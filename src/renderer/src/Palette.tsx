@@ -1,0 +1,185 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { isFlowRule } from '@core/rules'
+import type { Rule, ScheduleState, ShopState, TasksState } from '@shared/api'
+import { Icon, type IconName } from './Icon'
+import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
+
+export interface Command {
+  id: string
+  label: string
+  hint?: string
+  group: 'Go to' | 'Log' | 'Tasks' | 'Schedule' | 'Shop' | 'Actions'
+  icon: IconName
+  color?: string
+  run: () => void | Promise<unknown>
+}
+
+interface Sources {
+  rules: Rule[]
+  tasks: TasksState | null
+  schedule: ScheduleState | null
+  shop: ShopState | null
+  go: (page: PageId, view?: 'app' | 'system') => void
+  award: (rule: Rule) => Promise<unknown>
+  completeTask: (id: number) => Promise<unknown>
+  startBlock: (id: number) => Promise<unknown>
+  actions: Command[]
+}
+
+/** Everything the palette can do right now. */
+export function buildCommands(s: Sources): Command[] {
+  const out: Command[] = []
+  for (const m of [...MODULES, ...SYSTEM_PAGES]) {
+    if (m.phase > 0) continue
+    out.push({ id: `go:${m.id}`, label: m.label, hint: m.blurb, group: 'Go to', icon: m.icon, color: m.color, run: () => s.go(m.id) })
+  }
+  out.push(
+    { id: 'go:finance', label: 'Finance Helper', hint: 'Open the app', group: 'Go to', icon: 'coin', color: '#F5C84B', run: () => s.go('money', 'app') },
+    { id: 'go:waky', label: 'Waky', hint: 'Open the app', group: 'Go to', icon: 'moon', color: '#6EE7D8', run: () => s.go('sleep', 'app') },
+    { id: 'go:man', label: 'MAN', hint: 'Open the app', group: 'Go to', icon: 'shield', color: '#FF8A3D', run: () => s.go('discipline', 'app') }
+  )
+  for (const r of s.rules.filter((r) => r.enabled && !isFlowRule(r.id))) {
+    out.push({ id: `log:${r.id}`, label: r.title, hint: `${r.coins > 0 ? '+' : ''}${r.coins} coins`, group: 'Log', icon: 'plus', run: () => s.award(r) })
+  }
+  for (const t of s.tasks?.tasks.filter((t) => !t.done) ?? []) {
+    out.push({ id: `task:${t.id}`, label: t.title, hint: `Complete · +${t.coins}`, group: 'Tasks', icon: 'check', run: () => s.completeTask(t.id) })
+  }
+  for (const b of s.schedule?.day === s.schedule?.today ? s.schedule?.blocks.filter((b) => b.status === 'pending') ?? [] : []) {
+    out.push({ id: `block:${b.id}`, label: b.title, hint: `Start the timer · ${b.start}`, group: 'Schedule', icon: 'calendar', run: () => s.startBlock(b.id) })
+  }
+  for (const r of s.shop?.rewards ?? []) {
+    out.push({ id: `reward:${r.id}`, label: r.title, hint: `${r.price} coins`, group: 'Shop', icon: 'gift', run: () => s.go('shop') })
+  }
+  return [...out, ...s.actions]
+}
+
+/** Scores a label against the typed text: every letter in order, earlier and tighter is better. */
+export function fuzzyScore(label: string, q: string): number {
+  if (!q) return 1
+  const l = label.toLowerCase()
+  const query = q.toLowerCase().trim()
+  if (l.includes(query)) return 100 - l.indexOf(query)
+  let i = 0
+  let gaps = 0
+  for (const ch of query) {
+    const at = l.indexOf(ch, i)
+    if (at === -1) return 0
+    gaps += at - i
+    i = at + 1
+  }
+  return Math.max(1, 50 - gaps)
+}
+
+export function Palette({ open, onClose, commands }: { open: boolean; onClose: () => void; commands: Command[] }) {
+  const [q, setQ] = useState('')
+  const [sel, setSel] = useState(0)
+  const input = useRef<HTMLInputElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (open) {
+      setQ('')
+      setSel(0)
+      setTimeout(() => input.current?.focus(), 10)
+    }
+  }, [open])
+
+  const results = useMemo(() => {
+    const scored = commands.map((c) => ({ c, s: Math.max(fuzzyScore(c.label, q), fuzzyScore(`${c.group} ${c.label}`, q) * 0.8) })).filter((x) => x.s > 0)
+    if (q) scored.sort((a, b) => b.s - a.s)
+    return scored.slice(0, 40).map((x) => x.c)
+  }, [commands, q])
+
+  useEffect(() => setSel(0), [q])
+  useEffect(() => {
+    list.current?.querySelector('[data-sel="true"]')?.scrollIntoView({ block: 'nearest' })
+  }, [sel])
+
+  function run(c: Command | undefined) {
+    if (!c) return
+    onClose()
+    void c.run()
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="palette-back" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }} onMouseDown={onClose}>
+          <motion.div
+            className="palette"
+            role="dialog"
+            aria-label="Command palette"
+            initial={{ opacity: 0, y: -12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.14 }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="palette-input">
+              <Icon name="search" size={16} />
+              <input
+                ref={input}
+                value={q}
+                placeholder="Jump to, log, complete, start…"
+                aria-label="Search commands"
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setSel((s) => Math.min(results.length - 1, s + 1))
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setSel((s) => Math.max(0, s - 1))
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault()
+                    run(results[sel])
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    onClose()
+                  }
+                }}
+              />
+              <kbd>Esc</kbd>
+            </div>
+            <div className="palette-list" ref={list} role="listbox">
+              {results.length === 0 && <div className="palette-empty">Nothing matches “{q}”.</div>}
+              {results.map((c, i) => (
+                <div key={c.id}>
+                  {(i === 0 || results[i - 1].group !== c.group) && !q && <div className="palette-group">{c.group}</div>}
+                  <button
+                    role="option"
+                    aria-selected={i === sel}
+                    data-sel={i === sel}
+                    className={`palette-item ${i === sel ? 'sel' : ''}`}
+                    style={{ ['--c' as string]: c.color ?? 'var(--lime)' }}
+                    onMouseMove={() => setSel(i)}
+                    onClick={() => run(c)}
+                  >
+                    <span className="pi-icon">
+                      <Icon name={c.icon} size={15} />
+                    </span>
+                    <span className="pi-label">{c.label}</span>
+                    {q && <span className="pi-group">{c.group}</span>}
+                    {c.hint && <span className="pi-hint">{c.hint}</span>}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="palette-foot">
+              <span>
+                <kbd>↑</kbd> <kbd>↓</kbd> move
+              </span>
+              <span>
+                <kbd>Enter</kbd> run
+              </span>
+              <span>
+                <kbd>Ctrl</kbd> <kbd>K</kbd> open anywhere
+              </span>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}

@@ -1,0 +1,59 @@
+/* Command palette, coin pop-ups, search button, full screen, greeting. */
+
+/* ---------- Search button in the header ---------- */
+.search-btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); color: var(--muted); font-size: 13px;
+}
+.search-btn:hover { color: var(--text); border-color: #3a4358; }
+.search-btn kbd, .palette kbd, .focus-bar kbd {
+  font: 600 10.5px var(--mono); color: var(--faint); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; background: var(--panel);
+}
+@media (max-width: 1300px) { .search-btn .chip-text { display: none; } }
+
+/* ---------- Command palette ---------- */
+.palette-back { position: fixed; inset: 0; z-index: 60; background: rgba(4, 6, 10, 0.55); backdrop-filter: blur(3px); display: grid; justify-items: center; align-items: start; padding-top: 12vh; }
+.palette { width: min(640px, calc(100vw - 32px)); max-height: 70vh; display: flex; flex-direction: column; background: var(--panel); border: 1px solid #2c3446; border-radius: 16px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); overflow: hidden; }
+.palette-input { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.palette-input input { flex: 1; background: transparent !important; border: 0 !important; padding: 4px 0 !important; font-size: 16px; color: var(--text); }
+.palette-input input:focus { outline: none; }
+.palette-list { overflow-y: auto; padding: 6px; }
+.palette-group { padding: 10px 10px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); }
+.palette-item { --c: var(--lime); width: 100%; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px; padding: 9px 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; }
+.palette-item.sel { background: var(--panel-2); }
+.pi-icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.pi-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pi-group { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.pi-hint { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.palette-empty { padding: 26px; text-align: center; color: var(--faint); }
+.palette-foot { display: flex; gap: 18px; padding: 9px 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+
+/* ---------- Coins flying into the wallet ---------- */
+.wallet { position: relative; }
+.wallet-pops { position: absolute; right: -6px; top: calc(100% + 10px); display: grid; justify-items: end; gap: 6px; pointer-events: none; z-index: 40; }
+.wallet-pop {
+  display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+  background: var(--panel-2); border: 1px solid rgba(245, 200, 75, 0.45); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 18px rgba(245, 200, 75, 0.2);
+}
+.wallet-pop b { font: 800 15px var(--display); color: var(--gold); }
+.wallet-pop small { color: var(--muted); font-size: 12px; font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.wallet-pop.neg { border-color: rgba(255, 93, 108, 0.45); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
+.wallet-pop.neg b { color: var(--red); }
+
+/* ---------- Full screen: the app gets the whole window ---------- */
+.shell.focus { grid-template-columns: 0 1fr; }
+.shell.focus .side-cell { display: none; }
+.shell.focus .topbar { display: none; }
+.focus-reveal { position: fixed; top: 0; left: 0; right: 0; height: 10px; z-index: 50; }
+.focus-bar {
+  position: absolute; left: 50%; top: 8px; transform: translate(-50%, -140%); transition: transform 0.18s ease;
+  display: flex; align-items: center; gap: 14px; padding: 7px 8px 7px 16px; border-radius: 999px;
+  background: var(--panel); border: 1px solid #2c3446; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); font-weight: 600; white-space: nowrap;
+}
+.focus-reveal:hover .focus-bar, .focus-bar:hover { transform: translate(-50%, 0); }
+.focus-reveal:hover { height: 64px; }
+
+/* ---------- Greeting on Today ---------- */
+.greeting { display: grid; gap: 4px; margin-bottom: 2px; }
+.greeting h2 { font: 800 28px var(--display); letter-spacing: -0.01em; }
+.greeting p { margin: 0; color: var(--muted); font-size: 14.5px; }

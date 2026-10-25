@@ -181,6 +181,7 @@ export function createMockApi(): Bridge {
     onWalletChanged: () => {},
     onNavigate: () => {},
     onUpdate: () => {},
-    onUiKey: () => () => {}
+    onUiKey: () => () => {},
+    onFullScreen: () => () => {}
   }
 }

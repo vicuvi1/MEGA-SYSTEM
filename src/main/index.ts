@@ -287,7 +287,11 @@ app.on('web-contents-created', (_e, wc) => {
       }
       const key = input.key.toLowerCase()
       let action: string | null = null
+      const inFinance = wc.session === session.fromPartition(FINANCE_PARTITION)
       if (input.control && !input.alt && !input.shift && key === 'b') action = 'toggle-sidebar'
+      // Finance Helper has its own Ctrl+K search; Ctrl+Shift+K opens ours everywhere.
+      else if (input.control && !input.alt && key === 'k' && (input.shift || !inFinance)) action = 'palette'
+      else if (key === 'f11') action = 'fullscreen'
       else if (input.alt && !input.control && /^[1-9]$/.test(key)) action = `go:${key}`
       else if (input.control && key === 'tab') action = 'switch-view'
       if (action) {
@@ -322,6 +326,10 @@ function prefs(): AppPrefs {
   }
 }
 handle('app:prefs', () => prefs())
+handle('app:toggleFullScreen', () => {
+  win?.setFullScreen(!win.isFullScreen())
+  return win?.isFullScreen() ?? false
+})
 handle('app:setPrefs', (p: Partial<AppPrefs>) => {
   if (p.openAtLogin !== undefined) {
     if (!app.isPackaged) throw new Error('Start with Windows works in the installed app')
@@ -448,6 +456,8 @@ function createWindow(): void {
     if (!win || win.isMinimized()) return
     setSetting(db, 'win_bounds', JSON.stringify({ ...win.getNormalBounds(), maximized: win.isMaximized() }))
   }
+  win.on('enter-full-screen', () => win?.webContents.send('ui:fullscreen', true))
+  win.on('leave-full-screen', () => win?.webContents.send('ui:fullscreen', false))
   win.on('resized', saveBounds)
   win.on('moved', saveBounds)
   win.on('maximize', saveBounds)

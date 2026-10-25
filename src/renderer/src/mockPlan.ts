@@ -160,6 +160,11 @@ export function createMockPlan(ctx: Ctx): Pick<LifeApi, 'tasks' | 'schedule' | '
       }
     },
     app: {
+      toggleFullScreen: async () => {
+        if (document.fullscreenElement) await document.exitFullscreen()
+        else await document.documentElement.requestFullscreen()
+        return !!document.fullscreenElement
+      },
       prefs: async () => ({ openAtLogin: false, canAutoStart: false, keepInTray, matchAppThemes: true }),
       setPrefs: async (p) => {
         if (p.keepInTray !== undefined) keepInTray = p.keepInTray

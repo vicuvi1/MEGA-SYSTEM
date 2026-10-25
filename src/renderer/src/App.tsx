@@ -20,6 +20,10 @@ import { Money } from './pages/Money'
 import { Connected } from './pages/Connected'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
+import { buildCommands, Palette, type Command } from './Palette'
+import { describeEntry, useAction } from './ui'
+import { loadLastPlace, saveLastPlace } from './uiPrefs'
+import { soundCoin, soundSpend, soundTick } from './sound'
 
 const IDLE_LOCK_MS = 10 * 60_000
 
@@ -71,7 +75,9 @@ function Gate() {
 }
 
 function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => void }) {
-  const [page, setPage] = useState<PageId>('today')
+  const last = useRef(loadLastPlace()).current
+  const known = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === last?.page && m.phase === 0)
+  const [page, setPage] = useState<PageId>(known ? known.id : 'today')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
   const [backup, setBackup] = useState<BackupStatus | null>(null)
@@ -84,7 +90,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [revealed, setRevealed] = useState(false)
   const [urgeOpen, setUrgeOpen] = useState(false)
   // Which tab each app section shows: the app itself, or Life System's view.
-  const [view, setView] = useState<Partial<Record<PageId, 'app' | 'system'>>>({})
+  const [view, setView] = useState<Partial<Record<PageId, 'app' | 'system'>>>(last?.view ?? {})
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [fullScreen, setFullScreen] = useState(false)
+  const [pops, setPops] = useState<{ id: number; coins: number; label: string }[]>([])
+  const act = useAction()
+
+  useEffect(() => saveLastPlace({ page, view: view as Record<string, 'app' | 'system'> }), [page, view])
+  useEffect(() => life.onFullScreen(setFullScreen), [])
   const [update, setUpdate] = useUpdates()
   const [sidebarMode, setSidebarMode] = useState<'auto' | 'open' | 'closed'>(() => {
     try {
@@ -151,6 +164,23 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     life.onWalletChanged(() => onWallet())
   }, [onWallet])
 
+  // Coins flying into the wallet whenever the balance changes, from anywhere.
+  const lastBalance = useRef<number | null>(null)
+  useEffect(() => {
+    if (!summary) return
+    const prev = lastBalance.current
+    lastBalance.current = summary.balance
+    if (prev === null || prev === summary.balance) return
+    const delta = summary.balance - prev
+    const latest = summary.recent.find((e) => e.kind !== 'undo')
+    const titles = Object.fromEntries(rules.map((r) => [r.id, r.title]))
+    const pop = { id: Date.now() + Math.random(), coins: delta, label: latest ? describeEntry(latest, titles) : '' }
+    setPops((p) => [...p.slice(-2), pop])
+    setTimeout(() => setPops((p) => p.filter((x) => x.id !== pop.id)), 2600)
+    if (delta > 0) soundCoin()
+    else soundSpend()
+  }, [summary, rules])
+
   const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page)!
   const lv = summary?.level
   const embed = EMBED_OF[page]
@@ -180,6 +210,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       const n = /^go:(\d)$/.exec(key)
       if (n && MODULES[Number(n[1]) - 1]) setPage(MODULES[Number(n[1]) - 1].id)
       if (key === 'switch-view' && embed) setView((v) => ({ ...v, [page]: tab === 'app' ? 'system' : 'app' }))
+      if (key === 'palette') {
+        soundTick()
+        setPaletteOpen((o) => !o)
+      }
+      if (key === 'fullscreen') life.app.toggleFullScreen()
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'b') {
@@ -191,6 +226,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       } else if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault()
         run('switch-view')
+      } else if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        run('palette')
+      } else if (e.key === 'F11') {
+        e.preventDefault()
+        run('fullscreen')
       }
     }
     window.addEventListener('keydown', onKey)
@@ -201,13 +242,57 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     }
   }, [toggleSidebar, embed, page, tab])
 
+  const go = useCallback((p: PageId, v?: 'app' | 'system') => {
+    if (v) setView((cur) => ({ ...cur, [p]: v }))
+    setPage(p)
+  }, [])
+  const commands: Command[] = buildCommands({
+    rules,
+    tasks,
+    schedule,
+    shop,
+    go,
+    award: (r) => act(() => life.wallet.award(r.id), `${r.title} logged`).then((x) => x && onWallet()),
+    completeTask: (id) => act(() => life.tasks.complete(id), 'Task done').then((x) => x && onWallet()),
+    startBlock: (id) => act(() => life.schedule.start(id), 'Timer started').then((x) => {
+      if (x) setSchedule(x)
+      go('schedule')
+    }),
+    actions: [
+      { id: 'a:sidebar', label: 'Collapse or expand the sidebar', hint: 'Ctrl+B', group: 'Actions', icon: 'list', run: toggleSidebar },
+      { id: 'a:full', label: 'Full screen', hint: 'F11', group: 'Actions', icon: 'spark', run: () => life.app.toggleFullScreen() },
+      { id: 'a:urge', label: 'Urge crusher', hint: 'Ctrl+Alt+U', group: 'Actions', icon: 'bolt', color: '#FF8A3D', run: () => {
+        setView((v) => ({ ...v, discipline: 'system' }))
+        setPage('discipline')
+        setRevealed(true)
+        setUrgeOpen(true)
+      } },
+      { id: 'a:backup', label: 'Back up now', group: 'Actions', icon: 'cloud', run: () => act(() => life.backup.runNow(), 'Backup written').then((b) => b && setBackup(b)) },
+      { id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) },
+      { id: 'a:sync', label: 'Check connected apps now', group: 'Actions', icon: 'link', run: () => act(() => life.connections.sync()).then((r) => r && onWallet()) },
+      ...(auth.pinSet ? [{ id: 'a:lock', label: 'Lock now', group: 'Actions' as const, icon: 'lock' as const, run: () => life.auth.lock().then(onAuth) }] : [])
+    ]
+  })
+
   // Sidebar: full, or a slim icon rail. "auto" turns it into a rail while an
   // app is open, so the app gets the room; hovering the rail slides it out.
   const collapsed = sidebarMode === 'closed' || (sidebarMode === 'auto' && !!activeEmbed)
   const compact = !!embed
+  const focus = fullScreen && !!activeEmbed
 
   return (
-    <div className={`shell ${collapsed ? 'rail' : ''}`}>
+    <div className={`shell ${collapsed ? 'rail' : ''} ${focus ? 'focus' : ''}`}>
+      <Palette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+      {focus && (
+        <div className="focus-reveal">
+          <div className="focus-bar">
+            <span>{current.label}</span>
+            <button className="btn small" onClick={() => life.app.toggleFullScreen()}>
+              Exit full screen <kbd>F11</kbd>
+            </button>
+          </div>
+        </div>
+      )}
       <div className="side-cell">
         <aside
           className={`sidebar ${collapsed ? 'collapsed' : ''} ${collapsed && peek ? 'peek' : ''}`}
@@ -295,6 +380,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </div>
           )}
           <span className="spacer" />
+          <button className="search-btn" onClick={() => { soundTick(); setPaletteOpen(true) }} title="Search and run anything (Ctrl+K)">
+            <Icon name="search" size={14} />
+            <span className="chip-text">Search or run…</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+          {activeEmbed && (
+            <button className="icon-btn" aria-label="Full screen" title="Full screen (F11)" onClick={() => life.app.toggleFullScreen()}>
+              <Icon name="expand" size={15} />
+            </button>
+          )}
           {lv && summary && (
             <div className="player">
               <div className="lvl-badge" title={`${summary.totalXp} XP total`}>
@@ -314,6 +409,26 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               </div>
               <div className="wallet" title="Coins you can spend">
                 <Coins n={summary.balance} />
+                <div className="wallet-pops" aria-live="polite">
+                  <AnimatePresence>
+                    {pops.map((p) => (
+                      <motion.span
+                        key={p.id}
+                        className={`wallet-pop ${p.coins < 0 ? 'neg' : ''}`}
+                        initial={{ opacity: 0, y: 14, scale: 0.8 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                      >
+                        <b>
+                          {p.coins > 0 ? '+' : ''}
+                          {p.coins}
+                        </b>
+                        {p.label && <small>{p.label}</small>}
+                      </motion.span>
+                    ))}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           )}

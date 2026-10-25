@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AppPrefs, AuthStatus, BackupStatus, UpdateStatus, VerifyResult } from '@shared/api'
 import { UpdatePanel } from '../updates'
+import { useUiPrefs } from '../uiPrefs'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -25,6 +26,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [restoreName, setRestoreName] = useState('')
   const [restorePass, setRestorePass] = useState('')
   const [prefs, setPrefs] = useState<AppPrefs | null>(null)
+  const [ui, setUi] = useUiPrefs()
 
   useEffect(() => {
     life.app.prefs().then(setPrefs)
@@ -74,6 +76,36 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   return (
     <div className="settings">
       <UpdatePanel status={update} onStatus={onUpdate} />
+
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="sun" /> Appearance
+          </h2>
+        </header>
+        <div className="field">
+          <span>Theme</span>
+          <div className="seg">
+            {(['dark', 'light', 'system'] as const).map((t) => (
+              <button key={t} type="button" className={ui.theme === t ? 'on' : ''} onClick={() => setUi({ theme: t })}>
+                {t === 'dark' ? 'Dark' : t === 'light' ? 'Light' : 'Like Windows'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="field">
+          <span>Your name, for the greeting on Today</span>
+          <input value={ui.name} maxLength={30} placeholder="e.g. Victor" onChange={(e) => setUi({ name: e.target.value })} />
+        </label>
+        <label className="check toggle-row">
+          <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ sound: e.target.checked })} />
+          <span>
+            Sounds
+            <small>A short chime when coins come in, a lower one when they go out.</small>
+          </span>
+        </label>
+        <p className="hint block">Size: Ctrl + and Ctrl − make everything bigger or smaller, Ctrl 0 resets. The apps inside keep their own dark look in the light theme.</p>
+      </section>
 
       <section className="panel">
         <header className="panel-head">

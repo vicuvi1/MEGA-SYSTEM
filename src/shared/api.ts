@@ -252,6 +252,8 @@ export interface LifeApi {
     startWaky(): Promise<{ ok: boolean; error: string | null }>
   }
   app: {
+    /** Window full screen on/off; returns the new state. */
+    toggleFullScreen(): Promise<boolean>
     prefs(): Promise<AppPrefs>
     setPrefs(p: Partial<AppPrefs>): Promise<AppPrefs>
   }

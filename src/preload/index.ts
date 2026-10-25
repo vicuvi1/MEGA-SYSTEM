@@ -7,7 +7,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return reply.data
 }
 
-const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void; onUiKey(cb: (key: string) => void): () => void } = {
+const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void; onUiKey(cb: (key: string) => void): () => void; onFullScreen(cb: (on: boolean) => void): () => void } = {
   auth: {
     status: () => call('auth:status'),
     setPin: (pin, currentPin) => call('auth:setPin', pin, currentPin),
@@ -78,6 +78,7 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     startWaky: () => call('apps:startWaky')
   },
   app: {
+    toggleFullScreen: () => call('app:toggleFullScreen'),
     prefs: () => call('app:prefs'),
     setPrefs: (p) => call('app:setPrefs', p)
   },
@@ -103,6 +104,11 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
   },
   onUpdate: (cb) => {
     ipcRenderer.on('update:event', (_e, s: UpdateStatus) => cb(s))
+  },
+  onFullScreen: (cb) => {
+    const fn = (_e: unknown, on: boolean) => cb(on)
+    ipcRenderer.on('ui:fullscreen', fn)
+    return () => ipcRenderer.removeListener('ui:fullscreen', fn)
   },
   onUiKey: (cb) => {
     const fn = (_e: unknown, key: string) => cb(key)

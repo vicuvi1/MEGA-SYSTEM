@@ -7,6 +7,7 @@ import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
 import { clock } from './planUi'
 import { KIND } from './Schedule'
+import { useUiPrefs } from '../uiPrefs'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 
 type Pop = { id: number; coins: number; xp: number }
@@ -51,6 +52,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
 
   return (
     <div className="today">
+      <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />
       <section className="stats">
         <div className="stat hero">
           <span className="label">{dateLabel}</span>
@@ -324,5 +326,27 @@ function AppTiles({ connections, discipline, onOpenApp }: { connections: Connect
         </motion.button>
       ))}
     </section>
+  )
+}
+
+function Greeting({ summary, shop, tasks, schedule }: { summary: Summary; shop: ShopState | null; tasks: TasksState | null; schedule: ScheduleState | null }) {
+  const [ui] = useUiPrefs()
+  const h = new Date().getHours()
+  const hello = h < 5 ? 'Still up' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+  const blocksLeft = schedule && schedule.day === schedule.today ? schedule.blocks.filter((b) => b.status === 'pending' || b.status === 'running').length : 0
+  const tasksLeft = tasks?.tasks.filter((t) => !t.done).length ?? 0
+  const goal = shop?.rewards.find((r) => r.pinned)
+  const bits: string[] = []
+  if (blocksLeft) bits.push(`${blocksLeft} block${blocksLeft > 1 ? 's' : ''} left`)
+  if (tasksLeft) bits.push(`${tasksLeft} task${tasksLeft > 1 ? 's' : ''} open`)
+  if (goal) bits.push(goal.price > summary.balance ? `${goal.price - summary.balance} coins to ${goal.title.toLowerCase()}` : `${goal.title} is ready to redeem`)
+  return (
+    <header className="greeting">
+      <h2>
+        {hello}
+        {ui.name ? `, ${ui.name}` : ''}
+      </h2>
+      <p>{bits.length ? bits.join(' · ') : 'A clean slate. Pick one thing and win it.'}</p>
+    </header>
   )
 }

@@ -5,6 +5,11 @@ import './styles.css'
 import './plan.css'
 import './discipline.css'
 import './shell.css'
+import './extras.css'
+import './light.css'
+import { applyTheme } from './uiPrefs'
+
+applyTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
