@@ -14,9 +14,15 @@ import { Shop } from './shop'
 import { Schedule, Tasks } from './planner'
 import { Discipline } from './discipline'
 import { Connections, defaultCandidates } from './connections'
+import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
+import {
+  appsDir, embeddedManLevelDb, ensureWaky, MAN_PARTITION, manUrl, migrateStandaloneData, registerEmbeddedSchemes, WAKY_PARTITION, WAKY_URL,
+  wakyRoot, type MigrationResult
+} from './apps/embedded'
 import { appIconPng } from './icon'
 
 const isDev = !app.isPackaged
+registerEmbeddedSchemes()
 // One copy at a time; a second launch just brings the window back.
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -52,7 +58,10 @@ function open(): void {
   tasks = new Tasks(db, wallet)
   schedule = new Schedule(db, wallet)
   discipline = new Discipline(db, wallet)
-  connections = new Connections(db, wallet, defaultCandidates(homedir(), DRIVE_ROOT))
+  const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
+  // The MAN copy inside Life System is checked first.
+  candidates.man.unshift(embeddedManLevelDb())
+  connections = new Connections(db, wallet, candidates)
 }
 open()
 
@@ -177,7 +186,8 @@ handle('discipline:setStealth', (on: boolean) => {
 })
 
 handle('connections:state', () => connections.state())
-handle('connections:connect', (kind: 'waky' | 'finance') => {
+handle('connections:connect', async (kind: 'waky' | 'finance') => {
+  if (kind === 'finance' && financeHost) connections.setEmbeddedFinance(await financeHost.readState().catch(() => null))
   connections.connect(kind)
   connections.sync()
   return connections.state()
@@ -186,7 +196,10 @@ handle('connections:disconnect', (kind: 'waky' | 'finance') => {
   connections.disconnect(kind)
   return connections.state()
 })
-handle('connections:sync', () => ({ awarded: connections.sync(), state: connections.state() }))
+handle('connections:sync', async () => {
+  if (financeHost) connections.setEmbeddedFinance(await financeHost.readState().catch(() => null))
+  return { awarded: connections.sync(), state: connections.state() }
+})
 handle('connections:setDailyBudget', (amount: number) => {
   connections.setDailyBudget(amount)
   return connections.state()
@@ -199,9 +212,53 @@ handle('connections:choosePath', async (kind: ConnectionKind) => {
   return connections.state()
 })
 
+// ---------- Apps inside Life System ----------
+let financeHost: FinanceHost | null = null
+let migration: MigrationResult | null = null
+handle('apps:info', () => ({
+  finance: { url: FINANCE_URL, partition: FINANCE_PARTITION, preloadReady: !!financeHost },
+  man: { url: manUrl(), partition: MAN_PARTITION },
+  waky: { url: WAKY_URL, partition: WAKY_PARTITION },
+  migration
+}))
+handle('apps:startWaky', () => ensureWaky(wakyRoot(connections.path('waky'))))
+
+function navigate(page: string): void {
+  showWindow()
+  const send = () => win?.webContents.send('nav:page', page)
+  if (win?.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+}
+
+// Only the three known apps may be embedded, each in its own partition.
+const EMBEDS: Record<string, (src: string) => boolean> = {
+  [FINANCE_PARTITION]: (src) => src.startsWith('app://finance/'),
+  [MAN_PARTITION]: (src) => src === manUrl(),
+  [WAKY_PARTITION]: (src) => src.startsWith(WAKY_URL)
+}
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('will-attach-webview', (event, prefs, params) => {
+    const ok = EMBEDS[params.partition]?.(params.src)
+    if (!ok) return event.preventDefault()
+    delete (prefs as { preloadURL?: string }).preloadURL
+    prefs.preload = params.partition === FINANCE_PARTITION && financeHost ? financeHost.preload : undefined
+    prefs.nodeIntegration = false
+    prefs.contextIsolation = true
+    prefs.sandbox = true
+  })
+  if (wc.getType() === 'webview') {
+    // Links from inside the apps open in the real browser.
+    wc.setWindowOpenHandler(({ url }) => {
+      if (/^https:/.test(url)) shell.openExternal(url)
+      return { action: 'deny' }
+    })
+  }
+})
+
 // Connected apps pay out shortly after they record something.
-function syncConnections(): void {
+async function syncConnections(): Promise<void> {
   try {
+    if (financeHost) connections.setEmbeddedFinance(await financeHost.readState().catch(() => null))
     if (connections.sync() > 0) win?.webContents.send('wallet:changed')
   } catch (e) {
     console.error('connection sync failed', e)
@@ -271,7 +328,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       sandbox: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webviewTag: true
     }
   })
   win.once('ready-to-show', () => win?.show())
@@ -282,7 +340,11 @@ function createWindow(): void {
       win?.hide()
     }
   })
-  win.on('closed', () => (win = null))
+  win.on('closed', () => {
+    win = null
+    // Hidden helper windows (the Finance reader) shouldn't keep the app alive.
+    if (!tray || !prefs().keepInTray) app.quit()
+  })
   // Links open in the real browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url)
@@ -341,6 +403,18 @@ app.on('second-instance', showWindow)
 
 app.whenReady().then(() => {
   app.setAppUserModelId('Life System')
+  // Before any embedded app opens its storage.
+  try {
+    migration = migrateStandaloneData()
+  } catch (e) {
+    console.error('moving app data failed', e)
+  }
+  try {
+    financeHost = setupFinance(appsDir(), () => navigate('money'))
+    if (!globalShortcut.register('CommandOrControl+Alt+N', () => financeHost?.quickAdd())) console.warn('could not register Ctrl+Alt+N')
+  } catch (e) {
+    console.error('Finance Helper could not start', e)
+  }
   createWindow()
   createTray()
   if (!globalShortcut.register(PANIC_KEY, openUrgeCrusher)) console.warn(`could not register ${PANIC_KEY}`)

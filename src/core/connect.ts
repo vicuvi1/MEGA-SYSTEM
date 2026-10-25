@@ -135,6 +135,16 @@ export interface FinanceData {
 
 const BILLISH = /bill|rent|chiri|apart|utilit|factur|comunal|internet|subscript|abonam|insur|asigur|mortgage|ipotec|credit/i
 
+/**
+ * Finance Helper's own saved state (its localStorage "finance-helper.state"),
+ * read from the copy inside Life System. Same shape as the sync file's data.
+ */
+export function parseFinanceState(text: string, readAt: number): FinanceData {
+  const data = JSON.parse(text)
+  if (!data || !Array.isArray(data.tx)) throw new Error('Not Finance Helper data')
+  return parseFinance(JSON.stringify({ app: 'finance-helper', savedAt: readAt, data }))
+}
+
 export function parseFinance(text: string): FinanceData {
   const j = JSON.parse(text)
   if (j?.app !== 'finance-helper' || !j.data || !Array.isArray(j.data.tx)) throw new Error('Not a Finance Helper sync file')

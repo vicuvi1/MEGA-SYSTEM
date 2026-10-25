@@ -18,8 +18,16 @@ import { Discipline } from './pages/Discipline'
 import { Sleep } from './pages/Sleep'
 import { Money } from './pages/Money'
 import { Connected } from './pages/Connected'
+import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 
 const IDLE_LOCK_MS = 10 * 60_000
+
+// Sections that hold one of the apps living inside Life System.
+const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
+  money: { kind: 'finance', system: 'Coins & budget' },
+  sleep: { kind: 'waky', system: 'Coins & stats' },
+  discipline: { kind: 'man', system: 'Streak & coins' }
+}
 
 export function App() {
   return (
@@ -74,9 +82,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // Stealth reveal lasts until the app locks or restarts.
   const [revealed, setRevealed] = useState(false)
   const [urgeOpen, setUrgeOpen] = useState(false)
+  // Which tab each app section shows: the app itself, or Life System's view.
+  const [view, setView] = useState<Partial<Record<PageId, 'app' | 'system'>>>({})
 
   useEffect(() => {
+    life.onNavigate((p) => {
+      setPage(p as PageId)
+      setView((v) => ({ ...v, [p]: 'app' }))
+    })
     life.onUrge(() => {
+      setView((v) => ({ ...v, discipline: 'system' }))
       setPage('discipline')
       setRevealed(true)
       setUrgeOpen(true)
@@ -127,6 +142,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page)!
   const lv = summary?.level
+  const embed = EMBED_OF[page]
+  // Stealth hides MAN too until the section is revealed.
+  const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
+  const tab = embed ? (hiddenByStealth ? 'system' : view[page] ?? 'app') : 'system'
+  const activeEmbed = embed && tab === 'app' ? embed.kind : null
 
   return (
     <div className="shell">
@@ -202,8 +222,21 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           </div>
         </header>
 
+        {embed && !hiddenByStealth && (
+          <div className="app-tabs" role="tablist" aria-label={`${current.label} views`}>
+            <button role="tab" aria-selected={tab === 'app'} className={tab === 'app' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'app' }))}>
+              {EMBED_LABEL[embed.kind]}
+            </button>
+            <button role="tab" aria-selected={tab === 'system'} className={tab === 'system' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'system' }))}>
+              {embed.system}
+            </button>
+          </div>
+        )}
+
+        <EmbedHost active={activeEmbed} />
+
         <AnimatePresence mode="wait">
-          <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} />
             )}
@@ -220,7 +253,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'rules' && <Rules rules={rules} onChange={setRules} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} />}
             {current.phase > 0 && <Soon module={current} />}
-          </motion.main>
+          </motion.main>}
         </AnimatePresence>
       </div>
     </div>

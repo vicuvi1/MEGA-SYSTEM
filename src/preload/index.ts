@@ -7,7 +7,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return reply.data
 }
 
-const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void } = {
+const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void } = {
   auth: {
     status: () => call('auth:status'),
     setPin: (pin, currentPin) => call('auth:setPin', pin, currentPin),
@@ -68,6 +68,10 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     choosePath: (kind) => call('connections:choosePath', kind),
     setDailyBudget: (amount) => call('connections:setDailyBudget', amount)
   },
+  apps: {
+    info: () => call('apps:info'),
+    startWaky: () => call('apps:startWaky')
+  },
   app: {
     prefs: () => call('app:prefs'),
     setPrefs: (p) => call('app:setPrefs', p)
@@ -88,6 +92,9 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
   },
   onWalletChanged: (cb) => {
     ipcRenderer.on('wallet:changed', () => cb())
+  },
+  onNavigate: (cb) => {
+    ipcRenderer.on('nav:page', (_e, page: string) => cb(page))
   }
 }
 

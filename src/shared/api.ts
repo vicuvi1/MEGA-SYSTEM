@@ -123,6 +123,13 @@ export interface ConnectionsState {
   }
 }
 
+export interface EmbeddedApps {
+  finance: { url: string; partition: string; preloadReady: boolean }
+  man: { url: string; partition: string }
+  waky: { url: string; partition: string }
+  migration: { finance: 'copied' | 'exists' | 'missing'; man: 'copied' | 'exists' | 'missing' } | null
+}
+
 export interface AppPrefs {
   openAtLogin: boolean
   /** Auto-start only works in the installed app, not in dev. */
@@ -222,6 +229,10 @@ export interface LifeApi {
     sync(): Promise<{ awarded: number; state: ConnectionsState }>
     choosePath(kind: ConnectionKind): Promise<ConnectionsState>
     setDailyBudget(amount: number): Promise<ConnectionsState>
+  }
+  apps: {
+    info(): Promise<EmbeddedApps>
+    startWaky(): Promise<{ ok: boolean; error: string | null }>
   }
   app: {
     prefs(): Promise<AppPrefs>

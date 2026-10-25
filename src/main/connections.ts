@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  financeDay, financeMonth, manStartSuggestion, parseFinance, parseManLog, parseWaky, sleptMinutes,
+  financeDay, financeMonth, manStartSuggestion, parseFinance, parseFinanceState, parseManLog, parseWaky, sleptMinutes,
   type FinanceData, type ManData, type WakyData
 } from '@core/connect'
 import { addDays, daysBetween } from '@core/dates'
@@ -32,7 +32,19 @@ export function defaultCandidates(home: string, driveRoot: string): Candidates {
 const CATCH_UP_DAYS = 31
 
 export class Connections {
+  /** Latest state read from the Finance Helper inside Life System. */
+  private embeddedFinance: { text: string; at: number } | null = null
+
   constructor(private db: DB, private wallet: Wallet, private candidates: Candidates) {}
+
+  /** Called by the main process after reading the embedded Finance Helper. */
+  setEmbeddedFinance(text: string | null, at = Date.now()): void {
+    this.embeddedFinance = text ? { text, at } : null
+  }
+
+  private financeLabel(): string | null {
+    return this.embeddedFinance ? 'Finance Helper inside Life System' : this.path('finance')
+  }
 
   path(kind: ConnectionKind): string | null {
     const chosen = getSetting(this.db, `conn_${kind}_path`)
@@ -55,10 +67,13 @@ export class Connections {
 
   /** Payouts start from the day you connect; nothing older is paid. */
   connect(kind: 'waky' | 'finance', now = new Date()): void {
-    const p = this.path(kind)
-    if (!p) throw new LedgerError('App data not found. Choose the file first.')
-    if (kind === 'waky') parseWaky(readFileSync(p, 'utf8'))
-    else parseFinance(readFileSync(p, 'utf8'))
+    if (kind === 'finance') {
+      if (!this.readFinance().data) throw new LedgerError('Finance Helper data not found. Open the Money section once, or choose its sync file.')
+    } else {
+      const p = this.path(kind)
+      if (!p) throw new LedgerError('App data not found. Choose the file first.')
+      parseWaky(readFileSync(p, 'utf8'))
+    }
     if (!this.since(kind)) setSetting(this.db, `conn_${kind}_since`, this.wallet.today(now))
   }
 
@@ -86,6 +101,13 @@ export class Connections {
   }
 
   private readFinance(): { data: FinanceData | null; error: string | null } {
+    if (this.embeddedFinance) {
+      try {
+        return { data: parseFinanceState(this.embeddedFinance.text, this.embeddedFinance.at), error: null }
+      } catch (e) {
+        return { data: null, error: (e as Error).message }
+      }
+    }
     const p = this.path('finance')
     if (!p) return { data: null, error: null }
     try {
@@ -204,7 +226,7 @@ export class Connections {
         avgSleepMin: slept.length ? Math.round(slept.reduce((s, x) => s + x, 0) / slept.length) : null
       },
       finance: {
-        path: this.path('finance'),
+        path: this.financeLabel(),
         found: !!fd,
         error: f.error,
         connectedSince: this.since('finance'),

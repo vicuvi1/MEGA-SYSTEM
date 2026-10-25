@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { financeDay, financeMonth, manStartSuggestion, parseFinance, parseManLog, parseWaky, sleptMinutes } from './connect'
+import { financeDay, financeMonth, manStartSuggestion, parseFinance, parseFinanceState, parseManLog, parseWaky, sleptMinutes } from './connect'
 import { FINANCE, WAKY } from './connect.fixtures'
 
 describe('waky reader', () => {
@@ -37,5 +37,12 @@ describe('finance reader', () => {
     expect(financeDay(f, '2026-10-23')).toEqual({ logged: false, everydaySpent: 0 })
     expect(financeMonth(f, '2026-10-25')).toEqual({ spent: 519000, everyday: 19000, income: 900000, days: 3 })
     expect(() => parseFinance('{"app":"other"}')).toThrow('Finance Helper')
+  })
+  it('reads the app own saved state the same way', () => {
+    const state = JSON.stringify(JSON.parse(FINANCE(0)).data)
+    const f = parseFinanceState(state, 123)
+    expect(f.savedAt).toBe(123)
+    expect(financeDay(f, '2026-10-24').everydaySpent).toBe(12000)
+    expect(() => parseFinanceState('{"x":1}', 0)).toThrow()
   })
 })

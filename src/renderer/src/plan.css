@@ -129,3 +129,13 @@
 .dg.over { border-color: rgba(255, 93, 108, 0.4); }
 .dg.over span { color: #ff9aa4; }
 .dg.none { opacity: 0.5; }
+
+/* ---------- Apps inside Life System ---------- */
+.app-tabs { display: flex; gap: 4px; padding: 10px 28px 0; border-bottom: 1px solid var(--line); }
+.app-tabs button { border: 0; background: transparent; color: var(--muted); padding: 8px 14px 10px; font-weight: 600; border-bottom: 2px solid transparent; }
+.app-tabs button:hover { color: var(--text); }
+.app-tabs button.on { color: var(--text); border-bottom-color: var(--lime); }
+.embed-host { display: none; flex: 1; position: relative; min-height: 0; background: var(--bg); }
+.embed-host.on { display: block; }
+.embed { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.embed-msg { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); text-align: center; }

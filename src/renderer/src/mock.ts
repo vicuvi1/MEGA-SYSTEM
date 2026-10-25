@@ -78,6 +78,12 @@ export function createMockApi(): Bridge {
     ...createMockPlan({ entries, add, rules: () => rules }),
     ...createMockDiscipline({ entries, add, rules: () => rules }),
     ...createMockConnections(),
+    apps: {
+      info: async () => {
+        throw new Error('The apps run inside the desktop app')
+      },
+      startWaky: async () => ({ ok: false, error: 'Only in the desktop app' })
+    },
     auth: {
       status: () => ok(auth()),
       setPin: async (p) => {
@@ -167,6 +173,7 @@ export function createMockApi(): Bridge {
     },
     onLocked: () => {},
     onUrge: () => {},
-    onWalletChanged: () => {}
+    onWalletChanged: () => {},
+    onNavigate: () => {}
   }
 }
