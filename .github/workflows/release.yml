@@ -21,6 +21,12 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npx electron-vite build
+      # Create the release up front: electron-builder uploads its files in
+      # parallel and would otherwise race to create two releases.
+      - run: gh release view "$env:GITHUB_REF_NAME" 2>$null; if ($LASTEXITCODE -ne 0) { gh release create "$env:GITHUB_REF_NAME" --title "$env:GITHUB_REF_NAME" --notes "Life System $env:GITHUB_REF_NAME" }; exit 0
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

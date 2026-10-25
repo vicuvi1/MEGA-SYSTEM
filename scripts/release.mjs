@@ -23,5 +23,8 @@ execFileSync('npm', ['install', '--package-lock-only', '--ignore-scripts'], { st
 git('add', 'package.json', 'package-lock.json')
 git('commit', '-m', `release: v${next}`)
 git('tag', `v${next}`)
-git('push', 'origin', 'main', `v${next}`)
+git('push', 'origin', 'main')
+// The tag goes up on its own push: GitHub sometimes skips the workflow for a
+// tag pushed together with the commit.
+git('push', 'origin', `v${next}`)
 console.log(`v${next} pushed. GitHub Actions is building the installer.`)
