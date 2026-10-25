@@ -49,6 +49,13 @@ Phases 0-1:
 - App lock (PIN) on start, after 10 minutes idle, and when Windows locks or sleeps.
 - Sidebar sections Tasks, Schedule, Sleep, Discipline, Body, Money, Shop and Journey are placeholders for the next phases.
 
+## Install and update
+
+- Installed per user at `%LOCALAPPDATA%\Programs\life-system`, with a **Life System** shortcut on the Desktop and in the Start menu. Data lives in `%APPDATA%\LifeSystem` and survives updates.
+- **Settings → Updates → Update now** (or the "Update to x" badge in the top bar) downloads the newest GitHub Release, installs it quietly and restarts. It also checks on start and every 4 hours. The private repo is read with this PC's GitHub CLI login (`gh auth login`); no token is stored in the app.
+- Publishing a version: `npm run release` (next patch), `npm run release -- minor`, or `npm run release -- 1.2.3`. It bumps the version, tags and pushes; `.github/workflows/release.yml` builds the installer and publishes the release.
+- Local installer build without publishing: `npm run dist` (output in `release/`).
+
 ## Run it
 
 ```bash
