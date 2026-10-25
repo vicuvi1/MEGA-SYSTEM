@@ -55,3 +55,34 @@
 @media (prefers-reduced-motion: reduce) {
   .shell, .sidebar, .seg-thumb { transition: none; }
 }
+
+/* Content keeps a comfortable width on wide screens. */
+.content { padding-inline: max(28px, calc((100% - 1440px) / 2)); }
+
+/* Today: the apps inside, at a glance. */
+.app-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.app-tile {
+  --c: var(--lime);
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px;
+  padding: 16px 18px; border-radius: var(--radius); text-align: left;
+  border: 1px solid var(--line); background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--c) 10%, transparent), transparent 60%), var(--panel);
+  transition: border-color 0.15s;
+}
+.app-tile:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--line)); }
+.app-tile-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.app-tile-body { display: grid; gap: 1px; min-width: 0; }
+.app-tile-body .label { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; }
+.app-tile-body b { font: 800 22px var(--display); }
+.app-tile-body small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-tile-go { color: var(--faint); font-size: 22px; }
+.app-tile:hover .app-tile-go { color: var(--c); }
+.small-empty { display: grid; justify-items: center; gap: 10px; }
+.small-empty p { margin: 0; }
+@media (max-width: 1100px) { .app-tiles { grid-template-columns: 1fr; } }
+
+/* The sidebar scrolls when the window is short, without a visible bar. */
+.sidebar { scrollbar-width: none; }
+.sidebar::-webkit-scrollbar { display: none; }
+
+/* The header lines up with the centered content below it. */
+.topbar:not(.compact) { padding-inline: max(28px, calc((100% - 1440px) / 2)); }

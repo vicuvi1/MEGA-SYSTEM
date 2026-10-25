@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, screen, session, shell, Tray } from 'electron'
 import { dueReminders } from '@core/plan'
 import { isFlowRule } from '@core/rules'
 import type { AppPrefs, BlockInput, Category, ConnectionKind, IpcReply, RewardInput, Rule, TaskInput } from '@shared/api'
@@ -21,7 +21,7 @@ import {
 } from './apps/embedded'
 import { appIconPng } from './icon'
 import { Updater } from './updater'
-import { themeFor } from './apps/themes'
+import { RESET_THEME_SCRIPT, themeFor } from './apps/themes'
 
 const isDev = !app.isPackaged
 registerEmbeddedSchemes()
@@ -268,13 +268,23 @@ app.on('web-contents-created', (_e, wc) => {
     embedded.add(wc)
     wc.on('destroyed', () => embedded.delete(wc))
     wc.on('dom-ready', () => {
+      wc.setZoomFactor(savedZoom())
       const partition = Object.keys(EMBEDS).find((p) => session.fromPartition(p) === wc.session)
-      const css = partition && prefs().matchAppThemes ? themeFor(partition) : null
-      if (css) wc.insertCSS(css).catch(() => {})
+      const theme = partition && prefs().matchAppThemes ? themeFor(partition) : null
+      if (theme) {
+        wc.insertCSS(theme.css).catch(() => {})
+        wc.executeJavaScript(theme.script).catch(() => {})
+      }
     })
     // Life System's shortcuts keep working while an app inside has focus.
     wc.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return
+      const z = zoomKey(input)
+      if (z !== null) {
+        event.preventDefault()
+        changeZoom(z)
+        return
+      }
       const key = input.key.toLowerCase()
       let action: string | null = null
       if (input.control && !input.alt && !input.shift && key === 'b') action = 'toggle-sidebar'
@@ -320,7 +330,11 @@ handle('app:setPrefs', (p: Partial<AppPrefs>) => {
   if (p.keepInTray !== undefined) setSetting(db, 'keep_in_tray', p.keepInTray ? '1' : '0')
   if (p.matchAppThemes !== undefined) {
     setSetting(db, 'apps_theme', p.matchAppThemes ? '1' : '0')
-    for (const wc of embedded) wc.reload() // the open apps pick up the change
+    // Turning it on again also forgets theme picks made inside the apps.
+    for (const wc of embedded) {
+      const reset = p.matchAppThemes ? wc.executeJavaScript(RESET_THEME_SCRIPT).catch(() => {}) : Promise.resolve()
+      reset.then(() => wc.reload())
+    }
   }
   return prefs()
 })
@@ -356,11 +370,62 @@ function showWindow(): void {
   }
 }
 
+// ---------- Size of the interface ----------
+// Big screens get a larger default; Ctrl + / - / 0 change it and it is kept.
+const ZOOM_STEPS = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.45, 1.6]
+function defaultZoom(): number {
+  const w = screen.getPrimaryDisplay().workAreaSize.width
+  return w >= 2400 ? 1.2 : w >= 1900 ? 1.1 : 1
+}
+function savedZoom(): number {
+  const z = Number(getSetting(db, 'ui_zoom'))
+  return ZOOM_STEPS.includes(z) ? z : defaultZoom()
+}
+function applyZoom(z: number): void {
+  win?.webContents.setZoomFactor(z)
+  // The apps inside follow the same size.
+  for (const wc of embedded) wc.setZoomFactor(z)
+}
+function changeZoom(dir: -1 | 0 | 1): void {
+  const cur = savedZoom()
+  let next = defaultZoom()
+  if (dir !== 0) {
+    const i = ZOOM_STEPS.findIndex((s) => s >= cur)
+    next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, (i === -1 ? ZOOM_STEPS.length - 1 : i) + dir))]
+  }
+  setSetting(db, 'ui_zoom', String(next))
+  applyZoom(next)
+}
+function zoomKey(input: Electron.Input): -1 | 0 | 1 | null {
+  if (input.type !== 'keyDown' || !input.control || input.alt) return null
+  if (input.key === '=' || input.key === '+') return 1
+  if (input.key === '-' || input.key === '_') return -1
+  if (input.key === '0') return 0
+  return null
+}
+
+// The window opens where it was last, or at 85% of the screen the first time.
+function windowBounds(): { width: number; height: number; x?: number; y?: number; maximized?: boolean } {
+  try {
+    const b = JSON.parse(getSetting(db, 'win_bounds') ?? '')
+    const area = screen.getDisplayMatching(b).workArea
+    // Only reuse it if it is still on a connected screen.
+    if (b.width >= 900 && b.height >= 600 && b.x >= area.x - 50 && b.y >= area.y - 50) return b
+  } catch {
+    // first start
+  }
+  const a = screen.getPrimaryDisplay().workAreaSize
+  return { width: Math.max(1100, Math.round(a.width * 0.85)), height: Math.max(700, Math.round(a.height * 0.85)) }
+}
+
 function createWindow(): void {
+  const bounds = windowBounds()
   win = new BrowserWindow({
     icon,
-    width: 1280,
-    height: 820,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0B0D12',
@@ -375,7 +440,26 @@ function createWindow(): void {
       webviewTag: true
     }
   })
-  win.once('ready-to-show', () => win?.show())
+  win.once('ready-to-show', () => {
+    if (bounds.maximized) win?.maximize()
+    win?.show()
+  })
+  const saveBounds = () => {
+    if (!win || win.isMinimized()) return
+    setSetting(db, 'win_bounds', JSON.stringify({ ...win.getNormalBounds(), maximized: win.isMaximized() }))
+  }
+  win.on('resized', saveBounds)
+  win.on('moved', saveBounds)
+  win.on('maximize', saveBounds)
+  win.on('unmaximize', saveBounds)
+  win.webContents.on('did-finish-load', () => win?.webContents.setZoomFactor(savedZoom()))
+  win.webContents.on('before-input-event', (event, input) => {
+    const z = zoomKey(input)
+    if (z !== null) {
+      event.preventDefault()
+      changeZoom(z)
+    }
+  })
   // Closing hides to the tray so reminders keep coming; Quit is in the tray menu.
   win.on('close', (e) => {
     if (!quitting && tray && prefs().keepInTray) {

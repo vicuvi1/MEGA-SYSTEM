@@ -163,7 +163,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
             <input type="checkbox" checked={prefs.matchAppThemes} onChange={(e) => changePrefs({ matchAppThemes: e.target.checked })} />
             <span>
               Match the apps to Life System's look
-              <small>Finance Helper, Waky and MAN use Life System's dark colors and fonts. Waky's reward themes stay as they are.</small>
+              <small>Finance Helper, Waky and MAN use Life System's dark colors and fonts. Picking a theme inside an app overrides it for that app; switching this off and on brings Life System's look back.</small>
             </span>
           </label>
           <label className={`check toggle-row ${prefs.canAutoStart ? '' : 'muted'}`}>

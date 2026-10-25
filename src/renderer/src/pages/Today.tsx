@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
-import type { DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import type { ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
@@ -18,13 +18,15 @@ interface Props {
   tasks: TasksState | null
   schedule: ScheduleState | null
   discipline: DisciplineState | null
+  connections: ConnectionsState | null
+  onOpenApp: (page: PageId) => void
   onChange: (s?: Summary) => void
   onTasks: (t: TasksState) => void
   onSchedule: (s: ScheduleState) => void
   onGo: (page: PageId) => void
 }
 
-export function Today({ summary, rules, shop, tasks, schedule, discipline, onChange, onTasks, onSchedule, onGo }: Props) {
+export function Today({ summary, rules, shop, tasks, schedule, discipline, connections, onOpenApp, onChange, onTasks, onSchedule, onGo }: Props) {
   const onOpenShop = () => onGo('shop')
   const act = useAction()
   const [pops, setPops] = useState<Pop[]>([])
@@ -70,6 +72,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, onCha
         <NextReward balance={summary.balance} shop={shop} onOpenShop={onOpenShop} />
         <DisciplineCard state={discipline} onGo={onGo} />
       </section>
+
+      <AppTiles connections={connections} discipline={discipline} onOpenApp={onOpenApp} />
 
       <div className="cols even">
         <TodaySchedule schedule={schedule} onSchedule={onSchedule} onGo={onGo} />
@@ -170,7 +174,10 @@ function TodaySchedule({ schedule, onSchedule, onGo }: { schedule: ScheduleState
       </header>
       {today.length === 0 ? (
         <div className="empty small-empty">
-          <p>No blocks today. Plan a study block in Schedule.</p>
+          <p>No blocks today.</p>
+          <button className="btn small" onClick={() => onGo('schedule')}>
+            <Icon name="plus" size={14} /> Plan a block
+          </button>
         </div>
       ) : (
         <ul className="mini-tl">
@@ -210,7 +217,10 @@ function TodayTasks({ tasks, onTasks, onWallet, onGo }: { tasks: TasksState | nu
       </header>
       {list.length === 0 ? (
         <div className="empty small-empty">
-          <p>No tasks for today. Add some in Tasks.</p>
+          <p>No tasks for today.</p>
+          <button className="btn small" onClick={() => onGo('tasks')}>
+            <Icon name="plus" size={14} /> Add a task
+          </button>
         </div>
       ) : (
         <ul className="task-list compact">
@@ -259,5 +269,60 @@ function DisciplineCard({ state, onGo }: { state: DisciplineState | null; onGo: 
         </>
       )}
     </button>
+  )
+}
+
+/** Live glance at the apps inside Life System; a click opens the app. */
+function AppTiles({ connections, discipline, onOpenApp }: { connections: ConnectionsState | null; discipline: DisciplineState | null; onOpenApp: (p: PageId) => void }) {
+  if (!connections) return null
+  const w = connections.waky
+  const f = connections.finance
+  const man = connections.man.data
+  const hidden = !!discipline?.stealth
+  const money = (bani: number) => (bani / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })
+  const tiles = [
+    {
+      page: 'sleep' as PageId,
+      icon: 'moon' as const,
+      color: '#6EE7D8',
+      app: 'Waky',
+      value: w.today ? w.today.time : '–',
+      sub: w.today ? (w.today.onTime ? `Up on time · streak ${w.streak}` : `Up late (target ${w.today.target})`) : w.found ? 'No check-in yet today' : 'Waky not found'
+    },
+    {
+      page: 'money' as PageId,
+      icon: 'coin' as const,
+      color: '#F5C84B',
+      app: 'Finance Helper',
+      value: f.today ? `${money(f.today.everydaySpent)} ${f.currency}` : '–',
+      sub: f.today ? (f.today.logged ? `spent today · ${money(f.month?.spent ?? 0)} this month` : 'Nothing logged today') : 'Open Money once to load it'
+    },
+    {
+      page: 'discipline' as PageId,
+      icon: 'shield' as const,
+      color: '#FF8A3D',
+      app: 'MAN',
+      value: hidden ? '••' : discipline?.setup ? `Day ${discipline.current}` : man ? `Day ${man.streakDays}` : '–',
+      sub: hidden ? 'Hidden' : discipline?.setup ? discipline.rank : man ? `best ${man.longestStreak}` : 'Not set up'
+    }
+  ]
+  return (
+    <section className="app-tiles" aria-label="Your apps">
+      {tiles.map((t) => (
+        <motion.button key={t.page} className="app-tile" style={{ ['--c' as string]: t.color }} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} onClick={() => onOpenApp(t.page)}>
+          <span className="app-tile-icon">
+            <Icon name={t.icon} size={18} />
+          </span>
+          <span className="app-tile-body">
+            <span className="label">{t.app}</span>
+            <b>{t.value}</b>
+            <small>{t.sub}</small>
+          </span>
+          <span className="app-tile-go" aria-hidden="true">
+            ›
+          </span>
+        </motion.button>
+      ))}
+    </section>
   )
 }
