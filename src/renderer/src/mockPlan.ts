@@ -160,10 +160,10 @@ export function createMockPlan(ctx: Ctx): Pick<LifeApi, 'tasks' | 'schedule' | '
       }
     },
     app: {
-      prefs: async () => ({ openAtLogin: false, canAutoStart: false, keepInTray }),
+      prefs: async () => ({ openAtLogin: false, canAutoStart: false, keepInTray, matchAppThemes: true }),
       setPrefs: async (p) => {
         if (p.keepInTray !== undefined) keepInTray = p.keepInTray
-        return { openAtLogin: false, canAutoStart: false, keepInTray }
+        return { openAtLogin: false, canAutoStart: false, keepInTray, matchAppThemes: true }
       }
     }
   }

@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, session, shell, Tray } from 'electron'
 import { dueReminders } from '@core/plan'
 import { isFlowRule } from '@core/rules'
 import type { AppPrefs, BlockInput, Category, ConnectionKind, IpcReply, RewardInput, Rule, TaskInput } from '@shared/api'
@@ -21,15 +21,18 @@ import {
 } from './apps/embedded'
 import { appIconPng } from './icon'
 import { Updater } from './updater'
+import { themeFor } from './apps/themes'
 
 const isDev = !app.isPackaged
 registerEmbeddedSchemes()
+// Set before the lock: the lock belongs to the data folder, so a dev copy can
+// run next to the installed app.
+app.setPath('userData', join(app.getPath('appData'), isDev ? 'LifeSystem-dev' : 'LifeSystem'))
 // One copy at a time; a second launch just brings the window back.
 if (!app.requestSingleInstanceLock()) {
   app.quit()
   process.exit(0)
 }
-app.setPath('userData', join(app.getPath('appData'), isDev ? 'LifeSystem-dev' : 'LifeSystem'))
 
 const DRIVE_ROOT = 'G:\\My Drive'
 const BACKUP_DIR = join(DRIVE_ROOT, 'Life System', isDev ? 'backups-dev' : 'backups')
@@ -242,6 +245,8 @@ function navigate(page: string): void {
   else send()
 }
 
+const embedded = new Set<Electron.WebContents>()
+
 // Only the three known apps may be embedded, each in its own partition.
 const EMBEDS: Record<string, (src: string) => boolean> = {
   [FINANCE_PARTITION]: (src) => src.startsWith('app://finance/'),
@@ -259,6 +264,14 @@ app.on('web-contents-created', (_e, wc) => {
     prefs.sandbox = true
   })
   if (wc.getType() === 'webview') {
+    // Life System's colors and fonts on top of the app's own styles.
+    embedded.add(wc)
+    wc.on('destroyed', () => embedded.delete(wc))
+    wc.on('dom-ready', () => {
+      const partition = Object.keys(EMBEDS).find((p) => session.fromPartition(p) === wc.session)
+      const css = partition && prefs().matchAppThemes ? themeFor(partition) : null
+      if (css) wc.insertCSS(css).catch(() => {})
+    })
     // Life System's shortcuts keep working while an app inside has focus.
     wc.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return
@@ -294,7 +307,8 @@ function prefs(): AppPrefs {
   return {
     openAtLogin: app.isPackaged && app.getLoginItemSettings().openAtLogin,
     canAutoStart: app.isPackaged,
-    keepInTray: getSetting(db, 'keep_in_tray') !== '0'
+    keepInTray: getSetting(db, 'keep_in_tray') !== '0',
+    matchAppThemes: getSetting(db, 'apps_theme') !== '0'
   }
 }
 handle('app:prefs', () => prefs())
@@ -304,6 +318,10 @@ handle('app:setPrefs', (p: Partial<AppPrefs>) => {
     app.setLoginItemSettings({ openAtLogin: p.openAtLogin })
   }
   if (p.keepInTray !== undefined) setSetting(db, 'keep_in_tray', p.keepInTray ? '1' : '0')
+  if (p.matchAppThemes !== undefined) {
+    setSetting(db, 'apps_theme', p.matchAppThemes ? '1' : '0')
+    for (const wc of embedded) wc.reload() // the open apps pick up the change
+  }
   return prefs()
 })
 

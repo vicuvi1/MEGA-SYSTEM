@@ -159,6 +159,13 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
               <small>Needed for block reminders. Quit from the tray icon.</small>
             </span>
           </label>
+          <label className="check toggle-row">
+            <input type="checkbox" checked={prefs.matchAppThemes} onChange={(e) => changePrefs({ matchAppThemes: e.target.checked })} />
+            <span>
+              Match the apps to Life System's look
+              <small>Finance Helper, Waky and MAN use Life System's dark colors and fonts. Waky's reward themes stay as they are.</small>
+            </span>
+          </label>
           <label className={`check toggle-row ${prefs.canAutoStart ? '' : 'muted'}`}>
             <input type="checkbox" disabled={!prefs.canAutoStart} checked={prefs.openAtLogin} onChange={(e) => changePrefs({ openAtLogin: e.target.checked })} />
             <span>

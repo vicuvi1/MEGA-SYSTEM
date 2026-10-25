@@ -144,6 +144,8 @@ export interface AppPrefs {
   /** Auto-start only works in the installed app, not in dev. */
   canAutoStart: boolean
   keepInTray: boolean
+  /** Give Finance Helper, Waky and MAN Life System's colors and fonts. */
+  matchAppThemes: boolean
 }
 
 export interface Summary {
