@@ -1,6 +1,7 @@
 const PATHS = {
   home: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
   check: 'M4 12l5 5L20 6',
+  tasks: 'M9 6h11M9 12h11M9 18h11M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   shield: 'M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z',
@@ -18,15 +19,36 @@ const PATHS = {
   expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0',
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   spark: 'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6'
 } as const
 
+// Closed shapes behind the lines, shown softly when an icon is "duo" (the active section).
+const FILLS: Partial<Record<keyof typeof PATHS, string>> = {
+  home: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z',
+  tasks: 'M2 3h20v18H2z',
+  calendar: 'M4 6h16v14H4z',
+  moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
+  shield: 'M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z',
+  bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
+  coin: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  gift: 'M4 10h16v10H4zM3 7h18v3H3z',
+  trophy: 'M8 4h8v5a4 4 0 0 1-8 0z',
+  lock: 'M6 11h12v10H6z',
+  cloud: 'M7 18a5 5 0 0 1-.6-9.96A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z',
+  gear: 'M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7z'
+}
+
 export type IconName = keyof typeof PATHS
 
-export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+export function Icon({ name, size = 18, duo = false }: { name: IconName; size?: number; duo?: boolean }) {
+  const fill = duo ? FILLS[name] : undefined
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {fill && <path d={fill} fill="currentColor" fillOpacity={0.22} stroke="none" />}
       <path d={PATHS[name]} />
     </svg>
   )

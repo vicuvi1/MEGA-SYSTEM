@@ -21,6 +21,9 @@ import { Connected } from './pages/Connected'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
+import { Notifications, type Alert } from './Notifications'
+import { useUiPrefs } from './uiPrefs'
+import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { soundCoin, soundSpend, soundTick } from './sound'
@@ -274,6 +277,32 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     ]
   })
 
+  // Small counts on the sidebar and the "needs you" list in the bell.
+  const [ui] = useUiPrefs()
+  const blocksLeft = schedule && schedule.day === schedule.today ? schedule.blocks.filter((b) => b.status === 'pending' || b.status === 'running').length : 0
+  const tasksLeft = tasks?.tasks.filter((t) => !t.done).length ?? 0
+  const overdue = tasks?.tasks.filter((t) => t.overdue).length ?? 0
+  const checkInDue = !!discipline?.setup && !discipline.checkedInToday && !discipline.resetToday && !discipline.stealth
+  const shopReady = !!shop && (shop.chests.length > 0 || shop.rewards.some((r) => r.price <= shop.balance && tierUnlocked(r.tier, shop.level)))
+  const updateReady = !!update && ['available', 'ready'].includes(update.state)
+  const badges: Partial<Record<PageId, { n?: number; dot?: 'lime' | 'warn' }>> = {
+    tasks: tasksLeft ? { n: tasksLeft, dot: overdue ? 'warn' : undefined } : undefined,
+    schedule: blocksLeft ? { n: blocksLeft } : undefined,
+    discipline: checkInDue ? { dot: 'lime' } : undefined,
+    shop: shopReady ? { dot: 'lime' } : undefined,
+    settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
+  }
+  const alerts: Alert[] = []
+  if (updateReady) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
+  if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Backups are off', body: backup.lastError, page: 'settings' })
+  if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.current} · +20 coins`, page: 'discipline' })
+  if (overdue) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
+  const nextBlock = schedule && schedule.day === schedule.today ? schedule.blocks.find((b) => b.status === 'pending' && Date.parse(b.startsAt) > Date.now()) : undefined
+  if (nextBlock && Date.parse(nextBlock.startsAt) - Date.now() < 60 * 60_000) {
+    alerts.push({ id: `block-${nextBlock.id}`, tone: 'info', icon: 'calendar', title: `${nextBlock.title} at ${nextBlock.start}`, body: 'Starts within the hour', page: 'schedule' })
+  }
+  if (shop?.chests.length) alerts.push({ id: 'chest', tone: 'good', icon: 'gift', title: `${shop.chests.length} chest${shop.chests.length > 1 ? 's' : ''} to open`, page: 'shop' })
+
   // Sidebar: full, or a slim icon rail. "auto" turns it into a rail while an
   // app is open, so the app gets the room; hovering the rail slides it out.
   const collapsed = sidebarMode === 'closed' || (sidebarMode === 'auto' && !!activeEmbed)
@@ -314,6 +343,19 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               LIFE<b>SYSTEM</b>
             </span>
           </div>
+          {lv && summary && (
+            <button className="profile" onClick={() => setPage('today')} title={`Level ${lv.level} · ${lv.rank} · ${summary.totalXp} XP`}>
+              <span className="profile-ring" style={{ ['--p' as string]: `${Math.round(lv.progress * 100)}` }}>
+                <span>{lv.level}</span>
+              </span>
+              <span className="profile-text label">
+                <b>{ui.name || 'You'}</b>
+                <small>
+                  {lv.rank} · <span className="profile-coins">{summary.balance.toLocaleString()}</span> coins
+                </small>
+              </span>
+            </button>
+          )}
           <nav aria-label="Sections">
             {MODULES.map((m, i) => (
               <button
@@ -327,9 +369,13 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
                 }}
                 style={{ ['--c' as string]: m.color }}
               >
-                <Icon name={m.icon} />
+                <span className="nav-icon">
+                  <Icon name={m.icon} duo={page === m.id} />
+                  {badges[m.id] && <i className={`nav-dot ${badges[m.id]!.dot ?? ''}`} />}
+                </span>
                 <span className="label">{m.label}</span>
                 {m.phase > 0 && <em className="soon label">soon</em>}
+                {badges[m.id]?.n ? <em className="nav-count label">{badges[m.id]!.n}</em> : null}
               </button>
             ))}
           </nav>
@@ -345,7 +391,10 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
                   setPeek(false)
                 }}
               >
-                <Icon name={m.icon} size={16} />
+                <span className="nav-icon">
+                  <Icon name={m.icon} size={16} duo={page === m.id} />
+                  {badges[m.id] && <i className={`nav-dot ${badges[m.id]!.dot ?? ''}`} />}
+                </span>
                 <span className="label">{m.label}</span>
               </button>
             ))}
@@ -433,6 +482,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </div>
           )}
           <div className="top-actions">
+            <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
             <UpdateChip status={update} onClick={() => setPage('settings')} />
             {backup && (
               <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>

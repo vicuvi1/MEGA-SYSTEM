@@ -57,3 +57,61 @@
 .greeting { display: grid; gap: 4px; margin-bottom: 2px; }
 .greeting h2 { font: 800 28px var(--display); letter-spacing: -0.01em; }
 .greeting p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+/* ---------- Sidebar: profile, badges ---------- */
+.profile { display: flex; align-items: center; gap: 12px; padding: 8px; margin: -6px 0 2px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); text-align: left; min-width: 0; }
+.profile:hover { border-color: #3a4358; }
+.profile-ring {
+  --p: 0; flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: conic-gradient(var(--lime) calc(var(--p) * 1%), #232938 0);
+}
+.profile-ring span { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); font: 800 14px var(--display); color: var(--lime); }
+.profile-text { display: grid; min-width: 0; line-height: 1.25; }
+.profile-text b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-text small { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.profile-coins { color: var(--gold); font-weight: 700; }
+.sidebar.collapsed:not(.peek) .profile { padding: 4px; border-color: transparent; background: transparent; justify-content: center; margin: -4px 0 4px; }
+.sidebar.collapsed:not(.peek) .profile-text { display: none; }
+
+.nav-icon { position: relative; display: inline-grid; place-items: center; flex: none; }
+.nav-dot { position: absolute; top: -3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--lime)); box-shadow: 0 0 0 2px #0e1118; }
+.nav-dot.lime { background: var(--lime); }
+.nav-dot.warn { background: var(--orange); }
+.nav-count { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--c, var(--lime)) 16%, transparent); color: var(--c, var(--lime)); }
+.nav.on .nav-count { background: color-mix(in srgb, var(--c, var(--lime)) 26%, transparent); }
+/* In the rail the count hides; the dot says there is something. */
+.sidebar.collapsed:not(.peek) .nav-count { display: none; }
+
+/* ---------- Notifications ---------- */
+.notif { position: relative; }
+.bell { position: relative; }
+.bell.has { color: var(--text); }
+.bell-count { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; display: grid; place-items: center; background: var(--lime); color: var(--lime-ink); font: 800 10px var(--font); box-shadow: 0 0 0 2px var(--bg); }
+.notif-panel {
+  position: absolute; right: -8px; top: calc(100% + 10px); z-index: 45; width: 380px; max-height: min(560px, 75vh);
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid #2c3446; border-radius: 16px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55); overflow: hidden;
+}
+.notif-panel header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.notif-panel h3 { font-size: 14px; }
+.notif-scroll { overflow-y: auto; padding: 6px; }
+.notif-group { padding: 10px 8px 4px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+.notif-item { width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center; padding: 8px; border: 0; border-radius: 10px; background: transparent; text-align: left; position: relative; }
+.notif-item:hover { background: var(--panel-2); }
+.notif-item.new::before { content: ''; position: absolute; left: 1px; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: var(--lime); }
+.ni-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--lime); background: rgba(200, 241, 53, 0.1); }
+.ni-icon.neg { color: var(--red); background: rgba(255, 93, 108, 0.1); }
+.alert.warn .ni-icon { color: var(--orange); background: rgba(255, 138, 61, 0.12); }
+.alert.info .ni-icon { color: #7cc4ff; background: rgba(124, 196, 255, 0.12); }
+.alert.good .ni-icon { color: var(--lime); background: rgba(200, 241, 53, 0.12); }
+.ni-body { display: grid; gap: 1px; min-width: 0; }
+.ni-body b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ni-body small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ni-go { color: var(--faint); font-size: 18px; }
+.notif-empty { padding: 16px 8px; color: var(--faint); font-size: 13px; }
+:root[data-theme='light'] .notif-panel { border-color: #d9dde5; box-shadow: 0 20px 60px rgba(20, 25, 34, 0.18); }
+:root[data-theme='light'] .nav-dot { box-shadow: 0 0 0 2px #ffffff; }
+:root[data-theme='light'] .profile-ring { background: conic-gradient(var(--lime) calc(var(--p) * 1%), #e6e9ef 0); }
+:root[data-theme='light'] .profile-ring span { color: var(--lime-text); }
+
+/* The header (and its bell panel and coin pop-ups) sits above the page. */
+.topbar { position: relative; z-index: 25; }
