@@ -1,7 +1,8 @@
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, powerMonitor, shell, Tray } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, shell, Tray } from 'electron'
 import { dueReminders } from '@core/plan'
+import { isFlowRule } from '@core/rules'
 import type { AppPrefs, BlockInput, Category, IpcReply, RewardInput, Rule, TaskInput } from '@shared/api'
 import { getSetting, openDb, setSetting, type DB } from './db'
 import { Wallet } from './wallet'
@@ -10,6 +11,7 @@ import { Backups } from './backup'
 import { SecretStore } from './secrets'
 import { Shop } from './shop'
 import { Schedule, Tasks } from './planner'
+import { Discipline } from './discipline'
 import { appIconPng } from './icon'
 
 const isDev = !app.isPackaged
@@ -34,6 +36,7 @@ let auth: Auth
 let shop: Shop
 let tasks: Tasks
 let schedule: Schedule
+let discipline: Discipline
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
@@ -45,6 +48,7 @@ function open(): void {
   shop = new Shop(db, wallet)
   tasks = new Tasks(db, wallet)
   schedule = new Schedule(db, wallet)
+  discipline = new Discipline(db, wallet)
 }
 open()
 
@@ -79,6 +83,7 @@ handle('auth:setPin', (pin: string, current?: string) => auth.setPin(pin, curren
 handle('wallet:summary', () => wallet.summary())
 handle('wallet:history', (limit?: number) => wallet.history(limit))
 handle('wallet:award', (ruleId: string, note?: string) => {
+  if (isFlowRule(ruleId)) throw new Error('This one is logged from its own section')
   wallet.award(ruleId, note)
   return wallet.summary()
 })
@@ -149,6 +154,23 @@ for (const action of ['start', 'finish', 'skip'] as const) {
     return schedule.state()
   })
 }
+
+handle('discipline:state', () => discipline.state())
+handle('discipline:setStart', (day: string) => {
+  discipline.setStart(day)
+  return discipline.state()
+})
+for (const action of ['checkIn', 'oath', 'reset', 'startUrge', 'finishUrge', 'cancelUrge'] as const) {
+  handle(`discipline:${action}`, () => {
+    discipline[action]()
+    return discipline.state()
+  })
+}
+handle('discipline:claim', (days: number) => ({ coins: discipline.claim(days), state: discipline.state() }))
+handle('discipline:setStealth', (on: boolean) => {
+  discipline.setStealth(on)
+  return discipline.state()
+})
 
 function prefs(): AppPrefs {
   return {
@@ -240,12 +262,22 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open Life System', click: showWindow },
+      { label: 'Urge crusher', click: openUrgeCrusher },
       { label: 'Lock now', click: () => lockNow() },
       { type: 'separator' },
       { label: 'Quit', click: () => { quitting = true; app.quit() } }
     ])
   )
   tray.on('click', showWindow)
+}
+
+// Panic button: one shortcut from anywhere opens the urge crusher.
+const PANIC_KEY = 'CommandOrControl+Alt+U'
+function openUrgeCrusher(): void {
+  showWindow()
+  const send = () => win?.webContents.send('nav:urge')
+  if (win?.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
 }
 
 function lockNow(): void {
@@ -275,6 +307,7 @@ app.whenReady().then(() => {
   app.setAppUserModelId('Life System')
   createWindow()
   createTray()
+  if (!globalShortcut.register(PANIC_KEY, openUrgeCrusher)) console.warn(`could not register ${PANIC_KEY}`)
   checkReminders()
   setInterval(checkReminders, 30_000)
   backups.run()
@@ -283,6 +316,8 @@ app.whenReady().then(() => {
   powerMonitor.on('lock-screen', lockNow)
   powerMonitor.on('suspend', lockNow)
 })
+
+app.on('will-quit', () => globalShortcut.unregisterAll())
 
 app.on('before-quit', () => {
   quitting = true

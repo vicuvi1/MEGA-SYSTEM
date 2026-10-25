@@ -18,10 +18,21 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'study.block_skipped', module: 'schedule', title: 'Study block skipped', coins: -5, xp: 0, dailyCap: 6, cooldownMin: 0, enabled: true },
   { id: 'discipline.clean_day', module: 'discipline', title: 'Clean day', coins: 20, xp: 40, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'discipline.urge_resisted', module: 'discipline', title: 'Urge crushed', coins: 10, xp: 20, dailyCap: 5, cooldownMin: 10, enabled: true },
+  { id: 'discipline.oath', module: 'discipline', title: 'Morning oath', coins: 3, xp: 5, dailyCap: 1, cooldownMin: 0, enabled: true },
+  { id: 'discipline.reset', module: 'discipline', title: 'Streak reset', coins: -20, xp: 0, dailyCap: 3, cooldownMin: 0, enabled: true },
   { id: 'body.workout_done', module: 'body', title: 'Workout done', coins: 10, xp: 25, dailyCap: 2, cooldownMin: 60, enabled: true },
   { id: 'face.routine_done', module: 'tasks', title: 'Skincare routine', coins: 5, xp: 10, dailyCap: 2, cooldownMin: 240, enabled: true },
   { id: 'money.under_budget', module: 'money', title: 'Stayed under budget', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true }
 ]
+
+/**
+ * Rules paid only through their own section (focus timer, check-in, urge
+ * crusher), never by a quick-log tap, so the timer and the honest streak
+ * can't be skipped.
+ */
+export function isFlowRule(id: string): boolean {
+  return id.startsWith('discipline.') || id.startsWith('study.')
+}
 
 /** Checks caps and cooldowns and returns the row to insert for this rule. */
 export function planAward(rule: Rule, entries: LedgerEntry[], now: Date, day: string, note?: string): NewEntry {

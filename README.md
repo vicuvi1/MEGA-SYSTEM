@@ -6,7 +6,14 @@ The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-**Phases 0, 1 and 2 are done. Next: Phase 3, Discipline.**
+**Phases 0-3 are done. Next: Phase 4, Sleep (Waky port).**
+
+Phase 3 (Discipline, private):
+- The streak is worked out from a start date and dated resets, never a manual +1. A reset ("I slipped") restarts the current count only; best streak, total clean days and XP stay. It costs a few coins and opens a comeback plan.
+- Daily clean check-in (+20), morning oath (hold 3 s), and the urge crusher: a 3-minute breathing and push-up timer that pays only when it runs to the end. Panic shortcut from anywhere: Ctrl + Alt + U (also in the tray menu).
+- Milestones at 3, 7, 10, 14, 30, 60, 90, 180 and 365 days pay bonus coins and XP once per streak. Days reached before the streak was entered in the app show as reached without coins, so a backdated start can't unlock a pile at once.
+- Ranks, a 90-day campaign grid, a daily quote. Stealth mode hides the section and its Today card until clicked. The event log is append-only.
+- Study and Discipline points can no longer be tapped in Quick log; they only come from the timer, check-in and crusher.
 
 Phase 2 (Tasks + Schedule):
 - Tasks in categories Body, Face, Finance, University, Life (add your own). One-off tasks with an optional due date, or repeating every day or on chosen weekdays. Each task pays up to 30 coins; all tasks together pay at most 150 coins a day (XP keeps counting). Unticking a task takes its coins back.

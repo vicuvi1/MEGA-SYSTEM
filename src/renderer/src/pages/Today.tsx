@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import { isFlowRule } from '@core/rules'
+import type { DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
@@ -16,20 +17,21 @@ interface Props {
   shop: ShopState | null
   tasks: TasksState | null
   schedule: ScheduleState | null
+  discipline: DisciplineState | null
   onChange: (s?: Summary) => void
   onTasks: (t: TasksState) => void
   onSchedule: (s: ScheduleState) => void
   onGo: (page: PageId) => void
 }
 
-export function Today({ summary, rules, shop, tasks, schedule, onChange, onTasks, onSchedule, onGo }: Props) {
+export function Today({ summary, rules, shop, tasks, schedule, discipline, onChange, onTasks, onSchedule, onGo }: Props) {
   const onOpenShop = () => onGo('shop')
   const act = useAction()
   const [pops, setPops] = useState<Pop[]>([])
   const titles = useMemo(() => Object.fromEntries(rules.map((r) => [r.id, r.title])), [rules])
   const groups = useMemo(() => {
     const g: Record<string, Rule[]> = {}
-    for (const r of rules.filter((r) => r.enabled)) (g[r.module] ??= []).push(r)
+    for (const r of rules.filter((r) => r.enabled && !isFlowRule(r.id))) (g[r.module] ??= []).push(r)
     return g
   }, [rules])
 
@@ -66,13 +68,7 @@ export function Today({ summary, rules, shop, tasks, schedule, onChange, onTasks
           </div>
         </div>
         <NextReward balance={summary.balance} shop={shop} onOpenShop={onOpenShop} />
-        <div className="stat">
-          <span className="label">Level</span>
-          <div className="big">{summary.level.level}</div>
-          <span className="sub">
-            {summary.level.rank} · {summary.level.xpForNext - summary.level.xpIntoLevel} XP to next
-          </span>
-        </div>
+        <DisciplineCard state={discipline} onGo={onGo} />
       </section>
 
       <div className="cols even">
@@ -242,5 +238,26 @@ function TodayTasks({ tasks, onTasks, onWallet, onGo }: { tasks: TasksState | nu
       )}
       {tasks.tasks.length > 0 && <p className="hint block-hint">{doneCount} of {tasks.tasks.length} done</p>}
     </section>
+  )
+}
+
+function DisciplineCard({ state, onGo }: { state: DisciplineState | null; onGo: (p: PageId) => void }) {
+  if (!state) return <div className="stat" />
+  const hidden = state.stealth
+  return (
+    <button className="stat clickable disc-card" onClick={() => onGo('discipline')}>
+      <span className="label">Discipline</span>
+      {!state.setup ? (
+        <>
+          <div className="big small-big">Set up</div>
+          <span className="sub">Start your private streak</span>
+        </>
+      ) : (
+        <>
+          <div className="big">{hidden ? '••' : state.current} <small>days</small></div>
+          <span className="sub">{hidden ? 'Hidden' : state.checkedInToday ? `${state.rank} · checked in today` : state.resetToday ? 'Fresh start. Check in tomorrow.' : `${state.rank} · check in today`}</span>
+        </>
+      )}
+    </button>
   )
 }

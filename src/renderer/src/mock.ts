@@ -6,6 +6,7 @@ import { chestRef, DEFAULT_REWARDS, planRedeem, rollChest, unopenedChests, valid
 import type { AuthStatus, BackupStatus, ShopState, Summary } from '@shared/api'
 import type { Bridge } from './bridge'
 import { createMockPlan } from './mockPlan'
+import { createMockDiscipline } from './mockDiscipline'
 
 /** Browser-only stand-in for the Electron bridge, using the same core logic. */
 export function createMockApi(): Bridge {
@@ -74,6 +75,7 @@ export function createMockApi(): Bridge {
 
   return {
     ...createMockPlan({ entries, add, rules: () => rules }),
+    ...createMockDiscipline({ entries, add, rules: () => rules }),
     auth: {
       status: () => ok(auth()),
       setPin: async (p) => {
@@ -161,6 +163,7 @@ export function createMockApi(): Bridge {
         throw new Error('Restore is not available in the browser demo')
       }
     },
-    onLocked: () => {}
+    onLocked: () => {},
+    onUrge: () => {}
   }
 }

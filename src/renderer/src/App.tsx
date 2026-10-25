@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { AuthStatus, BackupStatus, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import type { AuthStatus, BackupStatus, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
@@ -14,6 +14,7 @@ import { Soon } from './pages/Soon'
 import { Shop } from './pages/Shop'
 import { Tasks } from './pages/Tasks'
 import { Schedule } from './pages/Schedule'
+import { Discipline } from './pages/Discipline'
 
 const IDLE_LOCK_MS = 10 * 60_000
 
@@ -65,9 +66,24 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [shop, setShop] = useState<ShopState | null>(null)
   const [tasks, setTasks] = useState<TasksState | null>(null)
   const [schedule, setSchedule] = useState<ScheduleState | null>(null)
+  const [discipline, setDiscipline] = useState<DisciplineState | null>(null)
+  // Stealth reveal lasts until the app locks or restarts.
+  const [revealed, setRevealed] = useState(false)
+  const [urgeOpen, setUrgeOpen] = useState(false)
+
+  useEffect(() => {
+    life.onUrge(() => {
+      setPage('discipline')
+      setRevealed(true)
+      setUrgeOpen(true)
+    })
+  }, [])
 
   const refresh = useCallback(async () => {
-    const [s, r, b, sh, t, sc] = await Promise.all([life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state(), life.tasks.state(), life.schedule.state()])
+    const [s, r, b, sh, t, sc, d] = await Promise.all([
+      life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state(), life.tasks.state(), life.schedule.state(), life.discipline.state()
+    ])
+    setDiscipline(d)
     setSummary(s)
     setRules(r)
     setBackup(b)
@@ -78,7 +94,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   // Coins moved: refresh everything that shows coins or completion.
   const onWallet = useCallback(async () => {
-    const [s, sh, t] = await Promise.all([life.wallet.summary(), life.shop.state(), life.tasks.state()])
+    const [s, sh, t, d] = await Promise.all([life.wallet.summary(), life.shop.state(), life.tasks.state(), life.discipline.state()])
+    setDiscipline(d)
     setSummary(s)
     setShop(sh)
     setTasks(t)
@@ -113,7 +130,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         </div>
         <nav aria-label="Sections">
           {MODULES.map((m) => (
-            <button key={m.id} className={`nav ${page === m.id ? 'on' : ''}`} onClick={() => setPage(m.id)} style={{ ['--c' as string]: m.color }}>
+            <button key={m.id} aria-label={m.label} className={`nav ${page === m.id ? 'on' : ''}`} onClick={() => setPage(m.id)} style={{ ['--c' as string]: m.color }}>
               <Icon name={m.icon} />
               <span>{m.label}</span>
               {m.phase > 0 && <em className="soon">soon</em>}
@@ -122,7 +139,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         </nav>
         <nav aria-label="System" className="nav-system">
           {SYSTEM_PAGES.map((m) => (
-            <button key={m.id} className={`nav small ${page === m.id ? 'on' : ''}`} onClick={() => setPage(m.id)}>
+            <button key={m.id} aria-label={m.label} className={`nav small ${page === m.id ? 'on' : ''}`} onClick={() => setPage(m.id)}>
               <Icon name={m.icon} size={16} />
               <span>{m.label}</span>
             </button>
@@ -177,7 +194,10 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <AnimatePresence mode="wait">
           <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             {page === 'today' && summary && (
-              <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} />
+              <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} />
+            )}
+            {page === 'discipline' && discipline && (
+              <Discipline state={discipline} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
             )}
             {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
             {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}

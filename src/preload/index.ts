@@ -7,7 +7,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return reply.data
 }
 
-const api: LifeApi & { onLocked(cb: () => void): void } = {
+const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void } = {
   auth: {
     status: () => call('auth:status'),
     setPin: (pin, currentPin) => call('auth:setPin', pin, currentPin),
@@ -48,6 +48,18 @@ const api: LifeApi & { onLocked(cb: () => void): void } = {
     finish: (id) => call('schedule:finish', id),
     skip: (id) => call('schedule:skip', id)
   },
+  discipline: {
+    state: () => call('discipline:state'),
+    setStart: (day) => call('discipline:setStart', day),
+    checkIn: () => call('discipline:checkIn'),
+    oath: () => call('discipline:oath'),
+    reset: () => call('discipline:reset'),
+    claim: (days) => call('discipline:claim', days),
+    startUrge: () => call('discipline:startUrge'),
+    finishUrge: () => call('discipline:finishUrge'),
+    cancelUrge: () => call('discipline:cancelUrge'),
+    setStealth: (on) => call('discipline:setStealth', on)
+  },
   app: {
     prefs: () => call('app:prefs'),
     setPrefs: (p) => call('app:setPrefs', p)
@@ -62,6 +74,9 @@ const api: LifeApi & { onLocked(cb: () => void): void } = {
   },
   onLocked: (cb) => {
     ipcRenderer.on('auth:locked', () => cb())
+  },
+  onUrge: (cb) => {
+    ipcRenderer.on('nav:urge', () => cb())
   }
 }
 

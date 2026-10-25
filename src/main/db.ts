@@ -120,6 +120,19 @@ const MIGRATIONS: string[] = [
     ledger_id INTEGER REFERENCES ledger(id),
     PRIMARY KEY (block_id, day)
   );
+  `,
+  /* 004 discipline: dated events; the streak is computed from them */ `
+  CREATE TABLE discipline_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL CHECK (kind IN ('start', 'reset', 'checkin', 'oath', 'urge')),
+    day TEXT NOT NULL,
+    ts TEXT NOT NULL
+  );
+  CREATE INDEX discipline_day ON discipline_events(day);
+  CREATE TRIGGER discipline_no_update BEFORE UPDATE ON discipline_events
+    BEGIN SELECT RAISE(ABORT, 'discipline log is append-only'); END;
+  CREATE TRIGGER discipline_no_delete BEFORE DELETE ON discipline_events
+    BEGIN SELECT RAISE(ABORT, 'discipline log is append-only'); END;
   `
 ]
 

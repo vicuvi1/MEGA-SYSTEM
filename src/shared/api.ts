@@ -64,6 +64,27 @@ export interface ScheduleState {
 
 export type BlockInput = Omit<Block, 'id' | 'createdDay'> & { id?: number }
 
+export interface DisciplineState {
+  setup: boolean
+  today: string
+  since: string | null
+  current: number
+  best: number
+  totalClean: number
+  resets: number
+  rank: string
+  nextRank: { name: string; days: number } | null
+  checkedInToday: boolean
+  oathToday: boolean
+  resetToday: boolean
+  canEditStart: boolean
+  milestones: { days: number; coins: number; status: 'locked' | 'claimable' | 'claimed' | 'before-setup'; reachedOn: string | null }[]
+  urgeStartedAt: string | null
+  urgesThisWeek: number
+  stealth: boolean
+  quote: string
+}
+
 export interface AppPrefs {
   openAtLogin: boolean
   /** Auto-start only works in the installed app, not in dev. */
@@ -143,6 +164,18 @@ export interface LifeApi {
     start(id: number): Promise<ScheduleState>
     finish(id: number): Promise<ScheduleState>
     skip(id: number): Promise<ScheduleState>
+  }
+  discipline: {
+    state(): Promise<DisciplineState>
+    setStart(day: string): Promise<DisciplineState>
+    checkIn(): Promise<DisciplineState>
+    oath(): Promise<DisciplineState>
+    reset(): Promise<DisciplineState>
+    claim(days: number): Promise<{ coins: number; state: DisciplineState }>
+    startUrge(): Promise<DisciplineState>
+    finishUrge(): Promise<DisciplineState>
+    cancelUrge(): Promise<DisciplineState>
+    setStealth(on: boolean): Promise<DisciplineState>
   }
   app: {
     prefs(): Promise<AppPrefs>
