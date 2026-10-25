@@ -2,7 +2,8 @@ import { dayKey } from '@core/dates'
 import { balance, effective, planUndo, totalXp, type LedgerEntry, type NewEntry } from '@core/ledger'
 import { levelInfo } from '@core/levels'
 import { DEFAULT_RULES, planAward, type Rule } from '@core/rules'
-import type { AuthStatus, BackupStatus, Summary } from '@shared/api'
+import { chestRef, DEFAULT_REWARDS, planRedeem, rollChest, unopenedChests, validateReward, type Reward } from '@core/shop'
+import type { AuthStatus, BackupStatus, ShopState, Summary } from '@shared/api'
 import type { Bridge } from './bridge'
 
 /** Browser-only stand-in for the Electron bridge, using the same core logic. */
@@ -13,8 +14,14 @@ export function createMockApi(): Bridge {
   let locked = false
   let pass: string | null = null
   let id = 1
+  let rewards: Reward[] = DEFAULT_REWARDS.map((r, i) => ({ ...r, id: i + 1 }))
+  const bought: { ledgerId: number; title: string; realCost: number; day: string }[] = []
+  let budget = 0
 
-  const add = (e: NewEntry) => entries.push({ ...e, id: id++ })
+  const add = (e: NewEntry) => {
+    entries.push({ ...e, id: id++ })
+    return id - 1
+  }
   // A little history so the demo isn't empty.
   const seed = ['sleep.up_on_time', 'discipline.clean_day', 'study.block_done', 'body.workout_done']
   seed.forEach((rid, i) => {
@@ -47,6 +54,22 @@ export function createMockApi(): Bridge {
     lastError: pass ? null : 'Set a backup passphrase in Settings to turn on backups'
   })
   const ok = <T>(v: T) => Promise.resolve(v)
+
+  const shop = (): ShopState => {
+    const live = new Set(effective(entries).map((e) => e.id))
+    const today = dayKey(new Date())
+    const level = levelInfo(totalXp(entries)).level
+    return {
+      rewards: rewards.filter((r) => !r.archived).sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.price - b.price),
+      balance: balance(entries),
+      level,
+      budget,
+      monthSpent: bought.filter((b) => live.has(b.ledgerId) && b.day.slice(0, 7) === today.slice(0, 7)).reduce((s, b) => s + b.realCost, 0),
+      currency: 'MDL',
+      chests: unopenedChests(level, effective(entries).map((e) => e.ref ?? '')),
+      recent: bought.slice().reverse().map((b) => ({ title: b.title, realCost: b.realCost, day: b.day, undone: !live.has(b.ledgerId) }))
+    }
+  }
 
   return {
     auth: {
@@ -86,6 +109,40 @@ export function createMockApi(): Bridge {
       save: async (rule) => {
         rules = rules.some((r) => r.id === rule.id) ? rules.map((r) => (r.id === rule.id ? rule : r)) : [...rules, rule]
         return rules
+      }
+    },
+    shop: {
+      state: () => ok(shop()),
+      save: async (input) => {
+        const r = { ...input, archived: false }
+        validateReward(r)
+        if (r.pinned) rewards = rewards.map((x) => ({ ...x, pinned: false }))
+        rewards = input.id ? rewards.map((x) => (x.id === input.id ? { ...x, ...r, id: x.id } : x)) : [...rewards, { ...r, id: rewards.length + 1 }]
+        return shop()
+      },
+      archive: async (rid) => {
+        rewards = rewards.map((r) => (r.id === rid ? { ...r, archived: true, pinned: false } : r))
+        return shop()
+      },
+      redeem: async (rid) => {
+        const s = shop()
+        const reward = rewards.find((r) => r.id === rid)!
+        planRedeem({ reward, balance: s.balance, level: s.level, monthSpent: s.monthSpent, budget })
+        const now = new Date()
+        const ledgerId = add({ ts: now.toISOString(), day: dayKey(now), module: 'shop', kind: 'spend', coins: -reward.price, xp: 0, ref: `reward:${rid}`, note: reward.title })
+        bought.push({ ledgerId, title: reward.title, realCost: reward.realCost, day: dayKey(now) })
+        return shop()
+      },
+      openChest: async (level) => {
+        if (!shop().chests.includes(level)) throw new Error('No chest waiting for that level')
+        const coins = rollChest(level, Math.random())
+        const now = new Date()
+        add({ ts: now.toISOString(), day: dayKey(now), module: 'shop', kind: 'earn', coins, xp: 0, ref: chestRef(level), note: `Level ${level} chest` })
+        return { coins, state: shop() }
+      },
+      setBudget: async (amount) => {
+        budget = amount
+        return shop()
       }
     },
     backup: {

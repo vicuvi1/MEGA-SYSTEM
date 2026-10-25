@@ -1,12 +1,13 @@
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, powerMonitor, shell } from 'electron'
-import type { IpcReply, Rule } from '@shared/api'
+import type { IpcReply, RewardInput, Rule } from '@shared/api'
 import { openDb, type DB } from './db'
 import { Wallet } from './wallet'
 import { Auth } from './auth'
 import { Backups } from './backup'
 import { SecretStore } from './secrets'
+import { Shop } from './shop'
 
 const isDev = !app.isPackaged
 app.setPath('userData', join(app.getPath('appData'), isDev ? 'LifeSystem-dev' : 'LifeSystem'))
@@ -22,12 +23,14 @@ const dbFile = join(dataDir, 'life.db')
 let db: DB
 let wallet: Wallet
 let auth: Auth
+let shop: Shop
 let win: BrowserWindow | null = null
 
 function open(): void {
   db = openDb(dbFile)
   wallet = new Wallet(db)
   auth = new Auth(db)
+  shop = new Shop(db, wallet)
 }
 open()
 
@@ -74,6 +77,25 @@ handle('rules:list', () => wallet.rules())
 handle('rules:save', (rule: Rule) => {
   wallet.saveRule(rule)
   return wallet.rules()
+})
+
+handle('shop:state', () => shop.state())
+handle('shop:save', (r: RewardInput) => {
+  shop.save(r)
+  return shop.state()
+})
+handle('shop:archive', (id: number) => {
+  shop.archive(id)
+  return shop.state()
+})
+handle('shop:redeem', (id: number) => {
+  shop.redeem(id)
+  return shop.state()
+})
+handle('shop:openChest', (level: number) => ({ coins: shop.openChest(level), state: shop.state() }))
+handle('shop:setBudget', (amount: number) => {
+  shop.setBudget(amount)
+  return shop.state()
 })
 
 handle('backup:status', () => backups.status())

@@ -48,7 +48,8 @@ export class Wallet {
     return (this.db.prepare('SELECT * FROM ledger ORDER BY id').all() as LedgerRow[]).map(toEntry)
   }
 
-  private insert(e: NewEntry): number {
+  /** Appends a row the core already validated. Call inside a transaction. */
+  append(e: NewEntry): number {
     const res = this.db
       .prepare(
         `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, ref, note, undo_of)
@@ -109,14 +110,14 @@ export class Wallet {
   award(ruleId: string, note?: string, now = new Date()): number {
     return this.db.transaction(() => {
       const row = planAward(this.rule(ruleId), this.entries(), now, dayKey(now, this.timeZone), note)
-      return this.insert(row)
+      return this.append(row)
     }).immediate()
   }
 
   undo(id: number, note: string, now = new Date()): number {
     return this.db.transaction(() => {
       const row = planUndo(this.entries(), id, note, now.toISOString(), dayKey(now, this.timeZone))
-      return this.insert(row)
+      return this.append(row)
     }).immediate()
   }
 }

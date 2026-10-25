@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { Rule, Summary } from '@shared/api'
+import type { Rule, ShopState, Summary } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES } from '../modules'
@@ -8,7 +8,15 @@ import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 
 type Pop = { id: number; coins: number; xp: number }
 
-export function Today({ summary, rules, onChange }: { summary: Summary; rules: Rule[]; onChange: (s: Summary) => void }) {
+interface Props {
+  summary: Summary
+  rules: Rule[]
+  shop: ShopState | null
+  onChange: (s: Summary) => void
+  onOpenShop: () => void
+}
+
+export function Today({ summary, rules, shop, onChange, onOpenShop }: Props) {
   const act = useAction()
   const [pops, setPops] = useState<Pop[]>([])
   const titles = useMemo(() => Object.fromEntries(rules.map((r) => [r.id, r.title])), [rules])
@@ -50,13 +58,7 @@ export function Today({ summary, rules, onChange }: { summary: Summary; rules: R
             </AnimatePresence>
           </div>
         </div>
-        <div className="stat">
-          <span className="label">Wallet</span>
-          <div className="big">
-            <Coins n={summary.balance} />
-          </div>
-          <span className="sub">ready to spend in the Shop</span>
-        </div>
+        <NextReward balance={summary.balance} shop={shop} onOpenShop={onOpenShop} />
         <div className="stat">
           <span className="label">Level</span>
           <div className="big">{summary.level.level}</div>
@@ -115,5 +117,32 @@ export function Today({ summary, rules, onChange }: { summary: Summary; rules: R
         </section>
       </div>
     </div>
+  )
+}
+
+function NextReward({ balance, shop, onOpenShop }: { balance: number; shop: ShopState | null; onOpenShop: () => void }) {
+  const target = shop?.rewards.find((r) => r.pinned) ?? shop?.rewards.find((r) => r.price > balance) ?? null
+  if (!target) {
+    return (
+      <button className="stat clickable" onClick={onOpenShop}>
+        <span className="label">Next reward</span>
+        <div className="big">
+          <Coins n={balance} />
+        </div>
+        <span className="sub">Pick a main goal in the Shop</span>
+      </button>
+    )
+  }
+  const pct = Math.min(1, balance / target.price)
+  const left = target.price - balance
+  return (
+    <button className="stat clickable" onClick={onOpenShop}>
+      <span className="label">Main goal · {target.title}</span>
+      <div className="big">{Math.round(pct * 100)}%</div>
+      <div className="bar goal">
+        <motion.i initial={false} animate={{ width: `${pct * 100}%` }} />
+      </div>
+      <span className="sub">{left > 0 ? `${left} coins to go` : 'Ready to redeem!'}</span>
+    </button>
   )
 }

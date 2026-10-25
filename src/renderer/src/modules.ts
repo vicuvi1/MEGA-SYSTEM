@@ -23,7 +23,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 3, blurb: 'Private streak, urge crusher and honest resets' },
   { id: 'body', label: 'Body', icon: 'bolt', color: '#FF6B8B', phase: 5, blurb: 'Workouts and body logs' },
   { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 5, blurb: 'Daily spending, safe-to-spend and budget points' },
-  { id: 'shop', label: 'Shop', icon: 'gift', color: '#F5C84B', phase: 1, blurb: 'Spend coins on real rewards, inside a real-money budget' },
+  { id: 'shop', label: 'Shop', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend coins on real rewards, inside a real-money budget' },
   { id: 'journey', label: 'Journey', icon: 'trophy', color: 'var(--lime)', phase: 6, blurb: 'Levels, ranks and weekly recaps' }
 ]
 

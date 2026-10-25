@@ -58,6 +58,8 @@ export function planUndo(entries: LedgerEntry[], id: number, note: string, ts: s
   const target = entries.find((e) => e.id === id)
   if (!target) throw new LedgerError('Entry not found')
   if (target.kind === 'undo') throw new LedgerError('Cannot undo an undo')
+  // Otherwise a low roll could be undone and the chest opened again.
+  if (target.ref?.startsWith('chest:')) throw new LedgerError('Chest prizes are final')
   if (entries.some((e) => e.kind === 'undo' && e.undoOf === id)) throw new LedgerError('Already undone')
   if (balance(entries) - target.coins < 0) throw new LedgerError('Those coins were already spent')
   return { ts, day, module: target.module, kind: 'undo', coins: 0, xp: 0, ruleId: target.ruleId ?? null, ref: target.ref ?? null, note, undoOf: id }

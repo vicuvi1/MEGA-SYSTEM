@@ -6,7 +6,12 @@ The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-**Phase 0 (foundations) is done; Phase 1 (core economy) is started.**
+**Phases 0 (foundations) and 1 (core economy) are done. Next: Phase 2, Tasks + Schedule.**
+
+- Shop: rewards with a coin price and a real-money cost, tiers that unlock with level (Bronze 1, Silver 5, Gold 10, Legendary 20), one "main goal" shown on Today, add/edit/archive your own rewards.
+- Monthly real-money reward budget, so coins never push overspending.
+- Chests: every level up drops one, opened for bonus coins. Chest prizes are final (no undo-and-reroll).
+- Bought something by mistake? Undo it in History and the coins come back.
 
 - Wallet: an append-only ledger. The database rejects edits and deletes, and an undo is a new row that needs a reason.
 - Levels and ranks: XP never goes down. Penalties take coins only and never push the wallet below zero.

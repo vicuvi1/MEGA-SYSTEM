@@ -39,6 +39,31 @@ const MIGRATIONS: string[] = [
     enabled INTEGER NOT NULL DEFAULT 1,
     sort INTEGER NOT NULL DEFAULT 0
   );
+  `,
+  /* 002 shop: rewards and what was bought (the coins live in the ledger) */ `
+  CREATE TABLE rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    price INTEGER NOT NULL CHECK (price > 0),
+    tier TEXT NOT NULL CHECK (tier IN ('bronze', 'silver', 'gold', 'legendary')),
+    real_cost INTEGER NOT NULL DEFAULT 0 CHECK (real_cost >= 0),
+    pinned INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0,
+    note TEXT
+  );
+  CREATE TABLE redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ledger_id INTEGER NOT NULL UNIQUE REFERENCES ledger(id),
+    reward_id INTEGER NOT NULL REFERENCES rewards(id),
+    title TEXT NOT NULL,
+    real_cost INTEGER NOT NULL DEFAULT 0,
+    day TEXT NOT NULL
+  );
+  INSERT INTO rewards (title, price, tier, real_cost, pinned, note) VALUES
+    ('Face cream', 300, 'bronze', 250, 0, NULL),
+    ('New phone case', 600, 'bronze', 300, 1, NULL),
+    ('Shaver machine', 1500, 'silver', 900, 0, NULL),
+    ('Kaaba trip fund', 20000, 'legendary', 0, 0, 'The big one. Keep stacking.');
   `
 ]
 

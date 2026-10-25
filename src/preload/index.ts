@@ -24,6 +24,14 @@ const api: LifeApi & { onLocked(cb: () => void): void } = {
     list: () => call('rules:list'),
     save: (rule) => call('rules:save', rule)
   },
+  shop: {
+    state: () => call('shop:state'),
+    save: (r) => call('shop:save', r),
+    archive: (id) => call('shop:archive', id),
+    redeem: (id) => call('shop:redeem', id),
+    openChest: (level) => call('shop:openChest', level),
+    setBudget: (amount) => call('shop:setBudget', amount)
+  },
   backup: {
     status: () => call('backup:status'),
     setPassphrase: (p) => call('backup:setPassphrase', p),

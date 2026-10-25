@@ -219,3 +219,65 @@ input[type='checkbox'] { accent-color: var(--lime); width: 16px; height: 16px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- Shop ---------- */
+.shop { display: grid; gap: 18px; }
+.stat.clickable { text-align: left; cursor: pointer; font: inherit; color: inherit; transition: border-color 0.15s; }
+.stat.clickable:hover { border-color: #3a4358; }
+.bar.goal, .bar.budget { margin: 8px 0 6px; }
+.bar.budget i.hot { background: linear-gradient(90deg, var(--orange), var(--red)); box-shadow: none; }
+.big.small-big { font-size: 26px; }
+.big small { font-size: 13px; color: var(--muted); font-weight: 600; }
+.link { background: none; border: 0; padding: 0; color: var(--lime); font-size: 12.5px; }
+.link:hover { text-decoration: underline; }
+.row.tight { margin-top: 8px; }
+.row.tight input { flex: 1 1 120px; }
+.block-sub { display: block; margin-top: 10px; }
+
+.stat.chests.has { border-color: rgba(245, 200, 75, 0.4); background: radial-gradient(120% 140% at 100% 0%, rgba(245, 200, 75, 0.14), transparent 60%), var(--panel); }
+.chest-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.chest {
+  display: grid; justify-items: center; gap: 2px; width: 62px; padding: 9px 0 7px;
+  border-radius: 12px; border: 1px solid rgba(245, 200, 75, 0.5);
+  background: linear-gradient(180deg, #3a2f12, #221c0c); color: var(--gold);
+  font: 700 10.5px var(--display); letter-spacing: 0.08em;
+  box-shadow: 0 0 18px rgba(245, 200, 75, 0.25);
+}
+
+.reward-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.reward {
+  --tier: var(--gold);
+  position: relative; display: flex; flex-direction: column; gap: 8px;
+  padding: 16px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line);
+  overflow: hidden;
+}
+.reward::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--tier); box-shadow: 0 0 14px var(--tier); }
+.reward.ready { border-color: color-mix(in srgb, var(--tier) 45%, var(--line)); }
+.reward.locked { opacity: 0.6; }
+.reward header { display: flex; align-items: center; justify-content: space-between; }
+.reward .tier { font: 700 10.5px var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--tier); }
+.reward-tools { display: flex; gap: 4px; }
+.reward-tools .icon-btn { width: 26px; height: 26px; }
+.icon-btn.pinned { color: var(--lime); border-color: rgba(200, 241, 53, 0.45); }
+.reward h3 { font-size: 17px; }
+.reward .note { margin: -4px 0 0; color: var(--muted); font-size: 12.5px; }
+.price { display: flex; align-items: baseline; gap: 10px; font-size: 18px; margin-top: auto; }
+.price .real { font-size: 12px; color: var(--muted); }
+.reward .bar i { background: linear-gradient(90deg, color-mix(in srgb, var(--tier) 70%, #000), var(--tier)); box-shadow: none; }
+.lock-note { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; min-height: 36px; }
+.reward .btn { width: 100%; }
+.reward.add { align-items: center; justify-content: center; gap: 8px; min-height: 200px; border-style: dashed; background: transparent; color: var(--muted); cursor: pointer; }
+.reward.add::before { display: none; }
+.reward.add:hover { color: var(--text); border-color: #3a4358; }
+
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+label.check { display: flex !important; align-items: center; gap: 8px; color: var(--text) !important; }
+.spacer { flex: 1; }
+.danger-text { color: var(--red); }
+
+.celebrate { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(4, 6, 10, 0.55); backdrop-filter: blur(4px); cursor: pointer; }
+.burst { position: absolute; left: 50%; top: 50%; }
+.burst i { position: absolute; width: 10px; height: 10px; border-radius: 3px; margin: -5px; }
+.celebrate-card { display: grid; justify-items: center; gap: 6px; padding: 30px 40px; border-radius: 20px; background: var(--panel); border: 1px solid rgba(200, 241, 53, 0.4); box-shadow: 0 0 60px rgba(200, 241, 53, 0.2); color: var(--lime); text-align: center; }
+.celebrate-card h2 { font-size: 26px; color: var(--text); }
+.celebrate-card p { margin: 0; color: var(--muted); }

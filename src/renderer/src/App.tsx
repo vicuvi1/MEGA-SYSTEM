@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { AuthStatus, BackupStatus, Rule, Summary } from '@shared/api'
+import type { AuthStatus, BackupStatus, Rule, ShopState, Summary } from '@shared/api'
 import { isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
@@ -11,6 +11,7 @@ import { History } from './pages/History'
 import { Rules } from './pages/Rules'
 import { Settings } from './pages/Settings'
 import { Soon } from './pages/Soon'
+import { Shop } from './pages/Shop'
 
 const IDLE_LOCK_MS = 10 * 60_000
 
@@ -59,12 +60,21 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
   const [backup, setBackup] = useState<BackupStatus | null>(null)
+  const [shop, setShop] = useState<ShopState | null>(null)
 
   const refresh = useCallback(async () => {
-    const [s, r, b] = await Promise.all([life.wallet.summary(), life.rules.list(), life.backup.status()])
+    const [s, r, b, sh] = await Promise.all([life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state()])
     setSummary(s)
     setRules(r)
     setBackup(b)
+    setShop(sh)
+  }, [])
+
+  // Coins moved: refresh the wallet and the shop together.
+  const onWallet = useCallback(async () => {
+    const [s, sh] = await Promise.all([life.wallet.summary(), life.shop.state()])
+    setSummary(s)
+    setShop(sh)
   }, [])
 
   useEffect(() => {
@@ -150,8 +160,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
         <AnimatePresence mode="wait">
           <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            {page === 'today' && summary && <Today summary={summary} rules={rules} onChange={setSummary} />}
-            {page === 'history' && <History rules={rules} onChange={setSummary} />}
+            {page === 'today' && summary && <Today summary={summary} rules={rules} shop={shop} onChange={onWallet} onOpenShop={() => setPage('shop')} />}
+            {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
+            {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'rules' && <Rules rules={rules} onChange={setRules} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} />}
             {current.phase > 0 && <Soon module={current} />}
