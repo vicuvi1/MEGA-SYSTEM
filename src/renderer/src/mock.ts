@@ -180,6 +180,7 @@ export function createMockApi(): Bridge {
     onUrge: () => {},
     onWalletChanged: () => {},
     onNavigate: () => {},
-    onUpdate: () => {}
+    onUpdate: () => {},
+    onUiKey: () => () => {}
   }
 }

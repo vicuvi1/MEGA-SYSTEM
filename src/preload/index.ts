@@ -7,7 +7,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return reply.data
 }
 
-const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void } = {
+const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void; onUiKey(cb: (key: string) => void): () => void } = {
   auth: {
     status: () => call('auth:status'),
     setPin: (pin, currentPin) => call('auth:setPin', pin, currentPin),
@@ -103,6 +103,11 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
   },
   onUpdate: (cb) => {
     ipcRenderer.on('update:event', (_e, s: UpdateStatus) => cb(s))
+  },
+  onUiKey: (cb) => {
+    const fn = (_e: unknown, key: string) => cb(key)
+    ipcRenderer.on('ui:key', fn)
+    return () => ipcRenderer.removeListener('ui:key', fn)
   }
 }
 

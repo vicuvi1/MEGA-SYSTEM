@@ -259,6 +259,19 @@ app.on('web-contents-created', (_e, wc) => {
     prefs.sandbox = true
   })
   if (wc.getType() === 'webview') {
+    // Life System's shortcuts keep working while an app inside has focus.
+    wc.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      const key = input.key.toLowerCase()
+      let action: string | null = null
+      if (input.control && !input.alt && !input.shift && key === 'b') action = 'toggle-sidebar'
+      else if (input.alt && !input.control && /^[1-9]$/.test(key)) action = `go:${key}`
+      else if (input.control && key === 'tab') action = 'switch-view'
+      if (action) {
+        event.preventDefault()
+        win?.webContents.send('ui:key', action)
+      }
+    })
     // Links from inside the apps open in the real browser.
     wc.setWindowOpenHandler(({ url }) => {
       if (/^https:/.test(url)) shell.openExternal(url)

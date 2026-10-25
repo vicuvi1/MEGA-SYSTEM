@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { AuthStatus, BackupStatus, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { isDemo, life } from './bridge'
@@ -86,6 +86,15 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // Which tab each app section shows: the app itself, or Life System's view.
   const [view, setView] = useState<Partial<Record<PageId, 'app' | 'system'>>>({})
   const [update, setUpdate] = useUpdates()
+  const [sidebarMode, setSidebarMode] = useState<'auto' | 'open' | 'closed'>(() => {
+    try {
+      return (localStorage.getItem('ls.sidebar') as 'auto' | 'open' | 'closed') || 'auto'
+    } catch {
+      return 'auto'
+    }
+  })
+  const [peek, setPeek] = useState(false)
+  const peekTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     life.onNavigate((p) => {
@@ -150,42 +159,142 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const tab = embed ? (hiddenByStealth ? 'system' : view[page] ?? 'app') : 'system'
   const activeEmbed = embed && tab === 'app' ? embed.kind : null
 
+  const toggleSidebar = useCallback(() => {
+    setPeek(false)
+    setSidebarMode((m) => {
+      const isCollapsed = m === 'closed' || (m === 'auto' && !!activeEmbed)
+      const next = isCollapsed ? 'open' : 'closed'
+      try {
+        localStorage.setItem('ls.sidebar', next)
+      } catch {
+        // per-viewer convenience only
+      }
+      return next
+    })
+  }, [activeEmbed])
+
+  // Shortcuts, also while an app inside is focused (main forwards them).
+  useEffect(() => {
+    const run = (key: string) => {
+      if (key === 'toggle-sidebar') toggleSidebar()
+      const n = /^go:(\d)$/.exec(key)
+      if (n && MODULES[Number(n[1]) - 1]) setPage(MODULES[Number(n[1]) - 1].id)
+      if (key === 'switch-view' && embed) setView((v) => ({ ...v, [page]: tab === 'app' ? 'system' : 'app' }))
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        run('toggle-sidebar')
+      } else if (e.altKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
+        e.preventDefault()
+        run(`go:${e.key}`)
+      } else if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault()
+        run('switch-view')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    const off = life.onUiKey(run)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      off()
+    }
+  }, [toggleSidebar, embed, page, tab])
+
+  // Sidebar: full, or a slim icon rail. "auto" turns it into a rail while an
+  // app is open, so the app gets the room; hovering the rail slides it out.
+  const collapsed = sidebarMode === 'closed' || (sidebarMode === 'auto' && !!activeEmbed)
+  const compact = !!embed
+
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <Icon name="spark" size={16} />
-          </span>
-          <span>
-            LIFE<b>SYSTEM</b>
-          </span>
-        </div>
-        <nav aria-label="Sections">
-          {MODULES.map((m) => (
-            <button key={m.id} aria-label={m.label} className={`nav ${page === m.id ? 'on' : ''}`} onClick={() => setPage(m.id)} style={{ ['--c' as string]: m.color }}>
-              <Icon name={m.icon} />
-              <span>{m.label}</span>
-              {m.phase > 0 && <em className="soon">soon</em>}
+    <div className={`shell ${collapsed ? 'rail' : ''}`}>
+      <div className="side-cell">
+        <aside
+          className={`sidebar ${collapsed ? 'collapsed' : ''} ${collapsed && peek ? 'peek' : ''}`}
+          onMouseEnter={() => {
+            if (!collapsed) return
+            clearTimeout(peekTimer.current)
+            peekTimer.current = window.setTimeout(() => setPeek(true), 160)
+          }}
+          onMouseLeave={() => {
+            clearTimeout(peekTimer.current)
+            setPeek(false)
+          }}
+        >
+          <div className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              <Icon name="spark" size={16} />
+            </span>
+            <span className="label">
+              LIFE<b>SYSTEM</b>
+            </span>
+          </div>
+          <nav aria-label="Sections">
+            {MODULES.map((m, i) => (
+              <button
+                key={m.id}
+                aria-label={m.label}
+                title={collapsed && !peek ? `${m.label}  (Alt+${i + 1})` : undefined}
+                className={`nav ${page === m.id ? 'on' : ''}`}
+                onClick={() => {
+                  setPage(m.id)
+                  setPeek(false)
+                }}
+                style={{ ['--c' as string]: m.color }}
+              >
+                <Icon name={m.icon} />
+                <span className="label">{m.label}</span>
+                {m.phase > 0 && <em className="soon label">soon</em>}
+              </button>
+            ))}
+          </nav>
+          <nav aria-label="System" className="nav-system">
+            {SYSTEM_PAGES.map((m) => (
+              <button
+                key={m.id}
+                aria-label={m.label}
+                title={collapsed && !peek ? m.label : undefined}
+                className={`nav small ${page === m.id ? 'on' : ''}`}
+                onClick={() => {
+                  setPage(m.id)
+                  setPeek(false)
+                }}
+              >
+                <Icon name={m.icon} size={16} />
+                <span className="label">{m.label}</span>
+              </button>
+            ))}
+            <button className="nav small side-toggle" onClick={toggleSidebar} title="Collapse or expand the sidebar (Ctrl+B)" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              <span className={`chev ${collapsed ? 'right' : ''}`} aria-hidden="true">
+                ‹
+              </span>
+              <span className="label">{collapsed ? 'Keep open' : 'Collapse'}</span>
+              <kbd className="label">Ctrl B</kbd>
             </button>
-          ))}
-        </nav>
-        <nav aria-label="System" className="nav-system">
-          {SYSTEM_PAGES.map((m) => (
-            <button key={m.id} aria-label={m.label} className={`nav small ${page === m.id ? 'on' : ''}`} onClick={() => setPage(m.id)}>
-              <Icon name={m.icon} size={16} />
-              <span>{m.label}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
+          </nav>
+        </aside>
+      </div>
 
       <div className="main">
-        <header className="topbar">
+        <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">
             <h1>{current.label}</h1>
-            <p>{current.blurb}</p>
+            {!compact && <p>{current.blurb}</p>}
           </div>
+          {embed && !hiddenByStealth && (
+            <div className="seg-switch" role="tablist" aria-label={`${current.label} views`}>
+              <span className={`seg-thumb ${tab === 'app' ? '' : 'second'}`} aria-hidden="true" />
+              <button role="tab" aria-selected={tab === 'app'} className={tab === 'app' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'app' }))}>
+                <Icon name={embed.kind === 'finance' ? 'coin' : embed.kind === 'waky' ? 'moon' : 'shield'} size={14} />
+                {EMBED_LABEL[embed.kind]}
+              </button>
+              <button role="tab" aria-selected={tab === 'system'} className={tab === 'system' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'system' }))}>
+                <Icon name="spark" size={14} />
+                {embed.system}
+              </button>
+            </div>
+          )}
+          <span className="spacer" />
           {lv && summary && (
             <div className="player">
               <div className="lvl-badge" title={`${summary.totalXp} XP total`}>
@@ -213,7 +322,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {backup && (
               <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>
                 <Icon name="cloud" size={15} />
-                {backup.lastError ? 'Backup off' : 'Backed up'}
+                <span className="chip-text">{backup.lastError ? 'Backup off' : 'Backed up'}</span>
               </button>
             )}
             {isDemo && <span className="chip">Demo</span>}
@@ -224,17 +333,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             )}
           </div>
         </header>
-
-        {embed && !hiddenByStealth && (
-          <div className="app-tabs" role="tablist" aria-label={`${current.label} views`}>
-            <button role="tab" aria-selected={tab === 'app'} className={tab === 'app' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'app' }))}>
-              {EMBED_LABEL[embed.kind]}
-            </button>
-            <button role="tab" aria-selected={tab === 'system'} className={tab === 'system' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'system' }))}>
-              {embed.system}
-            </button>
-          </div>
-        )}
 
         <EmbedHost active={activeEmbed} />
 
