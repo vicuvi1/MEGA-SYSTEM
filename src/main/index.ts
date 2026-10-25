@@ -1,9 +1,10 @@
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, shell, Tray } from 'electron'
 import { dueReminders } from '@core/plan'
 import { isFlowRule } from '@core/rules'
-import type { AppPrefs, BlockInput, Category, IpcReply, RewardInput, Rule, TaskInput } from '@shared/api'
+import type { AppPrefs, BlockInput, Category, ConnectionKind, IpcReply, RewardInput, Rule, TaskInput } from '@shared/api'
 import { getSetting, openDb, setSetting, type DB } from './db'
 import { Wallet } from './wallet'
 import { Auth } from './auth'
@@ -12,6 +13,7 @@ import { SecretStore } from './secrets'
 import { Shop } from './shop'
 import { Schedule, Tasks } from './planner'
 import { Discipline } from './discipline'
+import { Connections, defaultCandidates } from './connections'
 import { appIconPng } from './icon'
 
 const isDev = !app.isPackaged
@@ -37,6 +39,7 @@ let shop: Shop
 let tasks: Tasks
 let schedule: Schedule
 let discipline: Discipline
+let connections: Connections
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
@@ -49,6 +52,7 @@ function open(): void {
   tasks = new Tasks(db, wallet)
   schedule = new Schedule(db, wallet)
   discipline = new Discipline(db, wallet)
+  connections = new Connections(db, wallet, defaultCandidates(homedir(), DRIVE_ROOT))
 }
 open()
 
@@ -171,6 +175,38 @@ handle('discipline:setStealth', (on: boolean) => {
   discipline.setStealth(on)
   return discipline.state()
 })
+
+handle('connections:state', () => connections.state())
+handle('connections:connect', (kind: 'waky' | 'finance') => {
+  connections.connect(kind)
+  connections.sync()
+  return connections.state()
+})
+handle('connections:disconnect', (kind: 'waky' | 'finance') => {
+  connections.disconnect(kind)
+  return connections.state()
+})
+handle('connections:sync', () => ({ awarded: connections.sync(), state: connections.state() }))
+handle('connections:setDailyBudget', (amount: number) => {
+  connections.setDailyBudget(amount)
+  return connections.state()
+})
+handle('connections:choosePath', async (kind: ConnectionKind) => {
+  const res = await dialog.showOpenDialog(win!, kind === 'man'
+    ? { title: 'Choose the MAN profile folder (Local Storage, leveldb)', properties: ['openDirectory'] }
+    : { title: kind === 'waky' ? 'Choose waky.json' : 'Choose finance-helper-sync.json', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] })
+  if (!res.canceled && res.filePaths[0]) connections.setPath(kind, res.filePaths[0])
+  return connections.state()
+})
+
+// Connected apps pay out shortly after they record something.
+function syncConnections(): void {
+  try {
+    if (connections.sync() > 0) win?.webContents.send('wallet:changed')
+  } catch (e) {
+    console.error('connection sync failed', e)
+  }
+}
 
 function prefs(): AppPrefs {
   return {
@@ -310,6 +346,8 @@ app.whenReady().then(() => {
   if (!globalShortcut.register(PANIC_KEY, openUrgeCrusher)) console.warn(`could not register ${PANIC_KEY}`)
   checkReminders()
   setInterval(checkReminders, 30_000)
+  syncConnections()
+  setInterval(syncConnections, 5 * 60_000)
   backups.run()
   setInterval(() => backups.run(), BACKUP_EVERY_MS)
   // Lock when Windows locks or sleeps.

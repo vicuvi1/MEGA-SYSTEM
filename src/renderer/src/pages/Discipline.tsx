@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { campaignMap, URGE_SECONDS } from '@core/discipline'
-import type { DisciplineState } from '@shared/api'
+import type { ConnectionsState, DisciplineState } from '@shared/api'
+
+type ManSuggestion = ConnectionsState['man']['suggestion']
 import { isDemo, life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction } from '../ui'
@@ -10,6 +12,7 @@ import { useTicker } from './Schedule'
 
 interface Props {
   state: DisciplineState
+  man: ManSuggestion
   onState: (s: DisciplineState) => void
   onWallet: () => void
   revealed: boolean
@@ -18,7 +21,7 @@ interface Props {
   onUrgeOpen: (open: boolean) => void
 }
 
-export function Discipline({ state, onState, onWallet, revealed, onReveal, urgeOpen, onUrgeOpen }: Props) {
+export function Discipline({ state, man, onState, onWallet, revealed, onReveal, urgeOpen, onUrgeOpen }: Props) {
   const act = useAction()
   const [confirmReset, setConfirmReset] = useState(false)
   const [comeback, setComeback] = useState(false)
@@ -33,7 +36,7 @@ export function Discipline({ state, onState, onWallet, revealed, onReveal, urgeO
     return s
   }
 
-  if (!state.setup) return <Setup onState={onState} />
+  if (!state.setup) return <Setup man={man} onState={onState} />
   if (state.stealth && !revealed) {
     return (
       <button className="panel stealth-cover" onClick={onReveal}>
@@ -240,10 +243,10 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Setup({ onState }: { onState: (s: DisciplineState) => void }) {
+function Setup({ man, onState }: { man: ManSuggestion; onState: (s: DisciplineState) => void }) {
   const act = useAction()
   const today = new Date().toISOString().slice(0, 10)
-  const [day, setDay] = useState(today)
+  const [day, setDay] = useState(man?.start ?? today)
   return (
     <section className="panel setup">
       <div className="soon-icon" style={{ ['--c' as string]: '#FF8A3D' }}>
@@ -251,6 +254,14 @@ function Setup({ onState }: { onState: (s: DisciplineState) => void }) {
       </div>
       <h2>Set up Discipline</h2>
       <p className="hint">When did your current streak start? The count is worked out from this date, so it stays honest. You can't bump it by hand.</p>
+      {man && (
+        <div className="man-import">
+          <b>Found your MAN app: {man.showsDays}-day streak.</b>
+          <span>
+            Starting on {man.start} gives the same {man.showsDays} days here.{man.note ? ` ${man.note}` : ''}
+          </span>
+        </div>
+      )}
       <div className="row center">
         <input type="date" max={today} value={day} onChange={(e) => setDay(e.target.value)} aria-label="Streak start date" />
         <button className="btn primary" onClick={async () => { const s = await act(() => life.discipline.setStart(day), 'Streak set'); if (s) onState(s) }}>

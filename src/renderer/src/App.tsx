@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { AuthStatus, BackupStatus, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import type { AuthStatus, BackupStatus, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
@@ -15,6 +15,9 @@ import { Shop } from './pages/Shop'
 import { Tasks } from './pages/Tasks'
 import { Schedule } from './pages/Schedule'
 import { Discipline } from './pages/Discipline'
+import { Sleep } from './pages/Sleep'
+import { Money } from './pages/Money'
+import { Connected } from './pages/Connected'
 
 const IDLE_LOCK_MS = 10 * 60_000
 
@@ -67,6 +70,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [tasks, setTasks] = useState<TasksState | null>(null)
   const [schedule, setSchedule] = useState<ScheduleState | null>(null)
   const [discipline, setDiscipline] = useState<DisciplineState | null>(null)
+  const [connections, setConnections] = useState<ConnectionsState | null>(null)
   // Stealth reveal lasts until the app locks or restarts.
   const [revealed, setRevealed] = useState(false)
   const [urgeOpen, setUrgeOpen] = useState(false)
@@ -84,6 +88,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state(), life.tasks.state(), life.schedule.state(), life.discipline.state()
     ])
     setDiscipline(d)
+    life.connections.state().then(setConnections)
     setSummary(s)
     setRules(r)
     setBackup(b)
@@ -94,8 +99,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   // Coins moved: refresh everything that shows coins or completion.
   const onWallet = useCallback(async () => {
-    const [s, sh, t, d] = await Promise.all([life.wallet.summary(), life.shop.state(), life.tasks.state(), life.discipline.state()])
+    const [s, sh, t, d, c] = await Promise.all([life.wallet.summary(), life.shop.state(), life.tasks.state(), life.discipline.state(), life.connections.state()])
     setDiscipline(d)
+    setConnections(c)
     setSummary(s)
     setShop(sh)
     setTasks(t)
@@ -113,6 +119,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // A connected app paid something in the background.
+  useEffect(() => {
+    life.onWalletChanged(() => onWallet())
+  }, [onWallet])
 
   const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page)!
   const lv = summary?.level
@@ -197,8 +208,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} />
             )}
             {page === 'discipline' && discipline && (
-              <Discipline state={discipline} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
+              <Discipline state={discipline} man={connections?.man.suggestion ?? null} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
             )}
+            {page === 'sleep' && connections && <Sleep state={connections} onState={setConnections} onWallet={onWallet} />}
+            {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} />}
+            {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
             {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}

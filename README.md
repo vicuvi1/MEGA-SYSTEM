@@ -6,7 +6,13 @@ The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-**Phases 0-3 are done. Next: Phase 4, Sleep (Waky port).**
+**Phases 0-3 are done, and Waky, Finance Helper and MAN are connected. Next: Body (workouts) and polish/installer.**
+
+Connected apps (Sleep, Money, Connected apps pages):
+- Waky stays the alarm. Life System reads `data/waky.json`: each on-time wake-up pays +10 and each on-time bedtime +5, from the day you connect. Sleep shows this morning, the wake streak, on-time rate, a two-week chart and average sleep.
+- Finance Helper stays the money app. Life System reads the file it syncs to `G:\My Drive\Finance Helper\finance-helper-sync.json`: a day with logged spending pays +3, and a finished day with everyday spending (bills and rent left out) under your daily budget pays +5. Days after Finance Helper's last save aren't judged. Turn on its folder sync so the file stays fresh.
+- MAN: its desktop copy's saved streak is read once to suggest the Discipline start date that shows the same day count. Nothing is paid from it.
+- Checked on start and every 5 minutes, or with "Check now". Payouts are never repeated, even after an undo. Sleep and money rules can't be tapped in Quick log anymore.
 
 Phase 3 (Discipline, private):
 - The streak is worked out from a start date and dated resets, never a manual +1. A reset ("I slipped") restarts the current count only; best streak, total clean days and XP stay. It costs a few coins and opens a comeback plan.

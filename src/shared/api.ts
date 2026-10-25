@@ -85,6 +85,44 @@ export interface DisciplineState {
   quote: string
 }
 
+export type ConnectionKind = 'waky' | 'finance' | 'man'
+
+export interface ConnectionBase {
+  path: string | null
+  found: boolean
+  error: string | null
+}
+
+export interface ConnectionsState {
+  today: string
+  lastSync: string | null
+  waky: ConnectionBase & {
+    connectedSince: string | null
+    weekday: string | null
+    weekend: string | null
+    today: { time: string; target: string; onTime: boolean } | null
+    streak: number
+    best: number
+    onTimeRate: number | null // last 14 days with a check-in
+    mornings: { day: string; time: string; target: string; onTime: boolean; sleptMin: number | null }[]
+    avgSleepMin: number | null
+  }
+  finance: ConnectionBase & {
+    connectedSince: string | null
+    currency: string
+    savedAt: string | null
+    staleDays: number | null
+    dailyBudget: number // whole currency units, 0 = off
+    today: { logged: boolean; everydaySpent: number } | null
+    month: { spent: number; everyday: number; income: number; days: number } | null
+    days: { day: string; logged: boolean; everydaySpent: number; judged: boolean }[]
+  }
+  man: ConnectionBase & {
+    data: { streakDays: number; longestStreak: number; totalVictories: number; lastCheckin: string | null; urgesCrushed: number; oathsSworn: number } | null
+    suggestion: { start: string; showsDays: number; lastTapDaysAgo: number | null; note: string | null } | null
+  }
+}
+
 export interface AppPrefs {
   openAtLogin: boolean
   /** Auto-start only works in the installed app, not in dev. */
@@ -176,6 +214,14 @@ export interface LifeApi {
     finishUrge(): Promise<DisciplineState>
     cancelUrge(): Promise<DisciplineState>
     setStealth(on: boolean): Promise<DisciplineState>
+  }
+  connections: {
+    state(): Promise<ConnectionsState>
+    connect(kind: 'waky' | 'finance'): Promise<ConnectionsState>
+    disconnect(kind: 'waky' | 'finance'): Promise<ConnectionsState>
+    sync(): Promise<{ awarded: number; state: ConnectionsState }>
+    choosePath(kind: ConnectionKind): Promise<ConnectionsState>
+    setDailyBudget(amount: number): Promise<ConnectionsState>
   }
   app: {
     prefs(): Promise<AppPrefs>

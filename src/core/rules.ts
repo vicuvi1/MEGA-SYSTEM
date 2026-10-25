@@ -22,16 +22,17 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'discipline.reset', module: 'discipline', title: 'Streak reset', coins: -20, xp: 0, dailyCap: 3, cooldownMin: 0, enabled: true },
   { id: 'body.workout_done', module: 'body', title: 'Workout done', coins: 10, xp: 25, dailyCap: 2, cooldownMin: 60, enabled: true },
   { id: 'face.routine_done', module: 'tasks', title: 'Skincare routine', coins: 5, xp: 10, dailyCap: 2, cooldownMin: 240, enabled: true },
-  { id: 'money.under_budget', module: 'money', title: 'Stayed under budget', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true }
+  { id: 'money.under_budget', module: 'money', title: 'Stayed under budget', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
+  { id: 'money.logged', module: 'money', title: 'Logged spending', coins: 3, xp: 5, dailyCap: 1, cooldownMin: 0, enabled: true }
 ]
 
 /**
- * Rules paid only through their own section (focus timer, check-in, urge
- * crusher), never by a quick-log tap, so the timer and the honest streak
- * can't be skipped.
+ * Rules paid only through their own section or a connected app (focus timer,
+ * check-in, urge crusher, Waky, Finance Helper), never by a quick-log tap, so
+ * the proof behind them can't be skipped.
  */
 export function isFlowRule(id: string): boolean {
-  return id.startsWith('discipline.') || id.startsWith('study.')
+  return ['discipline.', 'study.', 'sleep.', 'money.'].some((p) => id.startsWith(p))
 }
 
 /** Checks caps and cooldowns and returns the row to insert for this rule. */

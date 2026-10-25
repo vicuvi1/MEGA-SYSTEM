@@ -101,3 +101,31 @@
 @media (max-width: 1100px) {
   .cols.even { grid-template-columns: 1fr; }
 }
+
+/* ---------- Connected apps, Sleep, Money ---------- */
+.conn { --c: var(--lime); }
+.conn-icon { width: 26px; height: 26px; border-radius: 8px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
+.sleep, .money { display: grid; gap: 16px; }
+.stat.hero.teal { border-color: rgba(110, 231, 216, 0.35); background: radial-gradient(120% 140% at 0% 0%, rgba(110, 231, 216, 0.14), transparent 55%), var(--panel); }
+.stat.hero.gold { border-color: rgba(245, 200, 75, 0.35); background: radial-gradient(120% 140% at 0% 0%, rgba(245, 200, 75, 0.14), transparent 55%), var(--panel); }
+.wake-chart { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; align-items: end; }
+.wc-col { display: grid; justify-items: center; gap: 3px; font-size: 11.5px; }
+.wc-col small { color: var(--faint); }
+.wc-track { position: relative; height: 130px; width: 100%; display: flex; justify-content: center; }
+.wc-track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed #2c3446; }
+.wc-bar { position: absolute; width: 60%; max-width: 26px; border-radius: 5px; }
+.wc-bar.up { bottom: 50%; }
+.wc-bar.down { top: 50%; }
+.wc-bar.ok { background: linear-gradient(180deg, #6ee7d8, #3fb8a9); }
+.wc-bar.late { background: linear-gradient(180deg, #ff8a3d, #ff5d6c); }
+.warn-panel { border-color: rgba(255, 138, 61, 0.45); color: #ffd2b3; }
+.day-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.dg { display: grid; gap: 2px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); font-size: 12px; }
+.dg small { color: var(--faint); }
+.dg b { font: 700 16px var(--display); }
+.dg span { color: var(--muted); }
+.dg.under { border-color: rgba(74, 222, 128, 0.45); }
+.dg.under span { color: var(--green); }
+.dg.over { border-color: rgba(255, 93, 108, 0.4); }
+.dg.over span { color: #ff9aa4; }
+.dg.none { opacity: 0.5; }
