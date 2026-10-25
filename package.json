@@ -1,6 +1,6 @@
 {
   "name": "life-system",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "description": "Life System - one points wallet, many sections",
   "main": "./out/main/index.js",
