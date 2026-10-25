@@ -20,6 +20,7 @@ import {
   wakyRoot, type MigrationResult
 } from './apps/embedded'
 import { appIconPng } from './icon'
+import { Updater } from './updater'
 
 const isDev = !app.isPackaged
 registerEmbeddedSchemes()
@@ -211,6 +212,17 @@ handle('connections:choosePath', async (kind: ConnectionKind) => {
   if (!res.canceled && res.filePaths[0]) connections.setPath(kind, res.filePaths[0])
   return connections.state()
 })
+
+// ---------- Updates from GitHub ----------
+const updater = new Updater(
+  (s) => win?.webContents.send('update:event', s),
+  () => {
+    quitting = true
+  }
+)
+handle('update:status', () => updater.get(), free)
+handle('update:check', () => updater.check())
+handle('update:run', () => updater.update())
 
 // ---------- Apps inside Life System ----------
 let financeHost: FinanceHost | null = null
@@ -422,6 +434,9 @@ app.whenReady().then(() => {
   setInterval(checkReminders, 30_000)
   syncConnections()
   setInterval(syncConnections, 5 * 60_000)
+  // Look for a new version shortly after start and every 4 hours.
+  setTimeout(() => updater.check(), 15_000)
+  setInterval(() => updater.check(), 4 * 3600_000)
   backups.run()
   setInterval(() => backups.run(), BACKUP_EVERY_MS)
   // Lock when Windows locks or sleeps.

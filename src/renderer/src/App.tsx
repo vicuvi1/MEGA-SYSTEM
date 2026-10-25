@@ -19,6 +19,7 @@ import { Sleep } from './pages/Sleep'
 import { Money } from './pages/Money'
 import { Connected } from './pages/Connected'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
+import { UpdateChip, useUpdates } from './updates'
 
 const IDLE_LOCK_MS = 10 * 60_000
 
@@ -84,6 +85,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [urgeOpen, setUrgeOpen] = useState(false)
   // Which tab each app section shows: the app itself, or Life System's view.
   const [view, setView] = useState<Partial<Record<PageId, 'app' | 'system'>>>({})
+  const [update, setUpdate] = useUpdates()
 
   useEffect(() => {
     life.onNavigate((p) => {
@@ -207,6 +209,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </div>
           )}
           <div className="top-actions">
+            <UpdateChip status={update} onClick={() => setPage('settings')} />
             {backup && (
               <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>
                 <Icon name="cloud" size={15} />
@@ -251,7 +254,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'rules' && <Rules rules={rules} onChange={setRules} />}
-            {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} />}
+            {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}
             {current.phase > 0 && <Soon module={current} />}
           </motion.main>}
         </AnimatePresence>

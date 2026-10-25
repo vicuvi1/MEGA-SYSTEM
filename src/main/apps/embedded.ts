@@ -18,8 +18,9 @@ export function registerEmbeddedSchemes(): void {
   protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 }
 
+/** apps/ ships next to the app (outside the asar) in the installed version. */
 export function appsDir(): string {
-  return join(app.getAppPath(), 'apps')
+  return app.isPackaged ? join(process.resourcesPath, 'apps') : join(app.getAppPath(), 'apps')
 }
 
 export function manUrl(): string {

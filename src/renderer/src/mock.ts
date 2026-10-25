@@ -78,6 +78,11 @@ export function createMockApi(): Bridge {
     ...createMockPlan({ entries, add, rules: () => rules }),
     ...createMockDiscipline({ entries, add, rules: () => rules }),
     ...createMockConnections(),
+    updates: {
+      status: async () => ({ current: '0.5.0', state: 'dev' as const, latest: null, progress: 0, error: 'Updates work in the installed app', checkedAt: null }),
+      check: async () => ({ current: '0.5.0', state: 'dev' as const, latest: null, progress: 0, error: 'Updates work in the installed app', checkedAt: null }),
+      run: async () => ({ current: '0.5.0', state: 'dev' as const, latest: null, progress: 0, error: 'Updates work in the installed app', checkedAt: null })
+    },
     apps: {
       info: async () => {
         throw new Error('The apps run inside the desktop app')
@@ -174,6 +179,7 @@ export function createMockApi(): Bridge {
     onLocked: () => {},
     onUrge: () => {},
     onWalletChanged: () => {},
-    onNavigate: () => {}
+    onNavigate: () => {},
+    onUpdate: () => {}
   }
 }

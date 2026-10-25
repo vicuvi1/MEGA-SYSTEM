@@ -1,7 +1,7 @@
-import type { LifeApi } from '@shared/api'
+import type { LifeApi, UpdateStatus } from '@shared/api'
 import { createMockApi } from './mock'
 
-export type Bridge = LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void }
+export type Bridge = LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void }
 
 declare global {
   interface Window {

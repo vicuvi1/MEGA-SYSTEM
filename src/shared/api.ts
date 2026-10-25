@@ -130,6 +130,15 @@ export interface EmbeddedApps {
   migration: { finance: 'copied' | 'exists' | 'missing'; man: 'copied' | 'exists' | 'missing' } | null
 }
 
+export interface UpdateStatus {
+  current: string
+  state: 'dev' | 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'installing' | 'error'
+  latest: string | null
+  progress: number
+  error: string | null
+  checkedAt: string | null
+}
+
 export interface AppPrefs {
   openAtLogin: boolean
   /** Auto-start only works in the installed app, not in dev. */
@@ -229,6 +238,12 @@ export interface LifeApi {
     sync(): Promise<{ awarded: number; state: ConnectionsState }>
     choosePath(kind: ConnectionKind): Promise<ConnectionsState>
     setDailyBudget(amount: number): Promise<ConnectionsState>
+  }
+  updates: {
+    status(): Promise<UpdateStatus>
+    check(): Promise<UpdateStatus>
+    /** Download the newest version, install it and restart. */
+    run(): Promise<UpdateStatus>
   }
   apps: {
     info(): Promise<EmbeddedApps>

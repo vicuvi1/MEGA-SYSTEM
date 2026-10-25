@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AppPrefs, AuthStatus, BackupStatus, VerifyResult } from '@shared/api'
+import type { AppPrefs, AuthStatus, BackupStatus, UpdateStatus, VerifyResult } from '@shared/api'
+import { UpdatePanel } from '../updates'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -10,9 +11,11 @@ interface Props {
   backup: BackupStatus | null
   onBackup: (b: BackupStatus) => void
   onRestored: () => void
+  update: UpdateStatus | null
+  onUpdate: (s: UpdateStatus) => void
 }
 
-export function Settings({ auth, onAuth, backup, onBackup, onRestored }: Props) {
+export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, onUpdate }: Props) {
   const act = useAction()
   const [pin, setPin] = useState('')
   const [currentPin, setCurrentPin] = useState('')
@@ -70,6 +73,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored }: Props) 
 
   return (
     <div className="settings">
+      <UpdatePanel status={update} onStatus={onUpdate} />
+
       <section className="panel">
         <header className="panel-head">
           <h2>

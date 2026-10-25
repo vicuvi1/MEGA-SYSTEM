@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { IpcReply, LifeApi } from '@shared/api'
+import type { IpcReply, LifeApi, UpdateStatus } from '@shared/api'
 
 async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   const reply = (await ipcRenderer.invoke(channel, ...args)) as IpcReply<T>
@@ -7,7 +7,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return reply.data
 }
 
-const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void } = {
+const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void } = {
   auth: {
     status: () => call('auth:status'),
     setPin: (pin, currentPin) => call('auth:setPin', pin, currentPin),
@@ -68,6 +68,11 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     choosePath: (kind) => call('connections:choosePath', kind),
     setDailyBudget: (amount) => call('connections:setDailyBudget', amount)
   },
+  updates: {
+    status: () => call('update:status'),
+    check: () => call('update:check'),
+    run: () => call('update:run')
+  },
   apps: {
     info: () => call('apps:info'),
     startWaky: () => call('apps:startWaky')
@@ -95,6 +100,9 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
   },
   onNavigate: (cb) => {
     ipcRenderer.on('nav:page', (_e, page: string) => cb(page))
+  },
+  onUpdate: (cb) => {
+    ipcRenderer.on('update:event', (_e, s: UpdateStatus) => cb(s))
   }
 }
 
