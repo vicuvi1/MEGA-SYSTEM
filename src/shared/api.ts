@@ -2,8 +2,9 @@ import type { LedgerEntry } from '@core/ledger'
 import type { LevelInfo } from '@core/levels'
 import type { Rule } from '@core/rules'
 import type { Reward, Tier } from '@core/shop'
+import type { Block, BlockKind, BlockStatus, Repeat, Task } from '@core/plan'
 
-export type { LedgerEntry, LevelInfo, Rule, Reward, Tier }
+export type { LedgerEntry, LevelInfo, Rule, Reward, Tier, Block, BlockKind, BlockStatus, Repeat, Task }
 
 export interface ShopState {
   rewards: Reward[]
@@ -19,6 +20,56 @@ export interface ShopState {
 }
 
 export type RewardInput = Omit<Reward, 'id' | 'archived'> & { id?: number }
+
+export interface Category {
+  id: string
+  label: string
+  color: string
+}
+
+export interface TaskView extends Task {
+  done: boolean
+  overdue: boolean
+  /** When it was last completed (for repeating tasks, the most recent day). */
+  lastDone: string | null
+}
+
+export interface TasksState {
+  today: string
+  categories: Category[]
+  /** Tasks that show today (open one-offs, today's repeats, things done today). */
+  tasks: TaskView[]
+  coinsToday: number
+  dailyCap: number
+}
+
+export type TaskInput = Omit<Task, 'id' | 'createdDay'> & { id?: number }
+
+export interface BlockView extends Block {
+  day: string
+  status: BlockStatus
+  startsAt: string // ISO
+  endsAt: string // ISO
+  startedAt: string | null
+  finishAllowedAt: string | null
+}
+
+export interface ScheduleState {
+  day: string
+  today: string
+  blocks: BlockView[]
+  /** Every block definition, for the weekly editor. */
+  all: Block[]
+}
+
+export type BlockInput = Omit<Block, 'id' | 'createdDay'> & { id?: number }
+
+export interface AppPrefs {
+  openAtLogin: boolean
+  /** Auto-start only works in the installed app, not in dev. */
+  canAutoStart: boolean
+  keepInTray: boolean
+}
 
 export interface Summary {
   balance: number
@@ -76,6 +127,26 @@ export interface LifeApi {
     redeem(id: number): Promise<ShopState>
     openChest(level: number): Promise<{ coins: number; state: ShopState }>
     setBudget(amount: number): Promise<ShopState>
+  }
+  tasks: {
+    state(): Promise<TasksState>
+    save(task: TaskInput): Promise<TasksState>
+    archive(id: number): Promise<TasksState>
+    complete(id: number): Promise<TasksState>
+    uncomplete(id: number): Promise<TasksState>
+    saveCategory(c: Category): Promise<TasksState>
+  }
+  schedule: {
+    state(day?: string): Promise<ScheduleState>
+    save(block: BlockInput): Promise<ScheduleState>
+    archive(id: number): Promise<ScheduleState>
+    start(id: number): Promise<ScheduleState>
+    finish(id: number): Promise<ScheduleState>
+    skip(id: number): Promise<ScheduleState>
+  }
+  app: {
+    prefs(): Promise<AppPrefs>
+    setPrefs(p: Partial<AppPrefs>): Promise<AppPrefs>
   }
   backup: {
     status(): Promise<BackupStatus>

@@ -32,6 +32,26 @@ const api: LifeApi & { onLocked(cb: () => void): void } = {
     openChest: (level) => call('shop:openChest', level),
     setBudget: (amount) => call('shop:setBudget', amount)
   },
+  tasks: {
+    state: () => call('tasks:state'),
+    save: (t) => call('tasks:save', t),
+    archive: (id) => call('tasks:archive', id),
+    complete: (id) => call('tasks:complete', id),
+    uncomplete: (id) => call('tasks:uncomplete', id),
+    saveCategory: (c) => call('tasks:saveCategory', c)
+  },
+  schedule: {
+    state: (day) => call('schedule:state', day),
+    save: (b) => call('schedule:save', b),
+    archive: (id) => call('schedule:archive', id),
+    start: (id) => call('schedule:start', id),
+    finish: (id) => call('schedule:finish', id),
+    skip: (id) => call('schedule:skip', id)
+  },
+  app: {
+    prefs: () => call('app:prefs'),
+    setPrefs: (p) => call('app:setPrefs', p)
+  },
   backup: {
     status: () => call('backup:status'),
     setPassphrase: (p) => call('backup:setPassphrase', p),

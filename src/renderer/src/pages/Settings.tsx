@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AuthStatus, BackupStatus, VerifyResult } from '@shared/api'
+import type { AppPrefs, AuthStatus, BackupStatus, VerifyResult } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -21,6 +21,16 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored }: Props) 
   const [names, setNames] = useState<string[]>([])
   const [restoreName, setRestoreName] = useState('')
   const [restorePass, setRestorePass] = useState('')
+  const [prefs, setPrefs] = useState<AppPrefs | null>(null)
+
+  useEffect(() => {
+    life.app.prefs().then(setPrefs)
+  }, [])
+
+  async function changePrefs(p: Partial<AppPrefs>) {
+    const next = await act(() => life.app.setPrefs(p))
+    if (next) setPrefs(next)
+  }
 
   useEffect(() => {
     life.backup.list().then((n) => {
@@ -129,6 +139,30 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored }: Props) 
           </div>
         )}
       </section>
+
+      {prefs && (
+        <section className="panel">
+          <header className="panel-head">
+            <h2>
+              <Icon name="bolt" /> Background
+            </h2>
+          </header>
+          <label className="check toggle-row">
+            <input type="checkbox" checked={prefs.keepInTray} onChange={(e) => changePrefs({ keepInTray: e.target.checked })} />
+            <span>
+              Keep running in the tray when the window is closed
+              <small>Needed for block reminders. Quit from the tray icon.</small>
+            </span>
+          </label>
+          <label className={`check toggle-row ${prefs.canAutoStart ? '' : 'muted'}`}>
+            <input type="checkbox" disabled={!prefs.canAutoStart} checked={prefs.openAtLogin} onChange={(e) => changePrefs({ openAtLogin: e.target.checked })} />
+            <span>
+              Start with Windows
+              <small>{prefs.canAutoStart ? 'Opens quietly when you sign in.' : 'Available once the app is installed (not in dev mode).'}</small>
+            </span>
+          </label>
+        </section>
+      )}
 
       <section className="panel">
         <header className="panel-head">

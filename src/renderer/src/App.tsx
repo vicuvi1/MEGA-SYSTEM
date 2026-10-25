@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { AuthStatus, BackupStatus, Rule, ShopState, Summary } from '@shared/api'
+import type { AuthStatus, BackupStatus, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
@@ -12,6 +12,8 @@ import { Rules } from './pages/Rules'
 import { Settings } from './pages/Settings'
 import { Soon } from './pages/Soon'
 import { Shop } from './pages/Shop'
+import { Tasks } from './pages/Tasks'
+import { Schedule } from './pages/Schedule'
 
 const IDLE_LOCK_MS = 10 * 60_000
 
@@ -61,20 +63,34 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [rules, setRules] = useState<Rule[]>([])
   const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [shop, setShop] = useState<ShopState | null>(null)
+  const [tasks, setTasks] = useState<TasksState | null>(null)
+  const [schedule, setSchedule] = useState<ScheduleState | null>(null)
 
   const refresh = useCallback(async () => {
-    const [s, r, b, sh] = await Promise.all([life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state()])
+    const [s, r, b, sh, t, sc] = await Promise.all([life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state(), life.tasks.state(), life.schedule.state()])
     setSummary(s)
     setRules(r)
     setBackup(b)
     setShop(sh)
+    setTasks(t)
+    setSchedule(sc)
   }, [])
 
-  // Coins moved: refresh the wallet and the shop together.
+  // Coins moved: refresh everything that shows coins or completion.
   const onWallet = useCallback(async () => {
-    const [s, sh] = await Promise.all([life.wallet.summary(), life.shop.state()])
+    const [s, sh, t] = await Promise.all([life.wallet.summary(), life.shop.state(), life.tasks.state()])
     setSummary(s)
     setShop(sh)
+    setTasks(t)
+  }, [])
+
+  // Pick up a new day, missed blocks and backup state while the app stays open.
+  useEffect(() => {
+    const t = setInterval(() => {
+      life.schedule.state().then((sc) => setSchedule((cur) => (cur && cur.day !== cur.today ? cur : sc)))
+      life.backup.status().then(setBackup)
+    }, 60_000)
+    return () => clearInterval(t)
   }, [])
 
   useEffect(() => {
@@ -160,7 +176,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
         <AnimatePresence mode="wait">
           <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            {page === 'today' && summary && <Today summary={summary} rules={rules} shop={shop} onChange={onWallet} onOpenShop={() => setPage('shop')} />}
+            {page === 'today' && summary && (
+              <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} />
+            )}
+            {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
+            {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'rules' && <Rules rules={rules} onChange={setRules} />}

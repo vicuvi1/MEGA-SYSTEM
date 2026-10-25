@@ -6,7 +6,15 @@ The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-**Phases 0 (foundations) and 1 (core economy) are done. Next: Phase 2, Tasks + Schedule.**
+**Phases 0, 1 and 2 are done. Next: Phase 3, Discipline.**
+
+Phase 2 (Tasks + Schedule):
+- Tasks in categories Body, Face, Finance, University, Life (add your own). One-off tasks with an optional due date, or repeating every day or on chosen weekdays. Each task pays up to 30 coins; all tasks together pay at most 150 coins a day (XP keeps counting). Unticking a task takes its coins back.
+- Schedule: blocks on a weekly plan or on one day. A study block pays only after its focus timer has run for 80% of the block; skipping costs a few coins, and a study block left open past its day is marked missed with the same cost. Workout blocks log a workout. One block runs at a time.
+- Windows reminders before and at the start of each block. Closing the window keeps the app in the tray so reminders keep coming; quit from the tray icon. "Start with Windows" works in the installed app.
+- Today shows today's blocks and tasks.
+
+Phases 0-1:
 
 - Shop: rewards with a coin price and a real-money cost, tiers that unlock with level (Bronze 1, Silver 5, Gold 10, Legendary 20), one "main goal" shown on Today, add/edit/archive your own rewards.
 - Monthly real-money reward budget, so coins never push overspending.

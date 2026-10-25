@@ -17,8 +17,8 @@ export interface ModuleDef {
 // The sidebar is built from this list; a new section is one entry plus its page.
 export const MODULES: ModuleDef[] = [
   { id: 'today', label: 'Today', icon: 'home', color: 'var(--lime)', phase: 0, blurb: 'Your day at a glance' },
-  { id: 'tasks', label: 'Tasks', icon: 'check', color: '#7CC4FF', phase: 2, blurb: 'To-dos by category: Body, Face, Finance, University, Life' },
-  { id: 'schedule', label: 'Schedule', icon: 'calendar', color: '#B892FF', phase: 2, blurb: 'Day timeline with study blocks that pay out or cost coins' },
+  { id: 'tasks', label: 'Tasks', icon: 'check', color: '#7CC4FF', phase: 0, blurb: 'To-dos by category: Body, Face, Finance, University, Life' },
+  { id: 'schedule', label: 'Schedule', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Day timeline with study blocks that pay out or cost coins' },
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 4, blurb: 'Wake-up check-ins and bedtime, ported from Waky' },
   { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 3, blurb: 'Private streak, urge crusher and honest resets' },
   { id: 'body', label: 'Body', icon: 'bolt', color: '#FF6B8B', phase: 5, blurb: 'Workouts and body logs' },

@@ -5,6 +5,7 @@ import { DEFAULT_RULES, planAward, type Rule } from '@core/rules'
 import { chestRef, DEFAULT_REWARDS, planRedeem, rollChest, unopenedChests, validateReward, type Reward } from '@core/shop'
 import type { AuthStatus, BackupStatus, ShopState, Summary } from '@shared/api'
 import type { Bridge } from './bridge'
+import { createMockPlan } from './mockPlan'
 
 /** Browser-only stand-in for the Electron bridge, using the same core logic. */
 export function createMockApi(): Bridge {
@@ -72,6 +73,7 @@ export function createMockApi(): Bridge {
   }
 
   return {
+    ...createMockPlan({ entries, add, rules: () => rules }),
     auth: {
       status: () => ok(auth()),
       setPin: async (p) => {

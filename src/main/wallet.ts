@@ -108,10 +108,20 @@ export class Wallet {
   }
 
   award(ruleId: string, note?: string, now = new Date()): number {
+    return this.awardRule(ruleId, { note, now })
+  }
+
+  /** Awards a rule; `day` books it on another day (e.g. a missed block from yesterday). */
+  awardRule(ruleId: string, opts: { note?: string; now?: Date; day?: string; ref?: string } = {}): number {
+    const now = opts.now ?? new Date()
     return this.db.transaction(() => {
-      const row = planAward(this.rule(ruleId), this.entries(), now, dayKey(now, this.timeZone), note)
-      return this.append(row)
+      const row = planAward(this.rule(ruleId), this.entries(), now, opts.day ?? dayKey(now, this.timeZone), opts.note)
+      return this.append({ ...row, ref: opts.ref ?? null })
     }).immediate()
+  }
+
+  today(now = new Date()): string {
+    return dayKey(now, this.timeZone)
   }
 
   undo(id: number, note: string, now = new Date()): number {

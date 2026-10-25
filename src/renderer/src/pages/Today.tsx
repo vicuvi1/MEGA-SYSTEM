@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { Rule, ShopState, Summary } from '@shared/api'
+import type { Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
-import { MODULE_LABEL, MODULES } from '../modules'
+import { MODULE_LABEL, MODULES, type PageId } from '../modules'
+import { clock } from './planUi'
+import { KIND } from './Schedule'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 
 type Pop = { id: number; coins: number; xp: number }
@@ -12,11 +14,16 @@ interface Props {
   summary: Summary
   rules: Rule[]
   shop: ShopState | null
-  onChange: (s: Summary) => void
-  onOpenShop: () => void
+  tasks: TasksState | null
+  schedule: ScheduleState | null
+  onChange: (s?: Summary) => void
+  onTasks: (t: TasksState) => void
+  onSchedule: (s: ScheduleState) => void
+  onGo: (page: PageId) => void
 }
 
-export function Today({ summary, rules, shop, onChange, onOpenShop }: Props) {
+export function Today({ summary, rules, shop, tasks, schedule, onChange, onTasks, onSchedule, onGo }: Props) {
+  const onOpenShop = () => onGo('shop')
   const act = useAction()
   const [pops, setPops] = useState<Pop[]>([])
   const titles = useMemo(() => Object.fromEntries(rules.map((r) => [r.id, r.title])), [rules])
@@ -67,6 +74,11 @@ export function Today({ summary, rules, shop, onChange, onOpenShop }: Props) {
           </span>
         </div>
       </section>
+
+      <div className="cols even">
+        <TodaySchedule schedule={schedule} onSchedule={onSchedule} onGo={onGo} />
+        <TodayTasks tasks={tasks} onTasks={onTasks} onWallet={() => onChange()} onGo={onGo} />
+      </div>
 
       <div className="cols">
         <section className="panel">
@@ -144,5 +156,91 @@ function NextReward({ balance, shop, onOpenShop }: { balance: number; shop: Shop
       </div>
       <span className="sub">{left > 0 ? `${left} coins to go` : 'Ready to redeem!'}</span>
     </button>
+  )
+}
+
+function TodaySchedule({ schedule, onSchedule, onGo }: { schedule: ScheduleState | null; onSchedule: (s: ScheduleState) => void; onGo: (p: PageId) => void }) {
+  const act = useAction()
+  const today = schedule && schedule.day === schedule.today ? schedule.blocks : []
+  const left = today.filter((b) => b.status === 'pending' || b.status === 'running')
+  const running = today.find((b) => b.status === 'running')
+  return (
+    <section className="panel">
+      <header className="panel-head">
+        <h2>Schedule today</h2>
+        <button className="link" onClick={() => onGo('schedule')}>
+          Open schedule
+        </button>
+      </header>
+      {today.length === 0 ? (
+        <div className="empty small-empty">
+          <p>No blocks today. Plan a study block in Schedule.</p>
+        </div>
+      ) : (
+        <ul className="mini-tl">
+          {today.slice(0, 6).map((b) => (
+            <li key={b.id} className={b.status} style={{ ['--c' as string]: KIND[b.kind].color }}>
+              <span className="when">{clock(b.startsAt)}</span>
+              <span className="what">{b.title}</span>
+              {b.status === 'pending' && !running ? (
+                <button className="btn small" onClick={async () => { const s = await act(() => life.schedule.start(b.id)); if (s) { onSchedule(s); onGo('schedule') } }}>
+                  Start
+                </button>
+              ) : (
+                <span className={`status s-${b.status}`}>{b.status === 'pending' ? 'Planned' : b.status === 'running' ? 'Running' : b.status[0].toUpperCase() + b.status.slice(1)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {today.length > 0 && <p className="hint block-hint">{left.length ? `${left.length} block${left.length > 1 ? 's' : ''} left today` : 'All blocks closed for today.'}</p>}
+    </section>
+  )
+}
+
+function TodayTasks({ tasks, onTasks, onWallet, onGo }: { tasks: TasksState | null; onTasks: (t: TasksState) => void; onWallet: () => void; onGo: (p: PageId) => void }) {
+  const act = useAction()
+  if (!tasks) return <section className="panel" />
+  const colors = Object.fromEntries(tasks.categories.map((c) => [c.id, c.color]))
+  const list = tasks.tasks.slice(0, 7)
+  const doneCount = tasks.tasks.filter((t) => t.done).length
+  return (
+    <section className="panel">
+      <header className="panel-head">
+        <h2>Tasks today</h2>
+        <button className="link" onClick={() => onGo('tasks')}>
+          All tasks
+        </button>
+      </header>
+      {list.length === 0 ? (
+        <div className="empty small-empty">
+          <p>No tasks for today. Add some in Tasks.</p>
+        </div>
+      ) : (
+        <ul className="task-list compact">
+          {list.map((t) => (
+            <li key={t.id} className={`task ${t.done ? 'done' : ''} ${t.overdue ? 'overdue' : ''}`} style={{ ['--c' as string]: colors[t.category] }}>
+              <motion.button
+                className="tick"
+                whileTap={{ scale: 0.85 }}
+                aria-label={t.done ? `Untick ${t.title}` : `Complete ${t.title}`}
+                onClick={async () => {
+                  const s = await act(() => (t.done ? life.tasks.uncomplete(t.id) : life.tasks.complete(t.id)))
+                  if (s) {
+                    onTasks(s)
+                    onWallet()
+                  }
+                }}
+              >
+                {t.done && <Icon name="check" size={13} />}
+              </motion.button>
+              <span className="task-title">{t.title}</span>
+              <Coins n={t.coins} sign />
+            </li>
+          ))}
+        </ul>
+      )}
+      {tasks.tasks.length > 0 && <p className="hint block-hint">{doneCount} of {tasks.tasks.length} done</p>}
+    </section>
   )
 }

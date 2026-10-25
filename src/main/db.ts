@@ -64,6 +64,62 @@ const MIGRATIONS: string[] = [
     ('New phone case', 600, 'bronze', 300, 1, NULL),
     ('Shaver machine', 1500, 'silver', 900, 0, NULL),
     ('Kaaba trip fund', 20000, 'legendary', 0, 0, 'The big one. Keep stacking.');
+  `,
+  /* 003 plan: task categories, tasks, schedule blocks */ `
+  CREATE TABLE categories (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  INSERT INTO categories (id, label, color, sort) VALUES
+    ('body', 'Body', '#FF6B8B', 1), ('face', 'Face', '#F9A8D4', 2), ('finance', 'Finance', '#F5C84B', 3),
+    ('university', 'University', '#7CC4FF', 4), ('life', 'Life', '#C8F135', 5);
+
+  CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL REFERENCES categories(id),
+    coins INTEGER NOT NULL DEFAULT 5,
+    xp INTEGER NOT NULL DEFAULT 10,
+    priority INTEGER NOT NULL DEFAULT 2,
+    due TEXT,
+    repeat TEXT NOT NULL DEFAULT 'none' CHECK (repeat IN ('none', 'daily', 'weekly')),
+    weekdays INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_day TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  -- A completion is the ledger row; this links it to the task and day.
+  CREATE TABLE task_done (
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    day TEXT NOT NULL,
+    ledger_id INTEGER NOT NULL REFERENCES ledger(id),
+    PRIMARY KEY (task_id, day)
+  );
+
+  CREATE TABLE blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('study', 'workout', 'other')),
+    start TEXT NOT NULL,
+    minutes INTEGER NOT NULL CHECK (minutes BETWEEN 5 AND 600),
+    weekdays INTEGER NOT NULL DEFAULT 0,
+    date TEXT,
+    remind_min INTEGER NOT NULL DEFAULT 5,
+    created_day TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE block_log (
+    block_id INTEGER NOT NULL REFERENCES blocks(id),
+    day TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('running', 'done', 'skipped', 'missed')),
+    started_at TEXT,
+    ended_at TEXT,
+    ledger_id INTEGER REFERENCES ledger(id),
+    PRIMARY KEY (block_id, day)
+  );
   `
 ]
 
