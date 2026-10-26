@@ -318,6 +318,8 @@ async function syncConnections(): Promise<void> {
 }
 
 function prefs(): AppPrefs {
+  // While quitting the database may already be closed: fall back to defaults.
+  if (!db.open) return { openAtLogin: false, canAutoStart: app.isPackaged, keepInTray: true, matchAppThemes: true }
   return {
     openAtLogin: app.isPackaged && app.getLoginItemSettings().openAtLogin,
     canAutoStart: app.isPackaged,
@@ -386,7 +388,7 @@ function defaultZoom(): number {
   return w >= 2400 ? 1.2 : w >= 1900 ? 1.1 : 1
 }
 function savedZoom(): number {
-  const z = Number(getSetting(db, 'ui_zoom'))
+  const z = db.open ? Number(getSetting(db, 'ui_zoom')) : 0
   return ZOOM_STEPS.includes(z) ? z : defaultZoom()
 }
 function applyZoom(z: number): void {
@@ -453,7 +455,7 @@ function createWindow(): void {
     win?.show()
   })
   const saveBounds = () => {
-    if (!win || win.isMinimized()) return
+    if (!win || win.isMinimized() || !db.open) return
     setSetting(db, 'win_bounds', JSON.stringify({ ...win.getNormalBounds(), maximized: win.isMaximized() }))
   }
   win.on('enter-full-screen', () => win?.webContents.send('ui:fullscreen', true))
@@ -569,11 +571,14 @@ app.whenReady().then(() => {
   powerMonitor.on('suspend', lockNow)
 })
 
-app.on('will-quit', () => globalShortcut.unregisterAll())
-
 app.on('before-quit', () => {
   quitting = true
-  backups.run()
+  if (db.open) backups.run()
+})
+
+// Close the database last, after every window is gone (an update quits this way too).
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
   if (db.open) db.close()
 })
 

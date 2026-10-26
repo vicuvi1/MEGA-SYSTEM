@@ -7,6 +7,7 @@ import './discipline.css'
 import './shell.css'
 import './extras.css'
 import './light.css'
+import './sidebar.css'
 import { applyTheme } from './uiPrefs'
 
 applyTheme()

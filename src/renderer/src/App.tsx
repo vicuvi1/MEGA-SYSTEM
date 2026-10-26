@@ -22,6 +22,7 @@ import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
 import { Notifications, type Alert } from './Notifications'
+import { Sidebar } from './Sidebar'
 import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
@@ -322,92 +323,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           </div>
         </div>
       )}
-      <div className="side-cell">
-        <aside
-          className={`sidebar ${collapsed ? 'collapsed' : ''} ${collapsed && peek ? 'peek' : ''}`}
-          onMouseEnter={() => {
-            if (!collapsed) return
-            clearTimeout(peekTimer.current)
-            peekTimer.current = window.setTimeout(() => setPeek(true), 160)
-          }}
-          onMouseLeave={() => {
-            clearTimeout(peekTimer.current)
-            setPeek(false)
-          }}
-        >
-          <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              <Icon name="spark" size={16} />
-            </span>
-            <span className="label">
-              LIFE<b>SYSTEM</b>
-            </span>
-          </div>
-          {lv && summary && (
-            <button className="profile" onClick={() => setPage('today')} title={`Level ${lv.level} · ${lv.rank} · ${summary.totalXp} XP`}>
-              <span className="profile-ring" style={{ ['--p' as string]: `${Math.round(lv.progress * 100)}` }}>
-                <span>{lv.level}</span>
-              </span>
-              <span className="profile-text label">
-                <b>{ui.name || 'You'}</b>
-                <small>
-                  {lv.rank} · <span className="profile-coins">{summary.balance.toLocaleString()}</span> coins
-                </small>
-              </span>
-            </button>
-          )}
-          <nav aria-label="Sections">
-            {MODULES.map((m, i) => (
-              <button
-                key={m.id}
-                aria-label={m.label}
-                title={collapsed && !peek ? `${m.label}  (Alt+${i + 1})` : undefined}
-                className={`nav ${page === m.id ? 'on' : ''}`}
-                onClick={() => {
-                  setPage(m.id)
-                  setPeek(false)
-                }}
-                style={{ ['--c' as string]: m.color }}
-              >
-                <span className="nav-icon">
-                  <Icon name={m.icon} duo={page === m.id} />
-                  {badges[m.id] && <i className={`nav-dot ${badges[m.id]!.dot ?? ''}`} />}
-                </span>
-                <span className="label">{m.label}</span>
-                {m.phase > 0 && <em className="soon label">soon</em>}
-                {badges[m.id]?.n ? <em className="nav-count label">{badges[m.id]!.n}</em> : null}
-              </button>
-            ))}
-          </nav>
-          <nav aria-label="System" className="nav-system">
-            {SYSTEM_PAGES.map((m) => (
-              <button
-                key={m.id}
-                aria-label={m.label}
-                title={collapsed && !peek ? m.label : undefined}
-                className={`nav small ${page === m.id ? 'on' : ''}`}
-                onClick={() => {
-                  setPage(m.id)
-                  setPeek(false)
-                }}
-              >
-                <span className="nav-icon">
-                  <Icon name={m.icon} size={16} duo={page === m.id} />
-                  {badges[m.id] && <i className={`nav-dot ${badges[m.id]!.dot ?? ''}`} />}
-                </span>
-                <span className="label">{m.label}</span>
-              </button>
-            ))}
-            <button className="nav small side-toggle" onClick={toggleSidebar} title="Collapse or expand the sidebar (Ctrl+B)" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-              <span className={`chev ${collapsed ? 'right' : ''}`} aria-hidden="true">
-                ‹
-              </span>
-              <span className="label">{collapsed ? 'Keep open' : 'Collapse'}</span>
-              <kbd className="label">Ctrl B</kbd>
-            </button>
-          </nav>
-        </aside>
-      </div>
+      <Sidebar
+        page={page}
+        onPage={setPage}
+        collapsed={collapsed}
+        onToggle={toggleSidebar}
+        badges={badges}
+        level={lv ?? null}
+        balance={summary?.balance ?? 0}
+        name={ui.name}
+      />
 
       <div className="main">
         <header className={`topbar ${compact ? 'compact' : ''}`}>
