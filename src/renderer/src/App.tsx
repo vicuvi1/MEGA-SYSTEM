@@ -18,6 +18,7 @@ import { Discipline } from './pages/Discipline'
 import { Sleep } from './pages/Sleep'
 import { Money } from './pages/Money'
 import { Connected } from './pages/Connected'
+import { Journey } from './pages/Journey'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
@@ -452,6 +453,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
             {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
+            {page === 'journey' && summary && <Journey summary={summary} rules={rules} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'rules' && <Rules rules={rules} onChange={setRules} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}

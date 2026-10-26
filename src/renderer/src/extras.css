@@ -130,3 +130,36 @@
 .log-msg { display: grid; gap: 2px; min-width: 0; }
 .log-msg b { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .log-msg small { color: var(--faint); font-size: 11.5px; }
+
+/* ---------- Daily quests ---------- */
+.quests.all { border-color: rgba(200, 241, 53, 0.4); }
+.quest-row { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 12px; align-items: center; }
+.quest { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); min-width: 0; }
+.quest.done { border-color: rgba(200, 241, 53, 0.35); }
+.quest-check { flex: none; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; border: 2px solid #3a4358; color: var(--lime-ink); }
+.quest.done .quest-check { background: var(--lime); border-color: transparent; }
+.quest-body { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.quest-body b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quest-body small { color: var(--muted); font-size: 11.5px; }
+.quest-body .bar { height: 5px; }
+.quest-claim { white-space: nowrap; }
+@media (max-width: 1100px) { .quest-row { grid-template-columns: 1fr; } }
+
+/* ---------- Journey ---------- */
+.journey { display: grid; gap: 16px; }
+.week-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; height: 170px; }
+.wb { display: grid; justify-items: center; align-content: end; gap: 6px; font-size: 12px; color: var(--muted); }
+.wb i { width: 60%; max-width: 34px; border-radius: 8px 8px 4px 4px; background: linear-gradient(180deg, var(--lime), #8fbf10); }
+.wb.today i { box-shadow: 0 0 16px rgba(200, 241, 53, 0.45); }
+.wb small { color: var(--gold); font-weight: 700; min-height: 15px; }
+.mod-bars { display: grid; gap: 10px; }
+.mb { --c: var(--lime); display: grid; grid-template-columns: 110px 1fr 50px; gap: 10px; align-items: center; font-size: 13px; }
+.mb .bar i { background: var(--c); box-shadow: none; }
+.mb b { text-align: right; color: var(--gold); }
+.week-goal { width: 100%; min-height: 90px; resize: vertical; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; color: var(--text); font: 15px var(--font); }
+.ranks { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.rank-step { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-2); opacity: 0.5; }
+.rank-step.reached { opacity: 1; }
+.rank-step.current { border-color: rgba(200, 241, 53, 0.5); box-shadow: 0 0 18px rgba(200, 241, 53, 0.15); }
+.rank-step.current b { color: var(--lime); }
+.rank-step small { color: var(--muted); font-size: 11.5px; }

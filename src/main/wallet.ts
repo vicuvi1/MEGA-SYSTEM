@@ -2,6 +2,7 @@ import { dayKey } from '@core/dates'
 import { balance, LedgerError, planUndo, totalXp, effective, type LedgerEntry, type NewEntry } from '@core/ledger'
 import { levelInfo } from '@core/levels'
 import { planAward, type Rule } from '@core/rules'
+import { questRef, questState, type QuestState } from '@core/quests'
 import type { Summary } from '@shared/api'
 import type { DB } from './db'
 
@@ -117,6 +118,20 @@ export class Wallet {
     return this.db.transaction(() => {
       const row = planAward(this.rule(ruleId), this.entries(), now, opts.day ?? dayKey(now, this.timeZone), opts.note)
       return this.append({ ...row, ref: opts.ref ?? null })
+    }).immediate()
+  }
+
+  quests(now = new Date()): QuestState {
+    return questState(this.today(now), this.entries())
+  }
+
+  /** Pays the daily quest bonus once all three are done. */
+  claimQuests(now = new Date()): number {
+    return this.db.transaction(() => {
+      const q = this.quests(now)
+      if (!q.allDone) throw new LedgerError('Finish all three quests first')
+      if (q.claimed) throw new LedgerError('Already claimed today')
+      return this.append({ ts: now.toISOString(), day: q.day, module: 'quests', kind: 'earn', coins: q.bonus.coins, xp: q.bonus.xp, ref: questRef(q.day), note: 'Daily quests complete' })
     }).immediate()
   }
 

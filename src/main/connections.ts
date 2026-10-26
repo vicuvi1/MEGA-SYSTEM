@@ -144,6 +144,15 @@ export class Connections {
     }
   }
 
+  /** Waky's reward list, once, so its goals carry over into the Shop. */
+  wakyRewardsToImport(): WakyData['rewards'] {
+    if (getSetting(this.db, 'waky_rewards_imported')) return []
+    const data = this.readWaky().data
+    if (!data) return []
+    setSetting(this.db, 'waky_rewards_imported', new Date().toISOString())
+    return data.rewards
+  }
+
   /** Pays out what the connected apps recorded since they were connected. */
   sync(now = new Date()): number {
     const today = this.wallet.today(now)

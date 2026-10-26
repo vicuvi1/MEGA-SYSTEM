@@ -2,8 +2,10 @@ import type { LedgerEntry } from '@core/ledger'
 import type { LevelInfo } from '@core/levels'
 import type { Rule } from '@core/rules'
 import type { Reward, Tier } from '@core/shop'
+import type { QuestState } from '@core/quests'
 import type { Block, BlockKind, BlockStatus, Repeat, Task } from '@core/plan'
 
+export type { QuestState }
 export type { LedgerEntry, LevelInfo, Rule, Reward, Tier, Block, BlockKind, BlockStatus, Repeat, Task }
 
 export interface ShopState {
@@ -200,6 +202,8 @@ export interface LifeApi {
     history(limit?: number): Promise<LedgerEntry[]>
     award(ruleId: string, note?: string): Promise<Summary>
     undo(id: number, note: string): Promise<Summary>
+    quests(): Promise<QuestState>
+    claimQuests(): Promise<Summary>
   }
   rules: {
     list(): Promise<Rule[]>

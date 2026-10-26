@@ -61,6 +61,7 @@ const WAKY = `
   /* One wallet: coins and rewards live in Life System's top bar and Shop, so
      Waky's own coin card and Rewards tab are hidden inside Life System. */
   ${ON} [data-goto="rewards"], ${ON} .tab[data-view="rewards"], ${ON} .tab[data-tab="rewards"] { display: none !important; }
+  ${ON} .stat-card:not([data-goto]):has(+ [data-goto="rewards"]) { grid-column: 1 / -1; }
   /* Waky's orange glows, retinted to Sleep's teal. */
   ${ON} .btn.primary { color: #062421 !important; box-shadow: 0 8px 30px -8px rgb(110 231 216 / 50%) !important; }
   ${ON} body::before {
@@ -84,6 +85,9 @@ const MAN = `
     --spartan-gold: #ff8a3d !important; --spartan-bronze: #e07a35 !important;
   }
   ${ON} body { font-family: ${UI} !important; background-color: #0b0d12 !important; }
+  /* One streak: Life System's Discipline check-in is the one that counts, so
+     MAN's own claim and day-adjust buttons are hidden inside Life System. */
+  ${ON} #btn-claim-victory, ${ON} #btn-adjust-streak, ${ON} #btn-quick-adjust-streak { display: none !important; }
   ${SCROLLBARS}
 `
 

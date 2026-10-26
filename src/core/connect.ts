@@ -19,6 +19,8 @@ export interface WakyData {
   mornings: WakyMorning[]
   /** Bedtimes, keyed by the morning they lead to. */
   nights: WakyMorning[]
+  /** Waky's own reward list, moved into Life System's Shop once. */
+  rewards: { name: string; tier: string; cost: number; emoji: string }[]
 }
 
 const toMin = (hhmm: string) => {
@@ -50,7 +52,10 @@ export function parseWaky(text: string): WakyData {
     weekday: isTime(s.weekday) ? s.weekday : '07:00',
     weekend: isTime(s.weekend) ? s.weekend : '08:00',
     mornings,
-    nights
+    nights,
+    rewards: (Array.isArray(j.rewards) ? j.rewards : [])
+      .filter((r: { name?: unknown; cost?: unknown }) => typeof r?.name === 'string' && Number.isInteger(r?.cost) && (r.cost as number) > 0)
+      .map((r: { name: string; tier?: string; cost: number; emoji?: string }) => ({ name: r.name, tier: r.tier ?? 'bronze', cost: r.cost, emoji: r.emoji ?? '' }))
   }
 }
 

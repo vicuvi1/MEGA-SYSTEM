@@ -24,7 +24,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'body', label: 'Body', icon: 'bolt', color: '#FF6B8B', phase: 5, blurb: 'Workouts and body logs' },
   { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Daily spending from Finance Helper, turned into coins' },
   { id: 'shop', label: 'Shop', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend coins on real rewards, inside a real-money budget' },
-  { id: 'journey', label: 'Journey', icon: 'trophy', color: 'var(--lime)', phase: 6, blurb: 'Levels, ranks and weekly recaps' }
+  { id: 'journey', label: 'Journey', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'Your weekly review and ranks' }
 ]
 
 export const SYSTEM_PAGES: ModuleDef[] = [
@@ -35,5 +35,5 @@ export const SYSTEM_PAGES: ModuleDef[] = [
 ]
 
 export const MODULE_LABEL: Record<string, string> = {
-  sleep: 'Sleep', schedule: 'Schedule', discipline: 'Discipline', body: 'Body', tasks: 'Tasks', money: 'Money', shop: 'Shop'
+  sleep: 'Sleep', schedule: 'Schedule', quests: 'Quests', discipline: 'Discipline', body: 'Body', tasks: 'Tasks', money: 'Money', shop: 'Shop'
 }

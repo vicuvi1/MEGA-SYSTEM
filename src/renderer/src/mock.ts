@@ -6,6 +6,7 @@ import { chestRef, DEFAULT_REWARDS, planRedeem, rollChest, unopenedChests, valid
 import type { AuthStatus, BackupStatus, ShopState, Summary } from '@shared/api'
 import type { Bridge } from './bridge'
 import { createMockPlan } from './mockPlan'
+import { questRef, questState } from '@core/quests'
 import { createMockDiscipline } from './mockDiscipline'
 import { createMockConnections } from './mockConnections'
 
@@ -113,6 +114,13 @@ export function createMockApi(): Bridge {
       award: async (ruleId, note) => {
         const now = new Date()
         add(planAward(rules.find((r) => r.id === ruleId)!, entries, now, dayKey(now), note))
+        return summary()
+      },
+      quests: async () => questState(dayKey(new Date()), entries),
+      claimQuests: async () => {
+        const q = questState(dayKey(new Date()), entries)
+        if (!q.allDone || q.claimed) throw new Error(q.claimed ? 'Already claimed today' : 'Finish all three quests first')
+        add({ ts: new Date().toISOString(), day: q.day, module: 'quests', kind: 'earn', coins: q.bonus.coins, xp: q.bonus.xp, ref: questRef(q.day), note: 'Daily quests complete' })
         return summary()
       },
       undo: async (eid, note) => {

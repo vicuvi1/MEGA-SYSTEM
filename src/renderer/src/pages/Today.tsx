@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
 import type { ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
@@ -8,6 +8,7 @@ import { MODULE_LABEL, MODULES, type PageId } from '../modules'
 import { clock } from './planUi'
 import { KIND } from './Schedule'
 import { useUiPrefs } from '../uiPrefs'
+import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 
 type Pop = { id: number; coins: number; xp: number }
@@ -53,6 +54,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   return (
     <div className="today">
       <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />
+      <Quests summary={summary} onChange={onChange} />
       <section className="stats">
         <div className="stat hero">
           <span className="label">{dateLabel}</span>
@@ -348,5 +350,48 @@ function Greeting({ summary, shop, tasks, schedule }: { summary: Summary; shop: 
       </h2>
       <p>{bits.length ? bits.join(' · ') : 'A clean slate. Pick one thing and win it.'}</p>
     </header>
+  )
+}
+
+function Quests({ summary, onChange }: { summary: Summary; onChange: (s?: Summary) => void }) {
+  const act = useAction()
+  const [q, setQ] = useState<QuestState | null>(null)
+  useEffect(() => {
+    life.wallet.quests().then(setQ).catch(() => {})
+  }, [summary])
+  if (!q) return null
+  const doneCount = q.quests.filter((x) => x.done).length
+  return (
+    <section className={`panel quests ${q.allDone ? 'all' : ''}`}>
+      <header className="panel-head">
+        <h2>
+          <Icon name="trophy" /> Daily quests
+        </h2>
+        <span className="hint">
+          {q.claimed ? 'Bonus claimed. New quests tomorrow.' : `${doneCount}/3 done · all three pay +${q.bonus.coins} coins and +${q.bonus.xp} XP`}
+        </span>
+      </header>
+      <div className="quest-row">
+        {q.quests.map((x) => (
+          <div key={x.id} className={`quest ${x.done ? 'done' : ''}`}>
+            <span className="quest-check">{x.done ? <Icon name="check" size={14} /> : null}</span>
+            <span className="quest-body">
+              <b>{x.title}</b>
+              <span className="bar">
+                <i style={{ width: `${(x.progress / x.goal) * 100}%` }} />
+              </span>
+              <small>
+                {x.progress} / {x.goal}
+              </small>
+            </span>
+          </div>
+        ))}
+        {q.allDone && !q.claimed && (
+          <motion.button className="btn primary quest-claim" whileTap={{ scale: 0.95 }} onClick={async () => { const s = await act(() => life.wallet.claimQuests(), 'Quests complete!'); if (s) onChange(s) }}>
+            Claim +{q.bonus.coins}
+          </motion.button>
+        )}
+      </div>
+    </section>
   )
 }

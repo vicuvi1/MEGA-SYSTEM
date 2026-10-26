@@ -130,6 +130,11 @@ handle('wallet:undo', (id: number, note: string) => {
   return wallet.summary()
 })
 
+handle('wallet:quests', () => wallet.quests())
+handle('wallet:claimQuests', () => {
+  wallet.claimQuests()
+  return wallet.summary()
+})
 handle('rules:list', () => wallet.rules())
 handle('rules:save', (rule: Rule) => {
   wallet.saveRule(rule)
@@ -341,6 +346,14 @@ async function syncConnections(): Promise<void> {
         setSetting(db, `conn_${kind}_auto`, 'done')
       } catch {
         // not found yet (e.g. Money never opened): try again next round
+      }
+    }
+    for (const r of connections.wakyRewardsToImport()) {
+      const tier = (['bronze', 'silver', 'gold', 'legendary'] as const).find((t) => t === r.tier) ?? 'bronze'
+      try {
+        shop.save({ title: `${r.emoji ? `${r.emoji} ` : ''}${r.name}`.slice(0, 80), price: r.cost, tier, realCost: 0, pinned: false, note: 'From Waky' })
+      } catch (e) {
+        errors.write('warn', 'waky rewards', e)
       }
     }
     if (connections.sync() > 0) win?.webContents.send('wallet:changed')
@@ -562,11 +575,33 @@ function lockNow(): void {
   win?.webContents.send('auth:locked')
 }
 
+// One evening nudge (after 20:30) listing what is still open today.
+function eveningNudge(now = new Date()): void {
+  if (now.getHours() * 60 + now.getMinutes() < 20 * 60 + 30) return
+  const today = wallet.today(now)
+  if (getSetting(db, 'nudge_day') === today) return
+  setSetting(db, 'nudge_day', today)
+  const open: string[] = []
+  const d = discipline.state(now)
+  if (d.setup && !d.checkedInToday && !d.resetToday) open.push('check in (+20)')
+  const blocks = schedule.state(undefined, now).blocks.filter((b) => b.status === 'pending' && b.kind === 'study').length
+  if (blocks) open.push(`${blocks} study block${blocks > 1 ? 's' : ''}`)
+  const fin = connections.state(now).finance
+  if (fin.connectedSince && fin.today && !fin.today.logged) open.push("log today's spending (+3)")
+  const q = wallet.quests(now)
+  if (!q.claimed) open.push(`daily quests ${q.quests.filter((x) => x.done).length}/3`)
+  if (!open.length || !Notification.isSupported()) return
+  const n = new Notification({ title: 'Before the day ends', body: `Still open: ${open.join(', ')}.`, icon })
+  n.on('click', () => navigate('today'))
+  n.show()
+}
+
 // Block reminders as Windows notifications, checked every 30 seconds.
 const sentReminders = new Set<string>()
 function checkReminders(): void {
   if (!Notification.isSupported()) return
   try {
+    eveningNudge()
     for (const r of dueReminders(schedule.state().blocks, new Date(), sentReminders)) {
       sentReminders.add(r.key)
       const n = new Notification({ title: r.title, body: r.body, icon })
