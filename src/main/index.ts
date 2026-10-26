@@ -332,6 +332,17 @@ app.on('web-contents-created', (_e, wc) => {
 async function syncConnections(): Promise<void> {
   try {
     if (financeHost) connections.setEmbeddedFinance(await financeHost.readState().catch(() => null))
+    // Waky and Finance live inside Life System, so they pay into the wallet
+    // without a Connect click. Done once: disconnecting later is respected.
+    for (const kind of ['waky', 'finance'] as const) {
+      if (getSetting(db, `conn_${kind}_auto`)) continue
+      try {
+        connections.connect(kind)
+        setSetting(db, `conn_${kind}_auto`, 'done')
+      } catch {
+        // not found yet (e.g. Money never opened): try again next round
+      }
+    }
     if (connections.sync() > 0) win?.webContents.send('wallet:changed')
   } catch (e) {
     console.error('connection sync failed', e)
