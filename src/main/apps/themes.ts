@@ -58,6 +58,9 @@ const WAKY = `
   ${ON} .topbar { padding: 10px 40px 8px !important; background: rgb(11 13 18 / 86%) !important; box-shadow: 0 0 0 100vmax rgb(11 13 18 / 86%) !important; border-bottom: 1px solid #1a1f2b; }
   ${ON} .topbar .brand, ${ON} .topbar .clock { display: none !important; }
   ${ON} main { padding-top: 22px !important; }
+  /* One wallet: coins and rewards live in Life System's top bar and Shop, so
+     Waky's own coin card and Rewards tab are hidden inside Life System. */
+  ${ON} [data-goto="rewards"], ${ON} .tab[data-view="rewards"], ${ON} .tab[data-tab="rewards"] { display: none !important; }
   /* Waky's orange glows, retinted to Sleep's teal. */
   ${ON} .btn.primary { color: #062421 !important; box-shadow: 0 8px 30px -8px rgb(110 231 216 / 50%) !important; }
   ${ON} body::before {
