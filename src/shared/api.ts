@@ -139,6 +139,14 @@ export interface UpdateStatus {
   checkedAt: string | null
 }
 
+export interface LogEntry {
+  at: string
+  level: 'error' | 'warn' | 'info'
+  source: string
+  message: string
+  detail?: string
+}
+
 export interface AppPrefs {
   openAtLogin: boolean
   /** Auto-start only works in the installed app, not in dev. */
@@ -254,6 +262,10 @@ export interface LifeApi {
   app: {
     /** Window full screen on/off; returns the new state. */
     toggleFullScreen(): Promise<boolean>
+    /** Saves a problem from the window to the log. */
+    reportError(message: string, detail?: string): Promise<void>
+    recentErrors(): Promise<LogEntry[]>
+    openLogs(): Promise<string>
     prefs(): Promise<AppPrefs>
     setPrefs(p: Partial<AppPrefs>): Promise<AppPrefs>
   }

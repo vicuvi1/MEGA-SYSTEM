@@ -79,6 +79,9 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
   },
   app: {
     toggleFullScreen: () => call('app:toggleFullScreen'),
+    reportError: (message, detail) => call('app:reportError', message, detail),
+    recentErrors: () => call('app:recentErrors'),
+    openLogs: () => call('app:openLogs'),
     prefs: () => call('app:prefs'),
     setPrefs: (p) => call('app:setPrefs', p)
   },

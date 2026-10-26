@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, screen, session, shell, Tray } from 'electron'
 import { dueReminders } from '@core/plan'
 import { isFlowRule } from '@core/rules'
+import { LedgerError } from '@core/ledger'
 import type { AppPrefs, BlockInput, Category, ConnectionKind, IpcReply, RewardInput, Rule, TaskInput } from '@shared/api'
 import { getSetting, openDb, setSetting, type DB } from './db'
 import { Wallet } from './wallet'
@@ -19,8 +20,11 @@ import {
   appsDir, embeddedManLevelDb, ensureWaky, MAN_PARTITION, manUrl, migrateStandaloneData, registerEmbeddedSchemes, WAKY_PARTITION, WAKY_URL,
   wakyRoot, type MigrationResult
 } from './apps/embedded'
-import { appIconPng } from './icon'
+import iconPath from './assets/icon.png?asset'
+import trayPath from './assets/tray.png?asset'
+import tray2xPath from './assets/tray@2x.png?asset'
 import { Updater } from './updater'
+import { ErrorLog, installCrashGuards, isExpected } from './errors'
 import { RESET_THEME_SCRIPT, themeFor } from './apps/themes'
 
 const isDev = !app.isPackaged
@@ -41,6 +45,15 @@ const BACKUP_EVERY_MS = 30 * 60_000
 const dataDir = app.getPath('userData')
 mkdirSync(dataDir, { recursive: true })
 const dbFile = join(dataDir, 'life.db')
+
+// Problems go to a log (Settings > Diagnostics) instead of a raw error dialog.
+const errors = new ErrorLog(join(dataDir, 'logs'))
+installCrashGuards(errors, (entry) => {
+  if (!app.isReady() || !Notification.isSupported()) return
+  const n = new Notification({ title: 'Life System hit a problem', body: `${entry.message}\nIt was saved to the log. The app keeps running.` })
+  n.on('click', () => navigate('settings'))
+  n.show()
+})
 
 let db: DB
 let wallet: Wallet
@@ -67,7 +80,14 @@ function open(): void {
   candidates.man.unshift(embeddedManLevelDb())
   connections = new Connections(db, wallet, candidates)
 }
-open()
+// If the data can't be opened, say so plainly once the app is ready (see whenReady).
+let startupError: unknown = null
+try {
+  open()
+} catch (e) {
+  startupError = e
+  errors.write('error', 'startup', e, `database: ${dbFile}`)
+}
 
 const secrets = new SecretStore(join(dataDir, 'backup-key.bin'))
 const backups = new Backups({
@@ -85,6 +105,7 @@ function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => R, 
       if (!opts.locked && auth.isLocked()) throw new Error('Locked')
       return { ok: true, data: await fn(...(args as A)) }
     } catch (e) {
+      if (!isExpected(e)) errors.write('warn', `ipc ${channel}`, e)
       return { ok: false, error: (e as Error).message }
     }
   })
@@ -100,7 +121,7 @@ handle('auth:setPin', (pin: string, current?: string) => auth.setPin(pin, curren
 handle('wallet:summary', () => wallet.summary())
 handle('wallet:history', (limit?: number) => wallet.history(limit))
 handle('wallet:award', (ruleId: string, note?: string) => {
-  if (isFlowRule(ruleId)) throw new Error('This one is logged from its own section')
+  if (isFlowRule(ruleId)) throw new LedgerError('This one is logged from its own section')
   wallet.award(ruleId, note)
   return wallet.summary()
 })
@@ -319,7 +340,7 @@ async function syncConnections(): Promise<void> {
 
 function prefs(): AppPrefs {
   // While quitting the database may already be closed: fall back to defaults.
-  if (!db.open) return { openAtLogin: false, canAutoStart: app.isPackaged, keepInTray: true, matchAppThemes: true }
+  if (!db?.open) return { openAtLogin: false, canAutoStart: app.isPackaged, keepInTray: true, matchAppThemes: true }
   return {
     openAtLogin: app.isPackaged && app.getLoginItemSettings().openAtLogin,
     canAutoStart: app.isPackaged,
@@ -328,13 +349,19 @@ function prefs(): AppPrefs {
   }
 }
 handle('app:prefs', () => prefs())
+// Diagnostics: problems reported by the window, the log list and its folder.
+handle('app:reportError', (message: string, detail?: string) => {
+  errors.write('error', 'window', new Error(String(message).slice(0, 500)), detail ? String(detail).slice(0, 4000) : undefined)
+}, free)
+handle('app:recentErrors', () => errors.list())
+handle('app:openLogs', () => shell.openPath(errors.folder))
 handle('app:toggleFullScreen', () => {
   win?.setFullScreen(!win.isFullScreen())
   return win?.isFullScreen() ?? false
 })
 handle('app:setPrefs', (p: Partial<AppPrefs>) => {
   if (p.openAtLogin !== undefined) {
-    if (!app.isPackaged) throw new Error('Start with Windows works in the installed app')
+    if (!app.isPackaged) throw new LedgerError('Start with Windows works in the installed app')
     app.setLoginItemSettings({ openAtLogin: p.openAtLogin })
   }
   if (p.keepInTray !== undefined) setSetting(db, 'keep_in_tray', p.keepInTray ? '1' : '0')
@@ -351,7 +378,7 @@ handle('app:setPrefs', (p: Partial<AppPrefs>) => {
 
 handle('backup:status', () => backups.status())
 handle('backup:setPassphrase', (p: string) => {
-  if (typeof p !== 'string' || p.length < 8) throw new Error('Use at least 8 characters')
+  if (typeof p !== 'string' || p.length < 8) throw new LedgerError('Use at least 8 characters')
   secrets.set(p)
   return backups.run(true)
 })
@@ -369,7 +396,7 @@ handle('backup:restore', (name: string, passphrase: string) => {
   open()
 })
 
-const icon = nativeImage.createFromBuffer(appIconPng(64))
+const icon = nativeImage.createFromPath(iconPath)
 
 function showWindow(): void {
   if (!win) createWindow()
@@ -494,7 +521,9 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  tray = new Tray(nativeImage.createFromBuffer(appIconPng(32)))
+  const trayImage = nativeImage.createFromPath(trayPath)
+  trayImage.addRepresentation({ scaleFactor: 2, dataURL: nativeImage.createFromPath(tray2xPath).toDataURL() })
+  tray = new Tray(trayImage)
   tray.setToolTip('Life System')
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -542,6 +571,20 @@ app.on('second-instance', showWindow)
 
 app.whenReady().then(() => {
   app.setAppUserModelId('Life System')
+  if (startupError) {
+    const choice = dialog.showMessageBoxSync({
+      type: 'error',
+      title: 'Life System',
+      message: "Life System couldn't open its data",
+      detail: `${(startupError as Error).message}\n\nYour data file is in ${dataDir}. Backups are in ${BACKUP_DIR}. Details are in the log.`,
+      buttons: ['Open data folder', 'Quit'],
+      defaultId: 0
+    })
+    if (choice === 0) shell.openPath(dataDir)
+    quitting = true
+    app.quit()
+    return
+  }
   // Before any embedded app opens its storage.
   try {
     migration = migrateStandaloneData()
@@ -573,15 +616,25 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   quitting = true
-  if (db.open) backups.run()
+  if (db?.open) backups.run()
 })
 
 // Close the database last, after every window is gone (an update quits this way too).
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
-  if (db.open) db.close()
+  if (db?.open) db.close()
 })
 
 app.on('window-all-closed', () => {
   if (!tray || !prefs().keepInTray) app.quit()
+})
+
+// A crashed page or helper is logged; the main window reloads itself.
+app.on('render-process-gone', (_e, wc, details) => {
+  if (details.reason === 'clean-exit') return
+  errors.write('error', wc === win?.webContents ? 'window crashed' : 'app inside crashed', new Error(`${details.reason} (exit ${details.exitCode})`), wc.getURL())
+  if (wc === win?.webContents && !quitting) setTimeout(() => win?.webContents.reload(), 800)
+})
+app.on('child-process-gone', (_e, details) => {
+  if (details.reason !== 'clean-exit') errors.write('warn', `process ${details.type}`, new Error(`${details.reason} (exit ${details.exitCode})`))
 })

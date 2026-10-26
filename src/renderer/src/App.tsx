@@ -4,7 +4,7 @@ import type { AuthStatus, BackupStatus, ConnectionsState, DisciplineState, Rule,
 import { isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
-import { Coins, ToastProvider } from './ui'
+import { Coins, ToastProvider, useToast } from './ui'
 import { LockScreen } from './pages/LockScreen'
 import { Today } from './pages/Today'
 import { History } from './pages/History'
@@ -23,6 +23,7 @@ import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
 import { Notifications, type Alert } from './Notifications'
 import { Sidebar } from './Sidebar'
+import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
@@ -41,9 +42,19 @@ const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
 export function App() {
   return (
     <ToastProvider>
-      <Gate />
+      <ErrorBoundary area="Life System">
+        <WindowErrors />
+        <Gate />
+      </ErrorBoundary>
     </ToastProvider>
   )
+}
+
+/** Errors outside React become a short note and a log entry. */
+function WindowErrors() {
+  const toast = useToast()
+  useEffect(() => installWindowErrorHandlers((t) => toast(t, 'bad')), [toast])
+  return null
 }
 
 function Gate() {
@@ -428,6 +439,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
         <AnimatePresence mode="wait">
           {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
             )}
@@ -444,6 +456,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'rules' && <Rules rules={rules} onChange={setRules} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}
             {current.phase > 0 && <Soon module={current} />}
+            </ErrorBoundary>
           </motion.main>}
         </AnimatePresence>
       </div>

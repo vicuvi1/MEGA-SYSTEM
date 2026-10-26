@@ -115,3 +115,18 @@
 
 /* The header (and its bell panel and coin pop-ups) sits above the page. */
 .topbar { position: relative; z-index: 25; }
+
+/* ---------- Problems ---------- */
+.crash { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 44px 24px; max-width: 620px; margin: 30px auto; }
+.crash-icon { width: 60px; height: 60px; border-radius: 18px; display: grid; place-items: center; color: var(--orange); background: rgba(255, 138, 61, 0.12); border: 1px solid rgba(255, 138, 61, 0.35); }
+.crash .hint { margin: 0; max-width: 440px; }
+.crash-msg { max-width: 100%; padding: 8px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); color: #ffb1b8; font: 12.5px var(--mono); overflow-wrap: anywhere; }
+.embed-msg .hint { max-width: 380px; margin: 0; }
+.log-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.log-list li { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; padding: 8px 10px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); }
+.log-level { font: 700 10.5px var(--mono); text-transform: uppercase; color: var(--faint); padding-top: 2px; }
+.log-list li.error .log-level { color: var(--red); }
+.log-list li.warn .log-level { color: var(--orange); }
+.log-msg { display: grid; gap: 2px; min-width: 0; }
+.log-msg b { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.log-msg small { color: var(--faint); font-size: 11.5px; }

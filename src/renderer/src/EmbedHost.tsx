@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EmbeddedApps } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
@@ -57,8 +57,67 @@ export function EmbedHost({ active }: { active: EmbedKind | null }) {
             </div>
           )
         }
-        return <webview key={k} className="embed" src={src[k].url} partition={src[k].partition} style={{ display: active === k ? undefined : 'none' }} />
+        return <AppFrame key={k} name={EMBED_LABEL[k]} url={src[k].url} partition={src[k].partition} visible={active === k} />
       })}
     </div>
+  )
+}
+
+type WebviewEl = HTMLElement & { reload(): void; loadURL(url: string): Promise<void> }
+
+/**
+ * One app's page. If it fails to load (e.g. Waky's server is down) or its
+ * page crashes, a card says so with a button to try again.
+ */
+function AppFrame({ name, url, partition, visible }: { name: string; url: string; partition: string; visible: boolean }) {
+  const ref = useRef<WebviewEl | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const failed = (e: Event) => {
+      const ev = e as Event & { errorCode: number; errorDescription: string; isMainFrame: boolean }
+      // -3 is "aborted": a normal navigation inside the app, not a failure.
+      if (!ev.isMainFrame || ev.errorCode === -3) return
+      setProblem(`${name} didn't load (${ev.errorDescription || ev.errorCode}).`)
+      life.app.reportError(`${name} failed to load: ${ev.errorDescription} (${ev.errorCode})`).catch(() => {})
+    }
+    const gone = (e: Event) => {
+      const reason = (e as Event & { details?: { reason?: string } }).details?.reason ?? 'crashed'
+      setProblem(`${name} stopped (${reason}).`)
+    }
+    const loaded = () => setProblem(null)
+    el.addEventListener('did-fail-load', failed)
+    el.addEventListener('render-process-gone', gone)
+    el.addEventListener('did-finish-load', loaded)
+    return () => {
+      el.removeEventListener('did-fail-load', failed)
+      el.removeEventListener('render-process-gone', gone)
+      el.removeEventListener('did-finish-load', loaded)
+    }
+  }, [name])
+
+  return (
+    <>
+      <webview ref={ref as never} className="embed" src={url} partition={partition} style={{ display: visible && !problem ? undefined : 'none' }} />
+      {visible && problem && (
+        <div className="embed-msg">
+          <Icon name="bolt" size={28} />
+          <p>{problem}</p>
+          <p className="hint">Your data in it is safe. Try again, and if it keeps happening, the log in Settings has the details.</p>
+          <button
+            className="btn primary small"
+            onClick={() => {
+              setProblem(null)
+              const el = ref.current
+              if (el) el.loadURL(url).catch(() => el.reload())
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+    </>
   )
 }

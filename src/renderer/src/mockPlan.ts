@@ -160,6 +160,11 @@ export function createMockPlan(ctx: Ctx): Pick<LifeApi, 'tasks' | 'schedule' | '
       }
     },
     app: {
+      reportError: async (message) => {
+        console.warn('reported:', message)
+      },
+      recentErrors: async () => [],
+      openLogs: async () => '',
       toggleFullScreen: async () => {
         if (document.fullscreenElement) await document.exitFullscreen()
         else await document.documentElement.requestFullscreen()

@@ -53,3 +53,14 @@ export function Icon({ name, size = 18, duo = false }: { name: IconName; size?: 
     </svg>
   )
 }
+
+/** The Life System mark: a level ring around a spark (same as the app icon). */
+export function Logo({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M 32 7 A 25 25 0 1 0 53.6 19.5" fill="none" stroke="currentColor" strokeWidth={6.5} strokeLinecap="round" />
+      <circle cx={53.6} cy={19.5} r={4.6} fill="currentColor" />
+      <path d="M32 17 C 33.4 28 36 30.6 47 32 C 36 33.4 33.4 36 32 47 C 30.6 36 28 33.4 17 32 C 28 30.6 30.6 28 32 17 Z" fill="currentColor" />
+    </svg>
+  )
+}

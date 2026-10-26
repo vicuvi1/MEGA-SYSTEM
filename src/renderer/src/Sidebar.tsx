@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LevelInfo } from '@shared/api'
-import { Icon } from './Icon'
+import { Icon, Logo } from './Icon'
 import { MODULES, SYSTEM_PAGES, type ModuleDef, type PageId } from './modules'
 
 export type Badge = { n?: number; dot?: 'lime' | 'warn' }
@@ -66,7 +66,7 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, bala
 
         <div className="sb-brand">
           <span className="sb-mark" aria-hidden="true">
-            <Icon name="spark" size={16} />
+            <Logo size={22} />
           </span>
           <span className="sb-label sb-word">
             LIFE<b>SYSTEM</b>

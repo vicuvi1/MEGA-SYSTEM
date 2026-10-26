@@ -19,7 +19,9 @@ export interface LedgerEntry {
 
 export type NewEntry = Omit<LedgerEntry, 'id'>
 
-export class LedgerError extends Error {}
+export class LedgerError extends Error {
+  name = 'LedgerError'
+}
 
 /** Rows that still count: not undo rows and not undone. */
 export function effective(entries: LedgerEntry[]): LedgerEntry[] {
