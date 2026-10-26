@@ -88,8 +88,42 @@ const MAN = `
   /* One streak: Life System's Discipline check-in is the one that counts, so
      MAN's own claim and day-adjust buttons are hidden inside Life System. */
   ${ON} #btn-claim-victory, ${ON} #btn-adjust-streak, ${ON} #btn-quick-adjust-streak { display: none !important; }
+  /* Full width inside Life System: header on top, two columns below. */
+  ${ON} .app-container.ls-wide { max-width: 1240px !important; display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; align-items: start; padding: 24px 32px 48px !important; }
+  ${ON} .ls-top { grid-column: 1 / -1; display: grid; justify-items: center; margin-bottom: 8px; }
+  ${ON} .ls-top .audio-banner { width: min(520px, 100%); }
+  ${ON} .ls-col { display: flex; flex-direction: column; min-width: 0; }
+  ${ON} .ls-col .streak-card { padding: 28px !important; }
+  @media (max-width: 980px) { ${ON} .app-container.ls-wide { grid-template-columns: 1fr; } }
   ${SCROLLBARS}
 `
+
+/**
+ * MAN is a phone-width page. Inside Life System its sections are moved into
+ * a header and two columns (the same elements, so its own code keeps working).
+ */
+const MAN_LAYOUT = `(() => {
+  document.documentElement.setAttribute('data-ls', '')
+  const c = document.getElementById('app-container')
+  if (!c || c.classList.contains('ls-wide')) return
+  const top = document.createElement('div')
+  const left = document.createElement('div')
+  const right = document.createElement('div')
+  top.className = 'ls-top'
+  left.className = 'ls-col'
+  right.className = 'ls-col'
+  const kids = Array.from(c.children)
+  const isTop = (el) => el.matches('.audio-banner, .header, .header-tagline')
+  const isLeft = (el) => el.matches('.streak-card, #btn-claim-victory, #btn-morning-oath, #btn-open-urge, .quote-card')
+  for (const el of kids) {
+    if (el.matches('.modal, .modal-overlay, [class*="modal"], script, style')) continue
+    if (isTop(el)) top.appendChild(el)
+    else if (isLeft(el)) left.appendChild(el)
+    else right.appendChild(el)
+  }
+  c.prepend(top, left, right)
+  c.classList.add('ls-wide')
+})()`
 
 /**
  * Runs in the app's page: turns html[data-ls] on while the app's own theme
@@ -121,7 +155,7 @@ export interface AppTheme {
 export function themeFor(partition: string): AppTheme | null {
   if (partition === FINANCE_PARTITION) return { css: FINANCE, script: guard('html', ['data-design', 'data-theme']) }
   if (partition === 'persist:waky') return { css: WAKY, script: guard('body', ['data-theme'], { '': 'dawn' }) }
-  if (partition === 'persist:man') return { css: MAN, script: "document.documentElement.setAttribute('data-ls', '')" }
+  if (partition === 'persist:man') return { css: MAN, script: MAN_LAYOUT }
   return null
 }
 
