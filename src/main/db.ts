@@ -236,6 +236,9 @@ const MIGRATIONS: string[] = [
   /* 009 clean up pseudo-categories today & tomorrow from categories table */ `
   UPDATE tasks SET category = 'life' WHERE category IN ('today', 'tomorrow');
   UPDATE categories SET archived = 1 WHERE id IN ('today', 'tomorrow');
+  `,
+  /* 010 permanently purge password / pin lock from settings */ `
+  DELETE FROM settings WHERE key = 'pin_hash';
   `
 ]
 
@@ -272,6 +275,8 @@ export function openDb(file: string): DB {
   db.pragma('busy_timeout = 3000')
   migrate(db)
   seedDefaults(db)
+  // Ensure any legacy PIN lock is immediately wiped
+  db.prepare("DELETE FROM settings WHERE key = 'pin_hash'").run()
   return db
 }
 

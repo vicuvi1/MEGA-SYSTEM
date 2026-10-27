@@ -32,9 +32,7 @@ import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
-import { soundCoin, soundSpend, soundTick, soundFanfare } from './sound'
-
-const IDLE_LOCK_MS = 10 * 60_000
+import { soundTick, stopAllSounds } from './sound'
 
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
@@ -61,36 +59,10 @@ function WindowErrors() {
   return null
 }
 
+const UNLOCKED_AUTH: AuthStatus = { pinSet: false, locked: false }
+
 function Gate() {
-  const [auth, setAuth] = useState<AuthStatus | null>(null)
-
-  useEffect(() => {
-    life.auth.status().then(setAuth)
-    life.onLocked(() => life.auth.status().then(setAuth))
-  }, [])
-
-  // Lock after a while without input, if a PIN is set.
-  useEffect(() => {
-    if (!auth?.pinSet || auth.locked) return
-    let timer = setTimeout(lock, IDLE_LOCK_MS)
-    function lock() {
-      life.auth.lock().then(setAuth)
-    }
-    const reset = () => {
-      clearTimeout(timer)
-      timer = setTimeout(lock, IDLE_LOCK_MS)
-    }
-    const events = ['mousemove', 'keydown', 'mousedown', 'wheel'] as const
-    events.forEach((e) => window.addEventListener(e, reset))
-    return () => {
-      clearTimeout(timer)
-      events.forEach((e) => window.removeEventListener(e, reset))
-    }
-  }, [auth])
-
-  if (!auth) return <div className="boot" />
-  if (auth.locked) return <LockScreen onUnlocked={setAuth} />
-  return <Shell auth={auth} onAuth={setAuth} />
+  return <Shell auth={UNLOCKED_AUTH} onAuth={() => {}} />
 }
 
 function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => void }) {
@@ -200,19 +172,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     const pop = { id: Date.now() + Math.random(), coins: delta, label: latest ? describeEntry(latest, titles) : '' }
     setPops((p) => [...p.slice(-2), pop])
     setTimeout(() => setPops((p) => p.filter((x) => x.id !== pop.id)), 2600)
-    if (delta > 0) soundCoin()
-    else soundSpend()
   }, [summary, rules])
-
-  const lastLevel = useRef<number | null>(null)
-  useEffect(() => {
-    if (!summary) return
-    const prev = lastLevel.current
-    lastLevel.current = summary.level.level
-    if (prev !== null && summary.level.level > prev) {
-      soundFanfare()
-    }
-  }, [summary])
 
   const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page)!
   const lv = summary?.level
@@ -307,7 +267,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       { id: 'a:backup', label: 'Back up now', group: 'Actions', icon: 'cloud', run: () => act(() => life.backup.runNow(), 'Backup written').then((b) => b && setBackup(b)) },
       { id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) },
       { id: 'a:sync', label: 'Check connected apps now', group: 'Actions', icon: 'link', run: () => act(() => life.connections.sync()).then((r) => r && onWallet()) },
-      ...(auth.pinSet ? [{ id: 'a:lock', label: 'Lock now', group: 'Actions' as const, icon: 'lock' as const, run: () => life.auth.lock().then(onAuth) }] : [])
+
     ]
   })
 
@@ -458,6 +418,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
                 const next = !ui.sound
                 setUiPrefs({ sound: next })
                 if (next) soundTick()
+                else stopAllSounds()
               }}
               style={{
                 opacity: ui.sound ? 1 : 0.6
@@ -474,11 +435,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               </button>
             )}
             {isDemo && <span className="chip">Demo</span>}
-            {auth.pinSet && (
-              <button className="icon-btn" aria-label="Lock now" title="Lock now" onClick={() => life.auth.lock().then(onAuth)}>
-                <Icon name="lock" />
-              </button>
-            )}
+
           </div>
         </header>
 

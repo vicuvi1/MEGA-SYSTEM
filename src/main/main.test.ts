@@ -65,22 +65,15 @@ describe('wallet', () => {
 })
 
 describe('auth', () => {
-  it('sets, checks and rate-limits the PIN', () => {
+  it('permanently disables locks and keeps system unlocked', () => {
     let t = 0
     const a = new Auth(db, () => t)
     expect(a.status()).toEqual({ pinSet: false, locked: false })
-    expect(() => a.setPin('12')).toThrow('4 to 12 digits')
-    a.setPin('1234')
-    a.lock()
-    expect(a.isLocked()).toBe(true)
-    for (let i = 0; i < 4; i++) expect(() => a.unlock('0000')).toThrow('Wrong PIN')
-    expect(() => a.unlock('0000')).toThrow('Too many tries')
-    expect(() => a.unlock('1234')).toThrow('Wait')
-    t += 31_000
-    expect(a.unlock('1234').locked).toBe(false)
-    expect(() => a.setPin('5678', '9999')).toThrow('Current PIN')
-    // A fresh process starts locked
-    expect(new Auth(db).isLocked()).toBe(true)
+    expect(a.isLocked()).toBe(false)
+    expect(a.lock()).toEqual({ pinSet: false, locked: false })
+    expect(a.unlock('1234')).toEqual({ pinSet: false, locked: false })
+    expect(a.setPin('1234')).toEqual({ pinSet: false, locked: false })
+    expect(new Auth(db).isLocked()).toBe(false)
   })
 })
 

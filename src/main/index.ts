@@ -739,7 +739,6 @@ function createTray(): void {
     Menu.buildFromTemplate([
       { label: 'Open Life System', click: showWindow },
       { label: 'Urge crusher', click: openUrgeCrusher },
-      { label: 'Lock now', click: () => lockNow() },
       { type: 'separator' },
       { label: 'Quit', click: () => { quitting = true; app.quit() } }
     ])
@@ -757,8 +756,7 @@ function openUrgeCrusher(): void {
 }
 
 function lockNow(): void {
-  auth.lock()
-  win?.webContents.send('auth:locked')
+  // App locking permanently disabled
 }
 
 // One evening nudge (after 20:30) listing what is still open today.
@@ -844,9 +842,7 @@ app.whenReady().then(() => {
   setInterval(() => updater.check(), 4 * 3600_000)
   backups.run()
   setInterval(() => backups.run(), BACKUP_EVERY_MS)
-  // Lock when Windows locks or sleeps.
-  powerMonitor.on('lock-screen', lockNow)
-  powerMonitor.on('suspend', lockNow)
+  // App lock has been permanently disabled per user specification.
 })
 
 app.on('before-quit', () => {

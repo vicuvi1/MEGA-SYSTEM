@@ -31,8 +31,7 @@ interface Props {
 
 export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, onUpdate }: Props) {
   const act = useAction()
-  const [pin, setPin] = useState('')
-  const [currentPin, setCurrentPin] = useState('')
+
   const [pass, setPass] = useState('')
   const [verify, setVerify] = useState<VerifyResult | null>(null)
   const [names, setNames] = useState<string[]>([])
@@ -139,15 +138,6 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       setRestoreName(n[n.length - 1] ?? '')
     })
   }, [backup])
-
-  async function savePin() {
-    const a = await act(() => life.auth.setPin(pin, currentPin || undefined), 'PIN saved')
-    if (a) {
-      onAuth(a)
-      setPin('')
-      setCurrentPin('')
-    }
-  }
 
   async function savePass() {
     const b = await act(() => life.backup.setPassphrase(pass), 'Passphrase saved. Backup written.')
@@ -582,22 +572,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </section>
       )}
 
-      <section className="panel">
-        <header className="panel-head">
-          <h2>
-            <Icon name="lock" /> App lock
-          </h2>
-          <span className={`chip ${auth.pinSet ? 'ok' : ''}`}>{auth.pinSet ? 'PIN set' : 'No PIN'}</span>
-        </header>
-        <p className="hint block">The app locks on start, after 10 minutes idle, and when Windows locks or sleeps.</p>
-        <div className="row">
-          {auth.pinSet && <input type="password" inputMode="numeric" placeholder="Current PIN" value={currentPin} onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))} />}
-          <input type="password" inputMode="numeric" placeholder={auth.pinSet ? 'New PIN' : 'Choose a PIN (4-12 digits)'} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
-          <button className="btn primary" disabled={pin.length < 4} onClick={savePin}>
-            {auth.pinSet ? 'Change PIN' : 'Set PIN'}
-          </button>
-        </div>
-      </section>
+
     </div>
   )
 }

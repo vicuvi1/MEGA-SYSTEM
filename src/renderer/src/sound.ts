@@ -4,7 +4,7 @@ import { getUiPrefs } from './uiPrefs'
 let ctx: AudioContext | null = null
 
 function getAudioContext(): AudioContext {
-  if (!ctx) {
+  if (!ctx || ctx.state === 'closed') {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
     ctx = new AudioCtx()
   }
@@ -12,6 +12,15 @@ function getAudioContext(): AudioContext {
     ctx.resume().catch(() => {})
   }
   return ctx
+}
+
+export function stopAllSounds(): void {
+  if (ctx) {
+    try {
+      ctx.close().catch(() => {})
+    } catch {}
+    ctx = null
+  }
 }
 
 function getMasterVolume(): number {
@@ -28,11 +37,11 @@ function play(fn: (c: AudioContext, masterGain: number) => void): void {
     const audioCtx = getAudioContext()
     fn(audioCtx, master)
   } catch {
-    // Audio device unavailable
+    // Audio device unavailable or context closed
   }
 }
 
-/** Synthesize a shaped oscillator tone with linear attack and exponential decay. */
+/** Synthesize a shaped oscillator tone with safe non-zero attack and exponential decay. */
 function synthTone(
   c: AudioContext,
   freq: number,
@@ -42,21 +51,36 @@ function synthTone(
   type: OscillatorType = 'sine',
   master = 1
 ): void {
-  const t = c.currentTime + start
-  const osc = c.createOscillator()
-  const g = c.createGain()
+  try {
+    const t = Math.max(c.currentTime, c.currentTime + start)
+    const osc = c.createOscillator()
+    const g = c.createGain()
 
-  osc.type = type
-  osc.frequency.setValueAtTime(freq, t)
+    osc.type = type
+    osc.frequency.setValueAtTime(freq, t)
 
-  const peak = gain * master
-  g.gain.setValueAtTime(0, t)
-  g.gain.linearRampToValueAtTime(peak, t + 0.008)
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    const peak = Math.max(0.0001, gain * master)
+    // Never start from 0 in Web Audio before an exponential ramp (prevents RangeError / runaway tone)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.linearRampToValueAtTime(peak, t + 0.008)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    g.gain.linearRampToValueAtTime(0, t + dur + 0.015)
 
-  osc.connect(g).connect(c.destination)
-  osc.start(t)
-  osc.stop(t + dur + 0.03)
+    osc.connect(g)
+    g.connect(c.destination)
+
+    osc.start(t)
+    osc.stop(t + dur + 0.03)
+
+    osc.onended = () => {
+      try {
+        osc.disconnect()
+        g.disconnect()
+      } catch {}
+    }
+  } catch {
+    // Gracefully handle timing / context race conditions
+  }
 }
 
 /**
@@ -65,7 +89,6 @@ function synthTone(
  */
 export const soundSystemOracle = () =>
   play((c, master) => {
-    // 5-layer ascending crystal holographic chord (C6, E6, G6, B6, C7 shimmer)
     synthTone(c, 1046.5, 0, 0.22, 0.09, 'sine', master)
     synthTone(c, 1318.5, 0.06, 0.26, 0.09, 'sine', master)
     synthTone(c, 1567.98, 0.12, 0.3, 0.1, 'sine', master)
@@ -79,40 +102,62 @@ export const soundSystemOracle = () =>
  */
 export const soundMechanicalClick = () =>
   play((c, master) => {
-    const t = c.currentTime
+    try {
+      const t = c.currentTime
 
-    // 1. Damped bottom thud (180 Hz)
-    const thudOsc = c.createOscillator()
-    const thudGain = c.createGain()
-    thudOsc.type = 'triangle'
-    thudOsc.frequency.setValueAtTime(180, t)
-    thudGain.gain.setValueAtTime(0.04 * master, t)
-    thudGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.025)
-    thudOsc.connect(thudGain).connect(c.destination)
-    thudOsc.start(t)
-    thudOsc.stop(t + 0.03)
+      // 1. Damped bottom thud (180 Hz)
+      const thudOsc = c.createOscillator()
+      const thudGain = c.createGain()
+      thudOsc.type = 'triangle'
+      thudOsc.frequency.setValueAtTime(180, t)
+      thudGain.gain.setValueAtTime(Math.max(0.0001, 0.04 * master), t)
+      thudGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.025)
+      thudGain.gain.linearRampToValueAtTime(0, t + 0.03)
+      thudOsc.connect(thudGain)
+      thudGain.connect(c.destination)
+      thudOsc.start(t)
+      thudOsc.stop(t + 0.035)
+      thudOsc.onended = () => {
+        try {
+          thudOsc.disconnect()
+          thudGain.disconnect()
+        } catch {}
+      }
 
-    // 2. Micro noise burst transient for physical switch latching
-    const bufferSize = Math.floor(c.sampleRate * 0.008)
-    const buffer = c.createBuffer(1, bufferSize, c.sampleRate)
-    const data = buffer.getChannelData(0)
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25))
-    }
+      // 2. Micro noise burst transient for physical switch latching
+      const bufferSize = Math.max(1, Math.floor(c.sampleRate * 0.008))
+      const buffer = c.createBuffer(1, bufferSize, c.sampleRate)
+      const data = buffer.getChannelData(0)
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25))
+      }
 
-    const noise = c.createBufferSource()
-    noise.buffer = buffer
+      const noise = c.createBufferSource()
+      noise.buffer = buffer
 
-    const filter = c.createBiquadFilter()
-    filter.type = 'bandpass'
-    filter.frequency.setValueAtTime(3400, t)
-    filter.Q.setValueAtTime(3, t)
+      const filter = c.createBiquadFilter()
+      filter.type = 'bandpass'
+      filter.frequency.setValueAtTime(3400, t)
+      filter.Q.setValueAtTime(3, t)
 
-    const noiseGain = c.createGain()
-    noiseGain.gain.setValueAtTime(0.06 * master, t)
+      const noiseGain = c.createGain()
+      noiseGain.gain.setValueAtTime(Math.max(0.0001, 0.06 * master), t)
+      noiseGain.gain.linearRampToValueAtTime(0, t + 0.012)
 
-    noise.connect(filter).connect(noiseGain).connect(c.destination)
-    noise.start(t)
+      noise.connect(filter)
+      filter.connect(noiseGain)
+      noiseGain.connect(c.destination)
+
+      noise.start(t)
+      noise.stop(t + 0.015)
+      noise.onended = () => {
+        try {
+          noise.disconnect()
+          filter.disconnect()
+          noiseGain.disconnect()
+        } catch {}
+      }
+    } catch {}
   })
 
 /**
@@ -121,11 +166,8 @@ export const soundMechanicalClick = () =>
  */
 export const soundCoin = () =>
   play((c, master) => {
-    // Primary coin strike (dual inharmonic frequencies)
     synthTone(c, 2480, 0, 0.16, 0.09, 'sine', master)
     synthTone(c, 3250, 0, 0.18, 0.07, 'sine', master)
-
-    // Secondary light rebound bounce
     synthTone(c, 2720, 0.05, 0.22, 0.07, 'sine', master)
     synthTone(c, 3480, 0.05, 0.24, 0.05, 'triangle', master)
   })
