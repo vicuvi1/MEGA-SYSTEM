@@ -226,6 +226,12 @@ const MIGRATIONS: string[] = [
     loot_label TEXT NOT NULL,
     ts TEXT NOT NULL
   );
+  `,
+  /* 008 photo urls and multi-currency: image_url & currency on rewards and wishlist_goals */ `
+  ALTER TABLE rewards ADD COLUMN image_url TEXT;
+  ALTER TABLE rewards ADD COLUMN currency TEXT NOT NULL DEFAULT 'MDL';
+  ALTER TABLE wishlist_goals ADD COLUMN image_url TEXT;
+  ALTER TABLE wishlist_goals ADD COLUMN currency TEXT NOT NULL DEFAULT 'MDL';
   `
 ]
 

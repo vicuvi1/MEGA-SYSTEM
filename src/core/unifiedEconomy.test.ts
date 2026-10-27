@@ -4,6 +4,9 @@ import {
   coinsToMoneyValue,
   computeActiveMultiplier,
   computeGoalProgress,
+  convertCurrency,
+  formatDualCurrency,
+  CURRENCY_CONFIGS,
   moneyToCoinsTarget,
   rollEnhancedChest,
   type WishlistGoal
@@ -147,6 +150,29 @@ describe('Unified Economy Core Domain Logic', () => {
       expect(loot.type).toBe('multiplier_24h')
       expect(loot.value).toBe(2)
       expect(loot.label).toContain('2x Super Multiplier')
+    })
+  })
+
+  describe('Multi-Currency & Real-Life Dual Comparisons', () => {
+    it('converts between MDL and USD accurately', () => {
+      expect(convertCurrency(180, 'MDL', 'USD')).toBe(10)
+      expect(convertCurrency(50, 'USD', 'MDL')).toBe(900)
+    })
+
+    it('converts between USD and EUR accurately', () => {
+      expect(convertCurrency(100, 'USD', 'EUR')).toBe(92)
+    })
+
+    it('formats dual currency comparisons for Lei and USD', () => {
+      const dualLei = formatDualCurrency(900, 'MDL')
+      expect(dualLei.primaryText).toBe('900 MDL')
+      expect(dualLei.secondaryText).toBe('$50')
+      expect(dualLei.combinedText).toBe('900 MDL (~$50)')
+
+      const dualUsd = formatDualCurrency(100, 'USD')
+      expect(dualUsd.primaryText).toBe('$100')
+      expect(dualUsd.secondaryText).toBe('1800 MDL')
+      expect(dualUsd.combinedText).toBe('$100 (~1800 MDL)')
     })
   })
 })

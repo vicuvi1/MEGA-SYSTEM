@@ -2,7 +2,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { redeemBlocker, TIERS, tierUnlocked } from '@core/shop'
 import { computeGoalProgress } from '@core/unifiedEconomy'
-import type {
+import {
+  calculateEffortEquivalence,
+  formatDualCurrency,
+  CURRENCY_CONFIGS,
+  type SupportedCurrency,
   ChestLootDrop,
   EconomySummary,
   Reward,
@@ -66,6 +70,18 @@ export function Shop({ state, onState, onWallet }: Props) {
       setShields(res.shields)
       onWallet()
       refreshEconomy()
+    }
+  }
+
+  async function changeCurrency(code: string) {
+    try {
+      const nextShop = await life.shop.setCurrency(code)
+      await life.economy.setCurrency(code)
+      onState(nextShop)
+      refreshEconomy()
+      toast(`Currency switched to ${code}`, 'good')
+    } catch (e: any) {
+      toast(e.message, 'bad')
     }
   }
 
@@ -209,6 +225,25 @@ export function Shop({ state, onState, onWallet }: Props) {
 
   return (
     <div className="shop">
+      {/* REAL-WORLD CURRENCY CONVERTER & SELECTOR */}
+      <section className="currency-selector-row">
+        <div className="currency-selector-left">
+          <Icon name="coin" size={16} />
+          <span>Active Real-World Currency: <b>{state.currency}</b> (with live USD / LEI equivalences)</span>
+        </div>
+        <div className="currency-pill-group">
+          {(['MDL', 'USD', 'EUR', 'RON'] as SupportedCurrency[]).map((cur) => (
+            <button
+              key={cur}
+              className={`currency-pill-btn ${state.currency === cur ? 'active' : ''}`}
+              onClick={() => changeCurrency(cur)}
+              title={`Switch primary real-world currency to ${CURRENCY_CONFIGS[cur]?.name ?? cur}`}
+            >
+              {cur} {CURRENCY_CONFIGS[cur]?.symbol !== cur ? `(${CURRENCY_CONFIGS[cur]?.symbol})` : ''}
+            </button>
+          ))}
+        </div>
+      </section>
       {/* MASTER ECONOMY COMMAND DECK */}
       <section className="economy-command-deck">
         {/* Card 1: Coins Wealth */}
@@ -344,6 +379,18 @@ export function Shop({ state, onState, onWallet }: Props) {
                   </div>
                 </div>
 
+                {pinned.imageUrl && (
+                  <div className="showcase-hero-image-wrap">
+                    <img
+                      src={pinned.imageUrl}
+                      alt={pinned.title}
+                      className="showcase-hero-img"
+                      onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+                    />
+                    <div className="showcase-hero-overlay" />
+                  </div>
+                )}
+
                 <div className="showcase-title-row">
                   <div>
                     <h2>{pinned.title}</h2>
@@ -368,7 +415,7 @@ export function Shop({ state, onState, onWallet }: Props) {
                     <div className="progress-label-row">
                       <span className="progress-label">Financial Discipline (Surplus Cash)</span>
                       <span className="progress-fraction">
-                        {pinned.allocatedRealCost} / {pinned.targetRealCost} {state.currency} ({prog.realCostPercent}%)
+                        {pinned.allocatedRealCost} / {pinned.targetRealCost} {state.currency} ({prog.realCostPercent}%) <small style={{ color: 'var(--muted)', fontSize: 11 }}>({formatDualCurrency(pinned.targetRealCost, state.currency).secondaryText})</small>
                       </span>
                     </div>
                     <div className="progress-track">
@@ -387,6 +434,10 @@ export function Shop({ state, onState, onWallet }: Props) {
                       : 'Funding in progress'}
                   </span>
                   <span>Overall Milestone: <b>{prog.overallPercent}%</b></span>
+                </div>
+                <div className="effort-badge">
+                  <Icon name="bolt" size={13} />
+                  <span>Master Milestone Grit: {calculateEffortEquivalence(pinned.targetCoins).summaryText}</span>
                 </div>
               </>
             )
@@ -537,6 +588,17 @@ export function Shop({ state, onState, onWallet }: Props) {
                 className={`reward ${locked ? 'locked' : ''} ${!why ? 'ready' : ''}`}
                 style={{ ['--tier' as string]: tier.color }}
               >
+                {r.imageUrl && (
+                  <div className="reward-photo-container">
+                    <img
+                      src={r.imageUrl}
+                      alt={r.title}
+                      className="reward-photo"
+                      onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+                    />
+                    <div className="reward-photo-gradient" />
+                  </div>
+                )}
                 <header>
                   <span className="tier">{tier.label}</span>
                   <span className="reward-tools">
@@ -564,9 +626,13 @@ export function Shop({ state, onState, onWallet }: Props) {
                   <Coins n={r.price} />
                   {r.realCost > 0 && (
                     <span className="real">
-                      ≈ {r.realCost} {state.currency}
+                      ≈ {formatDualCurrency(r.realCost, r.currency ?? state.currency).combinedText}
                     </span>
                   )}
+                </div>
+                <div className="effort-badge">
+                  <Icon name="bolt" size={12} />
+                  <span>Afforded by: {calculateEffortEquivalence(r.price).summaryText}</span>
                 </div>
                 <div className="bar">
                   <i style={{ width: `${pct * 100}%` }} />
@@ -595,6 +661,17 @@ export function Shop({ state, onState, onWallet }: Props) {
             const prog = computeGoalProgress(g)
             return (
               <div key={g.id} className={`goal-card ${g.completed ? 'completed' : ''}`}>
+                {g.imageUrl && (
+                  <div className="goal-photo-container">
+                    <img
+                      src={g.imageUrl}
+                      alt={g.title}
+                      className="goal-photo"
+                      onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+                    />
+                    <div className="goal-photo-gradient" />
+                  </div>
+                )}
                 <div className="goal-card-header">
                   <span className="goal-cat-badge">{g.category}</span>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -632,6 +709,10 @@ export function Shop({ state, onState, onWallet }: Props) {
 
                 <h3>{g.title}</h3>
                 {g.note && <p className="note">{g.note}</p>}
+                <div className="effort-badge">
+                  <Icon name="bolt" size={12} />
+                  <span>Milestone Grit: {calculateEffortEquivalence(g.targetCoins).summaryText}</span>
+                </div>
 
                 <div className="progress-group">
                   <div className="progress-label-row">
@@ -649,7 +730,7 @@ export function Shop({ state, onState, onWallet }: Props) {
                   <div className="progress-label-row">
                     <span className="progress-label">Vault Cash Progress</span>
                     <span className="progress-fraction">
-                      {g.allocatedRealCost} / {g.targetRealCost} {state.currency} ({prog.realCostPercent}%)
+                      {g.allocatedRealCost} / {g.targetRealCost} {g.currency ?? state.currency} ({prog.realCostPercent}%) <small style={{ color: 'var(--muted)', fontSize: 11 }}>({formatDualCurrency(g.targetRealCost, g.currency ?? state.currency).secondaryText})</small>
                     </span>
                   </div>
                   <div className="progress-track">
@@ -819,16 +900,51 @@ export function Shop({ state, onState, onWallet }: Props) {
                 />
               </label>
               <label>
-                Target Cost ({state.currency})
-                <input
-                  type="number"
-                  min={0}
-                  value={editingGoal.targetRealCost}
-                  onChange={(e) =>
-                    setEditingGoal({ ...editingGoal, targetRealCost: parseInt(e.target.value, 10) || 0 })
-                  }
-                />
+                Target Cost ({editingGoal.currency ?? state.currency})
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingGoal.targetRealCost}
+                    onChange={(e) =>
+                      setEditingGoal({ ...editingGoal, targetRealCost: parseInt(e.target.value, 10) || 0 })
+                    }
+                    style={{ flex: 1 }}
+                  />
+                  {editingGoal.targetRealCost > 0 && (
+                    <button
+                      type="button"
+                      className="calc-coins-btn"
+                      title="Calculate coins based on exchange rate"
+                      onClick={() =>
+                        setEditingGoal({
+                          ...editingGoal,
+                          targetCoins: Math.round(editingGoal.targetRealCost * 1.25)
+                        })
+                      }
+                    >
+                      ⚡ Calc
+                    </button>
+                  )}
+                </div>
               </label>
+              <label>
+                Currency
+                <select
+                  value={editingGoal.currency ?? state.currency}
+                  onChange={(e) =>
+                    setEditingGoal({ ...editingGoal, currency: e.target.value })
+                  }
+                >
+                  <option value="MDL">MDL (Lei)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="RON">RON (Lei)</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid2">
               <label>
                 Category
                 <select
@@ -845,16 +961,51 @@ export function Shop({ state, onState, onWallet }: Props) {
                   <option value="investment">Investment Seed</option>
                 </select>
               </label>
+
+              <label>
+                Note (optional)
+                <input
+                  value={editingGoal.note ?? ''}
+                  placeholder="Why this milestone matters..."
+                  onChange={(e) => setEditingGoal({ ...editingGoal, note: e.target.value })}
+                />
+              </label>
             </div>
 
             <label>
-              Note (optional)
+              Photo / Image URL
               <input
-                value={editingGoal.note ?? ''}
-                placeholder="Why this milestone matters..."
-                onChange={(e) => setEditingGoal({ ...editingGoal, note: e.target.value })}
+                value={editingGoal.imageUrl ?? ''}
+                placeholder="https://images.unsplash.com/... or direct image link"
+                onChange={(e) => setEditingGoal({ ...editingGoal, imageUrl: e.target.value })}
               />
             </label>
+            {editingGoal.imageUrl && (
+              <div className="image-preview-row">
+                <img
+                  src={editingGoal.imageUrl}
+                  alt="Preview"
+                  className="image-preview-thumb"
+                  onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Live Photo Preview</span>
+              </div>
+            )}
+            <div className="photo-suggest-pills">
+              <span style={{ fontSize: 11, color: 'var(--muted)', alignSelf: 'center', marginRight: 4 }}>Templates:</span>
+              <button type="button" className="photo-suggest-pill" onClick={() => setEditingGoal({ ...editingGoal, imageUrl: 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80', category: 'trip' })}>🕋 Kaaba Trip</button>
+              <button type="button" className="photo-suggest-pill" onClick={() => setEditingGoal({ ...editingGoal, imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=80', category: 'tech' })}>💻 MacBook / Tech</button>
+              <button type="button" className="photo-suggest-pill" onClick={() => setEditingGoal({ ...editingGoal, imageUrl: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&auto=format&fit=crop&q=80', category: 'luxury' })}>🧖 Spa Retreat</button>
+              <button type="button" className="photo-suggest-pill" onClick={() => setEditingGoal({ ...editingGoal, imageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800&auto=format&fit=crop&q=80', category: 'gear' })}>🏋️ Gym / Fitness</button>
+              <button type="button" className="photo-suggest-pill" onClick={() => setEditingGoal({ ...editingGoal, imageUrl: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=800&auto=format&fit=crop&q=80', category: 'investment' })}>📈 Investment Seed</button>
+            </div>
+
+            {editingGoal.targetCoins > 0 && (
+              <div className="effort-badge" style={{ marginBottom: 10 }}>
+                <Icon name="spark" size={13} />
+                <span>Required Grit: {calculateEffortEquivalence(editingGoal.targetCoins).summaryText}</span>
+              </div>
+            )}
 
             <label className="check">
               <input
@@ -1042,9 +1193,36 @@ function RewardSheet({
             <input type="number" min={1} value={r.price} onChange={int('price')} />
           </label>
           <label>
-            Real cost ({currency})
-            <input type="number" min={0} value={r.realCost} onChange={int('realCost')} />
+            Real cost ({r.currency ?? currency})
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="number" min={0} value={r.realCost} onChange={int('realCost')} style={{ flex: 1 }} />
+              {r.realCost > 0 && (
+                <button
+                  type="button"
+                  className="calc-coins-btn"
+                  title="Auto-calculate coins equivalent based on 100 coins = 10 MDL"
+                  onClick={() => setR({ ...r, price: Math.max(10, Math.round(r.realCost * 10)) })}
+                >
+                  ⚡ Calc
+                </button>
+              )}
+            </div>
           </label>
+          <label>
+            Currency
+            <select
+              value={r.currency ?? currency}
+              onChange={(e) => setR({ ...r, currency: e.target.value })}
+            >
+              <option value="MDL">MDL (Lei)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="RON">RON (Lei)</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="grid2">
           <label>
             Tier
             <select value={r.tier} onChange={(e) => setR({ ...r, tier: e.target.value as Tier })}>
@@ -1055,11 +1233,47 @@ function RewardSheet({
               ))}
             </select>
           </label>
+          <label>
+            Note (optional)
+            <input value={r.note ?? ''} onChange={(e) => setR({ ...r, note: e.target.value })} />
+          </label>
         </div>
+
         <label>
-          Note (optional)
-          <input value={r.note ?? ''} onChange={(e) => setR({ ...r, note: e.target.value })} />
+          Photo / Image URL
+          <input
+            value={r.imageUrl ?? ''}
+            placeholder="https://images.unsplash.com/... or direct image link"
+            onChange={(e) => setR({ ...r, imageUrl: e.target.value })}
+          />
         </label>
+        {r.imageUrl && (
+          <div className="image-preview-row">
+            <img
+              src={r.imageUrl}
+              alt="Preview"
+              className="image-preview-thumb"
+              onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Live Photo Preview</span>
+          </div>
+        )}
+        <div className="photo-suggest-pills">
+          <span style={{ fontSize: 11, color: 'var(--muted)', alignSelf: 'center', marginRight: 4 }}>Templates:</span>
+          <button type="button" className="photo-suggest-pill" onClick={() => setR({ ...r, imageUrl: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&auto=format&fit=crop&q=80' })}>🧴 Skincare</button>
+          <button type="button" className="photo-suggest-pill" onClick={() => setR({ ...r, imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80' })}>🎧 Tech / Audio</button>
+          <button type="button" className="photo-suggest-pill" onClick={() => setR({ ...r, imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80' })}>👟 Shoes / Gear</button>
+          <button type="button" className="photo-suggest-pill" onClick={() => setR({ ...r, imageUrl: 'https://images.unsplash.com/photo-1621607512214-68297480165e?w=600&auto=format&fit=crop&q=80' })}>✂️ Grooming</button>
+          <button type="button" className="photo-suggest-pill" onClick={() => setR({ ...r, imageUrl: 'https://images.unsplash.com/photo-1594035910387-fea47794261f?w=600&auto=format&fit=crop&q=80' })}>✨ Perfume</button>
+          <button type="button" className="photo-suggest-pill" onClick={() => setR({ ...r, imageUrl: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600&auto=format&fit=crop&q=80' })}>☕ Treat</button>
+        </div>
+
+        {r.price > 0 && (
+          <div className="effort-badge" style={{ marginBottom: 10 }}>
+            <Icon name="bolt" size={13} />
+            <span>Real-Life Grit: {calculateEffortEquivalence(r.price).summaryText}</span>
+          </div>
+        )}
         <label className="check">
           <input
             type="checkbox"

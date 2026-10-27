@@ -100,6 +100,8 @@ export interface WishlistGoal {
   completedAt: string | null
   note: string | null
   createdAt: string
+  imageUrl?: string | null
+  currency?: string | null
 }
 
 export interface GoalProgress {
@@ -215,5 +217,63 @@ export function rollEnhancedChest(level: number, rand = Math.random()): ChestLoo
     value: 2,
     label: '⚡ 24h 2x Super Multiplier Shard!',
     description: 'Double all coin earnings across all tasks and workouts for the next 24 hours!'
+  }
+}
+
+export type SupportedCurrency = 'MDL' | 'USD' | 'EUR' | 'RON'
+
+export interface CurrencyConfig {
+  code: SupportedCurrency
+  name: string
+  symbol: string
+  /** Standard rate relative to 1 USD */
+  rateToUsd: number
+}
+
+export const CURRENCY_CONFIGS: Record<SupportedCurrency, CurrencyConfig> = {
+  MDL: { code: 'MDL', name: 'Moldovan Leu (Lei)', symbol: 'MDL', rateToUsd: 18.0 },
+  USD: { code: 'USD', name: 'US Dollar', symbol: '$', rateToUsd: 1.0 },
+  EUR: { code: 'EUR', name: 'Euro', symbol: '€', rateToUsd: 0.92 },
+  RON: { code: 'RON', name: 'Romanian Leu (Lei)', symbol: 'RON', rateToUsd: 4.6 }
+}
+
+export function convertCurrency(
+  amount: number,
+  from: string,
+  to: string,
+  customUsdRate?: number
+): number {
+  if (from === to || amount === 0) return amount
+  const fromCfg = CURRENCY_CONFIGS[from as SupportedCurrency] || CURRENCY_CONFIGS.MDL
+  const toCfg = CURRENCY_CONFIGS[to as SupportedCurrency] || CURRENCY_CONFIGS.USD
+
+  const fromRate = from === 'MDL' && customUsdRate ? customUsdRate : fromCfg.rateToUsd
+  const toRate = to === 'MDL' && customUsdRate ? customUsdRate : toCfg.rateToUsd
+
+  // Convert from -> USD -> to
+  const inUsd = amount / fromRate
+  const converted = inUsd * toRate
+  return Math.round(converted)
+}
+
+export function formatDualCurrency(
+  amount: number,
+  primaryCurrency = 'MDL',
+  customUsdRate = 18.0
+): { primaryText: string; secondaryText: string; combinedText: string } {
+  const isLei = primaryCurrency === 'MDL' || primaryCurrency === 'RON'
+  const secondary = isLei ? 'USD' : 'MDL'
+  const secondaryAmount = convertCurrency(amount, primaryCurrency, secondary, customUsdRate)
+
+  const pSymbol = CURRENCY_CONFIGS[primaryCurrency as SupportedCurrency]?.symbol ?? primaryCurrency
+  const sSymbol = CURRENCY_CONFIGS[secondary as SupportedCurrency]?.symbol ?? secondary
+
+  const primaryText = pSymbol === '$' || pSymbol === '€' ? `${pSymbol}${amount}` : `${amount} ${primaryCurrency}`
+  const secondaryText = sSymbol === '$' || sSymbol === '€' ? `${sSymbol}${secondaryAmount}` : `${secondaryAmount} ${secondary}`
+
+  return {
+    primaryText,
+    secondaryText,
+    combinedText: `${primaryText} (~${secondaryText})`
   }
 }

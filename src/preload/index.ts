@@ -32,7 +32,8 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     archive: (id) => call('shop:archive', id),
     redeem: (id) => call('shop:redeem', id),
     openChest: (level) => call('shop:openChest', level),
-    setBudget: (amount) => call('shop:setBudget', amount)
+    setBudget: (amount) => call('shop:setBudget', amount),
+    setCurrency: (cur) => call('shop:setCurrency', cur)
   },
   tasks: {
     state: () => call('tasks:state'),
@@ -140,6 +141,7 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     claimGoal: (goalId) => call('economy:claimGoal', goalId),
     creditVault: (amount, note) => call('economy:creditVault', amount, note),
     setExchangeRate: (rate) => call('economy:setExchangeRate', rate),
+    setCurrency: (cur) => call('economy:setCurrency', cur),
     openChest: (level) => call('economy:openChest', level)
   },
   bots: {

@@ -156,13 +156,25 @@ function NextReward({ balance, shop, onOpenShop }: { balance: number; shop: Shop
   const pct = Math.min(1, balance / target.price)
   const left = target.price - balance
   return (
-    <button className="stat clickable" onClick={onOpenShop}>
-      <span className="label">Main goal · {target.title}</span>
-      <div className="big">{Math.round(pct * 100)}%</div>
-      <div className="bar goal">
-        <motion.i initial={false} animate={{ width: `${pct * 100}%` }} />
+    <button className={`stat clickable ${target.imageUrl ? 'next-reward-stat' : ''}`} onClick={onOpenShop}>
+      {target.imageUrl && (
+        <div className="next-reward-thumb-wrap">
+          <img
+            src={target.imageUrl}
+            alt={target.title}
+            className="next-reward-thumb"
+            onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+          />
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span className="label">Main goal · {target.title}</span>
+        <div className="big">{Math.round(pct * 100)}%</div>
+        <div className="bar goal">
+          <motion.i initial={false} animate={{ width: `${pct * 100}%` }} />
+        </div>
+        <span className="sub">{left > 0 ? `${left} coins to go` : 'Ready to redeem!'}</span>
       </div>
-      <span className="sub">{left > 0 ? `${left} coins to go` : 'Ready to redeem!'}</span>
     </button>
   )
 }

@@ -171,7 +171,8 @@ export function createMockApi(): Bridge {
       setBudget: async (amount) => {
         budget = amount
         return shop()
-      }
+      },
+      setCurrency: async (_cur) => shop()
     },
     telegram: {
       config: async () => ({ botToken: '', chatId: '', enabled: false, morningBriefing: true, eveningNudge: true }),
@@ -393,6 +394,26 @@ export function createMockApi(): Bridge {
       }),
       creditVault: async (amount) => 420 + amount,
       setExchangeRate: async (rate) => rate,
+      setCurrency: async (cur) => ({
+        coinsBalance: 1420,
+        coinsRealValue: 142,
+        exchangeRate: 10,
+        vaultBalance: 420,
+        currency: cur,
+        monthlyBudget: 1500,
+        monthSpent: 300,
+        multiplier: {
+          rate: 1.5,
+          cleanStreak: 14,
+          budgetStreak: 4,
+          budgetBonus: 0.15,
+          totalRate: 1.65,
+          label: 'Spartan (1.5x) + 💰 Budget Shield (+15%)'
+        },
+        pinnedGoal: null,
+        goals: [],
+        recentVaultEntries: []
+      }),
       openChest: async (level) => ({
         drop: {
           type: 'coins',

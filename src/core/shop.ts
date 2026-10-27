@@ -23,13 +23,55 @@ export interface Reward {
   pinned: boolean
   archived: boolean
   note: string | null
+  imageUrl?: string | null
+  currency?: string | null
 }
 
 export const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
-  { title: 'Face cream', price: 300, tier: 'bronze', realCost: 250, pinned: false, archived: false, note: null },
-  { title: 'New phone case', price: 600, tier: 'bronze', realCost: 300, pinned: true, archived: false, note: null },
-  { title: 'Shaver machine', price: 1500, tier: 'silver', realCost: 900, pinned: false, archived: false, note: null },
-  { title: 'Kaaba trip fund', price: 20000, tier: 'legendary', realCost: 0, pinned: false, archived: false, note: 'The big one. Keep stacking.' }
+  {
+    title: 'Face cream & skincare',
+    price: 300,
+    tier: 'bronze',
+    realCost: 250,
+    pinned: false,
+    archived: false,
+    note: 'Premium facial cleanser & hydration moisturizer.',
+    imageUrl: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&auto=format&fit=crop&q=80',
+    currency: 'MDL'
+  },
+  {
+    title: 'New phone case & screen armor',
+    price: 600,
+    tier: 'bronze',
+    realCost: 300,
+    pinned: true,
+    archived: false,
+    note: 'Sleek matte shockproof protection.',
+    imageUrl: 'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=600&auto=format&fit=crop&q=80',
+    currency: 'MDL'
+  },
+  {
+    title: 'Pro grooming shaver machine',
+    price: 1500,
+    tier: 'silver',
+    realCost: 900,
+    pinned: false,
+    archived: false,
+    note: 'Precision cordless beard & hair trimmer.',
+    imageUrl: 'https://images.unsplash.com/photo-1621607512214-68297480165e?w=600&auto=format&fit=crop&q=80',
+    currency: 'MDL'
+  },
+  {
+    title: 'Kaaba spiritual trip fund',
+    price: 20000,
+    tier: 'legendary',
+    realCost: 15000,
+    pinned: false,
+    archived: false,
+    note: 'The big spiritual milestone. Keep stacking and building.',
+    imageUrl: 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=600&auto=format&fit=crop&q=80',
+    currency: 'MDL'
+  }
 ]
 
 export function tierUnlocked(tier: Tier, level: number): boolean {
@@ -87,4 +129,29 @@ export function rollChest(level: number, rand: number): number {
   const min = 10 + level * 2
   const max = 40 + level * 5
   return Math.round(min + rand * (max - min))
+}
+
+export interface EffortEquivalence {
+  coins: number
+  workouts: number // at 10 coins / workout
+  studyBlocks: number // at 15 coins / focus block
+  cleanDays: number // at 20 coins / clean checkin
+  dailyRitualsDays: number // at 41 coins / all 5 daily rituals
+  summaryText: string
+}
+
+export function calculateEffortEquivalence(coins: number): EffortEquivalence {
+  const safeCoins = Math.max(1, coins || 1)
+  const workouts = Math.ceil(safeCoins / 10)
+  const studyBlocks = Math.ceil(safeCoins / 15)
+  const cleanDays = Math.ceil(safeCoins / 20)
+  const dailyRitualsDays = Math.ceil(safeCoins / 41)
+  return {
+    coins: safeCoins,
+    workouts,
+    studyBlocks,
+    cleanDays,
+    dailyRitualsDays,
+    summaryText: `~${cleanDays} clean days or ~${workouts} workouts`
+  }
 }

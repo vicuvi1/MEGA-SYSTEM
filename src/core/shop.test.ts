@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chestRef, planRedeem, redeemBlocker, rollChest, tierUnlocked, unopenedChests, validateReward, type Reward } from './shop'
+import { calculateEffortEquivalence, chestRef, planRedeem, redeemBlocker, rollChest, tierUnlocked, unopenedChests, validateReward, type Reward } from './shop'
 
 const cream: Reward = { id: 1, title: 'Face cream', price: 300, tier: 'bronze', realCost: 250, pinned: false, archived: false, note: null }
 const base = { reward: cream, balance: 500, level: 3, monthSpent: 0, budget: 0 }
@@ -42,5 +42,15 @@ describe('shop', () => {
     expect(rollChest(2, 0)).toBe(14)
     expect(rollChest(2, 1)).toBe(50)
     expect(rollChest(10, 0)).toBeGreaterThan(rollChest(2, 0))
+  })
+
+  it('calculates real-life effort equivalence accurately', () => {
+    const eq = calculateEffortEquivalence(300)
+    expect(eq.coins).toBe(300)
+    expect(eq.workouts).toBe(30)
+    expect(eq.studyBlocks).toBe(20)
+    expect(eq.cleanDays).toBe(15)
+    expect(eq.summaryText).toContain('15 clean days')
+    expect(eq.summaryText).toContain('30 workouts')
   })
 })

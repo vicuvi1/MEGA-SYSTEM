@@ -4,6 +4,15 @@ One desktop app, one points wallet, many sections. Doing good things (waking up 
 
 The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
+## Visual Motivation Engine, Photos & Real-Life Currency Comparisons (Phase 11 — v1.2.0)
+
+The brain and heart of Life System: directly connects the hard work you do every single day to the real-life rewards you see and touch:
+- **Real-Life Photos & Image URLs**: Add direct photo URLs to any reward or wishlist mega goal. Cards display cinematic photo banners with smooth rounded corners and subtle ambient glow.
+- **Multi-Currency Support & Live Comparison**: Choose between **LEI** (`MDL` / `RON`), `USD ($)`, and `EUR (€)` with 1-click toggle pills. Displays dual-currency comparisons (e.g. `900 MDL (~$50 USD)` or `$100 USD (~1,800 Lei)`).
+- **Real-Life Effort Grit Matrix**: Translates abstract coin numbers into real-world human grit (`Afforded by: ~15 clean days or ~30 workouts`), showing you exactly how close your daily habits are bringing you to your dream rewards.
+- **Smart Coin Auto-Calculator**: Enter real-life price and click `⚡ Calc Coins` to automatically calculate the balanced coin cost based on the system's economic exchange rate.
+- **Next Reward Visual Showcase on Today**: The Today dashboard displays a high-res thumbnail of your active dream goal beside the progress bar.
+
 ## Solo Leveling Hunter Awakening Progression System (Phase 10 — v1.1.0)
 
 Turn real-life habit execution into an authentic Solo Leveling RPG awakening:
@@ -50,7 +59,7 @@ Life System includes a unified 2-way Telegram Bot Command Center that connects a
 
 ## Status
 
-**Phases 0-10 are fully implemented (v1.1.0): Solo Leveling Hunter Awakening Progression System (30 Described Ranks, Dynamic Attributes, Holographic System Window), Grand Unified Rewarding & Financial Ecosystem (Vault, Wishlists, Multipliers, Loot Tables), Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
+**Phases 0-11 are fully implemented (v1.2.0): Visual Motivation Engine (Real Photos, Multi-Currency LEI/USD, Dual Price Comparisons, Effort Grit Matrix), Solo Leveling Hunter Awakening Progression System (30 Described Ranks, Dynamic Attributes, Holographic System Window), Grand Unified Rewarding & Financial Ecosystem (Vault, Wishlists, Multipliers, Loot Tables), Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
 
 Apps inside Life System (same screens, same features):
 - **Money → Finance Helper**: the real Finance Helper (copied into `apps/finance`) runs in its own tab with its desktop features: folder and Drive sync, daily backups in Documents\Finance Helper\Backups, Binance, Telegram bot and Ctrl+Alt+N quick add. `src/main/apps/finance.ts` replaces only its main.cjs.

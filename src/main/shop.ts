@@ -16,11 +16,14 @@ interface RewardRow {
   pinned: number
   archived: number
   note: string | null
+  image_url?: string | null
+  currency?: string | null
 }
 
 const toReward = (r: RewardRow): Reward => ({
   id: r.id, title: r.title, price: r.price, tier: r.tier, realCost: r.real_cost,
-  pinned: !!r.pinned, archived: !!r.archived, note: r.note
+  pinned: !!r.pinned, archived: !!r.archived, note: r.note,
+  imageUrl: r.image_url ?? null, currency: r.currency ?? 'MDL'
 })
 
 export class Shop {
@@ -84,17 +87,17 @@ export class Shop {
   }
 
   save(input: RewardInput): void {
-    const r = { ...input, title: input.title.trim(), note: input.note?.trim() || null, archived: false }
+    const r = { ...input, title: input.title.trim(), note: input.note?.trim() || null, imageUrl: input.imageUrl?.trim() || null, currency: input.currency?.trim() || 'MDL', archived: false }
     validateReward(r)
     this.db.transaction(() => {
       // Only one reward is the "next target" shown on Today.
       if (r.pinned) this.db.prepare('UPDATE rewards SET pinned = 0').run()
-      const params = { title: r.title, price: r.price, tier: r.tier, realCost: r.realCost, pinned: r.pinned ? 1 : 0, note: r.note }
+      const params = { title: r.title, price: r.price, tier: r.tier, realCost: r.realCost, pinned: r.pinned ? 1 : 0, note: r.note, imageUrl: r.imageUrl, currency: r.currency }
       if (input.id) {
         this.reward(input.id)
-        this.db.prepare('UPDATE rewards SET title = @title, price = @price, tier = @tier, real_cost = @realCost, pinned = @pinned, note = @note WHERE id = @id').run({ ...params, id: input.id })
+        this.db.prepare('UPDATE rewards SET title = @title, price = @price, tier = @tier, real_cost = @realCost, pinned = @pinned, note = @note, image_url = @imageUrl, currency = @currency WHERE id = @id').run({ ...params, id: input.id })
       } else {
-        this.db.prepare('INSERT INTO rewards (title, price, tier, real_cost, pinned, note) VALUES (@title, @price, @tier, @realCost, @pinned, @note)').run(params)
+        this.db.prepare('INSERT INTO rewards (title, price, tier, real_cost, pinned, note, image_url, currency) VALUES (@title, @price, @tier, @realCost, @pinned, @note, @imageUrl, @currency)').run(params)
       }
     })()
   }
@@ -135,5 +138,11 @@ export class Shop {
   setBudget(amount: number): void {
     if (!Number.isInteger(amount) || amount < 0) throw new LedgerError('Budget must be a whole number, 0 or more')
     setSetting(this.db, 'reward_budget', String(amount))
+  }
+
+  setCurrency(cur: string): void {
+    const code = cur?.trim().toUpperCase() || 'MDL'
+    setSetting(this.db, 'currency', code)
+    setSetting(this.db, 'money_currency', code)
   }
 }

@@ -16,7 +16,7 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
 
 ---
 
-## 2. Recent Implementation Summary (Phases 5 through 10 — v1.1.0)
+## 2. Recent Implementation Summary (Phases 5 through 11 — v1.2.0)
 - **Phase 5 (Body Module)**:
   - Database Migration `005` with `exercises`, `workouts`, and `body_metrics` tables.
   - Multi-exercise workout session logger with custom reps/units, awarding `body.workout_done` (+10 coins, +25 XP) to the wallet.
@@ -56,8 +56,14 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
     - Copyable System Status Recap for sharing or journals.
   - **Today Dashboard Hunter Banner (`Today.tsx`)**:
     - Compact status card displaying Grade badge, Title, Level, CP, and STR/INT/SEN stats with a 1-click portal to the Journey Status Window.
+- **Phase 11 (Visual Motivation Engine, Real-Life Photos & Multi-Currency Engine — v1.2.0)**:
+  - **Database Migration 008**: Added `image_url` and `currency` columns to both `rewards` and `wishlist_goals` tables.
+  - **High-Res Photo Showcase**: Direct support for image/photo URLs on all rewards and dream goals, complete with card hero banners, live photo preview in modals, template quick-picks (Kaaba trip, MacBook, Spa, Shaver, Tech, Shoes), and Next Reward thumbnail on Today.
+  - **Multi-Currency Engine (`convertCurrency` & `formatDualCurrency`)**: Seamless support for LEI (`MDL` / `RON`), `USD ($)`, and `EUR (€)` with instant 1-click currency switcher pills and live dual-currency equivalence display (e.g. `900 MDL (~$50 USD)`).
+  - **Real-Life Effort & Grit Equivalence (`calculateEffortEquivalence`)**: Translates abstract coin costs directly into tangible human effort (`Afforded by: ~15 clean days or ~30 workouts`), creating an irresistible psychological motivator.
+  - **Smart Coin Calculation Helper**: 1-click `⚡ Calc Coins` button in reward and goal editors that auto-derives coin targets from real-world prices.
 - **Testing & Quality Assurance**:
-  - **169 tests passing** across 28 test suites (`npm test`).
+  - **175 tests passing** across 28 test suites (`npm test`).
   - **0 TypeScript compilation errors** (`npm run typecheck`).
   - Production build verified with `electron-vite build`.
 
@@ -69,9 +75,10 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
 3. **Surplus Vault Integrity**: Vault withdrawals cannot exceed accumulated surplus; ledger rows are append-only.
 4. **Multiplier Math Safety**: All multipliers clamp to valid ranges and round cleanly to avoid fractional coin arithmetic anomalies.
 5. **Zero Schema Bloat for RPG Stats**: Derived all 5 Hunter Attributes dynamically from existing transactional tables on read, ensuring instant reactivity to workouts, study, and sleep without migration risk.
-6. **Backwards Compatibility**: Preserved all existing `summary.level` and IPC contracts while augmenting with the rich Solo Leveling Hunter engine.
+6. **Robust Image Handling**: Image tags implement silent fallback (`onError`) to prevent broken image icons when offline or when using invalid URLs.
+7. **Backwards Compatibility**: Preserved all existing `shop.state()` and IPC contracts while augmenting with `imageUrl`, `currency`, and `setCurrency`.
 
 ---
 
 ## 4. Handoff Brief for Claude Code
-Life System v1.1.0 delivers the full Solo Leveling Hunter Awakening Progression System alongside the Grand Unified Rewarding & Financial Ecosystem and Telegram Bot Command Center. The new Holographic Hunter Status Window in `Journey.tsx`, Hunter Dashboard Banner in `Today.tsx`, and `hunter.css` transform real-life habits into an epic RPG leveling journey with 30 described Hunter Ranks and dynamic CP stats. Your objective is visual polish, subtle particle animations, and UI refinements while preserving pure SQLite and domain logic.
+Life System v1.2.0 empowers the user with the Visual Motivation Engine, linking real-life high-res photo URLs, LEI/USD dual price comparisons, and effort equivalence metrics to the Grand Unified Rewarding & Financial Ecosystem and Solo Leveling Hunter Awakening progression. All components in `Shop.tsx`, `Today.tsx`, and `economy.css` feature live photo previews, currency switchers, and real-life effort grit badges backed by 175 passing tests. Your objective is visual polish, subtle particle animations, and UI refinements while preserving pure SQLite and domain logic.

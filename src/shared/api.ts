@@ -2,12 +2,20 @@ import type {
   ChestLootDrop,
   MultiplierInfo,
   WishlistCategory,
-  WishlistGoal
+  WishlistGoal,
+  SupportedCurrency,
+  CurrencyConfig
+} from '@core/unifiedEconomy'
+import {
+  CURRENCY_CONFIGS,
+  convertCurrency,
+  formatDualCurrency
 } from '@core/unifiedEconomy'
 import type { LedgerEntry } from '@core/ledger'
 import type { LevelInfo, HunterRankDef, HunterAttributes } from '@core/levels'
 import type { Rule } from '@core/rules'
-import type { Reward, Tier } from '@core/shop'
+import type { Reward, Tier, EffortEquivalence } from '@core/shop'
+import { calculateEffortEquivalence } from '@core/shop'
 import type { QuestState } from '@core/quests'
 import type { Block, BlockKind, BlockStatus, Repeat, Task } from '@core/plan'
 import type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput } from '@core/body'
@@ -15,7 +23,8 @@ import type { SleepLog, SleepSummary } from '@core/sleep'
 import type { Expense, ExpenseCategory, DailyExpenseSummary } from '@core/money'
 
 export type { QuestState }
-export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, Rule, Reward, Tier, Block, BlockKind, BlockStatus, Repeat, Task }
+export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, Rule, Reward, Tier, EffortEquivalence, Block, BlockKind, BlockStatus, Repeat, Task }
+export { calculateEffortEquivalence }
 export type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput }
 export type BodyState = BodySummary
 export type { SleepLog, SleepSummary, Expense, ExpenseCategory, DailyExpenseSummary }
@@ -29,7 +38,8 @@ export interface NativeMoneySummary {
 }
 
 
-export type { ChestLootDrop, MultiplierInfo, WishlistCategory, WishlistGoal }
+export type { ChestLootDrop, MultiplierInfo, WishlistCategory, WishlistGoal, SupportedCurrency, CurrencyConfig }
+export { CURRENCY_CONFIGS, convertCurrency, formatDualCurrency }
 
 export interface WishlistGoalInput {
   id?: number
@@ -39,6 +49,8 @@ export interface WishlistGoalInput {
   category?: WishlistCategory
   pinned?: boolean
   note?: string
+  imageUrl?: string | null
+  currency?: string | null
 }
 
 export interface VaultLedgerEntry {
@@ -309,6 +321,7 @@ export interface LifeApi {
     redeem(id: number): Promise<ShopState>
     openChest(level: number): Promise<{ coins: number; state: ShopState }>
     setBudget(amount: number): Promise<ShopState>
+    setCurrency(cur: string): Promise<ShopState>
   }
   tasks: {
     state(): Promise<TasksState>
@@ -419,6 +432,7 @@ export interface LifeApi {
     claimGoal(goalId: number): Promise<WishlistGoal>
     creditVault(amount: number, note: string): Promise<number>
     setExchangeRate(rate: number): Promise<number>
+    setCurrency(cur: string): Promise<EconomySummary>
     openChest(level: number): Promise<{ drop: ChestLootDrop; coins: number; balance: number; chests: number[] }>
   }
   bots: {

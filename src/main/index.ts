@@ -188,6 +188,10 @@ handle('shop:redeem', (id: number) => {
   return shop.state()
 })
 handle('shop:openChest', (level: number) => ({ coins: shop.openChest(level), state: shop.state() }))
+handle('shop:setCurrency', (cur: string) => {
+  shop.setCurrency(cur)
+  return shop.state()
+})
 handle('shop:setBudget', (amount: number) => {
   shop.setBudget(amount)
   return shop.state()
@@ -291,6 +295,10 @@ handle('economy:depositCoins', (goalId: number, amount: number) => {
 handle('economy:depositVault', (goalId: number, amount: number) => economyService.depositVaultCashToGoal(goalId, amount))
 handle('economy:claimGoal', (goalId: number) => economyService.claimGoal(goalId))
 handle('economy:creditVault', (amount: number, note: string) => economyService.creditVault('manual_deposit', amount, note))
+handle('economy:setCurrency', (cur: string) => {
+  economyService.setCurrency(cur)
+  return economyService.getEconomySummary()
+})
 handle('economy:setExchangeRate', (rate: number) => {
   economyService.setExchangeRate(rate)
   return economyService.getExchangeRate()

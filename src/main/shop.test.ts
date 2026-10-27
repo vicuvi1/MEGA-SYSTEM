@@ -96,6 +96,26 @@ describe('shop service', () => {
     const chestEntry = wallet.history(1)[0]
     expect(() => wallet.undo(chestEntry.id, 'reroll please', now)).toThrow('final')
   })
+
+  it('saves image_url and currency on rewards and switches active currency', () => {
+    shop.save({
+      title: 'AirPods Pro',
+      price: 2000,
+      tier: 'silver',
+      realCost: 200,
+      currency: 'USD',
+      imageUrl: 'https://example.com/airpods.jpg',
+      pinned: false,
+      note: 'Spatial audio'
+    })
+    const s = shop.state(now)
+    const airpods = s.rewards.find((r) => r.title === 'AirPods Pro')!
+    expect(airpods.imageUrl).toBe('https://example.com/airpods.jpg')
+    expect(airpods.currency).toBe('USD')
+
+    shop.setCurrency('USD')
+    expect(shop.state(now).currency).toBe('USD')
+  })
 })
 
 function rollMid(level: number) {

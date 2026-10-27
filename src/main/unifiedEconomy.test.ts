@@ -127,4 +127,21 @@ describe('UnifiedEconomyService Backend', () => {
     expect(summary.multiplier).toBeDefined()
     expect(summary.goals.length).toBeGreaterThan(0)
   })
+
+  it('supports photo image_url and currency on wishlist goals', () => {
+    const goal = economy.saveGoal({
+      title: 'Sony Alpha Camera',
+      targetCoins: 15000,
+      targetRealCost: 1200,
+      category: 'tech',
+      imageUrl: 'https://images.unsplash.com/photo-sony-camera.jpg',
+      currency: 'USD',
+      note: 'Cinematic video creator rig'
+    })
+    expect(goal.imageUrl).toBe('https://images.unsplash.com/photo-sony-camera.jpg')
+    expect(goal.currency).toBe('USD')
+
+    economy.setCurrency('USD')
+    expect(economy.getCurrency()).toBe('USD')
+  })
 })

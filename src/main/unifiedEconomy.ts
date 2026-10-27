@@ -26,6 +26,8 @@ export interface WishlistGoalInput {
   category?: WishlistCategory
   pinned?: boolean
   note?: string
+  imageUrl?: string | null
+  currency?: string | null
 }
 
 export interface VaultLedgerEntry {
@@ -65,6 +67,8 @@ interface GoalRow {
   completed_at: string | null
   note: string | null
   created_at: string
+  image_url?: string | null
+  currency?: string | null
 }
 
 const toGoal = (r: GoalRow): WishlistGoal => ({
@@ -79,7 +83,9 @@ const toGoal = (r: GoalRow): WishlistGoal => ({
   completed: !!r.completed,
   completedAt: r.completed_at,
   note: r.note,
-  createdAt: r.created_at
+  createdAt: r.created_at,
+  imageUrl: r.image_url ?? null,
+  currency: r.currency ?? 'MDL'
 })
 
 export class UnifiedEconomyService {
@@ -100,13 +106,13 @@ export class UnifiedEconomyService {
       if (count && count.c === 0) {
         const now = new Date().toISOString()
         const insert = this.db.prepare(
-          `INSERT INTO wishlist_goals (title, target_coins, target_real_cost, allocated_coins, allocated_real_cost, category, pinned, completed, note, created_at)
-           VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?)`
+          `INSERT INTO wishlist_goals (title, target_coins, target_real_cost, allocated_coins, allocated_real_cost, category, pinned, completed, note, created_at, image_url, currency)
+           VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, ?, ?)`
         )
         this.db.transaction(() => {
-          insert.run('Kaaba Pilgrimage Fund', 20000, 15000, 'trip', 1, 'The supreme spiritual milestone. Keep stacking.', now)
-          insert.run('MacBook / Pro Warrior Setup', 12000, 8000, 'tech', 0, 'High-performance battle workstation.', now)
-          insert.run('Luxury Recovery & Spa Retreat', 3500, 1500, 'luxury', 0, 'Deep restorative rest and rejuvenation.', now)
+          insert.run('Kaaba Pilgrimage Fund', 20000, 15000, 'trip', 1, 'The supreme spiritual milestone. Keep stacking.', now, 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80', 'MDL')
+          insert.run('MacBook / Pro Warrior Setup', 12000, 8000, 'tech', 0, 'High-performance battle workstation.', now, 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=80', 'MDL')
+          insert.run('Luxury Recovery & Spa Retreat', 3500, 1500, 'luxury', 0, 'Deep restorative rest and rejuvenation.', now, 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&auto=format&fit=crop&q=80', 'MDL')
         })()
       }
     } catch {
@@ -125,6 +131,12 @@ export class UnifiedEconomyService {
 
   getCurrency(): string {
     return getSetting(this.db, 'currency') ?? getSetting(this.db, 'money_currency') ?? 'MDL'
+  }
+
+  setCurrency(cur: string): void {
+    const code = cur?.trim().toUpperCase() || 'MDL'
+    setSetting(this.db, 'currency', code)
+    setSetting(this.db, 'money_currency', code)
   }
 
   getVaultBalance(): number {
@@ -214,6 +226,8 @@ export class UnifiedEconomyService {
     const targetRealCost = Math.max(0, Math.round(input.targetRealCost || 0))
     const category = input.category || 'gear'
     const note = input.note?.trim() || null
+    const imageUrl = input.imageUrl?.trim() || null
+    const currency = input.currency?.trim() || 'MDL'
     const pinned = input.pinned ? 1 : 0
     const now = new Date().toISOString()
 
@@ -226,19 +240,19 @@ export class UnifiedEconomyService {
         this.db
           .prepare(
             `UPDATE wishlist_goals
-             SET title = ?, target_coins = ?, target_real_cost = ?, category = ?, pinned = ?, note = ?
+             SET title = ?, target_coins = ?, target_real_cost = ?, category = ?, pinned = ?, note = ?, image_url = ?, currency = ?
              WHERE id = ?`
           )
-          .run(title, targetCoins, targetRealCost, category, pinned, note, input.id)
+          .run(title, targetCoins, targetRealCost, category, pinned, note, imageUrl, currency, input.id)
         const row = this.db.prepare('SELECT * FROM wishlist_goals WHERE id = ?').get(input.id) as GoalRow
         return toGoal(row)
       } else {
         const info = this.db
           .prepare(
-            `INSERT INTO wishlist_goals (title, target_coins, target_real_cost, allocated_coins, allocated_real_cost, category, pinned, completed, note, created_at)
-             VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?)`
+            `INSERT INTO wishlist_goals (title, target_coins, target_real_cost, allocated_coins, allocated_real_cost, category, pinned, completed, note, created_at, image_url, currency)
+             VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, ?, ?)`
           )
-          .run(title, targetCoins, targetRealCost, category, pinned, note, now)
+          .run(title, targetCoins, targetRealCost, category, pinned, note, now, imageUrl, currency)
         const row = this.db.prepare('SELECT * FROM wishlist_goals WHERE id = ?').get(info.lastInsertRowid) as GoalRow
         return toGoal(row)
       }
