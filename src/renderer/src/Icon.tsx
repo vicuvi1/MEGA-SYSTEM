@@ -24,7 +24,8 @@ const PATHS = {
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   spark: 'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6',
   trash: 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6',
-  edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'
+  edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z',
+  clock: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11h-4a1 1 0 0 1 0-2h3V6a1 1 0 0 1 2 0v6a1 1 0 0 1-1 1z'
 } as const
 
 // Closed shapes behind the lines, shown softly when an icon is "duo" (the active section).
@@ -44,7 +45,8 @@ const FILLS: Partial<Record<keyof typeof PATHS, string>> = {
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z',
   bot: 'M6 8h12v10H6z',
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7z',
-  trash: 'M5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6z'
+  trash: 'M5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6z',
+  clock: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z'
 }
 
 export type IconName = keyof typeof PATHS

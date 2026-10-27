@@ -14,8 +14,13 @@ import type {
   WishlistCategory,
   WishlistGoal,
   SupportedCurrency,
-  CurrencyConfig
+  CurrencyConfig,
+  BankState,
+  ActiveBuff,
+  ConsumableItem,
+  ConsumableId
 } from '@core/unifiedEconomy'
+import { CONSUMABLE_CATALOG } from '@core/unifiedEconomy'
 import {
   CURRENCY_CONFIGS,
   convertCurrency,
@@ -54,7 +59,8 @@ export interface NativeMoneySummary {
 }
 
 
-export type { ChestLootDrop, MultiplierInfo, WishlistCategory, WishlistGoal, SupportedCurrency, CurrencyConfig }
+export type { ChestLootDrop, MultiplierInfo, WishlistCategory, WishlistGoal, SupportedCurrency, CurrencyConfig, BankState, ActiveBuff, ConsumableItem, ConsumableId }
+export { CONSUMABLE_CATALOG }
 export { CURRENCY_CONFIGS, convertCurrency, formatDualCurrency }
 export type { AIConfig, AIPerformanceReport, GeneratedReward, ModelChoice }
 export { POPULAR_MODELS }
@@ -93,6 +99,8 @@ export interface EconomySummary {
   pinnedGoal: WishlistGoal | null
   goals: WishlistGoal[]
   recentVaultEntries: VaultLedgerEntry[]
+  bank?: BankState
+  activeBuffs?: ActiveBuff[]
 }
 
 export interface ShopState {
@@ -456,6 +464,12 @@ export interface LifeApi {
     setExchangeRate(rate: number): Promise<number>
     setCurrency(cur: string): Promise<EconomySummary>
     openChest(level: number): Promise<{ drop: ChestLootDrop; coins: number; balance: number; chests: number[] }>
+    bankState(): Promise<BankState>
+    stakeCoins(amount: number): Promise<BankState>
+    withdrawCoins(amount: number): Promise<BankState>
+    claimInterest(): Promise<{ bank: BankState; claimedCoins: number }>
+    activeBuffs(): Promise<ActiveBuff[]>
+    buyConsumable(itemId: string): Promise<{ buff?: ActiveBuff; balance: number; message: string }>
   }
   bots: {
     config(): Promise<BotBridgeConfig>

@@ -144,4 +144,76 @@ describe('UnifiedEconomyService Backend', () => {
     economy.setCurrency('USD')
     expect(economy.getCurrency()).toBe('USD')
   })
+
+  it('manages Iron Bank staking, withdrawals, and interest dividends', () => {
+    const day1 = new Date('2026-10-20T12:00:00Z');
+    // Credit 400 coins to wallet
+    wallet.append({
+      ts: day1.toISOString(),
+      day: '2026-10-20',
+      module: 'quests',
+      kind: 'earn',
+      coins: 400,
+      xp: 0,
+      note: 'Staking seed'
+    });
+
+    const bank0 = economy.getBankState(day1);
+    expect(bank0.stakedCoins).toBe(0);
+    expect(bank0.maxStakingCap).toBeGreaterThan(0);
+
+    // Stake 200 coins
+    const bank1 = economy.stakeCoins(200, day1);
+    expect(bank1.stakedCoins).toBe(200);
+    expect(wallet.summary(day1).balance).toBe(200); // 400 - 200 = 200
+
+    // Fast-forward 5 days to 2026-10-25
+    const day5 = new Date('2026-10-25T12:00:00Z');
+    const bank5 = economy.getBankState(day5);
+    expect(bank5.pendingInterest).toBeGreaterThan(0);
+
+    // Claim interest
+    const claimed = economy.claimInterest(day5);
+    expect(claimed.claimedCoins).toBe(bank5.pendingInterest);
+    expect(claimed.bank.pendingInterest).toBe(0);
+    expect(claimed.bank.totalInterestEarned).toBe(claimed.claimedCoins);
+    expect(wallet.summary(day5).balance).toBe(200 + claimed.claimedCoins);
+
+    // Withdraw 100 coins
+    const bankWithdrawn = economy.withdrawCoins(100, day5);
+    expect(bankWithdrawn.stakedCoins).toBe(100);
+    expect(wallet.summary(day5).balance).toBe(200 + claimed.claimedCoins + 100);
+  });
+
+  it('purchases and activates tactical consumables and buffs', () => {
+    const now = new Date('2026-10-27T12:00:00Z');
+    wallet.append({
+      ts: now.toISOString(),
+      day: '2026-10-27',
+      module: 'quests',
+      kind: 'earn',
+      coins: 200,
+      xp: 0,
+      note: 'Buff seed'
+    });
+
+    // Check no active buffs initially
+    expect(economy.isBuffActive('multiplier_boost', now)).toBe(false);
+    expect(economy.getActiveBuffs(now).length).toBe(0);
+
+    // Buy Focus Elixir (20 coins)
+    const res = economy.buyConsumable('focus_elixir', now);
+    expect(res.buff).toBeDefined();
+    expect(res.buff?.effectKind).toBe('multiplier_boost');
+    expect(res.balance).toBe(180);
+    expect(economy.isBuffActive('multiplier_boost', now)).toBe(true);
+    expect(economy.getBuffMultiplier('multiplier_boost', now)).toBe(2.0);
+
+    // Buy Streak Shield (50 coins)
+    const shieldBefore = shields.count();
+    const resShield = economy.buyConsumable('streak_shield', now);
+    expect(resShield.balance).toBe(130);
+    expect(shields.count()).toBe(shieldBefore + 1);
+  });
+
 })

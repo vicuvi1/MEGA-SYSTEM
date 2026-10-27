@@ -10,6 +10,11 @@ import {
   moneyToCoinsTarget,
   rollEnhancedChest,
   type WishlistGoal
+, computeMaxStakingCap,
+  computeDailyInterestRate,
+  computeDailyDividend,
+  calculateAccruedInterest,
+  CONSUMABLE_CATALOG
 } from './unifiedEconomy'
 
 describe('Unified Economy Core Domain Logic', () => {
@@ -175,4 +180,50 @@ describe('Unified Economy Core Domain Logic', () => {
       expect(dualUsd.combinedText).toBe('$100 (~1800 MDL)')
     })
   })
+
+  describe('Iron Bank Staking & Accrued Interest', () => {
+    it('scales max staking cap with hunter level', () => {
+      expect(computeMaxStakingCap(1)).toBe(500)
+      expect(computeMaxStakingCap(2)).toBe(750)
+      expect(computeMaxStakingCap(10)).toBe(2750)
+    })
+
+    it('determines interest rate tiers based on clean streak', () => {
+      expect(computeDailyInterestRate(0).percent).toBe(0.5)
+      expect(computeDailyInterestRate(6).percent).toBe(0.5)
+      expect(computeDailyInterestRate(7).percent).toBe(0.8)
+      expect(computeDailyInterestRate(14).percent).toBe(1.2)
+      expect(computeDailyInterestRate(30).percent).toBe(1.5)
+      expect(computeDailyInterestRate(30).streakBonusActive).toBe(true)
+    })
+
+    it('computes daily dividends with minimum yield threshold', () => {
+      // 100 staked @ 0.5% = 0.5 -> rounded down to 0 without threshold, but staked >= 50 so minimum 1
+      expect(computeDailyDividend(100, 0)).toBe(1)
+      // 1000 staked @ 0.5% = 5
+      expect(computeDailyDividend(1000, 0)).toBe(5)
+      // 1000 staked @ 1.5% (30-day streak) = 15
+      expect(computeDailyDividend(1000, 30)).toBe(15)
+    })
+
+    it('calculates accrued interest over multiple days passed', () => {
+      const res = calculateAccruedInterest(1000, '2026-10-20', '2026-10-25', 0)
+      expect(res.daysPassed).toBe(5)
+      expect(res.pendingInterest).toBe(25) // 5 coins/day * 5 days
+
+      // Same day returns 0
+      const sameDay = calculateAccruedInterest(1000, '2026-10-25', '2026-10-25', 0)
+      expect(sameDay.pendingInterest).toBe(0)
+    })
+
+    it('contains all 4 tactical consumables in catalog', () => {
+      expect(CONSUMABLE_CATALOG.length).toBe(4)
+      const ids = CONSUMABLE_CATALOG.map((c) => c.id)
+      expect(ids).toContain('focus_elixir')
+      expect(ids).toContain('xp_booster')
+      expect(ids).toContain('streak_shield')
+      expect(ids).toContain('fatigue_neutralizer')
+    })
+  })
+
 })

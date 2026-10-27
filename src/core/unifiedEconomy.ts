@@ -282,3 +282,185 @@ export function formatDualCurrency(
     combinedText: `${primaryText} (~${secondaryText})`
   }
 }
+
+
+// --- SHADOW ECONOMY 2.0: THE IRON BANK & STAKING ENGINE ---
+
+export interface BankState {
+  stakedCoins: number
+  maxStakingCap: number
+  dailyRatePercent: number
+  pendingInterest: number
+  totalInterestEarned: number
+  lastClaimDay: string | null
+  streakBonusActive: boolean
+  cleanStreak: number
+}
+
+/**
+ * Calculates staking cap based on hunter level:
+ * Formula: 250 + (level * 250) coins.
+ */
+export function computeMaxStakingCap(level: number): number {
+  const safeLevel = Math.max(1, Math.floor(level || 1))
+  return 250 + safeLevel * 250
+}
+
+/**
+ * Computes daily dividend interest rate for staked coins:
+ * - Base rate: 0.5% daily (0.005)
+ * - 7+ day clean streak: 0.8% daily (0.008)
+ * - 14+ day clean streak: 1.2% daily (0.012)
+ * - 30+ day clean streak: 1.5% daily (0.015)
+ */
+export function computeDailyInterestRate(cleanStreak: number): {
+  rate: number
+  percent: number
+  streakBonusActive: boolean
+} {
+  const safeStreak = Math.max(0, cleanStreak || 0)
+  if (safeStreak >= 30) {
+    return { rate: 0.015, percent: 1.5, streakBonusActive: true }
+  }
+  if (safeStreak >= 14) {
+    return { rate: 0.012, percent: 1.2, streakBonusActive: true }
+  }
+  if (safeStreak >= 7) {
+    return { rate: 0.008, percent: 0.8, streakBonusActive: true }
+  }
+  return { rate: 0.005, percent: 0.5, streakBonusActive: false }
+}
+
+/**
+ * Computes estimated daily coin dividend from staked amount:
+ * If staked >= 50 coins, minimum yield is 1 coin/day.
+ */
+export function computeDailyDividend(stakedCoins: number, cleanStreak: number): number {
+  if (stakedCoins <= 0) return 0
+  const { rate } = computeDailyInterestRate(cleanStreak)
+  const calculated = Math.floor(stakedCoins * rate)
+  return stakedCoins >= 50 ? Math.max(1, calculated) : calculated
+}
+
+/**
+ * Calculates accrued pending interest between lastClaimDay and currentDay.
+ */
+export function calculateAccruedInterest(
+  stakedCoins: number,
+  lastClaimDay: string | null,
+  currentDay: string,
+  cleanStreak: number
+): { pendingInterest: number; daysPassed: number } {
+  if (stakedCoins <= 0 || !currentDay) {
+    return { pendingInterest: 0, daysPassed: 0 }
+  }
+  if (!lastClaimDay) {
+    // Staked today; first dividend matures next day
+    return { pendingInterest: 0, daysPassed: 0 }
+  }
+  if (lastClaimDay >= currentDay) {
+    return { pendingInterest: 0, daysPassed: 0 }
+  }
+
+  const lastTime = Date.parse(`${lastClaimDay}T00:00:00Z`);
+  const currTime = Date.parse(`${currentDay}T00:00:00Z`);
+  if (isNaN(lastTime) || isNaN(currTime) || currTime <= lastTime) {
+    return { pendingInterest: 0, daysPassed: 0 }
+  }
+
+  const msPerDay = 86400000;
+  const daysPassed = Math.floor((currTime - lastTime) / msPerDay);
+  if (daysPassed <= 0) {
+    return { pendingInterest: 0, daysPassed: 0 }
+  }
+
+  const dailyYield = computeDailyDividend(stakedCoins, cleanStreak);
+  const pendingInterest = dailyYield * daysPassed;
+  return { pendingInterest, daysPassed };
+}
+
+// --- SHADOW ECONOMY 2.0: HUNTER CONSUMABLES & ACTIVE BUFFS ---
+
+export type ConsumableId = 'focus_elixir' | 'xp_booster' | 'streak_shield' | 'fatigue_neutralizer'
+
+export type BuffEffectKind = 'multiplier_boost' | 'xp_boost' | 'streak_shield' | 'workout_cap_reset'
+
+export interface ConsumableItem {
+  id: ConsumableId
+  name: string
+  title: string
+  description: string
+  costCoins: number
+  durationHours: number
+  icon: string
+  effectKind: BuffEffectKind
+  effectValue: number
+  rarity: 'common' | 'rare' | 'epic' | 'legendary'
+  quote: string
+}
+
+export const CONSUMABLE_CATALOG: ConsumableItem[] = [
+  {
+    id: 'focus_elixir',
+    name: 'Focus Elixir of the Shadow Monarch',
+    title: 'Focus Elixir',
+    description: 'Doubles (2.0x) all coin earnings on completed tasks and schedule blocks for 2 hours.',
+    costCoins: 20,
+    durationHours: 2,
+    icon: '🧪',
+    effectKind: 'multiplier_boost',
+    effectValue: 2.0,
+    rarity: 'rare',
+    quote: '"Your senses sharpen into absolute, unbroken focus."'
+  },
+  {
+    id: 'xp_booster',
+    name: 'Grand Hunter Awakening Draught',
+    title: 'XP Booster',
+    description: 'Increases all XP earned from tasks, blocks, and workouts by +50% for 3 hours.',
+    costCoins: 25,
+    durationHours: 3,
+    icon: '⚡',
+    effectKind: 'xp_boost',
+    effectValue: 1.5,
+    rarity: 'rare',
+    quote: '"The flow of mana accelerates your cellular ascension."'
+  },
+  {
+    id: 'streak_shield',
+    name: 'Aegis of the Immortal Vanguard',
+    title: 'Streak Aegis Shield',
+    description: 'Adds +1 Streak Shield to your inventory. Protects all streaks from resetting if you miss a day.',
+    costCoins: 50,
+    durationHours: 0,
+    icon: '🛡️',
+    effectKind: 'streak_shield',
+    effectValue: 1,
+    rarity: 'epic',
+    quote: '"An unyielding barrier shielding your hard-won discipline from rupture."'
+  },
+  {
+    id: 'fatigue_neutralizer',
+    name: 'System Fatigue Recovery Capsule',
+    title: 'Fatigue Neutralizer',
+    description: 'Instantly cleanses workout muscle exhaustion and resets daily workout coin caps.',
+    costCoins: 15,
+    durationHours: 0,
+    icon: '💊',
+    effectKind: 'workout_cap_reset',
+    effectValue: 1,
+    rarity: 'common',
+    quote: '"Lactic acid dissolved. Physical vitality restored to baseline."'
+  }
+];
+
+export interface ActiveBuff {
+  id: string
+  itemId: string
+  title: string
+  expiresAt: string
+  effectKind: BuffEffectKind | string
+  effectVal: number
+  icon: string
+  remainingSeconds: number
+}

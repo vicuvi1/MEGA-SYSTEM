@@ -433,6 +433,75 @@ export function createMockApi(): Bridge {
         coins: 35,
         balance: 1455,
         chests: []
+      }),
+      bankState: async () => ({
+        stakedCoins: 250,
+        maxStakingCap: 750,
+        dailyRatePercent: 1.2,
+        pendingInterest: 9,
+        totalInterestEarned: 48,
+        lastClaimDay: '2026-10-24',
+        streakBonusActive: true,
+        cleanStreak: 14
+      }),
+      stakeCoins: async (amount) => ({
+        stakedCoins: 250 + amount,
+        maxStakingCap: 750,
+        dailyRatePercent: 1.2,
+        pendingInterest: 0,
+        totalInterestEarned: 48,
+        lastClaimDay: '2026-10-27',
+        streakBonusActive: true,
+        cleanStreak: 14
+      }),
+      withdrawCoins: async (amount) => ({
+        stakedCoins: Math.max(0, 250 - amount),
+        maxStakingCap: 750,
+        dailyRatePercent: 1.2,
+        pendingInterest: 0,
+        totalInterestEarned: 48,
+        lastClaimDay: '2026-10-27',
+        streakBonusActive: true,
+        cleanStreak: 14
+      }),
+      claimInterest: async () => ({
+        bank: {
+          stakedCoins: 250,
+          maxStakingCap: 750,
+          dailyRatePercent: 1.2,
+          pendingInterest: 0,
+          totalInterestEarned: 57,
+          lastClaimDay: '2026-10-27',
+          streakBonusActive: true,
+          cleanStreak: 14
+        },
+        claimedCoins: 9
+      }),
+      activeBuffs: async () => [
+        {
+          id: 'buff_focus_elixir',
+          itemId: 'focus_elixir',
+          title: 'Focus Elixir',
+          expiresAt: new Date(Date.now() + 5400000).toISOString(),
+          effectKind: 'multiplier_boost',
+          effectVal: 2.0,
+          icon: '🧪',
+          remainingSeconds: 5400
+        }
+      ],
+      buyConsumable: async (itemId) => ({
+        buff: {
+          id: 'buff_' + itemId,
+          itemId,
+          title: 'Focus Elixir',
+          expiresAt: new Date(Date.now() + 7200000).toISOString(),
+          effectKind: 'multiplier_boost',
+          effectVal: 2.0,
+          icon: '🧪',
+          remainingSeconds: 7200
+        },
+        balance: 1400,
+        message: 'Item purchased & activated!'
       })
     },
     bots: {

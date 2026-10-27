@@ -145,7 +145,13 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     creditVault: (amount, note) => call('economy:creditVault', amount, note),
     setExchangeRate: (rate) => call('economy:setExchangeRate', rate),
     setCurrency: (cur) => call('economy:setCurrency', cur),
-    openChest: (level) => call('economy:openChest', level)
+    openChest: (level) => call('economy:openChest', level),
+    bankState: () => call('economy:bankState'),
+    stakeCoins: (amount) => call('economy:stakeCoins', amount),
+    withdrawCoins: (amount) => call('economy:withdrawCoins', amount),
+    claimInterest: () => call('economy:claimInterest'),
+    activeBuffs: () => call('economy:activeBuffs'),
+    buyConsumable: (itemId) => call('economy:buyConsumable', itemId)
   },
   bots: {
     config: () => call('bots:config'),

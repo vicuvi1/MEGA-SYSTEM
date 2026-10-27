@@ -15,7 +15,10 @@ import {
   ShopState,
   Tier,
   WishlistGoal,
-  WishlistGoalInput
+  WishlistGoalInput,
+  BankState,
+  ActiveBuff,
+  CONSUMABLE_CATALOG
 } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -43,7 +46,11 @@ export function Shop({ state, onState, onWallet }: Props) {
 
   // Economy state
   const [economy, setEconomy] = useState<EconomySummary | null>(state.economy ?? null)
-  const [activeTab, setActiveTab] = useState<'catalog' | 'goals' | 'vault'>('catalog')
+  const [activeTab, setActiveTab] = useState<'catalog' | 'bank' | 'consumables' | 'goals' | 'vault'>('catalog')
+  const [bank, setBank] = useState<BankState | null>(null)
+  const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([])
+  const [stakeDraft, setStakeDraft] = useState('')
+  const [withdrawDraft, setWithdrawDraft] = useState('')
   const [editingGoal, setEditingGoal] = useState<WishlistGoalInput | null>(null)
   const [depositModal, setDepositModal] = useState<{ goal: WishlistGoal; kind: 'coins' | 'cash' } | null>(null)
   const [depositAmount, setDepositAmount] = useState<string>('')
@@ -100,10 +107,100 @@ export function Shop({ state, onState, onWallet }: Props) {
     try {
       const summary = await life.economy.summary()
       setEconomy(summary)
+      if (summary.bank) setBank(summary.bank)
+      else {
+        const b = await life.economy.bankState()
+        setBank(b)
+      }
+      if (summary.activeBuffs) setActiveBuffs(summary.activeBuffs)
+      else {
+        const buffs = await life.economy.activeBuffs()
+        setActiveBuffs(buffs)
+      }
     } catch {
       // ignore
     }
   }, [])
+
+  // Live countdown timer for active buffs
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveBuffs((prev) =>
+        prev
+          .map((b) => {
+            const rem = Math.max(0, Math.floor((Date.parse(b.expiresAt) - Date.now()) / 1000))
+            return { ...b, remainingSeconds: rem }
+          })
+          .filter((b) => b.remainingSeconds > 0)
+      )
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  async function handleStake(amt: number) {
+    if (!amt || amt <= 0) return
+    try {
+      const nextBank = await life.economy.stakeCoins(amt)
+      soundSpend()
+      setBank(nextBank)
+      setStakeDraft('')
+      toast(`Successfully staked ${amt} coins in the Iron Bank!`, 'good')
+      onWallet()
+      refreshEconomy()
+    } catch (e: any) {
+      toast(e.message || 'Failed to stake coins', 'bad')
+    }
+  }
+
+  async function handleWithdraw(amt: number) {
+    if (!amt || amt <= 0) return
+    try {
+      const nextBank = await life.economy.withdrawCoins(amt)
+      soundTick()
+      setBank(nextBank)
+      setWithdrawDraft('')
+      toast(`Withdrew ${amt} coins from the Iron Bank to your wallet!`, 'good')
+      onWallet()
+      refreshEconomy()
+    } catch (e: any) {
+      toast(e.message || 'Failed to withdraw coins', 'bad')
+    }
+  }
+
+  async function handleClaimInterest() {
+    try {
+      const res = await life.economy.claimInterest()
+      soundFanfare()
+      setBank(res.bank)
+      toast(`🏆 Claimed +${res.claimedCoins} coins in passive staking dividends!`, 'good')
+      onWallet()
+      refreshEconomy()
+    } catch (e: any) {
+      toast(e.message || 'Failed to claim dividends', 'bad')
+    }
+  }
+
+  async function handleBuyConsumable(itemId: string) {
+    try {
+      const res = await life.economy.buyConsumable(itemId)
+      soundFanfare()
+      toast(res.message, 'good')
+      onWallet()
+      refreshEconomy()
+    } catch (e: any) {
+      toast(e.message || 'Failed to purchase consumable', 'bad')
+    }
+  }
+
+  function formatTimeRemaining(seconds: number): string {
+    if (seconds <= 0) return 'Expired'
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    if (h > 0) return `${h}h ${m}m ${s}s`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
 
   useEffect(() => {
     refreshEconomy()
@@ -537,6 +634,36 @@ export function Shop({ state, onState, onWallet }: Props) {
           </button>
 
           <button
+            className={`shop-pill-btn ${activeTab === 'bank' ? 'active' : ''}`}
+            onClick={() => {
+              soundTick()
+              setActiveTab('bank')
+            }}
+          >
+            <span>🏦 The Iron Bank</span>
+            {bank && bank.stakedCoins > 0 && (
+              <span className="count-pill" style={{ marginLeft: 6, color: '#ffd700' }}>
+                {bank.stakedCoins} 🪙
+              </span>
+            )}
+          </button>
+
+          <button
+            className={`shop-pill-btn ${activeTab === 'consumables' ? 'active' : ''}`}
+            onClick={() => {
+              soundTick()
+              setActiveTab('consumables')
+            }}
+          >
+            <span>🧪 Hunter Consumables</span>
+            {activeBuffs.length > 0 && (
+              <span className="count-pill" style={{ marginLeft: 6, color: '#38bdf8' }}>
+                {activeBuffs.length} Active
+              </span>
+            )}
+          </button>
+
+          <button
             className={`shop-pill-btn ${activeTab === 'goals' ? 'active' : ''}`}
             onClick={() => {
               soundTick()
@@ -711,6 +838,315 @@ export function Shop({ state, onState, onWallet }: Props) {
               </motion.article>
             )
           })}
+        </section>
+      )}
+
+      {/* TAB: THE IRON BANK */}
+      {activeTab === 'bank' && bank && (
+        <section className="iron-bank-container">
+          {/* Hero Banner */}
+          <div className="bank-hero-banner">
+            <div className="bank-hero-title-row">
+              <div>
+                <div className="bank-hero-badge">
+                  <span>Vault Staking Engine</span>
+                  {bank.streakBonusActive && <span>· 🔥 Streak Bonus Active</span>}
+                </div>
+                <h2 className="bank-hero-title">The Iron Bank of the Monarch</h2>
+                <p className="bank-hero-sub">
+                  Lock coins in the high-yield staking vault to earn daily compound dividends. Yields increase with discipline streaks, and maximum staking cap scales with your Hunter Rank.
+                </p>
+              </div>
+
+              {bank.pendingInterest > 0 && (
+                <button
+                  className="btn primary large"
+                  style={{
+                    background: 'linear-gradient(135deg, #ffd700 0%, #f59e0b 100%)',
+                    color: '#000',
+                    fontWeight: 800,
+                    boxShadow: '0 0 20px rgba(245, 200, 75, 0.4)'
+                  }}
+                  onClick={handleClaimInterest}
+                >
+                  🏆 Claim +{bank.pendingInterest} Coins!
+                </button>
+              )}
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="bank-metrics-grid">
+              <div className="bank-metric-tile highlight">
+                <span className="bank-metric-label">Staked In Vault</span>
+                <div className="bank-metric-value" style={{ color: '#ffd700' }}>
+                  {bank.stakedCoins} 🪙
+                </div>
+                <span className="bank-metric-sub">
+                  Cap: {bank.maxStakingCap} coins (Rank Lv. {state.level})
+                </span>
+              </div>
+
+              <div className="bank-metric-tile">
+                <span className="bank-metric-label">Daily Yield Rate</span>
+                <div className="bank-metric-value" style={{ color: '#4ade80' }}>
+                  {bank.dailyRatePercent}% / day
+                </div>
+                <span className="bank-metric-sub">
+                  {bank.streakBonusActive ? '🔥 Spartan Streak Boost' : 'Standard Yield'}
+                </span>
+              </div>
+
+              <div className="bank-metric-tile">
+                <span className="bank-metric-label">Pending Dividends</span>
+                <div className="bank-metric-value" style={{ color: bank.pendingInterest > 0 ? '#38bdf8' : 'var(--muted)' }}>
+                  +{bank.pendingInterest} 🪙
+                </div>
+                <span className="bank-metric-sub">
+                  {bank.pendingInterest > 0 ? 'Ready to collect!' : 'Accrues daily at midnight'}
+                </span>
+              </div>
+
+              <div className="bank-metric-tile">
+                <span className="bank-metric-label">Lifetime Yield</span>
+                <div className="bank-metric-value" style={{ color: '#c084fc' }}>
+                  +{bank.totalInterestEarned} 🪙
+                </div>
+                <span className="bank-metric-sub">
+                  Passive dividend income
+                </span>
+              </div>
+            </div>
+
+            {/* Staking Cap Progress */}
+            <div className="bank-progress-wrap">
+              <div className="bank-progress-info">
+                <span>Staking Vault Utilization</span>
+                <span>
+                  <b>{bank.stakedCoins}</b> / {bank.maxStakingCap} coins ({Math.min(100, Math.round((bank.stakedCoins / bank.maxStakingCap) * 100))}%)
+                </span>
+              </div>
+              <div className="bank-progress-bar">
+                <div
+                  className="bank-progress-fill"
+                  style={{
+                    width: `${Math.min(100, (bank.stakedCoins / bank.maxStakingCap) * 100)}%`
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Staking / Withdrawal Controls */}
+          <div className="bank-actions-deck">
+            {/* Stake Panel */}
+            <div className="bank-panel">
+              <div className="bank-panel-header">
+                <div className="bank-panel-icon stake">🔒</div>
+                <div>
+                  <h3 className="bank-panel-title">Deposit / Stake Coins</h3>
+                  <p className="bank-panel-sub">
+                    Wallet: {state.balance} 🪙 · Headroom: {Math.max(0, bank.maxStakingCap - bank.stakedCoins)} 🪙
+                  </p>
+                </div>
+              </div>
+
+              <div className="bank-input-group">
+                <div className="bank-input-row">
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.min(state.balance, bank.maxStakingCap - bank.stakedCoins)}
+                    className="bank-input"
+                    placeholder="Coins to stake..."
+                    value={stakeDraft}
+                    onChange={(e) => setStakeDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleStake(parseInt(stakeDraft, 10))}
+                  />
+                  <button
+                    className="btn primary"
+                    disabled={!parseInt(stakeDraft, 10) || parseInt(stakeDraft, 10) <= 0}
+                    onClick={() => handleStake(parseInt(stakeDraft, 10))}
+                  >
+                    Stake
+                  </button>
+                </div>
+
+                <div className="bank-presets-row">
+                  {[0.25, 0.5, 0.75, 1.0].map((frac) => {
+                    const maxPossible = Math.min(state.balance, bank.maxStakingCap - bank.stakedCoins)
+                    const val = Math.floor(maxPossible * frac)
+                    return (
+                      <button
+                        key={frac}
+                        type="button"
+                        className="bank-preset-btn"
+                        onClick={() => setStakeDraft(String(val))}
+                        disabled={val <= 0}
+                      >
+                        {frac === 1 ? 'MAX' : `${frac * 100}%`}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Withdraw Panel */}
+            <div className="bank-panel">
+              <div className="bank-panel-header">
+                <div className="bank-panel-icon withdraw">🔓</div>
+                <div>
+                  <h3 className="bank-panel-title">Withdraw / Liquidate</h3>
+                  <p className="bank-panel-sub">
+                    Available Staked: {bank.stakedCoins} 🪙 (Instant release to wallet)
+                  </p>
+                </div>
+              </div>
+
+              <div className="bank-input-group">
+                <div className="bank-input-row">
+                  <input
+                    type="number"
+                    min={1}
+                    max={bank.stakedCoins}
+                    className="bank-input"
+                    placeholder="Coins to withdraw..."
+                    value={withdrawDraft}
+                    onChange={(e) => setWithdrawDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleWithdraw(parseInt(withdrawDraft, 10))}
+                  />
+                  <button
+                    className="btn secondary"
+                    disabled={!parseInt(withdrawDraft, 10) || parseInt(withdrawDraft, 10) <= 0}
+                    onClick={() => handleWithdraw(parseInt(withdrawDraft, 10))}
+                  >
+                    Withdraw
+                  </button>
+                </div>
+
+                <div className="bank-presets-row">
+                  {[0.25, 0.5, 0.75, 1.0].map((frac) => {
+                    const val = Math.floor(bank.stakedCoins * frac)
+                    return (
+                      <button
+                        key={frac}
+                        type="button"
+                        className="bank-preset-btn"
+                        onClick={() => setWithdrawDraft(String(val))}
+                        disabled={val <= 0}
+                      >
+                        {frac === 1 ? 'ALL' : `${frac * 100}%`}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Staking Tiers Guide */}
+          <div className="bank-tiers-guide">
+            <div className="bank-tiers-title">
+              <Icon name="spark" size={16} />
+              <span>Discipline Streak Dividend Multipliers</span>
+            </div>
+            <div className="bank-tiers-grid">
+              <div className={`bank-tier-card ${bank.cleanStreak < 7 ? 'active' : ''}`}>
+                <span className="bank-tier-tag">Standard (0-6 Days)</span>
+                <div className="bank-tier-rate">0.5% / day</div>
+                <span className="bank-tier-desc">Baseline passive staking yield</span>
+              </div>
+              <div className={`bank-tier-card ${bank.cleanStreak >= 7 && bank.cleanStreak < 14 ? 'active' : ''}`}>
+                <span className="bank-tier-tag">Disciplined (7+ Days)</span>
+                <div className="bank-tier-rate" style={{ color: '#ffd700' }}>0.8% / day</div>
+                <span className="bank-tier-desc">+60% dividend yield bonus</span>
+              </div>
+              <div className={`bank-tier-card ${bank.cleanStreak >= 14 && bank.cleanStreak < 30 ? 'active' : ''}`}>
+                <span className="bank-tier-tag">Spartan (14+ Days)</span>
+                <div className="bank-tier-rate" style={{ color: '#f59e0b' }}>1.2% / day</div>
+                <span className="bank-tier-desc">+140% dividend yield bonus</span>
+              </div>
+              <div className={`bank-tier-card ${bank.cleanStreak >= 30 ? 'active' : ''}`}>
+                <span className="bank-tier-tag">Ascendant (30+ Days)</span>
+                <div className="bank-tier-rate" style={{ color: '#4ade80' }}>1.5% / day</div>
+                <span className="bank-tier-desc">3.0x Maximum dividend yield</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* TAB: HUNTER CONSUMABLES */}
+      {activeTab === 'consumables' && (
+        <section className="consumables-store-container">
+          {/* Active Buffs Strip */}
+          {activeBuffs.length > 0 && (
+            <div className="active-buffs-strip">
+              <div className="active-buffs-header">
+                <span className="active-buffs-label">
+                  <Icon name="bolt" size={16} />
+                  <span>Currently Active Tactical Buffs ({activeBuffs.length})</span>
+                </span>
+              </div>
+              <div className="active-buffs-cards">
+                {activeBuffs.map((b) => (
+                  <div key={b.id} className="active-buff-card">
+                    <div className="active-buff-icon">{b.icon}</div>
+                    <div className="active-buff-details">
+                      <h4 className="active-buff-title">{b.title}</h4>
+                      <div className="active-buff-timer">
+                        <Icon name="clock" size={12} />
+                        <span>{formatTimeRemaining(b.remainingSeconds)} remaining</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Consumables Catalog Grid */}
+          <div className="tactical-consumables-grid">
+            {CONSUMABLE_CATALOG.map((item) => {
+              const canAfford = state.balance >= item.costCoins
+              return (
+                <div key={item.id} className={`tactical-consumable-card ${item.rarity}`}>
+                  <div className="consumable-card-top">
+                    <div className="consumable-icon-wrap">{item.icon}</div>
+                    <span className={`consumable-rarity-pill ${item.rarity}`}>
+                      {item.rarity}
+                    </span>
+                  </div>
+
+                  <div className="consumable-content">
+                    <h3 className="consumable-name">{item.name}</h3>
+                    <p className="consumable-desc">{item.description}</p>
+                    <p className="consumable-quote">{item.quote}</p>
+                  </div>
+
+                  <div className="consumable-card-bottom">
+                    <div className="consumable-price-tag">
+                      <div className="consumable-coins-cost">
+                        <Icon name="coin" size={16} />
+                        <span>{item.costCoins} Coins</span>
+                      </div>
+                      <span className="consumable-duration-tag">
+                        {item.durationHours > 0 ? `Duration: ${item.durationHours} hours` : 'Instant activation'}
+                      </span>
+                    </div>
+
+                    <button
+                      className={`btn ${canAfford ? 'primary' : 'secondary'}`}
+                      disabled={!canAfford}
+                      onClick={() => handleBuyConsumable(item.id)}
+                    >
+                      {canAfford ? `Acquire (${item.costCoins} 🪙)` : `Need ${item.costCoins - state.balance} 🪙`}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </section>
       )}
 

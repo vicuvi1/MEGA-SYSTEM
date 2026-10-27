@@ -675,3 +675,568 @@
   object-fit: cover;
   display: block;
 }
+
+/* --- SHADOW ECONOMY 2.0: THE IRON BANK --- */
+.iron-bank-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.bank-hero-banner {
+  background: linear-gradient(135deg, rgba(245, 200, 75, 0.12) 0%, rgba(18, 24, 38, 0.95) 100%);
+  border: 1px solid rgba(245, 200, 75, 0.35);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 0 20px rgba(245, 200, 75, 0.05);
+}
+
+.bank-hero-banner::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(245, 200, 75, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.bank-hero-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.bank-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245, 200, 75, 0.18);
+  border: 1px solid rgba(245, 200, 75, 0.45);
+  color: #ffd700;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.bank-hero-title {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0;
+  text-shadow: 0 0 12px rgba(245, 200, 75, 0.3);
+}
+
+.bank-hero-sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+  max-width: 650px;
+  line-height: 1.5;
+}
+
+.bank-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.bank-metric-tile {
+  background: rgba(10, 14, 23, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bank-metric-tile.highlight {
+  border-color: rgba(245, 200, 75, 0.4);
+  background: rgba(245, 200, 75, 0.08);
+}
+
+.bank-metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bank-metric-value {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.bank-metric-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.bank-progress-wrap {
+  margin-top: 14px;
+}
+
+.bank-progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.bank-progress-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bank-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f5c84b 0%, #ffd700 100%);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(245, 200, 75, 0.5);
+}
+
+/* Bank Actions Deck (Stake & Withdraw panels) */
+.bank-actions-deck {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.bank-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bank-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bank-panel-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bank-panel-icon.stake {
+  background: rgba(245, 200, 75, 0.15);
+  color: #ffd700;
+}
+
+.bank-panel-icon.withdraw {
+  background: rgba(0, 210, 255, 0.15);
+  color: #00d2ff;
+}
+
+.bank-panel-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.bank-panel-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 0 0 0;
+}
+
+.bank-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bank-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.bank-input {
+  flex: 1;
+  background: rgba(10, 14, 23, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.bank-input:focus {
+  border-color: #ffd700;
+}
+
+.bank-presets-row {
+  display: flex;
+  gap: 6px;
+}
+
+.bank-preset-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bank-preset-btn:hover {
+  background: rgba(245, 200, 75, 0.15);
+  border-color: rgba(245, 200, 75, 0.4);
+  color: #ffd700;
+}
+
+/* Staking Tiers Guide */
+.bank-tiers-guide {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+}
+
+.bank-tiers-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bank-tiers-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.bank-tier-card {
+  background: rgba(10, 14, 23, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.bank-tier-card.active {
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.bank-tier-tag {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+.bank-tier-card.active .bank-tier-tag {
+  color: var(--green);
+}
+
+.bank-tier-rate {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.bank-tier-desc {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* --- SHADOW ECONOMY 2.0: HUNTER CONSUMABLES STORE --- */
+.consumables-store-container {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* Active Buffs Strip */
+.active-buffs-strip {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.12) 0%, rgba(18, 24, 38, 0.95) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.active-buffs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.active-buffs-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #c084fc;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.active-buffs-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.active-buff-card {
+  background: rgba(10, 14, 23, 0.85);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.active-buff-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #c084fc, #38bdf8);
+}
+
+.active-buff-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(168, 85, 247, 0.2);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.active-buff-details {
+  flex: 1;
+}
+
+.active-buff-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.active-buff-timer {
+  font-size: 12px;
+  font-weight: 800;
+  color: #38bdf8;
+  margin-top: 3px;
+  font-family: var(--mono, monospace);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Tactical Consumables Grid */
+.tactical-consumables-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.tactical-consumable-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.tactical-consumable-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.tactical-consumable-card.rare {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+.tactical-consumable-card.rare:hover {
+  border-color: rgba(56, 189, 248, 0.7);
+  box-shadow: 0 10px 30px rgba(56, 189, 248, 0.15);
+}
+
+.tactical-consumable-card.epic {
+  border-color: rgba(168, 85, 247, 0.35);
+}
+.tactical-consumable-card.epic:hover {
+  border-color: rgba(168, 85, 247, 0.7);
+  box-shadow: 0 10px 30px rgba(168, 85, 247, 0.15);
+}
+
+.tactical-consumable-card.common {
+  border-color: rgba(74, 222, 128, 0.35);
+}
+.tactical-consumable-card.common:hover {
+  border-color: rgba(74, 222, 128, 0.7);
+  box-shadow: 0 10px 30px rgba(74, 222, 128, 0.15);
+}
+
+.consumable-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.consumable-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+}
+
+.consumable-rarity-pill {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.consumable-rarity-pill.rare {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.consumable-rarity-pill.epic {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+
+.consumable-rarity-pill.common {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  color: #4ade80;
+}
+
+.consumable-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.consumable-name {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+}
+
+.consumable-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.consumable-quote {
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.45);
+  border-left: 2px solid rgba(255, 255, 255, 0.15);
+  padding-left: 10px;
+  margin: 4px 0 0 0;
+}
+
+.consumable-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 14px;
+}
+
+.consumable-price-tag {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.consumable-coins-cost {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffd700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.consumable-duration-tag {
+  font-size: 11px;
+  color: var(--muted);
+}

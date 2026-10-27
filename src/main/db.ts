@@ -239,6 +239,27 @@ const MIGRATIONS: string[] = [
   `,
   /* 010 permanently purge password / pin lock from settings */ `
   DELETE FROM settings WHERE key = 'pin_hash';
+  `,
+  /* 011 Shadow Economy 2.0: active buffs and inventory items */ `
+  CREATE TABLE IF NOT EXISTS active_buffs (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    effect_kind TEXT NOT NULL,
+    effect_val REAL NOT NULL,
+    icon TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS active_buffs_expiry ON active_buffs(expires_at);
+
+  CREATE TABLE IF NOT EXISTS inventory_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    description TEXT NOT NULL,
+    icon TEXT NOT NULL
+  );
   `
 ]
 

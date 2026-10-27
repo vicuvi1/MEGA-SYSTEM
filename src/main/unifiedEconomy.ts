@@ -7,7 +7,14 @@ import {
   type ChestLootDrop,
   type MultiplierInfo,
   type WishlistCategory,
-  type WishlistGoal
+  type WishlistGoal,
+  type BankState,
+  computeMaxStakingCap,
+  computeDailyInterestRate,
+  calculateAccruedInterest,
+  type ActiveBuff,
+  type ConsumableItem,
+  CONSUMABLE_CATALOG
 } from '@core/unifiedEconomy'
 import { chestRef, unopenedChests } from '@core/shop'
 import { levelInfo } from '@core/levels'
@@ -52,6 +59,8 @@ export interface EconomySummary {
   pinnedGoal: WishlistGoal | null
   goals: WishlistGoal[]
   recentVaultEntries: VaultLedgerEntry[]
+  bank: BankState
+  activeBuffs: ActiveBuff[]
 }
 
 interface GoalRow {
@@ -484,6 +493,9 @@ export class UnifiedEconomyService {
     const pinnedGoal = goals.find((g) => g.pinned && !g.completed) ?? null
     const recentVaultEntries = this.getVaultHistory(10)
 
+    const bank = this.getBankState(now);
+    const activeBuffs = this.getActiveBuffs(now);
+
     return {
       coinsBalance,
       coinsRealValue,
@@ -495,7 +507,283 @@ export class UnifiedEconomyService {
       multiplier,
       pinnedGoal,
       goals,
-      recentVaultEntries
+      recentVaultEntries,
+      bank,
+      activeBuffs
     }
   }
+
+  // --- SHADOW ECONOMY 2.0: THE IRON BANK ---
+
+  getBankState(now = new Date()): BankState {
+    const stakedCoins = Number(getSetting(this.db, 'bank_staked_coins') ?? 0);
+    const totalInterestEarned = Number(getSetting(this.db, 'bank_total_interest_earned') ?? 0);
+    const lastClaimDay = getSetting(this.db, 'bank_last_interest_day');
+
+    const all = this.wallet.entries();
+    const lvl = levelInfo(totalXp(all)).level;
+    const maxStakingCap = computeMaxStakingCap(lvl);
+
+    const cleanStreak = this.discipline?.state(now).current ?? 0;
+    const rateInfo = computeDailyInterestRate(cleanStreak);
+    const currentDay = dayKey(now, this.timeZone);
+
+    const { pendingInterest } = calculateAccruedInterest(
+      stakedCoins,
+      lastClaimDay,
+      currentDay,
+      cleanStreak
+    );
+
+    return {
+      stakedCoins,
+      maxStakingCap,
+      dailyRatePercent: rateInfo.percent,
+      pendingInterest,
+      totalInterestEarned,
+      lastClaimDay,
+      streakBonusActive: rateInfo.streakBonusActive,
+      cleanStreak
+    };
+  }
+
+  stakeCoins(amount: number, now = new Date()): BankState {
+    if (amount <= 0) throw new LedgerError('Staking amount must be greater than zero');
+    const currentBalance = balance(this.wallet.entries());
+    if (currentBalance < amount) {
+      throw new LedgerError(`Insufficient coins in wallet (${currentBalance} available, ${amount} requested)`);
+    }
+
+    const state = this.getBankState(now);
+    if (state.stakedCoins + amount > state.maxStakingCap) {
+      throw new LedgerError(`Staking would exceed your Rank limit of ${state.maxStakingCap} coins. Level up to increase cap!`);
+    }
+
+    const currentDay = dayKey(now, this.timeZone);
+
+    return this.db.transaction(() => {
+      // If there is pending interest, claim it as well during new stake so yield starts fresh
+      if (state.pendingInterest > 0) {
+        this.wallet.append({
+          ts: now.toISOString(),
+          day: currentDay,
+          module: 'shop',
+          kind: 'earn',
+          coins: state.pendingInterest,
+          xp: 0,
+          ref: 'bank:interest',
+          note: 'Iron Bank Auto-Accrued Dividend on Deposit'
+        });
+        setSetting(this.db, 'bank_total_interest_earned', String(state.totalInterestEarned + state.pendingInterest));
+      }
+
+      this.wallet.append({
+        ts: now.toISOString(),
+        day: currentDay,
+        module: 'shop',
+        kind: 'spend',
+        coins: -amount,
+        xp: 0,
+        ref: 'bank:stake',
+        note: `Iron Bank Vault Deposit: ${amount} coins staked`
+      });
+
+      const nextStaked = state.stakedCoins + amount;
+      setSetting(this.db, 'bank_staked_coins', String(nextStaked));
+      setSetting(this.db, 'bank_last_interest_day', currentDay);
+
+      return this.getBankState(now);
+    })();
+  }
+
+  withdrawCoins(amount: number, now = new Date()): BankState {
+    if (amount <= 0) throw new LedgerError('Withdrawal amount must be greater than zero');
+    const state = this.getBankState(now);
+    if (state.stakedCoins < amount) {
+      throw new LedgerError(`Insufficient staked coins (${state.stakedCoins} staked, requested ${amount})`);
+    }
+
+    const currentDay = dayKey(now, this.timeZone);
+
+    return this.db.transaction(() => {
+      // Claim accrued interest before principal changes
+      if (state.pendingInterest > 0) {
+        this.wallet.append({
+          ts: now.toISOString(),
+          day: currentDay,
+          module: 'shop',
+          kind: 'earn',
+          coins: state.pendingInterest,
+          xp: 0,
+          ref: 'bank:interest',
+          note: 'Iron Bank Accrued Dividend on Withdrawal'
+        });
+        setSetting(this.db, 'bank_total_interest_earned', String(state.totalInterestEarned + state.pendingInterest));
+      }
+
+      this.wallet.append({
+        ts: now.toISOString(),
+        day: currentDay,
+        module: 'shop',
+        kind: 'earn',
+        coins: amount,
+        xp: 0,
+        ref: 'bank:withdraw',
+        note: `Iron Bank Vault Withdrawal: ${amount} coins released`
+      });
+
+      const nextStaked = state.stakedCoins - amount;
+      setSetting(this.db, 'bank_staked_coins', String(nextStaked));
+      setSetting(this.db, 'bank_last_interest_day', currentDay);
+
+      return this.getBankState(now);
+    })();
+  }
+
+  claimInterest(now = new Date()): { bank: BankState; claimedCoins: number } {
+    const state = this.getBankState(now);
+    if (state.pendingInterest <= 0) {
+      throw new LedgerError('No dividend yield available to claim yet today');
+    }
+
+    const currentDay = dayKey(now, this.timeZone);
+    const claimed = state.pendingInterest;
+
+    return this.db.transaction(() => {
+      this.wallet.append({
+        ts: now.toISOString(),
+        day: currentDay,
+        module: 'shop',
+        kind: 'earn',
+        coins: claimed,
+        xp: 0,
+        ref: 'bank:interest',
+        note: `Iron Bank Daily Dividend Yield: +${claimed} coins`
+      });
+
+      setSetting(this.db, 'bank_last_interest_day', currentDay);
+      setSetting(this.db, 'bank_total_interest_earned', String(state.totalInterestEarned + claimed));
+
+      return {
+        bank: this.getBankState(now),
+        claimedCoins: claimed
+      };
+    })();
+  }
+
+  // --- SHADOW ECONOMY 2.0: HUNTER CONSUMABLES & BUFFS ---
+
+  getActiveBuffs(now = new Date()): ActiveBuff[] {
+    const nowIso = now.toISOString();
+    try {
+      this.db.prepare('DELETE FROM active_buffs WHERE expires_at <= ?').run(nowIso);
+      const rows = this.db.prepare('SELECT * FROM active_buffs WHERE expires_at > ?').all(nowIso) as any[];
+      return rows.map((r) => {
+        const remainingSeconds = Math.max(0, Math.floor((Date.parse(r.expires_at) - now.getTime()) / 1000));
+        return {
+          id: r.id,
+          itemId: r.item_id,
+          title: r.title,
+          expiresAt: r.expires_at,
+          effectKind: r.effect_kind,
+          effectVal: r.effect_val,
+          icon: r.icon,
+          remainingSeconds
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  isBuffActive(effectKind: string, now = new Date()): boolean {
+    try {
+      const nowIso = now.toISOString();
+      const row = this.db
+        .prepare('SELECT COUNT(*) as c FROM active_buffs WHERE effect_kind = ? AND expires_at > ?')
+        .get(effectKind, nowIso) as { c: number } | undefined;
+      return (row?.c ?? 0) > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  getBuffMultiplier(effectKind: string, now = new Date()): number {
+    try {
+      const nowIso = now.toISOString();
+      const row = this.db
+        .prepare('SELECT MAX(effect_val) as val FROM active_buffs WHERE effect_kind = ? AND expires_at > ?')
+        .get(effectKind, nowIso) as { val: number | null } | undefined;
+      return row?.val ?? 1.0;
+    } catch {
+      return 1.0;
+    }
+  }
+
+  buyConsumable(itemId: string, now = new Date()): { buff?: ActiveBuff; balance: number; message: string } {
+    const item = CONSUMABLE_CATALOG.find((c) => c.id === itemId);
+    if (!item) throw new LedgerError(`Unknown consumable item: "${itemId}"`);
+
+    const currentBalance = balance(this.wallet.entries());
+    if (currentBalance < item.costCoins) {
+      throw new LedgerError(`Insufficient coins (${currentBalance} available, ${item.costCoins} required)`);
+    }
+
+    const currentDay = dayKey(now, this.timeZone);
+
+    return this.db.transaction(() => {
+      this.wallet.append({
+        ts: now.toISOString(),
+        day: currentDay,
+        module: 'shop',
+        kind: 'spend',
+        coins: -item.costCoins,
+        xp: 0,
+        ref: `consumable:${item.id}`,
+        note: `Purchased ${item.name}`
+      });
+
+      const nextBalance = balance(this.wallet.entries());
+
+      if (item.effectKind === 'streak_shield') {
+        this.shields?.awardFreeShield('Purchased from Hunter Tactical Store');
+        return {
+          balance: nextBalance,
+          message: '🛡️ Streak Aegis Shield added to your tactical inventory!'
+        };
+      }
+
+      if (item.effectKind === 'workout_cap_reset') {
+        return {
+          balance: nextBalance,
+          message: '💊 System Fatigue Cleansed! Workout muscle limits reset.'
+        };
+      }
+
+      // Timed buff (Focus Elixir or XP Booster)
+      const existing = this.db.prepare('SELECT * FROM active_buffs WHERE item_id = ? AND expires_at > ?').get(item.id, now.toISOString()) as any;
+      const durationMs = item.durationHours * 3600 * 1000;
+      let newExpiresAt: string;
+
+      if (existing) {
+        newExpiresAt = new Date(Date.parse(existing.expires_at) + durationMs).toISOString();
+        this.db.prepare('UPDATE active_buffs SET expires_at = ? WHERE id = ?').run(newExpiresAt, existing.id);
+      } else {
+        newExpiresAt = new Date(now.getTime() + durationMs).toISOString();
+        const buffId = `buff_${item.id}_${Date.now()}`;
+        this.db.prepare('INSERT INTO active_buffs (id, item_id, title, expires_at, effect_kind, effect_val, icon) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(buffId, item.id, item.title, newExpiresAt, item.effectKind, item.effectValue, item.icon);
+      }
+
+      const activeList = this.getActiveBuffs(now);
+      const buff = activeList.find((b) => b.itemId === item.id);
+
+      return {
+        buff,
+        balance: nextBalance,
+        message: `${item.icon} ${item.title} Activated! Active for ${item.durationHours} hours.`
+      };
+    })();
+  }
+
 }

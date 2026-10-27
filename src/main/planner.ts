@@ -58,8 +58,19 @@ export function atLocal(day: string, hhmm: string): Date {
   return new Date(`${day}T${hhmm}:00`)
 }
 
+
+export interface EconomyBuffChecker {
+  isBuffActive(effectKind: string, now?: Date): boolean
+  getBuffMultiplier(effectKind: string, now?: Date): number
+}
+
 export class Tasks {
+  private economy?: EconomyBuffChecker
   constructor(private db: DB, private wallet: Wallet, private shieldService?: ShieldService) {}
+
+  setEconomy(economy: EconomyBuffChecker): void {
+    this.economy = economy
+  }
 
   private liveLedgerIds(): Set<number> {
     return new Set(effective(this.wallet.entries()).map((e) => e.id))
@@ -136,7 +147,15 @@ export class Tasks {
       const t = this.task(id)
       const today = this.wallet.today(now)
       const days = this.doneDays(this.liveLedgerIds()).get(id) ?? new Set<string>()
-      const { coins, xp } = planTaskComplete(t, today, days, this.coinsToday(today))
+      let { coins, xp } = planTaskComplete(t, today, days, this.coinsToday(today))
+      if (this.economy?.isBuffActive('multiplier_boost', now)) {
+        const mult = this.economy.getBuffMultiplier('multiplier_boost', now) || 2.0
+        coins = Math.round(coins * mult)
+      }
+      if (this.economy?.isBuffActive('xp_boost', now)) {
+        const xpMult = this.economy.getBuffMultiplier('xp_boost', now) || 1.5
+        xp = Math.round(xp * xpMult)
+      }
       const ledgerId = this.wallet.append({ ts: now.toISOString(), day: today, module: 'tasks', kind: 'earn', coins, xp, ref: `task:${id}`, note: t.title })
       // A row left behind by a completion that was undone in History.
       this.db.prepare('DELETE FROM task_done WHERE task_id = ? AND day = ?').run(id, today)
@@ -196,7 +215,12 @@ export class Tasks {
 }
 
 export class Schedule {
+  private economy?: EconomyBuffChecker
   constructor(private db: DB, private wallet: Wallet) {}
+
+  setEconomy(economy: EconomyBuffChecker): void {
+    this.economy = economy
+  }
 
   private blocks(): Block[] {
     return (this.db.prepare('SELECT * FROM blocks WHERE archived = 0 ORDER BY start').all() as BlockRow[]).map(toBlock)

@@ -103,6 +103,8 @@ function open(): void {
   moneyService = new MoneyService(db, wallet)
   economyService = new UnifiedEconomyService(db, wallet, discipline, moneyService, shieldService)
   shop.setEconomy(economyService)
+  tasks.setEconomy(economyService)
+  schedule.setEconomy(economyService)
   dataExportService = new DataExportService(db, body, moneyService)
   telegram = new TelegramNotifier()
   telegramHub = new TelegramBotHub(wallet, discipline, body, sleepService, moneyService, tasks)
@@ -369,6 +371,28 @@ handle('economy:setExchangeRate', (rate: number) => {
 })
 handle('economy:openChest', (level: number) => {
   const res = economyService.openEnhancedChest(level)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('economy:bankState', () => economyService.getBankState())
+handle('economy:stakeCoins', (amount: number) => {
+  const res = economyService.stakeCoins(amount)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('economy:withdrawCoins', (amount: number) => {
+  const res = economyService.withdrawCoins(amount)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('economy:claimInterest', () => {
+  const res = economyService.claimInterest()
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('economy:activeBuffs', () => economyService.getActiveBuffs())
+handle('economy:buyConsumable', (itemId: string) => {
+  const res = economyService.buyConsumable(itemId)
   win?.webContents.send('wallet:changed')
   return res
 })
