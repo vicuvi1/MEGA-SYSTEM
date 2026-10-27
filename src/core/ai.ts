@@ -53,10 +53,10 @@ export interface ModelChoice {
 }
 
 export const POPULAR_MODELS: ModelChoice[] = [
-  { provider: 'gemini', model: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Recommended · Fast & Free Tier)', isFree: true },
-  { provider: 'gemini', model: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Stable & Free Tier)', isFree: true },
-  { provider: 'gemini', model: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Deep Reasoning & Analysis)', isFree: true },
-  { provider: 'gemini', model: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (Ultra Lightweight)', isFree: true },
+  { provider: 'gemini', model: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash (Recommended · Ultra Fast & Free Tier)', isFree: true },
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Lightweight & Free Tier)', isFree: true },
+  { provider: 'gemini', model: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Latest Multimodal & Deep Thinking)', isFree: true },
+  { provider: 'gemini', model: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Deep Strategy & Reasoning)', isFree: true },
   { provider: 'openrouter', model: 'deepseek/deepseek-chat', label: 'DeepSeek V3 (OpenRouter - High Performance)' },
   { provider: 'openrouter', model: 'deepseek/deepseek-r1', label: 'DeepSeek R1 (OpenRouter - Deep Reasoning)' },
   { provider: 'openrouter', model: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (OpenRouter)' },
@@ -95,26 +95,26 @@ export function selectModelForTask(
       return { provider: 'openrouter', model: config.selectedModel }
     }
     // Fallback if chosen provider's key is not set
-    if (hasGemini) return { provider: 'gemini', model: 'gemini-2.0-flash' }
+    if (hasGemini) return { provider: 'gemini', model: 'gemini-3.5-flash' }
     return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
   }
 
   // AUTO Routing based on task complexity:
   // 1. Reward ideas & task decomposition -> Fast response (Gemini Flash or DeepSeek V3)
   if (task === 'reward_ideas' || task === 'decompose_task') {
-    if (hasGemini) return { provider: 'gemini', model: 'gemini-2.0-flash' }
+    if (hasGemini) return { provider: 'gemini', model: 'gemini-3.5-flash' }
     return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
   }
 
-  // 2. Performance conclusion report -> Deep analytical reasoning (DeepSeek R1 or Gemini 1.5 Pro)
+  // 2. Performance conclusion report -> Deep analytical reasoning (DeepSeek R1 or Gemini Pro)
   if (task === 'performance_report') {
     if (hasOpenRouter) return { provider: 'openrouter', model: 'deepseek/deepseek-r1' }
-    if (hasGemini) return { provider: 'gemini', model: 'gemini-1.5-pro' }
+    if (hasGemini) return { provider: 'gemini', model: 'gemini-3.1-pro-preview' }
   }
 
   // 3. Coach chat / advice
   if (hasOpenRouter) return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
-  return { provider: 'gemini', model: 'gemini-2.0-flash' }
+  return { provider: 'gemini', model: 'gemini-3.5-flash' }
 }
 
 export interface AIRewardContext {

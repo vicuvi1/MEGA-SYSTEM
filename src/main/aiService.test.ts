@@ -33,19 +33,19 @@ describe('AIService Backend', () => {
     service.saveConfig({
       geminiKey: 'AIzaSyDemo123',
       openRouterKey: 'sk-or-demo456',
-      selectedModel: 'gemini-2.0-flash'
+      selectedModel: 'gemini-3.5-flash'
     })
 
     const read = service.getConfig()
     expect(read.geminiKey).toBe('AIzaSyDemo123')
     expect(read.openRouterKey).toBe('sk-or-demo456')
-    expect(read.selectedModel).toBe('gemini-2.0-flash')
+    expect(read.selectedModel).toBe('gemini-3.5-flash')
   })
 
   it('calls Gemini endpoint and parses response cleanly', async () => {
     const mockFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       expect(String(url)).toContain('generativelanguage.googleapis.com')
-      expect(String(url)).toContain('gemini-2.0-flash')
+      expect(String(url)).toContain('gemini-3.5-flash')
       return new Response(
         JSON.stringify({
           candidates: [
@@ -76,7 +76,7 @@ describe('AIService Backend', () => {
 
     const filePath = join(dir, 'ai_test.bin')
     const service = new AIService(filePath, wallet, undefined, undefined, undefined, mockFetch as any)
-    service.saveConfig({ geminiKey: 'AIzaTestKey', selectedModel: 'gemini-2.0-flash' })
+    service.saveConfig({ geminiKey: 'AIzaTestKey', selectedModel: 'gemini-3.5-flash' })
 
     const res = await service.generateRewards('headphones')
     expect(res.rewards).toHaveLength(1)
@@ -141,7 +141,7 @@ describe('AIService Backend', () => {
 
     const filePath = join(dir, 'ai_test.bin')
     const service = new AIService(filePath, wallet, undefined, undefined, undefined, mockFetch as any)
-    service.saveConfig({ geminiKey: 'AIzaKey', selectedModel: 'gemini-2.0-flash' })
+    service.saveConfig({ geminiKey: 'AIzaKey', selectedModel: 'gemini-3.5-flash' })
 
     const reply = await service.askCoach('What is my next objective?')
     expect(reply.reply).toContain('Hunter Victor')
@@ -176,7 +176,7 @@ describe('AIService Backend', () => {
 
     const filePath = join(dir, 'ai_test.bin')
     const service = new AIService(filePath, wallet, undefined, undefined, undefined, mockFetch as any)
-    service.saveConfig({ geminiKey: 'AIzaKey', selectedModel: 'gemini-2.0-flash' })
+    service.saveConfig({ geminiKey: 'AIzaKey', selectedModel: 'gemini-3.5-flash' })
 
     const res = await service.decomposeTask('SI-266 Lab 7', 'cryptography', 'university')
     expect(res.strategyTip).toBe('Split research and writing.')

@@ -66,15 +66,16 @@ export class AIService {
     try {
       const buf = readFileSync(this.file)
       if (!buf || !buf.length) return { ...DEFAULT_AI_CONFIG }
-      if (safeStorage && safeStorage.isEncryptionAvailable()) {
-        const str = safeStorage.decryptString(buf)
-        const cfg = { ...DEFAULT_AI_CONFIG, ...JSON.parse(str) }
-        if (cfg.selectedModel === 'gemini-2.5-flash') cfg.selectedModel = 'gemini-2.0-flash'
+      const migrate = (cfg: AIConfig): AIConfig => {
+        const legacy = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite']
+        if (legacy.includes(cfg.selectedModel)) cfg.selectedModel = 'gemini-3.5-flash'
         return cfg
       }
-      const cfg = { ...DEFAULT_AI_CONFIG, ...JSON.parse(buf.toString('utf8')) }
-      if (cfg.selectedModel === 'gemini-2.5-flash') cfg.selectedModel = 'gemini-2.0-flash'
-      return cfg
+      if (safeStorage && safeStorage.isEncryptionAvailable()) {
+        const str = safeStorage.decryptString(buf)
+        return migrate({ ...DEFAULT_AI_CONFIG, ...JSON.parse(str) })
+      }
+      return migrate({ ...DEFAULT_AI_CONFIG, ...JSON.parse(buf.toString('utf8')) })
     } catch {
       return { ...DEFAULT_AI_CONFIG }
     }
@@ -82,9 +83,12 @@ export class AIService {
 
   saveConfig(patch: Partial<AIConfig>): AIConfig {
     const cur = this.getConfig()
+    const legacy = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite']
+    const nextModel = patch.selectedModel !== undefined ? patch.selectedModel : cur.selectedModel
     const next: AIConfig = {
       ...cur,
       ...patch,
+      selectedModel: legacy.includes(nextModel) ? 'gemini-3.5-flash' : nextModel,
       openRouterKey: patch.openRouterKey !== undefined ? patch.openRouterKey.trim() : cur.openRouterKey,
       geminiKey: patch.geminiKey !== undefined ? patch.geminiKey.trim() : cur.geminiKey
     }
@@ -98,10 +102,25 @@ export class AIService {
   }
 
   private async callGemini(model: string, key: string, prompt: string): Promise<string> {
-    let targetModel = model === 'gemini-2.5-flash' || !model.startsWith('gemini') ? 'gemini-2.0-flash' : model
+    const cleanKey = (key || '').trim()
+    if (!cleanKey) throw new Error('No Google Gemini API key configured. Please obtain a free key from Google AI Studio.')
+
+    let targetModel = (model || '').trim().replace(/^models\//, '')
+    const legacyMap: Record<string, string> = {
+      'gemini-2.5-flash': 'gemini-3.5-flash',
+      'gemini-2.0-flash': 'gemini-3.5-flash',
+      'gemini-1.5-flash': 'gemini-3.5-flash',
+      'gemini-1.5-pro': 'gemini-3.1-pro-preview',
+      'gemini-2.0-flash-lite': 'gemini-3.1-flash-lite'
+    }
+    if (legacyMap[targetModel]) {
+      targetModel = legacyMap[targetModel]
+    } else if (!targetModel.startsWith('gemini')) {
+      targetModel = 'gemini-3.5-flash'
+    }
 
     const tryFetch = async (m: string) => {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(key)}`
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(cleanKey)}`
       return await this.customFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -112,20 +131,60 @@ export class AIService {
       })
     }
 
-    let res = await tryFetch(targetModel)
-    // Automatic fallback if requested model is 404 (e.g. deprecated or unavailable)
-    if (res.status === 404 && targetModel !== 'gemini-2.0-flash') {
-      targetModel = 'gemini-2.0-flash'
-      res = await tryFetch(targetModel)
-    }
-    if (res.status === 404 && targetModel !== 'gemini-1.5-flash') {
-      targetModel = 'gemini-1.5-flash'
-      res = await tryFetch(targetModel)
+    const candidateModels = Array.from(
+      new Set([targetModel, 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'])
+    )
+
+    let res: Response | null = null
+    let successfulModel = targetModel
+
+    for (const candidate of candidateModels) {
+      try {
+        const response = await tryFetch(candidate)
+        if (response.ok) {
+          res = response
+          successfulModel = candidate
+          break
+        }
+        if (response.status === 404) {
+          continue
+        }
+        res = response
+        successfulModel = candidate
+        break
+      } catch {
+        // network attempt failed, continue
+      }
     }
 
-    if (!res.ok) {
-      const errText = await res.text()
-      throw new Error(`Google Gemini API error (${res.status}): ${errText} (${targetModel})`)
+    // Dynamic model discovery fallback if static candidates 404
+    if (!res || !res.ok) {
+      try {
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`
+        const listRes = await this.customFetch(listUrl)
+        if (listRes.ok) {
+          const listData = (await listRes.json()) as any
+          const availableModels: string[] = (listData.models || [])
+            .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+            .map((m: any) => String(m.name).replace(/^models\//, ''))
+
+          const dynamicCandidate = availableModels.find((m) => m.includes('flash')) || availableModels[0]
+          if (dynamicCandidate && !candidateModels.includes(dynamicCandidate)) {
+            const dynamicRes = await tryFetch(dynamicCandidate)
+            if (dynamicRes.ok) {
+              res = dynamicRes
+              successfulModel = dynamicCandidate
+            }
+          }
+        }
+      } catch {
+        // fallback ignored
+      }
+    }
+
+    if (!res || !res.ok) {
+      const errText = res ? await res.text() : 'No response from Google Gemini servers'
+      throw new Error(`Google Gemini API error (${res?.status ?? 500}): ${errText} (${successfulModel})`)
     }
 
     const data = (await res.json()) as any
@@ -179,8 +238,9 @@ export class AIService {
   async testConnection(provider?: 'gemini' | 'openrouter'): Promise<{ ok: boolean; message: string; model: string }> {
     const cfg = this.getConfig()
     const targetProvider = provider ?? (cfg.geminiKey ? 'gemini' : 'openrouter')
+    const legacy = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite']
     let model = targetProvider === 'gemini'
-      ? (cfg.selectedModel.startsWith('gemini') && cfg.selectedModel !== 'gemini-2.5-flash' ? cfg.selectedModel : 'gemini-2.0-flash')
+      ? (cfg.selectedModel.startsWith('gemini') && !legacy.includes(cfg.selectedModel) ? cfg.selectedModel : 'gemini-3.5-flash')
       : (cfg.selectedModel && !cfg.selectedModel.startsWith('gemini') && cfg.selectedModel !== 'auto' ? cfg.selectedModel : 'deepseek/deepseek-chat')
 
     try {

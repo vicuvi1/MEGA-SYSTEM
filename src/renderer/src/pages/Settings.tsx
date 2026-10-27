@@ -77,6 +77,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
     setTestingProvider(provider || 'auto')
     setAiTestResult(null)
     try {
+      const saved = await life.ai.saveConfig(aiCfg)
+      if (saved) setAiCfg(saved)
       const res = await life.ai.test(provider)
       setAiTestResult(res)
     } catch (err: any) {
@@ -266,7 +268,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
             </button>
           </div>
           <small className="hint">
-            Get a free key instantly from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>. Free models: Gemini 2.0 Flash, 1.5 Flash, 1.5 Pro.
+            Get a free key instantly from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>. Free models: Gemini 3.5 Flash, 3.1 Flash Lite, 3.8 Flash.
           </small>
         </div>
 

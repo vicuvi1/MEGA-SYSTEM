@@ -29,16 +29,16 @@ describe('AI Core Domain Engine', () => {
       )
     })
 
-    it('routes reward_ideas to Gemini 2.5 Flash on auto when Gemini key is available', () => {
+    it('routes reward_ideas to Gemini 3.5 Flash on auto when Gemini key is available', () => {
       const choice = selectModelForTask(baseConfig, 'reward_ideas')
       expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-2.0-flash')
+      expect(choice.model).toBe('gemini-3.5-flash')
     })
 
-    it('routes decompose_task to Gemini 2.5 Flash on auto when Gemini key is available', () => {
+    it('routes decompose_task to Gemini 3.5 Flash on auto when Gemini key is available', () => {
       const choice = selectModelForTask(baseConfig, 'decompose_task')
       expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-2.0-flash')
+      expect(choice.model).toBe('gemini-3.5-flash')
     })
 
     it('routes reward_ideas to OpenRouter DeepSeek V3 when only OpenRouter key is available', () => {
@@ -53,10 +53,10 @@ describe('AI Core Domain Engine', () => {
       expect(choice.model).toBe('deepseek/deepseek-r1')
     })
 
-    it('routes performance_report to Gemini 1.5 Pro when only Gemini key is available', () => {
+    it('routes performance_report to Gemini 3.1 Pro when only Gemini key is available', () => {
       const choice = selectModelForTask({ ...baseConfig, openRouterKey: '' }, 'performance_report')
       expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-1.5-pro')
+      expect(choice.model).toBe('gemini-3.1-pro-preview')
     })
 
     it('respects manual model selection when user chooses specific model', () => {
