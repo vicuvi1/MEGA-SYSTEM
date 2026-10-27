@@ -189,20 +189,29 @@ window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',
 function applyWallpaper() {
   document.getElementById('theme-wallpaper')?.remove();
   let wp = state.settings.wallpaper;
-  if (!wp && state.settings.theme === 'samurai') {
-    wp = 'samurai-moon';
+  if (!wp || wp === 'auto') {
+    if (state.settings.theme === 'samurai') wp = 'samurai-moon';
+    else if (state.settings.theme === 'paper') wp = 'paper-warm';
+    else if (state.settings.theme === 'forest') wp = 'forest-canopy';
+    else if (state.settings.theme === 'ocean') wp = 'ocean-tides';
   }
   if (!wp || wp === 'none') return;
   const layer = document.createElement('div');
   layer.id = 'theme-wallpaper';
   layer.className = 'theme-wallpaper';
   layer.setAttribute('aria-hidden', 'true');
-  const opacity = state.settings.wallpaperOpacity != null ? Number(state.settings.wallpaperOpacity) : 0.35;
+  const opacity = state.settings.wallpaperOpacity != null ? Number(state.settings.wallpaperOpacity) : 0.45;
   layer.style.opacity = Math.max(0.05, Math.min(1, opacity));
   if (wp === 'samurai-moon') {
     layer.classList.add('wp-samurai-moon');
   } else if (wp === 'samurai-katana') {
     layer.classList.add('wp-samurai-katana');
+  } else if (wp === 'paper-warm') {
+    layer.classList.add('wp-paper-warm');
+  } else if (wp === 'forest-canopy') {
+    layer.classList.add('wp-forest-canopy');
+  } else if (wp === 'ocean-tides') {
+    layer.classList.add('wp-ocean-tides');
   } else if (wp === 'custom' && state.settings.customWallpaper) {
     layer.style.backgroundImage = `url("${state.settings.customWallpaper.replace(/"/g, '\\"')}")`;
   } else {
@@ -1341,10 +1350,19 @@ function viewSettings() {
           <input type="radio" name="app-wp" data-set="wallpaper" value="none" ${(!st.wallpaper || st.wallpaper === 'none') ? 'checked' : ''}> None
         </label>
         <label class="btn outline sm" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="app-wp" data-set="wallpaper" value="paper-warm" ${st.wallpaper === 'paper-warm' || (!st.wallpaper && st.theme === 'paper') ? 'checked' : ''}> 📜 Warm Pages
+        </label>
+        <label class="btn outline sm" style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="app-wp" data-set="wallpaper" value="samurai-moon" ${st.wallpaper === 'samurai-moon' || (!st.wallpaper && st.theme === 'samurai') ? 'checked' : ''}> ⛩️ Blood Moon
         </label>
         <label class="btn outline sm" style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="app-wp" data-set="wallpaper" value="samurai-katana" ${st.wallpaper === 'samurai-katana' ? 'checked' : ''}> ⚔️ Katana Slash
+        </label>
+        <label class="btn outline sm" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="app-wp" data-set="wallpaper" value="forest-canopy" ${st.wallpaper === 'forest-canopy' || (!st.wallpaper && st.theme === 'forest') ? 'checked' : ''}> 🍃 Forest Canopy
+        </label>
+        <label class="btn outline sm" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="radio" name="app-wp" data-set="wallpaper" value="ocean-tides" ${st.wallpaper === 'ocean-tides' || (!st.wallpaper && st.theme === 'ocean') ? 'checked' : ''}> 🌊 Ocean Tides
         </label>
         <label class="btn outline sm" style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="radio" name="app-wp" data-set="wallpaper" value="custom" ${st.wallpaper === 'custom' ? 'checked' : ''}> 🖼️ Custom URL
@@ -2566,8 +2584,16 @@ function onSettingsChange(el) {
     else if (key === 'savingsAccount') st.savingsAccount = v;
     else if (key === 'theme') {
       st.theme = v;
-      if (v === 'samurai' && !st.wallpaper) {
+      if (v === 'samurai') {
         st.wallpaper = 'samurai-moon';
+      } else if (v === 'paper') {
+        st.wallpaper = 'paper-warm';
+      } else if (v === 'forest') {
+        st.wallpaper = 'forest-canopy';
+      } else if (v === 'ocean') {
+        st.wallpaper = 'ocean-tides';
+      } else if (v === 'dark' || v === 'light' || v === 'system') {
+        st.wallpaper = 'none';
       }
       applyTheme();
       render();

@@ -18,7 +18,7 @@ const SCROLLBARS = `
 `
 
 const FINANCE = `
-  ${ON} {
+  ${ON}:not([data-design]) {
     --bg: #0b0d12 !important; --surface: #141822 !important; --surface-2: #1a1f2b !important; --surface-3: #222838 !important;
     --side-bg: #0e1118 !important; --line: #242a38 !important; --line-strong: #2c3446 !important;
     --text: #e9ecf3 !important; --muted: #8a93a6 !important; --faint: #5b6376 !important;
@@ -40,7 +40,7 @@ const FINANCE = `
     color-scheme: dark !important;
   }
   /* The falling-leaf decorations belong to the paper/ocean looks, not this one. */
-  ${ON} .atmosphere-particle { display: none !important; }
+  ${ON}:not([data-design]) .atmosphere-particle { display: none !important; }
   ${SCROLLBARS}
 `
 
@@ -141,7 +141,8 @@ function guard(target: 'html' | 'body', attrs: string[], normalize: Record<strin
     const norm = ${JSON.stringify(normalize)}
     const key = () => attrs.map((a) => { const v = el.getAttribute(a) || ''; return norm[v] ?? v }).join('|')
     let base = localStorage.getItem(K)
-    const sync = () => document.documentElement.toggleAttribute('data-ls', base === null || key() === base)
+    const hasCustomDesign = () => Boolean(el.getAttribute('data-design'))
+    const sync = () => document.documentElement.toggleAttribute('data-ls', !hasCustomDesign() && (base === null || key() === base))
     sync()
     // The app sets its theme while starting up; take the baseline once it settled.
     if (base === null) setTimeout(() => { base = key(); localStorage.setItem(K, base); sync() }, 1500)

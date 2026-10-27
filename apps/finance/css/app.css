@@ -4040,7 +4040,21 @@ input:checked + .style-preview .style-check { opacity: 1; transform: scale(1); }
 .atmosphere-forest .atmosphere-particle { border-radius: 2px 85% 2px 85%; background: #a3c57c; border: 1px solid #729751; }
 .atmosphere-forest .atmosphere-particle::after { content: ''; position: absolute; top: 15%; left: 50%; height: 70%; width: 1px; background: #526f3c; transform: rotate(-45deg); }
 .atmosphere-ocean .atmosphere-particle { top: auto; bottom: -30px; border-radius: 50%; background: transparent; border: 1px solid #82caff; animation-name: atmosphere-rise; }
-.atmosphere-paper .atmosphere-particle { height: calc(var(--size) * 1.3); background: #b68e57; border-radius: 1px; }
+.atmosphere-paper .atmosphere-particle {
+  width: var(--size);
+  height: calc(var(--size) * 1.35);
+  background: linear-gradient(135deg, #d4a373 0%, #b08968 50%, #875523 100%);
+  border-radius: 1px 4px 1px 4px;
+  box-shadow: 0 1px 4px rgba(135, 85, 35, 0.4);
+  border: 1px solid rgba(182, 142, 87, 0.45);
+  animation-name: atmosphere-paper-fleck;
+}
+@keyframes atmosphere-paper-fleck {
+  0% { opacity: 0; transform: translate(0, -30px) rotate(0deg) scale(0.75); }
+  15%, 85% { opacity: 0.65; }
+  50% { transform: translate(var(--drift), 50vh) rotate(190deg) scale(1.1); }
+  100% { opacity: 0; transform: translate(calc(var(--drift) * 1.5), calc(100vh + 40px)) rotate(380deg) scale(0.85); }
+}
 .atmosphere-samurai .atmosphere-particle {
   width: var(--size);
   height: calc(var(--size) * 1.35);
@@ -4087,6 +4101,22 @@ body.locked .theme-atmosphere, body.printing .theme-atmosphere { display: none; 
     radial-gradient(circle at 75% 25%, rgba(255, 77, 109, 0.15) 0%, transparent 40%),
     url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="blade" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%23ff4d6d" stop-opacity="0.5"/><stop offset="50%" stop-color="%23ff758f" stop-opacity="0.2"/><stop offset="100%" stop-color="%23000" stop-opacity="0"/></linearGradient></defs><rect width="1920" height="1080" fill="%230b080d"/><path d="M200 120 L 1720 960" stroke="url(%23blade)" stroke-width="6" stroke-linecap="round"/><circle cx="1380" cy="380" r="240" fill="%23ff4d6d" opacity="0.12"/></svg>');
 }
+.wp-paper-warm {
+  background-image:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 250, 240, 0.55) 0%, rgba(212, 163, 115, 0.22) 55%, transparent 85%),
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"><defs><radialGradient id="pglow" cx="50%" cy="28%" r="45%"><stop offset="0%" stop-color="%23fffaf0" stop-opacity="0.85"/><stop offset="50%" stop-color="%23f4e8d6" stop-opacity="0.5"/><stop offset="100%" stop-color="%23ded0bb" stop-opacity="0"/></radialGradient><linearGradient id="pbottom" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%23f7f1e5" stop-opacity="0.5"/><stop offset="100%" stop-color="%23e5d6be" stop-opacity="0.85"/></linearGradient><linearGradient id="pink" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%23875523" stop-opacity="0.22"/><stop offset="100%" stop-color="%23b08968" stop-opacity="0.08"/></linearGradient></defs><rect width="1920" height="1080" fill="%23f5f0e6"/><circle cx="960" cy="320" r="480" fill="url(%23pglow)"/><g opacity="0.4" stroke="%23cbb89d" stroke-width="1.2"><line x1="120" y1="180" x2="1800" y2="180"/><line x1="120" y1="260" x2="1800" y2="260"/><line x1="120" y1="340" x2="1800" y2="340"/><line x1="120" y1="420" x2="1800" y2="420"/><line x1="120" y1="500" x2="1800" y2="500"/><line x1="120" y1="580" x2="1800" y2="580"/><line x1="120" y1="660" x2="1800" y2="660"/><line x1="120" y1="740" x2="1800" y2="740"/><line x1="120" y1="820" x2="1800" y2="820"/></g><g transform="translate(960, 500)" fill="none" stroke="url(%23pink)" stroke-width="2.5"><circle cx="0" cy="0" r="130" stroke-dasharray="6 4"/><circle cx="0" cy="0" r="110"/><path d="M-75 -35 Q 0 -70 75 -35 Q 0 0 -75 -35 Z"/><path d="M-75 35 Q 0 70 75 35 Q 0 0 -75 35 Z"/><circle cx="0" cy="0" r="7" fill="%23875523" opacity="0.35"/></g><path d="M0 880 Q 480 820 960 860 T 1920 890 L 1920 1080 L 0 1080 Z" fill="url(%23pbottom)" opacity="0.8"/></svg>');
+}
+.wp-forest-canopy {
+  background-image:
+    radial-gradient(circle at 50% 30%, rgba(184, 216, 141, 0.14) 0%, transparent 50%),
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"><defs><radialGradient id="sun" cx="50%" cy="20%" r="40%"><stop offset="0%" stop-color="%23b8d88d" stop-opacity="0.3"/><stop offset="100%" stop-color="%230b1712" stop-opacity="0"/></radialGradient><linearGradient id="trees" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%231a3126" stop-opacity="0.8"/><stop offset="100%" stop-color="%2308100c" stop-opacity="0.95"/></linearGradient></defs><rect width="1920" height="1080" fill="%2309140f"/><circle cx="960" cy="200" r="450" fill="url(%23sun)"/><path d="M0 720 Q 360 620 720 670 T 1440 650 Q 1680 640 1920 700 L 1920 1080 L 0 1080 Z" fill="url(%23trees)"/><path d="M0 830 Q 480 770 1000 810 T 1920 840 L 1920 1080 L 0 1080 Z" fill="%23050c09"/></svg>');
+}
+.wp-ocean-tides {
+  background-image:
+    radial-gradient(circle at 50% 20%, rgba(130, 202, 255, 0.16) 0%, transparent 45%),
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"><defs><radialGradient id="deep" cx="50%" cy="15%" r="50%"><stop offset="0%" stop-color="%2382caff" stop-opacity="0.25"/><stop offset="100%" stop-color="%2308131f" stop-opacity="0"/></radialGradient><linearGradient id="waves" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%230d243b" stop-opacity="0.75"/><stop offset="100%" stop-color="%23050d15" stop-opacity="0.98"/></linearGradient></defs><rect width="1920" height="1080" fill="%2308131f"/><circle cx="960" cy="180" r="500" fill="url(%23deep)"/><path d="M0 700 C 400 640 800 750 1200 680 C 1500 620 1750 670 1920 690 L 1920 1080 L 0 1080 Z" fill="url(%23waves)"/><path d="M0 820 C 500 780 900 860 1400 810 C 1650 780 1800 820 1920 830 L 1920 1080 L 0 1080 Z" fill="%2304090f"/></svg>');
+}
+
 
 /* Sidebar Ambient Music Pill */
 .sf-ambient { margin-top: 8px; width: 100%; }
