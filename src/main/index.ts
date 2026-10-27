@@ -24,7 +24,8 @@ import { DataExportService } from './dataExport'
 import { TelegramNotifier } from './telegram'
 import { TelegramBotHub } from './telegramHub'
 import { AIService } from './aiService'
-import type { BotBridgeConfig, AIConfig } from '@shared/api'
+import { CalendarService } from './calendarService'
+import type { BotBridgeConfig, AIConfig, CalendarConfig } from '@shared/api'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
 import {
@@ -82,6 +83,7 @@ let dataExportService: DataExportService
 let telegram: TelegramNotifier
 let telegramHub: TelegramBotHub
 let aiService: AIService
+let calendarService: CalendarService
 let connections: Connections
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -110,7 +112,13 @@ function open(): void {
   if (hubCfg.enabled && hubCfg.pollingEnabled && hubCfg.botToken) {
     telegramHub.startPolling()
   }
-  aiService = new AIService(join(dataDir, 'ai_config.bin'), wallet, discipline, moneyService, sleepService)
+  calendarService = new CalendarService(dataDir)
+  const calCfg = calendarService.getConfig()
+  if (calCfg.enabled && calCfg.feedUrl) {
+    calendarService.sync().catch(() => {})
+  }
+  telegramHub.setCalendar(calendarService)
+  aiService = new AIService(join(dataDir, 'ai_config.bin'), wallet, discipline, moneyService, sleepService, undefined, calendarService)
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.
   candidates.man.unshift(embeddedManLevelDb())
@@ -358,6 +366,13 @@ handle('ai:test', (provider?: 'gemini' | 'openrouter') => aiService.testConnecti
 handle('ai:generateRewards', (userPrompt?: string) => aiService.generateRewards(userPrompt))
 handle('ai:performanceReport', () => aiService.generatePerformanceReport())
 handle('ai:askCoach', (msg: string) => aiService.askCoach(msg))
+
+// ---------- Google Calendar Integration ----------
+handle('calendar:config', () => calendarService.getConfig())
+handle('calendar:saveConfig', (c: Partial<CalendarConfig>) => calendarService.saveConfig(c))
+handle('calendar:sync', () => calendarService.sync())
+handle('calendar:events', (day?: string) => calendarService.getEvents(day))
+handle('calendar:clear', () => calendarService.clear())
 
 
 handle('connections:state', () => connections.state())

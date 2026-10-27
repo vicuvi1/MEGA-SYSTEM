@@ -9,8 +9,9 @@ function downloadBlob(content: string, mime: string, filename: string) {
 }
 
 import { useEffect, useState } from 'react'
-import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, UpdateStatus, VerifyResult, AIConfig } from '@shared/api'
+import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, UpdateStatus, VerifyResult, AIConfig, CalendarConfig } from '@shared/api'
 import { POPULAR_MODELS, DEFAULT_AI_CONFIG } from '@core/ai'
+import { DEFAULT_CALENDAR_CONFIG } from '@shared/api'
 import { UpdatePanel } from '../updates'
 import { useUiPrefs } from '../uiPrefs'
 import { life } from '../bridge'
@@ -82,6 +83,38 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       setAiTestResult({ ok: false, message: err?.message || 'Connection failed', model: 'none' })
     } finally {
       setTestingProvider(null)
+    }
+  }
+
+  const [calCfg, setCalCfg] = useState<CalendarConfig>(DEFAULT_CALENDAR_CONFIG)
+  const [syncingCal, setSyncingCal] = useState(false)
+  const [calSyncMsg, setCalSyncMsg] = useState<{ ok: boolean; message: string } | null>(null)
+
+  useEffect(() => {
+    life.calendar.config().then(setCalCfg).catch(() => {})
+  }, [])
+
+  async function saveCalendarConfig() {
+    const next = await act(() => life.calendar.saveConfig(calCfg), 'Calendar settings saved')
+    if (next) setCalCfg(next)
+  }
+
+  async function syncCalendarNow() {
+    setSyncingCal(true)
+    setCalSyncMsg(null)
+    try {
+      const res = await life.calendar.sync()
+      if (res.error) {
+        setCalSyncMsg({ ok: false, message: res.error })
+      } else {
+        setCalSyncMsg({ ok: true, message: `Synced ${res.count} events from Google Calendar!` })
+        const next = await life.calendar.config()
+        setCalCfg(next)
+      }
+    } catch (e: any) {
+      setCalSyncMsg({ ok: false, message: e?.message || 'Sync failed' })
+    } finally {
+      setSyncingCal(false)
     }
   }
 
@@ -284,6 +317,83 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
             onClick={() => testAiConnection()}
           >
             {testingProvider === 'auto' ? 'Testing...' : 'Test Active Auto-Route'}
+          </button>
+        </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="calendar" /> Google Calendar Integration
+          </h2>
+          <span className={`chip ${calCfg.enabled && calCfg.feedUrl ? 'ok' : 'ghost'}`}>
+            {calCfg.enabled && calCfg.feedUrl ? 'Connected' : 'Disabled'}
+          </span>
+        </header>
+
+        <p className="hint block">
+          Connect your Google Calendar so the <b>Solo Leveling AI Oracle</b> and Hunter Coach can view your schedule, upcoming commitments, and daily agenda.
+        </p>
+
+        <div className="field">
+          <span>Google Calendar iCal Feed URL (Private Secret Address)</span>
+          <input
+            type="url"
+            placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+            value={calCfg.feedUrl}
+            onChange={(e) => setCalCfg({ ...calCfg, feedUrl: e.target.value })}
+          />
+          <small className="hint">
+            <b>How to get it in 3 steps:</b> 1. Open Google Calendar (web) → 2. Click Settings ⚙️ → select your calendar under <i>Settings for my calendars</i> on the left → 3. Scroll down to <i>"Secret address in iCal format"</i>, copy the link, and paste here.
+          </small>
+        </div>
+
+        <label className="check toggle-row">
+          <input
+            type="checkbox"
+            checked={calCfg.enabled}
+            onChange={(e) => setCalCfg({ ...calCfg, enabled: e.target.checked })}
+          />
+          <span>
+            Enable Calendar Synchronization & AI Visibility
+            <small>AI Oracle includes your daily agenda in strategic performance reports & coach chat.</small>
+          </span>
+        </label>
+
+        {calCfg.lastSyncAt && (
+          <dl className="facts" style={{ margin: '0.75rem 0' }}>
+            <dt>Last Synced</dt>
+            <dd>{timeAgo(calCfg.lastSyncAt)}</dd>
+            <dt>Cached Events</dt>
+            <dd>{calCfg.cachedEventsCount} events synchronized</dd>
+            {calCfg.lastError && (
+              <>
+                <dt>Last Issue</dt>
+                <dd className="warn-text">{calCfg.lastError}</dd>
+              </>
+            )}
+          </dl>
+        )}
+
+        {calSyncMsg && (
+          <div
+            className={`notice ${calSyncMsg.ok ? 'ok' : 'warn'}`}
+            style={{ margin: '0.75rem 0', padding: '0.6rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem' }}
+          >
+            {calSyncMsg.ok ? '✅ ' : '❌ '} {calSyncMsg.message}
+          </div>
+        )}
+
+        <div className="row" style={{ marginTop: '0.5rem' }}>
+          <button className="btn primary" onClick={saveCalendarConfig}>
+            Save Calendar Settings
+          </button>
+          <button
+            className="btn ghost"
+            disabled={!calCfg.feedUrl || syncingCal}
+            onClick={syncCalendarNow}
+          >
+            {syncingCal ? 'Syncing...' : 'Sync Calendar Now'}
           </button>
         </div>
       </section>

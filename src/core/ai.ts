@@ -180,6 +180,7 @@ export interface AIPerformanceContext {
   budgetSpent: number
   budgetDaily: number
   currency: string
+  calendarAgenda?: string
 }
 
 export interface AIPerformanceReport {
@@ -204,6 +205,7 @@ Player Telemetry:
 - Workouts This Week: ${ctx.workoutsThisWeek} sessions
 - Sleep Quality Score: ${ctx.sleepQualityAvg}/5
 - Everyday Spending Today: ${ctx.budgetSpent} ${ctx.currency} (Daily Budget: ${ctx.budgetDaily} ${ctx.currency})
+${ctx.calendarAgenda ? `- Google Calendar Agenda:\n  ${ctx.calendarAgenda.replace(/\n/g, '\n  ')}` : ''}
 
 Generate an authentic, motivating Solo Leveling style Strategic Performance Conclusion Report.
 Respond in valid JSON format:

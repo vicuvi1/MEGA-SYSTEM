@@ -21,9 +21,11 @@ import type { Wallet } from './wallet'
 import type { Discipline } from './discipline'
 import type { MoneyService } from './money'
 import type { SleepService } from './sleep'
+import type { CalendarService } from './calendarService'
 
 export class AIService {
   private file: string
+  private calendar?: CalendarService
 
   constructor(
     filePath?: string,
@@ -31,13 +33,19 @@ export class AIService {
     private discipline?: Discipline,
     private money?: MoneyService,
     private sleep?: SleepService,
-    private customFetch: typeof fetch = fetch
+    private customFetch: typeof fetch = fetch,
+    calendar?: CalendarService
   ) {
+    this.calendar = calendar
     try {
       this.file = filePath ?? join(app.getPath('userData'), 'ai_config.bin')
     } catch {
       this.file = filePath ?? join(process.cwd(), 'ai_config.bin')
     }
+  }
+
+  setCalendar(cal: CalendarService): void {
+    this.calendar = cal
   }
 
   getConfig(): AIConfig {
@@ -207,7 +215,8 @@ export class AIService {
       sleepQualityAvg: sleep?.todayLog?.quality ?? 4,
       budgetSpent: money?.today?.totalSpent ?? 0,
       budgetDaily: (money?.dailyBudget ?? 10000) / 100,
-      currency: money?.currency ?? 'MDL'
+      currency: money?.currency ?? 'MDL',
+      calendarAgenda: this.calendar?.getEventsForAi()
     }
 
     const prompt = buildPerformancePrompt(ctx)
@@ -218,7 +227,11 @@ export class AIService {
   async askCoach(userMessage: string): Promise<{ reply: string; modelUsed: string }> {
     const all = this.wallet?.entries() ?? []
     const lv = levelInfo(totalXp(all))
-    const systemPrompt = `You are the Solo Leveling Hunter Coach for Victor Barbuta. Hunter Rank: ${lv.hunterGrade} (${lv.hunterTitle}, Lv.${lv.level}). Give concise, direct, inspiring tactical advice.\n\nUser: ${userMessage}`
+    const calendarAgenda = this.calendar?.getEventsForAi()
+    const scheduleNote = calendarAgenda && !calendarAgenda.startsWith('No Google')
+      ? `\nVictor's Google Calendar Schedule:\n${calendarAgenda}\n`
+      : ''
+    const systemPrompt = `You are the Solo Leveling Hunter Coach for Victor Barbuta. Hunter Rank: ${lv.hunterGrade} (${lv.hunterTitle}, Lv.${lv.level}).${scheduleNote}\nGive concise, direct, inspiring tactical advice aligning with his schedule and physical goals.\n\nUser: ${userMessage}`
     const { text, model, provider } = await this.executeTask('coach_chat', systemPrompt)
     return { reply: text.trim(), modelUsed: `${provider.toUpperCase()} (${model})` }
   }

@@ -549,6 +549,78 @@ export function createMockApi(): Bridge {
         modelUsed: 'gemini-2.5-flash'
       })
     },
+    calendar: {
+      config: async () => ({
+        feedUrl: 'https://calendar.google.com/calendar/ical/demo/basic.ics',
+        enabled: true,
+        autoSyncIntervalMin: 15,
+        lastSyncAt: new Date().toISOString(),
+        lastError: null,
+        cachedEventsCount: 2
+      }),
+      saveConfig: async (c) => ({
+        feedUrl: c.feedUrl ?? '',
+        enabled: c.enabled ?? true,
+        autoSyncIntervalMin: 15,
+        lastSyncAt: new Date().toISOString(),
+        lastError: null,
+        cachedEventsCount: 2
+      }),
+      sync: async () => ({
+        events: [
+          {
+            id: 'mock-1',
+            title: 'Hunter Strategy Alignment',
+            start: new Date().toISOString(),
+            end: new Date(Date.now() + 3600_000).toISOString(),
+            day: dayKey(new Date()),
+            startTime: '10:00',
+            endTime: '11:00',
+            allDay: false,
+            location: 'HQ Command',
+            description: 'Sprint planning and habit calibration'
+          },
+          {
+            id: 'mock-2',
+            title: 'Evening Physical Conditioning',
+            start: new Date().toISOString(),
+            end: new Date(Date.now() + 5400_000).toISOString(),
+            day: dayKey(new Date()),
+            startTime: '18:30',
+            endTime: '20:00',
+            allDay: false,
+            location: 'Gym / Track'
+          }
+        ],
+        count: 2
+      }),
+      events: async () => [
+        {
+          id: 'mock-1',
+          title: 'Hunter Strategy Alignment',
+          start: new Date().toISOString(),
+          end: new Date(Date.now() + 3600_000).toISOString(),
+          day: dayKey(new Date()),
+          startTime: '10:00',
+          endTime: '11:00',
+          allDay: false,
+          location: 'HQ Command',
+          description: 'Sprint planning and habit calibration'
+        },
+        {
+          id: 'mock-2',
+          title: 'Evening Physical Conditioning',
+          start: new Date().toISOString(),
+          end: new Date(Date.now() + 5400_000).toISOString(),
+          day: dayKey(new Date()),
+          startTime: '18:30',
+          endTime: '20:00',
+          allDay: false,
+          location: 'Gym / Track'
+        }
+      ],
+      clear: async () => {}
+    },
     onLocked: () => {},
     onUrge: () => {},
     onWalletChanged: () => {},

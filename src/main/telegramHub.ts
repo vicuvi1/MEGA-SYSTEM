@@ -18,6 +18,7 @@ import type { MoneyService } from './money'
 import type { SleepService } from './sleep'
 import type { Tasks } from './planner'
 import type { Wallet } from './wallet'
+import type { CalendarService } from './calendarService'
 
 export interface BotLogEntry {
   id: number
@@ -61,6 +62,7 @@ const DEFAULT_BRIDGE_CONFIG: BotBridgeConfig = {
 
 export class TelegramBotHub {
   private economy?: UnifiedEconomyService
+  private calendar?: CalendarService
   private file: string
   private logsList: BotLogEntry[] = []
   private isPolling = false
@@ -97,6 +99,10 @@ export class TelegramBotHub {
 
   setEconomy(eco: UnifiedEconomyService): void {
     this.economy = eco
+  }
+
+  setCalendar(cal: CalendarService): void {
+    this.calendar = cal
   }
 
   setWalletCallback(cb: () => void): void {
@@ -247,6 +253,16 @@ export class TelegramBotHub {
             workoutStreak,
             tasksLeft: openTasks.length
           })
+          if (this.calendar) {
+            const calEvents = this.calendar.getEvents()
+            if (calEvents.length > 0) {
+              const calList = calEvents
+                .slice(0, 3)
+                .map((e) => `• <b>${e.startTime}</b>: ${e.title}`)
+                .join('\n')
+              reply += `\n\n📅 <b>Google Calendar:</b>\n${calList}`
+            }
+          }
           break
         }
 

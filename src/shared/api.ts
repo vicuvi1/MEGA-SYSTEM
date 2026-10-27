@@ -28,6 +28,11 @@ import type { Block, BlockKind, BlockStatus, Repeat, Task } from '@core/plan'
 import type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput } from '@core/body'
 import type { SleepLog, SleepSummary } from '@core/sleep'
 import type { Expense, ExpenseCategory, DailyExpenseSummary } from '@core/money'
+import type { CalendarConfig, CalendarEvent } from '@core/calendar'
+import { DEFAULT_CALENDAR_CONFIG } from '@core/calendar'
+
+export type { CalendarConfig, CalendarEvent }
+export { DEFAULT_CALENDAR_CONFIG }
 
 export type { QuestState }
 export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, Rule, Reward, Tier, EffortEquivalence, Block, BlockKind, BlockStatus, Repeat, Task }
@@ -461,6 +466,13 @@ export interface LifeApi {
     generateRewards(userPrompt?: string): Promise<{ rewards: GeneratedReward[]; modelUsed: string }>
     performanceReport(): Promise<AIPerformanceReport>
     askCoach(message: string): Promise<{ reply: string; modelUsed: string }>
+  }
+  calendar: {
+    config(): Promise<CalendarConfig>
+    saveConfig(cfg: Partial<CalendarConfig>): Promise<CalendarConfig>
+    sync(): Promise<{ events: CalendarEvent[]; count: number; error?: string }>
+    events(day?: string): Promise<CalendarEvent[]>
+    clear(): Promise<void>
   }
 }
 

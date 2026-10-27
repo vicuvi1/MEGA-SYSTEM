@@ -162,6 +162,13 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     performanceReport: () => call('ai:performanceReport'),
     askCoach: (msg) => call('ai:askCoach', msg)
   },
+  calendar: {
+    config: () => call('calendar:config'),
+    saveConfig: (c) => call('calendar:saveConfig', c),
+    sync: () => call('calendar:sync'),
+    events: (day) => call('calendar:events', day),
+    clear: () => call('calendar:clear')
+  },
   onLocked: (cb) => {
     ipcRenderer.on('auth:locked', () => cb())
   },
