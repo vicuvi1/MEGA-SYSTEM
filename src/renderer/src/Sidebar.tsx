@@ -21,9 +21,9 @@ interface Props {
 const GROUPS: { title: string; ids: PageId[] }[] = [
   { title: 'Plan', ids: ['today', 'tasks', 'schedule'] },
   { title: 'Life', ids: ['sleep', 'discipline', 'money'] },
-  { title: 'Rewards', ids: ['shop', 'journey'] }
+  { title: 'System RPG', ids: ['shop', 'journey', 'rules'] }
 ]
-const SHORT: Partial<Record<PageId, string>> = { rules: 'Rules', connected: 'Apps' }
+const SHORT: Partial<Record<PageId, string>> = { rules: 'Game Rules', connected: 'Apps' }
 
 export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, balance, name }: Props) {
   const [peek, setPeek] = useState(false)

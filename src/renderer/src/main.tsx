@@ -13,6 +13,7 @@ import './economy.css'
 import './hunter.css'
 import './soloLeveling.css'
 import './todoist.css'
+import './gameRules.css'
 import { applyTheme } from './uiPrefs'
 
 applyTheme()

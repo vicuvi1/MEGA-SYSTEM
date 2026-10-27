@@ -24,12 +24,13 @@ export const MODULES: ModuleDef[] = [
   { id: 'body', label: 'Body', icon: 'bolt', color: '#FF6B8B', phase: 0, blurb: 'Workouts and body logs' },
   { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Daily spending from Finance Helper, turned into coins' },
   { id: 'shop', label: 'Shop', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend coins on real rewards, inside a real-money budget' },
-  { id: 'journey', label: 'Journey', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'Your weekly review and ranks' }
+  { id: 'journey', label: 'Journey', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'Your weekly review and ranks' },
+  { id: 'rules', label: 'Game Rules', icon: 'sliders', color: '#00D2FF', phase: 0, blurb: 'Solo Leveling system codex and real-life growth rules' }
 ]
 
 export const SYSTEM_PAGES: ModuleDef[] = [
   { id: 'history', label: 'History', icon: 'list', color: 'var(--muted)', phase: 0, blurb: 'Every coin in and out' },
-  { id: 'rules', label: 'Point rules', icon: 'sliders', color: 'var(--muted)', phase: 0, blurb: 'What earns and what costs' },
+  { id: 'rules', label: 'Game Rules', icon: 'sliders', color: '#00D2FF', phase: 0, blurb: 'Solo Leveling system codex and real-life growth rules' },
   { id: 'connected', label: 'Connected apps', icon: 'link', color: 'var(--muted)', phase: 0, blurb: 'Waky, Finance Helper and MAN' },
   { id: 'bots', label: 'Bot Center', icon: 'bot', color: '#00D2FF', phase: 0, blurb: 'Unified Telegram bot command center' },
   { id: 'settings', label: 'Settings', icon: 'gear', color: 'var(--muted)', phase: 0, blurb: 'PIN and backups' }

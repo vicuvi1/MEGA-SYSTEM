@@ -413,6 +413,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <span className="oracle-text">SYSTEM ORACLE</span>
             <kbd>Ctrl+Shift+A</kbd>
           </button>
+          <button
+            className="game-rules-header-btn"
+            onClick={() => setPage('rules')}
+            title="Solo Leveling System Codex & Game Rules"
+          >
+            <span style={{ fontSize: 13 }}>📜</span>
+            <span>GAME RULES</span>
+          </button>
 
           <div className="top-actions">
             <button
@@ -465,7 +473,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'journey' && summary && <Journey summary={summary} rules={rules} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
-            {page === 'rules' && <Rules rules={rules} onChange={setRules} />}
+            {page === 'rules' && <Rules rules={rules} onChange={setRules} summary={summary} onGo={setPage} onOracle={() => setOracleOpen(true)} onModal={(type, data) => setSystemModal({ open: true, type, data })} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}
             {current.phase > 0 && <Soon module={current} />}
             </ErrorBoundary>
