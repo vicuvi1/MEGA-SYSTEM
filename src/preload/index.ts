@@ -154,6 +154,14 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     startPolling: () => call('bots:startPolling'),
     stopPolling: () => call('bots:stopPolling')
   },
+  ai: {
+    config: () => call('ai:config'),
+    saveConfig: (c) => call('ai:saveConfig', c),
+    test: (provider) => call('ai:test', provider),
+    generateRewards: (userPrompt) => call('ai:generateRewards', userPrompt),
+    performanceReport: () => call('ai:performanceReport'),
+    askCoach: (msg) => call('ai:askCoach', msg)
+  },
   onLocked: (cb) => {
     ipcRenderer.on('auth:locked', () => cb())
   },

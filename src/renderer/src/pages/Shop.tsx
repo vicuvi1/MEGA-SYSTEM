@@ -9,6 +9,7 @@ import {
   type SupportedCurrency,
   ChestLootDrop,
   EconomySummary,
+  GeneratedReward,
   Reward,
   RewardInput,
   ShopState,
@@ -48,6 +49,52 @@ export function Shop({ state, onState, onWallet }: Props) {
   const [depositAmount, setDepositAmount] = useState<string>('')
   const [depositVaultDirectModal, setDepositVaultDirectModal] = useState(false)
   const [directVaultDraft, setDirectVaultDraft] = useState('')
+
+  // AI Reward Oracle state
+  const [showAiModal, setShowAiModal] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [generatingAi, setGeneratingAi] = useState(false)
+  const [aiRewards, setAiRewards] = useState<GeneratedReward[] | null>(null)
+  const [aiModelUsed, setAiModelUsed] = useState<string | null>(null)
+
+  async function summonAiRewards() {
+    setGeneratingAi(true)
+    try {
+      const res = await life.ai.generateRewards(aiPrompt)
+      setAiRewards(res.rewards)
+      setAiModelUsed(res.modelUsed)
+      toast('✨ System Oracle generated 3 tailored rewards!', 'good')
+    } catch (err: any) {
+      toast(err?.message || 'Failed to generate AI rewards. Check keys in Settings.', 'bad')
+    } finally {
+      setGeneratingAi(false)
+    }
+  }
+
+  async function addAiRewardToCatalog(reward: GeneratedReward) {
+    const next = await act(() => life.shop.save({
+      title: reward.title,
+      price: reward.price,
+      tier: reward.tier as Tier,
+      realCost: reward.realCost,
+      note: reward.note,
+      pinned: false
+    }), `Added "${reward.title}" to catalog!`)
+    if (next) onState(next)
+  }
+
+  async function addAiRewardToWishlist(reward: GeneratedReward) {
+    await act(() => life.economy.saveGoal({
+      title: reward.title,
+      targetRealCost: reward.realCost,
+      targetCoins: reward.price,
+      currency: (economy?.currency ?? 'MDL') as SupportedCurrency,
+      category: reward.category as any,
+      imageUrl: reward.imageUrl,
+      note: reward.note
+    }), `Pinned "${reward.title}" as Wishlist Goal!`)
+    await refreshEconomy()
+  }
 
   const refreshEconomy = useCallback(async () => {
     try {
@@ -513,34 +560,47 @@ export function Shop({ state, onState, onWallet }: Props) {
           </button>
         </div>
 
-        {activeTab === 'catalog' && (
-          <button
-            className="btn small secondary"
-            onClick={() =>
-              setEditing({ title: '', price: 300, tier: 'bronze', realCost: 0, pinned: false, note: null })
-            }
-          >
-            <Icon name="plus" size={14} /> Add Reward
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {activeTab === 'catalog' && (
+            <button
+              className="btn small secondary"
+              onClick={() =>
+                setEditing({ title: '', price: 300, tier: 'bronze', realCost: 0, pinned: false, note: null })
+              }
+            >
+              <Icon name="plus" size={14} /> Add Reward
+            </button>
+          )}
 
-        {activeTab === 'goals' && (
+          {activeTab === 'goals' && (
+            <button
+              className="btn small primary"
+              onClick={() =>
+                setEditingGoal({
+                  title: '',
+                  targetCoins: 5000,
+                  targetRealCost: 2000,
+                  category: 'gear',
+                  pinned: false,
+                  note: ''
+                })
+              }
+            >
+              <Icon name="plus" size={14} /> Add Mega Goal
+            </button>
+          )}
+
           <button
-            className="btn small primary"
-            onClick={() =>
-              setEditingGoal({
-                title: '',
-                targetCoins: 5000,
-                targetRealCost: 2000,
-                category: 'gear',
-                pinned: false,
-                note: ''
-              })
-            }
+            className="btn small ai-sparkle-btn"
+            onClick={() => {
+              setShowAiModal(true)
+              if (!aiRewards && !generatingAi) summonAiRewards()
+            }}
+            title="Generate AI reward ideas tailored to your hunter rank & vault"
           >
-            <Icon name="plus" size={14} /> Add Mega Goal
+            <Icon name="spark" size={14} /> ✨ AI Rewards
           </button>
-        )}
+        </div>
       </div>
 
       {/* TAB 1: REWARDS CATALOG */}
@@ -1143,6 +1203,143 @@ export function Shop({ state, onState, onWallet }: Props) {
             <div className="sheet-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
               <button className="btn primary" onClick={() => setChestLoot(null)}>
                 Claim Loot!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI REWARD GENERATOR MODAL */}
+      {showAiModal && (
+        <div className="sheet" role="dialog" aria-label="AI Reward Architect">
+          <div className="sheet-card ai-reward-sheet-card" style={{ maxWidth: 640 }}>
+            <div className="ai-modal-header">
+              <div className="ai-modal-badge" style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', fontSize: 11, fontWeight: 700, marginBottom: 6 }}>✨ System Oracle</div>
+              <h3 style={{ margin: 0 }}>AI Reward Architect</h3>
+              <p className="hint" style={{ margin: '4px 0 0' }}>
+                Tailored rewards synthesized for your current Hunter level, coin balance, and vault savings.
+              </p>
+            </div>
+
+            <div className="ai-prompt-input-row" style={{ display: 'flex', gap: 8, margin: '14px 0' }}>
+              <input
+                autoFocus
+                placeholder="Optional interest (e.g. coffee setup, fitness equipment, tech, books, weekend trip)..."
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !generatingAi && summonAiRewards()}
+                style={{ flex: 1 }}
+              />
+              <button
+                className="btn primary"
+                disabled={generatingAi}
+                onClick={summonAiRewards}
+              >
+                {generatingAi ? 'Synthesizing...' : 'Summon'}
+              </button>
+            </div>
+
+            {generatingAi && (
+              <div className="ai-loading-state" style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                <div style={{ fontSize: 32, animation: 'spin 2s linear infinite' }}>🔮</div>
+                <p style={{ marginTop: 12, fontWeight: 600, color: '#818cf8' }}>
+                  System Oracle is analyzing your progress and generating rewards...
+                </p>
+                <small style={{ color: 'var(--muted)' }}>Balancing dopamine, real price, and coin feasibility</small>
+              </div>
+            )}
+
+            {!generatingAi && aiRewards && aiRewards.length > 0 && (
+              <div className="ai-rewards-list">
+                {aiModelUsed && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      Architected by <b>{aiModelUsed}</b>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      style={{ padding: '2px 8px', fontSize: 11 }}
+                      onClick={summonAiRewards}
+                    >
+                      🔄 Re-roll ideas
+                    </button>
+                  </div>
+                )}
+
+                <div className="ai-cards-grid" style={{ display: 'grid', gap: 12 }}>
+                  {aiRewards.map((item, idx) => (
+                    <div key={idx} className="ai-reward-card" style={{
+                      display: 'flex',
+                      gap: 14,
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 10,
+                      padding: 12,
+                      alignItems: 'center'
+                    }}>
+                      {item.imageUrl && (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title}
+                          style={{
+                            width: 72,
+                            height: 72,
+                            borderRadius: 8,
+                            objectFit: 'cover',
+                            background: '#1a1a24'
+                          }}
+                          onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+                        />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                          <span className={`chip small tier-${item.tier}`} style={{ textTransform: 'capitalize', fontSize: 10 }}>
+                            {item.tier}
+                          </span>
+                          <span className="chip small" style={{ fontSize: 10, textTransform: 'capitalize' }}>
+                            {item.category}
+                          </span>
+                        </div>
+                        <h4 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700 }}>{item.title}</h4>
+                        <div style={{ fontSize: 13, color: '#818cf8', fontWeight: 600, marginBottom: 4 }}>
+                          🪙 {item.price} coins <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· ~{item.realCost} {state.currency}</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>
+                          {item.note}
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <button
+                          className="btn small secondary"
+                          title="Add this reward to the regular Shop catalog"
+                          onClick={() => {
+                            addAiRewardToCatalog(item)
+                            toast(`Added "${item.title}" to catalog!`, 'good')
+                          }}
+                        >
+                          + Shop
+                        </button>
+                        <button
+                          className="btn small primary"
+                          title="Pin this as a Wishlist Milestone Goal"
+                          onClick={() => {
+                            addAiRewardToWishlist(item)
+                            toast(`Pinned "${item.title}" as Milestone!`, 'good')
+                          }}
+                        >
+                          🎯 Goal
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="sheet-actions" style={{ marginTop: 16 }}>
+              <button className="btn ghost" onClick={() => setShowAiModal(false)}>
+                Close
               </button>
             </div>
           </div>

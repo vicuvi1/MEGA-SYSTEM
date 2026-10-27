@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDays } from '@core/dates'
 import { effective } from '@core/ledger'
 import { RANKS, type HunterRankDef } from '@core/levels'
-import type { LedgerEntry, Rule, Summary } from '@shared/api'
+import type { LedgerEntry, Rule, Summary, AIPerformanceReport } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES } from '../modules'
@@ -22,6 +22,21 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
     }
   })
   const [rankFilter, setRankFilter] = useState<'all' | 'early' | 'mid' | 'high' | 'monarch'>('all')
+  const [report, setReport] = useState<AIPerformanceReport | null>(null)
+  const [loadingReport, setLoadingReport] = useState(false)
+
+  async function generateReport() {
+    setLoadingReport(true)
+    try {
+      const rep = await life.ai.performanceReport()
+      setReport(rep)
+      toast('✨ Solo Leveling Strategic Report compiled!', 'good')
+    } catch (err: any) {
+      toast(err?.message || 'Failed to compile AI report. Check keys in Settings.', 'bad')
+    } finally {
+      setLoadingReport(false)
+    }
+  }
 
   useEffect(() => {
     life.wallet.history(2000).then(setRows).catch(() => {})
@@ -194,6 +209,19 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
               <b>Active Hunter Perk:</b> {lv.rankPerk}
             </span>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          <button
+            className="btn small ai-sparkle-btn"
+            onClick={generateReport}
+            disabled={loadingReport}
+          >
+            <Icon name="spark" size={14} /> {loadingReport ? 'Oracle Synthesizing...' : '✨ Generate AI Tactical Evaluation'}
+          </button>
+          <button className="btn small ghost" onClick={copyRecap}>
+            📋 Copy Status Card
+          </button>
         </div>
       </section>
 
@@ -376,6 +404,82 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
           })}
         </div>
       </section>
+
+      {/* AI SOLO LEVELING PERFORMANCE REPORT MODAL */}
+      {report && (
+        <div className="sheet" role="dialog" aria-label="System Performance Report">
+          <div className="sheet-card ai-report-sheet-card" style={{ maxWidth: 680, border: '1px solid #6366f1' }}>
+            <div className="ai-report-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 14, marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="system-tag" style={{ color: '#818cf8', fontWeight: 800 }}>
+                  [ SYSTEM EVALUATION PROTOCOL ]
+                </span>
+                <span className="chip" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', fontSize: 11 }}>
+                  {report.modelUsed}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 8 }}>
+                <span className="grade-badge" style={{ fontSize: 24, fontWeight: 900, color: '#38bdf8' }}>
+                  {report.gradeRating}
+                </span>
+                <h3 style={{ margin: 0, fontSize: 18, color: '#f8fafc' }}>{report.headline}</h3>
+              </div>
+            </div>
+
+            <p style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 1.6, marginBottom: 16, background: 'rgba(255,255,255,0.02)', padding: 12, borderRadius: 8 }}>
+              {report.summary}
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
+              <div style={{ background: 'rgba(34, 197, 94, 0.05)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: 8, padding: 12 }}>
+                <h4 style={{ margin: '0 0 8px', color: '#4ade80', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  ⚔️ Core Strengths
+                </h4>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#e2e8f0', lineHeight: 1.5 }}>
+                  {report.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+
+              <div style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: 8, padding: 12 }}>
+                <h4 style={{ margin: '0 0 8px', color: '#fbbf24', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  ⚠️ Vulnerability Vectors
+                </h4>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#e2e8f0', lineHeight: 1.5 }}>
+                  {report.growthAreas.map((g, i) => <li key={i}>{g}</li>)}
+                </ul>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(99, 102, 241, 0.06)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 8px', color: '#818cf8', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                📜 Tactical Directives
+              </h4>
+              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#f1f5f9', lineHeight: 1.5 }}>
+                {report.strategicDirectives.map((d, i) => <li key={i}>{d}</li>)}
+              </ol>
+            </div>
+
+            <div style={{ fontStyle: 'italic', fontSize: 12, color: '#94a3b8', borderLeft: '3px solid #818cf8', paddingLeft: 12, marginBottom: 16 }}>
+              "{report.warriorVerdict}"
+            </div>
+
+            <div className="sheet-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                className="btn small ghost"
+                onClick={() => {
+                  navigator.clipboard.writeText(`⚡ [SOLO LEVELING STRATEGIC REPORT]\nGrade: ${report.gradeRating}\nHeadline: ${report.headline}\n\nSummary:\n${report.summary}\n\nDirectives:\n${report.strategicDirectives.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n\nVerdict: "${report.warriorVerdict}"`)
+                  toast('Tactical Report copied to clipboard!', 'good')
+                }}
+              >
+                📋 Copy Report
+              </button>
+              <button className="btn primary small" onClick={() => setReport(null)}>
+                Acknowledge Directives
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

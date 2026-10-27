@@ -1,4 +1,11 @@
 import type {
+  AIConfig,
+  AIPerformanceReport,
+  GeneratedReward,
+  ModelChoice
+} from '@core/ai'
+import { POPULAR_MODELS } from '@core/ai'
+import type {
   ChestLootDrop,
   MultiplierInfo,
   WishlistCategory,
@@ -40,6 +47,8 @@ export interface NativeMoneySummary {
 
 export type { ChestLootDrop, MultiplierInfo, WishlistCategory, WishlistGoal, SupportedCurrency, CurrencyConfig }
 export { CURRENCY_CONFIGS, convertCurrency, formatDualCurrency }
+export type { AIConfig, AIPerformanceReport, GeneratedReward, ModelChoice }
+export { POPULAR_MODELS }
 
 export interface WishlistGoalInput {
   id?: number
@@ -444,6 +453,14 @@ export interface LifeApi {
     test(): Promise<{ ok: boolean; error?: string }>
     startPolling(): Promise<boolean>
     stopPolling(): Promise<boolean>
+  }
+  ai: {
+    config(): Promise<AIConfig>
+    saveConfig(cfg: Partial<AIConfig>): Promise<AIConfig>
+    test(provider?: 'gemini' | 'openrouter'): Promise<{ ok: boolean; message: string; model: string }>
+    generateRewards(userPrompt?: string): Promise<{ rewards: GeneratedReward[]; modelUsed: string }>
+    performanceReport(): Promise<AIPerformanceReport>
+    askCoach(message: string): Promise<{ reply: string; modelUsed: string }>
   }
 }
 

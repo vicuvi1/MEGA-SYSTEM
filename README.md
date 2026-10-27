@@ -4,6 +4,28 @@ One desktop app, one points wallet, many sections. Doing good things (waking up 
 
 The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
+## Dual AI Oracle & Multi-Model Intelligence Engine (Phase 12 — v1.3.0)
+
+Deep integration of multi-model artificial intelligence directly into the motivation loop and tactical RPG core of Life System:
+- **Dual AI Provider Support (Google Gemini & OpenRouter)**:
+  - **Google Gemini Official Free Tier**: Native REST integration for `gemini-2.5-flash`, `gemini-2.0-flash`, and `gemini-1.5-pro` with zero billing required.
+  - **OpenRouter Multi-Model Gateway**: Access to DeepSeek V3 (`deepseek/deepseek-chat`), DeepSeek R1 (`deepseek/deepseek-r1`), GPT-4o Mini, Claude 3.5 Haiku, and Llama 3.3 70B.
+- **Smart Task-Based Auto-Routing (`auto`)**:
+  - Automatically selects fast, low-latency models (`gemini-2.5-flash` or `deepseek-chat`) for fast reward synthesis.
+  - Automatically routes high-complexity strategic performance evaluations to deep reasoning engines (`deepseek-r1` or `gemini-1.5-pro`).
+  - Seamless fallback when only one provider key is configured, plus manual model override.
+- **AI Reward Architect (`Shop` page)**:
+  - System analyzes your current Hunter rank, level, wallet balance, and savings vault to synthesize 3 personalized, realistic dream rewards.
+  - Returns HD Unsplash photo URLs, real prices in MDL/USD, coin cost calculations, tier classifications, and motivation notes.
+  - 1-click `+ Shop` (adds directly to catalog) or `🎯 Goal` (pins as a Wishlist Milestone Goal).
+- **Solo Leveling AI Performance Report (`Journey` page)**:
+  - Holographic evaluation window assessing recent habit execution, clean streak integrity, wakeups, and financial restraint.
+  - Synthesizes Grade Rating (S/A/B-Rank), Strategic Headline, Core Strengths, Vulnerability Vectors, Actionable Directives, and an authentic Solo Leveling Warrior Verdict.
+- **Enterprise-Grade Key Encryption**:
+  - API keys are encrypted at rest using Windows DPAPI (`safeStorage`) in `ai_config.bin`.
+- **Settings AI Control Panel**:
+  - Masked key inputs with reveal toggles, model selector dropdown, active connection test buttons with visual status alerts.
+
 ## Visual Motivation Engine, Photos & Real-Life Currency Comparisons (Phase 11 — v1.2.0)
 
 The brain and heart of Life System: directly connects the hard work you do every single day to the real-life rewards you see and touch:

@@ -472,6 +472,83 @@ export function createMockApi(): Bridge {
         throw new Error('Restore is not available in the browser demo')
       }
     },
+    ai: {
+      config: async () => ({
+        openRouterKey: 'sk-or-v1-mock-key',
+        geminiKey: 'AIzaSyMockKey',
+        selectedModel: 'auto',
+        enabled: true
+      }),
+      saveConfig: async (cfg) => ({
+        openRouterKey: cfg.openRouterKey ?? 'sk-or-v1-mock-key',
+        geminiKey: cfg.geminiKey ?? 'AIzaSyMockKey',
+        selectedModel: cfg.selectedModel ?? 'auto',
+        enabled: cfg.enabled ?? true
+      }),
+      test: async (provider) => ({
+        ok: true,
+        message: 'Connection successful',
+        model: provider === 'openrouter' ? 'deepseek/deepseek-chat' : 'gemini-2.5-flash'
+      }),
+      generateRewards: async (userPrompt?: string) => ({
+        modelUsed: 'gemini-2.5-flash',
+        rewards: [
+          {
+            title: userPrompt ? `Custom Upgrade: ${userPrompt}` : 'Premium Espresso & Reading Afternoon',
+            price: 450,
+            realCost: 85,
+            tier: 'bronze',
+            category: 'wellness',
+            note: 'High yield restoration for cognitive focus and dopamine reset.',
+            imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=600&q=80'
+          },
+          {
+            title: 'Deep Tissue Recovery & Spa Session',
+            price: 1200,
+            realCost: 400,
+            tier: 'silver',
+            category: 'wellness',
+            note: 'Physical recovery following intense training protocols.',
+            imageUrl: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80'
+          },
+          {
+            title: 'Mechanical Ergonomic Keyboard',
+            price: 3500,
+            realCost: 89,
+            tier: 'gold',
+            category: 'tech',
+            note: 'Top tier hunter hardware for maximum code execution velocity.',
+            imageUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80'
+          }
+        ]
+      }),
+      performanceReport: async () => ({
+        modelUsed: 'deepseek/deepseek-r1',
+        gradeRating: 'A-Rank',
+        headline: 'Formidable Momentum: Discipline Core Operating at 94% Efficiency',
+        summary: 'Player displays superior consistency in physical training and streak preservation. Vault reserve expansion is accelerating toward next echelon.',
+        strengths: [
+          'Unbroken discipline streak exceeding 14 days',
+          'Morning momentum routine completion rate at 90%+',
+          'Prudent financial reserve maintenance in the secure vault'
+        ],
+        growthAreas: [
+          'Sleep midpoint alignment variance on weekend cycles',
+          'Delayed afternoon recovery blocks after deep work sprints'
+        ],
+        strategicDirectives: [
+          'Lock in bedtime window strictly within 23:00 - 07:00.',
+          'Execute remaining S-Rank quest before end of the current micro-cycle.',
+          'Channel 15% of surplus coins into primary milestone goal.'
+        ],
+        warriorVerdict: 'You are ascending beyond the limits of common hunters. Maintain absolute focus—the Monarchs have noticed.',
+        generatedAt: new Date().toISOString()
+      }),
+      askCoach: async (msg: string) => ({
+        reply: `[System Oracle]: Understood, Hunter. In response to "${msg}": stay locked onto your primary directives. Discipline compounds exponentially.`,
+        modelUsed: 'gemini-2.5-flash'
+      })
+    },
     onLocked: () => {},
     onUrge: () => {},
     onWalletChanged: () => {},

@@ -23,7 +23,8 @@ import type { WishlistGoalInput } from '@shared/api'
 import { DataExportService } from './dataExport'
 import { TelegramNotifier } from './telegram'
 import { TelegramBotHub } from './telegramHub'
-import type { BotBridgeConfig } from '@shared/api'
+import { AIService } from './aiService'
+import type { BotBridgeConfig, AIConfig } from '@shared/api'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
 import {
@@ -80,6 +81,7 @@ let economyService: UnifiedEconomyService
 let dataExportService: DataExportService
 let telegram: TelegramNotifier
 let telegramHub: TelegramBotHub
+let aiService: AIService
 let connections: Connections
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -108,6 +110,7 @@ function open(): void {
   if (hubCfg.enabled && hubCfg.pollingEnabled && hubCfg.botToken) {
     telegramHub.startPolling()
   }
+  aiService = new AIService(join(dataDir, 'ai_config.bin'), wallet, discipline, moneyService, sleepService)
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.
   candidates.man.unshift(embeddedManLevelDb())
@@ -308,6 +311,14 @@ handle('economy:openChest', (level: number) => {
   win?.webContents.send('wallet:changed')
   return res
 })
+
+// ---------- AI Intelligence & Multi-Model Oracle ----------
+handle('ai:config', () => aiService.getConfig())
+handle('ai:saveConfig', (c: Partial<AIConfig>) => aiService.saveConfig(c))
+handle('ai:test', (provider?: 'gemini' | 'openrouter') => aiService.testConnection(provider))
+handle('ai:generateRewards', (userPrompt?: string) => aiService.generateRewards(userPrompt))
+handle('ai:performanceReport', () => aiService.generatePerformanceReport())
+handle('ai:askCoach', (msg: string) => aiService.askCoach(msg))
 
 
 handle('connections:state', () => connections.state())

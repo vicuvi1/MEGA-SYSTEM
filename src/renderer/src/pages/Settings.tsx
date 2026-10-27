@@ -9,7 +9,8 @@ function downloadBlob(content: string, mime: string, filename: string) {
 }
 
 import { useEffect, useState } from 'react'
-import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, UpdateStatus, VerifyResult } from '@shared/api'
+import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, UpdateStatus, VerifyResult, AIConfig } from '@shared/api'
+import { POPULAR_MODELS, DEFAULT_AI_CONFIG } from '@core/ai'
 import { UpdatePanel } from '../updates'
 import { useUiPrefs } from '../uiPrefs'
 import { life } from '../bridge'
@@ -54,6 +55,34 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
     setTestingTg(true)
     const res = await act(() => life.telegram.test(), 'Test message sent to Telegram!')
     setTestingTg(false)
+  }
+
+  const [aiCfg, setAiCfg] = useState<AIConfig>(DEFAULT_AI_CONFIG)
+  const [showGemini, setShowGemini] = useState(false)
+  const [showOr, setShowOr] = useState(false)
+  const [testingProvider, setTestingProvider] = useState<string | null>(null)
+  const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string; model: string } | null>(null)
+
+  useEffect(() => {
+    life.ai.config().then(setAiCfg).catch(() => {})
+  }, [])
+
+  async function saveAiConfig() {
+    const next = await act(() => life.ai.saveConfig(aiCfg), 'AI configuration saved')
+    if (next) setAiCfg(next)
+  }
+
+  async function testAiConnection(provider?: 'gemini' | 'openrouter') {
+    setTestingProvider(provider || 'auto')
+    setAiTestResult(null)
+    try {
+      const res = await life.ai.test(provider)
+      setAiTestResult(res)
+    } catch (err: any) {
+      setAiTestResult({ ok: false, message: err?.message || 'Connection failed', model: 'none' })
+    } finally {
+      setTestingProvider(null)
+    }
   }
 
 
@@ -138,6 +167,125 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </span>
         </label>
         <p className="hint block">Size: Ctrl + and Ctrl − make everything bigger or smaller, Ctrl 0 resets. The apps inside keep their own dark look in the light theme.</p>
+      </section>
+
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="spark" /> AI Intelligence & Multi-Model Oracle
+          </h2>
+          <span className={`chip ${aiCfg.enabled && (aiCfg.geminiKey || aiCfg.openRouterKey) ? 'ok' : 'muted'}`}>
+            {aiCfg.enabled && (aiCfg.geminiKey || aiCfg.openRouterKey) ? 'Oracle Active' : 'Not Configured'}
+          </span>
+        </header>
+        <p className="hint block">
+          Connect Google Gemini (official free API keys) or OpenRouter (DeepSeek V3/R1, Claude, GPT) to unlock AI dream reward generation, Solo Leveling performance reports, and tactical coaching.
+        </p>
+
+        <div className="field">
+          <span>Official Google Gemini API Key (Free)</span>
+          <div className="row">
+            <input
+              type={showGemini ? 'text' : 'password'}
+              placeholder="AIzaSy..."
+              value={aiCfg.geminiKey}
+              onChange={(e) => setAiCfg({ ...aiCfg, geminiKey: e.target.value })}
+            />
+            <button className="btn ghost" type="button" onClick={() => setShowGemini(!showGemini)}>
+              {showGemini ? 'Hide' : 'Show'}
+            </button>
+            <button
+              className="btn"
+              type="button"
+              disabled={!aiCfg.geminiKey || testingProvider === 'gemini'}
+              onClick={() => testAiConnection('gemini')}
+            >
+              {testingProvider === 'gemini' ? 'Testing...' : 'Test Gemini'}
+            </button>
+          </div>
+          <small className="hint">
+            Get a free key instantly from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>. Free models: Gemini 2.5 Flash, 2.0 Flash, 1.5 Pro.
+          </small>
+        </div>
+
+        <div className="field">
+          <span>OpenRouter API Key (DeepSeek V3 / DeepSeek R1 / Claude / GPT)</span>
+          <div className="row">
+            <input
+              type={showOr ? 'text' : 'password'}
+              placeholder="sk-or-v1-..."
+              value={aiCfg.openRouterKey}
+              onChange={(e) => setAiCfg({ ...aiCfg, openRouterKey: e.target.value })}
+            />
+            <button className="btn ghost" type="button" onClick={() => setShowOr(!showOr)}>
+              {showOr ? 'Hide' : 'Show'}
+            </button>
+            <button
+              className="btn"
+              type="button"
+              disabled={!aiCfg.openRouterKey || testingProvider === 'openrouter'}
+              onClick={() => testAiConnection('openrouter')}
+            >
+              {testingProvider === 'openrouter' ? 'Testing...' : 'Test OpenRouter'}
+            </button>
+          </div>
+          <small className="hint">
+            Connect to openrouter.ai to access DeepSeek V3, DeepSeek R1 reasoning models, and 100+ open models.
+          </small>
+        </div>
+
+        <div className="field">
+          <span>Model Routing Strategy</span>
+          <select
+            value={aiCfg.selectedModel}
+            onChange={(e) => setAiCfg({ ...aiCfg, selectedModel: e.target.value })}
+          >
+            <option value="auto">⚡ Auto (Smart Task Routing: Flash for rewards, DeepSeek R1/Pro for strategy)</option>
+            <optgroup label="Official Google Gemini (Direct / Free)">
+              {POPULAR_MODELS.filter((m) => m.provider === 'gemini').map((m) => (
+                <option key={m.model} value={m.model}>{m.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="OpenRouter Models">
+              {POPULAR_MODELS.filter((m) => m.provider === 'openrouter').map((m) => (
+                <option key={m.model} value={m.model}>{m.label}</option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+
+        <label className="check toggle-row">
+          <input
+            type="checkbox"
+            checked={aiCfg.enabled}
+            onChange={(e) => setAiCfg({ ...aiCfg, enabled: e.target.checked })}
+          />
+          <span>
+            Enable AI Systems
+            <small>Allows the Shop to summon dream reward ideas and Journey to compile Solo Leveling tactical reports.</small>
+          </span>
+        </label>
+
+        {aiTestResult && (
+          <div className={`notice ${aiTestResult.ok ? 'ok' : 'warn'}`} style={{ margin: '0.75rem 0', padding: '0.6rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem' }}>
+            <b>{aiTestResult.ok ? '✅ Connection Verified:' : '❌ Connection Problem:'}</b>{' '}
+            {aiTestResult.message} {aiTestResult.model ? `(${aiTestResult.model})` : ''}
+          </div>
+        )}
+
+        <div className="row" style={{ marginTop: '0.5rem' }}>
+          <button className="btn primary" onClick={saveAiConfig}>
+            Save AI Configuration
+          </button>
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={(!aiCfg.geminiKey && !aiCfg.openRouterKey) || testingProvider !== null}
+            onClick={() => testAiConnection()}
+          >
+            {testingProvider === 'auto' ? 'Testing...' : 'Test Active Auto-Route'}
+          </button>
+        </div>
       </section>
 
       <section className="panel">

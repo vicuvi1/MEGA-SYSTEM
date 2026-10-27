@@ -16,7 +16,7 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
 
 ---
 
-## 2. Recent Implementation Summary (Phases 5 through 11 — v1.2.0)
+## 2. Recent Implementation Summary (Phases 5 through 12 — v1.3.0)
 - **Phase 5 (Body Module)**:
   - Database Migration `005` with `exercises`, `workouts`, and `body_metrics` tables.
   - Multi-exercise workout session logger with custom reps/units, awarding `body.workout_done` (+10 coins, +25 XP) to the wallet.
@@ -62,8 +62,23 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
   - **Multi-Currency Engine (`convertCurrency` & `formatDualCurrency`)**: Seamless support for LEI (`MDL` / `RON`), `USD ($)`, and `EUR (€)` with instant 1-click currency switcher pills and live dual-currency equivalence display (e.g. `900 MDL (~$50 USD)`).
   - **Real-Life Effort & Grit Equivalence (`calculateEffortEquivalence`)**: Translates abstract coin costs directly into tangible human effort (`Afforded by: ~15 clean days or ~30 workouts`), creating an irresistible psychological motivator.
   - **Smart Coin Calculation Helper**: 1-click `⚡ Calc Coins` button in reward and goal editors that auto-derives coin targets from real-world prices.
+- **Phase 12 (Dual AI Oracle & Multi-Model Intelligence Engine — v1.3.0)**:
+  - **Pure AI Domain Engine (`src/core/ai.ts` & `src/core/ai.test.ts`)**:
+    - Task-based auto-router (`selectModelForTask`) routing `reward_ideas` to ultra-fast models (`gemini-2.5-flash` or `deepseek-chat`) and `performance_report` to deep reasoning models (`deepseek-r1` or `gemini-1.5-pro`).
+    - Structured prompt builders (`buildRewardPrompt`, `buildPerformancePrompt`) and resilient JSON markdown block extractors (`parseRewardResponse`, `parsePerformanceResponse`).
+    - Popular model registry with official Google Gemini free tier (`gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-pro`) and OpenRouter models (`deepseek/deepseek-chat`, `deepseek/deepseek-r1`, `openai/gpt-4o-mini`, `anthropic/claude-3.5-haiku`, `meta-llama/llama-3.3-70b-instruct`).
+  - **Backend AI Service (`src/main/aiService.ts` & `src/main/aiService.test.ts`)**:
+    - Zero-dependency native `fetch` client for both official Google Gemini REST API and OpenRouter chat completions.
+    - Encrypted at-rest key storage in `ai_config.bin` using Windows DPAPI (`safeStorage.encryptString`).
+    - Connection tester, AI reward architect synthesizing rewards tailored to user level, coin balance, and savings, plus Solo Leveling tactical performance evaluator.
+  - **IPC Bridge & Typing (`src/preload/index.ts`, `src/shared/api.ts`, `src/renderer/src/mock.ts`)**:
+    - Full typed context bridge for `window.life.ai` (`config`, `saveConfig`, `test`, `generateRewards`, `performanceReport`, `askCoach`).
+  - **UI Integration**:
+    - **Settings AI Intelligence Panel (`Settings.tsx`)**: Masked key inputs with reveal toggles, model selector dropdown, active connection test buttons with visual status alerts.
+    - **Shop AI Reward Architect (`Shop.tsx`)**: `✨ AI Rewards` button opening an interactive modal where the user can enter an optional prompt and generate 3 custom rewards with 1-click `+ Shop` (add to catalog) or `🎯 Goal` (pin as milestone).
+    - **Journey Solo Leveling Strategic Evaluation (`Journey.tsx`)**: `✨ Generate AI Tactical Evaluation` button rendering a holographic System window featuring Grade Rating, Strategic Headline, Executive Summary, Core Strengths, Vulnerability Vectors, Actionable Directives, and a copyable report.
 - **Testing & Quality Assurance**:
-  - **175 tests passing** across 28 test suites (`npm test`).
+  - **188 tests passing** across 30 test suites (`npm test`).
   - **0 TypeScript compilation errors** (`npm run typecheck`).
   - Production build verified with `electron-vite build`.
 
@@ -71,14 +86,16 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
 
 ## 3. Adversarial Code Review & Security Hardening
 1. **Chat ID Whitelist Security**: Disallowed any unknown Telegram sender from querying the user's ledger, balances, or executing commands.
-2. **DPAPI Credential Encryption**: Primary and secondary bot tokens are encrypted at rest with Windows DPAPI via `safeStorage`.
-3. **Surplus Vault Integrity**: Vault withdrawals cannot exceed accumulated surplus; ledger rows are append-only.
-4. **Multiplier Math Safety**: All multipliers clamp to valid ranges and round cleanly to avoid fractional coin arithmetic anomalies.
-5. **Zero Schema Bloat for RPG Stats**: Derived all 5 Hunter Attributes dynamically from existing transactional tables on read, ensuring instant reactivity to workouts, study, and sleep without migration risk.
-6. **Robust Image Handling**: Image tags implement silent fallback (`onError`) to prevent broken image icons when offline or when using invalid URLs.
-7. **Backwards Compatibility**: Preserved all existing `shop.state()` and IPC contracts while augmenting with `imageUrl`, `currency`, and `setCurrency`.
+2. **DPAPI Credential Encryption**: Primary and secondary bot tokens, as well as Gemini and OpenRouter AI API keys, are encrypted at rest with Windows DPAPI via `safeStorage`.
+3. **Zero-Dependency Native AI Calling**: Both Gemini and OpenRouter utilize native Node/Electron `fetch`, avoiding third-party dependency bloat and vendor lock-in.
+4. **Resilient JSON Response Extraction**: AI response parsers handle standard JSON as well as markdown fences (````json ... ````), with fallback heuristic parsers to protect against malformed LLM outputs.
+5. **Surplus Vault Integrity**: Vault withdrawals cannot exceed accumulated surplus; ledger rows are append-only.
+6. **Multiplier Math Safety**: All multipliers clamp to valid ranges and round cleanly to avoid fractional coin arithmetic anomalies.
+7. **Zero Schema Bloat for RPG Stats**: Derived all 5 Hunter Attributes dynamically from existing transactional tables on read, ensuring instant reactivity to workouts, study, and sleep without migration risk.
+8. **Robust Image Handling**: Image tags implement silent fallback (`onError`) to prevent broken image icons when offline or when using invalid URLs.
+9. **Backwards Compatibility**: Preserved all existing `shop.state()` and IPC contracts while augmenting with `ai:*` handlers.
 
 ---
 
 ## 4. Handoff Brief for Claude Code
-Life System v1.2.0 empowers the user with the Visual Motivation Engine, linking real-life high-res photo URLs, LEI/USD dual price comparisons, and effort equivalence metrics to the Grand Unified Rewarding & Financial Ecosystem and Solo Leveling Hunter Awakening progression. All components in `Shop.tsx`, `Today.tsx`, and `economy.css` feature live photo previews, currency switchers, and real-life effort grit badges backed by 175 passing tests. Your objective is visual polish, subtle particle animations, and UI refinements while preserving pure SQLite and domain logic.
+Life System v1.3.0 is a complete, production-ready desktop habit and motivation ecosystem integrating multi-model AI (official free Google Gemini + OpenRouter DeepSeek V3/R1) with the Solo Leveling Hunter Awakening progression and the Unified Rewarding & Financial Engine. The AI Reward Architect in `Shop.tsx` synthesizes realistic dream rewards with HD photos and real-life currency conversions, while `Journey.tsx` compiles executive holographic performance reports, backed by 188 passing tests and encrypted key storage. Your objective is aesthetic refinement, particle effects for AI summoning, and visual design polishing while maintaining zero regressions across the pure domain and SQLite layers.
