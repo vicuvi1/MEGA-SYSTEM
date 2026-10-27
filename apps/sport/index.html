@@ -7,15 +7,17 @@
   <style>
     :root {
       --bg-dark: #060913;
-      --card-bg: rgba(13, 20, 36, 0.75);
-      --card-border: rgba(30, 58, 102, 0.55);
-      --card-border-glow: rgba(0, 242, 254, 0.35);
+      --card-bg: rgba(13, 20, 36, 0.78);
+      --card-border: rgba(30, 58, 102, 0.6);
+      --card-border-glow: rgba(0, 242, 254, 0.45);
       --cyan-neon: #00f2fe;
       --azure-neon: #4facfe;
       --electric-blue: #0088ff;
       --gold-neon: #f9d423;
+      --orange-neon: #f97316;
       --purple-neon: #a855f7;
       --green-neon: #10b981;
+      --red-neon: #ef4444;
       --text-main: #f1f5f9;
       --text-sub: #94a3b8;
       --text-muted: #64748b;
@@ -59,7 +61,7 @@
       position: relative;
       z-index: 1;
       width: 100%;
-      max-width: 1200px;
+      max-width: 1240px;
       padding: 24px 20px;
       display: flex;
       flex-direction: column;
@@ -68,7 +70,7 @@
 
     /* Top HUD / Hunter Status Header */
     .hunter-hud {
-      background: linear-gradient(135deg, rgba(14, 25, 48, 0.85) 0%, rgba(9, 15, 28, 0.95) 100%);
+      background: linear-gradient(135deg, rgba(14, 25, 48, 0.88) 0%, rgba(9, 15, 28, 0.96) 100%);
       border: 1px solid var(--card-border);
       border-radius: 16px;
       padding: 22px 28px;
@@ -166,7 +168,7 @@
 
     .xp-bar-fill {
       height: 100%;
-      width: 65%;
+      width: 45%;
       border-radius: 4px;
       background: linear-gradient(90deg, var(--cyan-neon), var(--azure-neon));
       box-shadow: 0 0 10px var(--cyan-neon);
@@ -221,14 +223,14 @@
       text-shadow: 0 0 12px rgba(249, 212, 35, 0.4);
     }
 
-    /* Quick Grid */
+    /* Dashboard Layout Grid */
     .dashboard-grid {
       display: grid;
-      grid-template-columns: 1fr 340px;
+      grid-template-columns: 1fr 360px;
       gap: 24px;
     }
 
-    @media (max-width: 900px) {
+    @media (max-width: 960px) {
       .dashboard-grid {
         grid-template-columns: 1fr;
       }
@@ -254,11 +256,13 @@
       align-items: center;
       justify-content: space-between;
       margin-bottom: 18px;
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     .card-title {
       font-size: 15px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: 0.5px;
       color: #fff;
       display: flex;
@@ -270,109 +274,414 @@
       color: var(--cyan-neon);
     }
 
-    /* Category Selector Buttons */
-    .category-pills {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding-bottom: 6px;
-      margin-bottom: 18px;
+    /* === SPORTY: TODAY'S WORKOUT ROUTINE SECTION === */
+    .today-routine-card {
+      background: linear-gradient(135deg, rgba(16, 26, 48, 0.88) 0%, rgba(10, 16, 32, 0.95) 100%);
+      border: 1px solid rgba(0, 242, 254, 0.35);
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5), inset 0 0 25px rgba(0, 242, 254, 0.05);
     }
 
-    .cat-btn {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: var(--text-sub);
-      padding: 8px 14px;
-      border-radius: 10px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
+    .routine-top-actions {
       display: flex;
       align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .chip-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 9px;
+      padding: 8px 13px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
       gap: 6px;
-      white-space: nowrap;
-      transition: all 0.2s;
     }
 
-    .cat-btn:hover {
-      background: rgba(0, 242, 254, 0.1);
-      border-color: rgba(0, 242, 254, 0.3);
-      color: #fff;
-    }
-
-    .cat-btn.active {
-      background: linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.15));
+    .chip-btn:hover {
+      background: rgba(0, 242, 254, 0.12);
       border-color: var(--cyan-neon);
       color: #fff;
-      box-shadow: 0 0 14px rgba(0, 242, 254, 0.3);
+      transform: translateY(-1px);
     }
 
-    /* Form Fields */
-    .form-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 12px;
+    .chip-btn.active-50 {
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.25), rgba(249, 115, 22, 0.1));
+      border-color: var(--orange-neon);
+      color: #fed7aa;
+      box-shadow: 0 0 14px rgba(249, 115, 22, 0.4);
+    }
+
+    .chip-btn.primary {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(79, 172, 254, 0.1));
+      border-color: var(--cyan-neon);
+      color: var(--cyan-neon);
+    }
+
+    .chip-btn.primary:hover {
+      background: var(--cyan-neon);
+      color: #050811;
+      box-shadow: 0 0 16px rgba(0, 242, 254, 0.5);
+    }
+
+    /* Coach Speech Bubble */
+    .coach-quote-box {
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.14) 0%, rgba(13, 20, 36, 0.8) 100%);
+      border: 1px solid rgba(249, 115, 22, 0.35);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-style: italic;
+      color: #fed7aa;
       margin-bottom: 16px;
     }
 
-    .input-group {
+    .coach-quote-box .coach-icon {
+      font-size: 20px;
+      font-style: normal;
+    }
+
+    .coach-quote-box .coach-label {
+      font-weight: 800;
+      color: var(--orange-neon);
+      text-transform: uppercase;
+      font-style: normal;
+      font-size: 10px;
+      letter-spacing: 0.8px;
+    }
+
+    /* Exercise Routine Checklist */
+    .routine-list {
       display: flex;
       flex-direction: column;
+      gap: 12px;
+    }
+
+    .routine-item {
+      background: rgba(16, 24, 44, 0.7);
+      border: 1px solid rgba(0, 242, 254, 0.16);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .routine-item:hover {
+      border-color: rgba(0, 242, 254, 0.4);
+      background: rgba(18, 28, 52, 0.85);
+    }
+
+    .routine-item.done {
+      border-color: rgba(16, 185, 129, 0.45);
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(13, 20, 36, 0.75) 100%);
+    }
+
+    .routine-item-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .routine-item-info {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .routine-item-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .routine-item-target {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--cyan-neon);
+    }
+
+    .routine-item-badges {
+      display: flex;
+      align-items: center;
       gap: 6px;
     }
 
-    .input-group label {
+    .routine-pct-badge {
       font-size: 11px;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: rgba(0, 242, 254, 0.12);
+      color: var(--cyan-neon);
+      border: 1px solid rgba(0, 242, 254, 0.25);
     }
 
-    .input-group input, .input-group select {
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 8px;
-      padding: 10px 12px;
-      color: #fff;
-      font-size: 13px;
-      outline: none;
-      transition: border 0.2s, box-shadow 0.2s;
-      font-family: inherit;
+    .routine-pct-badge.done {
+      background: rgba(16, 185, 129, 0.18);
+      color: var(--green-neon);
+      border-color: rgba(16, 185, 129, 0.45);
     }
 
-    .input-group input:focus, .input-group select:focus {
-      border-color: var(--cyan-neon);
-      box-shadow: 0 0 10px rgba(0, 242, 254, 0.25);
-    }
-
-    .btn-log {
+    .routine-progress-wrap {
       width: 100%;
-      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      height: 9px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .routine-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--cyan-neon), var(--azure-neon));
+      border-radius: 5px;
+      transition: width 0.35s ease;
+      box-shadow: 0 0 10px var(--cyan-neon);
+    }
+
+    .routine-progress-fill.done {
+      background: linear-gradient(90deg, #10b981, #34d399);
+      box-shadow: 0 0 10px #10b981;
+    }
+
+    .routine-btn-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+
+    .btn-rep {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 7px;
+      padding: 6px 11px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-rep:hover {
+      background: rgba(0, 242, 254, 0.18);
+      border-color: var(--cyan-neon);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    .btn-rep.complete {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(16, 185, 129, 0.15));
+      border-color: rgba(16, 185, 129, 0.6);
+      color: #34d399;
+    }
+
+    .btn-rep.complete:hover {
+      background: #10b981;
+      color: #050811;
+    }
+
+    .btn-rep.edit-btn {
+      margin-left: auto;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-rep.edit-btn:hover {
+      color: var(--cyan-neon);
+      border-color: var(--cyan-neon);
+    }
+
+    /* Complete All Master Button */
+    .btn-complete-all {
+      width: 100%;
+      background: linear-gradient(135deg, #f9d423 0%, #ff4b1f 100%);
       border: none;
-      border-radius: 10px;
-      padding: 12px 20px;
+      border-radius: 12px;
+      padding: 13px 20px;
       color: #050811;
       font-size: 14px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+      box-shadow: 0 8px 25px rgba(249, 212, 35, 0.35);
       transition: transform 0.15s, box-shadow 0.15s;
+      margin-top: 14px;
     }
 
-    .btn-log:hover {
+    .btn-complete-all:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(0, 242, 254, 0.6);
+      box-shadow: 0 10px 30px rgba(249, 212, 35, 0.6);
     }
 
-    .btn-log:active {
+    .btn-complete-all:active {
       transform: translateY(0);
+    }
+
+    .routine-shortcuts {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .routine-shortcut-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 7px;
+      padding: 6px 11px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .routine-shortcut-btn:hover {
+      background: rgba(0, 242, 254, 0.12);
+      color: #fff;
+      border-color: rgba(0, 242, 254, 0.3);
+    }
+
+    /* === HYDRATION TRACKER CARD === */
+    .hydration-card {
+      background: linear-gradient(135deg, rgba(10, 28, 54, 0.85) 0%, rgba(8, 18, 36, 0.95) 100%);
+      border: 1px solid rgba(0, 198, 255, 0.35);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(0, 198, 255, 0.05);
+    }
+
+    .water-meter-box {
+      margin: 12px 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .water-stats-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .water-big {
+      font-size: 20px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+
+    .water-sub {
+      font-size: 12px;
+      font-weight: 700;
+      color: #7dd3fc;
+    }
+
+    .water-bar-bg {
+      width: 100%;
+      height: 14px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(0, 198, 255, 0.25);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .water-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00c6ff, #0072ff);
+      border-radius: 7px;
+      transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 0 12px rgba(0, 198, 255, 0.6);
+    }
+
+    .water-btn-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .btn-water {
+      background: rgba(0, 136, 255, 0.12);
+      border: 1px solid rgba(0, 136, 255, 0.3);
+      border-radius: 9px;
+      padding: 10px;
+      color: #e0f2fe;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-water:hover {
+      background: rgba(0, 136, 255, 0.28);
+      border-color: #38bdf8;
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    .btn-water.undo {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+    }
+
+    .btn-water.undo:hover {
+      background: rgba(248, 113, 113, 0.15);
+      border-color: rgba(248, 113, 113, 0.4);
+      color: #f87171;
+    }
+
+    .water-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .water-footer span {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .water-footer button {
+      background: none;
+      border: none;
+      color: var(--cyan-neon);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .water-footer button:hover {
+      text-decoration: underline;
     }
 
     /* Rest Timer Card */
@@ -381,14 +690,14 @@
       flex-direction: column;
       align-items: center;
       text-align: center;
-      padding: 10px 0;
+      padding: 18px 22px;
     }
 
     .timer-circle-wrap {
       position: relative;
       width: 140px;
       height: 140px;
-      margin: 10px 0 18px;
+      margin: 10px 0 16px;
     }
 
     .timer-svg {
@@ -492,7 +801,166 @@
       color: #fff;
     }
 
-    /* Personal Records (PR) Grid */
+    /* Telegram Guide Card */
+    .telegram-guide-card {
+      background: linear-gradient(135deg, rgba(36, 116, 219, 0.12) 0%, rgba(16, 24, 42, 0.8) 100%);
+      border: 1px solid rgba(0, 136, 255, 0.3);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .telegram-guide-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .telegram-guide-header .tg-logo {
+      width: 28px;
+      height: 28px;
+      background: #0088cc;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(0, 136, 204, 0.5);
+    }
+
+    .telegram-guide-header h3 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .tg-command-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tg-chip {
+      background: rgba(0, 136, 204, 0.15);
+      border: 1px solid rgba(0, 136, 204, 0.3);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #7dd3fc;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tg-chip:hover {
+      background: rgba(0, 136, 204, 0.35);
+      color: #fff;
+    }
+
+    /* Form Fields & Workout Logging */
+    .category-pills {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 18px;
+    }
+
+    .cat-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-sub);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .cat-btn:hover {
+      background: rgba(0, 242, 254, 0.1);
+      border-color: rgba(0, 242, 254, 0.3);
+      color: #fff;
+    }
+
+    .cat-btn.active {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.15));
+      border-color: var(--cyan-neon);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(0, 242, 254, 0.3);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-group label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .input-group input, .input-group select {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      transition: border 0.2s, box-shadow 0.2s;
+      font-family: inherit;
+    }
+
+    .input-group input:focus, .input-group select:focus {
+      border-color: var(--cyan-neon);
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.25);
+    }
+
+    .btn-log {
+      width: 100%;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      color: #050811;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn-log:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 242, 254, 0.6);
+    }
+
+    /* Personal Records (PR) Hall of Fame */
     .pr-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -610,63 +1078,263 @@
       color: var(--gold-neon);
     }
 
-    /* Telegram Integration Card */
-    .telegram-guide-card {
-      background: linear-gradient(135deg, rgba(36, 116, 219, 0.12) 0%, rgba(16, 24, 42, 0.8) 100%);
-      border: 1px solid rgba(0, 136, 255, 0.3);
-      border-radius: 14px;
-      padding: 16px 18px;
+    /* === MODAL STYLES (Manage Exercises & Settings) === */
+    .sport-modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(3, 7, 18, 0.85);
+      backdrop-filter: blur(10px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      padding: 20px;
+    }
+
+    .sport-modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .sport-modal-dialog {
+      background: linear-gradient(135deg, rgba(14, 25, 48, 0.98), rgba(9, 15, 28, 0.99));
+      border: 1px solid rgba(0, 242, 254, 0.4);
+      border-radius: 18px;
+      max-width: 620px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 242, 254, 0.2);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      transform: scale(0.96) translateY(10px);
+      transition: transform 0.2s ease;
+    }
+
+    .sport-modal-backdrop.open .sport-modal-dialog {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 14px;
+    }
+
+    .modal-head h3 {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-close-modal {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      color: var(--text-sub);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .btn-close-modal:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Catalog Items inside Modal */
+    .catalog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 340px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .catalog-item {
+      background: rgba(16, 24, 44, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: border 0.15s;
+    }
+
+    .catalog-item.disabled {
+      opacity: 0.55;
+      border-style: dashed;
+    }
+
+    .catalog-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .catalog-info h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .catalog-info span {
+      font-size: 12px;
+      color: var(--cyan-neon);
+      font-weight: 600;
+    }
+
+    .catalog-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-cat-action {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 7px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+
+    .btn-cat-action:hover {
+      background: rgba(0, 242, 254, 0.18);
+      border-color: var(--cyan-neon);
+    }
+
+    .btn-cat-action.delete:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: var(--red-neon);
+      color: #fca5a5;
+    }
+
+    /* Toggle Switch */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: .25s;
+      border-radius: 22px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .25s;
+      border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+      background-color: var(--cyan-neon);
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.45);
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+      background-color: #050811;
+    }
+
+    /* Edit Exercise Form Box inside modal */
+    .catalog-edit-card {
+      background: rgba(20, 32, 60, 0.9);
+      border: 1px solid var(--cyan-neon);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .quick-inc-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn-inc {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cyan-neon);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-inc:hover {
+      background: rgba(0, 242, 254, 0.2);
+      border-color: var(--cyan-neon);
+      color: #fff;
+    }
+
+    /* Add New Exercise Card */
+    .add-ex-card {
+      background: rgba(16, 24, 44, 0.6);
+      border: 1px dashed rgba(0, 242, 254, 0.35);
+      border-radius: 12px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
 
-    .telegram-guide-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .telegram-guide-header .tg-logo {
-      width: 28px;
-      height: 28px;
-      background: #0088cc;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      color: #fff;
-      box-shadow: 0 0 10px rgba(0, 136, 204, 0.5);
-    }
-
-    .telegram-guide-header h3 {
+    .add-ex-card h4 {
       font-size: 13px;
       font-weight: 700;
       color: #fff;
-    }
-
-    .tg-command-chips {
       display: flex;
-      flex-wrap: wrap;
+      align-items: center;
       gap: 6px;
-    }
-
-    .tg-chip {
-      background: rgba(0, 136, 204, 0.15);
-      border: 1px solid rgba(0, 136, 204, 0.3);
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-family: monospace;
-      font-size: 11px;
-      color: #7dd3fc;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .tg-chip:hover {
-      background: rgba(0, 136, 204, 0.35);
-      color: #fff;
     }
 
     /* Toast Notification */
@@ -682,7 +1350,7 @@
       font-size: 13px;
       font-weight: 700;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 242, 254, 0.4);
-      z-index: 1000;
+      z-index: 10000;
       transform: translateY(100px);
       opacity: 0;
       transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -744,14 +1412,69 @@
 
     <!-- Main Dashboard Split -->
     <div class="dashboard-grid">
-      <!-- Left Column: Workout Logging & Recent Sessions -->
+      <!-- Left Column: Workout Routine & Session Logging -->
       <div style="display: flex; flex-direction: column; gap: 24px;">
-        <!-- Workout Logger Card -->
+
+        <!-- 1. SPORTY BOT: TODAY'S WORKOUT ROUTINE CARD -->
+        <section class="glass-card today-routine-card" id="routine-section">
+          <div class="card-header">
+            <h2 class="card-title">
+              <span class="icon">📋</span>
+              Today's Workout Routine (Sporty Bot Mode)
+            </h2>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span id="progression-badge" style="font-size: 11px; color: var(--gold-neon); font-weight: 800; background: rgba(249, 212, 35, 0.12); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(249, 212, 35, 0.3);">
+                AUTO-PROGRESSION: +5% (0/3)
+              </span>
+            </div>
+          </div>
+
+          <!-- Routine Top Actions -->
+          <div class="routine-top-actions">
+            <button class="chip-btn" id="btn-toggle-short-time" title="Halves all targets for quick workout">
+              <span>⏱️ Short on time (50%)</span>
+            </button>
+            <button class="chip-btn primary" id="btn-open-manage-modal">
+              <span>⚙️ Manage exercises & targets</span>
+            </button>
+            <button class="chip-btn" id="btn-open-settings-modal">
+              <span>⚙️ Settings & Coach</span>
+            </button>
+          </div>
+
+          <!-- Coach Beast Mode Quote Banner -->
+          <div class="coach-quote-box" id="coach-quote-box">
+            <span class="coach-icon">🦁</span>
+            <div>
+              <span class="coach-label" id="coach-label">BEAST MODE COACH</span>
+              <p id="coach-quote-text">"The iron never lies. Attack today's workout with zero hesitation!"</p>
+            </div>
+          </div>
+
+          <!-- Exercise Checklist Injected via JS -->
+          <div class="routine-list" id="routine-list">
+            <!-- Injected via JS -->
+          </div>
+
+          <!-- Complete All & Shortcuts Footer -->
+          <button class="btn-complete-all" id="btn-complete-all">
+            <span>⚡ COMPLETE ALL EXERCISES (+15 🪙 / +35 XP)</span>
+          </button>
+
+          <div class="routine-shortcuts">
+            <button class="routine-shortcut-btn" id="shortcut-rest-60">⏱️ Rest 60s</button>
+            <button class="routine-shortcut-btn" id="shortcut-rest-90">⏱️ Rest 90s</button>
+            <button class="routine-shortcut-btn" id="btn-reset-routine-today">🔄 Reset Today</button>
+            <button class="routine-shortcut-btn" id="btn-quick-add-modal" style="color: var(--cyan-neon);">➕ Add Exercise</button>
+          </div>
+        </section>
+
+        <!-- 2. Freeform Athletic Session Logger -->
         <section class="glass-card">
           <div class="card-header">
             <h2 class="card-title">
               <span class="icon">⚔️</span>
-              Log Athletic Session
+              Log Custom Athletic Session
             </h2>
             <span style="font-size: 11px; color: var(--cyan-neon); font-weight: 700;">LIVE SYNC READY</span>
           </div>
@@ -811,7 +1534,7 @@
           </form>
         </section>
 
-        <!-- Personal Records (PR) Hall of Fame -->
+        <!-- 3. Personal Records (PR) Hall of Fame -->
         <section class="glass-card">
           <div class="card-header">
             <h2 class="card-title">
@@ -828,7 +1551,7 @@
           </div>
         </section>
 
-        <!-- Workout Activity History -->
+        <!-- 4. Workout Activity History -->
         <section class="glass-card">
           <div class="card-header">
             <h2 class="card-title">
@@ -844,10 +1567,49 @@
         </section>
       </div>
 
-      <!-- Right Column: Live Rest Timer & Telegram Sport Bot -->
+      <!-- Right Column: Hydration, Rest Timer & Telegram Assistant -->
       <div style="display: flex; flex-direction: column; gap: 24px;">
-        <!-- Rest Timer Card -->
-        <section class="glass-card rest-timer-box">
+
+        <!-- 1. SPORTY HYDRATION TRACKER -->
+        <section class="glass-card hydration-card" id="hydration-card">
+          <div class="card-header" style="margin-bottom: 0;">
+            <h2 class="card-title">
+              <span class="icon">💧</span>
+              Daily Hydration
+            </h2>
+            <span style="font-size: 11px; color: #7dd3fc; font-weight: 700;" id="water-calibrated-label">
+              Calibrated: 75 kg · 186 cm
+            </span>
+          </div>
+
+          <div class="water-meter-box">
+            <div class="water-stats-row">
+              <span class="water-big" id="water-display-ml">0 / 2,700 ml</span>
+              <span class="water-sub" id="water-display-glasses">0.0 of 11 glasses (0%)</span>
+            </div>
+            <div class="water-bar-bg">
+              <div class="water-bar-fill" id="water-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="water-btn-grid">
+            <button class="btn-water" data-ml="250">💧 +250 ml (1 glass)</button>
+            <button class="btn-water" data-ml="500">💧 +500 ml (bottle)</button>
+            <button class="btn-water" data-ml="1000">💧 +1,000 ml (shaker)</button>
+            <button class="btn-water undo" data-ml="-250">↩️ -250 ml</button>
+          </div>
+
+          <div class="water-footer">
+            <span id="water-goal-text">Daily Target: 2,700 ml</span>
+            <div style="display: flex; gap: 10px;">
+              <button id="btn-calibrate-water">Set Goal</button>
+              <button id="btn-reset-water">Reset</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Rest Interval Timer Card -->
+        <section class="glass-card rest-timer-box" id="rest-timer-section">
           <div class="card-header" style="width: 100%; margin-bottom: 0;">
             <h2 class="card-title">
               <span class="icon">⏱️</span>
@@ -881,7 +1643,7 @@
           </div>
         </section>
 
-        <!-- Telegram Sport Bot Assistant Card -->
+        <!-- 3. Telegram Sport Bot Assistant Card -->
         <section class="telegram-guide-card">
           <div class="telegram-guide-header">
             <div class="tg-logo">✈️</div>
@@ -912,6 +1674,130 @@
     </div>
   </div>
 
+  <!-- === MODAL 1: MANAGE EXERCISES & TARGETS === -->
+  <div class="sport-modal-backdrop" id="modal-manage-exercises">
+    <div class="sport-modal-dialog">
+      <div class="modal-head">
+        <h3>
+          <span>⚙️</span>
+          Manage Exercises & Targets
+        </h3>
+        <button class="btn-close-modal" id="btn-close-manage-modal">✕</button>
+      </div>
+
+      <p style="font-size: 12px; color: var(--text-sub); line-height: 1.5;">
+        Configure your daily routine catalog. Toggle exercises on or off, edit target reps and units, or add new exercises just like in your Sporty Telegram bot.
+      </p>
+
+      <!-- Active Exercise List -->
+      <div class="catalog-list" id="modal-catalog-list">
+        <!-- Injected via JS -->
+      </div>
+
+      <!-- Inline Editor Container (hidden until user clicks edit) -->
+      <div id="modal-inline-edit-box" style="display: none;">
+        <!-- Injected when editing -->
+      </div>
+
+      <!-- Add New Exercise Box -->
+      <div class="add-ex-card">
+        <h4><span>➕</span> Add New Exercise to Catalog</h4>
+        <div class="form-row" style="margin-bottom: 8px;">
+          <div class="input-group" style="grid-column: span 2;">
+            <label>Exercise Name</label>
+            <input type="text" id="new-ex-name" placeholder="e.g. Pull-ups, Dips, Squats">
+          </div>
+          <div class="input-group">
+            <label>Target Amount</label>
+            <input type="number" id="new-ex-target" placeholder="50" min="1" value="50">
+          </div>
+          <div class="input-group">
+            <label>Unit</label>
+            <select id="new-ex-unit">
+              <option value="reps">reps</option>
+              <option value="1">1</option>
+              <option value="sets">sets</option>
+              <option value="kg">kg</option>
+              <option value="min">min</option>
+              <option value="km">km</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-rep complete" id="btn-add-new-ex" style="padding: 10px; justify-content: center; font-size: 13px;">
+          <span>➕ Add Exercise to Catalog</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- === MODAL 2: SETTINGS & COACH === -->
+  <div class="sport-modal-backdrop" id="modal-sporty-settings">
+    <div class="sport-modal-dialog">
+      <div class="modal-head">
+        <h3>
+          <span>⚙️</span>
+          Sporty Settings & Coach
+        </h3>
+        <button class="btn-close-modal" id="btn-close-settings-modal">✕</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="input-group">
+          <label>Coach Personality</label>
+          <select id="setting-coach-persona">
+            <option value="beast">🦁 Beast Mode (Aggressive, relentless Hunter drive)</option>
+            <option value="system">⚡ Solo Leveling System (Cold, absolute game directives)</option>
+            <option value="discipline">🛡️ Discipline Master (Stoic, measured, unbroken)</option>
+            <option value="partner">🤝 Encouraging Partner (Upbeat, supportive energy)</option>
+          </select>
+        </div>
+
+        <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: #fff;">Auto-Progression (+5%)</div>
+            <div style="font-size: 11px; color: var(--text-sub);">Automatically increase all targets by 5% after 3 completed workouts.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="setting-auto-progression" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <div class="input-group">
+            <label>Daily Hydration Goal (ml)</label>
+            <input type="number" id="setting-water-target" value="2700" step="50">
+          </div>
+          <div class="input-group">
+            <label>Glass Size (ml)</label>
+            <input type="number" id="setting-glass-size" value="250" step="10">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="input-group">
+            <label>Body Weight (kg)</label>
+            <input type="number" id="setting-body-weight" value="75" step="0.5">
+          </div>
+          <div class="input-group">
+            <label>Height (cm)</label>
+            <input type="number" id="setting-body-height" value="186">
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Daily Workout Reminder Time</label>
+          <input type="time" id="setting-reminder-time" value="07:00">
+        </div>
+
+        <button class="btn-log" id="btn-save-settings" style="margin-top: 10px;">
+          <span>💾 SAVE SETTINGS</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
   <div id="toast">
     <span style="font-size: 16px;">⚡</span>
     <span id="toast-text">Workout Saved! +15 Coins Awarded</span>
@@ -955,6 +1841,10 @@
       }
       playTick() {
         this.playTone(1200, 'triangle', 0.04, 0.08);
+      }
+      playWater() {
+        this.playTone(600, 'sine', 0.08, 0.12);
+        setTimeout(() => this.playTone(900, 'sine', 0.08, 0.08), 50);
       }
       playChime() {
         if (!this.enabled) return;
@@ -1012,8 +1902,14 @@
     }
     animateParticles();
 
-    // --- State Storage ---
+    // --- State Storage & Defaults ---
     const STORAGE_KEY = 'life_sport_tracker_v1';
+    const DEFAULT_EXERCISES = [
+      { id: 'ex_situps', name: 'Sit-ups', target: 60, unit: 'reps', active: true, doneToday: 0 },
+      { id: 'ex_pushups', name: 'Push-ups', target: 123, unit: 'reps', active: true, doneToday: 0 },
+      { id: 'ex_press', name: 'press', target: 50, unit: '1', active: true, doneToday: 0 }
+    ];
+
     const DEFAULT_STATE = {
       xp: 45,
       level: 1,
@@ -1022,6 +1918,21 @@
       combatPower: 1420,
       streak: 1,
       lastDate: new Date().toISOString().split('T')[0],
+      exercises: DEFAULT_EXERCISES,
+      water: {
+        currentMl: 0,
+        targetMl: 2700,
+        glassSizeMl: 250
+      },
+      sportySettings: {
+        coach: 'beast',
+        autoProgression: true,
+        progressionStreak: 0,
+        shortOnTime: false,
+        bodyWeight: 75,
+        bodyHeight: 186,
+        reminderTime: '07:00'
+      },
       prs: [
         { id: 'bench', title: 'Bench Press', value: '85 kg', date: 'Yesterday' },
         { id: 'run5k', title: '5KM Run', value: '23m 15s', date: '3 days ago' },
@@ -1045,7 +1956,17 @@
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? { ...DEFAULT_STATE, ...JSON.parse(raw) } : DEFAULT_STATE;
+        if (!raw) return DEFAULT_STATE;
+        const parsed = JSON.parse(raw);
+        return {
+          ...DEFAULT_STATE,
+          ...parsed,
+          exercises: Array.isArray(parsed.exercises) && parsed.exercises.length > 0 ? parsed.exercises : DEFAULT_EXERCISES,
+          water: { ...DEFAULT_STATE.water, ...(parsed.water || {}) },
+          sportySettings: { ...DEFAULT_STATE.sportySettings, ...(parsed.sportySettings || {}) },
+          prs: Array.isArray(parsed.prs) && parsed.prs.length > 0 ? parsed.prs : DEFAULT_STATE.prs,
+          history: Array.isArray(parsed.history) ? parsed.history : DEFAULT_STATE.history
+        };
       } catch (e) {
         return DEFAULT_STATE;
       }
@@ -1059,7 +1980,80 @@
 
     let state = loadState();
 
-    // --- Hunter Level Engine ---
+    // Check day reset for daily checklist & water
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (state.lastDate !== todayStr) {
+      state.lastDate = todayStr;
+      state.exercises.forEach(ex => { ex.doneToday = 0; });
+      state.water.currentMl = 0;
+      saveState(state);
+    }
+
+    // --- Coach Quotes Catalog ---
+    const COACH_QUOTES = {
+      beast: [
+        '"The iron never lies. Attack today\'s workout with zero hesitation!"',
+        '"Pain is weakness leaving the body! Push past your old limits!"',
+        '"A true Hunter doesn\'t ask for easy days. He conquers heavy ones."',
+        '"Every rep is a contract with your future self. Execute now!"',
+        '"No excuses. Reps don\'t lie. S-Rank discipline only!"'
+      ],
+      system: [
+        '"[DAILY QUEST: PHYSICAL CONDITIONING] Failure is not an option."',
+        '"[SYSTEM NOTIFICATION] Combat power expansion detected."',
+        '"[PLAYER STATUS] Your physical vessel is awakening."',
+        '"[MONARCH COMMAND] Stand fast and overwhelm your obstacles."'
+      ],
+      discipline: [
+        '"Consistency is the only metric that builds an unshakeable mind."',
+        '"Small, relentless efforts compound into insurmountable strength."',
+        '"Master the simple disciplines and the great battles are already won."',
+        '"Maintain the standard. You are building who you are."'
+      ],
+      partner: [
+        '"Great effort! Every single rep brings you closer to your goal!"',
+        '"Let\'s get moving! You\'ve got this whole day ahead of you!"',
+        '"Consistency feels amazing! Keep that positive momentum going!"'
+      ]
+    };
+
+    function updateCoachQuote(customQuote = null) {
+      const persona = state.sportySettings.coach || 'beast';
+      const labelEl = document.getElementById('coach-label');
+      const textEl = document.getElementById('coach-quote-text');
+      const iconEl = document.querySelector('.coach-quote-box .coach-icon');
+
+      if (persona === 'beast') {
+        labelEl.textContent = 'BEAST MODE COACH';
+        iconEl.textContent = '🦁';
+      } else if (persona === 'system') {
+        labelEl.textContent = 'THE SYSTEM DIRECTIVE';
+        iconEl.textContent = '⚡';
+      } else if (persona === 'discipline') {
+        labelEl.textContent = 'DISCIPLINE MASTER';
+        iconEl.textContent = '🛡️';
+      } else {
+        labelEl.textContent = 'WORKOUT PARTNER';
+        iconEl.textContent = '🤝';
+      }
+
+      if (customQuote) {
+        textEl.textContent = customQuote;
+      } else {
+        const pool = COACH_QUOTES[persona] || COACH_QUOTES.beast;
+        textEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+      }
+    }
+
+    // --- Effective Target Calculator (Accounts for 50% short-on-time mode) ---
+    function getEffectiveTarget(ex) {
+      if (state.sportySettings.shortOnTime) {
+        return Math.max(1, Math.round(ex.target * 0.5));
+      }
+      return ex.target;
+    }
+
+    // --- Hunter Level & CP Engine ---
     function updateHunterStats() {
       const totalSessions = state.history.length;
       const calculatedXp = (totalSessions * 35) + state.xp;
@@ -1084,9 +2078,544 @@
 
       document.getElementById('xp-fill').style.width = xpIntoLevel + '%';
       document.getElementById('xp-text').textContent = `${xpIntoLevel} / 100 XP (LV ${level})`;
+
+      // Progression badge
+      const pBadge = document.getElementById('progression-badge');
+      if (state.sportySettings.autoProgression) {
+        pBadge.textContent = `AUTO-PROGRESSION: +5% (${state.sportySettings.progressionStreak || 0}/3)`;
+        pBadge.style.display = 'inline-block';
+      } else {
+        pBadge.style.display = 'none';
+      }
     }
 
-    // --- UI Renderers ---
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').textContent = text;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2800);
+    }
+
+    // --- SPORTY TODAY'S ROUTINE RENDERER ---
+    function renderTodayRoutine() {
+      const container = document.getElementById('routine-list');
+      const activeExercises = state.exercises.filter(e => e.active);
+
+      // Short on time button styling
+      const shortBtn = document.getElementById('btn-toggle-short-time');
+      if (state.sportySettings.shortOnTime) {
+        shortBtn.classList.add('active-50');
+        shortBtn.innerHTML = '<span>⚡ 50% Short on time (ACTIVE)</span>';
+      } else {
+        shortBtn.classList.remove('active-50');
+        shortBtn.innerHTML = '<span>⏱️ Short on time (50%)</span>';
+      }
+
+      if (activeExercises.length === 0) {
+        container.innerHTML = `
+          <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">
+            No active exercises in your routine.
+            <br>
+            <button class="chip-btn primary" id="btn-empty-manage" style="margin-top: 10px;">
+              ⚙️ Manage & Add Exercises
+            </button>
+          </div>
+        `;
+        const emptyBtn = document.getElementById('btn-empty-manage');
+        if (emptyBtn) emptyBtn.addEventListener('click', openManageModal);
+        return;
+      }
+
+      container.innerHTML = activeExercises.map(ex => {
+        const target = getEffectiveTarget(ex);
+        const done = ex.doneToday || 0;
+        const pct = Math.min(100, Math.round((done / target) * 100));
+        const isDone = done >= target;
+
+        return `
+          <div class="routine-item ${isDone ? 'done' : ''}" data-id="${ex.id}">
+            <div class="routine-item-top">
+              <div class="routine-item-info">
+                <span class="routine-item-title">${ex.name}</span>
+                <span class="routine-item-target">${done} / ${target} ${ex.unit}${state.sportySettings.shortOnTime ? ' (50%)' : ''}</span>
+              </div>
+              <div class="routine-item-badges">
+                <span class="routine-pct-badge ${isDone ? 'done' : ''}">${isDone ? '✓ 100% DONE' : pct + '%'}</span>
+              </div>
+            </div>
+
+            <div class="routine-progress-wrap">
+              <div class="routine-progress-fill ${isDone ? 'done' : ''}" style="width: ${pct}%;"></div>
+            </div>
+
+            <div class="routine-btn-row">
+              <button class="btn-rep" data-action="add" data-amount="5">+5</button>
+              <button class="btn-rep" data-action="add" data-amount="10">+10</button>
+              <button class="btn-rep" data-action="add" data-amount="25">+25</button>
+              <button class="btn-rep complete" data-action="full">⚡ Done (${target})</button>
+              <button class="btn-rep" data-action="sub" data-amount="10" style="color: var(--text-muted);" title="Undo 10 reps">-10</button>
+              <button class="btn-rep edit-btn" data-action="edit-target" title="Edit this exercise">✏️ Edit</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // --- Routine Event Handling (Delegation) ---
+    document.getElementById('routine-list').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const itemEl = e.target.closest('.routine-item');
+      if (!itemEl) return;
+      const exId = itemEl.dataset.id;
+      const ex = state.exercises.find(x => x.id === exId);
+      if (!ex) return;
+
+      const action = btn.dataset.action;
+      const target = getEffectiveTarget(ex);
+
+      if (action === 'add') {
+        const amt = parseInt(btn.dataset.amount, 10) || 10;
+        ex.doneToday = (ex.doneToday || 0) + amt;
+        audio.playClick();
+        saveState(state);
+        renderTodayRoutine();
+        checkAllCompleted();
+      } else if (action === 'sub') {
+        const amt = parseInt(btn.dataset.amount, 10) || 10;
+        ex.doneToday = Math.max(0, (ex.doneToday || 0) - amt);
+        audio.playClick();
+        saveState(state);
+        renderTodayRoutine();
+      } else if (action === 'full') {
+        ex.doneToday = target;
+        audio.playChime();
+        saveState(state);
+        renderTodayRoutine();
+        showToast(`🎯 ${ex.name} Completed (${target} ${ex.unit})!`);
+        updateCoachQuote(`"Superb execution on ${ex.name}! Keep that violent momentum!"`);
+        checkAllCompleted();
+      } else if (action === 'edit-target') {
+        audio.playClick();
+        openEditInline(ex.id);
+      }
+    });
+
+    // --- Check if All Exercises Completed ---
+    function checkAllCompleted() {
+      const active = state.exercises.filter(e => e.active);
+      if (active.length === 0) return;
+      const allDone = active.every(e => (e.doneToday || 0) >= getEffectiveTarget(e));
+      if (allDone) {
+        audio.playLevelUp();
+        updateCoachQuote('"ALL ROUTINES CRUSHED! The System recognizes your supreme mastery today!"');
+      }
+    }
+
+    // --- Complete All Button ---
+    document.getElementById('btn-complete-all').addEventListener('click', () => {
+      audio.playChime();
+      const active = state.exercises.filter(e => e.active);
+      if (active.length === 0) {
+        showToast('No active exercises in routine!');
+        return;
+      }
+
+      active.forEach(ex => {
+        ex.doneToday = getEffectiveTarget(ex);
+      });
+
+      const summaryText = active.map(e => `${getEffectiveTarget(e)} ${e.name}`).join(', ');
+
+      // Add workout record
+      const record = {
+        id: Date.now(),
+        category: 'Calisthenics',
+        title: `Daily Sporty Routine: ${summaryText}`,
+        amount: `${active.length} exercises`,
+        duration: '35m',
+        coins: 15,
+        xp: 35,
+        date: new Date().toLocaleDateString()
+      };
+
+      state.history.unshift(record);
+      state.xp += 35;
+
+      // Handle Auto-progression (+5% after 3 completed days)
+      if (state.sportySettings.autoProgression) {
+        state.sportySettings.progressionStreak = (state.sportySettings.progressionStreak || 0) + 1;
+        if (state.sportySettings.progressionStreak >= 3) {
+          state.sportySettings.progressionStreak = 0;
+          // Apply 5% target increase to all exercises
+          state.exercises.forEach(ex => {
+            ex.target = Math.max(ex.target + 1, Math.round(ex.target * 1.05));
+          });
+          audio.playLevelUp();
+          showToast('🔥 AUTO-PROGRESSION! All targets increased by +5%! Next tier reached!');
+        } else {
+          showToast(`🏆 Routine Finished! Streak: ${state.sportySettings.progressionStreak}/3 for next +5% boost!`);
+        }
+      } else {
+        showToast('🏆 Daily Routine Finished! +15 Coins & +35 XP Awarded!');
+      }
+
+      saveState(state);
+      updateHunterStats();
+      renderTodayRoutine();
+      renderHistory();
+      updateCoachQuote('"EVERY ROUTINE CONQUERED! Outstanding work, Hunter. Rest and re-hydrate!"');
+
+      // Electron IPC Broadcast
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'SPORT_WORKOUT_LOGGED', workout: record }, '*');
+      }
+    });
+
+    // --- Short on Time Toggle ---
+    document.getElementById('btn-toggle-short-time').addEventListener('click', () => {
+      audio.playClick();
+      state.sportySettings.shortOnTime = !state.sportySettings.shortOnTime;
+      saveState(state);
+      renderTodayRoutine();
+      if (state.sportySettings.shortOnTime) {
+        showToast('⏱️ Short on time (50%) ACTIVE! Targets halved for quick workout.');
+        updateCoachQuote('"Short on time? Zero excuses. Cut the rest and explode with 50% target intensity!"');
+      } else {
+        showToast('Full workout routine restored (100% targets).');
+        updateCoachQuote();
+      }
+    });
+
+    // --- Reset Today's Count ---
+    document.getElementById('btn-reset-routine-today').addEventListener('click', () => {
+      if (confirm("Reset today's recorded workout progress to 0?")) {
+        audio.playClick();
+        state.exercises.forEach(e => { e.doneToday = 0; });
+        saveState(state);
+        renderTodayRoutine();
+        showToast("Today's workout progress reset to 0.");
+      }
+    });
+
+    // --- Rest Timer Shortcuts from Routine ---
+    document.getElementById('shortcut-rest-60').addEventListener('click', () => {
+      setAndStartTimer(60);
+    });
+
+    document.getElementById('shortcut-rest-90').addEventListener('click', () => {
+      setAndStartTimer(90);
+    });
+
+    // --- HYDRATION TRACKER ENGINE ---
+    function renderHydration() {
+      const cur = state.water.currentMl || 0;
+      const target = state.water.targetMl || 2700;
+      const glassSize = state.water.glassSizeMl || 250;
+      const totalGlasses = (target / glassSize).toFixed(0);
+      const curGlasses = (cur / glassSize).toFixed(1);
+      const pct = Math.min(100, Math.round((cur / target) * 100));
+
+      document.getElementById('water-display-ml').textContent = `${cur.toLocaleString()} / ${target.toLocaleString()} ml`;
+      document.getElementById('water-display-glasses').textContent = `${curGlasses} of ${totalGlasses} glasses (${pct}%)`;
+      document.getElementById('water-bar-fill').style.width = pct + '%';
+      document.getElementById('water-goal-text').textContent = `Daily Target: ${target.toLocaleString()} ml`;
+      document.getElementById('water-calibrated-label').textContent = `Calibrated: ${state.sportySettings.bodyWeight || 75} kg · ${state.sportySettings.bodyHeight || 186} cm`;
+    }
+
+    document.querySelectorAll('.btn-water').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ml = parseInt(btn.dataset.ml, 10);
+        audio.playWater();
+        const prev = state.water.currentMl || 0;
+        state.water.currentMl = Math.max(0, prev + ml);
+        saveState(state);
+        renderHydration();
+
+        const target = state.water.targetMl || 2700;
+        if (state.water.currentMl >= target && prev < target) {
+          audio.playChime();
+          showToast('💧 Daily Hydration Target Reached (2,700 ml)! Body fully energized!');
+        } else if (ml > 0) {
+          showToast(`💧 +${ml} ml logged!`);
+        }
+      });
+    });
+
+    document.getElementById('btn-reset-water').addEventListener('click', () => {
+      audio.playClick();
+      state.water.currentMl = 0;
+      saveState(state);
+      renderHydration();
+      showToast('Hydration tracker reset to 0 ml.');
+    });
+
+    document.getElementById('btn-calibrate-water').addEventListener('click', () => {
+      audio.playClick();
+      const newGoal = prompt('Enter your daily hydration target in ml:', state.water.targetMl || 2700);
+      if (newGoal && !isNaN(parseInt(newGoal, 10))) {
+        state.water.targetMl = parseInt(newGoal, 10);
+        saveState(state);
+        renderHydration();
+        showToast(`Water target updated to ${state.water.targetMl} ml.`);
+      }
+    });
+
+    // --- MANAGE EXERCISES MODAL LOGIC ---
+    const manageModal = document.getElementById('modal-manage-exercises');
+
+    function openManageModal() {
+      audio.playClick();
+      renderCatalogList();
+      document.getElementById('modal-inline-edit-box').style.display = 'none';
+      manageModal.classList.add('open');
+    }
+
+    function closeManageModal() {
+      audio.playClick();
+      manageModal.classList.remove('open');
+      renderTodayRoutine();
+    }
+
+    document.getElementById('btn-open-manage-modal').addEventListener('click', openManageModal);
+    document.getElementById('btn-quick-add-modal').addEventListener('click', openManageModal);
+    document.getElementById('btn-close-manage-modal').addEventListener('click', closeManageModal);
+
+    function renderCatalogList() {
+      const container = document.getElementById('modal-catalog-list');
+      container.innerHTML = state.exercises.map(ex => `
+        <div class="catalog-item ${ex.active ? '' : 'disabled'}" data-id="${ex.id}">
+          <div class="catalog-left">
+            <label class="toggle-switch" title="Toggle active in daily workout">
+              <input type="checkbox" class="cat-toggle" ${ex.active ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="catalog-info">
+              <h4>${ex.name}</h4>
+              <span>Target: ${ex.target} ${ex.unit}</span>
+            </div>
+          </div>
+          <div class="catalog-actions">
+            <button class="btn-cat-action" data-action="edit">✏️ Edit</button>
+            <button class="btn-cat-action delete" data-action="delete">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Modal Catalog Event Delegation (Toggle, Edit, Delete)
+    document.getElementById('modal-catalog-list').addEventListener('click', (e) => {
+      const itemEl = e.target.closest('.catalog-item');
+      if (!itemEl) return;
+      const exId = itemEl.dataset.id;
+      const ex = state.exercises.find(x => x.id === exId);
+      if (!ex) return;
+
+      // Checkbox Toggle
+      if (e.target.classList.contains('cat-toggle')) {
+        ex.active = e.target.checked;
+        audio.playClick();
+        saveState(state);
+        renderCatalogList();
+        renderTodayRoutine();
+        return;
+      }
+
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const action = btn.dataset.action;
+
+      if (action === 'edit') {
+        audio.playClick();
+        openEditInline(ex.id);
+      } else if (action === 'delete') {
+        if (confirm(`Delete "${ex.name}" from your workout catalog?`)) {
+          audio.playClick();
+          state.exercises = state.exercises.filter(x => x.id !== ex.id);
+          saveState(state);
+          renderCatalogList();
+          renderTodayRoutine();
+          showToast(`Deleted ${ex.name}.`);
+        }
+      }
+    });
+
+    // Inline Editor inside Modal
+    function openEditInline(exId) {
+      const ex = state.exercises.find(x => x.id === exId);
+      if (!ex) return;
+      manageModal.classList.add('open');
+
+      const editBox = document.getElementById('modal-inline-edit-box');
+      editBox.style.display = 'block';
+      editBox.innerHTML = `
+        <div class="catalog-edit-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="font-size: 14px; font-weight: 800; color: #fff;">✏️ Edit Exercise: ${ex.name}</h4>
+            <button class="preset-btn" id="btn-cancel-edit">✕ Cancel</button>
+          </div>
+
+          <div class="form-row" style="margin-bottom: 6px;">
+            <div class="input-group" style="grid-column: span 2;">
+              <label>Exercise Title</label>
+              <input type="text" id="edit-ex-name" value="${ex.name}">
+            </div>
+            <div class="input-group">
+              <label>Target Amount</label>
+              <input type="number" id="edit-ex-target" value="${ex.target}" min="1">
+            </div>
+            <div class="input-group">
+              <label>Unit</label>
+              <select id="edit-ex-unit">
+                <option value="reps" ${ex.unit === 'reps' ? 'selected' : ''}>reps</option>
+                <option value="1" ${ex.unit === '1' ? 'selected' : ''}>1</option>
+                <option value="sets" ${ex.unit === 'sets' ? 'selected' : ''}>sets</option>
+                <option value="kg" ${ex.unit === 'kg' ? 'selected' : ''}>kg</option>
+                <option value="min" ${ex.unit === 'min' ? 'selected' : ''}>min</option>
+                <option value="km" ${ex.unit === 'km' ? 'selected' : ''}>km</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="quick-inc-row">
+            <span style="font-size: 11px; color: var(--text-muted); align-self: center; margin-right: 4px;">Quick Adjust:</span>
+            <button class="btn-inc" data-inc="pct5">+5%</button>
+            <button class="btn-inc" data-inc="pct10">+10%</button>
+            <button class="btn-inc" data-inc="minus5">-5%</button>
+            <button class="btn-inc" data-inc="add5">+5 reps</button>
+            <button class="btn-inc" data-inc="sub5">-5 reps</button>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <button class="btn-rep complete" id="btn-save-inline-edit" style="flex: 1; justify-content: center; padding: 10px;">
+              💾 Save Changes
+            </button>
+          </div>
+        </div>
+      `;
+
+      editBox.scrollIntoView({ behavior: 'smooth' });
+
+      // Quick Adjust Buttons
+      editBox.querySelectorAll('.btn-inc').forEach(incBtn => {
+        incBtn.addEventListener('click', () => {
+          audio.playClick();
+          const targetInput = document.getElementById('edit-ex-target');
+          let val = parseInt(targetInput.value, 10) || ex.target;
+          const type = incBtn.dataset.inc;
+          if (type === 'pct5') val = Math.round(val * 1.05);
+          else if (type === 'pct10') val = Math.round(val * 1.10);
+          else if (type === 'minus5') val = Math.max(1, Math.round(val * 0.95));
+          else if (type === 'add5') val += 5;
+          else if (type === 'sub5') val = Math.max(1, val - 5);
+          targetInput.value = val;
+        });
+      });
+
+      document.getElementById('btn-cancel-edit').addEventListener('click', () => {
+        editBox.style.display = 'none';
+      });
+
+      document.getElementById('btn-save-inline-edit').addEventListener('click', () => {
+        audio.playClick();
+        const newName = document.getElementById('edit-ex-name').value.trim();
+        const newTarget = parseInt(document.getElementById('edit-ex-target').value, 10);
+        const newUnit = document.getElementById('edit-ex-unit').value;
+
+        if (!newName || isNaN(newTarget) || newTarget < 1) {
+          alert('Please enter a valid title and target amount.');
+          return;
+        }
+
+        ex.name = newName;
+        ex.target = newTarget;
+        ex.unit = newUnit;
+
+        saveState(state);
+        editBox.style.display = 'none';
+        renderCatalogList();
+        renderTodayRoutine();
+        showToast(`Updated ${ex.name} (Target: ${ex.target} ${ex.unit}).`);
+      });
+    }
+
+    // Add New Exercise to Catalog
+    document.getElementById('btn-add-new-ex').addEventListener('click', () => {
+      audio.playClick();
+      const nameInput = document.getElementById('new-ex-name');
+      const targetInput = document.getElementById('new-ex-target');
+      const unitInput = document.getElementById('new-ex-unit');
+
+      const name = nameInput.value.trim();
+      const target = parseInt(targetInput.value, 10);
+      const unit = unitInput.value;
+
+      if (!name || isNaN(target) || target < 1) {
+        alert('Please provide a name and target for the exercise.');
+        return;
+      }
+
+      const newId = 'ex_' + Date.now();
+      state.exercises.push({
+        id: newId,
+        name,
+        target,
+        unit,
+        active: true,
+        doneToday: 0
+      });
+
+      saveState(state);
+      nameInput.value = '';
+      targetInput.value = '50';
+
+      renderCatalogList();
+      renderTodayRoutine();
+      showToast(`➕ Added "${name}" (${target} ${unit}) to catalog!`);
+    });
+
+    // --- SETTINGS & COACH MODAL ---
+    const settingsModal = document.getElementById('modal-sporty-settings');
+
+    function openSettingsModal() {
+      audio.playClick();
+      document.getElementById('setting-coach-persona').value = state.sportySettings.coach || 'beast';
+      document.getElementById('setting-auto-progression').checked = !!state.sportySettings.autoProgression;
+      document.getElementById('setting-water-target').value = state.water.targetMl || 2700;
+      document.getElementById('setting-glass-size').value = state.water.glassSizeMl || 250;
+      document.getElementById('setting-body-weight').value = state.sportySettings.bodyWeight || 75;
+      document.getElementById('setting-body-height').value = state.sportySettings.bodyHeight || 186;
+      document.getElementById('setting-reminder-time').value = state.sportySettings.reminderTime || '07:00';
+      settingsModal.classList.add('open');
+    }
+
+    function closeSettingsModal() {
+      audio.playClick();
+      settingsModal.classList.remove('open');
+    }
+
+    document.getElementById('btn-open-settings-modal').addEventListener('click', openSettingsModal);
+    document.getElementById('btn-close-settings-modal').addEventListener('click', closeSettingsModal);
+
+    document.getElementById('btn-save-settings').addEventListener('click', () => {
+      audio.playChime();
+      state.sportySettings.coach = document.getElementById('setting-coach-persona').value;
+      state.sportySettings.autoProgression = document.getElementById('setting-auto-progression').checked;
+      state.water.targetMl = parseInt(document.getElementById('setting-water-target').value, 10) || 2700;
+      state.water.glassSizeMl = parseInt(document.getElementById('setting-glass-size').value, 10) || 250;
+      state.sportySettings.bodyWeight = parseFloat(document.getElementById('setting-body-weight').value) || 75;
+      state.sportySettings.bodyHeight = parseInt(document.getElementById('setting-body-height').value, 10) || 186;
+      state.sportySettings.reminderTime = document.getElementById('setting-reminder-time').value || '07:00';
+
+      saveState(state);
+      updateCoachQuote();
+      updateHunterStats();
+      renderHydration();
+      closeSettingsModal();
+      showToast('⚙️ Sporty Settings Saved!');
+    });
+
+    // --- PR Hall of Fame ---
     function renderPRs() {
       const container = document.getElementById('pr-container');
       container.innerHTML = state.prs.map(pr => `
@@ -1125,13 +2654,6 @@
       `).join('');
     }
 
-    function showToast(text) {
-      const toast = document.getElementById('toast');
-      document.getElementById('toast-text').textContent = text;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 2800);
-    }
-
     // --- Category Selector ---
     let currentCat = 'gym';
     const catPresets = {
@@ -1158,7 +2680,7 @@
       document.getElementById('exercise-duration').value = preset.duration;
     });
 
-    // --- Workout Form Submit ---
+    // --- Custom Workout Form Submit ---
     document.getElementById('workout-form').addEventListener('submit', (e) => {
       e.preventDefault();
       audio.playChime();
@@ -1209,6 +2731,20 @@
       const fraction = timerRemaining / timerTotal;
       const offset = circleCircumference - (fraction * circleCircumference);
       progressEl.style.strokeDashoffset = offset;
+    }
+
+    function setAndStartTimer(seconds) {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      timerTotal = seconds;
+      timerRemaining = seconds;
+      startBtn.textContent = 'START REST';
+      statusEl.textContent = 'REST READY';
+      updateTimerUI();
+      document.getElementById('rest-timer-section').scrollIntoView({ behavior: 'smooth' });
+      startTimer();
     }
 
     function startTimer() {
@@ -1279,7 +2815,7 @@
       soundToggle.textContent = audio.enabled ? '🔊' : '🔇';
     });
 
-    // --- Update PR Modal Prompt ---
+    // Update PR Button
     document.getElementById('btn-add-pr').addEventListener('click', () => {
       audio.playClick();
       const ex = prompt('Enter exercise or sport for PR (e.g. Bench Press, 5km Run, Squat):', 'Bench Press');
@@ -1302,7 +2838,7 @@
       showToast(`🏆 New PR Saved for ${ex}! +50 XP`);
     });
 
-    // --- Telegram Command Copy Helper ---
+    // Telegram Command Copy Helper
     document.querySelectorAll('.tg-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         audio.playClick();
@@ -1315,8 +2851,11 @@
       });
     });
 
-    // Initialize UI
+    // --- Initialize App ---
     updateHunterStats();
+    updateCoachQuote();
+    renderTodayRoutine();
+    renderHydration();
     renderPRs();
     renderHistory();
     updateTimerUI();
