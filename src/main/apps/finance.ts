@@ -1,7 +1,7 @@
 // Hosts Finance Helper inside Life System. The page and its desktop helpers
 // (folder sync, Drive, Binance, Telegram) are Finance Helper's own files in
 // apps/finance; this replaces only its main.cjs, wiring the same IPC calls.
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -153,6 +153,21 @@ export function setupFinance(appsDir: string, onShow: () => void): FinanceHost {
     }
   }
   const savePrefs = (p: Record<string, unknown>) => writeFileSync(prefsFile, JSON.stringify({ ...prefs(), ...p }))
+
+  // Ensure syncFolder is initialized if available
+  if (!prefs().syncFolder) {
+    const standalonePrefs = join(app.getPath('appData'), 'finance-helper-app', 'prefs.json')
+    try {
+      if (existsSync(standalonePrefs)) {
+        const sp = JSON.parse(readFileSync(standalonePrefs, 'utf8'))
+        if (sp.syncFolder) savePrefs(sp)
+      }
+    } catch {}
+    if (!prefs().syncFolder && existsSync('G:\\My Drive\\Finance\\Backup')) {
+      savePrefs({ background: true, atLogin: true, trayTold: true, syncFolder: 'G:\\My Drive\\Finance\\Backup' })
+    }
+  }
+
   const folder = req('./folder.cjs').createFolderSync({ getPref: (k: string) => prefs()[k], setPref: (k: string, v: unknown) => savePrefs({ [k]: v }), dialog, shell, win: () => null })
   handle('folder-status', () => folder.status())
   handle('folder-use', (p: string) => folder.use(String(p)))
@@ -216,7 +231,23 @@ export function setupFinance(appsDir: string, onShow: () => void): FinanceHost {
       reader = new BrowserWindow({ show: false, webPreferences: { partition: FINANCE_PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false } })
       await reader.loadURL('app://finance/__life-system-reader')
     }
-    return reader.webContents.executeJavaScript("localStorage.getItem('finance-helper.state')")
+    let state = await reader.webContents.executeJavaScript("localStorage.getItem('finance-helper.state')")
+    if (!state || state === 'null') {
+      try {
+        const pulled = folder.pull()
+        if (pulled) {
+          const parsed = JSON.parse(pulled)
+          if (parsed && parsed.data && Array.isArray(parsed.data.tx)) {
+            const serialized = JSON.stringify(parsed.data)
+            await reader.webContents.executeJavaScript(`localStorage.setItem('finance-helper.state', ${JSON.stringify(serialized)})`)
+            state = serialized
+          }
+        }
+      } catch (e) {
+        console.error('Failed to hydrate finance state from folder sync', e)
+      }
+    }
+    return state
   }
 
   return {

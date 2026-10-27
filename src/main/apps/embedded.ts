@@ -2,7 +2,7 @@
 // from apps/ in their own storage partitions; Waky runs from your installed
 // Waky folder so its alarm and wake task keep working.
 import { spawn } from 'node:child_process'
-import { cpSync, existsSync, readdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -37,10 +37,34 @@ const partitionDir = (partition: string) => join(app.getPath('userData'), 'Parti
  */
 function copyLocalStorage(fromProfile: string, partition: string): 'copied' | 'exists' | 'missing' {
   const target = join(partitionDir(partition), 'Local Storage')
-  if (existsSync(target)) return 'exists'
   const source = join(fromProfile, 'Local Storage')
   if (!existsSync(source)) return 'missing'
-  cpSync(source, target, { recursive: true, filter: (p) => !p.endsWith('LOCK') })
+
+  if (existsSync(target)) {
+    const targetLevelDb = join(target, 'leveldb')
+    const sourceLevelDb = join(source, 'leveldb')
+    let shouldOverwrite = false
+    try {
+      if (existsSync(sourceLevelDb)) {
+        const srcFiles = readdirSync(sourceLevelDb)
+        const srcManifest = srcFiles.find((f) => f.startsWith('MANIFEST'))
+        const srcManifestSize = srcManifest ? statSync(join(sourceLevelDb, srcManifest)).size : 0
+
+        const tgtFiles = existsSync(targetLevelDb) ? readdirSync(targetLevelDb) : []
+        const tgtManifest = tgtFiles.find((f) => f.startsWith('MANIFEST'))
+        const tgtManifestSize = tgtManifest ? statSync(join(targetLevelDb, tgtManifest)).size : 0
+
+        if (srcManifestSize > 5000 && tgtManifestSize < 1000) {
+          shouldOverwrite = true
+        }
+      }
+    } catch {
+      // ignore
+    }
+    if (!shouldOverwrite) return 'exists'
+  }
+
+  cpSync(source, target, { recursive: true, force: true, filter: (p) => !p.endsWith('LOCK') })
   return 'copied'
 }
 
@@ -51,8 +75,29 @@ export interface MigrationResult {
 
 export function migrateStandaloneData(): MigrationResult {
   const home = homedir()
+  const financeProfile = join(app.getPath('appData'), 'finance-helper-app')
+  const financeAppDir = join(app.getPath('userData'), 'apps', 'finance')
+
+  try {
+    if (existsSync(financeProfile)) {
+      mkdirSync(financeAppDir, { recursive: true })
+      const prefsSrc = join(financeProfile, 'prefs.json')
+      const prefsDst = join(financeAppDir, 'prefs.json')
+      if (existsSync(prefsSrc) && (!existsSync(prefsDst) || statSync(prefsDst).size === 0)) {
+        cpSync(prefsSrc, prefsDst)
+      }
+      const tgSrc = join(financeProfile, 'telegram.bin')
+      const tgDst = join(financeAppDir, 'telegram.bin')
+      if (existsSync(tgSrc) && (!existsSync(tgDst) || statSync(tgDst).size === 0)) {
+        cpSync(tgSrc, tgDst)
+      }
+    }
+  } catch (e) {
+    console.error('Failed to copy finance app preferences/tokens:', e)
+  }
+
   return {
-    finance: copyLocalStorage(join(app.getPath('appData'), 'finance-helper-app'), FINANCE_PARTITION),
+    finance: copyLocalStorage(financeProfile, FINANCE_PARTITION),
     man: copyLocalStorage(join(home, '.gemini', 'antigravity', 'scratch', 'ManDesktop', 'profile', 'Default'), MAN_PARTITION)
   }
 }

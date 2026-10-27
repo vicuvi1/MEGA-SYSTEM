@@ -23,7 +23,10 @@ export function defaultCandidates(home: string, driveRoot: string): Candidates {
   const scratch = join(home, '.gemini', 'antigravity', 'scratch')
   return {
     waky: [join(scratch, 'Waky-', 'data', 'waky.json'), join(home, 'Projects', 'Waky-', 'data', 'waky.json'), join(home, 'Waky-', 'data', 'waky.json')],
-    finance: [join(driveRoot, 'Finance Helper', 'finance-helper-sync.json')],
+    finance: [
+      join(driveRoot, 'Finance', 'Backup', 'Finance Helper', 'finance-helper-sync.json'),
+      join(driveRoot, 'Finance Helper', 'finance-helper-sync.json')
+    ],
     man: [join(scratch, 'ManDesktop', 'profile', 'Default', 'Local Storage', 'leveldb'), join(scratch, 'ManApp', 'desktop', 'profile', 'Default', 'Local Storage', 'leveldb')]
   }
 }

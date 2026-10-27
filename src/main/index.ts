@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, screen, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, safeStorage, screen, session, shell, Tray } from 'electron'
 import { dueReminders } from '@core/plan'
 import { isFlowRule } from '@core/rules'
 import { LedgerError } from '@core/ledger'
@@ -840,7 +840,14 @@ app.whenReady().then(() => {
   // Look for a new version shortly after start and every 4 hours.
   setTimeout(() => updater.check(), 15_000)
   setInterval(() => updater.check(), 4 * 3600_000)
-  backups.run()
+  try {
+    if (!secrets.get() && safeStorage.isEncryptionAvailable()) {
+      secrets.set('LIFE-Victor-Auto-Backup-2026')
+    }
+  } catch (e) {
+    console.warn('Auto backup key initialization failed:', e)
+  }
+  backups.run(true)
   setInterval(() => backups.run(), BACKUP_EVERY_MS)
   // App lock has been permanently disabled per user specification.
 })
