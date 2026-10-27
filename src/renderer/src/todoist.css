@@ -234,15 +234,17 @@
   color: #ffffff;
 }
 
-/* Kanban Board Container (Horizontal Scroll) */
+/* Kanban Board Container (Horizontal Scroll with Flex Lanes) */
 .todoist-board-container {
   flex: 1;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 20px 24px;
+  padding: 16px 20px;
   display: flex;
   gap: 16px;
-  align-items: flex-start;
+  align-items: stretch;
+  height: calc(100vh - 145px);
+  min-height: 520px;
 }
 
 .todoist-board-container::-webkit-scrollbar {
@@ -252,29 +254,47 @@
   background: rgba(0, 0, 0, 0.2);
 }
 .todoist-board-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
   border-radius: 4px;
 }
 .todoist-board-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.3);
 }
 
-/* Board Column */
+/* Board Column Lane (Full-height Surface) */
 .todoist-column {
-  width: 300px;
-  min-width: 300px;
-  max-width: 300px;
+  flex: 1 1 300px;
+  min-width: 280px;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
-  max-height: 100%;
-  background: transparent;
+  background: rgba(18, 24, 38, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  height: 100%;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.todoist-column:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.todoist-column.drag-over {
+  border-color: #00d2ff !important;
+  background: rgba(0, 210, 255, 0.07) !important;
+  box-shadow: 0 0 24px rgba(0, 210, 255, 0.2) !important;
 }
 
 .todoist-col-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 4px 10px;
+  padding: 2px 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin-bottom: 12px;
 }
 
 .todoist-col-title {
@@ -287,18 +307,22 @@
 }
 
 .todoist-col-count {
-  font-size: 12px;
-  color: #777777;
-  font-weight: 500;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 12px;
 }
 
 .todoist-col-cards {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
   padding-right: 4px;
-  max-height: calc(100vh - 220px);
+  min-height: 80px;
 }
 
 .todoist-col-cards::-webkit-scrollbar {
@@ -311,9 +335,9 @@
 
 /* Task Card */
 .todoist-card {
-  background: rgba(24, 29, 41, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
+  background: rgba(24, 32, 49, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -325,9 +349,9 @@
 }
 
 .todoist-card:hover {
-  background: rgba(30, 38, 54, 0.98);
-  border-color: rgba(0, 210, 255, 0.35);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 12px rgba(0, 210, 255, 0.08);
+  background: rgba(30, 42, 66, 0.98);
+  border-color: rgba(0, 210, 255, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 14px rgba(0, 210, 255, 0.12);
   transform: translateY(-2px);
 }
 
@@ -942,4 +966,154 @@
   background: #00d2ff;
   color: #050811;
   border-color: #00d2ff;
+}
+
+
+/* Add Card Button (Ghost Dashed Card) */
+.todoist-add-card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+  color: #8899aa;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: auto;
+}
+
+.todoist-add-card-btn:hover {
+  border-color: rgba(0, 210, 255, 0.5);
+  color: #38bdf8;
+  background: rgba(0, 210, 255, 0.06);
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.1);
+}
+
+/* Solo Leveling Tactical Context Menu */
+.task-context-menu {
+  position: fixed;
+  z-index: 99999;
+  width: 240px;
+  background: rgba(11, 16, 28, 0.96);
+  border: 1px solid rgba(0, 210, 255, 0.35);
+  border-radius: 12px;
+  padding: 8px 6px;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 210, 255, 0.18);
+  backdrop-filter: blur(18px);
+  animation: cmFadeIn 0.12s ease-out;
+}
+
+@keyframes cmFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.cm-header {
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+}
+
+.cm-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.cm-sub {
+  font-size: 10px;
+  color: #38bdf8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.cm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+
+.cm-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+.cm-item.danger {
+  color: #f87171;
+  font-weight: 600;
+}
+
+.cm-item.danger:hover {
+  background: rgba(239, 68, 68, 0.22);
+  color: #ef4444;
+}
+
+.cm-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 5px 0;
+}
+
+.cm-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px 2px;
+}
+
+.cm-pills-row {
+  display: flex;
+  gap: 4px;
+  padding: 3px 6px 4px;
+}
+
+.cm-mini-pill {
+  flex: 1;
+  padding: 4px 2px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.cm-mini-pill:hover {
+  background: rgba(0, 210, 255, 0.15);
+  border-color: rgba(0, 210, 255, 0.4);
+  color: #fff;
+}
+
+.cm-mini-pill.active {
+  background: rgba(0, 210, 255, 0.25);
+  border-color: #00d2ff;
+  color: #fff;
 }

@@ -139,6 +139,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
   const [draftRepeat, setDraftRepeat] = useState<Repeat>('none')
   const [draftCategory, setDraftCategory] = useState<string>('university')
   const [editingTask, setEditingTask] = useState<TaskView | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: TaskView } | null>(null)
 
   // Real projects (excluding pseudo-categories like 'today' or 'tomorrow')
   const realProjects = useMemo(() => {
@@ -200,6 +201,109 @@ export function Tasks({ state, onState, onWallet }: Props) {
     setDecomposeModal(null)
     toast(`⚔️ Added ${subtasks.length} subtasks to ${catById[cat]?.label || cat}!`, 'good')
     soundSuccess()
+  }
+
+  // Context Menu & Quick Actions (Ultimate Flexibility)
+  async function handleDeleteTask(taskId: number) {
+    soundMechanicalClick()
+    const next = await life.tasks.archive(taskId)
+    onState(next)
+    toast('🗑️ Quest deleted', 'good')
+  }
+
+  async function handleDuplicateTask(task: TaskView) {
+    soundTick()
+    await life.tasks.save({
+      title: `${task.title} (Copy)`,
+      category: task.category,
+      priority: task.priority,
+      due: task.due,
+      repeat: task.repeat,
+      weekdays: task.weekdays,
+      coins: task.coins,
+      xp: task.xp,
+      notes: task.notes ?? null
+    })
+    const next = await life.tasks.state()
+    onState(next)
+    toast('📋 Quest duplicated', 'good')
+  }
+
+  async function handleMoveStatus(task: TaskView, colId: 'backlog' | 'todo' | 'inprogress' | 'done') {
+    soundMechanicalClick()
+    if (colId === 'done') {
+      await life.tasks.complete(task.id)
+      const next = await life.tasks.state()
+      onState(next)
+      onWallet()
+      toast('✅ Quest completed (+Coins)', 'good')
+      return
+    }
+    let nextPriority = task.priority
+    let nextDue = task.due
+    if (colId === 'inprogress') {
+      nextPriority = 1
+      nextDue = todayStr
+    } else if (colId === 'todo') {
+      nextPriority = (task.priority === 1 ? 2 : task.priority) as 1 | 2 | 3
+      nextDue = todayStr
+    } else if (colId === 'backlog') {
+      nextPriority = 3
+      nextDue = null
+    }
+    await life.tasks.save({
+      id: task.id,
+      title: task.title,
+      category: task.category,
+      priority: nextPriority,
+      due: nextDue,
+      repeat: task.repeat,
+      weekdays: task.weekdays,
+      coins: task.coins,
+      xp: task.xp,
+      notes: task.notes ?? null
+    })
+    const next = await life.tasks.state()
+    onState(next)
+    toast(`Moved to ${colId.toUpperCase()}`, 'good')
+  }
+
+  async function handleSetPriority(task: TaskView, p: 1 | 2 | 3) {
+    soundTick()
+    await life.tasks.save({
+      id: task.id,
+      title: task.title,
+      category: task.category,
+      priority: p,
+      due: task.due,
+      repeat: task.repeat,
+      weekdays: task.weekdays,
+      coins: task.coins,
+      xp: task.xp,
+      notes: task.notes ?? null
+    })
+    const next = await life.tasks.state()
+    onState(next)
+    toast(`Priority set to P${p}`, 'good')
+  }
+
+  async function handleSetDueDate(task: TaskView, due: string | null) {
+    soundTick()
+    await life.tasks.save({
+      id: task.id,
+      title: task.title,
+      category: task.category,
+      priority: task.priority,
+      due,
+      repeat: task.repeat,
+      weekdays: task.weekdays,
+      coins: task.coins,
+      xp: task.xp,
+      notes: task.notes ?? null
+    })
+    const next = await life.tasks.state()
+    onState(next)
+    toast(due ? `Due ${due}` : 'Due date cleared', 'good')
   }
 
   // Filter tasks based on sidebar, search, priority, done
@@ -851,6 +955,15 @@ export function Tasks({ state, onState, onWallet }: Props) {
                         draggable
                         onDragStart={(e) => handleDragStart(e, t.id)}
                         onClick={() => setEditingTask(t)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            task: t
+                          })
+                        }}
                       >
                         <div className="todoist-card-top">
                           <button
@@ -897,6 +1010,26 @@ export function Tasks({ state, onState, onWallet }: Props) {
                               }}
                             >
                               ✨ AI
+                            </button>
+                            <button
+                              className="card-action-mini-btn"
+                              title="Edit Quest"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingTask(t)
+                              }}
+                            >
+                              <Icon name="edit" size={11} />
+                            </button>
+                            <button
+                              className="card-action-mini-btn danger"
+                              title="Delete Quest"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteTask(t.id)
+                              }}
+                            >
+                              <Icon name="trash" size={11} />
                             </button>
                           </div>
                         </div>
@@ -996,6 +1129,15 @@ export function Tasks({ state, onState, onWallet }: Props) {
                         className={`todoist-card ${t.done ? 'done' : ''}`}
                         style={{ padding: '8px 12px' }}
                         onClick={() => setEditingTask(t)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            task: t
+                          })
+                        }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1011,7 +1153,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
                             </span>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             {dateInfo && (
                               <span className={`todoist-date-badge ${dateInfo.kind}`}>
                                 {dateInfo.label}
@@ -1020,12 +1162,33 @@ export function Tasks({ state, onState, onWallet }: Props) {
                             <span className="todoist-reward-badge">+{t.coins} 🪙</span>
                             <button
                               className="card-action-mini-btn"
+                              title="AI Decompose"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 startDecomposition(t)
                               }}
                             >
                               ✨ AI
+                            </button>
+                            <button
+                              className="card-action-mini-btn"
+                              title="Edit Quest"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingTask(t)
+                              }}
+                            >
+                              <Icon name="edit" size={11} />
+                            </button>
+                            <button
+                              className="card-action-mini-btn danger"
+                              title="Delete Quest"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteTask(t.id)
+                              }}
+                            >
+                              <Icon name="trash" size={11} />
                             </button>
                           </div>
                         </div>
@@ -1108,6 +1271,48 @@ export function Tasks({ state, onState, onWallet }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Right-Click Context Menu */}
+      {contextMenu && (
+        <TaskContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          task={contextMenu.task}
+          onClose={() => setContextMenu(null)}
+          onDelete={() => {
+            handleDeleteTask(contextMenu.task.id)
+            setContextMenu(null)
+          }}
+          onToggle={() => {
+            handleToggle(contextMenu.task)
+            setContextMenu(null)
+          }}
+          onEdit={() => {
+            setEditingTask(contextMenu.task)
+            setContextMenu(null)
+          }}
+          onDecompose={() => {
+            startDecomposition(contextMenu.task)
+            setContextMenu(null)
+          }}
+          onDuplicate={() => {
+            handleDuplicateTask(contextMenu.task)
+            setContextMenu(null)
+          }}
+          onSetPriority={(p) => {
+            handleSetPriority(contextMenu.task, p)
+            setContextMenu(null)
+          }}
+          onMoveStatus={(status) => {
+            handleMoveStatus(contextMenu.task, status)
+            setContextMenu(null)
+          }}
+          onSetDue={(due) => {
+            handleSetDueDate(contextMenu.task, due)
+            setContextMenu(null)
+          }}
+        />
       )}
 
       {/* 7. AI Quest Decomposition Modal */}
@@ -1296,6 +1501,121 @@ export function Tasks({ state, onState, onWallet }: Props) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+// Tactical Solo Leveling Right-Click Context Menu
+function TaskContextMenu({
+  x,
+  y,
+  task,
+  onClose,
+  onDelete,
+  onToggle,
+  onEdit,
+  onDecompose,
+  onDuplicate,
+  onSetPriority,
+  onMoveStatus,
+  onSetDue
+}: {
+  x: number
+  y: number
+  task: TaskView
+  onClose: () => void
+  onDelete: () => void
+  onToggle: () => void
+  onEdit: () => void
+  onDecompose: () => void
+  onDuplicate: () => void
+  onSetPriority: (p: 1 | 2 | 3) => void
+  onMoveStatus: (status: 'backlog' | 'todo' | 'inprogress' | 'done') => void
+  onSetDue: (due: string | null) => void
+}) {
+  const menuRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  const left = Math.min(x, window.innerWidth - 250)
+  const top = Math.min(y, window.innerHeight - 380)
+
+  return (
+    <div
+      ref={menuRef}
+      className="task-context-menu"
+      style={{ left: `${left}px`, top: `${top}px` }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="cm-header">
+        <span className="cm-title">{task.title}</span>
+        <span className="cm-sub">{task.category} · {task.priority === 1 ? 'P1 Urgent' : task.priority === 2 ? 'P2 Medium' : 'P3 Normal'}</span>
+      </div>
+
+      <button className="cm-item danger" onClick={onDelete}>
+        <Icon name="trash" size={14} />
+        <span>Delete Quest</span>
+      </button>
+
+      <button className="cm-item" onClick={onEdit}>
+        <Icon name="edit" size={14} />
+        <span>Edit Quest Details</span>
+      </button>
+
+      <button className="cm-item" onClick={onToggle}>
+        <Icon name="check" size={14} />
+        <span>{task.done ? 'Mark Incomplete' : 'Mark as Complete (+Coins)'}</span>
+      </button>
+
+      <button className="cm-item" onClick={onDecompose}>
+        <Icon name="spark" size={14} />
+        <span>AI Subtask Decomposition</span>
+      </button>
+
+      <button className="cm-item" onClick={onDuplicate}>
+        <Icon name="tasks" size={14} />
+        <span>Duplicate Quest</span>
+      </button>
+
+      <div className="cm-divider" />
+
+      <div className="cm-section-label">Move Status:</div>
+      <div className="cm-pills-row">
+        <button className="cm-mini-pill" onClick={() => onMoveStatus('backlog')}>Backlog</button>
+        <button className="cm-mini-pill" onClick={() => onMoveStatus('todo')}>To Do</button>
+        <button className="cm-mini-pill" onClick={() => onMoveStatus('inprogress')}>In Progress</button>
+        <button className="cm-mini-pill" onClick={() => onMoveStatus('done')}>Done</button>
+      </div>
+
+      <div className="cm-section-label">Priority:</div>
+      <div className="cm-pills-row">
+        <button className={`cm-mini-pill ${task.priority === 1 ? 'active' : ''}`} style={{ color: '#ef4444' }} onClick={() => onSetPriority(1)}>🔴 P1</button>
+        <button className={`cm-mini-pill ${task.priority === 2 ? 'active' : ''}`} style={{ color: '#f59e0b' }} onClick={() => onSetPriority(2)}>🟠 P2</button>
+        <button className={`cm-mini-pill ${task.priority === 3 ? 'active' : ''}`} style={{ color: '#38bdf8' }} onClick={() => onSetPriority(3)}>🔵 P3</button>
+      </div>
+
+      <div className="cm-section-label">Due Date:</div>
+      <div className="cm-pills-row">
+        <button className="cm-mini-pill" onClick={() => onSetDue(new Date().toISOString().slice(0, 10))}>Today</button>
+        <button className="cm-mini-pill" onClick={() => onSetDue(new Date(Date.now() + 86400000).toISOString().slice(0, 10))}>Tomorrow</button>
+        <button className="cm-mini-pill" onClick={() => onSetDue(null)}>No Date</button>
+      </div>
     </div>
   )
 }

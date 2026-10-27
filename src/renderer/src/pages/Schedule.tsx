@@ -37,10 +37,21 @@ export function useTicker(on: boolean): number {
 export function Schedule({ state, rules, onState, onWallet }: Props) {
   const act = useAction()
   const [editing, setEditing] = useState<BlockInput | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; block: BlockView } | null>(null)
   const running = state.blocks.find((b) => b.status === 'running')
   const now = useTicker(!!running)
   const isToday = state.day === state.today
   const ruleCoins = (id: string | null) => rules.find((r) => r.id === id)?.coins ?? 0
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', (e) => e.key === 'Escape' && close())
+    return () => {
+      window.removeEventListener('mousedown', close)
+    }
+  }, [contextMenu])
 
   const go = (day: string) => act(() => life.schedule.state(day)).then((s) => s && onState(s))
 
@@ -112,7 +123,13 @@ export function Schedule({ state, rules, onState, onWallet }: Props) {
               const cost = ruleCoins(BLOCK_RULES[b.kind].skipped)
               const open = b.status === 'pending' || b.status === 'running'
               return (
-                <li key={b.id} className={`tl ${b.status}`} style={{ ['--c' as string]: k.color }}>
+                <li key={b.id} className={`tl ${b.status}`} style={{ ['--c' as string]: k.color }}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setContextMenu({ x: e.clientX, y: e.clientY, block: b })
+                    }}
+                  >
                   <div className="tl-time">
                     <b>{clock(b.startsAt)}</b>
                     <small>{clock(b.endsAt)}</small>
@@ -143,6 +160,21 @@ export function Schedule({ state, rules, onState, onWallet }: Props) {
                   <button className="icon-btn tl-edit" aria-label={`Edit ${b.title}`} title="Edit" onClick={() => setEditing({ ...b })}>
                     <Icon name="sliders" size={14} />
                   </button>
+                  <button
+                    className="icon-btn tl-edit"
+                    aria-label={`Delete ${b.title}`}
+                    title="Delete Block"
+                    style={{ color: '#ef4444' }}
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (b.id) {
+                        const s = await act(() => life.schedule.archive(b.id), 'Block removed')
+                        if (s) onState(await life.schedule.state(state.day))
+                      }
+                    }}
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
                 </li>
               )
             })}
@@ -167,6 +199,75 @@ export function Schedule({ state, rules, onState, onWallet }: Props) {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Schedule Block Context Menu */}
+      {contextMenu && (
+        <div
+          className="task-context-menu"
+          style={{
+            left: `${Math.min(contextMenu.x, window.innerWidth - 240)}px`,
+            top: `${Math.min(contextMenu.y, window.innerHeight - 260)}px`
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="cm-header">
+            <span className="cm-title">{contextMenu.block.title}</span>
+            <span className="cm-sub">{contextMenu.block.minutes} min · {contextMenu.block.status}</span>
+          </div>
+
+          <button
+            className="cm-item danger"
+            onClick={async () => {
+              const b = contextMenu.block
+              setContextMenu(null)
+              if (b.id) {
+                const s = await act(() => life.schedule.archive(b.id), 'Block removed')
+                if (s) onState(await life.schedule.state(state.day))
+              }
+            }}
+          >
+            <Icon name="trash" size={14} />
+            <span>Delete Schedule Block</span>
+          </button>
+
+          <button
+            className="cm-item"
+            onClick={() => {
+              setEditing({ ...contextMenu.block })
+              setContextMenu(null)
+            }}
+          >
+            <Icon name="sliders" size={14} />
+            <span>Edit Block Settings</span>
+          </button>
+
+          {isToday && contextMenu.block.status === 'pending' && (
+            <button
+              className="cm-item"
+              onClick={() => {
+                run('start', contextMenu.block)
+                setContextMenu(null)
+              }}
+            >
+              <Icon name="bolt" size={14} />
+              <span>Start Timer Now</span>
+            </button>
+          )}
+
+          {isToday && (contextMenu.block.status === 'pending' || contextMenu.block.status === 'running') && (
+            <button
+              className="cm-item"
+              onClick={() => {
+                run('skip', contextMenu.block)
+                setContextMenu(null)
+              }}
+            >
+              <Icon name="undo" size={14} />
+              <span>Skip Block</span>
+            </button>
+          )}
+        </div>
       )}
 
       {editing && (
