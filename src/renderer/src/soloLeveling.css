@@ -448,3 +448,433 @@
   font-family: var(--display) !important;
   letter-spacing: 0.04em !important;
 }
+
+/* ==========================================================================
+   SOLO LEVELING APEX CORNER PLAYER CARD & TODAY HUB
+   ========================================================================== */
+
+/* Top-Right Corner Apex Player Card */
+.player.solo-apex-player-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 14px 5px 8px;
+  background: linear-gradient(135deg, rgba(8, 18, 36, 0.95) 0%, rgba(4, 9, 20, 0.98) 100%);
+  border: 1px solid rgba(0, 210, 255, 0.45);
+  border-radius: 999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 16px rgba(0, 210, 255, 0.2), inset 0 0 10px rgba(0, 210, 255, 0.05);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-left: auto;
+}
+
+.player.solo-apex-player-card:hover {
+  border-color: #00d2ff;
+  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.6), 0 0 26px rgba(0, 210, 255, 0.45), inset 0 0 15px rgba(0, 210, 255, 0.1);
+  transform: translateY(-1.5px);
+}
+
+.player.solo-apex-player-card:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.apex-crest-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: radial-gradient(circle at 30% 30%, rgba(0, 210, 255, 0.25), rgba(8, 18, 36, 0.9));
+  border: 1.5px solid #00d2ff;
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);
+}
+
+.apex-crest-icon {
+  font-size: 13px;
+  filter: drop-shadow(0 0 4px #00d2ff);
+}
+
+.apex-crest-lvl {
+  font: 900 13px/1 var(--display);
+  color: #38bdf8;
+  letter-spacing: 0.04em;
+}
+
+.apex-xp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 135px;
+}
+
+.apex-rank-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.apex-grade-pill {
+  font-size: 9.5px;
+  font-weight: 900;
+  color: #040914;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.apex-rank-title {
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.04em;
+}
+
+.apex-xp-digits {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+.apex-micro-bar {
+  height: 5px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(0, 210, 255, 0.25);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.apex-micro-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5e9 0%, #00d2ff 60%, #38bdf8 100%);
+  box-shadow: 0 0 10px rgba(0, 210, 255, 0.7);
+  position: relative;
+  overflow: hidden;
+}
+
+.apex-micro-bar i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  animation: shimmer 2s infinite;
+}
+
+.apex-wallet {
+  padding-left: 12px;
+  border-left: 1px solid rgba(0, 210, 255, 0.22);
+  font: 800 16px var(--display);
+  color: #f5c84b;
+  display: flex;
+  align-items: center;
+}
+
+/* ==========================================================================
+   SLEEK 4-CARD METRIC STRIP (TODAY DASHBOARD)
+   ========================================================================== */
+.stats-strip-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1200px) {
+  .stats-strip-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-strip-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.metric-strip-card {
+  --accent: #00d2ff;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(20, 24, 34, 0.95), rgba(15, 18, 26, 0.95));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: all 0.2s ease;
+  min-width: 0;
+  text-align: left;
+}
+
+.metric-strip-card.clickable {
+  cursor: pointer;
+}
+
+.metric-strip-card:hover {
+  transform: translateY(-1.5px);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 15px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.metric-strip-card.hero-card {
+  --accent: var(--lime);
+  background: radial-gradient(120% 140% at 0% 0%, rgba(200, 241, 53, 0.12), transparent 60%), linear-gradient(180deg, rgba(20, 24, 34, 0.95), rgba(15, 18, 26, 0.95));
+  border-color: rgba(200, 241, 53, 0.35);
+}
+
+.metric-strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.metric-strip-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metric-strip-head svg {
+  color: var(--accent);
+}
+
+.metric-strip-chevron {
+  color: var(--faint);
+  font-size: 14px;
+  transition: transform 0.15s, color 0.15s;
+}
+
+.metric-strip-card:hover .metric-strip-chevron {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+.metric-strip-value {
+  font: 800 22px/1.2 var(--display);
+  color: #f8fafc;
+  margin: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metric-strip-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metric-strip-progress {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.metric-strip-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: #232938;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.metric-strip-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* ==========================================================================
+   UNIFIED DAILY QUEST COMMAND HUB (SOLO LEVELING HUD)
+   ========================================================================== */
+.unified-quest-hub {
+  margin-bottom: 20px;
+  padding: 18px 22px;
+}
+
+.quest-hub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.quest-hub-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.quest-hub-icon-shield {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(0, 210, 255, 0.15);
+  border: 1.5px solid #00d2ff;
+  color: #00d2ff;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  box-shadow: 0 0 14px rgba(0, 210, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.quest-hub-title {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #00d2ff;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.quest-hub-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+  display: block;
+}
+
+.quest-hub-overall-bar {
+  height: 5px;
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  border: 1px solid rgba(0, 210, 255, 0.2);
+}
+
+.quest-hub-overall-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5e9, #00d2ff);
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.6);
+  transition: width 0.3s ease;
+}
+
+/* Grid of Directives */
+.quest-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.quest-directive-card {
+  --c: #00d2ff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(8, 15, 30, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.quest-directive-card:hover {
+  border-color: color-mix(in srgb, var(--c) 40%, rgba(255, 255, 255, 0.1));
+  background: rgba(12, 22, 42, 0.85);
+}
+
+.quest-directive-card.done {
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.quest-directive-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.quest-directive-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--c) 15%, transparent);
+  color: var(--c);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.quest-directive-card.done .quest-directive-icon {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+}
+
+.quest-directive-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.quest-directive-info b {
+  font-size: 12.5px;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quest-directive-info small {
+  font-size: 10.5px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quest-directive-reward {
+  color: #f5c84b;
+  font-weight: 700;
+  font-size: 10px;
+}
+
+.quest-directive-btn {
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.quest-directive-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4ade80;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  flex-shrink: 0;
+}

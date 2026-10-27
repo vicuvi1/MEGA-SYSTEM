@@ -413,7 +413,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
           {lv && summary && (
             <div
-              className="player player-interactive solo-hud-chip"
+              className="player player-interactive solo-apex-player-card"
               role="button"
               tabIndex={0}
               onClick={() => {
@@ -429,22 +429,29 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               }}
               title="⚡ Hunter Status Window · Click to view level progression, attributes & combat power"
             >
-              <div className="lvl-badge" title={`${summary.totalXp} XP total`}>
-                <small>LV</small>
-                {lv.level}
+              <div className="apex-crest-badge">
+                <span className="apex-crest-icon">⚔️</span>
+                <span className="apex-crest-lvl">LV.{lv.level}</span>
               </div>
-              <div className="xp">
-                <div className="xp-row">
-                  <span className="rank">{lv.rank}</span>
-                  <span className="xp-num">
+              <div className="apex-xp-section">
+                <div className="apex-rank-row">
+                  <span className="apex-grade-pill" style={{ background: lv.rankColor }}>
+                    {lv.hunterGrade}
+                  </span>
+                  <span className="apex-rank-title">{lv.rank}</span>
+                  <span className="apex-xp-digits">
                     {lv.xpIntoLevel} / {lv.xpForNext} XP
                   </span>
                 </div>
-                <div className="bar">
-                  <motion.i initial={false} animate={{ width: `${Math.round(lv.progress * 100)}%` }} transition={{ type: 'spring', stiffness: 120, damping: 20 }} />
+                <div className="apex-micro-bar">
+                  <motion.i
+                    initial={false}
+                    animate={{ width: `${Math.round(lv.progress * 100)}%` }}
+                    transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                  />
                 </div>
               </div>
-              <div className="wallet" title="Coins you can spend">
+              <div className="apex-wallet" title="Coins you can spend">
                 <Coins n={summary.balance} />
                 <div className="wallet-pops" aria-live="polite">
                   <AnimatePresence>
