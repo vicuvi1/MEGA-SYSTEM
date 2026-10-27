@@ -24,8 +24,9 @@
   color: var(--lime-ink); background: linear-gradient(135deg, #e4ff7a, var(--lime) 55%, #9fd11a);
   box-shadow: 0 6px 20px rgba(200, 241, 53, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
-.sb-word { font: 600 12px var(--display); letter-spacing: 0.26em; color: var(--muted); white-space: nowrap; }
-.sb-word b { color: var(--text); font-weight: 800; margin-left: 2px; }
+.sb-brand-info { display: flex; flex-direction: column; justify-content: center; }
+.sb-word { font: 800 15px var(--display); letter-spacing: 0.28em; color: var(--text); white-space: nowrap; line-height: 1.1; }
+.sb-tagline { font: 800 8.5px var(--mono); letter-spacing: 0.22em; color: var(--lime); opacity: 0.9; margin-top: 2px; white-space: nowrap; }
 
 /* Groups and items */
 .sb-nav { display: grid; gap: 4px; overflow-y: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; }

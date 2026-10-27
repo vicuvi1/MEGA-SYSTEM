@@ -64,13 +64,14 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, bala
       >
         <div className="sb-glow" aria-hidden="true" />
 
-        <div className="sb-brand">
+        <div className="sb-brand" title="LIFE — Real Growth RPG">
           <span className="sb-mark" aria-hidden="true">
             <Logo size={22} />
           </span>
-          <span className="sb-label sb-word">
-            LIFE<b>SYSTEM</b>
-          </span>
+          <div className="sb-brand-info">
+            <span className="sb-label sb-word">LIFE</span>
+            <span className="sb-label sb-tagline">REAL GROWTH</span>
+          </div>
         </div>
 
         <nav className="sb-nav" aria-label="Sections">

@@ -600,3 +600,97 @@
     border-color: #fbbf24;
   }
 }
+
+/* LIFE Real Growth Matrix & Philosophy Card */
+.growth-philosophy-card {
+  margin: 16px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(14, 23, 42, 0.85) 0%, rgba(5, 12, 28, 0.95) 100%);
+  border: 1px solid rgba(0, 210, 255, 0.28);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.growth-philosophy-card::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200, 241, 53, 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.philosophy-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.philosophy-symbol {
+  font-size: 22px;
+  line-height: 1;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(200, 241, 53, 0.1);
+  border: 1px solid rgba(200, 241, 53, 0.25);
+  flex-shrink: 0;
+}
+
+.philosophy-header h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+
+.philosophy-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.growth-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.growth-stat-item {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 9px;
+  padding: 10px 12px;
+  transition: all 0.2s ease;
+}
+
+.growth-stat-item:hover {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(0, 210, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.growth-stat-tag {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.growth-stat-item p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}

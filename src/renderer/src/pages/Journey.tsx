@@ -169,6 +169,39 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
           </div>
         </div>
 
+        {/* Foundation: The Law of Real Growth */}
+        <div className="growth-philosophy-card">
+          <div className="philosophy-header">
+            <span className="philosophy-symbol">🌱</span>
+            <div>
+              <h3>LIFE · REAL GROWTH MATRIX</h3>
+              <p>LIFE is not a game you play to escape reality. It is a system built to conquer it. Every stat point, level, and coin corresponds to real human evolution.</p>
+            </div>
+          </div>
+          <div className="growth-matrix-grid">
+            <div className="growth-stat-item">
+              <span className="growth-stat-tag" style={{ color: '#fb7185' }}>⚔️ STR · STRENGTH</span>
+              <p>Forged through physical workouts, strength training, and physical grit.</p>
+            </div>
+            <div className="growth-stat-item">
+              <span className="growth-stat-tag" style={{ color: '#38bdf8' }}>⚡ AGI · AGILITY</span>
+              <p>Forged through rapid task execution, habit speed, and punctual actions.</p>
+            </div>
+            <div className="growth-stat-item">
+              <span className="growth-stat-tag" style={{ color: '#34d399' }}>🛡️ VIT · VITALITY</span>
+              <p>Forged through deep sleep hygiene, waking on time, and physical recovery.</p>
+            </div>
+            <div className="growth-stat-item">
+              <span className="growth-stat-tag" style={{ color: '#a78bfa' }}>🧠 INT · INTELLIGENCE</span>
+              <p>Forged through deep study blocks, university excellence, and cognitive focus.</p>
+            </div>
+            <div className="growth-stat-item">
+              <span className="growth-stat-tag" style={{ color: '#fbbf24' }}>👁️ SEN · PERCEPTION</span>
+              <p>Forged through urge conquest, streak control, and calendar schedule vigilance.</p>
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
           <button
             className="btn small ai-sparkle-btn"

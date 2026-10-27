@@ -564,11 +564,32 @@ function Greeting({ summary, shop, tasks, schedule }: { summary: Summary; shop: 
   if (goal) bits.push(goal.price > summary.balance ? `${goal.price - summary.balance} coins to ${goal.title.toLowerCase()}` : `${goal.title} is ready to redeem`)
   return (
     <header className="greeting">
-      <h2>
-        {hello}
-        {ui.name ? `, ${ui.name}` : ''}
-      </h2>
-      <p>{bits.length ? bits.join(' · ') : 'A clean slate. Pick one thing and win it.'}</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <h2>
+          {hello}
+          {ui.name ? `, ${ui.name}` : ''}
+        </h2>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '3px 10px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontFamily: 'var(--mono)',
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            color: '#c8f135',
+            background: 'rgba(200, 241, 53, 0.08)',
+            border: '1px solid rgba(200, 241, 53, 0.25)'
+          }}
+          title="LIFE · Every real-life action fuels real human growth"
+        >
+          <span>🌱</span> LIFE · REAL GROWTH
+        </span>
+      </div>
+      <p>{bits.length ? bits.join(' · ') : 'A clean slate. Pick one thing and conquer your day.'}</p>
     </header>
   )
 }

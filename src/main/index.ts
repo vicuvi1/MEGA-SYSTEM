@@ -676,7 +676,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0B0D12',
-    title: 'Life System',
+    title: 'LIFE',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -734,10 +734,10 @@ function createTray(): void {
   const trayImage = nativeImage.createFromPath(trayPath)
   trayImage.addRepresentation({ scaleFactor: 2, dataURL: nativeImage.createFromPath(tray2xPath).toDataURL() })
   tray = new Tray(trayImage)
-  tray.setToolTip('Life System')
+  tray.setToolTip('LIFE — Real Growth RPG')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Life System', click: showWindow },
+      { label: 'Open LIFE', click: showWindow },
       { label: 'Urge crusher', click: openUrgeCrusher },
       { type: 'separator' },
       { label: 'Quit', click: () => { quitting = true; app.quit() } }
@@ -803,11 +803,11 @@ function checkReminders(): void {
 app.on('second-instance', showWindow)
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('Life System')
+  app.setAppUserModelId('LIFE')
   if (startupError) {
     const choice = dialog.showMessageBoxSync({
       type: 'error',
-      title: 'Life System',
+      title: 'LIFE',
       message: "Life System couldn't open its data",
       detail: `${(startupError as Error).message}\n\nYour data file is in ${dataDir}. Backups are in ${BACKUP_DIR}. Details are in the log.`,
       buttons: ['Open data folder', 'Quit'],
