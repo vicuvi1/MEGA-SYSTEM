@@ -544,6 +544,15 @@ export function createMockApi(): Bridge {
         warriorVerdict: 'You are ascending beyond the limits of common hunters. Maintain absolute focus—the Monarchs have noticed.',
         generatedAt: new Date().toISOString()
       }),
+      decomposeTask: async (title: string) => ({
+        strategyTip: `Conquer the foundation of "${title}" in the first 10 minutes to generate momentum.`,
+        subtasks: [
+          { title: `Prepare setup & eliminate distractions for ${title}`, minutes: 10, coins: 5, xp: 10, priority: 2 },
+          { title: `Execute core focus phase for ${title}`, minutes: 35, coins: 15, xp: 30, priority: 1 },
+          { title: `Review, test, and finalize ${title}`, minutes: 15, coins: 10, xp: 20, priority: 2 }
+        ],
+        modelUsed: 'gemini-2.5-flash'
+      }),
       askCoach: async (msg: string) => ({
         reply: `[System Oracle]: Understood, Hunter. In response to "${msg}": stay locked onto your primary directives. Discipline compounds exponentially.`,
         modelUsed: 'gemini-2.5-flash'

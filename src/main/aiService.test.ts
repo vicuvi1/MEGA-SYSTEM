@@ -118,4 +118,69 @@ describe('AIService Backend', () => {
     expect(report.headline).toBe('Supreme Momentum')
     expect(report.modelUsed).toContain('OPENROUTER')
   })
+
+  it('executes askCoach with context and multi-turn history', async () => {
+    const mockFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const body = JSON.parse(String((init as any)?.body))
+      const promptText = body.contents?.[0]?.parts?.[0]?.text
+      expect(promptText).toContain('SOLO LEVELING HUNTER ORACLE')
+      expect(promptText).toContain('What is my next objective?')
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Hunter Victor, execute your high priority study block immediately.' }]
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    }
+
+    const filePath = join(dir, 'ai_test.bin')
+    const service = new AIService(filePath, wallet, undefined, undefined, undefined, mockFetch as any)
+    service.saveConfig({ geminiKey: 'AIzaKey', selectedModel: 'gemini-2.5-flash' })
+
+    const reply = await service.askCoach('What is my next objective?')
+    expect(reply.reply).toContain('Hunter Victor')
+    expect(reply.modelUsed).toContain('GEMINI')
+  })
+
+  it('decomposes tasks into subtasks via decomposeTask', async () => {
+    const mockFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      strategyTip: 'Split research and writing.',
+                      subtasks: [
+                        { title: 'Read specifications', minutes: 15, coins: 5, xp: 10, priority: 2 },
+                        { title: 'Write report core', minutes: 40, coins: 20, xp: 40, priority: 1 }
+                      ]
+                    })
+                  }
+                ]
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    }
+
+    const filePath = join(dir, 'ai_test.bin')
+    const service = new AIService(filePath, wallet, undefined, undefined, undefined, mockFetch as any)
+    service.saveConfig({ geminiKey: 'AIzaKey', selectedModel: 'gemini-2.5-flash' })
+
+    const res = await service.decomposeTask('SI-266 Lab 7', 'cryptography', 'university')
+    expect(res.strategyTip).toBe('Split research and writing.')
+    expect(res.subtasks).toHaveLength(2)
+    expect(res.subtasks[0].title).toBe('Read specifications')
+  })
 })

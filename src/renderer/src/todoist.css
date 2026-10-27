@@ -2,13 +2,13 @@
 
 .todoist-app {
   display: flex;
-  height: calc(100vh - 110px);
-  min-height: 580px;
-  background: #1e1e1e;
-  border-radius: 12px;
+  height: calc(100vh - 96px);
+  min-height: 600px;
+  background: linear-gradient(180deg, rgba(20, 24, 33, 0.98) 0%, rgba(13, 16, 23, 0.99) 100%);
+  border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(0, 210, 255, 0.2);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 28px rgba(0, 210, 255, 0.05);
 }
 
 /* Left Sub-Sidebar */
@@ -311,23 +311,24 @@
 
 /* Task Card */
 .todoist-card {
-  background: #282828;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(24, 29, 41, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transition: all 0.15s ease;
   position: relative;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 .todoist-card:hover {
-  background: #303030;
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  transform: translateY(-1px);
+  background: rgba(30, 38, 54, 0.98);
+  border-color: rgba(0, 210, 255, 0.35);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 12px rgba(0, 210, 255, 0.08);
+  transform: translateY(-2px);
 }
 
 .todoist-card.done {
@@ -620,3 +621,120 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 6px;
 }
+
+/* AI Task Decomposer & Subtask Styles */
+.todoist-decompose-btn {
+  background: rgba(0, 210, 255, 0.08);
+  border: 1px solid rgba(0, 210, 255, 0.25);
+  color: #38bdf8;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.todoist-decompose-btn:hover {
+  background: rgba(0, 210, 255, 0.22);
+  border-color: #00d2ff;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+}
+
+.decompose-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 12, 0.7);
+  backdrop-filter: blur(8px);
+  display: grid;
+  place-items: center;
+  z-index: 999;
+}
+
+.decompose-modal {
+  width: 620px;
+  max-width: 92vw;
+  background: linear-gradient(180deg, #0f1726 0%, #080d16 100%);
+  border: 1px solid rgba(0, 210, 255, 0.4);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(0, 210, 255, 0.15);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #e2e8f0;
+}
+
+.decompose-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.decompose-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: #00d2ff;
+  text-transform: uppercase;
+}
+
+.decompose-strategy-tip {
+  background: rgba(0, 210, 255, 0.08);
+  border-left: 3px solid #00d2ff;
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: #bae6fd;
+  line-height: 1.45;
+}
+
+.decompose-subtask-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.decompose-subtask-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 12px;
+}
+
+.decompose-subtask-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.decompose-subtask-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.decompose-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+

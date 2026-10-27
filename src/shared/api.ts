@@ -2,7 +2,10 @@ import type {
   AIConfig,
   AIPerformanceReport,
   GeneratedReward,
-  ModelChoice
+  ModelChoice,
+  TaskDecompositionItem,
+  TaskDecompositionResult,
+  SystemCoachContext
 } from '@core/ai'
 import { POPULAR_MODELS } from '@core/ai'
 import type {
@@ -34,6 +37,7 @@ import { DEFAULT_CALENDAR_CONFIG } from '@core/calendar'
 export type { CalendarConfig, CalendarEvent }
 export { DEFAULT_CALENDAR_CONFIG }
 
+export type { TaskDecompositionItem, TaskDecompositionResult, SystemCoachContext }
 export type { QuestState }
 export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, Rule, Reward, Tier, EffortEquivalence, Block, BlockKind, BlockStatus, Repeat, Task }
 export { calculateEffortEquivalence }
@@ -465,7 +469,8 @@ export interface LifeApi {
     test(provider?: 'gemini' | 'openrouter'): Promise<{ ok: boolean; message: string; model: string }>
     generateRewards(userPrompt?: string): Promise<{ rewards: GeneratedReward[]; modelUsed: string }>
     performanceReport(): Promise<AIPerformanceReport>
-    askCoach(message: string): Promise<{ reply: string; modelUsed: string }>
+    askCoach(message: string, history?: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<{ reply: string; modelUsed: string }>
+    decomposeTask(title: string, notes?: string, category?: string): Promise<TaskDecompositionResult>
   }
   calendar: {
     config(): Promise<CalendarConfig>

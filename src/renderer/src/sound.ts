@@ -55,3 +55,10 @@ export const soundSuccess = () => play(() => {
   tone(880, 0, 0.09, 0.04)
   tone(1318.5, 0.07, 0.18, 0.05)
 })
+
+/** Solo Leveling System Oracle high-tech digital holographic chime. */
+export const soundSystemOracle = () => play(() => {
+  tone(1046.5, 0, 0.08, 0.05, 'sine')
+  tone(1318.5, 0.06, 0.12, 0.06, 'sine')
+  tone(1760.0, 0.12, 0.25, 0.07, 'sine')
+})

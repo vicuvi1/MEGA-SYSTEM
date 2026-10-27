@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { TASK_MAX_COINS, TASK_MAX_XP } from '@core/plan'
-import type { Category, Repeat, TaskInput, TasksState, TaskView } from '@shared/api'
+import type { Category, Repeat, TaskInput, TasksState, TaskView, TaskDecompositionResult } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
-import { Coins, useAction } from '../ui'
-import { soundSuccess, soundTick } from '../sound'
+import { Coins, useAction, useToast } from '../ui'
+import { soundSuccess, soundTick, soundSystemOracle } from '../sound'
 
 interface Props {
   state: TasksState
@@ -84,7 +84,60 @@ function renderTitle(title: string) {
 
 export function Tasks({ state, onState, onWallet }: Props) {
   const act = useAction()
+  const toast = useToast()
   const todayStr = state.today || new Date().toISOString().slice(0, 10)
+
+  const [decomposeModal, setDecomposeModal] = useState<{
+    isOpen: boolean
+    taskTitle: string
+    category: string
+    notes?: string
+    loading: boolean
+    result: TaskDecompositionResult | null
+  } | null>(null)
+
+  async function startDecomposition(t: { title: string; category?: string; notes?: string | null }) {
+    setDecomposeModal({
+      isOpen: true,
+      taskTitle: t.title,
+      category: t.category || 'university',
+      notes: t.notes ?? undefined,
+      loading: true,
+      result: null
+    })
+    try {
+      const res = await life.ai.decomposeTask(t.title, t.notes ?? undefined, t.category || 'university')
+      setDecomposeModal((prev) => (prev ? { ...prev, loading: false, result: res } : null))
+      soundSystemOracle()
+    } catch (err: any) {
+      toast(err?.message || 'Failed to decompose task. Check AI keys in Settings.', 'bad')
+      setDecomposeModal(null)
+    }
+  }
+
+  async function handleApplySubtasks() {
+    if (!decomposeModal?.result) return
+    const { subtasks } = decomposeModal.result
+    const cat = decomposeModal.category || 'university'
+    for (const sub of subtasks) {
+      await life.tasks.save({
+        title: sub.title,
+        category: cat,
+        priority: sub.priority || 2,
+        due: todayStr,
+        repeat: 'none',
+        weekdays: 0,
+        coins: sub.coins,
+        xp: sub.xp,
+        notes: `Decomposed from: "${decomposeModal.taskTitle}"`
+      })
+    }
+    const next = await life.tasks.state()
+    onState(next)
+    setDecomposeModal(null)
+    toast(`⚔️ Added ${subtasks.length} subtasks to ${catById[cat]?.label || cat}!`, 'good')
+    soundSuccess()
+  }
 
   const [activeTab, setActiveTab] = useState<FilterTab>('inbox')
   const [viewMode, setViewMode] = useState<ViewMode>('board')
@@ -501,6 +554,20 @@ export function Tasks({ state, onState, onWallet }: Props) {
           <div className="todoist-header-actions">
             <button
               className="todoist-action-btn"
+              style={{ background: 'rgba(0, 210, 255, 0.1)', borderColor: 'rgba(0, 210, 255, 0.3)', color: '#38bdf8' }}
+              onClick={() => {
+                const title = prompt('Enter a complex task or objective to decompose with System AI:')
+                if (title && title.trim()) {
+                  startDecomposition({ title: title.trim(), category: activeTab !== 'inbox' && catById[activeTab] ? activeTab : 'university' })
+                }
+              }}
+              title="Decompose any complex objective into actionable subtasks with AI"
+            >
+              <span>⚡ AI Decompose</span>
+            </button>
+
+            <button
+              className="todoist-action-btn"
               onClick={() => setViewMode(viewMode === 'board' ? 'list' : 'board')}
               title="Toggle Board/List layout"
             >
@@ -575,6 +642,16 @@ export function Tasks({ state, onState, onWallet }: Props) {
                           )}
 
                           <div className="todoist-card-footer">
+                            <button
+                              className="todoist-decompose-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                startDecomposition(t)
+                              }}
+                              title="Break down with AI System Oracle"
+                            >
+                              ⚡ AI Break Down
+                            </button>
                             {dateInfo && (
                               <span className={`todoist-date-pill ${dateInfo.kind}`}>
                                 <Icon name="calendar" size={11} />
@@ -849,10 +926,22 @@ export function Tasks({ state, onState, onWallet }: Props) {
               <button
                 type="button"
                 className="btn danger small"
-                style={{ marginRight: 'auto' }}
                 onClick={() => handleDeleteTask(editingTask.id)}
               >
                 Delete
+              </button>
+              <button
+                type="button"
+                className="btn small"
+                style={{ background: 'rgba(0, 210, 255, 0.12)', borderColor: 'rgba(0, 210, 255, 0.35)', color: '#38bdf8', marginRight: 'auto' }}
+                onClick={() => {
+                  const current = editingTask
+                  setEditingTask(null)
+                  startDecomposition(current)
+                }}
+                title="Break down this task into subtasks using AI Oracle"
+              >
+                ⚡ Decompose (AI)
               </button>
               <button
                 type="button"
@@ -872,6 +961,76 @@ export function Tasks({ state, onState, onWallet }: Props) {
           </div>
         </div>
       )}
+ 
+      {/* AI Quest Decomposition Modal */}
+      <AnimatePresence>
+        {decomposeModal?.isOpen && (
+          <div className="decompose-modal-backdrop" onClick={() => setDecomposeModal(null)}>
+            <motion.div
+              className="decompose-modal"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="decompose-modal-header">
+                <div className="decompose-modal-title">
+                  <span style={{ color: '#00d2ff' }}>[QUEST DECOMPOSITION]</span>
+                  <span style={{ color: '#fff', fontSize: '14px' }}>{decomposeModal.taskTitle}</span>
+                </div>
+                <button
+                  className="icon-btn"
+                  onClick={() => setDecomposeModal(null)}
+                  style={{ background: 'transparent', border: 0, color: '#aaa', cursor: 'pointer', fontSize: '16px' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {decomposeModal.loading ? (
+                <div style={{ padding: '36px 20px', textAlign: 'center', color: '#38bdf8' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '12px 18px', background: 'rgba(0, 210, 255, 0.08)', border: '1px dashed rgba(0, 210, 255, 0.35)', borderRadius: '10px' }}>
+                    <span style={{ animation: 'system-pulse 1.4s infinite' }}>⚡</span>
+                    <span>Solo Leveling System Oracle analyzing quest topology and generating micro-phases…</span>
+                  </div>
+                </div>
+              ) : decomposeModal.result ? (
+                <>
+                  <div className="decompose-strategy-tip">
+                    <b style={{ color: '#38bdf8' }}>Tactical Directive:</b> {decomposeModal.result.strategyTip}
+                  </div>
+
+                  <div className="decompose-subtask-list">
+                    {decomposeModal.result.subtasks.map((sub, i) => (
+                      <div key={i} className="decompose-subtask-item">
+                        <div className="decompose-subtask-left">
+                          <span style={{ color: '#00d2ff', fontWeight: 700, fontFamily: 'var(--mono)' }}>{i + 1}.</span>
+                          <span style={{ fontWeight: 500, fontSize: '13.5px' }}>{sub.title}</span>
+                        </div>
+                        <div className="decompose-subtask-badges">
+                          <span style={{ color: '#94a3b8', fontSize: '11.5px' }}>⏱ {sub.minutes}m</span>
+                          <span style={{ color: '#F5C84B', fontWeight: 600 }}>+{sub.coins} coins</span>
+                          <span style={{ color: '#c084fc', fontSize: '12px' }}>+{sub.xp} XP</span>
+                          <span className={`todoist-priority-badge p${sub.priority}`}>P{sub.priority}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="decompose-actions-row">
+                    <button className="btn ghost" onClick={() => setDecomposeModal(null)}>
+                      Dismiss
+                    </button>
+                    <button className="btn primary" onClick={handleApplySubtasks}>
+                      ⚔️ Add All {decomposeModal.result.subtasks.length} Subtasks to Board
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

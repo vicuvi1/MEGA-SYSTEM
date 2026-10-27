@@ -118,7 +118,7 @@ function open(): void {
     calendarService.sync().catch(() => {})
   }
   telegramHub.setCalendar(calendarService)
-  aiService = new AIService(join(dataDir, 'ai_config.bin'), wallet, discipline, moneyService, sleepService, undefined, calendarService)
+  aiService = new AIService(join(dataDir, 'ai_config.bin'), wallet, discipline, moneyService, sleepService, undefined, calendarService, tasks)
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.
   candidates.man.unshift(embeddedManLevelDb())
@@ -365,7 +365,8 @@ handle('ai:saveConfig', (c: Partial<AIConfig>) => aiService.saveConfig(c))
 handle('ai:test', (provider?: 'gemini' | 'openrouter') => aiService.testConnection(provider))
 handle('ai:generateRewards', (userPrompt?: string) => aiService.generateRewards(userPrompt))
 handle('ai:performanceReport', () => aiService.generatePerformanceReport())
-handle('ai:askCoach', (msg: string) => aiService.askCoach(msg))
+handle('ai:askCoach', (msg: string, history?: any[]) => aiService.askCoach(msg, history))
+handle('ai:decomposeTask', (title: string, notes?: string, category?: string) => aiService.decomposeTask(title, notes, category))
 
 // ---------- Google Calendar Integration ----------
 handle('calendar:config', () => calendarService.getConfig())

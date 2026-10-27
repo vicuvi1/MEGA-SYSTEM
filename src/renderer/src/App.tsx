@@ -21,6 +21,7 @@ import { Money } from './pages/Money'
 import { Connected } from './pages/Connected'
 import { BotCenter } from './pages/BotCenter'
 import { Journey } from './pages/Journey'
+import { SystemOracleDrawer } from './SystemOracleDrawer'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
@@ -98,6 +99,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [page, setPage] = useState<PageId>(known ? known.id : 'today')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
+  const [oracleOpen, setOracleOpen] = useState(false)
   const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [shop, setShop] = useState<ShopState | null>(null)
   const [tasks, setTasks] = useState<TasksState | null>(null)
@@ -260,6 +262,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       } else if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         run('palette')
+      } else if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'j')) {
+        e.preventDefault()
+        setOracleOpen((o) => !o)
       } else if (e.key === 'F11') {
         e.preventDefault()
         run('fullscreen')
@@ -290,6 +295,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       go('schedule')
     }),
     actions: [
+      { id: 'a:oracle', label: 'Summon Solo Leveling System Oracle', hint: 'Ctrl+Shift+A', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setOracleOpen(true) },
       { id: 'a:sidebar', label: 'Collapse or expand the sidebar', hint: 'Ctrl+B', group: 'Actions', icon: 'list', run: toggleSidebar },
       { id: 'a:full', label: 'Full screen', hint: 'F11', group: 'Actions', icon: 'spark', run: () => life.app.toggleFullScreen() },
       { id: 'a:urge', label: 'Urge crusher', hint: 'Ctrl+Alt+U', group: 'Actions', icon: 'bolt', color: '#FF8A3D', run: () => {
@@ -433,6 +439,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               </div>
             </div>
           )}
+          <button
+            className="system-oracle-header-btn"
+            onClick={() => setOracleOpen(true)}
+            title="Summon Solo Leveling System Oracle (Ctrl+Shift+A)"
+          >
+            <span className="oracle-dot" />
+            <span className="oracle-text">SYSTEM ORACLE</span>
+            <kbd>Ctrl+Shift+A</kbd>
+          </button>
+
           <div className="top-actions">
             <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
             <UpdateChip status={update} onClick={() => setPage('settings')} />
@@ -478,6 +494,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </ErrorBoundary>
           </motion.main>}
         </AnimatePresence>
+        <SystemOracleDrawer
+          open={oracleOpen}
+          onClose={() => setOracleOpen(false)}
+          summary={summary}
+        />
       </div>
     </div>
   )

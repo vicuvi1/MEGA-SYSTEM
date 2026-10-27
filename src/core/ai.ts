@@ -11,7 +11,39 @@ export interface AIConfig {
   enabled: boolean
 }
 
-export type AITask = 'reward_ideas' | 'performance_report' | 'coach_chat'
+export type AITask = 'reward_ideas' | 'performance_report' | 'coach_chat' | 'decompose_task'
+
+export interface TaskDecompositionItem {
+  title: string
+  minutes: number
+  coins: number
+  xp: number
+  priority: 1 | 2 | 3
+}
+
+export interface TaskDecompositionResult {
+  subtasks: TaskDecompositionItem[]
+  strategyTip: string
+  modelUsed?: string
+}
+
+export interface SystemCoachContext {
+  level: number
+  hunterTitle: string
+  hunterGrade: string
+  attributes: {
+    str: number
+    agi: number
+    vit: number
+    int: number
+    sen: number
+    totalCombatPower: number
+  }
+  coinsBalance: number
+  cleanStreakDays: number
+  todayTasksSummary?: string
+  calendarAgenda?: string
+}
 
 export interface ModelChoice {
   provider: 'gemini' | 'openrouter'
@@ -67,8 +99,8 @@ export function selectModelForTask(
   }
 
   // AUTO Routing based on task complexity:
-  // 1. Reward ideas generation -> Fast response (Gemini Flash or DeepSeek V3)
-  if (task === 'reward_ideas') {
+  // 1. Reward ideas & task decomposition -> Fast response (Gemini Flash or DeepSeek V3)
+  if (task === 'reward_ideas' || task === 'decompose_task') {
     if (hasGemini) return { provider: 'gemini', model: 'gemini-2.5-flash' }
     return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
   }
@@ -257,5 +289,115 @@ export function parsePerformanceResponse(text: string, modelUsed = 'AI'): AIPerf
     warriorVerdict: String(p.warriorVerdict || 'Slips are resurrectable as fuel. Keep ascending.'),
     generatedAt: new Date().toISOString(),
     modelUsed
+  }
+}
+
+export function buildSystemOraclePrompt(
+  ctx: SystemCoachContext,
+  userMessage: string,
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+): string {
+  const historyText = history && history.length > 0
+    ? '\nConversation History:\n' + history.map((h) => `${h.role === 'user' ? 'Hunter Victor' : 'System Oracle'}: ${h.content}`).join('\n') + '\n'
+    : ''
+
+  const tasksText = ctx.todayTasksSummary ? `\nTop Pending Tasks / Directives:\n${ctx.todayTasksSummary}\n` : ''
+  const calText = ctx.calendarAgenda ? `\nToday's Schedule & Appointments:\n${ctx.calendarAgenda}\n` : ''
+
+  return `[SYSTEM INSTRUCTION: SOLO LEVELING HUNTER ORACLE]
+You are the sentient System AI and Strategic Mentor for Player Victor Barbuta in the MEGA-SYSTEM.
+You speak with the calm, authoritative, intense, yet deeply empowering tone of the Solo Leveling System.
+You treat Victor's daily life, university studies, coding, training, and discipline as real hunter progression.
+
+Player Telemetry:
+- Hunter Rank: Level ${ctx.level} (${ctx.hunterGrade} - "${ctx.hunterTitle}")
+- Attributes: STR ${ctx.attributes.str} | AGI ${ctx.attributes.agi} | VIT ${ctx.attributes.vit} | INT ${ctx.attributes.int} | SEN ${ctx.attributes.sen}
+- Total Combat Power: ${ctx.attributes.totalCombatPower.toLocaleString()} CP
+- Pure Clean Streak: ${ctx.cleanStreakDays} Days
+- Wallet Balance: ${ctx.coinsBalance} Coins
+${tasksText}${calText}
+Guiding Principles:
+1. Address the player as "Hunter Victor" or "Player Victor".
+2. If the player mentions an urge, relapse risk, or procrastination, immediately activate the [TACTICAL PROTOCOL]: give an intense 3-step physical interrupt (cold water, 20 pushups/breaths, physical displacement) with zero tolerance for self-pity.
+3. If the player asks how to approach a task or study session, give an exact, surgical breakdown with time-boxing and relentless clarity.
+4. Keep answers focused, impactful, and directly actionable (avoid bloated filler). Use markdown formatting and warrior directives.
+${historyText}
+Hunter Victor: ${userMessage}
+System Oracle:`
+}
+
+export function buildTaskDecomposePrompt(
+  taskTitle: string,
+  notes?: string | null,
+  category?: string | null,
+  hunterGrade = 'E-Rank'
+): string {
+  return `[SYSTEM INSTRUCTION: QUEST DECOMPOSITION]
+You are the Solo Leveling System Oracle breaking down a complex quest for Hunter Victor (${hunterGrade}).
+Quest to Decompose: "${taskTitle}"
+${notes ? `Additional Notes: "${notes}"` : ''}
+${category ? `Category: "${category}"` : ''}
+
+Deconstruct this quest into 3 to 4 sequential, highly actionable micro-subtasks that overcome inertia.
+Each subtask should take between 10 and 60 minutes.
+Assign gamified Coin reward (5 to 25 coins) and XP (10 to 50 XP) based on difficulty.
+
+Respond ONLY in valid JSON matching this schema:
+{
+  "strategyTip": "1 concise sentence explaining the psychological/tactical angle to dominate this quest.",
+  "subtasks": [
+    {
+      "title": "Clear action-verb micro-task",
+      "minutes": 25,
+      "coins": 10,
+      "xp": 20,
+      "priority": 1
+    }
+  ]
+}`
+}
+
+export function parseTaskDecomposition(text: string, modelUsed = 'AI'): TaskDecompositionResult {
+  let cleaned = text.trim()
+  const objMatch = cleaned.match(/\{\s*"[\s\S]*\}\s*$/) || cleaned.match(/\{[\s\S]*\}/)
+  if (objMatch) {
+    cleaned = objMatch[0]
+  } else {
+    if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json/, '')
+    if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '')
+    if (cleaned.endsWith('```')) cleaned = cleaned.replace(/```$/, '')
+    cleaned = cleaned.trim()
+  }
+
+  try {
+    const parsed = JSON.parse(cleaned)
+    const rawList = Array.isArray(parsed.subtasks) ? parsed.subtasks : []
+    const subtasks: TaskDecompositionItem[] = rawList.map((item: any, i: number) => ({
+      title: String(item.title || `Sub-phase ${i + 1}`).trim(),
+      minutes: Number(item.minutes) || 25,
+      coins: Number(item.coins) || 10,
+      xp: Number(item.xp) || 20,
+      priority: (item.priority === 1 || item.priority === 3 ? item.priority : 2) as 1 | 2 | 3
+    }))
+
+    return {
+      subtasks: subtasks.length > 0 ? subtasks : [
+        { title: 'Step 1: Set up environment and eliminate distractions', minutes: 10, coins: 5, xp: 10, priority: 2 },
+        { title: 'Step 2: Execute core deep focus block', minutes: 35, coins: 15, xp: 30, priority: 1 },
+        { title: 'Step 3: Review and verify completion', minutes: 15, coins: 10, xp: 20, priority: 2 }
+      ],
+      strategyTip: String(parsed.strategyTip || 'Momentum is gained in the first 5 minutes. Start with zero hesitation.'),
+      modelUsed
+    }
+  } catch {
+    return {
+      subtasks: [
+        { title: 'Step 1: Set up environment and eliminate distractions', minutes: 10, coins: 5, xp: 10, priority: 2 },
+        { title: 'Step 2: Complete the hardest 25-minute core focus block', minutes: 25, coins: 15, xp: 30, priority: 1 },
+        { title: 'Step 3: Verify outputs and wrap up completion checklist', minutes: 15, coins: 10, xp: 20, priority: 2 }
+      ],
+      strategyTip: 'Overcome inertia by attacking the immediate first step for just 5 minutes.',
+      modelUsed
+    }
   }
 }

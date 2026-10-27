@@ -57,7 +57,7 @@
 }
 
 /* Content keeps a comfortable width on wide screens. */
-.content { padding-inline: max(28px, calc((100% - 1440px) / 2)); }
+.content { padding-inline: clamp(20px, 2.5vw, 44px); }
 
 /* Today: the apps inside, at a glance. */
 .app-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }

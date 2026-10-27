@@ -5,9 +5,13 @@ import {
   parseRewardResponse,
   buildPerformancePrompt,
   parsePerformanceResponse,
+  buildSystemOraclePrompt,
+  buildTaskDecomposePrompt,
+  parseTaskDecomposition,
   type AIConfig,
   type AIRewardContext,
-  type AIPerformanceContext
+  type AIPerformanceContext,
+  type SystemCoachContext
 } from './ai'
 
 describe('AI Core Domain Engine', () => {
@@ -27,6 +31,12 @@ describe('AI Core Domain Engine', () => {
 
     it('routes reward_ideas to Gemini 2.5 Flash on auto when Gemini key is available', () => {
       const choice = selectModelForTask(baseConfig, 'reward_ideas')
+      expect(choice.provider).toBe('gemini')
+      expect(choice.model).toBe('gemini-2.5-flash')
+    })
+
+    it('routes decompose_task to Gemini 2.5 Flash on auto when Gemini key is available', () => {
+      const choice = selectModelForTask(baseConfig, 'decompose_task')
       expect(choice.provider).toBe('gemini')
       expect(choice.model).toBe('gemini-2.5-flash')
     })
@@ -137,6 +147,72 @@ describe('AI Core Domain Engine', () => {
       expect(report.headline).toBe('Flawless Ascendance in Red Gates')
       expect(report.strengths).toHaveLength(2)
       expect(report.modelUsed).toBe('Gemini 2.5 Flash')
+    })
+  })
+
+  describe('System Oracle Coach & Task Decomposition', () => {
+    const coachCtx: SystemCoachContext = {
+      level: 20,
+      hunterTitle: 'Shadow Sovereign',
+      hunterGrade: 'S-Rank',
+      attributes: {
+        str: 45,
+        agi: 40,
+        vit: 38,
+        int: 52,
+        sen: 50,
+        totalCombatPower: 675
+      },
+      coinsBalance: 2400,
+      cleanStreakDays: 30,
+      todayTasksSummary: '1. SI-266 Lab 7 (P1)\n2. Gym Push Day',
+      calendarAgenda: '10:00 - Distributed Systems Lecture'
+    }
+
+    it('builds system oracle prompt with telemetry and instructions', () => {
+      const prompt = buildSystemOraclePrompt(coachCtx, 'I feel lazy today, give me a directive.')
+      expect(prompt).toContain('SOLO LEVELING HUNTER ORACLE')
+      expect(prompt).toContain('Level 20')
+      expect(prompt).toContain('S-Rank')
+      expect(prompt).toContain('675 CP')
+      expect(prompt).toContain('30 Days')
+      expect(prompt).toContain('SI-266 Lab 7')
+      expect(prompt).toContain('Distributed Systems Lecture')
+      expect(prompt).toContain('Hunter Victor: I feel lazy today')
+    })
+
+    it('builds task decomposition prompt with quest details', () => {
+      const prompt = buildTaskDecomposePrompt('Finish SI-266 Lab 7', 'Write cryptography report', 'university', 'B-Rank')
+      expect(prompt).toContain('QUEST DECOMPOSITION')
+      expect(prompt).toContain('Finish SI-266 Lab 7')
+      expect(prompt).toContain('Write cryptography report')
+      expect(prompt).toContain('university')
+      expect(prompt).toContain('B-Rank')
+    })
+
+    it('parses valid task decomposition JSON cleanly', () => {
+      const rawJson = `{
+        "strategyTip": "Conquer the cryptographic math proof first before compiling the Word report.",
+        "subtasks": [
+          { "title": "Review Lab 7 requirements & formulas", "minutes": 15, "coins": 8, "xp": 15, "priority": 2 },
+          { "title": "Implement cipher algorithm in Python", "minutes": 45, "coins": 20, "xp": 40, "priority": 1 },
+          { "title": "Document test cases and export PDF", "minutes": 20, "coins": 10, "xp": 20, "priority": 2 }
+        ]
+      }`
+      const res = parseTaskDecomposition(rawJson, 'Gemini 2.5 Flash')
+      expect(res.strategyTip).toContain('cryptographic math proof')
+      expect(res.subtasks).toHaveLength(3)
+      expect(res.subtasks[0].title).toBe('Review Lab 7 requirements & formulas')
+      expect(res.subtasks[1].priority).toBe(1)
+      expect(res.subtasks[1].coins).toBe(20)
+      expect(res.modelUsed).toBe('Gemini 2.5 Flash')
+    })
+
+    it('falls back gracefully when JSON parsing fails', () => {
+      const res = parseTaskDecomposition('Invalid non-json output', 'DeepSeek V3')
+      expect(res.subtasks.length).toBeGreaterThanOrEqual(3)
+      expect(res.strategyTip).toBeTruthy()
+      expect(res.modelUsed).toBe('DeepSeek V3')
     })
   })
 })

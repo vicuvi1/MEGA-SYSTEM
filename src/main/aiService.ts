@@ -4,16 +4,21 @@ import { app, safeStorage } from 'electron'
 import {
   buildPerformancePrompt,
   buildRewardPrompt,
+  buildSystemOraclePrompt,
+  buildTaskDecomposePrompt,
   DEFAULT_AI_CONFIG,
   parsePerformanceResponse,
   parseRewardResponse,
+  parseTaskDecomposition,
   selectModelForTask,
   type AIConfig,
   type AIPerformanceContext,
   type AIPerformanceReport,
   type AIRewardContext,
   type AITask,
-  type GeneratedReward
+  type GeneratedReward,
+  type SystemCoachContext,
+  type TaskDecompositionResult
 } from '@core/ai'
 import { levelInfo } from '@core/levels'
 import { balance, totalXp } from '@core/ledger'
@@ -22,10 +27,12 @@ import type { Discipline } from './discipline'
 import type { MoneyService } from './money'
 import type { SleepService } from './sleep'
 import type { CalendarService } from './calendarService'
+import type { Tasks } from './planner'
 
 export class AIService {
   private file: string
   private calendar?: CalendarService
+  private tasksService?: Tasks
 
   constructor(
     filePath?: string,
@@ -34,9 +41,11 @@ export class AIService {
     private money?: MoneyService,
     private sleep?: SleepService,
     private customFetch: typeof fetch = fetch,
-    calendar?: CalendarService
+    calendar?: CalendarService,
+    tasksService?: Tasks
   ) {
     this.calendar = calendar
+    this.tasksService = tasksService
     try {
       this.file = filePath ?? join(app.getPath('userData'), 'ai_config.bin')
     } catch {
@@ -46,6 +55,10 @@ export class AIService {
 
   setCalendar(cal: CalendarService): void {
     this.calendar = cal
+  }
+
+  setTasks(tasks: Tasks): void {
+    this.tasksService = tasks
   }
 
   getConfig(): AIConfig {
@@ -224,15 +237,55 @@ export class AIService {
     return parsePerformanceResponse(text, `${provider.toUpperCase()} (${model})`)
   }
 
-  async askCoach(userMessage: string): Promise<{ reply: string; modelUsed: string }> {
+  async askCoach(
+    userMessage: string,
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  ): Promise<{ reply: string; modelUsed: string }> {
     const all = this.wallet?.entries() ?? []
     const lv = levelInfo(totalXp(all))
+    const coinsBalance = balance(all)
+    const disc = this.discipline?.state()
     const calendarAgenda = this.calendar?.getEventsForAi()
-    const scheduleNote = calendarAgenda && !calendarAgenda.startsWith('No Google')
-      ? `\nVictor's Google Calendar Schedule:\n${calendarAgenda}\n`
-      : ''
-    const systemPrompt = `You are the Solo Leveling Hunter Coach for Victor Barbuta. Hunter Rank: ${lv.hunterGrade} (${lv.hunterTitle}, Lv.${lv.level}).${scheduleNote}\nGive concise, direct, inspiring tactical advice aligning with his schedule and physical goals.\n\nUser: ${userMessage}`
+
+    // Retrieve active tasks for tactical awareness
+    let tasksSummary = ''
+    try {
+      const activeTasks = this.tasksService?.state()?.tasks?.filter((t) => !t.done) ?? []
+      if (activeTasks.length > 0) {
+        tasksSummary = activeTasks
+          .slice(0, 6)
+          .map((t, i) => `${i + 1}. [P${t.priority}] ${t.title} (${t.category}${t.due ? ` due ${t.due}` : ''})`)
+          .join('\n')
+      }
+    } catch {
+      // safe fallback
+    }
+
+    const coachCtx: SystemCoachContext = {
+      level: lv.level,
+      hunterTitle: lv.hunterTitle,
+      hunterGrade: lv.hunterGrade,
+      attributes: lv.attributes,
+      coinsBalance,
+      cleanStreakDays: disc?.current ?? 0,
+      todayTasksSummary: tasksSummary,
+      calendarAgenda
+    }
+
+    const systemPrompt = buildSystemOraclePrompt(coachCtx, userMessage, history)
     const { text, model, provider } = await this.executeTask('coach_chat', systemPrompt)
     return { reply: text.trim(), modelUsed: `${provider.toUpperCase()} (${model})` }
+  }
+
+  async decomposeTask(
+    title: string,
+    notes?: string,
+    category?: string
+  ): Promise<TaskDecompositionResult> {
+    const all = this.wallet?.entries() ?? []
+    const lv = levelInfo(totalXp(all))
+    const prompt = buildTaskDecomposePrompt(title, notes, category, lv.hunterGrade)
+    const { text, model, provider } = await this.executeTask('decompose_task', prompt)
+    return parseTaskDecomposition(text, `${provider.toUpperCase()} (${model})`)
   }
 }
