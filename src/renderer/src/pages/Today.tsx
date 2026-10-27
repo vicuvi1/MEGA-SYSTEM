@@ -542,22 +542,30 @@ function HunterDashboardBanner({ level, onGo }: { level?: LevelInfo; onGo: (p: P
       </div>
 
       <div className="hunter-banner-stats">
-        <div className="stat-pill">
-          <span>CP</span>
-          <b style={{ color: '#00d2ff' }}>{cp.toLocaleString()}</b>
+        <div className="stat-pill cp-pill">
+          <span>COMBAT POWER</span>
+          <b style={{ color: '#00d2ff' }}>{cp.toLocaleString()} CP</b>
         </div>
         {attributes && (
           <>
             <div className="stat-pill">
-              <span>STR</span>
+              <span style={{ color: '#fb7185' }}>STR</span>
               <b>{attributes.str}</b>
             </div>
             <div className="stat-pill">
-              <span>INT</span>
+              <span style={{ color: '#38bdf8' }}>AGI</span>
+              <b>{attributes.agi}</b>
+            </div>
+            <div className="stat-pill">
+              <span style={{ color: '#34d399' }}>VIT</span>
+              <b>{attributes.vit}</b>
+            </div>
+            <div className="stat-pill">
+              <span style={{ color: '#a78bfa' }}>INT</span>
               <b>{attributes.int}</b>
             </div>
             <div className="stat-pill">
-              <span>SEN</span>
+              <span style={{ color: '#fbbf24' }}>SEN</span>
               <b>{attributes.sen}</b>
             </div>
           </>

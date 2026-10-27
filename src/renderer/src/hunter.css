@@ -87,7 +87,25 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 52px;
+  min-width: 48px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.stat-pill:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.stat-pill.cp-pill {
+  background: rgba(0, 210, 255, 0.08);
+  border-color: rgba(0, 210, 255, 0.35);
+  box-shadow: 0 0 14px rgba(0, 210, 255, 0.15);
+  min-width: 100px;
+}
+
+.stat-pill.cp-pill span {
+  color: #00d2ff;
+  letter-spacing: 0.08em;
 }
 
 .stat-pill span {
@@ -147,9 +165,19 @@
   font-size: 12px;
   color: var(--text);
   background: rgba(0, 210, 255, 0.1);
-  border: 1px solid rgba(0, 210, 255, 0.3);
-  padding: 3px 10px;
-  border-radius: 6px;
+  border: 1px solid rgba(0, 210, 255, 0.4);
+  padding: 4px 12px;
+  border-radius: 8px;
+  box-shadow: 0 0 14px rgba(0, 210, 255, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.system-cp b {
+  color: #38bdf8;
+  letter-spacing: 0.04em;
+}
 }
 
 .hunter-profile-row {
@@ -220,6 +248,61 @@
 .attribute-card:hover {
   border-color: #00d2ff;
   box-shadow: 0 0 14px rgba(0, 210, 255, 0.2);
+}
+
+.attribute-card.attr-str {
+  border-left: 3px solid #f43f5e;
+}
+.attribute-card.attr-str .attr-val {
+  color: #fb7185;
+}
+.attribute-card.attr-str:hover {
+  border-color: #f43f5e;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.35);
+}
+
+.attribute-card.attr-agi {
+  border-left: 3px solid #00d2ff;
+}
+.attribute-card.attr-agi .attr-val {
+  color: #38bdf8;
+}
+.attribute-card.attr-agi:hover {
+  border-color: #00d2ff;
+  box-shadow: 0 0 16px rgba(0, 210, 255, 0.35);
+}
+
+.attribute-card.attr-vit {
+  border-left: 3px solid #10b981;
+}
+.attribute-card.attr-vit .attr-val {
+  color: #34d399;
+}
+.attribute-card.attr-vit:hover {
+  border-color: #10b981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+}
+
+.attribute-card.attr-int {
+  border-left: 3px solid #8b5cf6;
+}
+.attribute-card.attr-int .attr-val {
+  color: #a78bfa;
+}
+.attribute-card.attr-int:hover {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.35);
+}
+
+.attribute-card.attr-sen {
+  border-left: 3px solid #f59e0b;
+}
+.attribute-card.attr-sen .attr-val {
+  color: #fbbf24;
+}
+.attribute-card.attr-sen:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
 }
 
 .attr-top {
@@ -314,27 +397,29 @@
 }
 
 .hunter-rank-card {
-  background: var(--panel);
+  background: linear-gradient(180deg, rgba(20, 24, 34, 0.95), rgba(15, 18, 26, 0.95));
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  transition: transform 0.15s, border-color 0.15s;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s, box-shadow 0.2s;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 .hunter-rank-card:hover {
   transform: translateY(-2px);
   border-color: rgba(0, 210, 255, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .hunter-rank-card.active {
   border-color: #00d2ff;
-  box-shadow: 0 0 25px rgba(0, 210, 255, 0.2);
-  background: linear-gradient(135deg, rgba(0, 210, 255, 0.08) 0%, var(--panel) 100%);
+  box-shadow: 0 0 30px rgba(0, 210, 255, 0.3), inset 0 0 15px rgba(0, 210, 255, 0.08);
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
 }
 
 .hunter-rank-card.unlocked {
@@ -461,4 +546,30 @@
 .ai-reward-card:hover {
   border-color: rgba(99, 102, 241, 0.4) !important;
   transform: translateX(2px);
+}
+
+.ai-reward-sheet-card {
+  background: linear-gradient(180deg, #121522 0%, #0d0f18 100%) !important;
+  border: 1px solid rgba(168, 85, 247, 0.35) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 35px rgba(168, 85, 247, 0.15) !important;
+  border-radius: 18px !important;
+}
+
+.ai-report-sheet-card {
+  background: linear-gradient(180deg, #0e1424 0%, #080d18 100%) !important;
+  border: 1px solid rgba(0, 210, 255, 0.45) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 210, 255, 0.2) !important;
+  border-radius: 18px !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-report-sheet-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00d2ff, #a855f7, transparent);
 }

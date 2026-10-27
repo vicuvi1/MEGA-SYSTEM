@@ -141,7 +141,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
 
         {/* 5 Hunter Attributes Grid */}
         <div className="attributes-grid">
-          <div className="attribute-card">
+          <div className="attribute-card attr-str">
             <div className="attr-top">
               <span className="attr-code">STR</span>
               <span className="attr-val">{lv.attributes.str}</span>
@@ -150,7 +150,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
             <span className="attr-source">Physical Workouts</span>
           </div>
 
-          <div className="attribute-card">
+          <div className="attribute-card attr-agi">
             <div className="attr-top">
               <span className="attr-code">AGI</span>
               <span className="attr-val">{lv.attributes.agi}</span>
@@ -159,7 +159,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
             <span className="attr-source">Circadian Wakeups</span>
           </div>
 
-          <div className="attribute-card">
+          <div className="attribute-card attr-vit">
             <div className="attr-top">
               <span className="attr-code">VIT</span>
               <span className="attr-val">{lv.attributes.vit}</span>
@@ -168,7 +168,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
             <span className="attr-source">Sleep & Budget</span>
           </div>
 
-          <div className="attribute-card">
+          <div className="attribute-card attr-int">
             <div className="attr-top">
               <span className="attr-code">INT</span>
               <span className="attr-val">{lv.attributes.int}</span>
@@ -177,7 +177,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
             <span className="attr-source">Focus & Study Blocks</span>
           </div>
 
-          <div className="attribute-card">
+          <div className="attribute-card attr-sen">
             <div className="attr-top">
               <span className="attr-code">SEN</span>
               <span className="attr-val">{lv.attributes.sen}</span>

@@ -96,13 +96,22 @@
 .ritual-card {
   --c: var(--lime);
   display: flex; flex-direction: column; justify-content: space-between;
-  padding: 14px; border-radius: var(--radius);
-  border: 1px solid var(--line); background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--c) 8%, transparent), transparent 60%), var(--panel);
-  min-height: 124px; transition: border-color 0.2s, background 0.2s;
+  padding: 16px; border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--c) 10%, transparent), transparent 60%), linear-gradient(180deg, rgba(20, 24, 34, 0.95), rgba(15, 18, 26, 0.95));
+  min-height: 130px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.ritual-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--c) 50%, var(--line));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 16px color-mix(in srgb, var(--c) 15%, transparent);
 }
 .ritual-card.done {
-  border-color: color-mix(in srgb, var(--c) 35%, var(--line));
-  background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--c) 15%, transparent), transparent 70%), var(--panel);
+  border-color: color-mix(in srgb, var(--c) 45%, var(--line));
+  background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--c) 20%, transparent), transparent 70%), linear-gradient(180deg, rgba(20, 24, 34, 0.95), rgba(15, 18, 26, 0.95));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 0 16px color-mix(in srgb, var(--c) 8%, transparent);
 }
 .ritual-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .ritual-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
