@@ -5,7 +5,7 @@ import type { Category, Repeat, TaskInput, TasksState, TaskView, TaskDecompositi
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction, useToast } from '../ui'
-import { soundSuccess, soundTick, soundSystemOracle } from '../sound'
+import { soundSuccess, soundTick, soundSystemOracle, soundMechanicalClick } from '../sound'
 
 interface Props {
   state: TasksState
@@ -288,7 +288,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
   }, [activeTab, catById, filteredTasks, state.categories, todayStr])
 
   async function handleToggle(t: TaskView) {
-    soundTick()
+    soundMechanicalClick()
     const next = await act(() => (t.done ? life.tasks.uncomplete(t.id) : life.tasks.complete(t.id)))
     if (next) {
       if (!t.done) soundSuccess()

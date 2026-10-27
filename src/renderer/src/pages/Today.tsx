@@ -7,6 +7,7 @@ import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
 import { clock } from './planUi'
 import { KIND } from './Schedule'
+import { DualTimeline } from '../DualTimeline'
 import { useUiPrefs } from '../uiPrefs'
 import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
@@ -180,74 +181,7 @@ function NextReward({ balance, shop, onOpenShop }: { balance: number; shop: Shop
 }
 
 function TodaySchedule({ schedule, onSchedule, onGo }: { schedule: ScheduleState | null; onSchedule: (s: ScheduleState) => void; onGo: (p: PageId) => void }) {
-  const act = useAction()
-  const [calEvents, setCalEvents] = useState<CalendarEvent[]>([])
-
-  useEffect(() => {
-    life.calendar.events().then(setCalEvents).catch(() => {})
-  }, [])
-
-  const today = schedule && schedule.day === schedule.today ? schedule.blocks : []
-  const left = today.filter((b) => b.status === 'pending' || b.status === 'running')
-  const running = today.find((b) => b.status === 'running')
-  return (
-    <section className="panel">
-      <header className="panel-head">
-        <h2>Schedule today</h2>
-        <button className="link" onClick={() => onGo('schedule')}>
-          Open schedule
-        </button>
-      </header>
-      {today.length === 0 ? (
-        <div className="empty small-empty">
-          <p>No blocks today.</p>
-          <button className="btn small" onClick={() => onGo('schedule')}>
-            <Icon name="plus" size={14} /> Plan a block
-          </button>
-        </div>
-      ) : (
-        <ul className="mini-tl">
-          {today.slice(0, 6).map((b) => (
-            <li key={b.id} className={b.status} style={{ ['--c' as string]: KIND[b.kind].color }}>
-              <span className="when">{clock(b.startsAt)}</span>
-              <span className="what">{b.title}</span>
-              {b.status === 'pending' && !running ? (
-                <button className="btn small" onClick={async () => { const s = await act(() => life.schedule.start(b.id)); if (s) { onSchedule(s); onGo('schedule') } }}>
-                  Start
-                </button>
-              ) : (
-                <span className={`status s-${b.status}`}>{b.status === 'pending' ? 'Planned' : b.status === 'running' ? 'Running' : b.status[0].toUpperCase() + b.status.slice(1)}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {today.length > 0 && <p className="hint block-hint">{left.length ? `${left.length} block${left.length > 1 ? 's' : ''} left today` : 'All blocks closed for today.'}</p>}
-
-      {calEvents.length > 0 && (
-        <div style={{ marginTop: '0.85rem', padding: '0.65rem 0.85rem', background: 'rgba(56, 189, 248, 0.08)', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.22)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.35rem', letterSpacing: '0.04em' }}>
-              <Icon name="calendar" size={13} /> GOOGLE CALENDAR (AI VISIBLE)
-            </span>
-            <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>{calEvents.length} event{calEvents.length > 1 ? 's' : ''}</span>
-          </div>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {calEvents.slice(0, 4).map((ce) => (
-              <li key={ce.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.82rem', gap: '0.5rem' }}>
-                <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ce.title}>
-                  {ce.title}
-                </span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: '0.74rem', color: '#38bdf8', flexShrink: 0 }}>
-                  {ce.allDay ? 'All Day' : `${ce.startTime} - ${ce.endTime}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </section>
-  )
+  return <DualTimeline schedule={schedule} onSchedule={onSchedule} onGo={onGo} />
 }
 
 function TodayTasks({ tasks, onTasks, onWallet, onGo }: { tasks: TasksState | null; onTasks: (t: TasksState) => void; onWallet: () => void; onGo: (p: PageId) => void }) {

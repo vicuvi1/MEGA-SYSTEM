@@ -17,6 +17,7 @@ import { useUiPrefs } from '../uiPrefs'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
+import { soundCoin, soundFanfare, soundMechanicalClick, soundSystemOracle, soundWarning } from '../sound'
 
 interface Props {
   auth: AuthStatus
@@ -192,13 +193,51 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           <span>Your name, for the greeting on Today</span>
           <input value={ui.name} maxLength={30} placeholder="e.g. Victor" onChange={(e) => setUi({ name: e.target.value })} />
         </label>
-        <label className="check toggle-row">
-          <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ sound: e.target.checked })} />
-          <span>
-            Sounds
-            <small>A short chime when coins come in, a lower one when they go out.</small>
-          </span>
-        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 10, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          <label className="check toggle-row" style={{ margin: 0 }}>
+            <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ sound: e.target.checked })} />
+            <span>
+              Cyberpunk & Solo Leveling Audio Effects
+              <small>Rich, low-latency synthesized audio for rituals, tasks, coins, and system warnings.</small>
+            </span>
+          </label>
+
+          {ui.sound && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Master SFX Volume</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: '#00d2ff', fontWeight: 700 }}>{ui.volume ?? 80}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={ui.volume ?? 80}
+                onChange={(e) => setUi({ volume: Number(e.target.value) })}
+                style={{ width: '100%', accentColor: '#00d2ff' }}
+              />
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                <button type="button" className="btn small ghost" onClick={() => soundSystemOracle()}>
+                  ⚔️ System Oracle
+                </button>
+                <button type="button" className="btn small ghost" onClick={() => soundCoin()}>
+                  💰 Gold Clink
+                </button>
+                <button type="button" className="btn small ghost" onClick={() => soundMechanicalClick()}>
+                  ⌨️ Mechanical Click
+                </button>
+                <button type="button" className="btn small ghost" onClick={() => soundFanfare()}>
+                  🏆 Rank Fanfare
+                </button>
+                <button type="button" className="btn small ghost" onClick={() => soundWarning()}>
+                  ⚠️ Conflict Alert
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <p className="hint block">Size: Ctrl + and Ctrl − make everything bigger or smaller, Ctrl 0 resets. The apps inside keep their own dark look in the light theme.</p>
       </section>
 

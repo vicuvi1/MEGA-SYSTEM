@@ -8,6 +8,7 @@ export interface UiPrefs {
   theme: 'dark' | 'light' | 'system'
   accent: AccentColor
   sound: boolean
+  volume: number
   name: string
 }
 
@@ -21,7 +22,7 @@ export const ACCENTS: Record<AccentColor, string> = {
 
 
 const KEY = 'ls.ui'
-const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, name: '' }
+const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '' }
 
 function load(): UiPrefs {
   try {

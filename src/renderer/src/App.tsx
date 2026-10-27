@@ -312,7 +312,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   })
 
   // Small counts on the sidebar and the "needs you" list in the bell.
-  const [ui] = useUiPrefs()
+  const [ui, setUiPrefs] = useUiPrefs()
   const blocksLeft = schedule && schedule.day === schedule.today ? schedule.blocks.filter((b) => b.status === 'pending' || b.status === 'running').length : 0
   const tasksLeft = tasks?.tasks.filter((t) => !t.done).length ?? 0
   const overdue = tasks?.tasks.filter((t) => t.overdue).length ?? 0
@@ -450,6 +450,21 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           </button>
 
           <div className="top-actions">
+            <button
+              className={`icon-btn ${!ui.sound ? 'muted' : ''}`}
+              aria-label={ui.sound ? 'Mute sound effects' : 'Unmute sound effects'}
+              title={ui.sound ? `Cyberpunk SFX Active (${ui.volume ?? 80}%) — Click to mute` : 'SFX Muted — Click to unmute'}
+              onClick={() => {
+                const next = !ui.sound
+                setUiPrefs({ sound: next })
+                if (next) soundTick()
+              }}
+              style={{
+                opacity: ui.sound ? 1 : 0.6
+              }}
+            >
+              <span style={{ fontSize: 16 }}>{ui.sound ? '🔊' : '🔇'}</span>
+            </button>
             <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
             <UpdateChip status={update} onClick={() => setPage('settings')} />
             {backup && (
