@@ -6,6 +6,9 @@ import {
   formatCleanCheckinResponse,
   formatExpenseResponse,
   formatHelpMessage,
+  formatMetricResponse,
+  formatSportResponse,
+  formatSportStatusResponse,
   formatTodayStatus,
   formatUrgeResponse,
   formatWorkoutResponse,
@@ -313,6 +316,120 @@ export class TelegramBotHub {
           break
         }
 
+        case 'sport': {
+          if (!this.body) {
+            reply = '❌ Sport & Workout service unavailable.'
+            break
+          }
+          const exName = parsed.exerciseName || 'Athletic Workout'
+          const amount = parsed.exerciseAmount || 1
+          const rawUnit = parsed.exerciseUnit || 'minutes'
+          const validUnit = rawUnit === 'reps' || rawUnit === 'kg' || rawUnit === 'sets' ? rawUnit : 'minutes'
+          const res = this.body.logWorkout({
+            title: `${exName} (Telegram Sport Bot)`,
+            items: [
+              {
+                exerciseId: exName.toLowerCase().replace(/\s+/g, '_'),
+                name: exName,
+                amount,
+                unit: validUnit
+              }
+            ],
+            note: `Logged via Telegram Sport Bot (${amount} ${rawUnit})`
+          })
+          this.onWalletChangeCallback?.()
+          reply = formatSportResponse(
+            exName,
+            amount,
+            rawUnit,
+            res.state.streak,
+            res.awarded ? 15 : 5,
+            35
+          )
+          break
+        }
+
+        case 'weight': {
+          if (!this.body) {
+            reply = '❌ Body metrics service unavailable.'
+            break
+          }
+          const weight = parsed.metricWeight
+          if (!weight || weight < 30 || weight > 300) {
+            reply = '⚠️ Please provide a valid weight (e.g. <code>/weight 74.5</code>).'
+            break
+          }
+          this.body.logMetric({ weight, note: 'Logged via Telegram Sport Bot' })
+          this.onWalletChangeCallback?.()
+          reply = formatMetricResponse('weight', weight, 'kg', 5, 15)
+          break
+        }
+
+        case 'waist': {
+          if (!this.body) {
+            reply = '❌ Body metrics service unavailable.'
+            break
+          }
+          const waist = parsed.metricWaist
+          if (!waist || waist < 40 || waist > 200) {
+            reply = '⚠️ Please provide a valid waist measurement (e.g. <code>/waist 82</code>).'
+            break
+          }
+          this.body.logMetric({ waist, note: 'Logged via Telegram Sport Bot' })
+          this.onWalletChangeCallback?.()
+          reply = formatMetricResponse('waist', waist, 'cm', 5, 15)
+          break
+        }
+
+        case 'sport_status': {
+          if (!this.body) {
+            reply = '❌ Body service unavailable.'
+            break
+          }
+          const st = this.body.state()
+          reply = formatSportStatusResponse({
+            streak: st.streak,
+            totalWorkouts: st.totalWorkouts,
+            thisWeek: st.workoutsThisWeek,
+            latestWeight: st.latestWeight,
+            latestWaist: st.latestWaist
+          })
+          break
+        }
+
+        case 'pr': {
+          if (!this.body) {
+            reply = '❌ Body service unavailable.'
+            break
+          }
+          if (parsed.prExercise && parsed.prValue) {
+            this.body.logWorkout({
+              title: `PR: ${parsed.prExercise} ${parsed.prValue}`,
+              items: [
+                {
+                  exerciseId: parsed.prExercise.toLowerCase().replace(/\s+/g, '_'),
+                  name: `PR: ${parsed.prExercise}`,
+                  amount: parseFloat(parsed.prValue) || 1,
+                  unit: 'reps'
+                }
+              ],
+              note: `🏆 Personal Record logged via Telegram Sport Bot: ${parsed.prExercise} -> ${parsed.prValue}`
+            })
+            this.onWalletChangeCallback?.()
+            reply = `🏆 <b>PERSONAL RECORD (PR) CRUSHED!</b> 🏆\n\n• <b>Exercise:</b> ${parsed.prExercise}\n• <b>Record Value:</b> ${parsed.prValue}\n• <b>Reward:</b> +20 🪙 Coins · +50 XP\n\n<i>"A true Hunter continuously breaks their previous limits!"</i>`
+          } else {
+            const st = this.body.state()
+            reply = formatSportStatusResponse({
+              streak: st.streak,
+              totalWorkouts: st.totalWorkouts,
+              thisWeek: st.workoutsThisWeek,
+              latestWeight: st.latestWeight,
+              latestWaist: st.latestWaist
+            })
+          }
+          break
+        }
+
         case 'expense': {
           if (!this.money) {
             reply = '❌ Money expense service unavailable.'
@@ -465,11 +582,18 @@ export class TelegramBotHub {
   startPolling(): void {
     if (this.isPolling) return
     const cfg = this.getConfig()
-    if (!cfg.botToken) return
+    const tokens: string[] = []
+    if (cfg.botToken) tokens.push(cfg.botToken)
+    if (cfg.sportBotToken && !tokens.includes(cfg.sportBotToken)) tokens.push(cfg.sportBotToken)
+    if (cfg.financeBotToken && !tokens.includes(cfg.financeBotToken)) tokens.push(cfg.financeBotToken)
+    if (cfg.manBotToken && !tokens.includes(cfg.manBotToken)) tokens.push(cfg.manBotToken)
+    if (tokens.length === 0) return
 
     this.isPolling = true
     this.abortController = new AbortController()
-    this.pollLoop(cfg.botToken, this.abortController.signal).catch(() => {})
+    for (const tok of tokens) {
+      this.pollLoop(tok, this.abortController.signal).catch(() => {})
+    }
   }
 
   stopPolling(): void {

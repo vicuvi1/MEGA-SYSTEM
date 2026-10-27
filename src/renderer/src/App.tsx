@@ -40,7 +40,8 @@ import { soundTick, stopAllSounds, soundSystemOracle } from './sound'
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
   money: { kind: 'finance', system: 'Coins & budget' },
   sleep: { kind: 'waky', system: 'Coins & stats' },
-  discipline: { kind: 'man', system: 'Streak & coins' }
+  discipline: { kind: 'man', system: 'Streak & coins' },
+  body: { kind: 'sport', system: 'Metrics & Workouts' }
 }
 
 export function App() {
@@ -344,7 +345,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <div className="seg-switch" role="tablist" aria-label={`${current.label} views`}>
               <span className={`seg-thumb ${tab === 'app' ? '' : 'second'}`} aria-hidden="true" />
               <button role="tab" aria-selected={tab === 'app'} className={tab === 'app' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'app' }))}>
-                <Icon name={embed.kind === 'finance' ? 'coin' : embed.kind === 'waky' ? 'moon' : 'shield'} size={14} />
+                <Icon name={embed.kind === 'finance' ? 'coin' : embed.kind === 'waky' ? 'moon' : embed.kind === 'sport' ? 'tasks' : 'shield'} size={14} />
                 {EMBED_LABEL[embed.kind]}
               </button>
               <button role="tab" aria-selected={tab === 'system'} className={tab === 'system' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'system' }))}>
@@ -486,7 +487,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
             )}
-            {page === 'body' && body && <Body state={body} onState={setBody} onWallet={onWallet} />}
+            {page === 'body' && body && <Body state={body} onState={setBody} onWallet={onWallet} onOpenSportApp={() => setView((v) => ({ ...v, body: 'app' }))} />}
             {page === 'discipline' && discipline && (
               <Discipline state={discipline} man={connections?.man.suggestion ?? null} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
             )}

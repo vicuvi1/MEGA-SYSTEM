@@ -11,6 +11,7 @@ import { FINANCE_PARTITION } from './finance'
 
 export const MAN_PARTITION = 'persist:man'
 export const WAKY_PARTITION = 'persist:waky'
+export const SPORT_PARTITION = 'persist:sport'
 export const WAKY_URL = 'http://127.0.0.1:48990'
 
 /** Must run before the app is ready. */
@@ -25,6 +26,10 @@ export function appsDir(): string {
 
 export function manUrl(): string {
   return pathToFileURL(join(appsDir(), 'man', 'index.html')).toString()
+}
+
+export function sportUrl(): string {
+  return pathToFileURL(join(appsDir(), 'sport', 'index.html')).toString()
 }
 
 const partitionDir = (partition: string) => join(app.getPath('userData'), 'Partitions', partition.replace(/^persist:/, ''))

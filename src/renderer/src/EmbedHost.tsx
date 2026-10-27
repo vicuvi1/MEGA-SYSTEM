@@ -3,9 +3,9 @@ import type { EmbeddedApps } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
 
-export type EmbedKind = 'finance' | 'waky' | 'man'
+export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
-export const EMBED_LABEL: Record<EmbedKind, string> = { finance: 'Finance Helper', waky: 'Waky', man: 'MAN' }
+export const EMBED_LABEL: Record<EmbedKind, string> = { finance: 'Finance Helper', waky: 'Waky', man: 'MAN', sport: 'Sport Track' }
 
 /**
  * Keeps each app open once visited (hidden when not shown), so switching
@@ -40,7 +40,7 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
     )
   }
 
-  const src: Record<EmbedKind, { url: string; partition: string }> = { finance: info.finance, man: info.man, waky: info.waky }
+  const src: Record<EmbedKind, { url: string; partition: string }> = { finance: info.finance, man: info.man, waky: info.waky, sport: info.sport }
   return (
     <div className={`embed-host ${active ? 'on' : ''}`}>
       {visited.map((k) => {

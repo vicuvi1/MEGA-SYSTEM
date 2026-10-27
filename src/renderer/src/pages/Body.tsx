@@ -9,11 +9,13 @@ import '../body.css'
 export function Body({
   state,
   onState,
-  onWallet
+  onWallet,
+  onOpenSportApp
 }: {
   state: BodyState
   onState: (s: BodyState) => void
   onWallet: () => void
+  onOpenSportApp?: () => void
 }) {
   const act = useAction()
   const [workoutOpen, setWorkoutOpen] = useState(false)
@@ -83,6 +85,22 @@ export function Body({
       </section>
 
       <div className="body-actions">
+        {onOpenSportApp && (
+          <button
+            className="btn"
+            style={{
+              background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(79, 172, 254, 0.15))',
+              borderColor: 'rgba(0, 242, 254, 0.6)',
+              color: '#00f2fe',
+              fontWeight: 700
+            }}
+            onClick={onOpenSportApp}
+            title="Switch to embedded Sport Track app"
+          >
+            <Icon name="bolt" size={15} />
+            ⚡ Launch Sport Track App
+          </button>
+        )}
         <button
           className="btn"
           style={{ background: '#ff6b8b', borderColor: '#ff6b8b', color: '#fff' }}

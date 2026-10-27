@@ -226,6 +226,7 @@ export interface EmbeddedApps {
   finance: { url: string; partition: string; preloadReady: boolean }
   man: { url: string; partition: string }
   waky: { url: string; partition: string }
+  sport: { url: string; partition: string }
   migration: { finance: 'copied' | 'exists' | 'missing'; man: 'copied' | 'exists' | 'missing' } | null
 }
 

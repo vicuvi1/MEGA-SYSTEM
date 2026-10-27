@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRON PULSE: Hunter Athletics & Sport Tracker</title>
+  <style>
+    :root {
+      --bg-dark: #060913;
+      --card-bg: rgba(13, 20, 36, 0.75);
+      --card-border: rgba(30, 58, 102, 0.55);
+      --card-border-glow: rgba(0, 242, 254, 0.35);
+      --cyan-neon: #00f2fe;
+      --azure-neon: #4facfe;
+      --electric-blue: #0088ff;
+      --gold-neon: #f9d423;
+      --purple-neon: #a855f7;
+      --green-neon: #10b981;
+      --text-main: #f1f5f9;
+      --text-sub: #94a3b8;
+      --text-muted: #64748b;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font);
+      min-height: 100vh;
+      overflow-x: hidden;
+      overflow-y: auto;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-bottom: 60px;
+    }
+
+    /* Ambient Cyber Canvas */
+    #ambient-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 1200px;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Top HUD / Hunter Status Header */
+    .hunter-hud {
+      background: linear-gradient(135deg, rgba(14, 25, 48, 0.85) 0%, rgba(9, 15, 28, 0.95) 100%);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 22px 28px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 242, 254, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hunter-hud::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan-neon), var(--azure-neon), transparent);
+    }
+
+    .hud-profile {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .rank-crest {
+      width: 64px;
+      height: 64px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(79, 172, 254, 0.1));
+      border: 2px solid var(--cyan-neon);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.35);
+      position: relative;
+    }
+
+    .rank-crest .crest-icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .rank-crest .crest-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: var(--cyan-neon);
+      margin-top: 2px;
+    }
+
+    .profile-info h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .profile-info .hunter-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(0, 242, 254, 0.15);
+      color: var(--cyan-neon);
+      border: 1px solid rgba(0, 242, 254, 0.4);
+      text-transform: uppercase;
+    }
+
+    .xp-meter-wrap {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 260px;
+    }
+
+    .xp-bar-bg {
+      flex: 1;
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .xp-bar-fill {
+      height: 100%;
+      width: 65%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--cyan-neon), var(--azure-neon));
+      box-shadow: 0 0 10px var(--cyan-neon);
+      transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .xp-text {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sub);
+      white-space: nowrap;
+    }
+
+    .hud-metrics {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .metric-pill {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .metric-pill .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+    }
+
+    .metric-pill .val {
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .metric-pill .val.highlight {
+      color: var(--cyan-neon);
+      text-shadow: 0 0 12px rgba(0, 242, 254, 0.5);
+    }
+
+    .metric-pill .val.gold {
+      color: var(--gold-neon);
+      text-shadow: 0 0 12px rgba(249, 212, 35, 0.4);
+    }
+
+    /* Quick Grid */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Glass Cards */
+    .glass-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(12px);
+      position: relative;
+    }
+
+    .glass-card:hover {
+      border-color: var(--card-border-glow);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title .icon {
+      color: var(--cyan-neon);
+    }
+
+    /* Category Selector Buttons */
+    .category-pills {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 18px;
+    }
+
+    .cat-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-sub);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .cat-btn:hover {
+      background: rgba(0, 242, 254, 0.1);
+      border-color: rgba(0, 242, 254, 0.3);
+      color: #fff;
+    }
+
+    .cat-btn.active {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.15));
+      border-color: var(--cyan-neon);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(0, 242, 254, 0.3);
+    }
+
+    /* Form Fields */
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-group label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .input-group input, .input-group select {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      transition: border 0.2s, box-shadow 0.2s;
+      font-family: inherit;
+    }
+
+    .input-group input:focus, .input-group select:focus {
+      border-color: var(--cyan-neon);
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.25);
+    }
+
+    .btn-log {
+      width: 100%;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      color: #050811;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn-log:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 242, 254, 0.6);
+    }
+
+    .btn-log:active {
+      transform: translateY(0);
+    }
+
+    /* Rest Timer Card */
+    .rest-timer-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 10px 0;
+    }
+
+    .timer-circle-wrap {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      margin: 10px 0 18px;
+    }
+
+    .timer-svg {
+      transform: rotate(-90deg);
+      width: 140px;
+      height: 140px;
+    }
+
+    .timer-svg-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 8;
+    }
+
+    .timer-svg-progress {
+      fill: none;
+      stroke: var(--cyan-neon);
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 377;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.3s linear;
+      filter: drop-shadow(0 0 6px var(--cyan-neon));
+    }
+
+    .timer-digits {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .timer-digits .sec {
+      font-size: 32px;
+      font-weight: 800;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+    }
+
+    .timer-digits .sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .timer-presets {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-sub);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .preset-btn:hover {
+      background: rgba(0, 242, 254, 0.15);
+      color: #fff;
+    }
+
+    .timer-controls {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .btn-timer {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+
+    .btn-timer.primary {
+      background: var(--cyan-neon);
+      color: #050811;
+      box-shadow: 0 4px 14px rgba(0, 242, 254, 0.35);
+    }
+
+    .btn-timer.sec {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    /* Personal Records (PR) Grid */
+    .pr-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .pr-card {
+      background: rgba(18, 28, 48, 0.6);
+      border: 1px solid rgba(249, 212, 35, 0.2);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pr-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--gold-neon);
+    }
+
+    .pr-trophy {
+      font-size: 24px;
+      filter: drop-shadow(0 0 8px rgba(249, 212, 35, 0.5));
+    }
+
+    .pr-details .pr-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .pr-details .pr-value {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      margin-top: 2px;
+    }
+
+    .pr-details .pr-date {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Workout History */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 380px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .history-item {
+      background: rgba(16, 24, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border 0.15s;
+    }
+
+    .history-item:hover {
+      border-color: rgba(0, 242, 254, 0.25);
+    }
+
+    .hist-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .hist-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: rgba(0, 242, 254, 0.12);
+      color: var(--cyan-neon);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .hist-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .hist-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .hist-reward {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--gold-neon);
+    }
+
+    /* Telegram Integration Card */
+    .telegram-guide-card {
+      background: linear-gradient(135deg, rgba(36, 116, 219, 0.12) 0%, rgba(16, 24, 42, 0.8) 100%);
+      border: 1px solid rgba(0, 136, 255, 0.3);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .telegram-guide-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .telegram-guide-header .tg-logo {
+      width: 28px;
+      height: 28px;
+      background: #0088cc;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(0, 136, 204, 0.5);
+    }
+
+    .telegram-guide-header h3 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .tg-command-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tg-chip {
+      background: rgba(0, 136, 204, 0.15);
+      border: 1px solid rgba(0, 136, 204, 0.3);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #7dd3fc;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tg-chip:hover {
+      background: rgba(0, 136, 204, 0.35);
+      color: #fff;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(13, 20, 36, 0.95);
+      border: 1px solid var(--cyan-neon);
+      border-radius: 10px;
+      padding: 12px 20px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 242, 254, 0.4);
+      z-index: 1000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="ambient-canvas"></canvas>
+
+  <div class="container">
+    <!-- Top Hunter HUD -->
+    <header class="hunter-hud">
+      <div class="hud-profile">
+        <div class="rank-crest" id="rank-crest">
+          <span class="crest-icon">⚡</span>
+          <span class="crest-label" id="rank-grade">E-RANK</span>
+        </div>
+        <div class="profile-info">
+          <h1>
+            IRON PULSE
+            <span class="hunter-badge" id="hunter-title">Recruit Athlete</span>
+          </h1>
+          <div class="xp-meter-wrap">
+            <div class="xp-bar-bg">
+              <div class="xp-bar-fill" id="xp-fill"></div>
+            </div>
+            <span class="xp-text" id="xp-text">0 / 100 XP</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud-metrics">
+        <div class="metric-pill">
+          <span class="lbl">Combat Power</span>
+          <span class="val highlight" id="combat-power">1,420 CP</span>
+        </div>
+        <div class="metric-pill">
+          <span class="lbl">Active Streak</span>
+          <span class="val" id="streak-counter">0 Days</span>
+        </div>
+        <div class="metric-pill">
+          <span class="lbl">Total Sessions</span>
+          <span class="val" id="total-sessions">0</span>
+        </div>
+        <div class="metric-pill">
+          <span class="lbl">Session Reward</span>
+          <span class="val gold">+15 🪙 / +35 XP</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Dashboard Split -->
+    <div class="dashboard-grid">
+      <!-- Left Column: Workout Logging & Recent Sessions -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Workout Logger Card -->
+        <section class="glass-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <span class="icon">⚔️</span>
+              Log Athletic Session
+            </h2>
+            <span style="font-size: 11px; color: var(--cyan-neon); font-weight: 700;">LIVE SYNC READY</span>
+          </div>
+
+          <!-- Category Selector -->
+          <div class="category-pills" id="cat-pills">
+            <button class="cat-btn active" data-cat="gym">🏋️ Gym & Weights</button>
+            <button class="cat-btn" data-cat="run">🏃 Running</button>
+            <button class="cat-btn" data-cat="football">⚽ Football</button>
+            <button class="cat-btn" data-cat="boxing">🥊 Boxing</button>
+            <button class="cat-btn" data-cat="calisthenics">🤸 Calisthenics</button>
+            <button class="cat-btn" data-cat="swim">🏊 Swimming</button>
+            <button class="cat-btn" data-cat="cycling">🚴 Cycling</button>
+          </div>
+
+          <!-- Dynamic Form Inputs -->
+          <form id="workout-form">
+            <div class="form-row">
+              <div class="input-group" style="grid-column: span 2;">
+                <label>Exercise / Sport Title</label>
+                <input type="text" id="exercise-name" placeholder="e.g. Bench Press, 5km Run, Sparring" required>
+              </div>
+              <div class="input-group">
+                <label id="lbl-amount">Amount / Sets</label>
+                <input type="number" id="exercise-amount" placeholder="5" value="5" min="1" step="any" required>
+              </div>
+              <div class="input-group">
+                <label id="lbl-unit">Unit</label>
+                <select id="exercise-unit">
+                  <option value="sets">Sets (x Reps)</option>
+                  <option value="reps">Reps</option>
+                  <option value="kg">Weight (kg)</option>
+                  <option value="km">Distance (km)</option>
+                  <option value="minutes">Duration (min)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="input-group">
+                <label>Weight / Load (kg)</label>
+                <input type="number" id="exercise-weight" placeholder="Optional (e.g. 80)" step="any">
+              </div>
+              <div class="input-group">
+                <label>Duration (Minutes)</label>
+                <input type="number" id="exercise-duration" placeholder="e.g. 45" value="45">
+              </div>
+              <div class="input-group" style="grid-column: span 2;">
+                <label>Session Notes / Intensity</label>
+                <input type="text" id="exercise-note" placeholder="Felt explosive, smooth sets, new personal best">
+              </div>
+            </div>
+
+            <button type="submit" class="btn-log">
+              <span>⚡ COMPLETE & RECORD WORKOUT</span>
+            </button>
+          </form>
+        </section>
+
+        <!-- Personal Records (PR) Hall of Fame -->
+        <section class="glass-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <span class="icon">🏆</span>
+              Personal Records (PR) Hall of Fame
+            </h2>
+            <button class="preset-btn" id="btn-add-pr" style="color: var(--gold-neon); border-color: rgba(249, 212, 35, 0.4);">
+              + Update PR
+            </button>
+          </div>
+
+          <div class="pr-grid" id="pr-container">
+            <!-- Injected via JS -->
+          </div>
+        </section>
+
+        <!-- Workout Activity History -->
+        <section class="glass-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <span class="icon">📜</span>
+              Recent Training Logs
+            </h2>
+            <span style="font-size: 11px; color: var(--text-muted);" id="hist-count">0 sessions</span>
+          </div>
+
+          <div class="history-list" id="history-container">
+            <!-- Injected via JS -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: Live Rest Timer & Telegram Sport Bot -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Rest Timer Card -->
+        <section class="glass-card rest-timer-box">
+          <div class="card-header" style="width: 100%; margin-bottom: 0;">
+            <h2 class="card-title">
+              <span class="icon">⏱️</span>
+              Rest Interval Timer
+            </h2>
+            <span style="font-size: 12px; cursor: pointer;" id="sound-toggle" title="Toggle Sound">🔊</span>
+          </div>
+
+          <div class="timer-circle-wrap">
+            <svg class="timer-svg" viewBox="0 0 140 140">
+              <circle class="timer-svg-bg" cx="70" cy="70" r="60" />
+              <circle class="timer-svg-progress" id="timer-progress" cx="70" cy="70" r="60" />
+            </svg>
+            <div class="timer-digits">
+              <span class="sec" id="timer-display">60s</span>
+              <span class="sub" id="timer-status">REST READY</span>
+            </div>
+          </div>
+
+          <div class="timer-presets">
+            <button class="preset-btn" data-time="30">30s</button>
+            <button class="preset-btn" data-time="45">45s</button>
+            <button class="preset-btn" data-time="60">60s</button>
+            <button class="preset-btn" data-time="90">90s</button>
+            <button class="preset-btn" data-time="120">2m</button>
+          </div>
+
+          <div class="timer-controls">
+            <button class="btn-timer primary" id="timer-start-btn">START REST</button>
+            <button class="btn-timer sec" id="timer-reset-btn">RESET</button>
+          </div>
+        </section>
+
+        <!-- Telegram Sport Bot Assistant Card -->
+        <section class="telegram-guide-card">
+          <div class="telegram-guide-header">
+            <div class="tg-logo">✈️</div>
+            <div>
+              <h3>Telegram Sport Bot</h3>
+              <p style="font-size: 11px; color: var(--text-sub);">Track sport directly from your phone</p>
+            </div>
+          </div>
+          <p style="font-size: 11px; color: var(--text-sub); line-height: 1.5;">
+            Send commands to your connected Telegram Bot to log reps, weights, running distances, or body metrics anytime:
+          </p>
+          <div class="tg-command-chips">
+            <span class="tg-chip" data-cmd="/sport run 5km">/sport run 5km</span>
+            <span class="tg-chip" data-cmd="/pushups 50">/pushups 50</span>
+            <span class="tg-chip" data-cmd="/pullups 20">/pullups 20</span>
+            <span class="tg-chip" data-cmd="/football 90m">/football 90m</span>
+            <span class="tg-chip" data-cmd="/boxing 45m">/boxing 45m</span>
+            <span class="tg-chip" data-cmd="/bench 80kg">/bench 80kg</span>
+            <span class="tg-chip" data-cmd="/weight 74.5">/weight 74.5</span>
+            <span class="tg-chip" data-cmd="/waist 82">/waist 82</span>
+            <span class="tg-chip" data-cmd="/sport status">/sport status</span>
+          </div>
+          <span style="font-size: 10px; color: var(--cyan-neon); cursor: pointer;" id="tg-copy-hint">
+            Tap any command to copy
+          </span>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">
+    <span style="font-size: 16px;">⚡</span>
+    <span id="toast-text">Workout Saved! +15 Coins Awarded</span>
+  </div>
+
+  <script>
+    // --- Synthesizer Audio Engine (Web Audio API) ---
+    class AudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playTone(freq, type, duration, gainVal = 0.15) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {}
+      }
+      playClick() {
+        this.playTone(800, 'sine', 0.05, 0.1);
+      }
+      playTick() {
+        this.playTone(1200, 'triangle', 0.04, 0.08);
+      }
+      playChime() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          setTimeout(() => this.playTone(freq, 'sine', 0.4, 0.15), i * 90);
+        });
+      }
+      playLevelUp() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        [440, 554.37, 659.25, 880, 1108.73].forEach((freq, i) => {
+          setTimeout(() => this.playTone(freq, 'triangle', 0.5, 0.2), i * 110);
+        });
+      }
+    }
+    const audio = new AudioEngine();
+
+    // --- Ambient Particle Canvas ---
+    const canvas = document.getElementById('ambient-canvas');
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    const particles = Array.from({ length: 45 }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      size: Math.random() * 2 + 1,
+      speedY: -(Math.random() * 0.6 + 0.2),
+      speedX: (Math.random() - 0.5) * 0.3,
+      alpha: Math.random() * 0.5 + 0.2
+    }));
+
+    function animateParticles() {
+      ctx.clearRect(0, 0, width, height);
+      particles.forEach(p => {
+        p.y += p.speedY;
+        p.x += p.speedX;
+        if (p.y < -10) {
+          p.y = height + 10;
+          p.x = Math.random() * width;
+        }
+        ctx.fillStyle = `rgba(0, 242, 254, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      requestAnimationFrame(animateParticles);
+    }
+    animateParticles();
+
+    // --- State Storage ---
+    const STORAGE_KEY = 'life_sport_tracker_v1';
+    const DEFAULT_STATE = {
+      xp: 45,
+      level: 1,
+      rank: 'E-RANK',
+      title: 'Recruit Athlete',
+      combatPower: 1420,
+      streak: 1,
+      lastDate: new Date().toISOString().split('T')[0],
+      prs: [
+        { id: 'bench', title: 'Bench Press', value: '85 kg', date: 'Yesterday' },
+        { id: 'run5k', title: '5KM Run', value: '23m 15s', date: '3 days ago' },
+        { id: 'pullups', title: 'Max Pull-ups', value: '18 reps', date: 'This week' },
+        { id: 'pushups', title: 'Max Push-ups', value: '55 reps', date: 'Last week' }
+      ],
+      history: [
+        {
+          id: 1,
+          category: 'Gym',
+          title: 'Upper Body Power & Bench',
+          amount: '5 sets (80kg)',
+          duration: '50m',
+          coins: 15,
+          xp: 35,
+          date: new Date().toLocaleDateString()
+        }
+      ]
+    };
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? { ...DEFAULT_STATE, ...JSON.parse(raw) } : DEFAULT_STATE;
+      } catch (e) {
+        return DEFAULT_STATE;
+      }
+    }
+
+    function saveState(s) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+      } catch (e) {}
+    }
+
+    let state = loadState();
+
+    // --- Hunter Level Engine ---
+    function updateHunterStats() {
+      const totalSessions = state.history.length;
+      const calculatedXp = (totalSessions * 35) + state.xp;
+      const level = Math.floor(calculatedXp / 100) + 1;
+      const xpIntoLevel = calculatedXp % 100;
+
+      let rank = 'E-RANK';
+      let title = 'Recruit Athlete';
+      if (level >= 15) { rank = 'S-RANK'; title = 'Monarch Athlete'; }
+      else if (level >= 10) { rank = 'A-RANK'; title = 'Elite Gladiator'; }
+      else if (level >= 6) { rank = 'B-RANK'; title = 'Master Hunter'; }
+      else if (level >= 3) { rank = 'C-RANK'; title = 'Ascended Athlete'; }
+      else if (level >= 2) { rank = 'D-RANK'; title = 'Seasoned Striker'; }
+
+      const cp = 1400 + (totalSessions * 180) + (level * 250);
+
+      document.getElementById('rank-grade').textContent = rank;
+      document.getElementById('hunter-title').textContent = title;
+      document.getElementById('combat-power').textContent = cp.toLocaleString() + ' CP';
+      document.getElementById('streak-counter').textContent = state.streak + (state.streak === 1 ? ' Day' : ' Days');
+      document.getElementById('total-sessions').textContent = totalSessions;
+
+      document.getElementById('xp-fill').style.width = xpIntoLevel + '%';
+      document.getElementById('xp-text').textContent = `${xpIntoLevel} / 100 XP (LV ${level})`;
+    }
+
+    // --- UI Renderers ---
+    function renderPRs() {
+      const container = document.getElementById('pr-container');
+      container.innerHTML = state.prs.map(pr => `
+        <div class="pr-card">
+          <div class="pr-trophy">🏆</div>
+          <div class="pr-details">
+            <div class="pr-title">${pr.title}</div>
+            <div class="pr-value">${pr.value}</div>
+            <div class="pr-date">${pr.date}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('history-container');
+      document.getElementById('hist-count').textContent = `${state.history.length} sessions`;
+      if (state.history.length === 0) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;">No workouts recorded yet. Complete a session above!</div>';
+        return;
+      }
+      container.innerHTML = state.history.map(h => `
+        <div class="history-item">
+          <div class="hist-left">
+            <div class="hist-icon">⚡</div>
+            <div>
+              <div class="hist-title">${h.title}</div>
+              <div class="hist-sub">${h.amount} · ${h.duration} · ${h.date}</div>
+            </div>
+          </div>
+          <div class="hist-reward">
+            <span>+${h.coins} 🪙</span>
+            <span style="color: var(--cyan-neon);">+${h.xp} XP</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').textContent = text;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2800);
+    }
+
+    // --- Category Selector ---
+    let currentCat = 'gym';
+    const catPresets = {
+      gym: { name: 'Bench Press & Strength', amount: '5', unit: 'sets', duration: '50' },
+      run: { name: 'Outdoor Running', amount: '5', unit: 'km', duration: '28' },
+      football: { name: 'Football Match', amount: '90', unit: 'minutes', duration: '90' },
+      boxing: { name: 'Heavy Bag & Sparring', amount: '6', unit: 'sets', duration: '45' },
+      calisthenics: { name: 'Pushups & Pullups', amount: '50', unit: 'reps', duration: '30' },
+      swim: { name: 'Freestyle Laps', amount: '1000', unit: 'km', duration: '40' },
+      cycling: { name: 'Road Cycling', amount: '15', unit: 'km', duration: '45' }
+    };
+
+    document.getElementById('cat-pills').addEventListener('click', (e) => {
+      const btn = e.target.closest('.cat-btn');
+      if (!btn) return;
+      audio.playClick();
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCat = btn.dataset.cat;
+      const preset = catPresets[currentCat] || catPresets.gym;
+      document.getElementById('exercise-name').value = preset.name;
+      document.getElementById('exercise-amount').value = preset.amount;
+      document.getElementById('exercise-unit').value = preset.unit;
+      document.getElementById('exercise-duration').value = preset.duration;
+    });
+
+    // --- Workout Form Submit ---
+    document.getElementById('workout-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      audio.playChime();
+
+      const name = document.getElementById('exercise-name').value.trim() || 'Athletic Workout';
+      const amount = document.getElementById('exercise-amount').value;
+      const unit = document.getElementById('exercise-unit').value;
+      const duration = document.getElementById('exercise-duration').value || '45';
+      const weight = document.getElementById('exercise-weight').value;
+
+      const record = {
+        id: Date.now(),
+        category: currentCat,
+        title: name + (weight ? ` (${weight}kg)` : ''),
+        amount: `${amount} ${unit}`,
+        duration: `${duration}m`,
+        coins: 15,
+        xp: 35,
+        date: new Date().toLocaleDateString()
+      };
+
+      state.history.unshift(record);
+      state.xp += 35;
+      saveState(state);
+
+      updateHunterStats();
+      renderHistory();
+      showToast(`🏆 Session Logged! +15 Coins & +35 XP Awarded`);
+
+      // IPC broadcast if inside Electron
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'SPORT_WORKOUT_LOGGED', workout: record }, '*');
+      }
+    });
+
+    // --- Rest Interval Timer ---
+    let timerTotal = 60;
+    let timerRemaining = 60;
+    let timerInterval = null;
+    const circleCircumference = 2 * Math.PI * 60; // 377
+    const progressEl = document.getElementById('timer-progress');
+    const displayEl = document.getElementById('timer-display');
+    const statusEl = document.getElementById('timer-status');
+    const startBtn = document.getElementById('timer-start-btn');
+
+    function updateTimerUI() {
+      displayEl.textContent = `${timerRemaining}s`;
+      const fraction = timerRemaining / timerTotal;
+      const offset = circleCircumference - (fraction * circleCircumference);
+      progressEl.style.strokeDashoffset = offset;
+    }
+
+    function startTimer() {
+      audio.init();
+      audio.playClick();
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        startBtn.textContent = 'RESUME';
+        statusEl.textContent = 'PAUSED';
+        return;
+      }
+      startBtn.textContent = 'PAUSE';
+      statusEl.textContent = 'RESTING';
+      timerInterval = setInterval(() => {
+        timerRemaining--;
+        if (timerRemaining <= 3 && timerRemaining > 0) {
+          audio.playTick();
+        }
+        if (timerRemaining <= 0) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+          timerRemaining = 0;
+          updateTimerUI();
+          startBtn.textContent = 'START REST';
+          statusEl.textContent = 'REST OVER!';
+          audio.playChime();
+          showToast('🔔 Rest Interval Complete! Next Set!');
+          return;
+        }
+        updateTimerUI();
+      }, 1000);
+    }
+
+    startBtn.addEventListener('click', startTimer);
+
+    document.getElementById('timer-reset-btn').addEventListener('click', () => {
+      audio.playClick();
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      timerRemaining = timerTotal;
+      startBtn.textContent = 'START REST';
+      statusEl.textContent = 'REST READY';
+      updateTimerUI();
+    });
+
+    document.querySelectorAll('.preset-btn[data-time]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        audio.playClick();
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        timerTotal = parseInt(btn.dataset.time, 10);
+        timerRemaining = timerTotal;
+        startBtn.textContent = 'START REST';
+        statusEl.textContent = 'REST READY';
+        updateTimerUI();
+      });
+    });
+
+    // Sound toggle
+    const soundToggle = document.getElementById('sound-toggle');
+    soundToggle.addEventListener('click', () => {
+      audio.enabled = !audio.enabled;
+      soundToggle.textContent = audio.enabled ? '🔊' : '🔇';
+    });
+
+    // --- Update PR Modal Prompt ---
+    document.getElementById('btn-add-pr').addEventListener('click', () => {
+      audio.playClick();
+      const ex = prompt('Enter exercise or sport for PR (e.g. Bench Press, 5km Run, Squat):', 'Bench Press');
+      if (!ex) return;
+      const val = prompt(`Enter new Personal Record value for ${ex} (e.g. 90 kg, 22m 10s, 60 reps):`, '90 kg');
+      if (!val) return;
+
+      const existing = state.prs.find(p => p.title.toLowerCase() === ex.toLowerCase());
+      if (existing) {
+        existing.value = val;
+        existing.date = 'Just now';
+      } else {
+        state.prs.push({ id: 'pr_' + Date.now(), title: ex, value: val, date: 'Just now' });
+      }
+      state.xp += 50;
+      saveState(state);
+      renderPRs();
+      updateHunterStats();
+      audio.playLevelUp();
+      showToast(`🏆 New PR Saved for ${ex}! +50 XP`);
+    });
+
+    // --- Telegram Command Copy Helper ---
+    document.querySelectorAll('.tg-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        audio.playClick();
+        const cmd = chip.dataset.cmd;
+        navigator.clipboard.writeText(cmd).then(() => {
+          showToast(`Copied to clipboard: ${cmd}`);
+        }).catch(() => {
+          showToast(`Command: ${cmd}`);
+        });
+      });
+    });
+
+    // Initialize UI
+    updateHunterStats();
+    renderPRs();
+    renderHistory();
+    updateTimerUI();
+  </script>
+</body>
+</html>

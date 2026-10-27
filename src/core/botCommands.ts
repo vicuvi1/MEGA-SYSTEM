@@ -3,6 +3,11 @@ export type BotCommandType =
   | 'checkin'
   | 'oath'
   | 'workout'
+  | 'sport'
+  | 'weight'
+  | 'waist'
+  | 'pr'
+  | 'sport_status'
   | 'expense'
   | 'tasks'
   | 'done'
@@ -20,10 +25,32 @@ export interface ParsedCommand {
   raw: string
   exerciseName?: string
   exerciseAmount?: number
+  exerciseUnit?: string
+  metricWeight?: number
+  metricWaist?: number
+  prExercise?: string
+  prValue?: string
   expenseAmount?: number
   expenseCategory?: string
   expenseNote?: string
   taskIndex?: number
+}
+
+function parseAmountAndUnit(str: string, defaultUnit = 'reps'): { amount: number; unit: string } {
+  if (!str) return { amount: 1, unit: defaultUnit }
+  const match = str.match(/^([\d.]+)\s*([a-zA-Z]*)$/)
+  if (match) {
+    const amount = parseFloat(match[1]) || 1
+    let unit = (match[2] || defaultUnit).toLowerCase()
+    if (unit === 'k' || unit === 'km' || unit === 'kms') unit = 'km'
+    else if (unit === 'm' || unit === 'min' || unit === 'mins' || unit === 'minute' || unit === 'minutes') unit = 'minutes'
+    else if (unit === 'sec' || unit === 'secs' || unit === 's') unit = 'seconds'
+    else if (unit === 'kg' || unit === 'kgs') unit = 'kg'
+    else if (unit === 'r' || unit === 'rep' || unit === 'reps') unit = 'reps'
+    return { amount, unit }
+  }
+  const fallback = parseFloat(str)
+  return { amount: isNaN(fallback) ? 1 : fallback, unit: defaultUnit }
 }
 
 export function parseTelegramText(text: string): ParsedCommand {
@@ -50,8 +77,7 @@ export function parseTelegramText(text: string): ParsedCommand {
     pullups: 'pullups',
     squats: 'squats',
     dips: 'dips',
-    plank: 'plank',
-    running: 'running'
+    plank: 'plank'
   }
   if (exerciseShortcuts[cmd]) {
     const amount = parseInt(args[0], 10) || 20
@@ -60,16 +86,109 @@ export function parseTelegramText(text: string): ParsedCommand {
       args,
       raw: trimmed,
       exerciseName: exerciseShortcuts[cmd],
-      exerciseAmount: amount
+      exerciseAmount: amount,
+      exerciseUnit: 'reps'
     }
   }
 
-  // 2. Standard commands
+  // 2. Direct sport shortcuts
+  const sportDirectShortcuts: Record<string, { name: string; defaultUnit: string }> = {
+    run: { name: 'Running', defaultUnit: 'km' },
+    running: { name: 'Running', defaultUnit: 'km' },
+    football: { name: 'Football', defaultUnit: 'minutes' },
+    soccer: { name: 'Football', defaultUnit: 'minutes' },
+    boxing: { name: 'Boxing', defaultUnit: 'minutes' },
+    combat: { name: 'Combat Sports', defaultUnit: 'minutes' },
+    gym: { name: 'Gym Session', defaultUnit: 'minutes' },
+    swim: { name: 'Swimming', defaultUnit: 'm' },
+    swimming: { name: 'Swimming', defaultUnit: 'm' },
+    cycling: { name: 'Cycling', defaultUnit: 'km' },
+    bike: { name: 'Cycling', defaultUnit: 'km' },
+    bench: { name: 'Bench Press', defaultUnit: 'kg' }
+  }
+  if (sportDirectShortcuts[cmd]) {
+    const spec = sportDirectShortcuts[cmd]
+    const parsed = parseAmountAndUnit(args[0], spec.defaultUnit)
+    return {
+      type: 'sport',
+      args,
+      raw: trimmed,
+      exerciseName: spec.name,
+      exerciseAmount: parsed.amount,
+      exerciseUnit: parsed.unit
+    }
+  }
+
+  // 3. Body metric shortcuts
+  if (cmd === 'weight') {
+    const parsed = parseAmountAndUnit(args[0], 'kg')
+    return {
+      type: 'weight',
+      args,
+      raw: trimmed,
+      metricWeight: parsed.amount
+    }
+  }
+
+  if (cmd === 'waist') {
+    const parsed = parseAmountAndUnit(args[0], 'cm')
+    return {
+      type: 'waist',
+      args,
+      raw: trimmed,
+      metricWaist: parsed.amount
+    }
+  }
+
+  // 4. Personal records (PR)
+  if (cmd === 'pr' || cmd === 'record') {
+    if (args.length === 0) {
+      return { type: 'pr', args, raw: trimmed }
+    }
+    const exercise = args[0]
+    const val = args.slice(1).join(' ')
+    return {
+      type: 'pr',
+      args,
+      raw: trimmed,
+      prExercise: exercise,
+      prValue: val
+    }
+  }
+
+  // 5. General /sport command
+  if (cmd === 'sport' || cmd === 'sports' || cmd === 'athlete') {
+    if (args.length === 0 || args[0].toLowerCase() === 'status' || args[0].toLowerCase() === 'stats') {
+      return { type: 'sport_status', args, raw: trimmed }
+    }
+    const act = args[0].toLowerCase()
+    let exName = args[0].charAt(0).toUpperCase() + args[0].slice(1)
+    let defUnit = 'minutes'
+    if (act.includes('run')) { exName = 'Running'; defUnit = 'km' }
+    else if (act.includes('foot') || act.includes('soccer')) { exName = 'Football'; defUnit = 'minutes' }
+    else if (act.includes('box')) { exName = 'Boxing'; defUnit = 'minutes' }
+    else if (act.includes('swim')) { exName = 'Swimming'; defUnit = 'm' }
+    else if (act.includes('cycl') || act.includes('bike')) { exName = 'Cycling'; defUnit = 'km' }
+    else if (act.includes('push') || act.includes('pull') || act.includes('squat')) { defUnit = 'reps' }
+    else if (act.includes('bench') || act.includes('deadlift')) { defUnit = 'kg' }
+
+    const parsed = parseAmountAndUnit(args[1], defUnit)
+    return {
+      type: 'sport',
+      args,
+      raw: trimmed,
+      exerciseName: exName,
+      exerciseAmount: parsed.amount,
+      exerciseUnit: parsed.unit
+    }
+  }
+
+  // 6. Standard commands
   if (cmd === 'start' || cmd === 'help' || cmd === 'commands') {
     return { type: 'help', args, raw: trimmed }
   }
 
-    if (cmd === 'vault' || cmd === 'economy') {
+  if (cmd === 'vault' || cmd === 'economy') {
     return { type: 'vault', args, raw: trimmed }
   }
 
@@ -113,7 +232,8 @@ export function parseTelegramText(text: string): ParsedCommand {
       args,
       raw: trimmed,
       exerciseName: ex,
-      exerciseAmount: amount
+      exerciseAmount: amount,
+      exerciseUnit: 'reps'
     }
   }
 
@@ -167,25 +287,36 @@ export function formatHelpMessage(): string {
   return [
     `⚡ <b>Life System — Telegram Command Center</b> ⚡`,
     ``,
-    `Control your habits, workouts, and wallet from your phone:`,
+    `Control your habits, workouts, sports, and wallet from your phone:`,
     ``,
     `📊 <b>Dashboard & Status</b>`,
     `• <code>/today</code> — View balance, level, streak & rituals`,
-    `• <code>/vault</code> — Real-money Reward Vault surplus, coin valuation & multiplier
-• <code>/goals</code> — Wishlist Mega Goals & savings progress
-• <code>/tasks</code> — View open tasks for today`,
+    `• <code>/vault</code> — Real-money Reward Vault surplus, coin valuation & multiplier`,
+    `• <code>/goals</code> — Wishlist Mega Goals & savings progress`,
+    `• <code>/tasks</code> — View open tasks for today`,
     `• <code>/done &lt;num&gt;</code> — Complete a task (e.g. <code>/done 1</code>)`,
+    ``,
+    `⚡ <b>Sport & Athletic Tracking</b>`,
+    `• <code>/sport &lt;activity&gt; &lt;amount&gt;</code> — e.g. <code>/sport run 5km</code> (+15 🪙)`,
+    `• <code>/run &lt;km&gt;</code> — e.g. <code>/run 5km</code>`,
+    `• <code>/football &lt;min&gt;</code> — e.g. <code>/football 90m</code>`,
+    `• <code>/boxing &lt;min&gt;</code> — e.g. <code>/boxing 45m</code>`,
+    `• <code>/gym &lt;min&gt;</code> — e.g. <code>/gym 60m</code>`,
+    `• <code>/bench &lt;kg&gt;</code> — e.g. <code>/bench 80kg</code>`,
+    `• <code>/weight &lt;kg&gt;</code> — e.g. <code>/weight 74.5</code> (+5 🪙)`,
+    `• <code>/waist &lt;cm&gt;</code> — e.g. <code>/waist 82</code> (+5 🪙)`,
+    `• <code>/sport status</code> — View Hunter athletic stats & PRs`,
+    ``,
+    `💪 <b>Quick Body Exercises</b>`,
+    `• <code>/pushups &lt;reps&gt;</code> — Quick log push-ups`,
+    `• <code>/pullups &lt;reps&gt;</code> — Quick log pull-ups`,
+    `• <code>/squats &lt;reps&gt;</code> — Quick log squats`,
+    `• <code>/workout &lt;reps&gt; &lt;exercise&gt;</code> — e.g. <code>/workout 50 pushups</code> (+10 🪙)`,
     ``,
     `🛡️ <b>Discipline & Standard</b>`,
     `• <code>/checkin</code> — Log daily clean check-in (+20 🪙)`,
     `• <code>/oath</code> — Take morning oath (+3 🪙)`,
     `• <code>/panic</code> — Instant urge crusher emergency protocol`,
-    ``,
-    `💪 <b>Body & Workouts</b>`,
-    `• <code>/workout &lt;reps&gt; &lt;exercise&gt;</code> — e.g. <code>/workout 50 pushups</code> (+10 🪙)`,
-    `• <code>/pushups &lt;reps&gt;</code> — Quick log push-ups`,
-    `• <code>/pullups &lt;reps&gt;</code> — Quick log pull-ups`,
-    `• <code>/squats &lt;reps&gt;</code> — Quick log squats`,
     ``,
     `💳 <b>Money & Expenses</b>`,
     `• <code>/expense &lt;amount&gt; &lt;category&gt; [note]</code>`,
@@ -220,7 +351,7 @@ export function formatTodayStatus(data: {
     ``,
     data.ritualsDone === data.totalRituals
       ? `🏆 <i>All daily rituals complete! Supreme focus today.</i>`
-      : `<i>Use /checkin, /workout or /expense to log today wins.</i>`
+      : `<i>Use /checkin, /sport or /expense to log today wins.</i>`
   ].join('\n')
 }
 
@@ -233,6 +364,63 @@ export function formatWorkoutResponse(exName: string, amount: number, streak: nu
     `• <b>Workout Streak:</b> ${streak} days in a row!`,
     ``,
     `<i>The iron never lies. Keep pushing forward!</i>`
+  ].join('\n')
+}
+
+export function formatSportResponse(
+  activity: string,
+  amount: number,
+  unit: string,
+  streak: number,
+  coins: number,
+  xp: number
+): string {
+  return [
+    `⚔️ <b>HUNTER ATHLETIC LOG: RECORDED</b> ⚔️`,
+    ``,
+    `• <b>Sport / Activity:</b> ${activity} (${amount} ${unit})`,
+    `• <b>Attribute Gains:</b> +2 STR · +2 VIT · +1 AGI`,
+    `• <b>Hunter Rewards:</b> +${coins} 🪙 Coins · +${xp} XP`,
+    `• <b>Continuous Streak:</b> ${streak} days active!`,
+    ``,
+    `<i>"Your physical combat power ascends. The System acknowledges your relentless dedication!"</i>`
+  ].join('\n')
+}
+
+export function formatMetricResponse(
+  type: 'weight' | 'waist',
+  val: number,
+  unit: string,
+  coins: number,
+  xp: number
+): string {
+  return [
+    `⚖️ <b>BODY COMPOSITION LOGGED</b> ⚖️`,
+    ``,
+    `• <b>${type === 'weight' ? 'Body Weight' : 'Waist Circumference'}:</b> ${val} ${unit}`,
+    `• <b>Reward:</b> +${coins} 🪙 Coins · +${xp} XP`,
+    `• <b>Ledger:</b> Saved to physical metrics archive.`,
+    ``,
+    `<i>"Consistency in tracking breeds absolute control over physical form."</i>`
+  ].join('\n')
+}
+
+export function formatSportStatusResponse(data: {
+  streak: number
+  totalWorkouts: number
+  thisWeek: number
+  latestWeight?: number | null
+  latestWaist?: number | null
+}): string {
+  return [
+    `⚡ <b>HUNTER ATHLETIC STATUS & POWER</b> ⚡`,
+    ``,
+    `🔥 <b>Workout Streak:</b> ${data.streak} Days Continuous`,
+    `🏋️ <b>Sessions Logged:</b> ${data.totalWorkouts} total (${data.thisWeek} this week)`,
+    `⚖️ <b>Current Weight:</b> ${data.latestWeight ? `${data.latestWeight} kg` : 'Not recorded'}`,
+    `📏 <b>Current Waist:</b> ${data.latestWaist ? `${data.latestWaist} cm` : 'Not recorded'}`,
+    ``,
+    `<i>Tip: Send <code>/sport run 5km</code>, <code>/bench 80kg</code>, <code>/boxing 45m</code> or <code>/weight 75</code> to log directly!</i>`
   ].join('\n')
 }
 

@@ -29,7 +29,7 @@ import type { BotBridgeConfig, AIConfig, CalendarConfig } from '@shared/api'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
 import {
-  appsDir, embeddedManLevelDb, ensureWaky, MAN_PARTITION, manUrl, migrateStandaloneData, registerEmbeddedSchemes, WAKY_PARTITION, WAKY_URL,
+  appsDir, embeddedManLevelDb, ensureWaky, MAN_PARTITION, manUrl, migrateStandaloneData, registerEmbeddedSchemes, SPORT_PARTITION, sportUrl, WAKY_PARTITION, WAKY_URL,
   wakyRoot, type MigrationResult
 } from './apps/embedded'
 import iconPath from './assets/icon.png?asset'
@@ -435,6 +435,7 @@ handle('apps:info', () => ({
   finance: { url: FINANCE_URL, partition: FINANCE_PARTITION, preloadReady: !!financeHost },
   man: { url: manUrl(), partition: MAN_PARTITION },
   waky: { url: WAKY_URL, partition: WAKY_PARTITION },
+  sport: { url: sportUrl(), partition: SPORT_PARTITION },
   migration
 }))
 handle('apps:startWaky', () => ensureWaky(wakyRoot(connections.path('waky'))))
@@ -452,7 +453,8 @@ const embedded = new Set<Electron.WebContents>()
 const EMBEDS: Record<string, (src: string) => boolean> = {
   [FINANCE_PARTITION]: (src) => src.startsWith('app://finance/'),
   [MAN_PARTITION]: (src) => src === manUrl(),
-  [WAKY_PARTITION]: (src) => src.startsWith(WAKY_URL)
+  [WAKY_PARTITION]: (src) => src.startsWith(WAKY_URL),
+  [SPORT_PARTITION]: (src) => src === sportUrl()
 }
 app.on('web-contents-created', (_e, wc) => {
   wc.on('will-attach-webview', (event, prefs, params) => {

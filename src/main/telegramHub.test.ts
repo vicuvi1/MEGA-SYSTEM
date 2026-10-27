@@ -44,6 +44,8 @@ beforeEach(() => {
   hub.saveConfig({
     botToken: 'TEST_TOKEN',
     chatId: '12345678',
+    sportBotToken: 'SPORT_TOKEN',
+    sportBotChatId: '87654321',
     enabled: true,
     pollingEnabled: false
   })
@@ -68,11 +70,46 @@ describe('TelegramBotHub service', () => {
     expect(hub.getLogs()[0].success).toBe(true)
   })
 
+  it('accepts commands from secondary sport bot chat ID', async () => {
+    const res = await hub.handleIncomingCommand('/today', '87654321')
+    expect(res).toContain('Life System Status')
+    expect(hub.getLogs()[0].success).toBe(true)
+  })
+
   it('processes /workout command and awards wallet', async () => {
     const res = await hub.handleIncomingCommand('/workout 40 pushups', '12345678')
     expect(res).toContain('Workout Recorded')
     expect(res).toContain('40 pushups')
     expect(wallet.summary().balance).toBe(10) // +10 coins for body.workout_done
+  })
+
+  it('processes /sport command (e.g. running) and logs to body', async () => {
+    const res = await hub.handleIncomingCommand('/sport run 5km', '87654321')
+    expect(res).toContain('HUNTER ATHLETIC LOG')
+    expect(res).toContain('Running (5 km)')
+    expect(body.state().recentWorkouts.length).toBe(1)
+    expect(wallet.summary().balance).toBe(10) // +10 first workout coins
+  })
+
+  it('processes /weight and /waist metric logging', async () => {
+    const resW = await hub.handleIncomingCommand('/weight 74.5', '12345678')
+    expect(resW).toContain('BODY COMPOSITION LOGGED')
+    expect(resW).toContain('74.5 kg')
+    expect(body.state().latestWeight).toBe(74.5)
+
+    const resWaist = await hub.handleIncomingCommand('/waist 82', '12345678')
+    expect(resWaist).toContain('BODY COMPOSITION LOGGED')
+    expect(resWaist).toContain('82 cm')
+    expect(body.state().latestWaist).toBe(82)
+  })
+
+  it('processes /pr command and /sport status', async () => {
+    const prRes = await hub.handleIncomingCommand('/pr bench 100kg', '12345678')
+    expect(prRes).toContain('PERSONAL RECORD')
+    expect(prRes).toContain('bench')
+
+    const statusRes = await hub.handleIncomingCommand('/sport status', '12345678')
+    expect(statusRes).toContain('HUNTER ATHLETIC STATUS')
   })
 
   it('processes /expense command and tracks spending', async () => {
