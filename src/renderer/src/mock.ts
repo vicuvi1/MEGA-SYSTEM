@@ -1,6 +1,6 @@
 import { dayKey } from '@core/dates'
 import { balance, effective, planUndo, totalXp, type LedgerEntry, type NewEntry } from '@core/ledger'
-import { levelInfo } from '@core/levels'
+import { levelInfo, type StatAllocation } from '@core/levels'
 import { DEFAULT_RULES, planAward, type Rule } from '@core/rules'
 import { chestRef, DEFAULT_REWARDS, planRedeem, rollChest, unopenedChests, validateReward, type Reward } from '@core/shop'
 import type { AuthStatus, BackupStatus, ShopState, Summary } from '@shared/api'
@@ -22,6 +22,7 @@ export function createMockApi(): Bridge {
   let rewards: Reward[] = DEFAULT_REWARDS.map((r, i) => ({ ...r, id: i + 1 }))
   const bought: { ledgerId: number; title: string; realCost: number; day: string }[] = []
   let budget = 0
+  let statAlloc: StatAllocation = { str: 0, agi: 0, vit: 0, int: 0, sen: 0 }
 
   const add = (e: NewEntry) => {
     entries.push({ ...e, id: id++ })
@@ -41,7 +42,7 @@ export function createMockApi(): Bridge {
     return {
       balance: balance(entries),
       totalXp: xp,
-      level: levelInfo(xp),
+      level: levelInfo(xp, { allocated: statAlloc }),
       today,
       todayCoins: live.reduce((s, e) => s + e.coins, 0),
       todayXp: live.reduce((s, e) => s + e.xp, 0),
@@ -129,6 +130,14 @@ export function createMockApi(): Bridge {
       undo: async (eid, note) => {
         const now = new Date()
         add(planUndo(entries, eid, note, now.toISOString(), dayKey(now)))
+        return summary()
+      },
+      allocateStats: async (stat, points = 1) => {
+        statAlloc[stat] = (statAlloc[stat] ?? 0) + points
+        return summary()
+      },
+      resetStats: async () => {
+        statAlloc = { str: 0, agi: 0, vit: 0, int: 0, sen: 0 }
         return summary()
       }
     },

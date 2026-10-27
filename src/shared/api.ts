@@ -22,7 +22,7 @@ import {
   formatDualCurrency
 } from '@core/unifiedEconomy'
 import type { LedgerEntry } from '@core/ledger'
-import type { LevelInfo, HunterRankDef, HunterAttributes } from '@core/levels'
+import type { LevelInfo, HunterRankDef, HunterAttributes, StatAllocation, HunterPerkDef, HunterPerk } from '@core/levels'
 import type { Rule } from '@core/rules'
 import type { Reward, Tier, EffortEquivalence } from '@core/shop'
 import { calculateEffortEquivalence } from '@core/shop'
@@ -39,7 +39,7 @@ export { DEFAULT_CALENDAR_CONFIG }
 
 export type { TaskDecompositionItem, TaskDecompositionResult, SystemCoachContext }
 export type { QuestState }
-export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, Rule, Reward, Tier, EffortEquivalence, Block, BlockKind, BlockStatus, Repeat, Task }
+export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, StatAllocation, HunterPerkDef, HunterPerk, Rule, Reward, Tier, EffortEquivalence, Block, BlockKind, BlockStatus, Repeat, Task }
 export { calculateEffortEquivalence }
 export type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput }
 export type BodyState = BodySummary
@@ -327,6 +327,8 @@ export interface LifeApi {
     undo(id: number, note: string): Promise<Summary>
     quests(): Promise<QuestState>
     claimQuests(): Promise<Summary>
+    allocateStats(stat: 'str' | 'agi' | 'vit' | 'int' | 'sen', points?: number): Promise<Summary>
+    resetStats(): Promise<Summary>
   }
   rules: {
     list(): Promise<Rule[]>

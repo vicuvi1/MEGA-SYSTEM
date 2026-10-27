@@ -577,6 +577,19 @@ function HunterDashboardBanner({ level, onGo }: { level?: LevelInfo; onGo: (p: P
         </div>
         {attributes && (
           <>
+            {attributes.unallocatedPoints > 0 && (
+              <div
+                className="stat-pill unallocated-pill"
+                title={`${attributes.unallocatedPoints} Stat Points Ready for Allocation! Click to invest in Journey.`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onGo('journey')
+                }}
+              >
+                <span style={{ color: '#fbbf24' }}>✦ POINTS</span>
+                <b style={{ color: '#fbbf24' }}>+{attributes.unallocatedPoints}</b>
+              </div>
+            )}
             <div className="stat-pill">
               <span style={{ color: '#fb7185' }}>STR</span>
               <b>{attributes.str}</b>

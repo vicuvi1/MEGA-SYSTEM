@@ -94,13 +94,13 @@ function open(): void {
   wallet = new Wallet(db)
   auth = new Auth(db)
   shop = new Shop(db, wallet)
-  tasks = new Tasks(db, wallet)
+  shieldService = new ShieldService(db, wallet)
+  tasks = new Tasks(db, wallet, shieldService)
   schedule = new Schedule(db, wallet)
   discipline = new Discipline(db, wallet)
   body = new Body(db, wallet)
   sleepService = new SleepService(db, wallet)
   moneyService = new MoneyService(db, wallet)
-  shieldService = new ShieldService(db, wallet)
   economyService = new UnifiedEconomyService(db, wallet, discipline, moneyService, shieldService)
   shop.setEconomy(economyService)
   dataExportService = new DataExportService(db, body, moneyService)
@@ -178,6 +178,16 @@ handle('wallet:quests', () => wallet.quests())
 handle('wallet:claimQuests', () => {
   wallet.claimQuests()
   return wallet.summary()
+})
+handle('wallet:allocateStats', (stat: 'str' | 'agi' | 'vit' | 'int' | 'sen', points?: number) => {
+  const res = wallet.allocateStats(stat, points)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('wallet:resetStats', () => {
+  const res = wallet.resetStatAllocation()
+  win?.webContents.send('wallet:changed')
+  return res
 })
 handle('rules:list', () => wallet.rules())
 handle('rules:save', (rule: Rule) => {

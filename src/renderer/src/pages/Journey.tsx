@@ -7,6 +7,7 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES } from '../modules'
 import { Coins, describeEntry, useToast } from '../ui'
+import { HolographicRadarChart } from '../HolographicRadarChart'
 
 const COLOR: Record<string, string> = Object.fromEntries(MODULES.map((m) => [m.id, m.color]))
 const GOAL_KEY = 'ls.weekGoal'
@@ -139,52 +140,9 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
           </div>
         </div>
 
-        {/* 5 Hunter Attributes Grid */}
-        <div className="attributes-grid">
-          <div className="attribute-card attr-str">
-            <div className="attr-top">
-              <span className="attr-code">STR</span>
-              <span className="attr-val">{lv.attributes.str}</span>
-            </div>
-            <span className="attr-name">Strength</span>
-            <span className="attr-source">Physical Workouts</span>
-          </div>
-
-          <div className="attribute-card attr-agi">
-            <div className="attr-top">
-              <span className="attr-code">AGI</span>
-              <span className="attr-val">{lv.attributes.agi}</span>
-            </div>
-            <span className="attr-name">Agility</span>
-            <span className="attr-source">Circadian Wakeups</span>
-          </div>
-
-          <div className="attribute-card attr-vit">
-            <div className="attr-top">
-              <span className="attr-code">VIT</span>
-              <span className="attr-val">{lv.attributes.vit}</span>
-            </div>
-            <span className="attr-name">Vitality</span>
-            <span className="attr-source">Sleep & Budget</span>
-          </div>
-
-          <div className="attribute-card attr-int">
-            <div className="attr-top">
-              <span className="attr-code">INT</span>
-              <span className="attr-val">{lv.attributes.int}</span>
-            </div>
-            <span className="attr-name">Intelligence</span>
-            <span className="attr-source">Focus & Study Blocks</span>
-          </div>
-
-          <div className="attribute-card attr-sen">
-            <div className="attr-top">
-              <span className="attr-code">SEN</span>
-              <span className="attr-val">{lv.attributes.sen}</span>
-            </div>
-            <span className="attr-name">Sense & Will</span>
-            <span className="attr-source">Discipline Purity</span>
-          </div>
+        {/* Solo Leveling Holographic Radar & Stat Allocation Matrix */}
+        <div style={{ margin: '20px 0' }}>
+          <HolographicRadarChart level={lv} />
         </div>
 
         {/* Current Hunter Lore & Active Perk Banner */}

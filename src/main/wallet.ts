@@ -1,6 +1,6 @@
 import { dayKey } from '@core/dates'
 import { balance, LedgerError, planUndo, totalXp, effective, type LedgerEntry, type NewEntry } from '@core/ledger'
-import { levelInfo } from '@core/levels'
+import { levelInfo, type StatAllocation } from '@core/levels'
 import { planAward, type Rule } from '@core/rules'
 import { questRef, questState, type QuestState } from '@core/quests'
 import type { Summary } from '@shared/api'
@@ -60,19 +60,61 @@ export class Wallet {
     return Number(res.lastInsertRowid)
   }
 
+  getStatAllocation(): StatAllocation {
+    try {
+      const row = this.db.prepare("SELECT value FROM settings WHERE key = 'hunter.stat_allocation'").get() as { value: string } | undefined
+      if (!row?.value) return { str: 0, agi: 0, vit: 0, int: 0, sen: 0 }
+      const parsed = JSON.parse(row.value)
+      return {
+        str: Math.max(0, Math.floor(Number(parsed.str) || 0)),
+        agi: Math.max(0, Math.floor(Number(parsed.agi) || 0)),
+        vit: Math.max(0, Math.floor(Number(parsed.vit) || 0)),
+        int: Math.max(0, Math.floor(Number(parsed.int) || 0)),
+        sen: Math.max(0, Math.floor(Number(parsed.sen) || 0))
+      }
+    } catch {
+      return { str: 0, agi: 0, vit: 0, int: 0, sen: 0 }
+    }
+  }
+
+  saveStatAllocation(alloc: StatAllocation): void {
+    this.db.prepare(
+      `INSERT INTO settings (key, value) VALUES ('hunter.stat_allocation', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    ).run(JSON.stringify(alloc))
+  }
+
+  allocateStats(stat: 'str' | 'agi' | 'vit' | 'int' | 'sen', points = 1): Summary {
+    if (points <= 0) return this.summary()
+    const current = this.summary()
+    if (current.level.attributes.unallocatedPoints < points) {
+      throw new LedgerError('Not enough unallocated stat points available')
+    }
+    const alloc = this.getStatAllocation()
+    alloc[stat] = (alloc[stat] ?? 0) + points
+    this.saveStatAllocation(alloc)
+    return this.summary()
+  }
+
+  resetStatAllocation(): Summary {
+    this.saveStatAllocation({ str: 0, agi: 0, vit: 0, int: 0, sen: 0 })
+    return this.summary()
+  }
+
   summary(now = new Date()): Summary {
     const all = this.entries()
     const today = dayKey(now, this.timeZone)
     const live = effective(all).filter((e) => e.day === today)
     const xp = totalXp(all)
-    let hunterStats = undefined
+    const allocated = this.getStatAllocation()
+    let hunterStats: any = { allocated }
     try {
       const workoutCount = (this.db.prepare("SELECT COUNT(*) as c FROM workouts").get() as any)?.c ?? 0
       const cleanStreakDays = (this.db.prepare("SELECT COUNT(*) as c FROM discipline_events WHERE kind = 'checkin'").get() as any)?.c ?? 0
       const focusBlocksCount = (this.db.prepare("SELECT COUNT(*) as c FROM block_log WHERE status = 'done'").get() as any)?.c ?? 0
       const onTimeWakeups = (this.db.prepare("SELECT COUNT(*) as c FROM sleep_logs WHERE on_time = 1").get() as any)?.c ?? 0
       const budgetDays = (this.db.prepare("SELECT COUNT(*) as c FROM reward_vault_ledger WHERE kind = 'surplus_credit'").get() as any)?.c ?? 0
-      hunterStats = { workoutCount, cleanStreakDays, focusBlocksCount, onTimeWakeups, budgetDays }
+      hunterStats = { workoutCount, cleanStreakDays, focusBlocksCount, onTimeWakeups, budgetDays, allocated }
     } catch {
       // fallback
     }

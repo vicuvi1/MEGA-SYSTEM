@@ -573,3 +573,30 @@
   height: 2px;
   background: linear-gradient(90deg, transparent, #00d2ff, #a855f7, transparent);
 }
+
+
+/* Unallocated Stat Points Alert Pill */
+.stat-pill.unallocated-pill {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.6) !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3) !important;
+  animation: pulse-stat-pill 2s infinite alternate;
+  cursor: pointer;
+}
+
+.stat-pill.unallocated-pill:hover {
+  background: rgba(245, 158, 11, 0.28) !important;
+  border-color: #fbbf24 !important;
+  transform: translateY(-2px) scale(1.04);
+}
+
+@keyframes pulse-stat-pill {
+  0% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 18px rgba(245, 158, 11, 0.55);
+    border-color: #fbbf24;
+  }
+}

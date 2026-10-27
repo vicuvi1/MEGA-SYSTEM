@@ -87,10 +87,39 @@ export class Discipline {
       const events = this.events()
       if (!startOf(events)) throw new LedgerError('Set your start date first')
       if (events.some((e) => e.kind === 'reset' && e.day === today)) throw new LedgerError('Already reset today. Tomorrow is day 1.')
+      let penaltyAwarded = false
       try {
         this.wallet.awardRule('discipline.reset', { now })
+        penaltyAwarded = true
       } catch (e) {
         if (!(e instanceof LedgerError)) throw e // penalty switched off or capped: still reset
+      }
+      if (penaltyAwarded) {
+        try {
+          const summary = this.wallet.summary(now)
+          const hasRulersAuthority = summary.level.perks.some((p) => p.id === 'rulers_authority' && p.unlocked)
+          if (hasRulersAuthority) {
+            const entries = this.wallet.entries()
+            const lastEntry = entries[entries.length - 1]
+            if (lastEntry && lastEntry.ruleId === 'discipline.reset' && lastEntry.coins < 0) {
+              const refundCoins = Math.round(Math.abs(lastEntry.coins) * 0.5)
+              if (refundCoins > 0) {
+                this.wallet.append({
+                  ts: now.toISOString(),
+                  day: today,
+                  module: 'perks',
+                  kind: 'earn',
+                  coins: refundCoins,
+                  xp: 0,
+                  ref: 'perk:rulers_authority',
+                  note: "Ruler's Authority: 50% Urge Reset Penalty Refund"
+                })
+              }
+            }
+          }
+        } catch {
+          // Perk non-fatal
+        }
       }
       this.record('reset', today, now)
       setSetting(this.db, 'urge_started_at', '')

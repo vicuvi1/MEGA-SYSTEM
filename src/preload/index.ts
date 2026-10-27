@@ -20,7 +20,9 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     award: (ruleId, note) => call('wallet:award', ruleId, note),
     undo: (id, note) => call('wallet:undo', id, note),
     quests: () => call('wallet:quests'),
-    claimQuests: () => call('wallet:claimQuests')
+    claimQuests: () => call('wallet:claimQuests'),
+    allocateStats: (stat, points) => call('wallet:allocateStats', stat, points),
+    resetStats: () => call('wallet:resetStats')
   },
   rules: {
     list: () => call('rules:list'),

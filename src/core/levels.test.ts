@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateHunterAttributes,
+  computeHunterPerks,
   hunterDefFor,
+  HUNTER_PERK_DEFINITIONS,
   levelInfo,
   nextHunterRank,
   RANKS,
   rankFor,
+  totalStatPointsForLevel,
   xpToNext
 } from './levels'
 
@@ -61,6 +64,63 @@ describe('Solo Leveling Hunter Progression System', () => {
     expect(stats.agi).toBeGreaterThan(50)
     expect(stats.vit).toBeGreaterThan(50)
     expect(stats.totalCombatPower).toBeGreaterThan(500)
+    expect(stats.unallocatedPoints).toBeGreaterThan(0)
+    expect(stats.totalEarnedPoints).toBe(totalStatPointsForLevel(20))
+  })
+
+  it('computes allocatable stat points by level progression curve', () => {
+    expect(totalStatPointsForLevel(1)).toBe(0)
+    expect(totalStatPointsForLevel(2)).toBe(1)
+    expect(totalStatPointsForLevel(10)).toBe(9) // 9 levels (2..10) * 1 = 9
+    expect(totalStatPointsForLevel(11)).toBe(11) // 9 + 2 = 11
+    expect(totalStatPointsForLevel(25)).toBe(39) // 9 + 15*2 = 39
+    expect(totalStatPointsForLevel(26)).toBe(42) // 39 + 3 = 42
+  })
+
+  it('factors manually allocated stat points into hunter attributes', () => {
+    const stats = calculateHunterAttributes(10, {
+      workoutCount: 0,
+      cleanStreakDays: 0,
+      focusBlocksCount: 0,
+      onTimeWakeups: 0,
+      budgetDays: 0,
+      allocated: { str: 4, int: 3, agi: 2 }
+    })
+
+    const base = Math.max(10, Math.floor(10 * 2.5)) // 25
+    expect(stats.str).toBe(base + 4)
+    expect(stats.int).toBe(base + 3)
+    expect(stats.agi).toBe(base + 2)
+    expect(stats.vit).toBe(base)
+    expect(stats.sen).toBe(base)
+    expect(stats.allocated.str).toBe(4)
+    expect(stats.allocated.int).toBe(3)
+    expect(stats.allocated.agi).toBe(2)
+    expect(stats.allocated.vit).toBe(0)
+    expect(stats.allocated.sen).toBe(0)
+    expect(stats.totalEarnedPoints).toBe(9)
+    expect(stats.unallocatedPoints).toBe(0) // 9 - (4+3+2) = 0
+  })
+
+  it('evaluates hunter perks unlocking according to level and attribute milestones', () => {
+    const perksLv1 = computeHunterPerks(1, { str: 10, agi: 10, vit: 10, int: 10, sen: 10 })
+    const awakening = perksLv1.find((p) => p.id === 'awakening_spark')
+    const shadowMonarch = perksLv1.find((p) => p.id === 'shadow_monarch_extraction')
+    const ironFocus = perksLv1.find((p) => p.id === 'iron_focus')
+
+    expect(awakening?.unlocked).toBe(true)
+    expect(awakening?.progressPct).toBe(100)
+    expect(shadowMonarch?.unlocked).toBe(false)
+    expect(shadowMonarch?.progressPct).toBe(2) // 1/50 = 2%
+    expect(ironFocus?.unlocked).toBe(false)
+    expect(ironFocus?.progressPct).toBe(40) // 10/25 = 40%
+
+    // With upgraded stats:
+    const perksUpgraded = computeHunterPerks(50, { str: 35, agi: 25, vit: 28, int: 30, sen: 32 })
+    for (const perk of perksUpgraded) {
+      expect(perk.unlocked).toBe(true)
+      expect(perk.progressPct).toBe(100)
+    }
   })
 
   it('returns full LevelInfo with rank, perks, and next milestone', () => {
@@ -71,6 +131,7 @@ describe('Solo Leveling Hunter Progression System', () => {
     expect(info.rankColor).toBeDefined()
     expect(info.rankPerk).toBeDefined()
     expect(info.attributes.totalCombatPower).toBeGreaterThan(0)
+    expect(info.perks.length).toBe(HUNTER_PERK_DEFINITIONS.length)
     expect(info.allRanks.length).toBe(30)
   })
 })

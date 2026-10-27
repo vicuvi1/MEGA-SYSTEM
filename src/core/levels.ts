@@ -18,6 +18,28 @@ export interface HunterRankDef {
   dailyQuestBonus: number
 }
 
+export interface StatAllocation {
+  str: number
+  agi: number
+  vit: number
+  int: number
+  sen: number
+}
+
+export interface HunterPerk {
+  id: string
+  name: string
+  category: 'combat' | 'mind' | 'recovery' | 'sovereign'
+  reqDesc: string
+  statReq?: { stat: 'str' | 'agi' | 'vit' | 'int' | 'sen'; value: number }
+  levelReq?: number
+  icon: string
+  color: string
+  desc: string
+  unlocked: boolean
+  progressPct: number
+}
+
 export interface HunterAttributes {
   str: number // Strength (Workouts & Physical Power)
   agi: number // Agility (Circadian Wakeups & Speed)
@@ -25,6 +47,9 @@ export interface HunterAttributes {
   int: number // Intelligence (Focus Blocks & Study)
   sen: number // Perception / Willpower (Discipline Purity & Urge Defense)
   totalCombatPower: number
+  allocated: StatAllocation
+  unallocatedPoints: number
+  totalEarnedPoints: number
 }
 
 export interface LevelInfo {
@@ -41,6 +66,7 @@ export interface LevelInfo {
   rankDesc: string
   rankPerk: string
   attributes: HunterAttributes
+  perks: HunterPerk[]
   nextRank: HunterRankDef | null
   allRanks: HunterRankDef[]
 }
@@ -427,6 +453,127 @@ export function rankFor(level: number): string {
   return hunterDefFor(level).name
 }
 
+export function totalStatPointsForLevel(level: number): number {
+  if (level <= 1) return 0
+  let total = 0
+  for (let l = 2; l <= level; l++) {
+    if (l <= 10) total += 1
+    else if (l <= 25) total += 2
+    else total += 3
+  }
+  return total
+}
+
+export interface HunterPerkDef {
+  id: string
+  name: string
+  category: 'combat' | 'mind' | 'recovery' | 'sovereign'
+  reqDesc: string
+  statReq?: { stat: 'str' | 'agi' | 'vit' | 'int' | 'sen'; value: number }
+  levelReq?: number
+  icon: string
+  color: string
+  desc: string
+}
+
+export const HUNTER_PERK_DEFINITIONS: HunterPerkDef[] = [
+  {
+    id: 'awakening_spark',
+    name: 'Awakening Spark',
+    category: 'combat',
+    reqDesc: 'Level 1',
+    levelReq: 1,
+    icon: '⚡',
+    color: '#8A93A6',
+    desc: 'Awakened spark grants +10% bonus XP on the first ritual completed each day.'
+  },
+  {
+    id: 'sprint_velocity',
+    name: 'Sprint Velocity',
+    category: 'mind',
+    reqDesc: 'AGI 20',
+    statReq: { stat: 'agi', value: 20 },
+    icon: '💨',
+    color: '#38bdf8',
+    desc: 'Morning circadian momentum: on-time wakeups yield +5 bonus coins.'
+  },
+  {
+    id: 'iron_focus',
+    name: 'Iron Focus',
+    category: 'mind',
+    reqDesc: 'INT 25',
+    statReq: { stat: 'int', value: 25 },
+    icon: '🧠',
+    color: '#a78bfa',
+    desc: 'Hyper-focused cognition: planned study and focus blocks yield +20% bonus coins.'
+  },
+  {
+    id: 'indomitable_bastion',
+    name: 'Indomitable Bastion',
+    category: 'recovery',
+    reqDesc: 'VIT 25',
+    statReq: { stat: 'vit', value: 25 },
+    icon: '🛡️',
+    color: '#4ade80',
+    desc: 'Metabolic resilience: healthy sleep quality and budget discipline reinforce streak fortitude.'
+  },
+  {
+    id: 'bloodlust',
+    name: 'Bloodlust Strike',
+    category: 'combat',
+    reqDesc: 'STR 30',
+    statReq: { stat: 'str', value: 30 },
+    icon: '⚔️',
+    color: '#f87171',
+    desc: 'Relentless physical intensity: workout sessions award +25% bonus XP toward leveling.'
+  },
+  {
+    id: 'rulers_authority',
+    name: "Ruler's Authority",
+    category: 'sovereign',
+    reqDesc: 'SEN 30',
+    statReq: { stat: 'sen', value: 30 },
+    icon: '👑',
+    color: '#fbbf24',
+    desc: 'Sovereign willpower barrier: urge reset coin penalties are permanently reduced by 50%.'
+  },
+  {
+    id: 'shadow_monarch_extraction',
+    name: "Shadow Monarch's Extraction",
+    category: 'sovereign',
+    reqDesc: 'Level 50',
+    levelReq: 50,
+    icon: '🌑',
+    color: '#c084fc',
+    desc: 'Extracting shadow remnants: completing 7 consecutive Priority 1 (P1) tasks refunds 1 streak shield.'
+  }
+]
+
+export function computeHunterPerks(
+  level: number,
+  attributes: { str: number; agi: number; vit: number; int: number; sen: number }
+): HunterPerk[] {
+  return HUNTER_PERK_DEFINITIONS.map((def) => {
+    let unlocked = false
+    let progressPct = 0
+
+    if (def.levelReq != null) {
+      unlocked = level >= def.levelReq
+      progressPct = Math.min(100, Math.round((level / def.levelReq) * 100))
+    } else if (def.statReq != null) {
+      const currentStat = attributes[def.statReq.stat]
+      unlocked = currentStat >= def.statReq.value
+      progressPct = Math.min(100, Math.round((currentStat / def.statReq.value) * 100))
+    }
+
+    return {
+      ...def,
+      unlocked,
+      progressPct
+    }
+  })
+}
+
 export function calculateHunterAttributes(
   level: number,
   params?: {
@@ -435,6 +582,7 @@ export function calculateHunterAttributes(
     focusBlocksCount?: number
     onTimeWakeups?: number
     budgetDays?: number
+    allocated?: Partial<StatAllocation>
   }
 ): HunterAttributes {
   const base = Math.max(10, Math.floor(level * 2.5))
@@ -444,12 +592,24 @@ export function calculateHunterAttributes(
   const agiBonus = Math.floor((params?.onTimeWakeups ?? 0) * 1.2)
   const vitBonus = Math.floor((params?.budgetDays ?? 0) * 1.0)
 
-  const str = base + strBonus
-  const sen = base + senBonus
-  const int = base + intBonus
-  const agi = base + agiBonus
-  const vit = base + vitBonus
+  const allocated: StatAllocation = {
+    str: Math.max(0, Math.floor(params?.allocated?.str ?? 0)),
+    agi: Math.max(0, Math.floor(params?.allocated?.agi ?? 0)),
+    vit: Math.max(0, Math.floor(params?.allocated?.vit ?? 0)),
+    int: Math.max(0, Math.floor(params?.allocated?.int ?? 0)),
+    sen: Math.max(0, Math.floor(params?.allocated?.sen ?? 0))
+  }
+
+  const str = base + strBonus + allocated.str
+  const sen = base + senBonus + allocated.sen
+  const int = base + intBonus + allocated.int
+  const agi = base + agiBonus + allocated.agi
+  const vit = base + vitBonus + allocated.vit
   const totalCombatPower = str * 3 + agi * 2 + vit * 2 + int * 3 + sen * 4
+
+  const totalEarnedPoints = totalStatPointsForLevel(level)
+  const spent = allocated.str + allocated.agi + allocated.vit + allocated.int + allocated.sen
+  const unallocatedPoints = Math.max(0, totalEarnedPoints - spent)
 
   return {
     str,
@@ -457,7 +617,10 @@ export function calculateHunterAttributes(
     vit,
     int,
     sen,
-    totalCombatPower
+    totalCombatPower,
+    allocated,
+    unallocatedPoints,
+    totalEarnedPoints
   }
 }
 
@@ -469,6 +632,7 @@ export function levelInfo(
     focusBlocksCount?: number
     onTimeWakeups?: number
     budgetDays?: number
+    allocated?: Partial<StatAllocation>
   }
 ): LevelInfo {
   let level = 1
@@ -481,6 +645,7 @@ export function levelInfo(
   const def = hunterDefFor(level)
   const next = nextHunterRank(level)
   const attributes = calculateHunterAttributes(level, hunterStatsInput)
+  const perks = computeHunterPerks(level, attributes)
 
   return {
     level,
@@ -496,6 +661,7 @@ export function levelInfo(
     rankDesc: def.desc,
     rankPerk: def.perk,
     attributes,
+    perks,
     nextRank: next,
     allRanks: RANKS
   }

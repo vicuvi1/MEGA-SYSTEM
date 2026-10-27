@@ -5,7 +5,9 @@ import {
 } from '@core/plan'
 import type { BlockInput, BlockView, Category, ScheduleState, TaskInput, TasksState, TaskView } from '@shared/api'
 import type { DB } from './db'
+import { getSetting, setSetting } from './db'
 import type { Wallet } from './wallet'
+import type { ShieldService } from './shields'
 
 interface TaskRow {
   id: number
@@ -57,7 +59,7 @@ export function atLocal(day: string, hhmm: string): Date {
 }
 
 export class Tasks {
-  constructor(private db: DB, private wallet: Wallet) {}
+  constructor(private db: DB, private wallet: Wallet, private shieldService?: ShieldService) {}
 
   private liveLedgerIds(): Set<number> {
     return new Set(effective(this.wallet.entries()).map((e) => e.id))
@@ -139,6 +141,26 @@ export class Tasks {
       // A row left behind by a completion that was undone in History.
       this.db.prepare('DELETE FROM task_done WHERE task_id = ? AND day = ?').run(id, today)
       this.db.prepare('INSERT INTO task_done (task_id, day, ledger_id) VALUES (?, ?, ?)').run(id, today, ledgerId)
+
+      // Perk: Shadow Monarch's Extraction (Level 50)
+      if (t.priority === 1) {
+        try {
+          const summary = this.wallet.summary(now)
+          const hasExtraction = summary.level.perks.some((p) => p.id === 'shadow_monarch_extraction' && p.unlocked)
+          if (hasExtraction) {
+            const currentStreak = parseInt(getSetting(this.db, 'perk.shadow_monarch.p1_streak') || '0', 10) + 1
+            if (currentStreak >= 7) {
+              setSetting(this.db, 'perk.shadow_monarch.p1_streak', '0')
+              this.shieldService?.awardFreeShield('Shadow Monarch Extraction: 7 consecutive P1 tasks')
+            } else {
+              setSetting(this.db, 'perk.shadow_monarch.p1_streak', String(currentStreak))
+            }
+          }
+        } catch {
+          // Perk non-fatal
+        }
+      }
+
       return ledgerId
     }).immediate()
   }
@@ -278,6 +300,33 @@ export class Schedule {
       planFinish(log?.status ?? 'pending', log?.started_at ?? null, b.minutes, now)
       const ledgerId = this.payout(BLOCK_RULES[b.kind].done, b, day, now)
       this.db.prepare("UPDATE block_log SET status = 'done', ended_at = ?, ledger_id = ? WHERE block_id = ? AND day = ?").run(now.toISOString(), ledgerId, b.id, day)
+
+      // Perk: Iron Focus (INT 25)
+      if (ledgerId && b.kind === 'study') {
+        try {
+          const summary = this.wallet.summary(now)
+          const hasIronFocus = summary.level.perks.some((p) => p.id === 'iron_focus' && p.unlocked)
+          if (hasIronFocus) {
+            const entry = this.wallet.entries().find((e) => e.id === ledgerId)
+            const baseCoins = entry?.coins ?? 0
+            if (baseCoins > 0) {
+              const bonusCoins = Math.max(1, Math.round(baseCoins * 0.2))
+              this.wallet.append({
+                ts: now.toISOString(),
+                day,
+                module: 'perks',
+                kind: 'earn',
+                coins: bonusCoins,
+                xp: 0,
+                ref: `perk:iron_focus:${b.id}:${day}`,
+                note: 'Perk: Iron Focus (+20% coins)'
+              })
+            }
+          }
+        } catch {
+          // Perk non-fatal
+        }
+      }
     }).immediate()
   }
 
