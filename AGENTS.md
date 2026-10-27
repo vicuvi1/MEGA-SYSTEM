@@ -6,8 +6,8 @@ Life System (`MEGA-SYSTEM`) is an offline-first, local-first gamified habit, tas
 ### Directory Structure
 ```
 src/
-  core/        Pure TypeScript business logic (zero Electron/DOM deps): ledger, levels, streaks, dates, body, shop, quests.
-  main/        Electron main process: SQLite migrations (001-005), DPAPI secrets, backups, Telegram notifier, IPC handlers.
+  core/        Pure TypeScript business logic (zero Electron/DOM deps): ledger, levels, streaks, dates, body, shop, quests, sleep, money, shields, dataExport.
+  main/        Electron main process: SQLite migrations (001-006), DPAPI secrets, backups, Telegram notifier, SleepService, MoneyService, ShieldService, DataExportService, IPC handlers.
   preload/     Typed context bridge exposed safely to the renderer as window.life.
   shared/      Cross-boundary TypeScript types and LifeApi interface definitions.
   renderer/    React 19 + Framer Motion user interface.
@@ -16,7 +16,7 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
 
 ---
 
-## 2. Recent Implementation Summary (Phases 5 & 6 — v0.7.0)
+## 2. Recent Implementation Summary (Phases 5, 6 & 7 — v0.8.0)
 - **Phase 5 (Body Module)**:
   - Database Migration `005` with `exercises`, `workouts`, and `body_metrics` tables.
   - Multi-exercise workout session logger with custom reps/units, awarding `body.workout_done` (+10 coins, +25 XP) to the wallet.
@@ -31,9 +31,15 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
   - **Telegram Bridge**: Background `TelegramNotifier` supporting DPAPI token encryption, 08:00 morning kickoff briefings, and 20:30 evening recaps.
   - **Custom Backup Directory**: User-selectable backup folder via native dialog, removing the hard dependency on `G:\My Drive`.
   - **Desktop Visibility**: Windows desktop shortcut (`Life System.lnk`) and standalone launcher (`Launch Life System.cmd`) created on `C:\Users\victo\Desktop`.
+- **Phase 7 (Standalone Sleep & Expense Hub, Streak Shield Economy & Data Portability)**:
+  - **Database Migration 006**: Created `sleep_logs` and `expenses` tables.
+  - **Standalone Sleep Tracker**: Native sleep check-in with 1-click "I'm Up" (+10 coins if on time) and "Bedtime" (+5 coins), target configuration, and 14-day history bar chart. Seamless fallback when Waky is not installed.
+  - **Standalone Expense Hub**: Native expense tracker with quick expense logger, category breakdown, and daily budget tracker (+3 coins on first log). Seamless fallback when Finance Helper is not installed.
+  - **Streak Shield Economy**: Users can purchase Streak Shields (50 coins) in the Shop to protect their streak flames if a day is missed.
+  - **Data Export & Portability**: 1-click export of complete JSON system snapshot and CSV exports for workouts and expenses in Settings.
 - **Testing & Quality Assurance**:
-  - 108 tests passing across 16 test suites (`npm test`).
-  - 0 TypeScript compilation errors (`npm run typecheck`).
+  - **131 tests passing** across 23 test suites (`npm test`).
+  - **0 TypeScript compilation errors** (`npm run typecheck`).
   - Production build verified with `electron-vite build` and `electron-builder`.
 
 ---
@@ -46,8 +52,10 @@ During the autonomous audit, the following edge cases and flaws were discovered 
 4. **Foreign Key Integrity**: Verified and enforced append-only rules for ledger interactions during workout rollbacks.
 5. **Backups Method Signatures**: Implemented `setDir` and `runNow` on `Backups` class to ensure complete TypeScript typing parity with `src/main/index.ts`.
 6. **Active Daily Rules Propagation**: Added `todayRules` array to `Summary` interface so the UI knows exactly which rules were completed today even after pagination.
+7. **Tagged Template Literal Migration Delimiter**: Ensured trailing comma separation on SQL array elements in `src/main/db.ts` to prevent runtime tagged-template syntax errors.
+8. **Rule Cooldown Verification**: Enforced 20-minute cooldowns on repeatable rules in test fixtures and wallet triggers.
 
 ---
 
 ## 4. Handoff Brief for Claude Code
-Life System v0.7.0 has its complete backend, SQLite database migrations, typed IPC bridge, domain business logic, and functional React UI fully implemented and verified with 108 passing tests. The UI is cleanly structured using semantic containers, state hooks, and custom tokens ready for conversion into high-fidelity Tailwind utility classes and visual polish. Your objective is to refine the styling, micro-animations, and visual hierarchy of the views (especially `Body.tsx`, `Today.tsx`, and `Settings.tsx`) while preserving existing component contracts and IPC bridges.
+Life System v0.8.0 has its complete backend, SQLite database migrations, typed IPC bridge, domain business logic, standalone sleep & expense engines, streak shield mechanics, and functional React UI fully implemented and verified with 131 passing tests. The UI is cleanly structured using semantic containers, state hooks, and custom tokens ready for conversion into high-fidelity Tailwind utility classes and visual polish. Your objective is to refine the styling, micro-animations, and visual hierarchy of the views (especially `Body.tsx`, `Today.tsx`, `Sleep.tsx`, `Money.tsx`, and `Shop.tsx`) while preserving existing component contracts and IPC bridges.

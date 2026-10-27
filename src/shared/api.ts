@@ -5,11 +5,22 @@ import type { Reward, Tier } from '@core/shop'
 import type { QuestState } from '@core/quests'
 import type { Block, BlockKind, BlockStatus, Repeat, Task } from '@core/plan'
 import type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput } from '@core/body'
+import type { SleepLog, SleepSummary } from '@core/sleep'
+import type { Expense, ExpenseCategory, DailyExpenseSummary } from '@core/money'
 
 export type { QuestState }
 export type { LedgerEntry, LevelInfo, Rule, Reward, Tier, Block, BlockKind, BlockStatus, Repeat, Task }
 export type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput }
 export type BodyState = BodySummary
+export type { SleepLog, SleepSummary, Expense, ExpenseCategory, DailyExpenseSummary }
+
+export interface NativeMoneySummary {
+  currency: string
+  dailyBudget: number
+  today: DailyExpenseSummary
+  monthSpent: number
+  recentExpenses: Expense[]
+}
 
 export interface ShopState {
   rewards: Reward[]
@@ -306,6 +317,27 @@ export interface LifeApi {
     list(): Promise<string[]>
     verifyLatest(): Promise<VerifyResult>
     restore(name: string, passphrase: string): Promise<void>
+  }
+  sleep: {
+    state(): Promise<SleepSummary>
+    logWake(time?: string, quality?: number): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
+    logBed(time?: string): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
+    setTargets(weekday: string, weekend: string, bedtime?: string): Promise<SleepSummary>
+  }
+  money: {
+    state(): Promise<NativeMoneySummary>
+    addExpense(amountBani: number, category: string, note?: string): Promise<{ expense: Expense; state: NativeMoneySummary; awarded: boolean }>
+    deleteExpense(id: number): Promise<NativeMoneySummary>
+    setBudget(budgetBani: number): Promise<NativeMoneySummary>
+    setCurrency(cur: string): Promise<NativeMoneySummary>
+  }
+  shields: {
+    count(): Promise<number>
+    buy(): Promise<{ shields: number; balance: number }>
+  }
+  data: {
+    exportJson(): Promise<string>
+    exportCsv(kind: 'workouts' | 'expenses'): Promise<string>
   }
 }
 

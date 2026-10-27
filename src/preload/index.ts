@@ -108,6 +108,27 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     verifyLatest: () => call('backup:verifyLatest'),
     restore: (name, passphrase) => call('backup:restore', name, passphrase)
   },
+  sleep: {
+    state: () => call('sleep:state'),
+    logWake: (time, quality) => call('sleep:logWake', time, quality),
+    logBed: (time) => call('sleep:logBed', time),
+    setTargets: (weekday, weekend, bedtime) => call('sleep:setTargets', weekday, weekend, bedtime)
+  },
+  money: {
+    state: () => call('money:state'),
+    addExpense: (amountBani, category, note) => call('money:addExpense', amountBani, category, note),
+    deleteExpense: (id) => call('money:deleteExpense', id),
+    setBudget: (budgetBani) => call('money:setBudget', budgetBani),
+    setCurrency: (cur) => call('money:setCurrency', cur)
+  },
+  shields: {
+    count: () => call('shields:count'),
+    buy: () => call('shields:buy')
+  },
+  data: {
+    exportJson: () => call('data:exportJson'),
+    exportCsv: (kind) => call('data:exportCsv', kind)
+  },
   onLocked: (cb) => {
     ipcRenderer.on('auth:locked', () => cb())
   },

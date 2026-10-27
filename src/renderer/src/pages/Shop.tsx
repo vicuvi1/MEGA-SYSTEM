@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { redeemBlocker, TIERS, tierUnlocked } from '@core/shop'
 import type { Reward, RewardInput, ShopState, Tier } from '@shared/api'
@@ -22,6 +22,20 @@ export function Shop({ state, onState, onWallet }: Props) {
   const [confirm, setConfirm] = useState<Reward | null>(null)
   const [celebrate, setCelebrate] = useState<{ title: string; sub: string } | null>(null)
   const [budgetDraft, setBudgetDraft] = useState<string | null>(null)
+  const [shields, setShields] = useState(0)
+
+  useEffect(() => {
+    life.shields.count().then(setShields).catch(() => {})
+  }, [state])
+
+  async function buyShield() {
+    const res = await act(() => life.shields.buy(), 'Streak Shield purchased!')
+    if (res) {
+      soundFanfare()
+      setShields(res.shields)
+      onWallet()
+    }
+  }
 
   const check = (r: Reward) => redeemBlocker({ reward: r, balance: state.balance, level: state.level, monthSpent: state.monthSpent, budget: state.budget })
 

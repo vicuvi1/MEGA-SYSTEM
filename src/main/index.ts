@@ -15,6 +15,10 @@ import { Shop } from './shop'
 import { Schedule, Tasks } from './planner'
 import { Discipline } from './discipline'
 import { Body } from './body'
+import { SleepService } from './sleep'
+import { MoneyService } from './money'
+import { ShieldService } from './shields'
+import { DataExportService } from './dataExport'
 import { TelegramNotifier } from './telegram'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
@@ -65,6 +69,10 @@ let tasks: Tasks
 let schedule: Schedule
 let discipline: Discipline
 let body: Body
+let sleepService: SleepService
+let moneyService: MoneyService
+let shieldService: ShieldService
+let dataExportService: DataExportService
 let telegram: TelegramNotifier
 let connections: Connections
 let win: BrowserWindow | null = null
@@ -80,6 +88,10 @@ function open(): void {
   schedule = new Schedule(db, wallet)
   discipline = new Discipline(db, wallet)
   body = new Body(db, wallet)
+  sleepService = new SleepService(db, wallet)
+  moneyService = new MoneyService(db, wallet)
+  shieldService = new ShieldService(db, wallet)
+  dataExportService = new DataExportService(db, body, moneyService)
   telegram = new TelegramNotifier()
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.

@@ -178,6 +178,89 @@ export function createMockApi(): Bridge {
       saveConfig: async (c) => ({ botToken: '', chatId: '', enabled: false, morningBriefing: true, eveningNudge: true, ...c }),
       test: async () => ({ ok: true })
     },
+    sleep: {
+      state: async () => ({
+        today: dayKey(new Date()),
+        weekdayTarget: '07:00',
+        weekendTarget: '08:30',
+        todayLog: null,
+        streak: 3,
+        bestStreak: 14,
+        onTimeRate: 0.9,
+        avgSleepMin: 450,
+        recentLogs: []
+      }),
+      logWake: async (time = '07:00') => ({
+        log: { id: 1, day: dayKey(new Date()), wakeTime: time, wakeTarget: '07:00', onTime: true, bedTime: null, bedTarget: null, bedOnTime: null, quality: 5, createdAt: '' },
+        state: { today: dayKey(new Date()), weekdayTarget: '07:00', weekendTarget: '08:30', todayLog: null, streak: 4, bestStreak: 14, onTimeRate: 0.92, avgSleepMin: 450, recentLogs: [] },
+        awarded: true
+      }),
+      logBed: async (time = '23:00') => ({
+        log: { id: 1, day: dayKey(new Date()), wakeTime: '07:00', wakeTarget: '07:00', onTime: true, bedTime: time, bedTarget: '23:00', bedOnTime: true, quality: 5, createdAt: '' },
+        state: { today: dayKey(new Date()), weekdayTarget: '07:00', weekendTarget: '08:30', todayLog: null, streak: 4, bestStreak: 14, onTimeRate: 0.92, avgSleepMin: 450, recentLogs: [] },
+        awarded: true
+      }),
+      setTargets: async (weekday, weekend) => ({
+        today: dayKey(new Date()),
+        weekdayTarget: weekday,
+        weekendTarget: weekend,
+        todayLog: null,
+        streak: 3,
+        bestStreak: 14,
+        onTimeRate: 0.9,
+        avgSleepMin: 450,
+        recentLogs: []
+      })
+    },
+    money: {
+      state: async () => ({
+        currency: 'MDL',
+        dailyBudget: 10000,
+        today: { day: dayKey(new Date()), totalSpent: 3500, everydaySpent: 3500, budget: 10000, underBudget: true, remaining: 6500, byCategory: { food: 3500 } },
+        monthSpent: 28500,
+        recentExpenses: []
+      }),
+      addExpense: async (amount, category, note) => ({
+        expense: { id: 1, day: dayKey(new Date()), amount, category, note: note ?? null, createdAt: new Date().toISOString() },
+        state: {
+          currency: 'MDL',
+          dailyBudget: 10000,
+          today: { day: dayKey(new Date()), totalSpent: amount, everydaySpent: amount, budget: 10000, underBudget: true, remaining: 10000 - amount, byCategory: { [category]: amount } },
+          monthSpent: amount,
+          recentExpenses: []
+        },
+        awarded: true
+      }),
+      deleteExpense: async () => ({
+        currency: 'MDL',
+        dailyBudget: 10000,
+        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: 10000, underBudget: true, remaining: 10000, byCategory: {} },
+        monthSpent: 0,
+        recentExpenses: []
+      }),
+      setBudget: async (b) => ({
+        currency: 'MDL',
+        dailyBudget: b,
+        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: b, underBudget: true, remaining: b, byCategory: {} },
+        monthSpent: 0,
+        recentExpenses: []
+      }),
+      setCurrency: async (cur) => ({
+        currency: cur,
+        dailyBudget: 10000,
+        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: 10000, underBudget: true, remaining: 10000, byCategory: {} },
+        monthSpent: 0,
+        recentExpenses: []
+      })
+    },
+    shields: {
+      count: async () => 1,
+      buy: async () => ({ shields: 2, balance: balance(entries) - 50 })
+    },
+    data: {
+      exportJson: async () => JSON.stringify({ demo: true }, null, 2),
+      exportCsv: async () => 'Date,Amount\n2026-10-27,50.00'
+    },
     backup: {
       status: () => ok(backup()),
       chooseDir: () => ok(backup()),

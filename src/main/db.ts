@@ -164,6 +164,31 @@ const MIGRATIONS: string[] = [
     note TEXT,
     updated_at TEXT NOT NULL
   );
+  `,
+  /* 006 sleep & expenses: native sleep logging and standalone expense tracking */ `
+  CREATE TABLE sleep_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL UNIQUE,
+    wake_time TEXT NOT NULL,
+    wake_target TEXT NOT NULL,
+    on_time INTEGER NOT NULL DEFAULT 0,
+    bed_time TEXT,
+    bed_target TEXT,
+    bed_on_time INTEGER,
+    quality INTEGER,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX sleep_day ON sleep_logs(day);
+
+  CREATE TABLE expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    note TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX expenses_day ON expenses(day);
   `
 ]
 
