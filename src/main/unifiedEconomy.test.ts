@@ -216,4 +216,36 @@ describe('UnifiedEconomyService Backend', () => {
     expect(shields.count()).toBe(shieldBefore + 1);
   });
 
+  it('manages economy config and presets', () => {
+    const config = economy.getEconomyConfig()
+    expect(config.bankBaseRate).toBe(0.5)
+    expect(config.consumablePrices.focus_elixir).toBe(20)
+
+    // Save custom config
+    economy.saveEconomyConfig({
+      bankBaseRate: 0.8,
+      consumablePrices: {
+        focus_elixir: 28,
+        xp_booster: 32,
+        streak_shield: 60,
+        fatigue_neutralizer: 18
+      }
+    })
+    const updated = economy.getEconomyConfig()
+    expect(updated.bankBaseRate).toBe(0.8)
+    expect(updated.consumablePrices.focus_elixir).toBe(28)
+
+    // Apply Spartan preset
+    economy.applyEconomyPreset('spartan')
+    const spartanCfg = economy.getEconomyConfig()
+    expect(spartanCfg.bankBaseRate).toBe(0.3)
+    expect(spartanCfg.consumablePrices.streak_shield).toBe(75)
+
+    // Check rules updated
+    const cleanDayRule = wallet.rules().find((r) => r.id === 'discipline.clean_day')
+    expect(cleanDayRule?.coins).toBe(25)
+    const resetRule = wallet.rules().find((r) => r.id === 'discipline.reset')
+    expect(resetRule?.coins).toBe(-50)
+  });
+
 })

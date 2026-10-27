@@ -285,7 +285,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
   )
 }
 
-function RenderMarkdown({ text }: { text: string }) {
+export function RenderMarkdown({ text }: { text: string }) {
   const lines = text.split("\n")
   return (
     <div className="oracle-markdown-body">
@@ -304,7 +304,7 @@ function RenderMarkdown({ text }: { text: string }) {
           const level = levelMatch ? levelMatch[0].length : 1
           const rawTitle = trimmed.replace(/^#+\s*/, "").replace(/^\[(.*)\]$/, "$1")
           return (
-            <div key={i} className={`oracle-heading h${level}`}>',
+            <div key={i} className={`oracle-heading h${level}`}>
               <span className="oracle-heading-accent">✦</span>
               <span>{formatInline(rawTitle)}</span>
             </div>

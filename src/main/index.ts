@@ -397,6 +397,18 @@ handle('economy:buyConsumable', (itemId: string) => {
   return res
 })
 
+handle('economy:getConfig', () => economyService.getEconomyConfig())
+handle('economy:saveConfig', (patch: any) => {
+  const res = economyService.saveEconomyConfig(patch)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('economy:applyPreset', (preset: 'balanced' | 'spartan' | 'turbo') => {
+  const res = economyService.applyEconomyPreset(preset)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+
 // ---------- AI Intelligence & Multi-Model Oracle ----------
 handle('ai:config', () => aiService.getConfig())
 handle('ai:saveConfig', (c: Partial<AIConfig>) => aiService.saveConfig(c))

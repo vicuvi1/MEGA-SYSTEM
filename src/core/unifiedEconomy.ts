@@ -464,3 +464,126 @@ export interface ActiveBuff {
   icon: string
   remainingSeconds: number
 }
+
+// --- MASTER ECONOMY CONFIGURATION & PRESET PROFILES ---
+
+export interface EconomyPreset {
+  id: 'balanced' | 'spartan' | 'turbo'
+  name: string
+  tagline: string
+  description: string
+  badge: string
+  bankBaseRate: number
+  bankCapPerLevel: number
+  consumablePrices: {
+    focus_elixir: number
+    xp_booster: number
+    streak_shield: number
+    fatigue_neutralizer: number
+  }
+  ruleOverrides: Record<string, { coins: number; xp: number; dailyCap?: number }>
+}
+
+export const ECONOMY_PRESETS: Record<'balanced' | 'spartan' | 'turbo', EconomyPreset> = {
+  balanced: {
+    id: 'balanced',
+    name: 'Balanced Hunter',
+    tagline: 'Standard Progression',
+    description: 'Realistic, sustainable reward pacing. Standard daily yields and balanced consumable prices.',
+    badge: '⚖️ BALANCED',
+    bankBaseRate: 0.5,
+    bankCapPerLevel: 250,
+    consumablePrices: {
+      focus_elixir: 20,
+      xp_booster: 25,
+      streak_shield: 50,
+      fatigue_neutralizer: 15
+    },
+    ruleOverrides: {
+      'sleep.up_on_time': { coins: 10, xp: 20 },
+      'sleep.bed_on_time': { coins: 5, xp: 10 },
+      'study.block_done': { coins: 15, xp: 30 },
+      'study.block_skipped': { coins: -5, xp: 0 },
+      'discipline.clean_day': { coins: 20, xp: 40 },
+      'discipline.urge_resisted': { coins: 10, xp: 20 },
+      'discipline.oath': { coins: 3, xp: 5 },
+      'discipline.reset': { coins: -20, xp: 0 },
+      'body.workout_done': { coins: 10, xp: 25 },
+      'face.routine_done': { coins: 5, xp: 10 },
+      'money.under_budget': { coins: 5, xp: 10 },
+      'money.logged': { coins: 3, xp: 5 }
+    }
+  },
+  spartan: {
+    id: 'spartan',
+    name: 'Hardcore Spartan',
+    tagline: 'High Stakes & Extreme Discipline',
+    description: 'Stricter discipline, punishing slip penalties, and precious coin rewards. For elite focus.',
+    badge: '⚔️ SPARTAN',
+    bankBaseRate: 0.3,
+    bankCapPerLevel: 150,
+    consumablePrices: {
+      focus_elixir: 30,
+      xp_booster: 35,
+      streak_shield: 75,
+      fatigue_neutralizer: 25
+    },
+    ruleOverrides: {
+      'sleep.up_on_time': { coins: 8, xp: 25 },
+      'sleep.bed_on_time': { coins: 5, xp: 15 },
+      'study.block_done': { coins: 12, xp: 35 },
+      'study.block_skipped': { coins: -15, xp: 0 },
+      'discipline.clean_day': { coins: 25, xp: 60 },
+      'discipline.urge_resisted': { coins: 15, xp: 30 },
+      'discipline.oath': { coins: 5, xp: 10 },
+      'discipline.reset': { coins: -50, xp: 0 },
+      'body.workout_done': { coins: 12, xp: 35 },
+      'face.routine_done': { coins: 4, xp: 10 },
+      'money.under_budget': { coins: 8, xp: 15 },
+      'money.logged': { coins: 2, xp: 5 }
+    }
+  },
+  turbo: {
+    id: 'turbo',
+    name: 'Turbo Velocity',
+    tagline: 'High Motivation & Fast Milestones',
+    description: 'Generous coin and XP payouts to rapidly celebrate habit consistency and unlock master wishlist rewards.',
+    badge: '⚡ TURBO',
+    bankBaseRate: 1.0,
+    bankCapPerLevel: 500,
+    consumablePrices: {
+      focus_elixir: 15,
+      xp_booster: 20,
+      streak_shield: 35,
+      fatigue_neutralizer: 10
+    },
+    ruleOverrides: {
+      'sleep.up_on_time': { coins: 20, xp: 40 },
+      'sleep.bed_on_time': { coins: 10, xp: 20 },
+      'study.block_done': { coins: 30, xp: 60 },
+      'study.block_skipped': { coins: -5, xp: 0 },
+      'discipline.clean_day': { coins: 40, xp: 80 },
+      'discipline.urge_resisted': { coins: 20, xp: 40 },
+      'discipline.oath': { coins: 10, xp: 15 },
+      'discipline.reset': { coins: -15, xp: 0 },
+      'body.workout_done': { coins: 25, xp: 50 },
+      'face.routine_done': { coins: 10, xp: 20 },
+      'money.under_budget': { coins: 15, xp: 30 },
+      'money.logged': { coins: 5, xp: 10 }
+    }
+  }
+}
+
+export interface EconomyConfig {
+  exchangeRate: number
+  currency: string
+  monthlyBudget: number
+  bankBaseRate: number
+  bankCapPerLevel: number
+  consumablePrices: {
+    focus_elixir: number
+    xp_booster: number
+    streak_shield: number
+    fatigue_neutralizer: number
+  }
+}

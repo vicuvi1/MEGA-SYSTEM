@@ -151,7 +151,10 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     withdrawCoins: (amount) => call('economy:withdrawCoins', amount),
     claimInterest: () => call('economy:claimInterest'),
     activeBuffs: () => call('economy:activeBuffs'),
-    buyConsumable: (itemId) => call('economy:buyConsumable', itemId)
+    buyConsumable: (itemId) => call('economy:buyConsumable', itemId),
+    getConfig: () => call('economy:getConfig'),
+    saveConfig: (patch) => call('economy:saveConfig', patch),
+    applyPreset: (preset) => call('economy:applyPreset', preset)
   },
   bots: {
     config: () => call('bots:config'),

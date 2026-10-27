@@ -14,7 +14,10 @@ import {
   calculateAccruedInterest,
   type ActiveBuff,
   type ConsumableItem,
-  CONSUMABLE_CATALOG
+  CONSUMABLE_CATALOG,
+  type EconomyConfig,
+  type EconomyPreset,
+  ECONOMY_PRESETS
 } from '@core/unifiedEconomy'
 import { chestRef, unopenedChests } from '@core/shop'
 import { levelInfo } from '@core/levels'
@@ -721,8 +724,10 @@ export class UnifiedEconomyService {
   }
 
   buyConsumable(itemId: string, now = new Date()): { buff?: ActiveBuff; balance: number; message: string } {
-    const item = CONSUMABLE_CATALOG.find((c) => c.id === itemId);
-    if (!item) throw new LedgerError(`Unknown consumable item: "${itemId}"`);
+    const defaultItem = CONSUMABLE_CATALOG.find((c) => c.id === itemId);
+    if (!defaultItem) throw new LedgerError(`Unknown consumable item: "${itemId}"`);
+    const customCost = Number(getSetting(this.db, `price_${itemId}`)) || defaultItem.costCoins;
+    const item = { ...defaultItem, costCoins: customCost };
 
     const currentBalance = balance(this.wallet.entries());
     if (currentBalance < item.costCoins) {
@@ -784,6 +789,85 @@ export class UnifiedEconomyService {
         message: `${item.icon} ${item.title} Activated! Active for ${item.durationHours} hours.`
       };
     })();
+  }
+
+
+  // --- MASTER ECONOMY CONFIGURATION & PRESET TUNING ---
+
+  getEconomyConfig(): EconomyConfig {
+    const exchangeRate = this.getExchangeRate();
+    const currency = this.getCurrency();
+    const monthlyBudget = Number(getSetting(this.db, 'reward_budget') ?? 0);
+    const bankBaseRate = Number(getSetting(this.db, 'bank_base_rate') ?? 0.5);
+    const bankCapPerLevel = Number(getSetting(this.db, 'bank_cap_per_level') ?? 250);
+
+    const consumablePrices = {
+      focus_elixir: Number(getSetting(this.db, 'price_focus_elixir') ?? 20),
+      xp_booster: Number(getSetting(this.db, 'price_xp_booster') ?? 25),
+      streak_shield: Number(getSetting(this.db, 'price_streak_shield') ?? 50),
+      fatigue_neutralizer: Number(getSetting(this.db, 'price_fatigue_neutralizer') ?? 15)
+    };
+
+    return {
+      exchangeRate,
+      currency,
+      monthlyBudget,
+      bankBaseRate,
+      bankCapPerLevel,
+      consumablePrices
+    };
+  }
+
+  saveEconomyConfig(patch: Partial<EconomyConfig>): EconomyConfig {
+    if (patch.exchangeRate !== undefined && patch.exchangeRate > 0) {
+      this.setExchangeRate(patch.exchangeRate);
+    }
+    if (patch.currency !== undefined && patch.currency.trim()) {
+      this.setCurrency(patch.currency);
+    }
+    if (patch.monthlyBudget !== undefined && patch.monthlyBudget >= 0) {
+      setSetting(this.db, 'reward_budget', String(patch.monthlyBudget));
+    }
+    if (patch.bankBaseRate !== undefined && patch.bankBaseRate > 0) {
+      setSetting(this.db, 'bank_base_rate', String(patch.bankBaseRate));
+    }
+    if (patch.bankCapPerLevel !== undefined && patch.bankCapPerLevel > 0) {
+      setSetting(this.db, 'bank_cap_per_level', String(patch.bankCapPerLevel));
+    }
+    if (patch.consumablePrices) {
+      for (const [k, v] of Object.entries(patch.consumablePrices)) {
+        if (typeof v === 'number' && v > 0) {
+          setSetting(this.db, `price_${k}`, String(v));
+        }
+      }
+    }
+    return this.getEconomyConfig();
+  }
+
+  applyEconomyPreset(presetId: 'balanced' | 'spartan' | 'turbo'): EconomyConfig {
+    const preset = ECONOMY_PRESETS[presetId];
+    if (!preset) throw new LedgerError(`Unknown preset: "${presetId}"`);
+
+    setSetting(this.db, 'bank_base_rate', String(preset.bankBaseRate));
+    setSetting(this.db, 'bank_cap_per_level', String(preset.bankCapPerLevel));
+    for (const [k, v] of Object.entries(preset.consumablePrices)) {
+      setSetting(this.db, `price_${k}`, String(v));
+    }
+
+    const allRules = this.wallet.rules();
+    for (const [ruleId, override] of Object.entries(preset.ruleOverrides)) {
+      const existing = allRules.find((r) => r.id === ruleId);
+      if (existing) {
+        this.wallet.saveRule({
+          ...existing,
+          coins: override.coins,
+          xp: override.xp,
+          dailyCap: override.dailyCap ?? existing.dailyCap
+        });
+      }
+    }
+
+    return this.getEconomyConfig();
   }
 
 }

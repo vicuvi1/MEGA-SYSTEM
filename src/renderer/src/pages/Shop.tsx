@@ -18,12 +18,17 @@ import {
   WishlistGoalInput,
   BankState,
   ActiveBuff,
-  CONSUMABLE_CATALOG
+  CONSUMABLE_CATALOG,
+  ECONOMY_PRESETS,
+  EconomyConfig,
+  EconomyPreset,
+  Rule
 } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction, useToast } from '../ui'
 import { soundFanfare, soundSpend, soundTick } from '../sound'
+import { RenderMarkdown } from '../SystemOracleDrawer'
 
 interface Props {
   state: ShopState
@@ -46,7 +51,7 @@ export function Shop({ state, onState, onWallet }: Props) {
 
   // Economy state
   const [economy, setEconomy] = useState<EconomySummary | null>(state.economy ?? null)
-  const [activeTab, setActiveTab] = useState<'catalog' | 'bank' | 'consumables' | 'goals' | 'vault'>('catalog')
+  const [activeTab, setActiveTab] = useState<'catalog' | 'bank' | 'consumables' | 'goals' | 'vault' | 'tuning'>('catalog')
   const [bank, setBank] = useState<BankState | null>(null)
   const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([])
   const [stakeDraft, setStakeDraft] = useState('')

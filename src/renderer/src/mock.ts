@@ -3,7 +3,8 @@ import { balance, effective, planUndo, totalXp, type LedgerEntry, type NewEntry 
 import { levelInfo, type StatAllocation } from '@core/levels'
 import { DEFAULT_RULES, planAward, type Rule } from '@core/rules'
 import { chestRef, DEFAULT_REWARDS, planRedeem, rollChest, unopenedChests, validateReward, type Reward } from '@core/shop'
-import type { AuthStatus, BackupStatus, ShopState, Summary } from '@shared/api'
+import type { AuthStatus, BackupStatus, ShopState, Summary, EconomyConfig } from '@shared/api'
+import { ECONOMY_PRESETS } from '@shared/api'
 import type { Bridge } from './bridge'
 import { createMockPlan } from './mockPlan'
 import { questRef, questState } from '@core/quests'
@@ -502,7 +503,44 @@ export function createMockApi(): Bridge {
         },
         balance: 1400,
         message: 'Item purchased & activated!'
-      })
+      }),
+      getConfig: async () => ({
+        exchangeRate: 5,
+        currency: 'MDL',
+        monthlyBudget: 2500,
+        bankBaseRate: 0.5,
+        bankCapPerLevel: 250,
+        consumablePrices: {
+          focus_elixir: 20,
+          xp_booster: 25,
+          streak_shield: 50,
+          fatigue_neutralizer: 15
+        }
+      }),
+      saveConfig: async (patch: Partial<EconomyConfig>) => ({
+        exchangeRate: patch.exchangeRate ?? 5,
+        currency: patch.currency ?? 'MDL',
+        monthlyBudget: patch.monthlyBudget ?? 2500,
+        bankBaseRate: patch.bankBaseRate ?? 0.5,
+        bankCapPerLevel: patch.bankCapPerLevel ?? 250,
+        consumablePrices: {
+          focus_elixir: patch.consumablePrices?.focus_elixir ?? 20,
+          xp_booster: patch.consumablePrices?.xp_booster ?? 25,
+          streak_shield: patch.consumablePrices?.streak_shield ?? 50,
+          fatigue_neutralizer: patch.consumablePrices?.fatigue_neutralizer ?? 15
+        }
+      }),
+      applyPreset: async (preset: 'balanced' | 'spartan' | 'turbo') => {
+        const p = ECONOMY_PRESETS[preset] ?? ECONOMY_PRESETS.balanced
+        return {
+          exchangeRate: 5,
+          currency: 'MDL',
+          monthlyBudget: 2500,
+          bankBaseRate: p.bankBaseRate,
+          bankCapPerLevel: p.bankCapPerLevel,
+          consumablePrices: { ...p.consumablePrices }
+        }
+      }
     },
     bots: {
       config: async () => ({
