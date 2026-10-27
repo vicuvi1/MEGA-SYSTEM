@@ -350,6 +350,7 @@ export interface LifeApi {
     complete(id: number): Promise<TasksState>
     uncomplete(id: number): Promise<TasksState>
     saveCategory(c: Category): Promise<TasksState>
+    archiveCategory(id: string): Promise<TasksState>
   }
   schedule: {
     state(day?: string): Promise<ScheduleState>

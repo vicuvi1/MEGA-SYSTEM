@@ -738,3 +738,208 @@
   margin-top: 8px;
 }
 
+
+
+/* Sidebar Collapse Toggle */
+.todoist-sidebar.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border-right: none !important;
+}
+
+.sidebar-toggle-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Group By Control */
+.todoist-group-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.todoist-group-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #888888;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.12s ease;
+}
+
+.todoist-group-btn:hover {
+  color: #ffffff;
+}
+
+.todoist-group-btn.active {
+  background: rgba(0, 210, 255, 0.15);
+  color: #00d2ff;
+  border-color: rgba(0, 210, 255, 0.35);
+  box-shadow: 0 0 10px rgba(0, 210, 255, 0.1);
+}
+
+/* Drag Over Column Highlight */
+.todoist-column.drag-over {
+  background: rgba(0, 210, 255, 0.05) !important;
+  border: 1.5px dashed rgba(0, 210, 255, 0.4) !important;
+  border-radius: 10px;
+}
+
+/* Filter Chips Bar */
+.todoist-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  overflow-x: auto;
+}
+
+.todoist-filter-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #888888;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+}
+
+.todoist-filter-chip:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.todoist-filter-chip.active {
+  background: rgba(222, 76, 74, 0.15);
+  border-color: rgba(222, 76, 74, 0.4);
+  color: #ff7a75;
+}
+
+/* Starter Quests Empty State */
+.todoist-starter-box {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.6) 0%, rgba(9, 13, 22, 0.8) 100%);
+  border: 1px solid rgba(0, 210, 255, 0.25);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 520px;
+  margin: 60px auto;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.todoist-starter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.todoist-starter-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.todoist-starter-chip:hover {
+  background: rgba(0, 210, 255, 0.15);
+  border-color: #00d2ff;
+  color: #00d2ff;
+  transform: translateY(-1px);
+}
+
+/* List View Section Groups */
+.todoist-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.todoist-list-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  user-select: none;
+}
+
+.todoist-list-section-header:hover {
+  color: #00d2ff;
+}
+
+/* Quick Card Move Dropdown */
+.todoist-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.todoist-card:hover .todoist-card-actions {
+  opacity: 1;
+}
+
+.card-action-mini-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ccc;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.card-action-mini-btn:hover {
+  background: #00d2ff;
+  color: #050811;
+  border-color: #00d2ff;
+}

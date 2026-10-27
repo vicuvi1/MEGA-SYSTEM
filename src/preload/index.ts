@@ -43,7 +43,8 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     archive: (id) => call('tasks:archive', id),
     complete: (id) => call('tasks:complete', id),
     uncomplete: (id) => call('tasks:uncomplete', id),
-    saveCategory: (c) => call('tasks:saveCategory', c)
+    saveCategory: (c) => call('tasks:saveCategory', c),
+    archiveCategory: (id) => call('tasks:archiveCategory', id)
   },
   schedule: {
     state: (day) => call('schedule:state', day),

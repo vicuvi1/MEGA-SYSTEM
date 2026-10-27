@@ -232,6 +232,10 @@ const MIGRATIONS: string[] = [
   ALTER TABLE rewards ADD COLUMN currency TEXT NOT NULL DEFAULT 'MDL';
   ALTER TABLE wishlist_goals ADD COLUMN image_url TEXT;
   ALTER TABLE wishlist_goals ADD COLUMN currency TEXT NOT NULL DEFAULT 'MDL';
+  `,
+  /* 009 clean up pseudo-categories today & tomorrow from categories table */ `
+  UPDATE tasks SET category = 'life' WHERE category IN ('today', 'tomorrow');
+  UPDATE categories SET archived = 1 WHERE id IN ('today', 'tomorrow');
   `
 ]
 

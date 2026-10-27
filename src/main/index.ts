@@ -239,6 +239,10 @@ handle('tasks:saveCategory', (c: Category) => {
   tasks.saveCategory(c)
   return tasks.state()
 })
+handle('tasks:archiveCategory', (id: string) => {
+  tasks.archiveCategory(id)
+  return tasks.state()
+})
 
 handle('schedule:state', (day?: string) => schedule.state(day))
 handle('schedule:save', (b: BlockInput) => {

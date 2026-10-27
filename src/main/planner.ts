@@ -189,6 +189,10 @@ export class Tasks {
       )
       .run(id, c.label.trim(), c.color)
   }
+
+  archiveCategory(id: string): void {
+    this.db.prepare('UPDATE categories SET archived = 1 WHERE id = ?').run(id)
+  }
 }
 
 export class Schedule {

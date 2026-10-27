@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { TASK_MAX_COINS, TASK_MAX_XP } from '@core/plan'
 import type { Category, Repeat, TaskInput, TasksState, TaskView, TaskDecompositionResult } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction, useToast } from '../ui'
-import { soundSuccess, soundTick, soundSystemOracle, soundMechanicalClick } from '../sound'
+import { soundSuccess, soundTick, soundSystemOracle, soundMechanicalClick, soundCoin } from '../sound'
 
 interface Props {
   state: TasksState
@@ -14,7 +14,8 @@ interface Props {
 }
 
 type ViewMode = 'board' | 'list'
-type FilterTab = 'inbox' | 'today' | 'upcoming' | 'p1' | 'all' | string
+type GroupBy = 'status' | 'priority' | 'date' | 'project'
+type FilterTab = 'inbox' | 'today' | 'upcoming' | 'p1' | string
 
 function formatTodoistDate(due: string | null, repeat: string, todayStr: string): { label: string; kind: 'today' | 'tomorrow' | 'upcoming' | 'overdue' } | null {
   if (!due && repeat === 'none') return null
@@ -82,11 +83,44 @@ function renderTitle(title: string) {
   })
 }
 
+const PROJECT_COLOR_PALETTE = [
+  '#00D2FF', '#7CC4FF', '#FF6B8B', '#DE4C4A',
+  '#4ADE80', '#F5C84B', '#B892FF', '#EC4899'
+]
+
 export function Tasks({ state, onState, onWallet }: Props) {
   const act = useAction()
   const toast = useToast()
   const todayStr = state.today || new Date().toISOString().slice(0, 10)
+  const tomorrowStr = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
 
+  // View preferences persisted
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    return (localStorage.getItem('ls.tasks.viewMode') as ViewMode) || 'board'
+  })
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
+    return (localStorage.getItem('ls.tasks.groupBy') as GroupBy) || 'status'
+  })
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('ls.tasks.sidebarCollapsed') === 'true'
+  })
+
+  // Filtering state
+  const [activeTab, setActiveTab] = useState<FilterTab>('inbox')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showDone, setShowDone] = useState(false)
+  const [filterPriority, setFilterPriority] = useState<1 | 2 | 3 | 'all'>('all')
+
+  // Drag and drop state
+  const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null)
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null)
+
+  // Project creation modal
+  const [addingProject, setAddingProject] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [newProjectColor, setNewProjectColor] = useState('#00D2FF')
+
+  // AI Decomposition modal
   const [decomposeModal, setDecomposeModal] = useState<{
     isOpen: boolean
     taskTitle: string
@@ -96,6 +130,35 @@ export function Tasks({ state, onState, onWallet }: Props) {
     result: TaskDecompositionResult | null
   } | null>(null)
 
+  // Task creation and editing state
+  const [addingInColumn, setAddingInColumn] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftNotes, setDraftNotes] = useState('')
+  const [draftDue, setDraftDue] = useState<string | null>(todayStr)
+  const [draftPriority, setDraftPriority] = useState<1 | 2 | 3>(2)
+  const [draftRepeat, setDraftRepeat] = useState<Repeat>('none')
+  const [draftCategory, setDraftCategory] = useState<string>('university')
+  const [editingTask, setEditingTask] = useState<TaskView | null>(null)
+
+  // Real projects (excluding pseudo-categories like 'today' or 'tomorrow')
+  const realProjects = useMemo(() => {
+    return state.categories.filter((c) => c.id !== 'today' && c.id !== 'tomorrow')
+  }, [state.categories])
+
+  const catById = useMemo(() => Object.fromEntries(realProjects.map((c) => [c.id, c])), [realProjects])
+
+  // Persist view choices
+  useEffect(() => {
+    localStorage.setItem('ls.tasks.viewMode', viewMode)
+  }, [viewMode])
+  useEffect(() => {
+    localStorage.setItem('ls.tasks.groupBy', groupBy)
+  }, [groupBy])
+  useEffect(() => {
+    localStorage.setItem('ls.tasks.sidebarCollapsed', String(sidebarCollapsed))
+  }, [sidebarCollapsed])
+
+  // Start AI Decomposition
   async function startDecomposition(t: { title: string; category?: string; notes?: string | null }) {
     setDecomposeModal({
       isOpen: true,
@@ -139,154 +202,198 @@ export function Tasks({ state, onState, onWallet }: Props) {
     soundSuccess()
   }
 
-  const [activeTab, setActiveTab] = useState<FilterTab>('inbox')
-  const [viewMode, setViewMode] = useState<ViewMode>('board')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showDone, setShowDone] = useState(false)
-
-  // Column inline task adding
-  const [addingInColumn, setAddingInColumn] = useState<string | null>(null)
-  const [draftTitle, setDraftTitle] = useState('')
-  const [draftNotes, setDraftNotes] = useState('')
-  const [draftDue, setDraftDue] = useState<string | null>(todayStr)
-  const [draftPriority, setDraftPriority] = useState<1 | 2 | 3>(2)
-  const [draftRepeat, setDraftRepeat] = useState<Repeat>('none')
-  const [draftCategory, setDraftCategory] = useState<string>('university')
-
-  // Editing existing task
-  const [editingTask, setEditingTask] = useState<TaskView | null>(null)
-
-  // Ensure default categories exist
-  useEffect(() => {
-    const existingIds = new Set(state.categories.map((c) => c.id))
-    const required: { id: string; label: string; color: string }[] = [
-      { id: 'university', label: 'University', color: '#7CC4FF' },
-      { id: 'today', label: 'Today', color: '#4ADE80' },
-      { id: 'just-tasks', label: 'Just Tasks', color: '#B892FF' },
-      { id: 'tomorrow', label: 'Tomorrow', color: '#F5C84B' },
-      { id: 'life', label: 'Life', color: '#C8F135' }
-    ]
-    for (const r of required) {
-      if (!existingIds.has(r.id)) {
-        life.tasks.saveCategory(r).catch(() => {})
-      }
-    }
-  }, [state.categories])
-
-  const catById = useMemo(() => Object.fromEntries(state.categories.map((c) => [c.id, c])), [state.categories])
-
-  // Filter tasks based on activeTab and search
+  // Filter tasks based on sidebar, search, priority, done
   const filteredTasks = useMemo(() => {
     let list = state.tasks
 
+    // Search query filter
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim()
+      const q = searchQuery.toLowerCase()
       list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.notes && t.notes.toLowerCase().includes(q)))
     }
 
+    // Done filter
     if (!showDone) {
       list = list.filter((t) => !t.done)
     }
 
-    if (activeTab === 'inbox' || activeTab === 'all') {
-      return list
+    // Priority filter chip
+    if (filterPriority !== 'all') {
+      list = list.filter((t) => t.priority === filterPriority)
     }
 
+    // Sidebar tab filter
     if (activeTab === 'today') {
-      return list.filter((t) => t.due === todayStr || t.repeat === 'daily' || t.category === 'today')
+      return list.filter((t) => t.due === todayStr || t.repeat === 'daily')
     }
-
     if (activeTab === 'upcoming') {
-      return list.filter((t) => (t.due && t.due > todayStr) || t.category === 'tomorrow')
+      return list.filter((t) => t.due && t.due > todayStr)
     }
-
     if (activeTab === 'p1') {
       return list.filter((t) => t.priority === 1)
     }
-
-    // Specific category/project tab
-    return list.filter((t) => t.category === activeTab)
-  }, [state.tasks, activeTab, searchQuery, showDone, todayStr])
-
-  // Distinct board columns:
-  // When in Inbox or All, show sections matching categories: University, Today, Just Tasks, Tomorrow, Life, etc.
-  // When in a specific project or Today view, show sections: Overdue, Today, Tomorrow, Upcoming, No Date.
-  const boardColumns = useMemo(() => {
-    if (activeTab === 'inbox' || activeTab === 'all') {
-      // Use categories as columns
-      const cols: { id: string; label: string; tasks: TaskView[]; color?: string }[] = []
-      // Standard order to match user screenshot: University, Today, Just Tasks, Tomorrow, etc.
-      const priorityOrder = ['university', 'today', 'just-tasks', 'tomorrow', 'life', 'body', 'finance']
-      const seen = new Set<string>()
-
-      for (const catId of priorityOrder) {
-        const cat = catById[catId]
-        if (cat) {
-          seen.add(cat.id)
-          cols.push({
-            id: cat.id,
-            label: cat.label,
-            tasks: filteredTasks.filter((t) => t.category === cat.id),
-            color: cat.color
-          })
-        }
-      }
-
-      for (const cat of state.categories) {
-        if (!seen.has(cat.id)) {
-          cols.push({
-            id: cat.id,
-            label: cat.label,
-            tasks: filteredTasks.filter((t) => t.category === cat.id),
-            color: cat.color
-          })
-        }
-      }
-
-      return cols
+    if (activeTab !== 'inbox' && activeTab !== 'all') {
+      return list.filter((t) => t.category === activeTab)
     }
 
-    // Date-based grouping columns for Today / Upcoming / Project views
-    return [
-      {
-        id: 'today',
-        label: 'Today',
-        tasks: filteredTasks.filter((t) => t.due === todayStr || t.repeat === 'daily' || t.category === 'today'),
-        color: '#4ade80'
-      },
-      {
-        id: 'tomorrow',
-        label: 'Tomorrow',
-        tasks: filteredTasks.filter((t) => {
-          if (t.due) {
-            const diff = Math.round((new Date(t.due).getTime() - new Date(todayStr).getTime()) / 86_400_000)
-            return diff === 1 || t.category === 'tomorrow'
-          }
-          return t.category === 'tomorrow'
-        }),
-        color: '#fbbf24'
-      },
-      {
-        id: 'upcoming',
-        label: 'Later & Upcoming',
-        tasks: filteredTasks.filter((t) => {
-          if (t.due) {
-            const diff = Math.round((new Date(t.due).getTime() - new Date(todayStr).getTime()) / 86_400_000)
-            return diff > 1
-          }
-          return false
-        }),
-        color: '#c084fc'
-      },
-      {
-        id: 'nodate',
-        label: 'No Due Date',
-        tasks: filteredTasks.filter((t) => !t.due && t.repeat === 'none' && t.category !== 'today' && t.category !== 'tomorrow'),
-        color: '#888888'
-      }
-    ]
-  }, [activeTab, catById, filteredTasks, state.categories, todayStr])
+    return list
+  }, [state.tasks, searchQuery, showDone, filterPriority, activeTab, todayStr])
 
+  // DYNAMIC GROUPING COLUMNS (Ultimate Flexibility!)
+  const boardColumns = useMemo(() => {
+    if (groupBy === 'status') {
+      return [
+        {
+          id: 'backlog',
+          label: 'Backlog / Inbox',
+          color: '#8A93A6',
+          tasks: filteredTasks.filter((t) => !t.done && (!t.due || t.due > tomorrowStr) && t.priority !== 1)
+        },
+        {
+          id: 'todo',
+          label: 'To Do',
+          color: '#38BDF8',
+          tasks: filteredTasks.filter((t) => !t.done && (t.due === todayStr || t.due === tomorrowStr || t.repeat !== 'none') && t.priority !== 1)
+        },
+        {
+          id: 'inprogress',
+          label: 'In Progress (P1)',
+          color: '#F43F5E',
+          tasks: filteredTasks.filter((t) => !t.done && t.priority === 1)
+        },
+        {
+          id: 'done',
+          label: 'Completed',
+          color: '#4ADE80',
+          tasks: filteredTasks.filter((t) => t.done)
+        }
+      ]
+    }
+
+    if (groupBy === 'priority') {
+      return [
+        {
+          id: 'p1',
+          label: '🔴 Priority 1 (Urgent)',
+          color: '#DE4C4A',
+          tasks: filteredTasks.filter((t) => t.priority === 1)
+        },
+        {
+          id: 'p2',
+          label: '🟠 Priority 2 (Medium)',
+          color: '#F59E0B',
+          tasks: filteredTasks.filter((t) => t.priority === 2)
+        },
+        {
+          id: 'p3',
+          label: '🔵 Priority 3 (Normal)',
+          color: '#38BDF8',
+          tasks: filteredTasks.filter((t) => t.priority === 3)
+        }
+      ]
+    }
+
+    if (groupBy === 'date') {
+      return [
+        {
+          id: 'overdue',
+          label: '⚠️ Overdue',
+          color: '#EF4444',
+          tasks: filteredTasks.filter((t) => !t.done && t.due && t.due < todayStr)
+        },
+        {
+          id: 'today',
+          label: '📅 Today',
+          color: '#4ADE80',
+          tasks: filteredTasks.filter((t) => t.due === todayStr || t.repeat === 'daily')
+        },
+        {
+          id: 'tomorrow',
+          label: '🌅 Tomorrow',
+          color: '#F5C84B',
+          tasks: filteredTasks.filter((t) => t.due === tomorrowStr)
+        },
+        {
+          id: 'upcoming',
+          label: '🗓️ Upcoming',
+          color: '#C084FC',
+          tasks: filteredTasks.filter((t) => t.due && t.due > tomorrowStr)
+        },
+        {
+          id: 'nodate',
+          label: '⏳ Someday / No Date',
+          color: '#8A93A6',
+          tasks: filteredTasks.filter((t) => !t.due && t.repeat === 'none')
+        }
+      ]
+    }
+
+    // Default: Group by Project / Category
+    return realProjects.map((p) => ({
+      id: p.id,
+      label: p.label,
+      color: p.color,
+      tasks: filteredTasks.filter((t) => t.category === p.id)
+    }))
+  }, [groupBy, filteredTasks, realProjects, todayStr, tomorrowStr])
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, taskId: number) => {
+    e.dataTransfer.setData('text/plain', String(taskId))
+    setDraggedTaskId(taskId)
+  }
+
+  const handleDragOver = (e: React.DragEvent, colId: string) => {
+    e.preventDefault()
+    setDragOverColId(colId)
+  }
+
+  const handleDrop = async (e: React.DragEvent, targetColId: string) => {
+    e.preventDefault()
+    setDragOverColId(null)
+    const rawId = e.dataTransfer.getData('text/plain')
+    const taskId = parseInt(rawId, 10)
+    if (!taskId) return
+
+    const t = state.tasks.find((x) => x.id === taskId)
+    if (!t) return
+
+    soundMechanicalClick()
+
+    // Handle dropping based on current groupBy
+    if (groupBy === 'priority') {
+      const newP = targetColId === 'p1' ? 1 : targetColId === 'p2' ? 2 : 3
+      if (t.priority !== newP) {
+        const next = await life.tasks.save({ ...t, priority: newP })
+        onState(next)
+      }
+    } else if (groupBy === 'date') {
+      const newDue = targetColId === 'today' ? todayStr : targetColId === 'tomorrow' ? tomorrowStr : targetColId === 'nodate' ? null : t.due
+      const next = await life.tasks.save({ ...t, due: newDue })
+      onState(next)
+    } else if (groupBy === 'status') {
+      if (targetColId === 'done' && !t.done) {
+        const next = await life.tasks.complete(t.id)
+        soundCoin()
+        onState(next)
+        onWallet()
+      } else if (targetColId !== 'done' && t.done) {
+        const next = await life.tasks.uncomplete(t.id)
+        onState(next)
+        onWallet()
+      } else if (targetColId === 'inprogress' && t.priority !== 1) {
+        const next = await life.tasks.save({ ...t, priority: 1 })
+        onState(next)
+      }
+    } else if (groupBy === 'project') {
+      if (t.category !== targetColId) {
+        const next = await life.tasks.save({ ...t, category: targetColId })
+        onState(next)
+      }
+    }
+  }
+
+  // Toggle complete
   async function handleToggle(t: TaskView) {
     soundMechanicalClick()
     const next = await act(() => (t.done ? life.tasks.uncomplete(t.id) : life.tasks.complete(t.id)))
@@ -297,168 +404,167 @@ export function Tasks({ state, onState, onWallet }: Props) {
     }
   }
 
+  // Create Task
   async function handleCreateTask(colId: string) {
     if (!draftTitle.trim()) return
-    const targetCat = colId === 'today' || colId === 'tomorrow' || colId === 'just-tasks' || colId === 'university'
-      ? colId
-      : activeTab !== 'inbox' && activeTab !== 'all' && activeTab !== 'today' && activeTab !== 'upcoming' && activeTab !== 'p1'
-      ? activeTab
-      : draftCategory || 'university'
 
-    const targetDue = colId === 'today'
-      ? todayStr
-      : colId === 'tomorrow'
-      ? new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
-      : draftDue
+    let targetCat = draftCategory || 'university'
+    let targetPriority: 1 | 2 | 3 = draftPriority
+    let targetDue = draftDue
+
+    if (groupBy === 'project' && catById[colId]) {
+      targetCat = colId
+    } else if (groupBy === 'priority') {
+      targetPriority = colId === 'p1' ? 1 : colId === 'p2' ? 2 : 3
+    } else if (groupBy === 'date') {
+      targetDue = colId === 'today' ? todayStr : colId === 'tomorrow' ? tomorrowStr : null
+    }
 
     const input: TaskInput = {
       title: draftTitle.trim(),
       category: targetCat,
-      priority: draftPriority,
+      priority: targetPriority,
       due: targetDue,
       repeat: draftRepeat,
       weekdays: draftRepeat === 'weekly' ? 0b0011111 : 0,
-      coins: draftPriority === 1 ? 15 : draftPriority === 2 ? 10 : 5,
-      xp: draftPriority === 1 ? 30 : draftPriority === 2 ? 20 : 10,
+      coins: targetPriority === 1 ? 15 : targetPriority === 2 ? 10 : 5,
+      xp: targetPriority === 1 ? 30 : targetPriority === 2 ? 20 : 10,
       notes: draftNotes.trim() || null
     }
 
-    const next = await act(() => life.tasks.save(input), 'Task created!')
+    const next = await act(() => life.tasks.save(input), 'Quest created!')
     if (next) {
       onState(next)
       setDraftTitle('')
       setDraftNotes('')
       setAddingInColumn(null)
+      soundTick()
     }
   }
 
-  async function handleUpdateTask() {
-    if (!editingTask || !editingTask.title.trim()) return
-    const input: TaskInput = {
-      id: editingTask.id,
-      title: editingTask.title.trim(),
-      category: editingTask.category,
-      priority: editingTask.priority,
-      due: editingTask.due,
-      repeat: editingTask.repeat,
-      weekdays: editingTask.weekdays,
-      coins: editingTask.coins,
-      xp: editingTask.xp,
-      notes: editingTask.notes
+  // Add Custom Project
+  async function handleCreateProject() {
+    if (!newProjectName.trim()) return
+    const id = newProjectName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    const cat: Category = {
+      id,
+      label: newProjectName.trim(),
+      color: newProjectColor
     }
-    const next = await act(() => life.tasks.save(input), 'Task updated!')
+    const next = await act(() => life.tasks.saveCategory(cat), 'Project created!')
     if (next) {
       onState(next)
-      setEditingTask(null)
+      setAddingProject(false)
+      setNewProjectName('')
+      soundSuccess()
     }
   }
 
-  async function handleDeleteTask(id: number) {
-    const next = await act(() => life.tasks.archive(id), 'Task deleted')
-    if (next) {
-      onState(next)
-      setEditingTask(null)
-    }
-  }
+  // Starter Quest Generator
+  async function handleAddStarterQuest(type: 'study' | 'workout' | 'p1' | 'project') {
+    let title = ''
+    let cat = 'university'
+    let priority: 1 | 2 | 3 = 2
+    let due = todayStr
 
-  async function loadScreenshotDemoTasks() {
-    // Exact tasks from user's Todoist screenshot
-    const samples = [
-      // University (8)
-      { title: 'Certifications that emil recommnede Crto', category: 'university', priority: 2 as const, due: null },
-      { title: 'clean up our pc', category: 'university', priority: 2 as const, due: new Date(Date.now() + 4 * 86_400_000).toISOString().slice(0, 10) },
-      { title: 'CYBERSECURITY VIDEO CHFC I IT OUT https://www.instagram.com', category: 'university', priority: 2 as const, due: null },
-      { title: 'find out hte number of your teacher de educatia fizica penbtru ai da lui doamna...', category: 'university', priority: 2 as const, due: null },
-      { title: 'finish etica curs IMPORTANT', category: 'university', priority: 1 as const, due: null },
-      { title: 'just sit down and thinkg of your priorities again life is hard and you might...', category: 'university', priority: 2 as const, due: '2026-10-23' },
-      { title: 'manaca morcov', category: 'university', priority: 2 as const, due: todayStr },
-      { title: 'think more a bout Marius about Emil', category: 'university', priority: 2 as const, due: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10) },
-
-      // Today (6)
-      { title: 'interview', category: 'today', priority: 2 as const, due: todayStr },
-      { title: 'invata laborator criptgrafie', category: 'today', priority: 2 as const, due: '2026-10-25' },
-      { title: 'study criptografie', category: 'today', priority: 2 as const, due: todayStr },
-      { title: 'study math', category: 'today', priority: 2 as const, due: todayStr },
-      { title: 'team meeting', category: 'today', priority: 2 as const, due: todayStr },
-      { title: 'work some AI', category: 'today', priority: 2 as const, due: todayStr },
-
-      // Just Tasks (4)
-      { title: 'check linkedin15 min', category: 'just-tasks', priority: 2 as const, due: todayStr, repeat: 'daily' as const },
-      { title: 'CRITICAL NEED TO IMPLEMENT ANTIAI from Maxim - this simbol cna be...', category: 'just-tasks', priority: 1 as const, due: new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10) },
-      { title: 'log in the result in sparta app 1 min', category: 'just-tasks', priority: 2 as const, due: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), repeat: 'daily' as const },
-      { title: 'sport', category: 'just-tasks', priority: 2 as const, due: todayStr, repeat: 'daily' as const },
-
-      // Tomorrow (1)
-      { title: 'Solve the problem with Revolut 20 min', category: 'tomorrow', priority: 2 as const, due: new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10) }
-    ]
-
-    for (const s of samples) {
-      await life.tasks.save({
-        title: s.title,
-        category: s.category,
-        priority: s.priority,
-        due: s.due,
-        repeat: (s as any).repeat ?? 'none',
-        weekdays: 0,
-        coins: s.priority === 1 ? 15 : 10,
-        xp: s.priority === 1 ? 30 : 20,
-        notes: null
-      })
+    if (type === 'study') {
+      title = 'Deep Focus: SI-266 Lab & Core Study Block (90m)'
+      cat = 'university'
+      priority = 1
+    } else if (type === 'workout') {
+      title = 'Physical Mastery: Calisthenics / Gym Strength Session'
+      cat = 'body'
+      priority = 2
+    } else if (type === 'p1') {
+      title = 'CRITICAL: Solve High-Priority Assignment & Code Review'
+      cat = 'university'
+      priority = 1
+    } else {
+      title = 'Life System Architecture Refactor & Optimization'
+      cat = 'life'
+      priority = 2
     }
 
-    const updated = await life.tasks.state()
-    onState(updated)
+    const next = await life.tasks.save({
+      title,
+      category: cat,
+      priority,
+      due,
+      repeat: 'none',
+      weekdays: 0,
+      coins: priority === 1 ? 15 : 10,
+      xp: priority === 1 ? 30 : 20,
+      notes: 'Generated from Solo Leveling starter templates'
+    })
+    onState(next)
+    toast('⚔️ Quest added to your board!', 'good')
+    soundCoin()
   }
 
-  // Count open tasks for navigation badges
+  // Counts for sidebar badges
   const totalOpen = state.tasks.filter((t) => !t.done).length
-  const todayOpen = state.tasks.filter((t) => !t.done && (t.due === todayStr || t.repeat === 'daily' || t.category === 'today')).length
+  const todayOpen = state.tasks.filter((t) => !t.done && (t.due === todayStr || t.repeat === 'daily')).length
+  const p1Open = state.tasks.filter((t) => !t.done && t.priority === 1).length
+  const doneCount = state.tasks.filter((t) => t.done).length
 
   return (
     <div className="todoist-app">
-      {/* Left Sub-Sidebar */}
-      <aside className="todoist-sidebar">
+      {/* 1. Collapsible Sub-Sidebar */}
+      <aside className={`todoist-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="todoist-user-row">
           <div className="todoist-user-badge">
             <div className="todoist-avatar">V</div>
             <span>vicuvi1</span>
           </div>
-          <button className="icon-btn" title="Notifications" style={{ background: 'transparent', border: 0, color: '#888', cursor: 'pointer' }}>
-            <Icon name="bell" size={15} />
+          <button
+            className="sidebar-toggle-btn"
+            onClick={() => setSidebarCollapsed(true)}
+            title="Collapse sidebar for wide board view"
+          >
+            ◀
           </button>
         </div>
 
         <button
           className="todoist-btn-add"
           onClick={() => {
-            setAddingInColumn('university')
+            setAddingInColumn(boardColumns[0]?.id || 'university')
             setDraftTitle('')
           }}
         >
           <Icon name="plus" size={15} />
-          <span>Add task</span>
+          <span>Add quest</span>
         </button>
 
         <div className="todoist-search-box">
           <Icon name="search" size={14} />
           <input
             type="text"
-            placeholder="Search tasks..."
+            placeholder="Search quests..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{ background: 'none', border: 0, color: '#888', cursor: 'pointer', padding: 0 }}
+            >
+              ✕
+            </button>
+          )}
         </div>
 
+        {/* Navigation Filters */}
         <ul className="todoist-nav-list">
           <li
             className={`todoist-nav-item ${activeTab === 'inbox' ? 'active' : ''}`}
             onClick={() => setActiveTab('inbox')}
           >
             <div className="todoist-nav-left">
-              <Icon name="tasks" size={16} />
-              <span>Inbox</span>
+              <Icon name="list" size={15} />
+              <span>Inbox & All</span>
             </div>
-            <span className="todoist-nav-count">{totalOpen}</span>
+            {totalOpen > 0 && <span className="todoist-nav-count">{totalOpen}</span>}
           </li>
 
           <li
@@ -466,10 +572,10 @@ export function Tasks({ state, onState, onWallet }: Props) {
             onClick={() => setActiveTab('today')}
           >
             <div className="todoist-nav-left">
-              <Icon name="calendar" size={16} />
+              <Icon name="calendar" size={15} />
               <span>Today</span>
             </div>
-            <span className="todoist-nav-count">{todayOpen}</span>
+            {todayOpen > 0 && <span className="todoist-nav-count">{todayOpen}</span>}
           </li>
 
           <li
@@ -477,7 +583,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
             onClick={() => setActiveTab('upcoming')}
           >
             <div className="todoist-nav-left">
-              <Icon name="calendar" size={16} />
+              <Icon name="spark" size={15} />
               <span>Upcoming</span>
             </div>
           </li>
@@ -487,54 +593,61 @@ export function Tasks({ state, onState, onWallet }: Props) {
             onClick={() => setActiveTab('p1')}
           >
             <div className="todoist-nav-left">
-              <Icon name="bolt" size={16} />
+              <span style={{ color: '#de4c4a', fontSize: 14 }}>🚩</span>
               <span>High Priority (P1)</span>
             </div>
+            {p1Open > 0 && <span className="todoist-nav-count" style={{ color: '#de4c4a' }}>{p1Open}</span>}
           </li>
         </ul>
 
+        {/* Real Projects */}
         <div className="todoist-section-label">
-          <span>My Projects</span>
+          <span>PROJECTS</span>
+          <button
+            className="icon-btn"
+            title="Create new project"
+            onClick={() => setAddingProject(true)}
+            style={{ background: 'transparent', border: 0, color: '#888', cursor: 'pointer' }}
+          >
+            <Icon name="plus" size={13} />
+          </button>
         </div>
 
-        <ul className="todoist-nav-list">
-          {state.categories.map((c) => {
-            const count = state.tasks.filter((t) => t.category === c.id && !t.done).length
+        <ul className="todoist-nav-list" style={{ overflowY: 'auto', flex: 1 }}>
+          {realProjects.map((p) => {
+            const count = state.tasks.filter((t) => !t.done && t.category === p.id).length
             return (
               <li
-                key={c.id}
-                className={`todoist-project-item ${activeTab === c.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(c.id)}
+                key={p.id}
+                className={`todoist-nav-item ${activeTab === p.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(p.id)}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ color: c.color, fontSize: '13px', fontWeight: 'bold' }}>#</span>
-                  <span>{c.label}</span>
+                <div className="todoist-nav-left">
+                  <span style={{ color: p.color, fontWeight: 700 }}>#</span>
+                  <span>{p.label}</span>
                 </div>
                 {count > 0 && <span className="todoist-nav-count">{count}</span>}
               </li>
             )
           })}
         </ul>
-
-        {/* Demo data loader if empty */}
-        {state.tasks.length === 0 && (
-          <div style={{ marginTop: 'auto', padding: '10px 6px' }}>
-            <button
-              className="btn small"
-              style={{ width: '100%', fontSize: '11.5px', background: 'rgba(222, 76, 74, 0.2)', border: '1px solid #de4c4a', color: '#ff7a75' }}
-              onClick={loadScreenshotDemoTasks}
-            >
-              📥 Load Screenshot Boards
-            </button>
-          </div>
-        )}
       </aside>
 
-      {/* Main Board / List Area */}
+      {/* 2. Main Content Area */}
       <main className="todoist-main">
-        {/* Top Header */}
+        {/* Header Controls */}
         <header className="todoist-header">
           <div className="todoist-header-title">
+            {sidebarCollapsed && (
+              <button
+                className="sidebar-toggle-btn"
+                onClick={() => setSidebarCollapsed(false)}
+                title="Expand sidebar"
+                style={{ marginRight: 8 }}
+              >
+                ▶
+              </button>
+            )}
             <h1>
               {activeTab === 'inbox'
                 ? 'Inbox'
@@ -543,261 +656,201 @@ export function Tasks({ state, onState, onWallet }: Props) {
                 : activeTab === 'upcoming'
                 ? 'Upcoming'
                 : activeTab === 'p1'
-                ? 'Priority 1 Tasks'
-                : catById[activeTab]?.label || 'Tasks'}
+                ? 'High Priority (P1)'
+                : catById[activeTab]?.label || activeTab}
             </h1>
-            <span style={{ fontSize: '13px', color: '#888' }}>
+            <span style={{ fontSize: 13, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
               {filteredTasks.filter((t) => !t.done).length} open
             </span>
           </div>
 
           <div className="todoist-header-actions">
-            <button
-              className="todoist-action-btn"
-              style={{ background: 'rgba(0, 210, 255, 0.1)', borderColor: 'rgba(0, 210, 255, 0.3)', color: '#38bdf8' }}
-              onClick={() => {
-                const title = prompt('Enter a complex task or objective to decompose with System AI:')
-                if (title && title.trim()) {
-                  startDecomposition({ title: title.trim(), category: activeTab !== 'inbox' && catById[activeTab] ? activeTab : 'university' })
-                }
-              }}
-              title="Decompose any complex objective into actionable subtasks with AI"
-            >
-              <span>⚡ AI Decompose</span>
-            </button>
-
-            <button
-              className="todoist-action-btn"
-              onClick={() => setViewMode(viewMode === 'board' ? 'list' : 'board')}
-              title="Toggle Board/List layout"
-            >
-              <Icon name="sliders" size={14} />
-              <span>Display: {viewMode === 'board' ? 'Board' : 'List'}</span>
-            </button>
-
-            <label className="check small-check" style={{ fontSize: '12px', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
-              <span>Show Done</span>
-            </label>
-
-            {state.tasks.length === 0 && (
-              <button className="todoist-action-btn" onClick={loadScreenshotDemoTasks}>
-                Load Demo Tasks
+            {/* GROUP BY CONTROL (The Ultimate Flexibility!) */}
+            <div className="todoist-group-control">
+              <span style={{ fontSize: 11, color: '#888', paddingLeft: 4 }}>Group:</span>
+              <button
+                className={`todoist-group-btn ${groupBy === 'status' ? 'active' : ''}`}
+                onClick={() => {
+                  soundTick()
+                  setGroupBy('status')
+                }}
+                title="Group tasks by status: Backlog, To Do, In Progress, Done"
+              >
+                Status
               </button>
-            )}
+              <button
+                className={`todoist-group-btn ${groupBy === 'priority' ? 'active' : ''}`}
+                onClick={() => {
+                  soundTick()
+                  setGroupBy('priority')
+                }}
+                title="Group tasks by priority: P1 (Red), P2 (Orange), P3 (Blue)"
+              >
+                Priority
+              </button>
+              <button
+                className={`todoist-group-btn ${groupBy === 'date' ? 'active' : ''}`}
+                onClick={() => {
+                  soundTick()
+                  setGroupBy('date')
+                }}
+                title="Group tasks by due date: Today, Tomorrow, Upcoming"
+              >
+                Date
+              </button>
+              <button
+                className={`todoist-group-btn ${groupBy === 'project' ? 'active' : ''}`}
+                onClick={() => {
+                  soundTick()
+                  setGroupBy('project')
+                }}
+                title="Group tasks by project category"
+              >
+                Project
+              </button>
+            </div>
+
+            {/* VIEW MODE TOGGLE */}
+            <button
+              className="todoist-action-btn"
+              onClick={() => {
+                soundTick()
+                setViewMode(viewMode === 'board' ? 'list' : 'board')
+              }}
+              title="Toggle Kanban Board vs Dense List View"
+            >
+              {viewMode === 'board' ? '⊞ Board' : '☰ List'}
+            </button>
+
+            {/* AI DECOMPOSE BUTTON */}
+            <button
+              className="todoist-action-btn"
+              style={{ color: '#00d2ff', borderColor: 'rgba(0, 210, 255, 0.3)' }}
+              onClick={() => {
+                const sample = filteredTasks[0] || { title: 'Master Distributed Systems', category: 'university' }
+                startDecomposition(sample)
+              }}
+              title="Break down any quest into subtasks with AI"
+            >
+              <span style={{ fontSize: 14 }}>✨</span> AI Decompose
+            </button>
           </div>
         </header>
 
-        {/* Board (Kanban) View */}
-        {viewMode === 'board' ? (
+        {/* Quick Filter Bar */}
+        <div className="todoist-filter-bar">
+          <button
+            className={`todoist-filter-chip ${filterPriority === 'all' ? 'active' : ''}`}
+            onClick={() => setFilterPriority('all')}
+          >
+            All Priorities
+          </button>
+          <button
+            className={`todoist-filter-chip ${filterPriority === 1 ? 'active' : ''}`}
+            onClick={() => setFilterPriority(filterPriority === 1 ? 'all' : 1)}
+          >
+            🔴 P1 Urgent ({p1Open})
+          </button>
+          <button
+            className={`todoist-filter-chip ${filterPriority === 2 ? 'active' : ''}`}
+            onClick={() => setFilterPriority(filterPriority === 2 ? 'all' : 2)}
+          >
+            🟠 P2 Medium
+          </button>
+          <button
+            className={`todoist-filter-chip ${filterPriority === 3 ? 'active' : ''}`}
+            onClick={() => setFilterPriority(filterPriority === 3 ? 'all' : 3)}
+          >
+            🔵 P3 Normal
+          </button>
+          <button
+            className={`todoist-filter-chip ${showDone ? 'active' : ''}`}
+            onClick={() => setShowDone(!showDone)}
+          >
+            👁️ Completed ({doneCount})
+          </button>
+          <button
+            className="todoist-filter-chip"
+            onClick={() => setAddingProject(true)}
+            style={{ color: '#00d2ff' }}
+          >
+            + New Project
+          </button>
+        </div>
+
+        {/* 3. Empty State with Starter Quest Chips */}
+        {filteredTasks.length === 0 && (
+          <div className="todoist-starter-box">
+            <span style={{ fontSize: 32 }}>⚔️</span>
+            <strong style={{ fontSize: 16, color: '#fff', letterSpacing: '0.05em', fontFamily: 'var(--display)' }}>
+              QUEST BOARD IS READY
+            </strong>
+            <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
+              No quests in this view. Pick a starter quest template or decompose a project with the System Oracle:
+            </p>
+            <div className="todoist-starter-chips">
+              <button className="todoist-starter-chip" onClick={() => handleAddStarterQuest('study')}>
+                + University Study Block
+              </button>
+              <button className="todoist-starter-chip" onClick={() => handleAddStarterQuest('workout')}>
+                + Physical Strength Session
+              </button>
+              <button className="todoist-starter-chip" onClick={() => handleAddStarterQuest('p1')}>
+                + Urgent P1 Objective
+              </button>
+              <button
+                className="todoist-starter-chip"
+                style={{ borderColor: '#00d2ff', color: '#00d2ff' }}
+                onClick={() => startDecomposition({ title: 'Finish Semester Project', category: 'university' })}
+              >
+                ✨ AI Decompose Quest
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 4. VIEW: Kanban Board (Horizontal Scrolling Columns) */}
+        {viewMode === 'board' && filteredTasks.length > 0 && (
           <div className="todoist-board-container">
             {boardColumns.map((col) => (
-              <div key={col.id} className="todoist-column">
+              <div
+                key={col.id}
+                className={`todoist-column ${dragOverColId === col.id ? 'drag-over' : ''}`}
+                onDragOver={(e) => handleDragOver(e, col.id)}
+                onDragLeave={() => setDragOverColId(null)}
+                onDrop={(e) => handleDrop(e, col.id)}
+              >
+                {/* Column Header */}
                 <div className="todoist-col-header">
                   <div className="todoist-col-title">
-                    {col.color && <span style={{ color: col.color, fontWeight: 'bold' }}>#</span>}
+                    <span style={{ color: col.color || '#fff' }}>●</span>
                     <span>{col.label}</span>
-                    <span className="todoist-col-count">{col.tasks.filter((t) => !t.done).length}</span>
+                    <span className="todoist-col-count">{col.tasks.length}</span>
                   </div>
-                  <button className="icon-btn" style={{ background: 'transparent', border: 0, color: '#777', cursor: 'pointer' }}>
-                    •••
+                  <button
+                    className="icon-btn"
+                    title="Add task to this column"
+                    onClick={() => {
+                      setAddingInColumn(col.id)
+                      setDraftTitle('')
+                    }}
+                    style={{ background: 'transparent', border: 0, color: '#888', cursor: 'pointer' }}
+                  >
+                    <Icon name="plus" size={13} />
                   </button>
                 </div>
 
+                {/* Column Cards */}
                 <div className="todoist-col-cards">
-                  <AnimatePresence>
-                    {col.tasks.map((t) => {
-                      const dateInfo = formatTodoistDate(t.due, t.repeat, todayStr)
-                      return (
-                        <motion.div
-                          key={t.id}
-                          layout
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          className={`todoist-card ${t.done ? 'done' : ''}`}
-                          onClick={() => setEditingTask(t)}
-                        >
-                          <div className="todoist-card-top">
-                            <button
-                              className={`todoist-circle-check p${t.priority} ${t.done ? 'checked' : ''}`}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleToggle(t)
-                              }}
-                              title={t.done ? 'Untick task' : 'Mark complete'}
-                            >
-                              {t.done && <Icon name="check" size={11} />}
-                            </button>
-
-                            <div className="todoist-card-text">
-                              {renderTitle(t.title)}
-                            </div>
-                          </div>
-
-                          {t.notes && (
-                            <div className="todoist-card-notes">
-                              {t.notes}
-                            </div>
-                          )}
-
-                          <div className="todoist-card-footer">
-                            <button
-                              className="todoist-decompose-btn"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                startDecomposition(t)
-                              }}
-                              title="Break down with AI System Oracle"
-                            >
-                              ⚡ AI Break Down
-                            </button>
-                            {dateInfo && (
-                              <span className={`todoist-date-pill ${dateInfo.kind}`}>
-                                <Icon name="calendar" size={11} />
-                                {dateInfo.label}
-                              </span>
-                            )}
-
-                            {activeTab === 'inbox' && catById[t.category] && (
-                              <span className="todoist-project-tag">
-                                #{catById[t.category].label}
-                              </span>
-                            )}
-
-                            <span className="todoist-reward-badge" title="Reward on completion">
-                              <Coins n={t.coins} />
-                              <span style={{ fontSize: '10px', color: '#888' }}>+{t.xp}XP</span>
-                            </span>
-                          </div>
-                        </motion.div>
-                      )
-                    })}
-                  </AnimatePresence>
-
-                  {/* Inline Composer if this column is active */}
-                  {addingInColumn === col.id ? (
-                    <div className="todoist-inline-composer">
-                      <input
-                        className="todoist-composer-input"
-                        placeholder="Task name"
-                        autoFocus
-                        value={draftTitle}
-                        onChange={(e) => setDraftTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleCreateTask(col.id)
-                          if (e.key === 'Escape') setAddingInColumn(null)
-                        }}
-                      />
-
-                      <textarea
-                        className="todoist-composer-notes"
-                        placeholder="Description (optional)"
-                        rows={2}
-                        value={draftNotes}
-                        onChange={(e) => setDraftNotes(e.target.value)}
-                      />
-
-                      <div className="todoist-composer-pills-row">
-                        <select
-                          className="todoist-composer-pill"
-                          value={draftCategory}
-                          onChange={(e) => setDraftCategory(e.target.value)}
-                          style={{ background: '#222', border: '1px solid #444', color: '#eee' }}
-                        >
-                          {state.categories.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              📁 #{c.label}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          className={`todoist-composer-pill ${draftDue === todayStr ? 'active' : ''}`}
-                          onClick={() => setDraftDue(draftDue === todayStr ? null : todayStr)}
-                        >
-                          <Icon name="calendar" size={11} />
-                          {draftDue === todayStr ? '📅 Today' : '📅 Date'}
-                        </button>
-
-                        <select
-                          className="todoist-composer-pill"
-                          value={draftPriority}
-                          onChange={(e) => setDraftPriority(Number(e.target.value) as 1 | 2 | 3)}
-                          style={{ background: '#222', border: '1px solid #444', color: '#eee' }}
-                        >
-                          <option value={1}>🚩 P1 Urgent</option>
-                          <option value={2}>🚩 P2 High</option>
-                          <option value={3}>🚩 P3 Normal</option>
-                        </select>
-
-                        <select
-                          className="todoist-composer-pill"
-                          value={draftRepeat}
-                          onChange={(e) => setDraftRepeat(e.target.value as Repeat)}
-                          style={{ background: '#222', border: '1px solid #444', color: '#eee' }}
-                        >
-                          <option value="none">One-off</option>
-                          <option value="daily">🔁 Daily</option>
-                          <option value="weekly">🔁 Weekly</option>
-                        </select>
-                      </div>
-
-                      <div className="todoist-composer-actions">
-                        <button
-                          type="button"
-                          className="todoist-btn-cancel"
-                          onClick={() => setAddingInColumn(null)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="todoist-btn-submit"
-                          disabled={!draftTitle.trim()}
-                          onClick={() => handleCreateTask(col.id)}
-                        >
-                          Add task
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      className="todoist-col-add-btn"
-                      onClick={() => {
-                        setAddingInColumn(col.id)
-                        setDraftTitle('')
-                        setDraftCategory(col.id)
-                      }}
-                    >
-                      <Icon name="plus" size={13} />
-                      <span>Add task</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          /* List View */
-          <div className="todoist-list-container">
-            {boardColumns.map((col) => (
-              <div key={col.id} className="todoist-list-group">
-                <div className="todoist-list-group-header">
-                  <span>{col.label}</span>
-                  <span style={{ fontSize: '12px', color: '#777' }}>{col.tasks.length}</span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {col.tasks.map((t) => {
                     const dateInfo = formatTodoistDate(t.due, t.repeat, todayStr)
                     return (
                       <div
                         key={t.id}
                         className={`todoist-card ${t.done ? 'done' : ''}`}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, t.id)}
                         onClick={() => setEditingTask(t)}
-                        style={{ padding: '10px 14px' }}
                       >
                         <div className="todoist-card-top">
                           <button
@@ -806,32 +859,179 @@ export function Tasks({ state, onState, onWallet }: Props) {
                               e.stopPropagation()
                               handleToggle(t)
                             }}
-                          >
-                            {t.done && <Icon name="check" size={11} />}
-                          </button>
-                          <div className="todoist-card-text">{renderTitle(t.title)}</div>
+                            title={t.done ? 'Mark incomplete' : 'Mark complete'}
+                          />
+                          <span className="todoist-card-title">{renderTitle(t.title)}</span>
+                        </div>
+
+                        {t.notes && <p className="todoist-card-notes">{t.notes}</p>}
+
+                        {/* Card Footer */}
+                        <div className="todoist-card-meta">
                           {dateInfo && (
-                            <span className={`todoist-date-pill ${dateInfo.kind}`} style={{ marginLeft: 'auto' }}>
+                            <span className={`todoist-date-badge ${dateInfo.kind}`}>
                               {dateInfo.label}
                             </span>
                           )}
+
+                          {catById[t.category] && groupBy !== 'project' && (
+                            <span
+                              className="todoist-project-tag"
+                              style={{ color: catById[t.category]?.color || '#888' }}
+                            >
+                              # {catById[t.category]?.label}
+                            </span>
+                          )}
+
+                          <span className="todoist-reward-badge">
+                            +{t.coins} 🪙
+                          </span>
+
+                          <div className="todoist-card-actions">
+                            <button
+                              className="card-action-mini-btn"
+                              title="Decompose with AI"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                startDecomposition(t)
+                              }}
+                            >
+                              ✨ AI
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )
                   })}
 
-                  <button
-                    className="todoist-col-add-btn"
-                    onClick={() => {
-                      setAddingInColumn(col.id)
-                      setDraftTitle('')
-                      setDraftCategory(col.id)
-                      setViewMode('board')
-                    }}
-                  >
-                    <Icon name="plus" size={13} />
-                    <span>Add task to {col.label}</span>
-                  </button>
+                  {/* Inline Composer */}
+                  {addingInColumn === col.id ? (
+                    <div className="todoist-composer-box">
+                      <input
+                        type="text"
+                        placeholder="Quest title..."
+                        value={draftTitle}
+                        autoFocus
+                        onChange={(e) => setDraftTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCreateTask(col.id)
+                          if (e.key === 'Escape') setAddingInColumn(null)
+                        }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Description / notes (optional)..."
+                        value={draftNotes}
+                        onChange={(e) => setDraftNotes(e.target.value)}
+                      />
+                      <div className="todoist-composer-actions">
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            type="button"
+                            className={`priority-chip ${draftPriority === 1 ? 'active' : ''}`}
+                            onClick={() => setDraftPriority(1)}
+                          >
+                            P1
+                          </button>
+                          <button
+                            type="button"
+                            className={`priority-chip ${draftPriority === 2 ? 'active' : ''}`}
+                            onClick={() => setDraftPriority(2)}
+                          >
+                            P2
+                          </button>
+                          <button
+                            type="button"
+                            className={`priority-chip ${draftPriority === 3 ? 'active' : ''}`}
+                            onClick={() => setDraftPriority(3)}
+                          >
+                            P3
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn small ghost" onClick={() => setAddingInColumn(null)}>
+                            Cancel
+                          </button>
+                          <button className="btn small primary" onClick={() => handleCreateTask(col.id)}>
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="todoist-add-card-btn"
+                      onClick={() => {
+                        setAddingInColumn(col.id)
+                        setDraftTitle('')
+                      }}
+                    >
+                      + Add task
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 5. VIEW: Dense List View */}
+        {viewMode === 'list' && filteredTasks.length > 0 && (
+          <div style={{ padding: '18px 24px', overflowY: 'auto', flex: 1 }}>
+            {boardColumns.map((col) => (
+              <div key={col.id} className="todoist-list-section">
+                <div className="todoist-list-section-header">
+                  <span style={{ color: col.color || '#fff' }}>●</span>
+                  <span>{col.label}</span>
+                  <span style={{ fontSize: 11, color: '#888' }}>({col.tasks.length})</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {col.tasks.map((t) => {
+                    const dateInfo = formatTodoistDate(t.due, t.repeat, todayStr)
+                    return (
+                      <div
+                        key={t.id}
+                        className={`todoist-card ${t.done ? 'done' : ''}`}
+                        style={{ padding: '8px 12px' }}
+                        onClick={() => setEditingTask(t)}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button
+                              className={`todoist-circle-check p${t.priority} ${t.done ? 'checked' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleToggle(t)
+                              }}
+                            />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>
+                              {renderTitle(t.title)}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {dateInfo && (
+                              <span className={`todoist-date-badge ${dateInfo.kind}`}>
+                                {dateInfo.label}
+                              </span>
+                            )}
+                            <span className="todoist-reward-badge">+{t.coins} 🪙</span>
+                            <button
+                              className="card-action-mini-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                startDecomposition(t)
+                              }}
+                            >
+                              ✨ AI
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}
@@ -839,121 +1039,256 @@ export function Tasks({ state, onState, onWallet }: Props) {
         )}
       </main>
 
-      {/* Edit Task Modal */}
-      {editingTask && (
-        <div
-          className="modal-scrim"
-          onClick={() => setEditingTask(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 999 }}
-        >
-          <div
-            className="todoist-inline-composer"
-            style={{ width: '450px', maxWidth: '90vw', padding: '18px' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>Edit Task</span>
+      {/* 6. New Project Modal */}
+      {addingProject && (
+        <div className="decompose-modal-backdrop" onClick={() => setAddingProject(false)}>
+          <div className="decompose-modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="decompose-modal-header">
+              <span className="decompose-modal-title">📁 CREATE NEW PROJECT</span>
               <button
                 className="icon-btn"
-                style={{ background: 'transparent', border: 0, color: '#aaa', cursor: 'pointer' }}
-                onClick={() => setEditingTask(null)}
+                onClick={() => setAddingProject(false)}
+                style={{ background: 'none', border: 0, color: '#888', cursor: 'pointer' }}
               >
                 ✕
               </button>
             </div>
 
-            <input
-              className="todoist-composer-input"
-              value={editingTask.title}
-              onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-            />
-
-            <textarea
-              className="todoist-composer-notes"
-              placeholder="Notes / Link"
-              rows={3}
-              value={editingTask.notes || ''}
-              onChange={(e) => setEditingTask({ ...editingTask, notes: e.target.value })}
-            />
-
-            <div className="todoist-composer-pills-row">
-              <select
-                className="todoist-composer-pill"
-                value={editingTask.category}
-                onChange={(e) => setEditingTask({ ...editingTask, category: e.target.value })}
-                style={{ background: '#222', border: '1px solid #444', color: '#eee' }}
-              >
-                {state.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.label}
-                  </option>
-                ))}
-              </select>
-
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+              <span style={{ color: 'var(--muted)' }}>Project Name</span>
               <input
-                type="date"
-                className="todoist-composer-pill"
-                value={editingTask.due || ''}
-                onChange={(e) => setEditingTask({ ...editingTask, due: e.target.value || null })}
-                style={{ background: '#222', border: '1px solid #444', color: '#eee' }}
-              >
-              </input>
+                type="text"
+                placeholder="e.g. Cybersecurity Lab, Side Business..."
+                value={newProjectName}
+                autoFocus
+                onChange={(e) => setNewProjectName(e.target.value)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 6,
+                  padding: '8px 12px',
+                  color: '#fff'
+                }}
+              />
+            </label>
 
-              <select
-                className="todoist-composer-pill"
-                value={editingTask.priority}
-                onChange={(e) => setEditingTask({ ...editingTask, priority: Number(e.target.value) as 1 | 2 | 3 })}
-                style={{ background: '#222', border: '1px solid #444', color: '#eee' }}
-              >
-                <option value={1}>🚩 P1 Urgent</option>
-                <option value={2}>🚩 P2 High</option>
-                <option value={3}>🚩 P3 Normal</option>
-              </select>
-
-              <select
-                className="todoist-composer-pill"
-                value={editingTask.repeat}
-                onChange={(e) => setEditingTask({ ...editingTask, repeat: e.target.value as Repeat })}
-                style={{ background: '#222', border: '1px solid #444', color: '#eee' }}
-              >
-                <option value="none">One-off</option>
-                <option value="daily">🔁 Daily</option>
-                <option value="weekly">🔁 Weekly</option>
-              </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Project Color</span>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {PROJECT_COLOR_PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setNewProjectColor(c)}
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: '50%',
+                      background: c,
+                      border: newProjectColor === c ? '3px solid #fff' : '1px solid rgba(0,0,0,0.4)',
+                      cursor: 'pointer',
+                      transform: newProjectColor === c ? 'scale(1.15)' : 'none'
+                    }}
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="todoist-composer-actions">
-              <button
-                type="button"
-                className="btn danger small"
-                onClick={() => handleDeleteTask(editingTask.id)}
-              >
-                Delete
-              </button>
-              <button
-                type="button"
-                className="btn small"
-                style={{ background: 'rgba(0, 210, 255, 0.12)', borderColor: 'rgba(0, 210, 255, 0.35)', color: '#38bdf8', marginRight: 'auto' }}
-                onClick={() => {
-                  const current = editingTask
-                  setEditingTask(null)
-                  startDecomposition(current)
-                }}
-                title="Break down this task into subtasks using AI Oracle"
-              >
-                ⚡ Decompose (AI)
-              </button>
-              <button
-                type="button"
-                className="todoist-btn-cancel"
-                onClick={() => setEditingTask(null)}
-              >
+            <div className="decompose-actions-row">
+              <button className="btn small ghost" onClick={() => setAddingProject(false)}>
                 Cancel
               </button>
               <button
-                type="button"
-                className="todoist-btn-submit"
-                onClick={handleUpdateTask}
+                className="btn small primary"
+                disabled={!newProjectName.trim()}
+                onClick={handleCreateProject}
+              >
+                Create Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. AI Quest Decomposition Modal */}
+      {decomposeModal && (
+        <div className="decompose-modal-backdrop" onClick={() => setDecomposeModal(null)}>
+          <div className="decompose-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="decompose-modal-header">
+              <div className="decompose-modal-title">
+                <Icon name="spark" size={15} />
+                <span>SOLO LEVELING QUEST DECOMPOSER</span>
+              </div>
+              <button
+                className="icon-btn"
+                onClick={() => setDecomposeModal(null)}
+                style={{ background: 'transparent', border: 0, color: '#888', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
+              Target: <span style={{ color: '#00d2ff' }}>"{decomposeModal.taskTitle}"</span>
+            </div>
+
+            {decomposeModal.loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '36px 0' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid #00d2ff', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: '#38bdf8' }}>
+                  Oracle decomposing quest vectors into tactical subtasks...
+                </span>
+              </div>
+            ) : decomposeModal.result ? (
+              <>
+                <div className="decompose-strategy-tip">
+                  <b>💡 Strategy:</b> {decomposeModal.result.strategyTip}
+                </div>
+
+                <div className="decompose-subtask-list">
+                  {decomposeModal.result.subtasks.map((sub, i) => (
+                    <div key={i} className="decompose-subtask-item">
+                      <div className="decompose-subtask-left">
+                        <span style={{ color: '#00d2ff', fontWeight: 700, fontFamily: 'var(--mono)' }}>#{i + 1}</span>
+                        <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>{sub.title}</span>
+                      </div>
+                      <div className="decompose-subtask-badges">
+                        <span style={{ fontFamily: 'var(--mono)', color: '#94a3b8' }}>⏱ {sub.minutes}m</span>
+                        <span style={{ fontFamily: 'var(--mono)', color: '#38bdf8' }}>+{sub.coins} 🪙</span>
+                        <span style={{ fontFamily: 'var(--mono)', color: '#c084fc' }}>+{sub.xp} XP</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="decompose-actions-row">
+                  <button className="btn small ghost" onClick={() => setDecomposeModal(null)}>
+                    Discard
+                  </button>
+                  <button className="btn small primary" onClick={handleApplySubtasks}>
+                    ⚔️ Accept & Add Subtasks
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* 8. Edit Task Modal */}
+      {editingTask && (
+        <div className="decompose-modal-backdrop" onClick={() => setEditingTask(null)}>
+          <div className="decompose-modal" style={{ width: 500 }} onClick={(e) => e.stopPropagation()}>
+            <div className="decompose-modal-header">
+              <span className="decompose-modal-title">EDIT QUEST OBJECTIVE</span>
+              <button
+                className="icon-btn"
+                onClick={() => setEditingTask(null)}
+                style={{ background: 'none', border: 0, color: '#888', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+              <span style={{ color: 'var(--muted)' }}>Title</span>
+              <input
+                type="text"
+                value={editingTask.title}
+                onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 6,
+                  padding: '8px 12px',
+                  color: '#fff'
+                }}
+              />
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+              <span style={{ color: 'var(--muted)' }}>Notes / Brief</span>
+              <textarea
+                rows={3}
+                value={editingTask.notes || ''}
+                onChange={(e) => setEditingTask({ ...editingTask, notes: e.target.value || null })}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 6,
+                  padding: '8px 12px',
+                  color: '#fff',
+                  resize: 'vertical'
+                }}
+              />
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                <span style={{ color: 'var(--muted)' }}>Priority</span>
+                <select
+                  value={editingTask.priority}
+                  onChange={(e) => setEditingTask({ ...editingTask, priority: Number(e.target.value) as 1 | 2 | 3 })}
+                  style={{
+                    background: '#1a2336',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    color: '#fff'
+                  }}
+                >
+                  <option value={1}>P1 - Urgent (Red)</option>
+                  <option value={2}>P2 - Medium (Orange)</option>
+                  <option value={3}>P3 - Normal (Blue)</option>
+                </select>
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                <span style={{ color: 'var(--muted)' }}>Project</span>
+                <select
+                  value={editingTask.category}
+                  onChange={(e) => setEditingTask({ ...editingTask, category: e.target.value })}
+                  style={{
+                    background: '#1a2336',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    color: '#fff'
+                  }}
+                >
+                  {realProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="decompose-actions-row">
+              <button
+                className="btn small ghost"
+                style={{ color: '#ef4444', marginRight: 'auto' }}
+                onClick={() => {
+                  life.tasks.archive(editingTask.id).then((next) => {
+                    onState(next)
+                    setEditingTask(null)
+                  })
+                }}
+              >
+                Delete Quest
+              </button>
+              <button className="btn small ghost" onClick={() => setEditingTask(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn small primary"
+                onClick={() => {
+                  life.tasks.save(editingTask).then((next) => {
+                    onState(next)
+                    setEditingTask(null)
+                  })
+                }}
               >
                 Save Changes
               </button>
@@ -961,76 +1296,6 @@ export function Tasks({ state, onState, onWallet }: Props) {
           </div>
         </div>
       )}
- 
-      {/* AI Quest Decomposition Modal */}
-      <AnimatePresence>
-        {decomposeModal?.isOpen && (
-          <div className="decompose-modal-backdrop" onClick={() => setDecomposeModal(null)}>
-            <motion.div
-              className="decompose-modal"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="decompose-modal-header">
-                <div className="decompose-modal-title">
-                  <span style={{ color: '#00d2ff' }}>[QUEST DECOMPOSITION]</span>
-                  <span style={{ color: '#fff', fontSize: '14px' }}>{decomposeModal.taskTitle}</span>
-                </div>
-                <button
-                  className="icon-btn"
-                  onClick={() => setDecomposeModal(null)}
-                  style={{ background: 'transparent', border: 0, color: '#aaa', cursor: 'pointer', fontSize: '16px' }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {decomposeModal.loading ? (
-                <div style={{ padding: '36px 20px', textAlign: 'center', color: '#38bdf8' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '12px 18px', background: 'rgba(0, 210, 255, 0.08)', border: '1px dashed rgba(0, 210, 255, 0.35)', borderRadius: '10px' }}>
-                    <span style={{ animation: 'system-pulse 1.4s infinite' }}>⚡</span>
-                    <span>Solo Leveling System Oracle analyzing quest topology and generating micro-phases…</span>
-                  </div>
-                </div>
-              ) : decomposeModal.result ? (
-                <>
-                  <div className="decompose-strategy-tip">
-                    <b style={{ color: '#38bdf8' }}>Tactical Directive:</b> {decomposeModal.result.strategyTip}
-                  </div>
-
-                  <div className="decompose-subtask-list">
-                    {decomposeModal.result.subtasks.map((sub, i) => (
-                      <div key={i} className="decompose-subtask-item">
-                        <div className="decompose-subtask-left">
-                          <span style={{ color: '#00d2ff', fontWeight: 700, fontFamily: 'var(--mono)' }}>{i + 1}.</span>
-                          <span style={{ fontWeight: 500, fontSize: '13.5px' }}>{sub.title}</span>
-                        </div>
-                        <div className="decompose-subtask-badges">
-                          <span style={{ color: '#94a3b8', fontSize: '11.5px' }}>⏱ {sub.minutes}m</span>
-                          <span style={{ color: '#F5C84B', fontWeight: 600 }}>+{sub.coins} coins</span>
-                          <span style={{ color: '#c084fc', fontSize: '12px' }}>+{sub.xp} XP</span>
-                          <span className={`todoist-priority-badge p${sub.priority}`}>P{sub.priority}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="decompose-actions-row">
-                    <button className="btn ghost" onClick={() => setDecomposeModal(null)}>
-                      Dismiss
-                    </button>
-                    <button className="btn primary" onClick={handleApplySubtasks}>
-                      ⚔️ Add All {decomposeModal.result.subtasks.length} Subtasks to Board
-                    </button>
-                  </div>
-                </>
-              ) : null}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }

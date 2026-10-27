@@ -124,6 +124,11 @@ export function createMockPlan(ctx: Ctx): Pick<LifeApi, 'tasks' | 'schedule' | '
       saveCategory: async (c) => {
         categories.push({ ...c, id: c.label.toLowerCase() })
         return tasksState()
+      },
+      archiveCategory: async (id) => {
+        const idx = categories.findIndex((x) => x.id === id)
+        if (idx !== -1) categories.splice(idx, 1)
+        return tasksState()
       }
     },
     schedule: {
