@@ -11,7 +11,7 @@ export const EMBED_LABEL: Record<EmbedKind, string> = { finance: 'Finance Helper
  * Keeps each app open once visited (hidden when not shown), so switching
  * sections doesn't reload it or lose what you were typing.
  */
-export function EmbedHost({ active }: { active: EmbedKind | null }) {
+export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind | null; soundEnabled?: boolean }) {
   const [info, setInfo] = useState<EmbeddedApps | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [visited, setVisited] = useState<EmbedKind[]>([])
@@ -57,7 +57,7 @@ export function EmbedHost({ active }: { active: EmbedKind | null }) {
             </div>
           )
         }
-        return <AppFrame key={k} name={EMBED_LABEL[k]} url={src[k].url} partition={src[k].partition} visible={active === k} />
+        return <AppFrame key={k} name={EMBED_LABEL[k]} url={src[k].url} partition={src[k].partition} visible={active === k} soundEnabled={soundEnabled} />
       })}
     </div>
   )
@@ -69,9 +69,36 @@ type WebviewEl = HTMLElement & { reload(): void; loadURL(url: string): Promise<v
  * One app's page. If it fails to load (e.g. Waky's server is down) or its
  * page crashes, a card says so with a button to try again.
  */
-function AppFrame({ name, url, partition, visible }: { name: string; url: string; partition: string; visible: boolean }) {
+function AppFrame({ name, url, partition, visible, soundEnabled }: { name: string; url: string; partition: string; visible: boolean; soundEnabled: boolean }) {
   const ref = useRef<WebviewEl | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+
+  useEffect(() => {
+    const el = ref.current as any
+    if (!el) return
+    const shouldMute = !visible || !soundEnabled
+    if (typeof el.setAudioMuted === 'function') {
+      try { el.setAudioMuted(shouldMute) } catch {}
+    }
+    if (shouldMute) {
+      try {
+        el.executeJavaScript?.(`
+          if (typeof window !== 'undefined') {
+            if (window.sound && typeof window.sound.stopBGM === 'function') {
+              window.sound.stopBGM();
+              if (typeof window.updateAnthemUI === 'function') window.updateAnthemUI(0);
+            }
+            if (window.sound && window.sound.ctx && window.sound.ctx.state === 'running') {
+              window.sound.ctx.suspend().catch(() => {});
+            }
+            if (window.AmbientMusic && typeof window.AmbientMusic.pause === 'function') {
+              window.AmbientMusic.pause();
+            }
+          }
+        `).catch(() => {})
+      } catch {}
+    }
+  }, [visible, soundEnabled])
 
   useEffect(() => {
     const el = ref.current
@@ -87,7 +114,34 @@ function AppFrame({ name, url, partition, visible }: { name: string; url: string
       const reason = (e as Event & { details?: { reason?: string } }).details?.reason ?? 'crashed'
       setProblem(`${name} stopped (${reason}).`)
     }
-    const loaded = () => setProblem(null)
+    const loaded = () => {
+      setProblem(null)
+      const el = ref.current as any
+      if (el) {
+        const shouldMute = !visible || !soundEnabled
+        if (typeof el.setAudioMuted === 'function') {
+          try { el.setAudioMuted(shouldMute) } catch {}
+        }
+        if (shouldMute) {
+          try {
+            el.executeJavaScript?.(`
+              if (typeof window !== 'undefined') {
+                if (window.sound && typeof window.sound.stopBGM === 'function') {
+                  window.sound.stopBGM();
+                  if (typeof window.updateAnthemUI === 'function') window.updateAnthemUI(0);
+                }
+                if (window.sound && window.sound.ctx && window.sound.ctx.state === 'running') {
+                  window.sound.ctx.suspend().catch(() => {});
+                }
+                if (window.AmbientMusic && typeof window.AmbientMusic.pause === 'function') {
+                  window.AmbientMusic.pause();
+                }
+              }
+            `).catch(() => {})
+          } catch {}
+        }
+      }
+    }
     el.addEventListener('did-fail-load', failed)
     el.addEventListener('render-process-gone', gone)
     el.addEventListener('did-finish-load', loaded)
@@ -96,7 +150,7 @@ function AppFrame({ name, url, partition, visible }: { name: string; url: string
       el.removeEventListener('render-process-gone', gone)
       el.removeEventListener('did-finish-load', loaded)
     }
-  }, [name])
+  }, [name, visible, soundEnabled])
 
   return (
     <>

@@ -471,7 +471,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           )}
         </header>
 
-        <EmbedHost active={activeEmbed} />
+        <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
 
         <AnimatePresence mode="wait">
           {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18, ease: 'easeOut' }}>

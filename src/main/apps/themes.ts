@@ -101,6 +101,12 @@ const MAN = `
  */
 const MAN_LAYOUT = `(() => {
   document.documentElement.setAttribute('data-ls', '')
+  const lock = document.getElementById('lock-screen')
+  if (lock) lock.remove()
+  if (window.sound && typeof window.sound.stopBGM === 'function') {
+    window.sound.stopBGM()
+    if (typeof window.updateAnthemUI === 'function') window.updateAnthemUI(0)
+  }
   const c = document.getElementById('app-container')
   if (!c || c.classList.contains('ls-wide')) return
   const top = document.createElement('div')

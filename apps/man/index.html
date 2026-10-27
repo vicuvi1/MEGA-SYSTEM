@@ -107,7 +107,8 @@
         }
 
         /* Lock Screen */
-        #lock-screen {
+        #lock-screen { display: none !important;
+
             position: fixed;
             top: 0;
             left: 0;
@@ -1058,15 +1059,7 @@
     <!-- BACKGROUND WAR EMBERS CANVAS -->
     <canvas id="ember-canvas"></canvas>
 
-    <!-- LOCK SCREEN GATE -->
-    <div id="lock-screen">
-        <div class="lock-lambda">Λ</div>
-        <div class="lock-title">M A N</div>
-        <div class="lock-subtitle">SPARTAN CITADEL • ENTER PASSCODE</div>
-        <input type="password" id="passcode-input" class="passcode-input" placeholder="Enter Passcode..." autofocus />
-        <button id="btn-unlock" class="btn-enter">⚔️ ENTER THE CITADEL</button>
-        <div id="lock-error" class="lock-error">Incorrect Passcode. Only a MAN may enter.</div>
-    </div>
+    <!-- CITADEL LOCK SCREEN PERMANENTLY REMOVED: DIRECT ENTRY -->
 
     <!-- MAIN APP CONTAINER -->
     <div class="app-container" id="app-container">
@@ -1074,8 +1067,8 @@
         <!-- AUDIO SOUNDTRACK BANNER (MULTI-MODE) -->
         <div class="audio-banner" id="audio-banner">
             <button id="btn-toggle-anthem" class="btn-anthem-toggle">
-                <span class="anthem-icon" id="anthem-icon">⚔️</span>
-                <span id="anthem-text">AUDIO: ⚔️ WAR MARCH</span>
+                <span class="anthem-icon" id="anthem-icon">🔇</span>
+                <span id="anthem-text">AUDIO: 🔇 MUTED</span>
             </button>
             <div class="volume-control">
                 <span style="font-size: 11px; color: var(--spartan-bronze); font-weight: 700;">VOL</span>
@@ -1580,7 +1573,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
         class SoundEngine {
             constructor() {
                 this.ctx = null;
-                this.bgmMode = 1; // 1 = War March, 2 = Focus Drone, 0 = Off
+                this.bgmMode = 0; // 0 = Off/Muted by default
                 this.bgmTimer = null;
                 this.bgmStep = 0;
                 this.masterVolume = 0.5;
@@ -1709,6 +1702,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             }
 
             stopBGM() {
+                this.bgmMode = 0;
                 if (this.bgmTimer) {
                     clearTimeout(this.bgmTimer);
                     this.bgmTimer = null;
@@ -1716,6 +1710,9 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                 if (this.droneOsc) {
                     try { this.droneOsc.stop(); } catch(e){}
                     this.droneOsc = null;
+                }
+                if (this.ctx && this.ctx.state === 'running') {
+                    try { this.ctx.suspend(); } catch(e){}
                 }
             }
 
@@ -2376,24 +2373,35 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
         // 6. CITADEL UNLOCK
         // -------------------------------------------------------------
         function unlockCitadel() {
-            const entered = document.getElementById("passcode-input").value.trim();
-            if (entered.toLowerCase() === "man") {
-                sound.playWarDrum();
-                document.getElementById("lock-screen").style.display = "none";
-                showToast("Citadel Access Granted. Welcome, Spartan.");
-                sound.startWarMarch();
-                updateAnthemUI(1);
-            } else {
-                const err = document.getElementById("lock-error");
-                err.style.visibility = "visible";
-                document.getElementById("passcode-input").value = "";
-                document.getElementById("passcode-input").focus();
-            }
+            const lock = document.getElementById("lock-screen");
+            if (lock) lock.style.display = "none";
         }
 
-        document.getElementById("btn-unlock").addEventListener("click", unlockCitadel);
-        document.getElementById("passcode-input").addEventListener("keydown", (e) => {
+        const btnUnlockEl = document.getElementById("btn-unlock");
+        if (btnUnlockEl) btnUnlockEl.addEventListener("click", unlockCitadel);
+        const passInputEl = document.getElementById("passcode-input");
+        if (passInputEl) passInputEl.addEventListener("keydown", (e) => {
             if (e.key === "Enter") unlockCitadel();
+        });
+
+        // Tab Visibility & Inter-process Mute Handlers
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                sound.stopBGM();
+                updateAnthemUI(0);
+            }
+        });
+        window.addEventListener("blur", () => {
+            if (sound.bgmMode !== 0) {
+                sound.stopBGM();
+                updateAnthemUI(0);
+            }
+        });
+        window.addEventListener("message", (e) => {
+            if (e.data === 'mute' || (typeof e.data === 'object' && e.data?.type === 'mute')) {
+                sound.stopBGM();
+                updateAnthemUI(0);
+            }
         });
 
         // -------------------------------------------------------------
@@ -2472,6 +2480,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             document.getElementById("medals-count").innerText = `${appData.unlockedAchievements.length}/${ACHIEVEMENTS.length}`;
             updateRewardTeaser();
             updateEmpireTeaser();
+            updateAnthemUI(0);
         }
 
         // Claim Victory
