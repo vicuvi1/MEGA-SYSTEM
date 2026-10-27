@@ -85,9 +85,6 @@ const MAN = `
     --spartan-gold: #ff8a3d !important; --spartan-bronze: #e07a35 !important;
   }
   ${ON} body { font-family: ${UI} !important; background-color: #0b0d12 !important; }
-  /* One streak: Life System's Discipline check-in is the one that counts, so
-     MAN's own claim and day-adjust buttons are hidden inside Life System. */
-  ${ON} #btn-claim-victory, ${ON} #btn-adjust-streak, ${ON} #btn-quick-adjust-streak { display: none !important; }
   /* Full width inside Life System: header on top, two columns below. */
   ${ON} .app-container.ls-wide { max-width: 1240px !important; display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; align-items: start; padding: 24px 32px 48px !important; }
   ${ON} .ls-top { grid-column: 1 / -1; display: grid; justify-items: center; margin-bottom: 8px; }
