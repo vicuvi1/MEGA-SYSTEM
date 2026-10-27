@@ -1,0 +1,622 @@
+/* Todoist Dark Theme Kanban & Task Board Styles */
+
+.todoist-app {
+  display: flex;
+  height: calc(100vh - 110px);
+  min-height: 580px;
+  background: #1e1e1e;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+
+/* Left Sub-Sidebar */
+.todoist-sidebar {
+  width: 250px;
+  background: #262626;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 10px;
+  gap: 16px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.todoist-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+}
+
+.todoist-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #f3f3f3;
+}
+
+.todoist-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #de4c4a;
+  color: white;
+  display: grid;
+  place-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.todoist-btn-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: #de4c4a;
+  border: 1px dashed rgba(222, 76, 74, 0.4);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.todoist-btn-add:hover {
+  background: rgba(222, 76, 74, 0.1);
+  border-color: #de4c4a;
+}
+
+.todoist-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todoist-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #cccccc;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.todoist-nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.todoist-nav-item.active {
+  background: rgba(222, 76, 74, 0.15);
+  color: #ff7a75;
+  font-weight: 600;
+}
+
+.todoist-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.todoist-nav-count {
+  font-size: 11.5px;
+  color: #888888;
+  font-variant-numeric: tabular-nums;
+}
+
+.todoist-nav-item.active .todoist-nav-count {
+  color: #ff7a75;
+  font-weight: 700;
+}
+
+.todoist-section-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #777777;
+  padding: 8px 10px 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.todoist-project-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: #cccccc;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.todoist-project-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.todoist-project-item.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.todoist-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #888;
+  font-size: 12.5px;
+}
+
+.todoist-search-box input {
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #eee;
+  font-size: 12.5px;
+  width: 100%;
+}
+
+/* Main Content Area */
+.todoist-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #1e1e1e;
+}
+
+.todoist-header {
+  height: 52px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.todoist-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.todoist-header-title h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.todoist-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.todoist-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cccccc;
+  font-size: 12.5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.todoist-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* Kanban Board Container (Horizontal Scroll) */
+.todoist-board-container {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 20px 24px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.todoist-board-container::-webkit-scrollbar {
+  height: 8px;
+}
+.todoist-board-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+.todoist-board-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+.todoist-board-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Board Column */
+.todoist-column {
+  width: 300px;
+  min-width: 300px;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  background: transparent;
+}
+
+.todoist-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px 10px;
+}
+
+.todoist-col-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.todoist-col-count {
+  font-size: 12px;
+  color: #777777;
+  font-weight: 500;
+}
+
+.todoist-col-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+  max-height: calc(100vh - 220px);
+}
+
+.todoist-col-cards::-webkit-scrollbar {
+  width: 5px;
+}
+.todoist-col-cards::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+/* Task Card */
+.todoist-card {
+  background: #282828;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  position: relative;
+}
+
+.todoist-card:hover {
+  background: #303030;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+
+.todoist-card.done {
+  opacity: 0.5;
+}
+
+.todoist-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* Todoist Circle Checkbox */
+.todoist-circle-check {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 50%;
+  border: 2px solid #666666;
+  background: transparent;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  margin-top: 2px;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.todoist-circle-check.p1 {
+  border-color: #e44332;
+}
+.todoist-circle-check.p2 {
+  border-color: #fa8c16;
+}
+.todoist-circle-check.p3 {
+  border-color: #1890ff;
+}
+
+.todoist-circle-check:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.todoist-circle-check.checked {
+  background: #de4c4a;
+  border-color: #de4c4a;
+}
+
+.todoist-circle-check svg {
+  color: white;
+}
+
+.todoist-card-text {
+  flex: 1;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: #eeeeee;
+  word-break: break-word;
+}
+
+.todoist-card.done .todoist-card-text {
+  text-decoration: line-through;
+  color: #888888;
+}
+
+/* Link in task title */
+.todoist-card-text a {
+  color: #38bdf8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.todoist-card-notes {
+  font-size: 12px;
+  color: #888888;
+  line-height: 1.35;
+  margin-left: 28px;
+}
+
+.todoist-card-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 28px;
+}
+
+/* Date Pills */
+.todoist-date-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.todoist-date-pill.today {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+}
+
+.todoist-date-pill.tomorrow {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.todoist-date-pill.upcoming {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.12);
+}
+
+.todoist-date-pill.overdue {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.todoist-project-tag {
+  font-size: 11px;
+  color: #888888;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.todoist-reward-badge {
+  font-size: 11px;
+  color: #f5c84b;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+
+/* Column Add Task Button */
+.todoist-col-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  color: #888888;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: all 0.12s ease;
+}
+
+.todoist-col-add-btn:hover {
+  color: #de4c4a;
+  background: rgba(222, 76, 74, 0.08);
+}
+
+/* Interactive Inline Composer Card (from Screenshot Column 2) */
+.todoist-inline-composer {
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  margin-top: 6px;
+}
+
+.todoist-composer-input {
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  width: 100%;
+}
+
+.todoist-composer-input::placeholder {
+  color: #888888;
+}
+
+.todoist-composer-notes {
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #cccccc;
+  font-size: 12.5px;
+  width: 100%;
+  resize: none;
+}
+
+.todoist-composer-pills-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.todoist-composer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #cccccc;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.todoist-composer-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.todoist-composer-pill.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.todoist-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+}
+
+.todoist-btn-cancel {
+  background: transparent;
+  border: 0;
+  color: #aaaaaa;
+  font-size: 13px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.todoist-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.todoist-btn-submit {
+  background: #de4c4a;
+  border: 0;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.todoist-btn-submit:hover {
+  background: #e44332;
+  box-shadow: 0 2px 8px rgba(222, 76, 74, 0.4);
+}
+
+/* List View Container */
+.todoist-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.todoist-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.todoist-list-group-header {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+}
