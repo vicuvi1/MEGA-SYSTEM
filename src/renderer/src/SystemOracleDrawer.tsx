@@ -41,8 +41,8 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
       {
         id: 'init-1',
         role: 'assistant',
-        content: `**[SYSTEM INITIALIZED]**\nGreetings, Hunter Victor. I am your System Oracle. I monitor your physical statistics, discipline streak, calendar agenda, and daily tasks in real-time.\n\nState your objective or select a tactical directive below.`,
-        modelUsed: 'SYSTEM CORE',
+        content: `**System Coach Ready.**\nHey Victor. I am tracking your schedule, tasks, and streaks in real-time.\n\nWhat are we focusing on right now?`,
+        modelUsed: 'COACH',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
     ]
@@ -286,47 +286,102 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
 }
 
 function RenderMarkdown({ text }: { text: string }) {
-  // Simple markdown renderer for bold, lists, and line breaks
-  const lines = text.split('\n')
+  const lines = text.split("\n")
   return (
-    <>
+    <div className="oracle-markdown-body">
       {lines.map((line, i) => {
         const trimmed = line.trim()
-        if (!trimmed) return <div key={i} style={{ height: '6px' }} />
+        if (!trimmed) return <div key={i} className="oracle-empty-line" />
 
-        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        // Horizontal dividers
+        if (/^[-*_]{3,}$/.test(trimmed)) {
+          return <div key={i} className="oracle-divider" />
+        }
+
+        // Headings: #, ##, ###
+        if (trimmed.startsWith("#")) {
+          const levelMatch = trimmed.match(/^#+/)
+          const level = levelMatch ? levelMatch[0].length : 1
+          const rawTitle = trimmed.replace(/^#+\s*/, "").replace(/^\[(.*)\]$/, "$1")
           return (
-            <div key={i} style={{ display: 'flex', gap: '8px', marginLeft: '6px', marginBottom: '4px' }}>
-              <span style={{ color: '#00d2ff' }}>▸</span>
-              <span>{formatBold(trimmed.slice(2))}</span>
+            <div key={i} className={`oracle-heading h${level}`}>',
+              <span className="oracle-heading-accent">✦</span>
+              <span>{formatInline(rawTitle)}</span>
             </div>
           )
         }
 
-        if (/^\d+\.\s/.test(trimmed)) {
-          const match = trimmed.match(/^(\d+\.)\s(.*)/)
+        // Standalone bracket tag like [SYSTEM NOTICE]
+        if (/^\[[A-Z0-9\s:_-]+\]$/.test(trimmed)) {
+          const label = trimmed.slice(1, -1)
+          return (
+            <div key={i} className="oracle-tag-pill">
+              <span className="oracle-tag-dot" />
+              <span>{label}</span>
+            </div>
+          )
+        }
+
+        // Numbered action items: 1. or 1)
+        if (/^\d+[\.)]\s/.test(trimmed)) {
+          const match = trimmed.match(/^(\d+)[\.)]\s(.*)/)
           if (match) {
             return (
-              <div key={i} style={{ display: 'flex', gap: '8px', marginLeft: '6px', marginBottom: '4px' }}>
-                <span style={{ color: '#00d2ff', fontWeight: 600 }}>{match[1]}</span>
-                <span>{formatBold(match[2])}</span>
+              <div key={i} className="oracle-step-item">
+                <span className="oracle-step-num">{match[1]}</span>
+                <div className="oracle-step-content">{formatInline(match[2])}</div>
               </div>
             )
           }
         }
 
-        return <p key={i} style={{ margin: '0 0 6px' }}>{formatBold(line)}</p>
+        // Bullet points: - or * or • or ▸
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ") || trimmed.startsWith("▸ ")) {
+          const rawBullet = trimmed.replace(/^[-*•▸]\s+/, "")
+          return (
+            <div key={i} className="oracle-bullet-item">
+              <span className="oracle-bullet-dot">▸</span>
+              <div className="oracle-bullet-content">{formatInline(rawBullet)}</div>
+            </div>
+          )
+        }
+
+        // Blockquotes
+        if (trimmed.startsWith(">")) {
+          const quote = trimmed.replace(/^>\s*/, "")
+          return (
+            <blockquote key={i} className="oracle-quote">
+              {formatInline(quote)}
+            </blockquote>
+          )
+        }
+
+        return (
+          <p key={i} className="oracle-paragraph">
+            {formatInline(line)}
+          </p>
+        )
       })}
-    </>
+    </div>
   )
 }
 
-function formatBold(str: string) {
-  const parts = str.split(/(\*\*[^*]+\*\*)/g)
-  return parts.map((part, idx) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={idx}>{part.slice(2, -2)}</strong>
+function formatInline(str: string): React.ReactNode {
+  const inlineRegex = new RegExp("(\\*{2}[^*]+?\\*{2}|\\*[^*]+?\\*|`[^`]+?`|_[^_]+?_)", "g")
+  const tokens = str.split(inlineRegex)
+  return tokens.map((token, idx) => {
+    if (token.startsWith("**") && token.endsWith("**") && token.length > 4) {
+      return <strong key={idx} className="oracle-strong">{token.slice(2, -2)}</strong>
     }
-    return part
+    if (token.startsWith("*") && token.endsWith("*") && token.length > 2) {
+      return <em key={idx} className="oracle-em">{token.slice(1, -1)}</em>
+    }
+    if (token.startsWith("_") && token.endsWith("_") && token.length > 2) {
+      return <em key={idx} className="oracle-em">{token.slice(1, -1)}</em>
+    }
+    if (token.startsWith("`") && token.endsWith("`") && token.length > 2) {
+      return <code key={idx} className="oracle-code">{token.slice(1, -1)}</code>
+    }
+    return token
   })
 }

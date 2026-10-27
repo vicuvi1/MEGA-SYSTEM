@@ -171,14 +171,14 @@ describe('AI Core Domain Engine', () => {
 
     it('builds system oracle prompt with telemetry and instructions', () => {
       const prompt = buildSystemOraclePrompt(coachCtx, 'I feel lazy today, give me a directive.')
-      expect(prompt).toContain('SOLO LEVELING HUNTER ORACLE')
+      expect(prompt).toContain('DIRECT HIGH-PERFORMANCE COACH')
       expect(prompt).toContain('Level 20')
       expect(prompt).toContain('S-Rank')
       expect(prompt).toContain('675 CP')
       expect(prompt).toContain('30 Days')
       expect(prompt).toContain('SI-266 Lab 7')
       expect(prompt).toContain('Distributed Systems Lecture')
-      expect(prompt).toContain('Hunter Victor: I feel lazy today')
+      expect(prompt).toContain('Victor: I feel lazy today')
     })
 
     it('builds task decomposition prompt with quest details', () => {
