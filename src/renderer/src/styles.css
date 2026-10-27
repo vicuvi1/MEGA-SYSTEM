@@ -109,11 +109,17 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   border: 1px solid var(--line);
   border-radius: 999px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  user-select: none;
 }
 .player:hover {
-  border-color: rgba(200, 241, 53, 0.3);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 15px rgba(200, 241, 53, 0.1);
+  border-color: rgba(0, 210, 255, 0.55);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), 0 0 18px rgba(0, 210, 255, 0.3);
+  transform: translateY(-1px);
+}
+.player:active {
+  transform: translateY(0) scale(0.985);
 }
 .lvl-badge {
   width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; line-height: 1;

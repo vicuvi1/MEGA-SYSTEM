@@ -23,6 +23,7 @@ import { BotCenter } from './pages/BotCenter'
 import { Journey } from './pages/Journey'
 import { SystemOracleDrawer } from './SystemOracleDrawer'
 import { SoloSystemModal } from './SoloSystemModal'
+import { SoloPlayerModal } from './SoloPlayerModal'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
@@ -33,7 +34,7 @@ import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
-import { soundTick, stopAllSounds } from './sound'
+import { soundTick, stopAllSounds, soundSystemOracle } from './sound'
 
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
@@ -74,6 +75,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [rules, setRules] = useState<Rule[]>([])
   const [oracleOpen, setOracleOpen] = useState(false)
   const [systemModal, setSystemModal] = useState<{ open: boolean; type: 'quest-complete' | 'level-up' | 'penalty-warning'; data?: any }>({ open: false, type: 'quest-complete' })
+  const [playerModalOpen, setPlayerModalOpen] = useState(false)
   const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [shop, setShop] = useState<ShopState | null>(null)
   const [tasks, setTasks] = useState<TasksState | null>(null)
@@ -362,48 +364,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <Icon name="expand" size={15} />
             </button>
           )}
-          {lv && summary && (
-            <div className="player">
-              <div className="lvl-badge" title={`${summary.totalXp} XP total`}>
-                <small>LV</small>
-                {lv.level}
-              </div>
-              <div className="xp">
-                <div className="xp-row">
-                  <span className="rank">{lv.rank}</span>
-                  <span className="xp-num">
-                    {lv.xpIntoLevel} / {lv.xpForNext} XP
-                  </span>
-                </div>
-                <div className="bar">
-                  <motion.i initial={false} animate={{ width: `${Math.round(lv.progress * 100)}%` }} transition={{ type: 'spring', stiffness: 120, damping: 20 }} />
-                </div>
-              </div>
-              <div className="wallet" title="Coins you can spend">
-                <Coins n={summary.balance} />
-                <div className="wallet-pops" aria-live="polite">
-                  <AnimatePresence>
-                    {pops.map((p) => (
-                      <motion.span
-                        key={p.id}
-                        className={`wallet-pop ${p.coins < 0 ? 'neg' : ''}`}
-                        initial={{ opacity: 0, y: 14, scale: 0.8 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-                      >
-                        <b>
-                          {p.coins > 0 ? '+' : ''}
-                          {p.coins}
-                        </b>
-                        {p.label && <small>{p.label}</small>}
-                      </motion.span>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
-          )}
           <button
             className="system-oracle-header-btn"
             onClick={() => setOracleOpen(true)}
@@ -450,6 +410,65 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {isDemo && <span className="chip">Demo</span>}
 
           </div>
+
+          {lv && summary && (
+            <div
+              className="player player-interactive solo-hud-chip"
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                soundSystemOracle()
+                setPlayerModalOpen(true)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  soundSystemOracle()
+                  setPlayerModalOpen(true)
+                }
+              }}
+              title="⚡ Hunter Status Window · Click to view level progression, attributes & combat power"
+            >
+              <div className="lvl-badge" title={`${summary.totalXp} XP total`}>
+                <small>LV</small>
+                {lv.level}
+              </div>
+              <div className="xp">
+                <div className="xp-row">
+                  <span className="rank">{lv.rank}</span>
+                  <span className="xp-num">
+                    {lv.xpIntoLevel} / {lv.xpForNext} XP
+                  </span>
+                </div>
+                <div className="bar">
+                  <motion.i initial={false} animate={{ width: `${Math.round(lv.progress * 100)}%` }} transition={{ type: 'spring', stiffness: 120, damping: 20 }} />
+                </div>
+              </div>
+              <div className="wallet" title="Coins you can spend">
+                <Coins n={summary.balance} />
+                <div className="wallet-pops" aria-live="polite">
+                  <AnimatePresence>
+                    {pops.map((p) => (
+                      <motion.span
+                        key={p.id}
+                        className={`wallet-pop ${p.coins < 0 ? 'neg' : ''}`}
+                        initial={{ opacity: 0, y: 14, scale: 0.8 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                      >
+                        <b>
+                          {p.coins > 0 ? '+' : ''}
+                          {p.coins}
+                        </b>
+                        {p.label && <small>{p.label}</small>}
+                      </motion.span>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+          )}
         </header>
 
         <EmbedHost active={activeEmbed} />
@@ -489,6 +508,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           onClose={() => setSystemModal((s) => ({ ...s, open: false }))}
           type={systemModal.type}
           data={systemModal.data}
+        />
+        <SoloPlayerModal
+          open={playerModalOpen}
+          onClose={() => setPlayerModalOpen(false)}
+          summary={summary}
+          onGo={go}
         />
       </div>
     </div>

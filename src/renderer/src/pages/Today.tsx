@@ -58,7 +58,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   return (
     <div className="today">
       <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />
-      <HunterDashboardBanner level={summary.level} onGo={onGo} />
       <Quests summary={summary} onChange={onChange} />
       <section className="stats">
         <div className="stat hero">
