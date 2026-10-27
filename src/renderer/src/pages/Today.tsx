@@ -12,6 +12,7 @@ import { useUiPrefs } from '../uiPrefs'
 import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { soundSuccess } from '../sound'
+import { SoloSystemModal } from '../SoloSystemModal'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -466,12 +467,16 @@ function HunterDashboardBanner({ level, onGo }: { level?: LevelInfo; onGo: (p: P
 
   return (
     <div
-      className="hunter-system-banner"
+      className="hunter-system-banner solo-hud-frame"
       onClick={() => onGo('journey')}
       role="button"
       tabIndex={0}
       title="Click to view full Hunter Status Window & Awakening Codex"
     >
+      <div className="solo-corner-bottom-left" />
+      <div className="solo-corner-bottom-right" />
+      <div className="solo-scanline" />
+      <div className="solo-grid-bg" />
       <div className="hunter-banner-left">
         <div
           className="hunter-badge-circle"
@@ -597,20 +602,44 @@ function Greeting({ summary, shop, tasks, schedule }: { summary: Summary; shop: 
 function Quests({ summary, onChange }: { summary: Summary; onChange: (s?: Summary) => void }) {
   const act = useAction()
   const [q, setQ] = useState<QuestState | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+
   useEffect(() => {
     life.wallet.quests().then(setQ).catch(() => {})
   }, [summary])
+
   if (!q) return null
   const doneCount = q.quests.filter((x) => x.done).length
+
   return (
-    <section className={`panel quests ${q.allDone ? 'all' : ''}`}>
+    <section className={`panel quests solo-hud-frame ${q.allDone ? 'all' : ''}`}>
+      <div className="solo-corner-bottom-left" />
+      <div className="solo-corner-bottom-right" />
+      <div className="solo-scanline" />
       <header className="panel-head">
-        <h2>
-          <Icon name="trophy" /> Daily quests
-        </h2>
-        <span className="hint">
-          {q.claimed ? 'Bonus claimed. New quests tomorrow.' : `${doneCount}/3 done · all three pay +${q.bonus.coins} coins and +${q.bonus.xp} XP`}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>🏆</span>
+          <div>
+            <h2 style={{ fontSize: 15, letterSpacing: '0.08em', color: '#00d2ff', margin: 0 }}>
+              [ DAILY QUEST: PREPARATION TO BECOME STRONG ]
+            </h2>
+            <span className="hint" style={{ fontSize: 11.5, marginTop: 2, display: 'block' }}>
+              {q.claimed
+                ? 'Status: Claimed · All objectives accomplished. New quests at midnight.'
+                : `${doneCount}/3 Objectives Clear · Rewards: +${q.bonus.coins} Coins, +${q.bonus.xp} XP & Recovery`}
+            </span>
+          </div>
+        </div>
+        {q.claimed && (
+          <button
+            className="btn small ghost"
+            style={{ borderColor: 'rgba(0, 210, 255, 0.3)', color: '#00d2ff', fontSize: 11 }}
+            onClick={() => setModalOpen(true)}
+            title="View Completed Daily Quest System Hologram"
+          >
+            View Quest Card
+          </button>
+        )}
       </header>
       <div className="quest-row">
         {q.quests.map((x) => (
@@ -628,11 +657,32 @@ function Quests({ summary, onChange }: { summary: Summary; onChange: (s?: Summar
           </div>
         ))}
         {q.allDone && !q.claimed && (
-          <motion.button className="btn primary quest-claim" whileTap={{ scale: 0.95 }} onClick={async () => { const s = await act(() => life.wallet.claimQuests(), 'Quests complete!'); if (s) onChange(s) }}>
-            Claim +{q.bonus.coins}
+          <motion.button
+            className="btn solo-quest-claim-btn"
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setModalOpen(true)}
+          >
+            ✦ CLAIM SYSTEM REWARDS (+{q.bonus.coins} COINS)
           </motion.button>
         )}
       </div>
+
+      <SoloSystemModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        type="quest-complete"
+        data={{
+          coins: q.bonus.coins,
+          xp: q.bonus.xp,
+          objectives: q.quests.map((x) => ({ label: x.title, done: x.done })),
+          onAction: async () => {
+            if (!q.claimed) {
+              const s = await act(() => life.wallet.claimQuests(), 'Daily Quest Rewards Accepted!')
+              if (s) onChange(s)
+            }
+          }
+        }}
+      />
     </section>
   )
 }

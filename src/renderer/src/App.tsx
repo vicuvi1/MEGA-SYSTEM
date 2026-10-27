@@ -22,6 +22,7 @@ import { Connected } from './pages/Connected'
 import { BotCenter } from './pages/BotCenter'
 import { Journey } from './pages/Journey'
 import { SystemOracleDrawer } from './SystemOracleDrawer'
+import { SoloSystemModal } from './SoloSystemModal'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
@@ -72,6 +73,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
   const [oracleOpen, setOracleOpen] = useState(false)
+  const [systemModal, setSystemModal] = useState<{ open: boolean; type: 'quest-complete' | 'level-up' | 'penalty-warning'; data?: any }>({ open: false, type: 'quest-complete' })
   const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [shop, setShop] = useState<ShopState | null>(null)
   const [tasks, setTasks] = useState<TasksState | null>(null)
@@ -267,6 +269,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       { id: 'a:backup', label: 'Back up now', group: 'Actions', icon: 'cloud', run: () => act(() => life.backup.runNow(), 'Backup written').then((b) => b && setBackup(b)) },
       { id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) },
       { id: 'a:sync', label: 'Check connected apps now', group: 'Actions', icon: 'link', run: () => act(() => life.connections.sync()).then((r) => r && onWallet()) },
+      { id: 'a:system-quest', label: 'Summon Quest Complete Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#00d2ff', run: () => setSystemModal({ open: true, type: 'quest-complete', data: { coins: 50, xp: 100 } }) },
+      { id: 'a:system-level', label: 'Summon Level Advancement Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#c8f135', run: () => setSystemModal({ open: true, type: 'level-up', data: { level: summary?.level.level ?? 1, prevLevel: Math.max(1, (summary?.level.level ?? 2) - 1), statPoints: 3, onAction: () => setPage('journey') } }) },
+      { id: 'a:system-warning', label: 'Summon Penalty Warning Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'shield', color: '#f43f5e', run: () => setSystemModal({ open: true, type: 'penalty-warning', data: { onAction: () => { setView((v) => ({ ...v, discipline: 'system' })); setPage('discipline'); setRevealed(true); setUrgeOpen(true); } } }) },
 
     ]
   })
@@ -470,6 +475,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           open={oracleOpen}
           onClose={() => setOracleOpen(false)}
           summary={summary}
+        />
+        <SoloSystemModal
+          open={systemModal.open}
+          onClose={() => setSystemModal((s) => ({ ...s, open: false }))}
+          type={systemModal.type}
+          data={systemModal.data}
         />
       </div>
     </div>

@@ -8,6 +8,7 @@ import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES } from '../modules'
 import { Coins, describeEntry, useToast } from '../ui'
 import { HolographicRadarChart } from '../HolographicRadarChart'
+import { SoloSystemModal } from '../SoloSystemModal'
 
 const COLOR: Record<string, string> = Object.fromEntries(MODULES.map((m) => [m.id, m.color]))
 const GOAL_KEY = 'ls.weekGoal'
@@ -25,6 +26,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
   const [rankFilter, setRankFilter] = useState<'all' | 'early' | 'mid' | 'high' | 'monarch'>('all')
   const [report, setReport] = useState<AIPerformanceReport | null>(null)
   const [loadingReport, setLoadingReport] = useState(false)
+  const [previewModal, setPreviewModal] = useState<'level-up' | 'quest-complete' | null>(null)
 
   async function generateReport() {
     setLoadingReport(true)
@@ -113,7 +115,11 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
   return (
     <div className="journey">
       {/* 1. SOLO LEVELING HOLOGRAPHIC PLAYER STATUS WINDOW */}
-      <section className="hunter-status-window">
+      <section className="hunter-status-window solo-hud-frame">
+        <div className="solo-corner-bottom-left" />
+        <div className="solo-corner-bottom-right" />
+        <div className="solo-scanline" />
+        <div className="solo-grid-bg" />
         <div className="system-window-header">
           <span className="system-tag">[ SYSTEM STATUS WINDOW — AWAKENED HUNTER ]</span>
           <span className="system-cp">
@@ -212,6 +218,14 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
           </button>
           <button className="btn small ghost" onClick={copyRecap}>
             📋 Copy Status Card
+          </button>
+          <button
+            className="btn small ghost"
+            style={{ borderColor: 'rgba(0, 210, 255, 0.4)', color: '#00d2ff' }}
+            onClick={() => setPreviewModal('level-up')}
+            title="Preview Solo Leveling Level Advancement Hologram"
+          >
+            ⚡ Test Level-Up Hologram
           </button>
         </div>
       </section>
