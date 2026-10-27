@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
-import type { BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import type { BodyState, ConnectionsState, DisciplineState, LevelInfo, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
@@ -56,6 +56,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   return (
     <div className="today">
       <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />
+      <HunterDashboardBanner level={summary.level} onGo={onGo} />
       <Quests summary={summary} onChange={onChange} />
       <section className="stats">
         <div className="stat hero">
@@ -480,6 +481,77 @@ function DailyRituals({
         ))}
       </div>
     </section>
+  )
+}
+
+function HunterDashboardBanner({ level, onGo }: { level?: LevelInfo; onGo: (p: PageId) => void }) {
+  if (!level || !level.hunterGrade) return null
+  const { rankBadge, rankColor, hunterGrade, hunterTitle, rankPerk, attributes, level: lvl } = level
+  const cp = attributes?.totalCombatPower ?? (lvl * 150)
+
+  return (
+    <div
+      className="hunter-system-banner"
+      onClick={() => onGo('journey')}
+      role="button"
+      tabIndex={0}
+      title="Click to view full Hunter Status Window & Awakening Codex"
+    >
+      <div className="hunter-banner-left">
+        <div
+          className="hunter-badge-circle"
+          style={{
+            background: `${rankColor}22`,
+            borderColor: rankColor,
+            color: rankColor
+          }}
+        >
+          {rankBadge}
+        </div>
+        <div className="hunter-title-group">
+          <div className="hunter-header-row">
+            <span
+              className="hunter-grade-tag"
+              style={{
+                background: rankColor,
+                color: '#050811'
+              }}
+            >
+              {hunterGrade}
+            </span>
+            <span className="hunter-title-text">{hunterTitle}</span>
+            <span style={{ fontSize: 13, fontFamily: 'var(--mono)', color: 'var(--muted)' }}>Lv.{lvl}</span>
+          </div>
+          <span className="hunter-perk-hint">
+            <Icon name="spark" size={13} />
+            <span>Passive Perk: {rankPerk}</span>
+          </span>
+        </div>
+      </div>
+
+      <div className="hunter-banner-stats">
+        <div className="stat-pill">
+          <span>CP</span>
+          <b style={{ color: '#00d2ff' }}>{cp.toLocaleString()}</b>
+        </div>
+        {attributes && (
+          <>
+            <div className="stat-pill">
+              <span>STR</span>
+              <b>{attributes.str}</b>
+            </div>
+            <div className="stat-pill">
+              <span>INT</span>
+              <b>{attributes.int}</b>
+            </div>
+            <div className="stat-pill">
+              <span>SEN</span>
+              <b>{attributes.sen}</b>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 

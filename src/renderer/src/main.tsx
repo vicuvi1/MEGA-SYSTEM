@@ -10,6 +10,7 @@ import './light.css'
 import './sidebar.css'
 import './bots.css'
 import './economy.css'
+import './hunter.css'
 import { applyTheme } from './uiPrefs'
 
 applyTheme()

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { addDays } from '@core/dates'
 import { effective } from '@core/ledger'
-import { RANKS } from '@core/levels'
+import { RANKS, type HunterRankDef } from '@core/levels'
 import type { LedgerEntry, Rule, Summary } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -11,7 +11,6 @@ import { Coins, describeEntry, useToast } from '../ui'
 const COLOR: Record<string, string> = Object.fromEntries(MODULES.map((m) => [m.id, m.color]))
 const GOAL_KEY = 'ls.weekGoal'
 
-/** Levels and the weekly review: this week against last week, best day, what slipped. */
 export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] }) {
   const [rows, setRows] = useState<LedgerEntry[]>([])
   const toast = useToast()
@@ -22,6 +21,8 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
       return ''
     }
   })
+  const [rankFilter, setRankFilter] = useState<'all' | 'early' | 'mid' | 'high' | 'monarch'>('all')
+
   useEffect(() => {
     life.wallet.history(2000).then(setRows).catch(() => {})
   }, [summary])
@@ -37,126 +38,234 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
     const earned = (list: LedgerEntry[]) => list.reduce((s, e) => s + Math.max(0, e.coins), 0)
     const byModule: Record<string, number> = {}
     for (const e of thisWeek) if (e.coins > 0) byModule[e.module] = (byModule[e.module] ?? 0) + e.coins
-    const days = Array.from({ length: 7 }, (_, i) => addDays(from, i)).map((d) => ({ day: d, coins: earned(thisWeek.filter((e) => e.day === d)) }))
+    const days = Array.from({ length: 7 }, (_, i) => addDays(from, i)).map((d) => ({
+      day: d,
+      coins: earned(thisWeek.filter((e) => e.day === d))
+    }))
     const best = days.reduce((a, b) => (b.coins > a.coins ? b : a), days[0])
     const slips = thisWeek.filter((e) => e.coins < 0)
-    return { earned: earned(thisWeek), last: earned(lastWeek), xp: thisWeek.reduce((s, e) => s + e.xp, 0), byModule, days, best, slips }
+    return {
+      earned: earned(thisWeek),
+      last: earned(lastWeek),
+      xp: thisWeek.reduce((s, e) => s + e.xp, 0),
+      byModule,
+      days,
+      best,
+      slips
+    }
   }, [rows, summary.today])
 
-  const max = Math.max(1, ...week.days.map((d) => d.coins))
-  const modMax = Math.max(1, ...Object.values(week.byModule))
   const diff = week.earned - week.last
   const lv = summary.level
+
   const copyRecap = () => {
     const text = [
-      `🏆 Life System Weekly Recap (${week.days[0].day} to ${week.days[6].day})`,
+      `⚡ [SYSTEM STATUS RECAP] Victor Barbuta`,
+      `🏆 Hunter Rank: ${lv.hunterGrade} · ${lv.hunterTitle} (Level ${lv.level})`,
+      `💥 Combat Power: ${lv.attributes.totalCombatPower.toLocaleString()} CP`,
+      `📊 Stats: STR ${lv.attributes.str} | AGI ${lv.attributes.agi} | VIT ${lv.attributes.vit} | INT ${lv.attributes.int} | SEN ${lv.attributes.sen}`,
       `🪙 Coins Earned: ${week.earned} coins (${diff >= 0 ? '+' : ''}${diff} vs last week)`,
-      `⚡ XP Gained: +${week.xp} XP (Current: Level ${lv.level} · ${lv.rank})`,
-      `📅 Best Day: ${week.best.day} (${week.best.coins} coins)`,
+      `⚡ XP Gained: +${week.xp} XP (${lv.xpForNext - lv.xpIntoLevel} XP to next rank)`,
       `🛡️ Slips: ${week.slips.length === 0 ? '0 (Clean week!)' : `${week.slips.length} slips`}`,
-      goal ? `🎯 Goal for Next Week: ${goal}` : ''
-    ].filter(Boolean).join('\n')
-    navigator.clipboard.writeText(text).then(() => {
-      toast('Weekly recap copied to clipboard!')
-    }).catch(() => {})
+      goal ? `🎯 Target: ${goal}` : ''
+    ]
+      .filter(Boolean)
+      .join('\n')
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        toast('Hunter Status recap copied to clipboard!', 'good')
+      })
+      .catch(() => {})
   }
 
+  const filteredRanks = useMemo(() => {
+    switch (rankFilter) {
+      case 'early':
+        return RANKS.filter((r) => r.minLevel <= 14) // E-D-C Rank
+      case 'mid':
+        return RANKS.filter((r) => r.minLevel >= 18 && r.minLevel <= 45) // B-A Rank
+      case 'high':
+        return RANKS.filter((r) => r.minLevel >= 50 && r.minLevel <= 75) // S & National
+      case 'monarch':
+        return RANKS.filter((r) => r.minLevel >= 80) // Monarch & Sovereign
+      default:
+        return RANKS
+    }
+  }, [rankFilter])
 
   return (
     <div className="journey">
+      {/* 1. SOLO LEVELING HOLOGRAPHIC PLAYER STATUS WINDOW */}
+      <section className="hunter-status-window">
+        <div className="system-window-header">
+          <span className="system-tag">[ SYSTEM STATUS WINDOW — AWAKENED HUNTER ]</span>
+          <span className="system-cp">
+            COMBAT POWER: <b>{lv.attributes.totalCombatPower.toLocaleString()} CP</b>
+          </span>
+        </div>
+
+        <div className="hunter-profile-row">
+          <div className="hunter-name-col">
+            <h1>
+              <span>{lv.rankBadge}</span>
+              <span>Victor Barbuta</span>
+            </h1>
+            <p>
+              TITLE: <b>{lv.hunterTitle}</b> · GRADE: <b>{lv.hunterGrade}</b>
+            </p>
+          </div>
+
+          <div className="hunter-level-badge">
+            <div className="hunter-level-num">LV {lv.level}</div>
+            <div className="hunter-level-xp">
+              {lv.xpIntoLevel} / {lv.xpForNext} XP ({Math.round(lv.progress * 100)}%)
+            </div>
+          </div>
+        </div>
+
+        {/* 5 Hunter Attributes Grid */}
+        <div className="attributes-grid">
+          <div className="attribute-card">
+            <div className="attr-top">
+              <span className="attr-code">STR</span>
+              <span className="attr-val">{lv.attributes.str}</span>
+            </div>
+            <span className="attr-name">Strength</span>
+            <span className="attr-source">Physical Workouts</span>
+          </div>
+
+          <div className="attribute-card">
+            <div className="attr-top">
+              <span className="attr-code">AGI</span>
+              <span className="attr-val">{lv.attributes.agi}</span>
+            </div>
+            <span className="attr-name">Agility</span>
+            <span className="attr-source">Circadian Wakeups</span>
+          </div>
+
+          <div className="attribute-card">
+            <div className="attr-top">
+              <span className="attr-code">VIT</span>
+              <span className="attr-val">{lv.attributes.vit}</span>
+            </div>
+            <span className="attr-name">Vitality</span>
+            <span className="attr-source">Sleep & Budget</span>
+          </div>
+
+          <div className="attribute-card">
+            <div className="attr-top">
+              <span className="attr-code">INT</span>
+              <span className="attr-val">{lv.attributes.int}</span>
+            </div>
+            <span className="attr-name">Intelligence</span>
+            <span className="attr-source">Focus & Study Blocks</span>
+          </div>
+
+          <div className="attribute-card">
+            <div className="attr-top">
+              <span className="attr-code">SEN</span>
+              <span className="attr-val">{lv.attributes.sen}</span>
+            </div>
+            <span className="attr-name">Sense & Will</span>
+            <span className="attr-source">Discipline Purity</span>
+          </div>
+        </div>
+
+        {/* Current Hunter Lore & Active Perk Banner */}
+        <div className="current-rank-lore-card">
+          <div className="lore-header">
+            <div className="lore-title">
+              <span style={{ fontSize: 18 }}>{lv.rankBadge}</span>
+              <span>
+                {lv.hunterGrade}: <b>{lv.rank}</b>
+              </span>
+            </div>
+            {lv.nextRank && (
+              <span className="count-pill">
+                Next Rank: {lv.nextRank.name} (LV {lv.nextRank.minLevel})
+              </span>
+            )}
+          </div>
+          <p className="lore-desc">"{lv.rankDesc}"</p>
+          <div className="lore-perk-box">
+            <Icon name="bolt" size={16} />
+            <span>
+              <b>Active Hunter Perk:</b> {lv.rankPerk}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. STATS OVERVIEW CARDS */}
       <section className="stats four">
         <div className="stat hero">
           <span className="label">This week</span>
           <div className="big">
             <Coins n={week.earned} />
           </div>
-          <span className="sub">{week.last ? `${diff >= 0 ? '+' : ''}${diff} vs last week` : 'Your first week'} · +{week.xp} XP</span>
+          <span className="sub">
+            {week.last ? `${diff >= 0 ? '+' : ''}${diff} vs last week` : 'Your first week'} · +
+            {week.xp} XP
+          </span>
         </div>
         <div className="stat">
           <span className="label">Best day</span>
-          <div className="big small-big">{week.best.coins ? new Date(`${week.best.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' }) : '–'}</div>
+          <div className="big small-big">
+            {week.best.coins
+              ? new Date(`${week.best.day}T12:00:00`).toLocaleDateString(undefined, {
+                  weekday: 'long'
+                })
+              : '–'}
+          </div>
           <span className="sub">{week.best.coins} coins</span>
         </div>
         <div className="stat">
-          <span className="label">Level</span>
-          <div className="big">{lv.level}</div>
+          <span className="label">Hunter Rank</span>
+          <div className="big" style={{ fontSize: 20 }}>
+            {lv.hunterGrade}
+          </div>
           <span className="sub">
-            {lv.rank} · {lv.xpForNext - lv.xpIntoLevel} XP to next
+            {lv.xpForNext - lv.xpIntoLevel} XP to level {lv.level + 1}
           </span>
         </div>
         <div className="stat">
           <span className="label">Slips this week</span>
           <div className="big small-big">{week.slips.length}</div>
-          <span className="sub">{week.slips.length ? 'skipped, missed or reset' : 'None. Clean week.'}</span>
+          <span className="sub">
+            {week.slips.length ? 'skipped, missed or reset' : 'None. Clean week.'}
+          </span>
         </div>
       </section>
 
+      {/* 3. WEEKLY REVIEW & GOAL */}
       <div className="cols even">
         <section className="panel">
           <header className="panel-head">
             <h2>Last 7 days</h2>
-            <button className="btn small" onClick={copyRecap} title="Copy week stats to clipboard">
-              <Icon name="spark" size={13} /> Copy recap
+            <button className="btn small" onClick={copyRecap} title="Copy hunter stats to clipboard">
+              <Icon name="spark" size={13} /> Copy Hunter Recap
             </button>
           </header>
-          <div className="week-bars" role="img" aria-label="Coins earned each of the last 7 days">
+          <div className="week-bars">
             {week.days.map((d) => (
-              <div key={d.day} className={`wb ${d.day === summary.today ? 'today' : ''}`}>
-                <small>{d.coins || ''}</small>
-                <i style={{ height: `${Math.max(4, (d.coins / max) * 120)}px` }} />
-                <span>{new Date(`${d.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })}</span>
+              <div key={d.day} className="day-col">
+                <span className="bar">
+                  <i
+                    style={{
+                      height: `${Math.min(100, (d.coins / Math.max(1, week.best.coins)) * 100)}%`
+                    }}
+                  />
+                </span>
+                <span className="day-label">
+                  {new Date(`${d.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}
+                </span>
+                <span className="day-val">{d.coins}</span>
               </div>
             ))}
           </div>
         </section>
-        <section className="panel">
-          <header className="panel-head">
-            <h2>Where the coins came from</h2>
-          </header>
-          {Object.keys(week.byModule).length === 0 ? (
-            <div className="empty small-empty">
-              <p>No coins this week yet.</p>
-            </div>
-          ) : (
-            <div className="mod-bars">
-              {Object.entries(week.byModule)
-                .sort((a, b) => b[1] - a[1])
-                .map(([m, c]) => (
-                  <div key={m} className="mb" style={{ ['--c' as string]: COLOR[m] ?? 'var(--lime)' }}>
-                    <span>{MODULE_LABEL[m] ?? (m === 'quests' ? 'Daily quests' : m)}</span>
-                    <span className="bar">
-                      <i style={{ width: `${(c / modMax) * 100}%` }} />
-                    </span>
-                    <b>{c}</b>
-                  </div>
-                ))}
-            </div>
-          )}
-        </section>
-      </div>
 
-      <div className="cols even">
-        <section className="panel">
-          <header className="panel-head">
-            <h2>What slipped</h2>
-          </header>
-          {week.slips.length === 0 ? (
-            <div className="empty small-empty">
-              <Icon name="shield" size={24} />
-              <p>Nothing slipped this week.</p>
-            </div>
-          ) : (
-            <ul className="feed">
-              {week.slips.slice(-8).reverse().map((e) => (
-                <li key={e.id}>
-                  <span className="what">{describeEntry(e, titles)}</span>
-                  <span className="when">{e.day}</span>
-                  <Coins n={e.coins} sign />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
         <section className="panel">
           <header className="panel-head">
             <h2>One goal for next week</h2>
@@ -179,18 +288,92 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
         </section>
       </div>
 
-      <section className="panel">
+      {/* 4. THE 30 SOLO LEVELING HUNTER RANKS CODEX */}
+      <section className="panel" style={{ marginTop: 24 }}>
         <header className="panel-head">
-          <h2>Ranks</h2>
-          <span className="hint">Level up by earning XP. XP never goes down.</span>
+          <div>
+            <h2>Solo Leveling — Hunter Awakening Codex</h2>
+            <span className="hint">
+              30 Described Hunter Ranks spanning Levels 1 to 150. Level up by completing daily quests, workouts, and focus blocks.
+            </span>
+          </div>
+
+          <div className="shop-pills" style={{ marginTop: 8 }}>
+            <button
+              className={`shop-pill-btn ${rankFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setRankFilter('all')}
+            >
+              All (30)
+            </button>
+            <button
+              className={`shop-pill-btn ${rankFilter === 'early' ? 'active' : ''}`}
+              onClick={() => setRankFilter('early')}
+            >
+              E-D-C Rank
+            </button>
+            <button
+              className={`shop-pill-btn ${rankFilter === 'mid' ? 'active' : ''}`}
+              onClick={() => setRankFilter('mid')}
+            >
+              B-A Rank
+            </button>
+            <button
+              className={`shop-pill-btn ${rankFilter === 'high' ? 'active' : ''}`}
+              onClick={() => setRankFilter('high')}
+            >
+              S & National
+            </button>
+            <button
+              className={`shop-pill-btn ${rankFilter === 'monarch' ? 'active' : ''}`}
+              onClick={() => setRankFilter('monarch')}
+            >
+              Monarch & Sovereign
+            </button>
+          </div>
         </header>
-        <div className="ranks">
-          {RANKS.map((r) => (
-            <div key={r.name} className={`rank-step ${lv.level >= r.minLevel ? 'reached' : ''} ${lv.rank === r.name ? 'current' : ''}`}>
-              <b>{r.name}</b>
-              <small>level {r.minLevel}</small>
-            </div>
-          ))}
+
+        <div className="hunter-codex-grid" style={{ marginTop: 18 }}>
+          {filteredRanks.map((r) => {
+            const isReached = lv.level >= r.minLevel
+            const isCurrent = lv.rank === r.name
+            return (
+              <div
+                key={r.name}
+                className={`hunter-rank-card ${isCurrent ? 'active' : isReached ? 'unlocked' : 'locked'}`}
+                style={{
+                  borderLeft: `4px solid ${r.color}`,
+                  boxShadow: isCurrent ? `0 0 25px ${r.auraGlow}` : undefined
+                }}
+              >
+                <div className="rank-card-top">
+                  <div className="rank-badge-wrap">
+                    <span className="rank-badge-icon">{r.badge}</span>
+                    <span
+                      className="rank-grade-pill"
+                      style={{ background: `${r.color}25`, color: r.color }}
+                    >
+                      {r.grade}
+                    </span>
+                  </div>
+                  <span className="rank-level-tag">
+                    {isCurrent ? 'ACTIVE' : `LV ${r.minLevel}+`}
+                  </span>
+                </div>
+
+                <div className="rank-name-title">
+                  <h3>{r.name}</h3>
+                  <small>{r.title}</small>
+                </div>
+
+                <p className="rank-desc-text">"{r.desc}"</p>
+
+                <div className="rank-perk-footer" style={{ color: r.color }}>
+                  <Icon name="bolt" size={14} />
+                  <span>{r.perk}</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </section>
     </div>

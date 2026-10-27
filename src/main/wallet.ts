@@ -65,10 +65,22 @@ export class Wallet {
     const today = dayKey(now, this.timeZone)
     const live = effective(all).filter((e) => e.day === today)
     const xp = totalXp(all)
+    let hunterStats = undefined
+    try {
+      const workoutCount = (this.db.prepare("SELECT COUNT(*) as c FROM workouts").get() as any)?.c ?? 0
+      const cleanStreakDays = (this.db.prepare("SELECT COUNT(*) as c FROM discipline_events WHERE kind = 'checkin'").get() as any)?.c ?? 0
+      const focusBlocksCount = (this.db.prepare("SELECT COUNT(*) as c FROM block_log WHERE status = 'done'").get() as any)?.c ?? 0
+      const onTimeWakeups = (this.db.prepare("SELECT COUNT(*) as c FROM sleep_logs WHERE on_time = 1").get() as any)?.c ?? 0
+      const budgetDays = (this.db.prepare("SELECT COUNT(*) as c FROM reward_vault_ledger WHERE kind = 'surplus_credit'").get() as any)?.c ?? 0
+      hunterStats = { workoutCount, cleanStreakDays, focusBlocksCount, onTimeWakeups, budgetDays }
+    } catch {
+      // fallback
+    }
+
     return {
       balance: balance(all),
       totalXp: xp,
-      level: levelInfo(xp),
+      level: levelInfo(xp, hunterStats),
       today,
       todayCoins: live.reduce((s, e) => s + e.coins, 0),
       todayXp: live.reduce((s, e) => s + e.xp, 0),

@@ -5,7 +5,7 @@ import type {
   WishlistGoal
 } from '@core/unifiedEconomy'
 import type { LedgerEntry } from '@core/ledger'
-import type { LevelInfo } from '@core/levels'
+import type { LevelInfo, HunterRankDef, HunterAttributes } from '@core/levels'
 import type { Rule } from '@core/rules'
 import type { Reward, Tier } from '@core/shop'
 import type { QuestState } from '@core/quests'
@@ -15,7 +15,7 @@ import type { SleepLog, SleepSummary } from '@core/sleep'
 import type { Expense, ExpenseCategory, DailyExpenseSummary } from '@core/money'
 
 export type { QuestState }
-export type { LedgerEntry, LevelInfo, Rule, Reward, Tier, Block, BlockKind, BlockStatus, Repeat, Task }
+export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, Rule, Reward, Tier, Block, BlockKind, BlockStatus, Repeat, Task }
 export type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput }
 export type BodyState = BodySummary
 export type { SleepLog, SleepSummary, Expense, ExpenseCategory, DailyExpenseSummary }

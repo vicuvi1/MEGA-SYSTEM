@@ -4,6 +4,24 @@ One desktop app, one points wallet, many sections. Doing good things (waking up 
 
 The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
+## Solo Leveling Hunter Awakening Progression System (Phase 10 — v1.1.0)
+
+Turn real-life habit execution into an authentic Solo Leveling RPG awakening:
+- **30 Deeply Described Hunter Ranks**: Progress across 150 levels through 5 distinct tiers (E-Rank Weakest Hunter, D-Rank Survivors, C-Rank Strikers, B-Rank Raiders, A-Rank Elite Vanguard, S-Rank Calamity Busters, National Level Hunters, Monarch Candidates, Shadow Monarchs, and Transcendent Sovereigns).
+- **Dynamic 5-Attribute Character Sheet**: Derives your character's RPG stats dynamically from real-world habits:
+  - **STR** (Strength): Powered by logged workout sessions and exercises.
+  - **AGI** (Agility): Powered by consistent early wake-ups and circadian timing.
+  - **VIT** (Vitality): Powered by restorative sleep, clean days, and staying under budget.
+  - **INT** (Intelligence): Powered by deep focus blocks and university study sessions.
+  - **SEN** (Perception / Willpower): Powered by your unbroken discipline streak and urge crusher victories.
+  - **Combat Power (CP)**: Holographic combat rating dynamically synthesizing your holistic progress.
+- **Holographic System Status Window (`Journey` page)**:
+  - Authentic obsidian glass and cyan neon aesthetic inspired by Sung Jin-woo's Hunter System.
+  - Complete 30-rank Hunter Awakening Codex with tab filters (All, E-D-C, B-A, S & National, Monarch & Sovereign).
+  - Passive perk activation and motivational lore for every milestone.
+  - 1-click System Status Recap generator for progress logs.
+- **Today Dashboard Hunter Banner**: Sleek status pill on the main dashboard showing current Title, Grade, Level, CP, and key attributes with 1-click shortcut to the full System Status Window.
+
 ## Grand Unified Rewarding & Financial Ecosystem (Phase 9 — v1.0.0)
 
 All money, surplus savings, habit coins, and real-world rewards are unified into one grand, cohesive flywheel:
@@ -32,7 +50,7 @@ Life System includes a unified 2-way Telegram Bot Command Center that connects a
 
 ## Status
 
-**Phases 0-9 are fully implemented (v1.0.0): Grand Unified Rewarding & Financial Ecosystem (Vault, Wishlists, Multipliers, Loot Tables), Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
+**Phases 0-10 are fully implemented (v1.1.0): Solo Leveling Hunter Awakening Progression System (30 Described Ranks, Dynamic Attributes, Holographic System Window), Grand Unified Rewarding & Financial Ecosystem (Vault, Wishlists, Multipliers, Loot Tables), Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
 
 Apps inside Life System (same screens, same features):
 - **Money → Finance Helper**: the real Finance Helper (copied into `apps/finance`) runs in its own tab with its desktop features: folder and Drive sync, daily backups in Documents\Finance Helper\Backups, Binance, Telegram bot and Ctrl+Alt+N quick add. `src/main/apps/finance.ts` replaces only its main.cjs.

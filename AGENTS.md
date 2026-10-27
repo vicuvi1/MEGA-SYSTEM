@@ -16,7 +16,7 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
 
 ---
 
-## 2. Recent Implementation Summary (Phases 5 through 9 — v1.0.0)
+## 2. Recent Implementation Summary (Phases 5 through 10 — v1.1.0)
 - **Phase 5 (Body Module)**:
   - Database Migration `005` with `exercises`, `workouts`, and `body_metrics` tables.
   - Multi-exercise workout session logger with custom reps/units, awarding `body.workout_done` (+10 coins, +25 XP) to the wallet.
@@ -36,18 +36,28 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
   - **Database Migration 007**: Created `wishlist_goals`, `reward_vault_ledger`, and `chest_loot_drops` tables.
   - **Unified Real-Money Reward Surplus Vault**: Accumulates real surplus cash when finishing days under daily budget. Funds real-world rewards and mega milestones directly.
   - **Coin-to-Real-Money Valuation**: Transparent economic exchange rate (100 coins = 10 MDL, 1 coin = 0.10 MDL) giving tangible real-world value to every habit completed.
-  - **Dynamic Multiplier Engine**:
-    - Clean discipline streak multiplier (1.1x at 3d, 1.25x at 7d, 1.5x at 14d, 2.0x at 30d).
-    - +15% Financial Budget Shield bonus when under budget 3+ consecutive days.
-  - **Wishlist Mega Goals System**: Long-term life goals (Kaaba Pilgrimage, Tech Setup, Spa Retreat) with dual progress tracking (coins and real cash), velocity ETA projections, and deposit modals.
-  - **Enhanced Mystery Chest Loot Table**: Chests roll Coins Jackpots (60%), free Streak Shields (20%), Reward Vault Cash Boosts (15%), or 24-hour 2x Super Multiplier Shards (5%).
-  - **Unified Master Deck in Shop (`Shop.tsx` & `economy.css`)**:
-    - 4-metric Command Deck: Coins Wealth, Reward Vault, Monthly Budget Cap, Active Multiplier.
-    - Pinned Master Goal showcase with dual progress bars and ETA countdown.
-    - 3-tab navigation: Rewards Catalog (with Streak Shields), Wishlist Mega Goals, and Savings Vault & Redemptions Ledger.
-    - Celebratory audio fanfare and particle bursts on redemption and goal claims.
+  - **Dynamic Multiplier Engine**: Clean discipline streak multiplier (1.1x at 3d, 1.25x at 7d, 1.5x at 14d, 2.0x at 30d), plus +15% Financial Budget Shield bonus when under budget 3+ consecutive days.
+  - **Wishlist Mega Goals System & Mystery Chest Loot Tables**.
+- **Phase 10 (Solo Leveling Hunter Awakening Progression System — v1.1.0)**:
+  - **30 Comprehensive Hunter Ranks (`src/core/levels.ts`)**: Spans Levels 1 to 150 across E-Rank Weakest Hunter, D-Rank Survivors, C-Rank Strikers, B-Rank Raiders, A-Rank Elite Vanguard, S-Rank Calamity Busters, National Level Hunters, Monarch Candidates, the Shadow Monarch, and Transcendent Sovereigns. Each rank features motivational lore, passive perks, daily quest bonuses, and distinct glowing aura themes.
+  - **5-Attribute RPG Matrix (`calculateHunterAttributes`)**: Real-life habits directly power RPG stats on read without database overhead:
+    - **STR** (Strength): Workouts logged and reps executed.
+    - **AGI** (Agility): Early wake-ups and circadian discipline.
+    - **VIT** (Vitality): Sleep quality, total clean days, and staying under daily budget.
+    - **INT** (Intelligence): Deep work focus blocks and university study sessions.
+    - **SEN** (Perception / Willpower): Current discipline streak and emergency urge crushe protocols.
+    - **Combat Power (CP)**: Weighted composite score measuring holistic life power.
+  - **Holographic System Status Window (`Journey.tsx` & `hunter.css`)**:
+    - Dark obsidian glass and azure cyan holographic neon styling.
+    - Player Identity Card ("Player: Victor Barbuta", Title, Grade, Level, and CP).
+    - 5-Attribute Matrix with glowing progress bars and subtext descriptors.
+    - Active Hunter Rank Lore and Passive Perk Banner.
+    - Complete 30-Rank Hunter Awakening Codex with tab filters (All, E-D-C, B-A, S & National, Monarch & Sovereign).
+    - Copyable System Status Recap for sharing or journals.
+  - **Today Dashboard Hunter Banner (`Today.tsx`)**:
+    - Compact status card displaying Grade badge, Title, Level, CP, and STR/INT/SEN stats with a 1-click portal to the Journey Status Window.
 - **Testing & Quality Assurance**:
-  - **164 tests passing** across 27 test suites (`npm test`).
+  - **169 tests passing** across 28 test suites (`npm test`).
   - **0 TypeScript compilation errors** (`npm run typecheck`).
   - Production build verified with `electron-vite build`.
 
@@ -58,9 +68,10 @@ apps/          Embedded sandboxed apps (Finance Helper, MAN) running in isolated
 2. **DPAPI Credential Encryption**: Primary and secondary bot tokens are encrypted at rest with Windows DPAPI via `safeStorage`.
 3. **Surplus Vault Integrity**: Vault withdrawals cannot exceed accumulated surplus; ledger rows are append-only.
 4. **Multiplier Math Safety**: All multipliers clamp to valid ranges and round cleanly to avoid fractional coin arithmetic anomalies.
-5. **Backwards Compatibility**: Preserved all existing `shop.state()` and IPC contracts while introducing the rich `life.economy` namespace.
+5. **Zero Schema Bloat for RPG Stats**: Derived all 5 Hunter Attributes dynamically from existing transactional tables on read, ensuring instant reactivity to workouts, study, and sleep without migration risk.
+6. **Backwards Compatibility**: Preserved all existing `summary.level` and IPC contracts while augmenting with the rich Solo Leveling Hunter engine.
 
 ---
 
 ## 4. Handoff Brief for Claude Code
-Life System v1.0.0 is the complete, grand unified life operations and rewarding ecosystem with all money, savings, coins, habits, and Telegram bots operating as one single cohesive platform backed by 164 passing tests. The new `Shop.tsx` and `economy.css` feature the Master Economy Deck, Dream Wishlist, and Mystery Chest loot mechanics. Your objective is visual styling refinement, micro-interactions, and responsive polishing of these components while preserving the clean SQLite and IPC bridges.
+Life System v1.1.0 delivers the full Solo Leveling Hunter Awakening Progression System alongside the Grand Unified Rewarding & Financial Ecosystem and Telegram Bot Command Center. The new Holographic Hunter Status Window in `Journey.tsx`, Hunter Dashboard Banner in `Today.tsx`, and `hunter.css` transform real-life habits into an epic RPG leveling journey with 30 described Hunter Ranks and dynamic CP stats. Your objective is visual polish, subtle particle animations, and UI refinements while preserving pure SQLite and domain logic.
