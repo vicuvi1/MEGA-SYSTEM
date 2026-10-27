@@ -266,7 +266,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
             </button>
           </div>
           <small className="hint">
-            Get a free key instantly from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>. Free models: Gemini 2.5 Flash, 2.0 Flash, 1.5 Pro.
+            Get a free key instantly from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>. Free models: Gemini 2.0 Flash, 1.5 Flash, 1.5 Pro.
           </small>
         </div>
 

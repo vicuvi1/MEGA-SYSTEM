@@ -68,9 +68,13 @@ export class AIService {
       if (!buf || !buf.length) return { ...DEFAULT_AI_CONFIG }
       if (safeStorage && safeStorage.isEncryptionAvailable()) {
         const str = safeStorage.decryptString(buf)
-        return { ...DEFAULT_AI_CONFIG, ...JSON.parse(str) }
+        const cfg = { ...DEFAULT_AI_CONFIG, ...JSON.parse(str) }
+        if (cfg.selectedModel === 'gemini-2.5-flash') cfg.selectedModel = 'gemini-2.0-flash'
+        return cfg
       }
-      return { ...DEFAULT_AI_CONFIG, ...JSON.parse(buf.toString('utf8')) }
+      const cfg = { ...DEFAULT_AI_CONFIG, ...JSON.parse(buf.toString('utf8')) }
+      if (cfg.selectedModel === 'gemini-2.5-flash') cfg.selectedModel = 'gemini-2.0-flash'
+      return cfg
     } catch {
       return { ...DEFAULT_AI_CONFIG }
     }
@@ -94,19 +98,34 @@ export class AIService {
   }
 
   private async callGemini(model: string, key: string, prompt: string): Promise<string> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`
-    const res = await this.customFetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+    let targetModel = model === 'gemini-2.5-flash' || !model.startsWith('gemini') ? 'gemini-2.0-flash' : model
+
+    const tryFetch = async (m: string) => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(key)}`
+      return await this.customFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+        })
       })
-    })
+    }
+
+    let res = await tryFetch(targetModel)
+    // Automatic fallback if requested model is 404 (e.g. deprecated or unavailable)
+    if (res.status === 404 && targetModel !== 'gemini-2.0-flash') {
+      targetModel = 'gemini-2.0-flash'
+      res = await tryFetch(targetModel)
+    }
+    if (res.status === 404 && targetModel !== 'gemini-1.5-flash') {
+      targetModel = 'gemini-1.5-flash'
+      res = await tryFetch(targetModel)
+    }
 
     if (!res.ok) {
       const errText = await res.text()
-      throw new Error(`Google Gemini API error (${res.status}): ${errText}`)
+      throw new Error(`Google Gemini API error (${res.status}): ${errText} (${targetModel})`)
     }
 
     const data = (await res.json()) as any
@@ -160,7 +179,9 @@ export class AIService {
   async testConnection(provider?: 'gemini' | 'openrouter'): Promise<{ ok: boolean; message: string; model: string }> {
     const cfg = this.getConfig()
     const targetProvider = provider ?? (cfg.geminiKey ? 'gemini' : 'openrouter')
-    const model = targetProvider === 'gemini' ? (cfg.selectedModel.startsWith('gemini') ? cfg.selectedModel : 'gemini-2.5-flash') : 'deepseek/deepseek-chat'
+    let model = targetProvider === 'gemini'
+      ? (cfg.selectedModel.startsWith('gemini') && cfg.selectedModel !== 'gemini-2.5-flash' ? cfg.selectedModel : 'gemini-2.0-flash')
+      : (cfg.selectedModel && !cfg.selectedModel.startsWith('gemini') && cfg.selectedModel !== 'auto' ? cfg.selectedModel : 'deepseek/deepseek-chat')
 
     try {
       let reply = ''

@@ -497,10 +497,10 @@ export function createMockApi(): Bridge {
       test: async (provider) => ({
         ok: true,
         message: 'Connection successful',
-        model: provider === 'openrouter' ? 'deepseek/deepseek-chat' : 'gemini-2.5-flash'
+        model: provider === 'openrouter' ? 'deepseek/deepseek-chat' : 'gemini-2.0-flash'
       }),
       generateRewards: async (userPrompt?: string) => ({
-        modelUsed: 'gemini-2.5-flash',
+        modelUsed: 'gemini-2.0-flash',
         rewards: [
           {
             title: userPrompt ? `Custom Upgrade: ${userPrompt}` : 'Premium Espresso & Reading Afternoon',
@@ -560,11 +560,11 @@ export function createMockApi(): Bridge {
           { title: `Execute core focus phase for ${title}`, minutes: 35, coins: 15, xp: 30, priority: 1 },
           { title: `Review, test, and finalize ${title}`, minutes: 15, coins: 10, xp: 20, priority: 2 }
         ],
-        modelUsed: 'gemini-2.5-flash'
+        modelUsed: 'gemini-2.0-flash'
       }),
       askCoach: async (msg: string) => ({
         reply: `[System Oracle]: Understood, Hunter. In response to "${msg}": stay locked onto your primary directives. Discipline compounds exponentially.`,
-        modelUsed: 'gemini-2.5-flash'
+        modelUsed: 'gemini-2.0-flash'
       })
     },
     calendar: {

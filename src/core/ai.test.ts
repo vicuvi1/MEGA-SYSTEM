@@ -32,13 +32,13 @@ describe('AI Core Domain Engine', () => {
     it('routes reward_ideas to Gemini 2.5 Flash on auto when Gemini key is available', () => {
       const choice = selectModelForTask(baseConfig, 'reward_ideas')
       expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-2.5-flash')
+      expect(choice.model).toBe('gemini-2.0-flash')
     })
 
     it('routes decompose_task to Gemini 2.5 Flash on auto when Gemini key is available', () => {
       const choice = selectModelForTask(baseConfig, 'decompose_task')
       expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-2.5-flash')
+      expect(choice.model).toBe('gemini-2.0-flash')
     })
 
     it('routes reward_ideas to OpenRouter DeepSeek V3 when only OpenRouter key is available', () => {
