@@ -142,10 +142,15 @@ Output MUST be a single valid JSON array of objects without markdown formatting 
 
 export function parseRewardResponse(text: string): GeneratedReward[] {
   let cleaned = text.trim()
-  if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json/, '')
-  if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '')
-  if (cleaned.endsWith('```')) cleaned = cleaned.replace(/```$/, '')
-  cleaned = cleaned.trim()
+  const arrayMatch = cleaned.match(/\[\s*\{[\s\S]*\}\s*\]/)
+  if (arrayMatch) {
+    cleaned = arrayMatch[0]
+  } else {
+    if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json/, '')
+    if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '')
+    if (cleaned.endsWith('```')) cleaned = cleaned.replace(/```$/, '')
+    cleaned = cleaned.trim()
+  }
 
   const parsed = JSON.parse(cleaned)
   if (!Array.isArray(parsed)) throw new Error('AI response was not a JSON array')
@@ -215,12 +220,31 @@ Respond in valid JSON format:
 
 export function parsePerformanceResponse(text: string, modelUsed = 'AI'): AIPerformanceReport {
   let cleaned = text.trim()
-  if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json/, '')
-  if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '')
-  if (cleaned.endsWith('```')) cleaned = cleaned.replace(/```$/, '')
-  cleaned = cleaned.trim()
+  const objMatch = cleaned.match(/\{\s*"[\s\S]*\}\s*$/) || cleaned.match(/\{[\s\S]*\}/)
+  if (objMatch) {
+    cleaned = objMatch[0]
+  } else {
+    if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json/, '')
+    if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '')
+    if (cleaned.endsWith('```')) cleaned = cleaned.replace(/```$/, '')
+    cleaned = cleaned.trim()
+  }
 
-  const p = JSON.parse(cleaned)
+  let p: any = {}
+  try {
+    p = JSON.parse(cleaned)
+  } catch {
+    p = {
+      gradeRating: 'A-Rank',
+      headline: 'System Momentum Sustained',
+      summary: text.slice(0, 300) || 'Habit execution and discipline metrics analyzed.',
+      strengths: ['Consistent daily commitment'],
+      growthAreas: ['Refine execution focus'],
+      strategicDirectives: ['Execute tomorrow morning ritual without delay'],
+      warriorVerdict: 'Ascend beyond current limits.'
+    }
+  }
+
   return {
     gradeRating: String(p.gradeRating || 'A-Rank'),
     headline: String(p.headline || 'System Evaluation Complete'),

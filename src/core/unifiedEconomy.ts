@@ -243,16 +243,20 @@ export function convertCurrency(
   to: string,
   customUsdRate?: number
 ): number {
-  if (from === to || amount === 0) return amount
+  const safeAmount = Number.isFinite(amount) ? amount : 0
+  if (from === to || safeAmount === 0) return safeAmount
   const fromCfg = CURRENCY_CONFIGS[from as SupportedCurrency] || CURRENCY_CONFIGS.MDL
   const toCfg = CURRENCY_CONFIGS[to as SupportedCurrency] || CURRENCY_CONFIGS.USD
 
-  const fromRate = from === 'MDL' && customUsdRate ? customUsdRate : fromCfg.rateToUsd
-  const toRate = to === 'MDL' && customUsdRate ? customUsdRate : toCfg.rateToUsd
+  const fromRate = from === 'MDL' && customUsdRate && customUsdRate > 0 ? customUsdRate : fromCfg.rateToUsd
+  const toRate = to === 'MDL' && customUsdRate && customUsdRate > 0 ? customUsdRate : toCfg.rateToUsd
+
+  const safeFromRate = Math.max(0.0001, fromRate || 1)
+  const safeToRate = Math.max(0.0001, toRate || 1)
 
   // Convert from -> USD -> to
-  const inUsd = amount / fromRate
-  const converted = inUsd * toRate
+  const inUsd = safeAmount / safeFromRate
+  const converted = inUsd * safeToRate
   return Math.round(converted)
 }
 
@@ -261,14 +265,15 @@ export function formatDualCurrency(
   primaryCurrency = 'MDL',
   customUsdRate = 18.0
 ): { primaryText: string; secondaryText: string; combinedText: string } {
+  const safeAmount = Number.isFinite(amount) ? amount : 0
   const isLei = primaryCurrency === 'MDL' || primaryCurrency === 'RON'
   const secondary = isLei ? 'USD' : 'MDL'
-  const secondaryAmount = convertCurrency(amount, primaryCurrency, secondary, customUsdRate)
+  const secondaryAmount = convertCurrency(safeAmount, primaryCurrency, secondary, customUsdRate)
 
   const pSymbol = CURRENCY_CONFIGS[primaryCurrency as SupportedCurrency]?.symbol ?? primaryCurrency
   const sSymbol = CURRENCY_CONFIGS[secondary as SupportedCurrency]?.symbol ?? secondary
 
-  const primaryText = pSymbol === '$' || pSymbol === '€' ? `${pSymbol}${amount}` : `${amount} ${primaryCurrency}`
+  const primaryText = pSymbol === '$' || pSymbol === '€' ? `${pSymbol}${safeAmount}` : `${safeAmount} ${primaryCurrency}`
   const secondaryText = sSymbol === '$' || sSymbol === '€' ? `${sSymbol}${secondaryAmount}` : `${secondaryAmount} ${secondary}`
 
   return {

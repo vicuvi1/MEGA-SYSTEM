@@ -492,13 +492,20 @@ export class TelegramBotHub {
     while (this.isPolling && !signal.aborted) {
       try {
         this.lastPollTimestamp = new Date().toISOString()
-        this.lastPollingError = null
         const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=20`
-        const res = await fetch(url, { signal: AbortSignal.timeout(30000) })
+        const timeoutSignal = AbortSignal.timeout(30000)
+        const fetchSignal = typeof (AbortSignal as any).any === 'function'
+          ? (AbortSignal as any).any([signal, timeoutSignal])
+          : signal
+
+        const res = await fetch(url, { signal: fetchSignal })
         if (!res.ok) {
+          this.lastPollingError = `Telegram HTTP ${res.status}: ${res.statusText}`
           await new Promise((r) => setTimeout(r, 4000))
           continue
         }
+
+        this.lastPollingError = null
 
         const data = (await res.json()) as {
           ok: boolean

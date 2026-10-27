@@ -265,6 +265,45 @@ handle('discipline:setStealth', (on: boolean) => {
   return discipline.state()
 })
 
+// ---------- Sleep Tracker (Standalone) ----------
+handle('sleep:state', () => sleepService.state())
+handle('sleep:logWake', (time?: string, quality?: number) => {
+  const res = sleepService.logWake(time, quality)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('sleep:logBed', (time?: string) => {
+  const res = sleepService.logBed(time)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('sleep:setTargets', (weekday: string, weekend: string, bedtime?: string) =>
+  sleepService.setTargets(weekday, weekend, bedtime)
+)
+
+// ---------- Money Tracker (Standalone) ----------
+handle('money:state', () => moneyService.state())
+handle('money:addExpense', (amountBani: number, category: string, note?: string) => {
+  const res = moneyService.addExpense(amountBani, category as any, note)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+handle('money:deleteExpense', (id: number) => moneyService.deleteExpense(id))
+handle('money:setBudget', (budgetBani: number) => moneyService.setBudget(budgetBani))
+handle('money:setCurrency', (cur: string) => moneyService.setCurrency(cur))
+
+// ---------- Shields ----------
+handle('shields:count', () => shieldService.count())
+handle('shields:buy', () => {
+  const res = shieldService.buy()
+  win?.webContents.send('wallet:changed')
+  return res
+})
+
+// ---------- Data Export ----------
+handle('data:exportJson', () => dataExportService.exportJson())
+handle('data:exportCsv', (kind: 'workouts' | 'expenses') => dataExportService.exportCsv(kind))
+
 
 handle('telegram:config', () => telegram.getConfig())
 handle('telegram:saveConfig', (c: Partial<TelegramConfig>) => telegram.saveConfig(c))

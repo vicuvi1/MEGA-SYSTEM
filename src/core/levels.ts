@@ -472,7 +472,7 @@ export function levelInfo(
   }
 ): LevelInfo {
   let level = 1
-  let left = Math.max(0, Math.floor(totalXp))
+  let left = Number.isFinite(totalXp) ? Math.max(0, Math.floor(totalXp)) : 0
   while (level < MAX_LEVEL && left >= xpToNext(level)) {
     left -= xpToNext(level)
     level++
