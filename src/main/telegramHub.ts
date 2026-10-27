@@ -1,3 +1,4 @@
+import type { UnifiedEconomyService } from './unifiedEconomy'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, safeStorage } from 'electron'
@@ -59,6 +60,7 @@ const DEFAULT_BRIDGE_CONFIG: BotBridgeConfig = {
 }
 
 export class TelegramBotHub {
+  private economy?: UnifiedEconomyService
   private file: string
   private logsList: BotLogEntry[] = []
   private isPolling = false
@@ -75,13 +77,26 @@ export class TelegramBotHub {
     private sleep?: SleepService,
     private money?: MoneyService,
     private tasks?: Tasks,
-    filePath?: string
+    filePathOrEconomy?: string | UnifiedEconomyService,
+    economyOrFilePath?: UnifiedEconomyService | string
   ) {
+    let filePath: string | undefined
+    if (typeof filePathOrEconomy === 'string') {
+      filePath = filePathOrEconomy
+      if (typeof economyOrFilePath !== 'string') this.economy = economyOrFilePath
+    } else if (filePathOrEconomy) {
+      this.economy = filePathOrEconomy
+      if (typeof economyOrFilePath === 'string') filePath = economyOrFilePath
+    }
     try {
       this.file = filePath ?? join(app.getPath('userData'), 'telegram_hub.bin')
     } catch {
       this.file = filePath ?? 'telegram_hub.bin'
     }
+  }
+
+  setEconomy(eco: UnifiedEconomyService): void {
+    this.economy = eco
   }
 
   setWalletCallback(cb: () => void): void {
@@ -368,6 +383,46 @@ export class TelegramBotHub {
             reply = `✅ Task completed: <b>${target.title}</b>\n<b>+10 coins awarded!</b>`
           } else {
             reply = `⚠️ Task number not found. Use <code>/tasks</code> to view list.`
+          }
+          break
+        }
+
+                case 'vault': {
+          if (!this.economy) {
+            reply = '❌ Economy service unavailable.'
+            break
+          }
+          const s = this.economy.getEconomySummary()
+          reply = [
+            '🏛️ <b>UNIFIED REWARD VAULT & ECONOMY</b>',
+            '',
+            `🪙 <b>Coins Balance:</b> ${s.coinsBalance} coins (≈ <b>${s.coinsRealValue} ${s.currency}</b>)`,
+            `💰 <b>Reward Vault:</b> <b>${s.vaultBalance} ${s.currency}</b> (accumulated surplus cash)`,
+            `🔥 <b>Multiplier:</b> ${s.multiplier.label}`,
+            `🎯 <b>Monthly Budget:</b> ${s.monthSpent} / ${s.monthlyBudget || '∞'} ${s.currency} used`,
+            '',
+            s.pinnedGoal
+              ? `🌟 <b>Pinned Goal:</b> ${s.pinnedGoal.title} (${s.pinnedGoal.allocatedCoins}/${s.pinnedGoal.targetCoins} coins · ${s.pinnedGoal.allocatedRealCost}/${s.pinnedGoal.targetRealCost} ${s.currency})`
+              : '<i>Set a pinned goal in the desktop Shop to track milestones!</i>'
+          ].join('\n')
+          break
+        }
+
+        case 'goals': {
+          if (!this.economy) {
+            reply = '❌ Economy service unavailable.'
+            break
+          }
+          const goals = this.economy.goals().filter((g: any) => !g.completed)
+          if (!goals.length) {
+            reply = '🎯 <b>No active goals!</b>\n\nAll goals completed or none created. Add your dream milestones in the desktop Shop!'
+          } else {
+            const list = goals
+              .map((g: any, idx: number) =>
+                  `${idx + 1}. ${g.pinned ? '⭐ ' : ''}<b>${g.title}</b>\n   • Coins: ${g.allocatedCoins}/${g.targetCoins}\n   • Cash: ${g.allocatedRealCost}/${g.targetRealCost} ${this.economy?.getCurrency()}`
+              )
+              .join('\n\n')
+            reply = `🎯 <b>WISHLIST MEGA GOALS:</b>\n\n${list}\n\n<i>Fund goals by staying under budget and stacking coins!</i>`
           }
           break
         }

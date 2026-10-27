@@ -1,3 +1,4 @@
+import type { UnifiedEconomyService } from './unifiedEconomy'
 import { dayKey, monthKey } from '@core/dates'
 import { balance, effective, LedgerError, totalXp } from '@core/ledger'
 import { levelInfo } from '@core/levels'
@@ -23,7 +24,17 @@ const toReward = (r: RewardRow): Reward => ({
 })
 
 export class Shop {
-  constructor(private db: DB, private wallet: Wallet, private timeZone?: string, private rand: () => number = Math.random) {}
+  constructor(
+    private db: DB,
+    private wallet: Wallet,
+    private timeZone?: string,
+    private rand: () => number = Math.random,
+    private economy?: UnifiedEconomyService
+  ) {}
+
+  setEconomy(eco: UnifiedEconomyService): void {
+    this.economy = eco
+  }
 
   private rewards(): Reward[] {
     const rows = this.db.prepare('SELECT * FROM rewards WHERE archived = 0 ORDER BY pinned DESC, price').all() as RewardRow[]
@@ -67,7 +78,8 @@ export class Shop {
       monthSpent: this.monthSpent(day, undone),
       currency: getSetting(this.db, 'currency') ?? 'MDL',
       chests: unopenedChests(level, openedRefs),
-      recent: recent.map((r) => ({ title: r.title, realCost: r.real_cost, day: r.day, undone: undone.has(r.ledger_id) }))
+      recent: recent.map((r) => ({ title: r.title, realCost: r.real_cost, day: r.day, undone: undone.has(r.ledger_id) })),
+      economy: this.economy?.getEconomySummary(now)
     }
   }
 

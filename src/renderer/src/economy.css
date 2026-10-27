@@ -1,0 +1,423 @@
+/* Unified Economy & Rewards Master Styling */
+.economy-command-deck {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.economy-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.economy-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(200, 241, 53, 0.35);
+}
+
+.economy-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.economy-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.economy-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+
+.icon-coins {
+  background: rgba(245, 200, 75, 0.15);
+  color: var(--gold);
+}
+
+.icon-vault {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--green);
+}
+
+.icon-budget {
+  background: rgba(0, 210, 255, 0.15);
+  color: #00d2ff;
+}
+
+.icon-multiplier {
+  background: rgba(255, 138, 61, 0.15);
+  color: var(--orange);
+}
+
+.economy-card-value {
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.economy-card-sub {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vault-deposit-btn {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  color: var(--green);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.vault-deposit-btn:hover {
+  background: var(--green);
+  color: #0b0d12;
+}
+
+.multiplier-flame-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--orange);
+  background: rgba(255, 138, 61, 0.12);
+  border: 1px solid rgba(255, 138, 61, 0.3);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* Pinned Goal Showcase Card */
+.pinned-goal-showcase {
+  background: linear-gradient(135deg, rgba(200, 241, 53, 0.08) 0%, rgba(20, 24, 34, 0.85) 100%);
+  border: 1px solid rgba(200, 241, 53, 0.3);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  margin-bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.showcase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.showcase-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lime);
+}
+
+.showcase-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.showcase-title-row h2 {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  color: var(--text);
+}
+
+.showcase-title-row p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.showcase-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.showcase-bars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  background: rgba(11, 13, 18, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.progress-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.progress-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.progress-fraction {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.progress-track {
+  height: 8px;
+  background: var(--panel-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill-coins {
+  height: 100%;
+  background: linear-gradient(90deg, #f5c84b, #ffd700);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.progress-fill-cash {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #6ee7b7);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.showcase-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.eta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lime);
+  background: rgba(200, 241, 53, 0.12);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* Category Tabs */
+.shop-tabs-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.shop-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.shop-pill-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.shop-pill-btn:hover {
+  color: var(--text);
+  background: var(--panel);
+}
+
+.shop-pill-btn.active {
+  background: var(--panel-2);
+  border-color: var(--lime);
+  color: var(--lime);
+}
+
+/* Wishlist Grid */
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 16px;
+}
+
+.goal-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.goal-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(200, 241, 53, 0.35);
+}
+
+.goal-card.completed {
+  opacity: 0.75;
+  border-color: var(--green);
+}
+
+.goal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.goal-cat-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.goal-card h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.goal-card p.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.goal-card-actions {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* Modal Deposit Sheet */
+.deposit-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.deposit-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.deposit-input-row input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.deposit-quick-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.deposit-quick-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.deposit-quick-btn:hover {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+
+/* Chest Loot Drop Celebration */
+.chest-loot-modal {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.chest-loot-badge {
+  font-size: 28px;
+  padding: 16px;
+  border-radius: 50%;
+  background: rgba(200, 241, 53, 0.15);
+  border: 2px solid var(--lime);
+  box-shadow: 0 0 24px rgba(200, 241, 53, 0.3);
+}
+
+.chest-loot-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+.chest-loot-desc {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 320px;
+  line-height: 1.4;
+  margin: 0;
+}

@@ -129,6 +129,19 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     exportJson: () => call('data:exportJson'),
     exportCsv: (kind) => call('data:exportCsv', kind)
   },
+    economy: {
+    summary: () => call('economy:summary'),
+    goals: () => call('economy:goals'),
+    saveGoal: (g) => call('economy:saveGoal', g),
+    deleteGoal: (id) => call('economy:deleteGoal', id),
+    pinGoal: (id) => call('economy:pinGoal', id),
+    depositCoins: (goalId, amount) => call('economy:depositCoins', goalId, amount),
+    depositVault: (goalId, amount) => call('economy:depositVault', goalId, amount),
+    claimGoal: (goalId) => call('economy:claimGoal', goalId),
+    creditVault: (amount, note) => call('economy:creditVault', amount, note),
+    setExchangeRate: (rate) => call('economy:setExchangeRate', rate),
+    openChest: (level) => call('economy:openChest', level)
+  },
   bots: {
     config: () => call('bots:config'),
     saveConfig: (c) => call('bots:saveConfig', c),

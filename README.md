@@ -4,6 +4,16 @@ One desktop app, one points wallet, many sections. Doing good things (waking up 
 
 The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
+## Grand Unified Rewarding & Financial Ecosystem (Phase 9 — v1.0.0)
+
+All money, surplus savings, habit coins, and real-world rewards are unified into one grand, cohesive flywheel:
+- **Real-Money Reward Surplus Vault**: Days finished under daily budget automatically accumulate real surplus cash into your Reward Vault to fund real-life rewards and dream milestones.
+- **Coin-to-Real-Money Valuation**: Transparent exchange rate (100 coins = 10 MDL) gives every single habit completed real tangible monetary value.
+- **Dynamic Multipliers**: 1.1x to 2.0x coin earnings based on clean discipline streaks, plus a +15% Budget Shield multiplier for consistent financial discipline.
+- **Wishlist Mega Goals**: Track and fund major life goals (Kaaba Pilgrimage, MacBook/Tech Setup, Spa Retreat) with dual progress bars (coins + cash) and ETA velocity projections.
+- **Enhanced Mystery Chest Loot Table**: Chests roll Coins Jackpots (60%), free Streak Shields (20%), Reward Vault Cash Boosts (15%), and 24h 2x Super Multiplier Shards (5%).
+- **Desktop Shop & Economy Deck**: 4-card metric deck, pinned goal showcase, rewards catalog with Streak Shields, and savings audit timeline.
+
 ## Bot Command Center (Phase 8 — v0.9.0)
 
 Life System includes a unified 2-way Telegram Bot Command Center that connects all bots in your ecosystem (Central Controller, Sport Bot, Finance Bot, MAN recovery bot):
@@ -22,7 +32,7 @@ Life System includes a unified 2-way Telegram Bot Command Center that connects a
 
 ## Status
 
-**Phases 0-8 are fully implemented (v0.9.0): Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
+**Phases 0-9 are fully implemented (v1.0.0): Grand Unified Rewarding & Financial Ecosystem (Vault, Wishlists, Multipliers, Loot Tables), Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
 
 Apps inside Life System (same screens, same features):
 - **Money → Finance Helper**: the real Finance Helper (copied into `apps/finance`) runs in its own tab with its desktop features: folder and Drive sync, daily backups in Documents\Finance Helper\Backups, Binance, Telegram bot and Ctrl+Alt+N quick add. `src/main/apps/finance.ts` replaces only its main.cjs.

@@ -261,6 +261,150 @@ export function createMockApi(): Bridge {
       exportJson: async () => JSON.stringify({ demo: true }, null, 2),
       exportCsv: async () => 'Date,Amount\n2026-10-27,50.00'
     },
+        economy: {
+      summary: async () => ({
+        coinsBalance: 1420,
+        coinsRealValue: 142,
+        exchangeRate: 10,
+        vaultBalance: 420,
+        currency: 'MDL',
+        monthlyBudget: 1500,
+        monthSpent: 300,
+        multiplier: {
+          rate: 1.5,
+          cleanStreak: 14,
+          budgetStreak: 4,
+          budgetBonus: 0.15,
+          totalRate: 1.65,
+          label: 'Spartan (1.5x) + 💰 Budget Shield (+15%)'
+        },
+        pinnedGoal: {
+          id: 1,
+          title: 'Kaaba Pilgrimage Fund',
+          targetCoins: 20000,
+          targetRealCost: 15000,
+          allocatedCoins: 4500,
+          allocatedRealCost: 3200,
+          category: 'trip',
+          pinned: true,
+          completed: false,
+          completedAt: null,
+          note: 'The supreme spiritual milestone. Keep stacking.',
+          createdAt: new Date().toISOString()
+        },
+        goals: [
+          {
+            id: 1,
+            title: 'Kaaba Pilgrimage Fund',
+            targetCoins: 20000,
+            targetRealCost: 15000,
+            allocatedCoins: 4500,
+            allocatedRealCost: 3200,
+            category: 'trip',
+            pinned: true,
+            completed: false,
+            completedAt: null,
+            note: 'The supreme spiritual milestone. Keep stacking.',
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 2,
+            title: 'MacBook / Pro Warrior Setup',
+            targetCoins: 12000,
+            targetRealCost: 8000,
+            allocatedCoins: 2000,
+            allocatedRealCost: 1500,
+            category: 'tech',
+            pinned: false,
+            completed: false,
+            completedAt: null,
+            note: 'High-performance battle workstation.',
+            createdAt: new Date().toISOString()
+          }
+        ],
+        recentVaultEntries: [
+          { id: 1, ts: new Date().toISOString(), day: '2026-10-27', kind: 'surplus_credit', amount: 85, ref: null, note: 'Daily surplus savings under budget' }
+        ]
+      }),
+      goals: async () => [],
+      saveGoal: async (g) => ({
+        id: g.id || Date.now(),
+        title: g.title,
+        targetCoins: g.targetCoins,
+        targetRealCost: g.targetRealCost,
+        allocatedCoins: 0,
+        allocatedRealCost: 0,
+        category: g.category || 'gear',
+        pinned: !!g.pinned,
+        completed: false,
+        completedAt: null,
+        note: g.note || null,
+        createdAt: new Date().toISOString()
+      }),
+      deleteGoal: async () => {},
+      pinGoal: async () => {},
+      depositCoins: async (goalId, amount) => ({
+        goal: {
+          id: goalId,
+          title: 'Kaaba Pilgrimage Fund',
+          targetCoins: 20000,
+          targetRealCost: 15000,
+          allocatedCoins: 5000,
+          allocatedRealCost: 3200,
+          category: 'trip',
+          pinned: true,
+          completed: false,
+          completedAt: null,
+          note: null,
+          createdAt: new Date().toISOString()
+        },
+        balance: 1420 - amount
+      }),
+      depositVault: async (goalId, amount) => ({
+        goal: {
+          id: goalId,
+          title: 'Kaaba Pilgrimage Fund',
+          targetCoins: 20000,
+          targetRealCost: 15000,
+          allocatedCoins: 4500,
+          allocatedRealCost: 3200 + amount,
+          category: 'trip',
+          pinned: true,
+          completed: false,
+          completedAt: null,
+          note: null,
+          createdAt: new Date().toISOString()
+        },
+        vaultBalance: 420 - amount
+      }),
+      claimGoal: async (goalId) => ({
+        id: goalId,
+        title: 'Claimed Goal',
+        targetCoins: 100,
+        targetRealCost: 100,
+        allocatedCoins: 100,
+        allocatedRealCost: 100,
+        category: 'gear',
+        pinned: false,
+        completed: true,
+        completedAt: new Date().toISOString(),
+        note: null,
+        createdAt: new Date().toISOString()
+      }),
+      creditVault: async (amount) => 420 + amount,
+      setExchangeRate: async (rate) => rate,
+      openChest: async (level) => ({
+        drop: {
+          type: 'coins',
+          value: 35,
+          label: '+35 Coins Jackpot!',
+          description: 'Discipline dividends credited directly to your points wallet.'
+        },
+        coins: 35,
+        balance: 1455,
+        chests: []
+      })
+    },
     bots: {
       config: async () => ({
         botToken: '',

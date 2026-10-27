@@ -18,6 +18,8 @@ import { Body } from './body'
 import { SleepService } from './sleep'
 import { MoneyService } from './money'
 import { ShieldService } from './shields'
+import { UnifiedEconomyService } from './unifiedEconomy'
+import type { WishlistGoalInput } from '@shared/api'
 import { DataExportService } from './dataExport'
 import { TelegramNotifier } from './telegram'
 import { TelegramBotHub } from './telegramHub'
@@ -74,6 +76,7 @@ let body: Body
 let sleepService: SleepService
 let moneyService: MoneyService
 let shieldService: ShieldService
+let economyService: UnifiedEconomyService
 let dataExportService: DataExportService
 let telegram: TelegramNotifier
 let telegramHub: TelegramBotHub
@@ -94,9 +97,12 @@ function open(): void {
   sleepService = new SleepService(db, wallet)
   moneyService = new MoneyService(db, wallet)
   shieldService = new ShieldService(db, wallet)
+  economyService = new UnifiedEconomyService(db, wallet, discipline, moneyService, shieldService)
+  shop.setEconomy(economyService)
   dataExportService = new DataExportService(db, body, moneyService)
   telegram = new TelegramNotifier()
   telegramHub = new TelegramBotHub(wallet, discipline, body, sleepService, moneyService, tasks)
+  telegramHub.setEconomy(economyService)
   telegramHub.setWalletCallback(() => win?.webContents.send('wallet:changed'))
   const hubCfg = telegramHub.getConfig()
   if (hubCfg.enabled && hubCfg.pollingEnabled && hubCfg.botToken) {
@@ -270,7 +276,31 @@ handle('bots:startPolling', () => {
 handle('bots:stopPolling', () => {
   telegramHub.stopPolling()
   return telegramHub.getPollingStatus()
+}) 
+
+handle('economy:summary', () => economyService.getEconomySummary())
+handle('economy:goals', () => economyService.goals())
+handle('economy:saveGoal', (g: WishlistGoalInput) => economyService.saveGoal(g))
+handle('economy:deleteGoal', (id: number) => economyService.deleteGoal(id))
+handle('economy:pinGoal', (id: number) => economyService.pinGoal(id))
+handle('economy:depositCoins', (goalId: number, amount: number) => {
+  const res = economyService.depositCoinsToGoal(goalId, amount)
+  win?.webContents.send('wallet:changed')
+  return res
 })
+handle('economy:depositVault', (goalId: number, amount: number) => economyService.depositVaultCashToGoal(goalId, amount))
+handle('economy:claimGoal', (goalId: number) => economyService.claimGoal(goalId))
+handle('economy:creditVault', (amount: number, note: string) => economyService.creditVault('manual_deposit', amount, note))
+handle('economy:setExchangeRate', (rate: number) => {
+  economyService.setExchangeRate(rate)
+  return economyService.getExchangeRate()
+})
+handle('economy:openChest', (level: number) => {
+  const res = economyService.openEnhancedChest(level)
+  win?.webContents.send('wallet:changed')
+  return res
+})
+
 
 handle('connections:state', () => connections.state())
 handle('connections:connect', async (kind: 'waky' | 'finance') => {

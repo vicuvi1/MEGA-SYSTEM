@@ -10,6 +10,8 @@ export type BotCommandType =
   | 'bed'
   | 'crush'
   | 'help'
+  | 'vault'
+  | 'goals'
   | 'unknown'
 
 export interface ParsedCommand {
@@ -65,6 +67,14 @@ export function parseTelegramText(text: string): ParsedCommand {
   // 2. Standard commands
   if (cmd === 'start' || cmd === 'help' || cmd === 'commands') {
     return { type: 'help', args, raw: trimmed }
+  }
+
+    if (cmd === 'vault' || cmd === 'economy') {
+    return { type: 'vault', args, raw: trimmed }
+  }
+
+  if (cmd === 'goals' || cmd === 'wishlist') {
+    return { type: 'goals', args, raw: trimmed }
   }
 
   if (cmd === 'today' || cmd === 'status' || cmd === 'stat') {
@@ -161,7 +171,9 @@ export function formatHelpMessage(): string {
     ``,
     `📊 <b>Dashboard & Status</b>`,
     `• <code>/today</code> — View balance, level, streak & rituals`,
-    `• <code>/tasks</code> — View open tasks for today`,
+    `• <code>/vault</code> — Real-money Reward Vault surplus, coin valuation & multiplier
+• <code>/goals</code> — Wishlist Mega Goals & savings progress
+• <code>/tasks</code> — View open tasks for today`,
     `• <code>/done &lt;num&gt;</code> — Complete a task (e.g. <code>/done 1</code>)`,
     ``,
     `🛡️ <b>Discipline & Standard</b>`,

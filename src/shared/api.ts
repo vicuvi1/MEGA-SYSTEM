@@ -1,3 +1,9 @@
+import type {
+  ChestLootDrop,
+  MultiplierInfo,
+  WishlistCategory,
+  WishlistGoal
+} from '@core/unifiedEconomy'
 import type { LedgerEntry } from '@core/ledger'
 import type { LevelInfo } from '@core/levels'
 import type { Rule } from '@core/rules'
@@ -22,6 +28,43 @@ export interface NativeMoneySummary {
   recentExpenses: Expense[]
 }
 
+
+export type { ChestLootDrop, MultiplierInfo, WishlistCategory, WishlistGoal }
+
+export interface WishlistGoalInput {
+  id?: number
+  title: string
+  targetCoins: number
+  targetRealCost: number
+  category?: WishlistCategory
+  pinned?: boolean
+  note?: string
+}
+
+export interface VaultLedgerEntry {
+  id: number
+  ts: string
+  day: string
+  kind: 'surplus_credit' | 'manual_deposit' | 'goal_allocation' | 'reward_payout' | 'chest_bonus'
+  amount: number
+  ref: string | null
+  note: string
+}
+
+export interface EconomySummary {
+  coinsBalance: number
+  coinsRealValue: number
+  exchangeRate: number
+  vaultBalance: number
+  currency: string
+  monthlyBudget: number
+  monthSpent: number
+  multiplier: MultiplierInfo
+  pinnedGoal: WishlistGoal | null
+  goals: WishlistGoal[]
+  recentVaultEntries: VaultLedgerEntry[]
+}
+
 export interface ShopState {
   rewards: Reward[]
   balance: number
@@ -33,6 +76,7 @@ export interface ShopState {
   /** Levels whose chest is waiting to be opened. */
   chests: number[]
   recent: { title: string; realCost: number; day: string; undone: boolean }[]
+  economy?: EconomySummary
 }
 
 export type RewardInput = Omit<Reward, 'id' | 'archived'> & { id?: number }
@@ -363,6 +407,19 @@ export interface LifeApi {
   data: {
     exportJson(): Promise<string>
     exportCsv(kind: 'workouts' | 'expenses'): Promise<string>
+  }
+    economy: {
+    summary(): Promise<EconomySummary>
+    goals(): Promise<WishlistGoal[]>
+    saveGoal(goal: WishlistGoalInput): Promise<WishlistGoal>
+    deleteGoal(id: number): Promise<void>
+    pinGoal(id: number): Promise<void>
+    depositCoins(goalId: number, amount: number): Promise<{ goal: WishlistGoal; balance: number }>
+    depositVault(goalId: number, amount: number): Promise<{ goal: WishlistGoal; vaultBalance: number }>
+    claimGoal(goalId: number): Promise<WishlistGoal>
+    creditVault(amount: number, note: string): Promise<number>
+    setExchangeRate(rate: number): Promise<number>
+    openChest(level: number): Promise<{ drop: ChestLootDrop; coins: number; balance: number; chests: number[] }>
   }
   bots: {
     config(): Promise<BotBridgeConfig>

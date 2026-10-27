@@ -189,6 +189,43 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   CREATE INDEX expenses_day ON expenses(day);
+  `,
+  /* 007 unified rewarding & financial economy: wishlist mega goals, reward vault surplus ledger, chest loot drops */ `
+  CREATE TABLE wishlist_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    target_coins INTEGER NOT NULL,
+    target_real_cost INTEGER NOT NULL,
+    allocated_coins INTEGER NOT NULL DEFAULT 0,
+    allocated_real_cost INTEGER NOT NULL DEFAULT 0,
+    category TEXT NOT NULL DEFAULT 'gear',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    completed INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX wishlist_pinned ON wishlist_goals(pinned, completed);
+
+  CREATE TABLE reward_vault_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    day TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('surplus_credit', 'manual_deposit', 'goal_allocation', 'reward_payout', 'chest_bonus')),
+    amount INTEGER NOT NULL,
+    ref TEXT,
+    note TEXT NOT NULL
+  );
+  CREATE INDEX vault_day ON reward_vault_ledger(day);
+
+  CREATE TABLE chest_loot_drops (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    level INTEGER NOT NULL,
+    loot_type TEXT NOT NULL,
+    loot_value INTEGER NOT NULL,
+    loot_label TEXT NOT NULL,
+    ts TEXT NOT NULL
+  );
   `
 ]
 

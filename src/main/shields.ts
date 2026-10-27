@@ -36,6 +36,13 @@ export class ShieldService {
     }
   }
 
+  awardFreeShield(reason = 'Bonus'): number {
+    const current = this.count()
+    const next = current + 1
+    setSetting(this.db, 'streak_shields', String(next))
+    return next
+  }
+
   consume(): boolean {
     const current = this.count()
     if (current <= 0) return false
