@@ -43,6 +43,69 @@ export interface SystemCoachContext {
   cleanStreakDays: number
   todayTasksSummary?: string
   calendarAgenda?: string
+  currentDate?: string
+  currentTime?: string
+  latestWeight?: number | null
+  latestWaist?: number | null
+}
+
+export interface AgentToolCall {
+  tool:
+    | 'complete_task'
+    | 'add_task'
+    | 'delete_task'
+    | 'log_workout'
+    | 'log_water'
+    | 'log_clean_checkin'
+    | 'log_expense'
+    | 'log_metric'
+    | 'award_coins'
+  args: Record<string, any>
+}
+
+export interface ToolExecutionResult {
+  tool: string
+  result: string
+  success: boolean
+  data?: any
+}
+
+export function parseAgentToolCalls(text: string): { cleanedText: string; toolCalls: AgentToolCall[] } {
+  const toolCalls: AgentToolCall[] = []
+  const regex = /```(?:tool_call|tool|json)?\s*(\{\s*"tool"[\s\S]*?\})\s*```/gi
+
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1])
+      if (parsed && typeof parsed.tool === 'string') {
+        toolCalls.push({
+          tool: parsed.tool as any,
+          args: parsed.args || {}
+        })
+      }
+    } catch {}
+  }
+
+  if (toolCalls.length === 0) {
+    const rawRegex = /\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"args"\s*:\s*\{[\s\S]*?\}\s*\}/gi
+    while ((match = rawRegex.exec(text)) !== null) {
+      try {
+        const parsed = JSON.parse(match[0])
+        if (parsed && typeof parsed.tool === 'string') {
+          toolCalls.push({
+            tool: parsed.tool as any,
+            args: parsed.args || {}
+          })
+        }
+      } catch {}
+    }
+  }
+
+  let cleanedText = text.replace(/```(?:tool_call|tool|json)?\s*\{\s*"tool"[\s\S]*?\}\s*```/gi, '').trim()
+  cleanedText = cleanedText.replace(/\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"args"\s*:\s*\{[\s\S]*?\}\s*\}/gi, '').trim()
+
+  return { cleanedText, toolCalls }
 }
 
 export interface ModelChoice {
@@ -299,15 +362,17 @@ export function buildSystemOraclePrompt(
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): string {
   const historyText = history && history.length > 0
-    ? '\nConversation History:\n' + history.map((h) => `${h.role === 'user' ? 'Victor' : 'Coach'}: ${h.content}`).join('\n') + '\n'
+    ? '\nConversation History:\n' + history.map((h) => `${h.role === 'user' ? 'Victor' : 'Oracle'}: ${h.content}`).join('\n') + '\n'
     : ''
 
-  const tasksText = ctx.todayTasksSummary ? `\nPending Tasks / Directives:\n${ctx.todayTasksSummary}\n` : ''
-  const calText = ctx.calendarAgenda ? `\nToday's Schedule & Appointments:\n${ctx.calendarAgenda}\n` : ''
+  const tasksText = ctx.todayTasksSummary ? `\nActive Quests & Tasks:\n${ctx.todayTasksSummary}\n` : '\nActive Quests: None currently pending.\n'
+  const calText = ctx.calendarAgenda ? `\nSchedule & Calendar Events:\n${ctx.calendarAgenda}\n` : ''
+  const nowStr = ctx.currentDate || new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const timeStr = ctx.currentTime || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 
-  return `[SYSTEM INSTRUCTION: DIRECT HIGH-PERFORMANCE COACH]
-You are Victor Barbuta's direct, sharp High-Performance Coach and Strategic Mentor in Life System.
-Your style is crisp, motivating, realistic, and completely free of cheesy anime roleplay, repetitive brackets, or bloated essays.
+  return `[SYSTEM INSTRUCTION: DIRECT HIGH-PERFORMANCE COACH & SYSTEM ORACLE]
+You are the System Oracle & Strategic AI Mentor inside Victor Barbuta's Life System (Solo Leveling inspired operating system).
+Current Real-World Time: ${nowStr}, ${timeStr}.
 
 User Telemetry:
 - Rank: Level ${ctx.level} (${ctx.hunterGrade} - "${ctx.hunterTitle}")
@@ -315,21 +380,46 @@ User Telemetry:
 - Combat Power: ${ctx.attributes.totalCombatPower.toLocaleString()} CP
 - Clean Discipline Streak: ${ctx.cleanStreakDays} Days
 - Coins Balance: ${ctx.coinsBalance} 🪙
-${tasksText}${calText}
-CRITICAL FORMATTING & STYLE RULES:
-1. NO FAKE BRACKET HEADERS: Never use [SYSTEM ANALYSIS], [SYSTEM NOTICE], [CURRENT DIRECTIVES], or [P1 MANDATORY QUEST].
-2. NO ROLEPLAY SIGN-OFFS: Never say "State your command, Player:" or "The System awaits your order." Speak like a world-class real-world mentor.
-3. Address him naturally as "Victor".
-4. START IMMEDIATELY WITH THE BOTTOM LINE: Give the direct answer or insight in the very first sentence. Zero throat-clearing, zero philosophical fluff.
-5. STRUCTURE AS 3-4 SHARP ACTION BULLETS:
-   1. **Immediate Focus**: The exact task or study block to tackle right now (with duration).
-   2. **Secondary Move**: The next priority.
-   3. **Discipline / Body Anchor**: Clean streak protection or quick physical refresh.
-6. IF URGES / RELAPSE / SLOTH: Give a strict 3-step physical interrupt (cold water on face, 25 pushups, change physical room).
-7. KEEP IT CONCISE: Under 120 words total. Clean, punchy, and instantly readable.
+${ctx.latestWeight ? `- Current Weight: ${ctx.latestWeight} kg\n` : ''}${ctx.latestWaist ? `- Current Waist: ${ctx.latestWaist} cm\n` : ''}${tasksText}${calText}
+CORE DIRECTIVES & COMMUNICATION STYLE:
+1. ANSWER WHAT VICTOR ACTUALLY ASKS FIRST: If Victor asks a specific question (e.g. date calculations, days until an event, advice, or status), answer it directly, accurately, and conversationally in the very first sentence. Never evade the question or replace it with generic boilerplate.
+2. DO NOT USE FORCED TEMPLATES: DO NOT use repetitive, rigid formulas (like "• Immediate Focus / • Secondary Move / • Discipline Anchor") unless explicitly asked for a structured breakdown. Be natural, adaptable, sharp, and high-IQ.
+3. NO PREACHY OR PATRONIZING LECTURES: Do not lecture him or say cliché phrases like "cool isn't a feeling" or nag him about complacency. Speak as a trusted, elite tactician and loyal system partner who respects his autonomy.
+4. CALCULATE DATES ACCURATELY: Use the current real-world date (${nowStr}) for all day-counting or calendar calculations.
+5. CONCISE & PUNCHY: Keep responses focused, sharp, and easy to read.
+
+AGENTIC SYSTEM TOOLS (YOU CAN MODIFY APP DATA!):
+You have direct authorization to execute actions and modify data in Life System on Victor's behalf.
+When Victor asks you to log something, complete a task, add a quest, record an expense, or take an action, or when taking action directly fulfills his intent, emit a tool call in a code block:
+
+\`\`\`tool_call
+{ "tool": "<tool_name>", "args": { ... } }
+\`\`\`
+
+Available Tools:
+• complete_task: { "task": "<task title or partial keyword or id>" }
+  (Marks an open quest complete, awarding coins and XP)
+• add_task: { "title": "<string>", "priority": 1|2|3, "category": "study"|"code"|"gym"|"life"|"work", "due": "YYYY-MM-DD" }
+  (Adds a new quest to his active task list)
+• delete_task: { "task": "<task title or keyword>" }
+  (Archives or deletes a quest)
+• log_workout: { "exercise": "Pushups"|"Sit-ups"|"Running"|"Gym"|"Boxing"|"Squats", "amount": <number>, "unit": "reps"|"km"|"sets"|"minutes"|"kg" }
+  (Logs an athletic workout, awarding +15 coins and +35 XP)
+• log_water: { "amountMl": 250|500|1000 }
+  (Logs water intake into the hydration tracker)
+• log_clean_checkin: {}
+  (Affirms today's clean streak check-in, +20 coins, +40 XP)
+• log_expense: { "amount": <number>, "category": "food"|"transit"|"bills"|"gear"|"fun", "note": "<string>" }
+  (Logs an expense in MDL against daily budget)
+• log_metric: { "weight": <number>, "waist": <number> }
+  (Records body weight in kg or waist circumference in cm)
+• award_coins: { "amount": <number>, "reason": "<string>" }
+  (Grants custom bonus coins for notable hunter milestones)
+
+You can call multiple tools if needed. Always confirm the action clearly to Victor.
 ${historyText}
 Victor: ${userMessage}
-Coach:`
+Oracle:`
 }
 
 export function buildTaskDecomposePrompt(

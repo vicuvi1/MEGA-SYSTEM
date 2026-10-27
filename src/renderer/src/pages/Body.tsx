@@ -21,6 +21,102 @@ export function Body({
   const [workoutOpen, setWorkoutOpen] = useState(false)
   const [metricOpen, setMetricOpen] = useState(false)
   const [exerciseOpen, setExerciseOpen] = useState(false)
+  const [shortOnTime, setShortOnTime] = useState(false)
+
+  const todayKey = new Date().toISOString().split('T')[0]
+  const [waterMl, setWaterMl] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('ls.hydration')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed.date === todayKey) return parsed.ml || 0
+      }
+    } catch {}
+    return 0
+  })
+
+  const saveWater = (newMl: number) => {
+    const val = Math.max(0, newMl)
+    setWaterMl(val)
+    try {
+      localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: val }))
+    } catch {}
+  }
+
+  // Calculate today's completed reps per exercise
+  const todayWorkouts = state.recentWorkouts.filter((w) => w.day === todayKey)
+  const doneMap: Record<string, number> = {}
+  for (const w of todayWorkouts) {
+    for (const it of w.items) {
+      const key = (it.exerciseId || it.name || '').toLowerCase()
+      doneMap[key] = (doneMap[key] || 0) + it.amount
+      const cleanKey = key.replace(/[^a-z0-9]/g, '')
+      if (cleanKey) doneMap[cleanKey] = (doneMap[cleanKey] || 0) + it.amount
+    }
+  }
+
+  const handleQuickLog = async (ex: Exercise, amount: number) => {
+    const next = await act(
+      () =>
+        life.body.logWorkout({
+          title: `${ex.name} (+${amount} ${ex.unit})`,
+          items: [{ exerciseId: ex.id, name: ex.name, amount, unit: ex.unit as any }],
+          note: 'Quick logged from Sporty Routine'
+        }),
+      `Logged ${amount} ${ex.unit} ${ex.name}`
+    )
+    if (next) {
+      soundCoin()
+      onState(next.state)
+      onWallet()
+    }
+  }
+
+  const handleCompleteAllRoutine = async () => {
+    const activeExercises = state.exercises.length > 0 ? state.exercises : [
+      { id: 'situps', name: 'Sit-ups', target: 60, unit: 'reps', category: 'calisthenics', sort: 0 },
+      { id: 'pushups', name: 'Push-ups', target: 123, unit: 'reps', category: 'calisthenics', sort: 1 },
+      { id: 'press', name: 'press', target: 50, unit: '1', category: 'calisthenics', sort: 2 }
+    ]
+
+    const items: WorkoutExerciseItem[] = activeExercises.map((ex) => {
+      const target = shortOnTime ? Math.max(1, Math.round(ex.target * 0.5)) : ex.target
+      const done = doneMap[ex.id] || doneMap[ex.name.toLowerCase().replace(/[^a-z0-9]/g, '')] || 0
+      const remaining = Math.max(0, target - done)
+      return {
+        exerciseId: ex.id,
+        name: ex.name,
+        amount: remaining > 0 ? remaining : target,
+        unit: ex.unit as any
+      }
+    })
+
+    const next = await act(
+      () =>
+        life.body.logWorkout({
+          title: `Sporty Routine Completed (${items.map((i) => `${i.amount} ${i.name}`).join(', ')})`,
+          items,
+          note: '⚡ Completed full daily routine'
+        }),
+      'All daily routine exercises completed!'
+    )
+    if (next) {
+      soundCoin()
+      onState(next.state)
+      onWallet()
+    }
+  }
+
+  const handleUndoLast = async () => {
+    if (state.recentWorkouts.length === 0) return
+    const last = state.recentWorkouts[0]
+    if (!confirm(`Undo last workout "${last.title}" and refund coins?`)) return
+    const next = await act(() => life.body.deleteWorkout(last.id), `Reverted "${last.title}"`)
+    if (next) {
+      onState(next)
+      onWallet()
+    }
+  }
 
   const diffWeight =
     state.latestWeight != null && state.previousWeight != null
@@ -117,7 +213,136 @@ export function Body({
           <Icon name="tasks" size={15} />
           Add exercise
         </button>
+        {state.recentWorkouts.length > 0 && (
+          <button
+            className="btn"
+            style={{ background: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.35)', color: '#fca5a5' }}
+            onClick={handleUndoLast}
+            title={`Undo last workout: "${state.recentWorkouts[0]?.title}"`}
+          >
+            <Icon name="undo" size={15} />
+            Undo last workout
+          </button>
+        )}
       </div>
+
+      {/* SPORTY ROUTINE & HYDRATION DASHBOARD */}
+      <section className="sporty-routine-panel">
+        <div className="sporty-routine-header">
+          <div className="sporty-routine-title">
+            <Icon name="bolt" size={18} />
+            Today's Workout Routine (Sporty Bot Mode)
+            <span style={{ fontSize: '11px', color: '#ff6b8b', background: 'rgba(255, 107, 139, 0.15)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+              BEAST MODE
+            </span>
+          </div>
+
+          <div className="sporty-routine-controls">
+            <button
+              className={`chip-btn ${shortOnTime ? 'active' : ''}`}
+              onClick={() => setShortOnTime(!shortOnTime)}
+              style={shortOnTime ? { background: '#f97316', borderColor: '#f97316', color: '#fff' } : {}}
+            >
+              ⏱️ Short on time (50%)
+            </button>
+            <button
+              className="btn"
+              style={{ background: 'linear-gradient(135deg, #f9d423, #ff4b1f)', color: '#050811', fontWeight: 800, padding: '7px 14px', fontSize: '12px' }}
+              onClick={handleCompleteAllRoutine}
+            >
+              ⚡ Complete all (+15 🪙 / +35 XP)
+            </button>
+            {state.recentWorkouts.length > 0 && (
+              <button
+                className="btn small"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', fontSize: '11px' }}
+                onClick={handleUndoLast}
+                title="Undo last recorded set"
+              >
+                <Icon name="undo" size={12} />
+                Undo
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="sporty-routine-grid">
+          {state.exercises.slice(0, 3).map((ex) => {
+            const target = shortOnTime ? Math.max(1, Math.round(ex.target * 0.5)) : ex.target
+            const done = doneMap[ex.id] || doneMap[ex.name.toLowerCase().replace(/[^a-z0-9]/g, '')] || 0
+            const pct = Math.min(100, Math.round((done / target) * 100))
+            const isDone = done >= target
+
+            return (
+              <div key={ex.id} className={`sporty-routine-item ${isDone ? 'done' : ''}`}>
+                <div className="sporty-item-top">
+                  <span className="sporty-item-name">{ex.name}</span>
+                  <span className="sporty-item-progress-text">
+                    {done} / {target} {ex.unit}{shortOnTime ? ' (50%)' : ''} {isDone ? '✓' : `(${pct}%)`}
+                  </span>
+                </div>
+
+                <div className="sporty-item-bar-bg">
+                  <div
+                    className={`sporty-item-bar-fill ${isDone ? 'done' : ''}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+
+                <div className="sporty-item-buttons">
+                  <button className="btn-sporty-rep" onClick={() => handleQuickLog(ex, 10)}>+10</button>
+                  <button className="btn-sporty-rep" onClick={() => handleQuickLog(ex, 25)}>+25</button>
+                  <button className="btn-sporty-rep done-btn" onClick={() => handleQuickLog(ex, Math.max(1, target - done))}>
+                    ⚡ Done ({target})
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* DAILY HYDRATION TRACKER */}
+      <section className="sporty-hydration-panel">
+        <div className="hydration-top">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '18px' }}>💧</span>
+            <span className="hydration-amount">{waterMl.toLocaleString()} / 2,700 ml</span>
+          </div>
+          <span className="hydration-glasses">
+            {(waterMl / 250).toFixed(1)} of 11 glasses ({Math.min(100, Math.round((waterMl / 2700) * 100))}%)
+          </span>
+        </div>
+
+        <div className="hydration-bar-bg">
+          <div
+            className="hydration-bar-fill"
+            style={{ width: `${Math.min(100, Math.round((waterMl / 2700) * 100))}%` }}
+          />
+        </div>
+
+        <div className="hydration-buttons">
+          <button className="btn-hydration" onClick={() => saveWater(waterMl + 250)}>
+            💧 +250 ml (1 glass)
+          </button>
+          <button className="btn-hydration" onClick={() => saveWater(waterMl + 500)}>
+            💧 +500 ml (bottle)
+          </button>
+          <button className="btn-hydration" onClick={() => saveWater(waterMl + 1000)}>
+            💧 +1,000 ml
+          </button>
+          <button className="btn-hydration" onClick={() => saveWater(waterMl - 250)} style={{ opacity: 0.8 }}>
+            ↩️ -250 ml (Undo)
+          </button>
+          <button
+            className="btn-hydration"
+            onClick={() => { if (confirm('Reset today\'s water intake to 0?')) saveWater(0); }}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748b', fontSize: '11px' }}
+          >
+            Reset
+          </button>
+        </div>
+      </section>
 
       <div className="cols">
         <section className="panel">
@@ -142,11 +367,22 @@ export function Body({
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <small style={{ color: 'var(--muted)' }}>{w.day}</small>
                       <button
-                        className="icon-btn"
-                        title="Delete workout"
+                        className="btn small"
+                        title="Undo / delete this workout record"
                         onClick={() => handleDelete(w.id)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          borderColor: 'rgba(239, 68, 68, 0.3)',
+                          color: '#fca5a5',
+                          fontSize: '11px',
+                          padding: '3px 8px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
                       >
-                        <Icon name="undo" size={13} />
+                        <Icon name="undo" size={12} />
+                        Undo
                       </button>
                     </div>
                   </div>

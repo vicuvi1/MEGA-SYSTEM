@@ -18,6 +18,7 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   modelUsed?: string
+  toolExecutions?: Array<{ tool: string; result: string; success: boolean; data?: any }>
   timestamp: string
 }
 
@@ -101,10 +102,18 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
         role: 'assistant',
         content: res.reply,
         modelUsed: res.modelUsed,
+        toolExecutions: res.toolExecutions,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
 
       setMessages((prev) => [...prev, assistantMsg])
+
+      if (res.toolExecutions && res.toolExecutions.length > 0) {
+        soundSystemOracle()
+        const count = res.toolExecutions.length
+        toast(`⚡ System Oracle executed ${count} action${count > 1 ? 's' : ''}!`, 'good')
+        window.dispatchEvent(new CustomEvent('life:refresh'))
+      }
     } catch (err: any) {
       toast(err?.message || 'System Oracle unreachable. Check API keys in Settings.', 'bad')
       const errorMsg: ChatMessage = {
@@ -124,6 +133,28 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+    }
+  }
+
+
+  async function handleUndoTool(exec: { tool: string; result: string; success: boolean; data?: any }) {
+    try {
+      if (exec.tool === 'complete_task' && exec.data?.taskId) {
+        await life.tasks.uncomplete(exec.data.taskId)
+        toast('↩️ Task uncompleted and returned to queue!', 'good')
+      } else if (exec.tool === 'log_workout' && exec.data?.workoutId) {
+        await life.body.deleteWorkout(exec.data.workoutId)
+        toast('↩️ Workout undone & coins refunded!', 'good')
+      } else if (exec.data?.ledgerId) {
+        await life.wallet.undo(exec.data.ledgerId, 'Undone from Oracle chat')
+        toast('↩️ Action undone!', 'good')
+      } else {
+        toast('Action reverted!', 'good')
+      }
+      soundSystemOracle()
+      window.dispatchEvent(new CustomEvent('life:refresh'))
+    } catch (err: any) {
+      toast(err?.message || 'Undo failed', 'bad')
     }
   }
 
@@ -217,6 +248,24 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
               </button>
               <button
                 className="system-quick-btn"
+                onClick={() => handleSend('Check off task "ss" as completed.')}
+              >
+                ⚔️ Check off task "ss"
+              </button>
+              <button
+                className="system-quick-btn"
+                onClick={() => handleSend('Log 25 pushups for me.')}
+              >
+                🏋️ Log 25 Pushups
+              </button>
+              <button
+                className="system-quick-btn"
+                onClick={() => handleSend('Log 500 ml water for me.')}
+              >
+                💧 Log 500ml Water
+              </button>
+              <button
+                className="system-quick-btn"
                 onClick={() => handleSend('Audit my open tasks and priorities. Tell me what order I should tackle them.')}
               >
                 ⚔️ Audit Task Queue
@@ -234,6 +283,27 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
                   </div>
                   <div className="system-msg-bubble">
                     <RenderMarkdown text={m.content} />
+                    {m.toolExecutions && m.toolExecutions.length > 0 && (
+                      <div className="oracle-tool-pills">
+                        {m.toolExecutions.map((t, idx) => (
+                          <div key={idx} className={`oracle-tool-pill ${t.success ? 'success' : 'failed'}`}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span className="tool-icon">{t.success ? '⚡' : '⚠️'}</span>
+                              <span className="tool-text">{t.result}</span>
+                            </div>
+                            {t.success && t.data && (
+                              <button
+                                className="oracle-tool-undo-btn"
+                                onClick={() => handleUndoTool(t)}
+                                title="Undo this action"
+                              >
+                                ↩️ Undo
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

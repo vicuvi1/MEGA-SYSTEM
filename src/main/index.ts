@@ -120,7 +120,22 @@ function open(): void {
     calendarService.sync().catch(() => {})
   }
   telegramHub.setCalendar(calendarService)
-  aiService = new AIService(join(dataDir, 'ai_config.bin'), wallet, discipline, moneyService, sleepService, undefined, calendarService, tasks)
+  aiService = new AIService(
+    join(dataDir, 'ai_config.bin'),
+    wallet,
+    discipline,
+    moneyService,
+    sleepService,
+    undefined,
+    calendarService,
+    tasks,
+    body,
+    () => {
+      win?.webContents.send('wallet:changed')
+      win?.webContents.send('tasks:changed')
+      win?.webContents.send('body:changed')
+    }
+  )
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.
   candidates.man.unshift(embeddedManLevelDb())

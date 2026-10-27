@@ -8,6 +8,7 @@ import {
   buildSystemOraclePrompt,
   buildTaskDecomposePrompt,
   parseTaskDecomposition,
+  parseAgentToolCalls,
   type AIConfig,
   type AIRewardContext,
   type AIPerformanceContext,
@@ -213,6 +214,35 @@ describe('AI Core Domain Engine', () => {
       expect(res.subtasks.length).toBeGreaterThanOrEqual(3)
       expect(res.strategyTip).toBeTruthy()
       expect(res.modelUsed).toBe('DeepSeek V3')
+    })
+    it('parses agent tool calls and cleans message text', () => {
+      const modelOutput = `I have checked off task "ss" and logged 25 pushups for you, Victor.
+
+\`\`\`tool_call
+{
+  "tool": "complete_task",
+  "args": { "task": "ss" }
+}
+\`\`\`
+
+\`\`\`tool_call
+{
+  "tool": "log_workout",
+  "args": { "exercise": "Pushups", "amount": 25, "unit": "reps" }
+}
+\`\`\`
+
+Great work keeping up the momentum!`
+
+      const { cleanedText, toolCalls } = parseAgentToolCalls(modelOutput)
+      expect(toolCalls).toHaveLength(2)
+      expect(toolCalls[0].tool).toBe('complete_task')
+      expect(toolCalls[0].args.task).toBe('ss')
+      expect(toolCalls[1].tool).toBe('log_workout')
+      expect(toolCalls[1].args.amount).toBe(25)
+      expect(cleanedText).toContain('I have checked off task "ss"')
+      expect(cleanedText).toContain('Great work keeping up the momentum!')
+      expect(cleanedText).not.toContain('\`\`\`tool_call')
     })
   })
 })

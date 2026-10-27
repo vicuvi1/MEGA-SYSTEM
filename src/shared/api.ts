@@ -492,7 +492,14 @@ export interface LifeApi {
     test(provider?: 'gemini' | 'openrouter'): Promise<{ ok: boolean; message: string; model: string }>
     generateRewards(userPrompt?: string): Promise<{ rewards: GeneratedReward[]; modelUsed: string }>
     performanceReport(): Promise<AIPerformanceReport>
-    askCoach(message: string, history?: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<{ reply: string; modelUsed: string }>
+    askCoach(
+      message: string,
+      history?: Array<{ role: 'user' | 'assistant'; content: string }>
+    ): Promise<{
+      reply: string
+      modelUsed: string
+      toolExecutions?: Array<{ tool: string; result: string; success: boolean }>
+    }>
     decomposeTask(title: string, notes?: string, category?: string): Promise<TaskDecompositionResult>
   }
   calendar: {

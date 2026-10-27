@@ -50,7 +50,21 @@ export class Body {
   constructor(private db: DB, private wallet: Wallet) {}
 
   exercises(): Exercise[] {
-    const rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
+    let rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
+    if (rows.length === 0) {
+      for (const ex of DEFAULT_EXERCISES) {
+        this.saveExercise(ex)
+      }
+      rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
+    } else {
+      const existingIds = new Set(rows.map((r) => r.id))
+      for (const ex of DEFAULT_EXERCISES.slice(0, 3)) {
+        if (!existingIds.has(ex.id)) {
+          this.saveExercise(ex)
+        }
+      }
+      rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
+    }
     return rows.map((r) => ({
       id: r.id,
       name: r.name,

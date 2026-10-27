@@ -10,6 +10,9 @@ import {
   parsePerformanceResponse,
   parseRewardResponse,
   parseTaskDecomposition,
+  parseAgentToolCalls,
+  type AgentToolCall,
+  type ToolExecutionResult,
   selectModelForTask,
   type AIConfig,
   type AIPerformanceContext,
@@ -28,11 +31,14 @@ import type { MoneyService } from './money'
 import type { SleepService } from './sleep'
 import type { CalendarService } from './calendarService'
 import type { Tasks } from './planner'
+import type { Body } from './body'
 
 export class AIService {
   private file: string
   private calendar?: CalendarService
   private tasksService?: Tasks
+  private bodyService?: Body
+  private onDataChanged?: () => void
 
   constructor(
     filePath?: string,
@@ -42,10 +48,14 @@ export class AIService {
     private sleep?: SleepService,
     private customFetch: typeof fetch = fetch,
     calendar?: CalendarService,
-    tasksService?: Tasks
+    tasksService?: Tasks,
+    bodyService?: Body,
+    onDataChanged?: () => void
   ) {
     this.calendar = calendar
     this.tasksService = tasksService
+    this.bodyService = bodyService
+    this.onDataChanged = onDataChanged
     try {
       this.file = filePath ?? join(app.getPath('userData'), 'ai_config.bin')
     } catch {
@@ -59,6 +69,14 @@ export class AIService {
 
   setTasks(tasks: Tasks): void {
     this.tasksService = tasks
+  }
+
+  setBody(body: Body): void {
+    this.bodyService = body
+  }
+
+  setOnDataChanged(cb: () => void): void {
+    this.onDataChanged = cb
   }
 
   getConfig(): AIConfig {
@@ -318,15 +336,200 @@ export class AIService {
     return parsePerformanceResponse(text, `${provider.toUpperCase()} (${model})`)
   }
 
+
+  async executeToolCall(call: AgentToolCall): Promise<ToolExecutionResult> {
+    const { tool, args } = call
+    try {
+      switch (tool) {
+        case 'complete_task': {
+          if (!this.tasksService) return { tool, result: 'Tasks service not available', success: false }
+          const query = String(args.task || args.title || args.name || '').trim().toLowerCase()
+          const state = this.tasksService.state()
+          const matching = state.tasks.find((t) => !t.done && (
+            t.title.toLowerCase().includes(query) ||
+            String(t.id) === query ||
+            query.includes(t.title.toLowerCase())
+          ))
+          if (!matching) {
+            return { tool, result: `No open task found matching "${query}"`, success: false }
+          }
+          this.tasksService.complete(matching.id)
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Completed quest "${matching.title}" (+${matching.coins} 🪙 / +${matching.xp} XP)`,
+            success: true,
+            data: { taskId: matching.id, taskTitle: matching.title }
+          }
+        }
+
+        case 'add_task': {
+          if (!this.tasksService) return { tool, result: 'Tasks service not available', success: false }
+          const title = String(args.title || args.name || '').trim()
+          if (!title) return { tool, result: 'Task title is required', success: false }
+          const priority = (args.priority === 1 || args.priority === 2 || args.priority === 3) ? args.priority : 2
+          const category = String(args.category || 'life').toLowerCase()
+          const due = args.due ? String(args.due) : null
+          const coins = priority === 1 ? 15 : (priority === 2 ? 10 : 5)
+          const xp = priority === 1 ? 30 : (priority === 2 ? 20 : 10)
+          this.tasksService.save({
+            title,
+            priority,
+            category: this.tasksService.categories().some(c => c.id === category) ? category : (this.tasksService.categories()[0]?.id || 'life'),
+            coins,
+            xp,
+            due,
+            notes: null,
+            repeat: 'none',
+            weekdays: 127
+          })
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Created quest "${title}" [P${priority}] (+${coins} 🪙 reward)`,
+            success: true
+          }
+        }
+
+        case 'delete_task': {
+          if (!this.tasksService) return { tool, result: 'Tasks service not available', success: false }
+          const query = String(args.task || args.title || '').trim().toLowerCase()
+          const state = this.tasksService.state()
+          const matching = state.tasks.find((t) => t.title.toLowerCase().includes(query) || String(t.id) === query)
+          if (!matching) {
+            return { tool, result: `Task "${query}" not found to delete`, success: false }
+          }
+          this.tasksService.archive(matching.id)
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Removed quest "${matching.title}" from queue`,
+            success: true
+          }
+        }
+
+        case 'log_workout': {
+          if (!this.bodyService) return { tool, result: 'Body/Workout service not available', success: false }
+          const exercise = String(args.exercise || args.name || 'Workout').trim()
+          const amount = parseFloat(args.amount) || 20
+          const unit = String(args.unit || 'reps').toLowerCase()
+          const validUnit = ['reps', 'sets', 'kg', 'km', 'minutes'].includes(unit) ? unit : 'reps'
+          const workoutRes = this.bodyService.logWorkout({
+            title: `${exercise} (${amount} ${validUnit})`,
+            items: [{
+              exerciseId: exercise.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+              name: exercise,
+              amount,
+              unit: validUnit as any
+            }],
+            note: 'Logged by System Oracle Agent'
+          })
+          const latestId = this.bodyService.workouts(1)[0]?.id
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Logged ${amount} ${validUnit} of ${exercise} (+15 🪙 / +35 XP)`,
+            success: true,
+            data: { workoutId: latestId, ledgerId: workoutRes.workout.ledgerId }
+          }
+        }
+
+        case 'log_water': {
+          const ml = parseInt(args.amountMl || args.amount || 250, 10)
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Logged +${ml} ml of water into Daily Hydration Tracker`,
+            success: true
+          }
+        }
+
+        case 'log_clean_checkin': {
+          if (!this.discipline) return { tool, result: 'Discipline service not available', success: false }
+          this.discipline.checkIn()
+          const discState = this.discipline.state()
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Clean Day Affirmed! Current Streak: ${discState.current} days (+20 🪙 / +40 XP)`,
+            success: true
+          }
+        }
+
+        case 'log_expense': {
+          if (!this.money) return { tool, result: 'Money service not available', success: false }
+          const amount = parseFloat(args.amount) || 0
+          const category = String(args.category || 'food').toLowerCase()
+          const note = args.note ? String(args.note) : undefined
+          const expenseRes = this.money.addExpense(Math.round(amount * 100), category, note || 'Logged by System Oracle')
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Recorded ${amount} ${this.money.state().currency} expense for ${category}${note ? ` (${note})` : ''}`,
+            success: true,
+            data: { expenseId: expenseRes.expense.id }
+          }
+        }
+
+        case 'log_metric': {
+          if (!this.bodyService) return { tool, result: 'Body service not available', success: false }
+          const weight = args.weight ? parseFloat(args.weight) : undefined
+          const waist = args.waist ? parseFloat(args.waist) : undefined
+          this.bodyService.logMetric({ weight, waist, note: 'Logged by System Oracle' })
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Logged body composition: ${weight ? `${weight} kg ` : ''}${waist ? `${waist} cm` : ''} (+5 🪙)`,
+            success: true
+          }
+        }
+
+        case 'award_coins': {
+          if (!this.wallet) return { tool, result: 'Wallet service not available', success: false }
+          const amount = Math.min(100, Math.max(1, parseInt(args.amount, 10) || 10))
+          const reason = String(args.reason || 'Oracle Tactical Reward').trim()
+          const now = new Date()
+          const ledgerId = this.wallet.append({
+            ts: now.toISOString(),
+            day: this.wallet.today(now),
+            module: 'oracle',
+            kind: 'earn',
+            coins: amount,
+            xp: amount * 2,
+            ref: 'oracle:reward',
+            note: reason
+          })
+          this.onDataChanged?.()
+          return {
+            tool,
+            result: `✓ Awarded +${amount} 🪙 Coins: ${reason}`,
+            success: true,
+            data: { ledgerId }
+          }
+        }
+
+        default:
+          return { tool, result: `Unknown tool "${tool}"`, success: false }
+      }
+    } catch (err: any) {
+      return { tool, result: `Tool failed: ${err.message}`, success: false }
+    }
+  }
+
   async askCoach(
     userMessage: string,
     history?: Array<{ role: 'user' | 'assistant'; content: string }>
-  ): Promise<{ reply: string; modelUsed: string }> {
+  ): Promise<{
+    reply: string
+    modelUsed: string
+    toolExecutions?: Array<{ tool: string; result: string; success: boolean }>
+  }> {
     const all = this.wallet?.entries() ?? []
     const lv = levelInfo(totalXp(all))
     const coinsBalance = balance(all)
     const disc = this.discipline?.state()
     const calendarAgenda = this.calendar?.getEventsForAi()
+    const bodyState = this.bodyService?.state()
 
     // Retrieve active tasks for tactical awareness
     let tasksSummary = ''
@@ -334,7 +537,7 @@ export class AIService {
       const activeTasks = this.tasksService?.state()?.tasks?.filter((t) => !t.done) ?? []
       if (activeTasks.length > 0) {
         tasksSummary = activeTasks
-          .slice(0, 6)
+          .slice(0, 8)
           .map((t, i) => `${i + 1}. [P${t.priority}] ${t.title} (${t.category}${t.due ? ` due ${t.due}` : ''})`)
           .join('\n')
       }
@@ -350,12 +553,35 @@ export class AIService {
       coinsBalance,
       cleanStreakDays: disc?.current ?? 0,
       todayTasksSummary: tasksSummary,
-      calendarAgenda
+      calendarAgenda,
+      currentDate: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      currentTime: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      latestWeight: bodyState?.latestWeight ?? null,
+      latestWaist: bodyState?.latestWaist ?? null
     }
 
     const systemPrompt = buildSystemOraclePrompt(coachCtx, userMessage, history)
     const { text, model, provider } = await this.executeTask('coach_chat', systemPrompt)
-    return { reply: text.trim(), modelUsed: `${provider.toUpperCase()} (${model})` }
+
+    const { cleanedText, toolCalls } = parseAgentToolCalls(text)
+    const toolExecutions: ToolExecutionResult[] = []
+
+    for (const call of toolCalls) {
+      const res = await this.executeToolCall(call)
+      toolExecutions.push(res)
+    }
+
+    let finalReply = cleanedText
+    if (toolExecutions.length > 0) {
+      const toolSummaries = toolExecutions.map((e) => e.result).join('\n')
+      finalReply = finalReply ? `${finalReply}\n\n${toolSummaries}` : toolSummaries
+    }
+
+    return {
+      reply: finalReply.trim(),
+      modelUsed: `${provider.toUpperCase()} (${model})`,
+      toolExecutions: toolExecutions.length > 0 ? toolExecutions : undefined
+    }
   }
 
   async decomposeTask(

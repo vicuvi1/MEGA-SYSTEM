@@ -76,11 +76,11 @@ export interface BodySummary {
 }
 
 export const DEFAULT_EXERCISES: Exercise[] = [
-  { id: 'pushups', name: 'Push-ups', unit: 'reps', target: 20, category: 'calisthenics', sort: 0 },
-  { id: 'pullups', name: 'Pull-ups', unit: 'reps', target: 8, category: 'calisthenics', sort: 1 },
-  { id: 'squats', name: 'Squats', unit: 'reps', target: 25, category: 'calisthenics', sort: 2 },
-  { id: 'dips', name: 'Dips', unit: 'reps', target: 12, category: 'calisthenics', sort: 3 },
-  { id: 'plank', name: 'Plank', unit: 'sec', target: 60, category: 'calisthenics', sort: 4 },
+  { id: 'situps', name: 'Sit-ups', unit: 'reps', target: 60, category: 'calisthenics', sort: 0 },
+  { id: 'pushups', name: 'Push-ups', unit: 'reps', target: 123, category: 'calisthenics', sort: 1 },
+  { id: 'press', name: 'press', unit: '1', target: 50, category: 'calisthenics', sort: 2 },
+  { id: 'pullups', name: 'Pull-ups', unit: 'reps', target: 12, category: 'calisthenics', sort: 3 },
+  { id: 'squats', name: 'Squats', unit: 'reps', target: 50, category: 'calisthenics', sort: 4 },
   { id: 'running', name: 'Running', unit: 'min', target: 20, category: 'cardio', sort: 5 }
 ]
 
