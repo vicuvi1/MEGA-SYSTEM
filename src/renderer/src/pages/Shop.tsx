@@ -29,6 +29,8 @@ import { Icon } from '../Icon'
 import { Coins, useAction, useToast } from '../ui'
 import { soundFanfare, soundSpend, soundTick } from '../sound'
 import { RenderMarkdown } from '../SystemOracleDrawer'
+import { ChestGachaModal } from '../ChestGachaModal'
+import { HunterSkillCards } from '../HunterSkillCards'
 
 interface Props {
   state: ShopState
@@ -51,7 +53,8 @@ export function Shop({ state, onState, onWallet }: Props) {
 
   // Economy state
   const [economy, setEconomy] = useState<EconomySummary | null>(state.economy ?? null)
-  const [activeTab, setActiveTab] = useState<'catalog' | 'bank' | 'consumables' | 'goals' | 'vault' | 'tuning'>('catalog')
+  const [activeTab, setActiveTab] = useState<'catalog' | 'bank' | 'consumables' | 'cards' | 'goals' | 'vault' | 'tuning'>('catalog')
+  const [gachaLevel, setGachaLevel] = useState<number | null>(null)
   const [bank, setBank] = useState<BankState | null>(null)
   const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([])
   const [stakeDraft, setStakeDraft] = useState('')
@@ -606,7 +609,7 @@ export function Shop({ state, onState, onWallet }: Props) {
                   className="chest"
                   whileHover={{ y: -3, scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => openChest(l)}
+                  onClick={() => setGachaLevel(l)}
                   title={`Open Level ${l} Mystery Chest (Coins, Shields, Vault Boosts & 2x Multipliers!)`}
                 >
                   <Icon name="gift" size={24} />
@@ -704,7 +707,13 @@ export function Shop({ state, onState, onWallet }: Props) {
             </button>
           )}
 
-          {activeTab === 'goals' && (
+          {activeTab === 'cards' && (
+        <section className="shop-skill-deck-tab">
+          <HunterSkillCards walletBalance={state.balance} />
+        </section>
+      )}
+
+      {activeTab === 'goals' && (
             <button
               className="btn small primary"
               onClick={() =>

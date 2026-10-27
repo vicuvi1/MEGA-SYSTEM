@@ -11,6 +11,7 @@ import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { soundSuccess } from '../sound'
 import { SoloSystemModal } from '../SoloSystemModal'
+import { DungeonRaidCards } from '../DungeonRaidCards'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -55,12 +56,13 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     <div className="today">
       <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />
 
-      {/* Sleek 4-Card Metric Strip: Today Coins/Goal, Waky Sleep, Finance Spend, MAN Discipline */}
-      <StatsStrip4
+      {/* Sleek 5-Card Metric Strip: Today Coins/Goal, Waky Sleep, Finance Spend, MAN Discipline, Sport Track */}
+      <StatsStrip5
         summary={summary}
         shop={shop}
         connections={connections}
         discipline={discipline}
+        body={body ?? null}
         pops={pops}
         onOpenApp={onOpenApp}
         onOpenShop={onOpenShop}
@@ -76,6 +78,9 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         onGo={onGo}
         onOpenApp={onOpenApp}
       />
+
+      {/* High-Stakes Dimensional Dungeon Raid Cards */}
+      <DungeonRaidCards balance={summary.balance} onAwardCoins={() => onChange()} />
 
       {/* Schedule & Tasks Immediately Visible Without Scrolling */}
       <div className="cols even">
@@ -179,12 +184,13 @@ function Greeting({ summary, shop, tasks, schedule }: { summary: Summary; shop: 
   )
 }
 
-/** Sleek 4-Card Metric Strip combining Today Coins/Goal, Waky Sleep, Finance Spend, MAN Discipline */
-function StatsStrip4({
+/** Sleek 5-Card Metric Strip combining Today Coins/Goal, Waky Sleep, Finance Spend, MAN Discipline, Sport Track */
+function StatsStrip5({
   summary,
   shop,
   connections,
   discipline,
+  body,
   pops,
   onOpenApp,
   onOpenShop
@@ -193,6 +199,7 @@ function StatsStrip4({
   shop: ShopState | null
   connections: ConnectionsState | null
   discipline: DisciplineState | null
+  body: BodyState | null
   pops: Pop[]
   onOpenApp: (p: PageId) => void
   onOpenShop: () => void
@@ -209,7 +216,7 @@ function StatsStrip4({
   const money = (bani: number) => (bani / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })
 
   return (
-    <section className="stats-strip-4" aria-label="Core Metrics">
+    <section className="stats-strip-5 stats-strip-4" aria-label="Core Metrics">
       {/* 1. Today's Harvest & Goal */}
       <div className="metric-strip-card hero-card clickable" onClick={onOpenShop} title="Coins earned today & main wishlist goal">
         <div className="metric-strip-head">
@@ -325,6 +332,29 @@ function StatsStrip4({
             : discipline?.setup
             ? (discipline.checkedInToday ? `${discipline.rank} · checked in` : `${discipline.rank} · check in due`)
             : 'Spartan Citadel'}
+        </div>
+      </div>
+
+      {/* 5. Hunter Athletics & Workout (Sport Track) */}
+      <div
+        className="metric-strip-card clickable"
+        style={{ ['--accent' as string]: '#00F2FE' }}
+        onClick={() => onOpenApp('body')}
+        title="Sport Track: Hunter Athletics & Progressive Overload (Click to open)"
+      >
+        <div className="metric-strip-head">
+          <span className="metric-strip-label">
+            <Icon name="bolt" size={13} /> Sport Track
+          </span>
+          <span className="metric-strip-chevron">›</span>
+        </div>
+        <div className="metric-strip-value" style={{ color: '#00F2FE' }}>
+          {body?.workoutDoneToday ? 'Workout Done' : `${body?.streak ?? 0}d Streak`}
+        </div>
+        <div className="metric-strip-sub">
+          {body?.workoutDoneToday
+            ? '+10 🪙 & +25 XP awarded'
+            : `${body?.workoutsThisWeek ?? 0} workouts this week · Ready to train`}
         </div>
       </div>
     </section>

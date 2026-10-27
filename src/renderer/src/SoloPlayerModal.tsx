@@ -1,9 +1,11 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Summary } from '@shared/api'
 import type { PageId } from './modules'
 import { soundSystemOracle, soundMechanicalClick } from './sound'
 import { Icon } from './Icon'
+import { RadarChart } from './RadarChart'
+import { HunterSkillCards } from './HunterSkillCards'
 
 export interface SoloPlayerModalProps {
   open: boolean
@@ -13,6 +15,7 @@ export interface SoloPlayerModalProps {
 }
 
 export function SoloPlayerModal({ open, onClose, summary, onGo }: SoloPlayerModalProps) {
+  const [modalTab, setModalTab] = useState<'status' | 'cards'>('status')
   useEffect(() => {
     if (open) {
       soundSystemOracle()
@@ -50,7 +53,7 @@ export function SoloPlayerModal({ open, onClose, summary, onGo }: SoloPlayerModa
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 10 }}
           transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-          style={{ maxWidth: '620px', width: '92%' }}
+          style={{ maxWidth: '720px', width: '94%' }}
         >
           {/* Cybernetic Corner Brackets & Scanlines */}
           <div className="solo-corner-bottom-left" />
@@ -85,6 +88,34 @@ export function SoloPlayerModal({ open, onClose, summary, onGo }: SoloPlayerModa
             Every habit executed, every workout pushed, and every study block conquered directly powers your Hunter Attributes and elevates your Combat Power.
           </p>
 
+          {/* Modal Tab Switcher */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button
+              className={`btn small ${modalTab === 'status' ? 'primary' : 'secondary'}`}
+              style={{ fontWeight: 800, padding: '7px 16px', borderRadius: '8px' }}
+              onClick={() => {
+                soundMechanicalClick()
+                setModalTab('status')
+              }}
+            >
+              ⚡ Status Window & Radar
+            </button>
+            <button
+              className={`btn small ${modalTab === 'cards' ? 'primary' : 'secondary'}`}
+              style={{ fontWeight: 800, padding: '7px 16px', borderRadius: '8px' }}
+              onClick={() => {
+                soundMechanicalClick()
+                setModalTab('cards')
+              }}
+            >
+              🃏 Tactical Skill Cards Loadout
+            </button>
+          </div>
+
+          {modalTab === 'cards' ? (
+            <HunterSkillCards walletBalance={summary.balance} />
+          ) : (
+            <>
           {/* Hunter Primary Profile Card */}
           <div
             style={{
@@ -211,38 +242,45 @@ export function SoloPlayerModal({ open, onClose, summary, onGo }: SoloPlayerModa
             </div>
           </div>
 
-          {/* 5 Core Attributes Grid */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>
-              Hunter Core Attributes
+          {/* Radar Chart & 5 Core Attributes */}
+          <div style={{ marginBottom: '16px', background: 'rgba(0, 0, 0, 0.45)', border: '1px solid rgba(0, 210, 255, 0.22)', borderRadius: '12px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#38bdf8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Hunter Combat Matrix & Core Attributes
+              </span>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>5-Point Resonance Chart</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
-              {[
-                { code: 'STR', val: attrs.str, name: 'Strength', color: '#ff6b8b', hint: 'Workouts' },
-                { code: 'AGI', val: attrs.agi, name: 'Agility', color: '#38bdf8', hint: 'Wake-ups' },
-                { code: 'VIT', val: attrs.vit, name: 'Vitality', color: '#4ade80', hint: 'Sleep' },
-                { code: 'INT', val: attrs.int, name: 'Intelligence', color: '#b892ff', hint: 'Focus' },
-                { code: 'SEN', val: attrs.sen, name: 'Perception', color: '#f5c84b', hint: 'Discipline' }
-              ].map((a) => (
-                <div
-                  key={a.code}
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '8px',
-                    padding: '8px',
-                    textAlign: 'center'
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 900, color: a.color }}>
-                    {a.code}
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
+              <RadarChart stats={attrs} size={185} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', flex: 1, minWidth: '260px' }}>
+                {[
+                  { code: 'STR', val: attrs.str, name: 'Strength', color: '#ff6b8b', hint: 'Workouts' },
+                  { code: 'AGI', val: attrs.agi, name: 'Agility', color: '#38bdf8', hint: 'Wake-ups' },
+                  { code: 'VIT', val: attrs.vit, name: 'Vitality', color: '#4ade80', hint: 'Sleep' },
+                  { code: 'INT', val: attrs.int, name: 'Intelligence', color: '#b892ff', hint: 'Focus' },
+                  { code: 'SEN', val: attrs.sen, name: 'Perception', color: '#f5c84b', hint: 'Discipline' }
+                ].map((a) => (
+                  <div
+                    key={a.code}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '8px',
+                      padding: '8px 4px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: 900, color: a.color }}>
+                      {a.code}
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#f8fafc', margin: '2px 0' }}>
+                      {a.val}
+                    </div>
+                    <div style={{ fontSize: '9px', color: '#64748b' }}>{a.hint}</div>
                   </div>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#f8fafc', margin: '2px 0' }}>
-                    {a.val}
-                  </div>
-                  <div style={{ fontSize: '9px', color: '#64748b' }}>{a.hint}</div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 
@@ -277,6 +315,8 @@ export function SoloPlayerModal({ open, onClose, summary, onGo }: SoloPlayerModa
                 Invest Points
               </button>
             </div>
+          )}
+          </>
           )}
 
           {/* Action Buttons */}

@@ -21,7 +21,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'schedule', label: 'Schedule', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Day timeline with study blocks that pay out or cost coins' },
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },
   { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 0, blurb: 'Private streak, urge crusher and honest resets' },
-  { id: 'body', label: 'Body', icon: 'bolt', color: '#FF6B8B', phase: 0, blurb: 'Workouts and body logs' },
+  { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Hunter athletics, workout sessions & body metrics' },
   { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Daily spending from Finance Helper, turned into coins' },
   { id: 'shop', label: 'Shop', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend coins on real rewards, inside a real-money budget' },
   { id: 'journey', label: 'Journey', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'Your weekly review and ranks' },

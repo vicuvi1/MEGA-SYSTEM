@@ -579,21 +579,30 @@
 /* ==========================================================================
    SLEEK 4-CARD METRIC STRIP (TODAY DASHBOARD)
    ========================================================================== */
-.stats-strip-4 {
+.stats-strip-4,
+.stats-strip-5 {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
-@media (max-width: 1200px) {
-  .stats-strip-4 {
+@media (max-width: 1400px) {
+  .stats-strip-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .stats-strip-4,
+  .stats-strip-5 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .stats-strip-4 {
+  .stats-strip-4,
+  .stats-strip-5 {
     grid-template-columns: 1fr;
   }
 }

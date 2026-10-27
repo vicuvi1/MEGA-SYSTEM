@@ -35,6 +35,7 @@ import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { soundTick, stopAllSounds, soundSystemOracle } from './sound'
+import './gameCards.css'
 
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {

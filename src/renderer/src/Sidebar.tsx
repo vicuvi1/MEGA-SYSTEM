@@ -20,10 +20,10 @@ interface Props {
 // Sections in groups, in the order they appear.
 const GROUPS: { title: string; ids: PageId[] }[] = [
   { title: 'Plan', ids: ['today', 'tasks', 'schedule'] },
-  { title: 'Life', ids: ['sleep', 'discipline', 'money'] },
+  { title: 'Life', ids: ['sleep', 'discipline', 'body', 'money'] },
   { title: 'System RPG', ids: ['shop', 'journey', 'rules'] }
 ]
-const SHORT: Partial<Record<PageId, string>> = { rules: 'Game Rules', connected: 'Apps' }
+const SHORT: Partial<Record<PageId, string>> = { rules: 'Game Rules', connected: 'Apps', body: 'Sport' }
 
 export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, balance, name }: Props) {
   const [peek, setPeek] = useState(false)
