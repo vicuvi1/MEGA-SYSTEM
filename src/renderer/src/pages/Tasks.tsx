@@ -328,13 +328,21 @@ export function Tasks({ state, onState, onWallet }: Props) {
 
     // Sidebar tab filter
     if (activeTab === 'today') {
-      return list.filter((t) => t.due === todayStr || t.repeat === 'daily')
+      if (viewMode === 'board' && groupBy === 'status') {
+        // In status board, columns already separate To Do (today) from Backlog and In Progress
+      } else {
+        return list.filter((t) => t.due === todayStr || t.repeat === 'daily')
+      }
     }
     if (activeTab === 'upcoming') {
       return list.filter((t) => t.due && t.due > todayStr)
     }
     if (activeTab === 'p1') {
-      return list.filter((t) => t.priority === 1)
+      if (viewMode === 'board' && groupBy === 'status') {
+        // In status board, columns already show P1 in In Progress
+      } else {
+        return list.filter((t) => t.priority === 1)
+      }
     }
     if (activeTab !== 'inbox' && activeTab !== 'all') {
       return list.filter((t) => t.category === activeTab)
@@ -357,7 +365,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
           id: 'todo',
           label: 'To Do',
           color: '#38BDF8',
-          tasks: filteredTasks.filter((t) => !t.done && (t.due === todayStr || t.due === tomorrowStr || t.repeat !== 'none') && t.priority !== 1)
+          tasks: filteredTasks.filter((t) => !t.done && (t.due && t.due <= tomorrowStr || t.repeat !== 'none') && t.priority !== 1)
         },
         {
           id: 'inprogress',
@@ -945,7 +953,11 @@ export function Tasks({ state, onState, onWallet }: Props) {
                 </div>
 
                 {/* Column Cards */}
-                <div className="todoist-col-cards">
+                <div
+                  className="todoist-col-cards"
+                  onDragOver={(e) => handleDragOver(e, col.id)}
+                  onDrop={(e) => handleDrop(e, col.id)}
+                >
                   {col.tasks.map((t) => {
                     const dateInfo = formatTodoistDate(t.due, t.repeat, todayStr)
                     return (
@@ -954,6 +966,8 @@ export function Tasks({ state, onState, onWallet }: Props) {
                         className={`todoist-card ${t.done ? 'done' : ''}`}
                         draggable
                         onDragStart={(e) => handleDragStart(e, t.id)}
+                        onDragOver={(e) => handleDragOver(e, col.id)}
+                        onDrop={(e) => handleDrop(e, col.id)}
                         onClick={() => setEditingTask(t)}
                         onContextMenu={(e) => {
                           e.preventDefault()
@@ -1001,6 +1015,66 @@ export function Tasks({ state, onState, onWallet }: Props) {
                           </span>
 
                           <div className="todoist-card-actions">
+                            {groupBy === 'status' && col.id === 'todo' && (
+                              <>
+                                <button
+                                  className="card-action-mini-btn"
+                                  title="Move to Backlog"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleMoveStatus(t, 'backlog')
+                                  }}
+                                >
+                                  ◀ Backlog
+                                </button>
+                                <button
+                                  className="card-action-mini-btn primary"
+                                  title="Move to In Progress (P1)"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleMoveStatus(t, 'inprogress')
+                                  }}
+                                >
+                                  ▶ Start
+                                </button>
+                              </>
+                            )}
+                            {groupBy === 'status' && col.id === 'backlog' && (
+                              <button
+                                className="card-action-mini-btn primary"
+                                title="Move to To Do (Today)"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleMoveStatus(t, 'todo')
+                                }}
+                              >
+                                ▶ To Do
+                              </button>
+                            )}
+                            {groupBy === 'status' && col.id === 'inprogress' && (
+                              <>
+                                <button
+                                  className="card-action-mini-btn"
+                                  title="Move back to To Do"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleMoveStatus(t, 'todo')
+                                  }}
+                                >
+                                  ◀ To Do
+                                </button>
+                                <button
+                                  className="card-action-mini-btn success"
+                                  title="Complete Quest"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleMoveStatus(t, 'done')
+                                  }}
+                                >
+                                  ✅ Done
+                                </button>
+                              </>
+                            )}
                             <button
                               className="card-action-mini-btn"
                               title="Decompose with AI"
