@@ -4,9 +4,25 @@ One desktop app, one points wallet, many sections. Doing good things (waking up 
 
 The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
+## Bot Command Center (Phase 8 — v0.9.0)
+
+Life System includes a unified 2-way Telegram Bot Command Center that connects all bots in your ecosystem (Central Controller, Sport Bot, Finance Bot, MAN recovery bot):
+- **Outbound Long-Polling**: Works behind any domestic Wi-Fi/router without port forwarding, static IP, or ngrok.
+- **Strict Security Whitelist**: Only your designated Telegram Chat ID can trigger commands; unauthorized requests are rejected and logged.
+- **Remote 2-Way Ledger Commands**:
+  - `/today` — Real-time overview of coins balance, level, rank, clean streak, and open tasks.
+  - `/checkin` — Instant daily clean discipline affirmation (+10 coins).
+  - `/oath` — Reaffirm morning warrior oath (+3 coins).
+  - `/workout <reps> <exercise>` or `/pushups 50` — Remote fitness logging (+10 coins).
+  - `/expense <amount> <category> [note]` — Instant expense entry and daily budget recalculation (+3 coins).
+  - `/tasks` & `/done <number>` — View and complete tasks from your phone.
+  - `/wake` & `/bed` — Native circadian check-in (+10/+5 coins).
+  - `/panic` — Immediate emergency urge crusher protocol.
+- **Desktop UI**: Dedicated `Bot Center` page with live polling status, encrypted credential pairing, interactive Command Codex with 1-click clipboard copy, and real-time command audit log feed.
+
 ## Status
 
-**Phases 0-7 are fully implemented (v0.8.0): Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
+**Phases 0-8 are fully implemented (v0.9.0): Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
 
 Apps inside Life System (same screens, same features):
 - **Money → Finance Helper**: the real Finance Helper (copied into `apps/finance`) runs in its own tab with its desktop features: folder and Drive sync, daily backups in Documents\Finance Helper\Backups, Binance, Telegram bot and Ctrl+Alt+N quick add. `src/main/apps/finance.ts` replaces only its main.cjs.

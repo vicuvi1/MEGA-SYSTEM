@@ -129,6 +129,16 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     exportJson: () => call('data:exportJson'),
     exportCsv: (kind) => call('data:exportCsv', kind)
   },
+  bots: {
+    config: () => call('bots:config'),
+    saveConfig: (c) => call('bots:saveConfig', c),
+    status: () => call('bots:status'),
+    logs: () => call('bots:logs'),
+    clearLogs: () => call('bots:clearLogs'),
+    test: () => call('bots:test'),
+    startPolling: () => call('bots:startPolling'),
+    stopPolling: () => call('bots:stopPolling')
+  },
   onLocked: (cb) => {
     ipcRenderer.on('auth:locked', () => cb())
   },

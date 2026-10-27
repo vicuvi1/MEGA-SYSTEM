@@ -19,6 +19,7 @@ import { Body } from './pages/Body'
 import { Sleep } from './pages/Sleep'
 import { Money } from './pages/Money'
 import { Connected } from './pages/Connected'
+import { BotCenter } from './pages/BotCenter'
 import { Journey } from './pages/Journey'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
@@ -465,6 +466,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'sleep' && connections && <Sleep state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
+            {page === 'bots' && <BotCenter />}
             {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
             {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}

@@ -8,6 +8,7 @@ import './shell.css'
 import './extras.css'
 import './light.css'
 import './sidebar.css'
+import './bots.css'
 import { applyTheme } from './uiPrefs'
 
 applyTheme()

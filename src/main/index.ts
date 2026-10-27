@@ -20,6 +20,8 @@ import { MoneyService } from './money'
 import { ShieldService } from './shields'
 import { DataExportService } from './dataExport'
 import { TelegramNotifier } from './telegram'
+import { TelegramBotHub } from './telegramHub'
+import type { BotBridgeConfig } from '@shared/api'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
 import {
@@ -74,6 +76,7 @@ let moneyService: MoneyService
 let shieldService: ShieldService
 let dataExportService: DataExportService
 let telegram: TelegramNotifier
+let telegramHub: TelegramBotHub
 let connections: Connections
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -93,6 +96,12 @@ function open(): void {
   shieldService = new ShieldService(db, wallet)
   dataExportService = new DataExportService(db, body, moneyService)
   telegram = new TelegramNotifier()
+  telegramHub = new TelegramBotHub(wallet, discipline, body, sleepService, moneyService, tasks)
+  telegramHub.setWalletCallback(() => win?.webContents.send('wallet:changed'))
+  const hubCfg = telegramHub.getConfig()
+  if (hubCfg.enabled && hubCfg.pollingEnabled && hubCfg.botToken) {
+    telegramHub.startPolling()
+  }
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.
   candidates.man.unshift(embeddedManLevelDb())
@@ -247,6 +256,21 @@ handle('discipline:setStealth', (on: boolean) => {
 handle('telegram:config', () => telegram.getConfig())
 handle('telegram:saveConfig', (c: Partial<TelegramConfig>) => telegram.saveConfig(c))
 handle('telegram:test', () => telegram.sendTest())
+
+handle('bots:config', () => telegramHub.getConfig())
+handle('bots:saveConfig', (c: Partial<BotBridgeConfig>) => telegramHub.saveConfig(c))
+handle('bots:status', () => telegramHub.getStatus())
+handle('bots:logs', () => telegramHub.getLogs())
+handle('bots:clearLogs', () => telegramHub.clearLogs())
+handle('bots:test', () => telegramHub.sendTest())
+handle('bots:startPolling', () => {
+  telegramHub.startPolling()
+  return telegramHub.getPollingStatus()
+})
+handle('bots:stopPolling', () => {
+  telegramHub.stopPolling()
+  return telegramHub.getPollingStatus()
+})
 
 handle('connections:state', () => connections.state())
 handle('connections:connect', async (kind: 'waky' | 'finance') => {
@@ -708,6 +732,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  telegramHub.stopPolling()
   quitting = true
   if (db?.open) backups.run()
 })

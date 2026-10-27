@@ -192,6 +192,31 @@ export interface Summary {
   recent: LedgerEntry[]
 }
 
+
+export interface BotLogEntry {
+  id: number
+  ts: string
+  command: string
+  sender: string
+  success: boolean
+  reply: string
+}
+
+export interface BotBridgeConfig {
+  botToken: string
+  chatId: string
+  enabled: boolean
+  pollingEnabled: boolean
+  morningBriefing: boolean
+  eveningNudge: boolean
+  sportBotToken?: string
+  sportBotChatId?: string
+  financeBotToken?: string
+  financeBotChatId?: string
+  manBotToken?: string
+  manBotChatId?: string
+}
+
 export interface AuthStatus {
   pinSet: boolean
   locked: boolean
@@ -338,6 +363,16 @@ export interface LifeApi {
   data: {
     exportJson(): Promise<string>
     exportCsv(kind: 'workouts' | 'expenses'): Promise<string>
+  }
+  bots: {
+    config(): Promise<BotBridgeConfig>
+    saveConfig(cfg: Partial<BotBridgeConfig>): Promise<BotBridgeConfig>
+    status(): Promise<{ polling: boolean; enabled: boolean; configured: boolean; lastPollAt: string | null; lastError: string | null; processedCount: number }>
+    logs(): Promise<BotLogEntry[]>
+    clearLogs(): Promise<void>
+    test(): Promise<{ ok: boolean; error?: string }>
+    startPolling(): Promise<boolean>
+    stopPolling(): Promise<boolean>
   }
 }
 

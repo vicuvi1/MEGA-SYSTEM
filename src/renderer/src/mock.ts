@@ -261,6 +261,37 @@ export function createMockApi(): Bridge {
       exportJson: async () => JSON.stringify({ demo: true }, null, 2),
       exportCsv: async () => 'Date,Amount\n2026-10-27,50.00'
     },
+    bots: {
+      config: async () => ({
+        botToken: '',
+        chatId: '',
+        enabled: false,
+        pollingEnabled: false,
+        morningBriefing: true,
+        eveningNudge: true,
+        sportBotToken: '',
+        financeBotToken: '',
+        manBotToken: ''
+      }),
+      saveConfig: async (c) => ({
+        botToken: '',
+        chatId: '',
+        enabled: false,
+        pollingEnabled: false,
+        morningBriefing: true,
+        eveningNudge: true,
+        ...c
+      }),
+      status: async () => ({ polling: false, enabled: false, configured: false, lastPollAt: null, lastError: null, processedCount: 0 }),
+      logs: async () => [
+        { id: 1, ts: new Date().toISOString(), command: '/today', sender: '12345678', success: true, reply: '👑 Life System Status...' },
+        { id: 2, ts: new Date().toISOString(), command: '/checkin', sender: '12345678', success: true, reply: '🛡️ Clean Day Affirmed!' }
+      ],
+      clearLogs: async () => {},
+      test: async () => ({ ok: true }),
+      startPolling: async () => true,
+      stopPolling: async () => false
+    },
     backup: {
       status: () => ok(backup()),
       chooseDir: () => ok(backup()),

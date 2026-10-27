@@ -2,7 +2,7 @@ import type { IconName } from './Icon'
 
 export type PageId =
   | 'today' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
-  | 'history' | 'rules' | 'connected' | 'settings'
+  | 'history' | 'rules' | 'connected' | 'settings' | 'bots'
 
 export interface ModuleDef {
   id: PageId
@@ -31,6 +31,7 @@ export const SYSTEM_PAGES: ModuleDef[] = [
   { id: 'history', label: 'History', icon: 'list', color: 'var(--muted)', phase: 0, blurb: 'Every coin in and out' },
   { id: 'rules', label: 'Point rules', icon: 'sliders', color: 'var(--muted)', phase: 0, blurb: 'What earns and what costs' },
   { id: 'connected', label: 'Connected apps', icon: 'link', color: 'var(--muted)', phase: 0, blurb: 'Waky, Finance Helper and MAN' },
+  { id: 'bots', label: 'Bot Center', icon: 'bot', color: '#00D2FF', phase: 0, blurb: 'Unified Telegram bot command center' },
   { id: 'settings', label: 'Settings', icon: 'gear', color: 'var(--muted)', phase: 0, blurb: 'PIN and backups' }
 ]
 
