@@ -41,9 +41,11 @@ describe('wallet', () => {
     const now = new Date('2026-10-25T09:00:00Z')
     const id = w.award('sleep.up_on_time', undefined, now)
     expect(w.summary(now)).toMatchObject({ balance: 10, totalXp: 20, todayCoins: 10 })
+    expect(w.summary(now).todayRules).toContain('sleep.up_on_time')
     expect(() => w.award('sleep.up_on_time', undefined, now)).toThrow('Daily limit')
     w.undo(id, 'pressed by mistake', now)
     expect(w.summary(now)).toMatchObject({ balance: 0, totalXp: 0 })
+    expect(w.summary(now).todayRules).not.toContain('sleep.up_on_time')
     expect(w.history().length).toBe(2)
   })
   it('clamps a penalty at a zero balance', () => {

@@ -2,14 +2,26 @@
 // they are conveniences, not data, and the app works the same without them.
 import { useEffect, useState } from 'react'
 
+export type AccentColor = 'lime' | 'orange' | 'cyan' | 'purple' | 'pink'
+
 export interface UiPrefs {
   theme: 'dark' | 'light' | 'system'
+  accent: AccentColor
   sound: boolean
   name: string
 }
 
+export const ACCENTS: Record<AccentColor, string> = {
+  lime: '#C8F135',
+  orange: '#FF8A3D',
+  cyan: '#6EE7D8',
+  purple: '#B892FF',
+  pink: '#FF6B8B'
+}
+
+
 const KEY = 'ls.ui'
-const DEFAULTS: UiPrefs = { theme: 'dark', sound: true, name: '' }
+const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, name: '' }
 
 function load(): UiPrefs {
   try {

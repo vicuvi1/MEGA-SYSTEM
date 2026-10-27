@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
-import type { ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import type { BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
@@ -10,6 +10,7 @@ import { KIND } from './Schedule'
 import { useUiPrefs } from '../uiPrefs'
 import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
+import { soundSuccess } from '../sound'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -21,6 +22,7 @@ interface Props {
   schedule: ScheduleState | null
   discipline: DisciplineState | null
   connections: ConnectionsState | null
+  body?: BodyState | null
   onOpenApp: (page: PageId) => void
   onChange: (s?: Summary) => void
   onTasks: (t: TasksState) => void
@@ -28,7 +30,7 @@ interface Props {
   onGo: (page: PageId) => void
 }
 
-export function Today({ summary, rules, shop, tasks, schedule, discipline, connections, onOpenApp, onChange, onTasks, onSchedule, onGo }: Props) {
+export function Today({ summary, rules, shop, tasks, schedule, discipline, connections, body, onOpenApp, onChange, onTasks, onSchedule, onGo }: Props) {
   const onOpenShop = () => onGo('shop')
   const act = useAction()
   const [pops, setPops] = useState<Pop[]>([])
@@ -77,7 +79,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         <DisciplineCard state={discipline} onGo={onGo} />
       </section>
 
-      <AppTiles connections={connections} discipline={discipline} onOpenApp={onOpenApp} />
+      <AppTiles connections={connections} discipline={discipline} body={body ?? null} onOpenApp={onOpenApp} />
+      <DailyRituals summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} />
 
       <div className="cols even">
         <TodaySchedule schedule={schedule} onSchedule={onSchedule} onGo={onGo} />
@@ -277,7 +280,7 @@ function DisciplineCard({ state, onGo }: { state: DisciplineState | null; onGo: 
 }
 
 /** Live glance at the apps inside Life System; a click opens the app. */
-function AppTiles({ connections, discipline, onOpenApp }: { connections: ConnectionsState | null; discipline: DisciplineState | null; onOpenApp: (p: PageId) => void }) {
+function AppTiles({ connections, discipline, body, onOpenApp }: { connections: ConnectionsState | null; discipline: DisciplineState | null; body: BodyState | null; onOpenApp: (p: PageId) => void }) {
   if (!connections) return null
   const w = connections.waky
   const f = connections.finance
@@ -327,6 +330,155 @@ function AppTiles({ connections, discipline, onOpenApp }: { connections: Connect
           </span>
         </motion.button>
       ))}
+    </section>
+  )
+}
+
+
+function DailyRituals({
+  summary,
+  discipline,
+  connections,
+  body,
+  onChange,
+  onGo,
+  onOpenApp
+}: {
+  summary: Summary
+  discipline: DisciplineState | null
+  connections: ConnectionsState | null
+  body: BodyState | null
+  onChange: (s?: Summary) => void
+  onGo: (p: PageId) => void
+  onOpenApp: (p: PageId) => void
+}) {
+  const act = useAction()
+  const rituals = [
+    {
+      id: 'oath',
+      label: 'Morning Oath',
+      detail: 'Affirm your standard today',
+      coins: 3,
+      xp: 5,
+      color: '#FF8A3D',
+      icon: 'shield' as const,
+      done: Boolean(discipline?.oathToday || summary.todayRules?.includes('discipline.oath')),
+      actionLabel: 'Take Oath',
+      action: async () => {
+        const d = await act(() => life.discipline.oath(), 'Morning oath taken')
+        if (d) {
+          soundSuccess()
+          onChange()
+        }
+      }
+    },
+    {
+      id: 'clean',
+      label: 'Clean Day',
+      detail: discipline?.setup ? `Day ${discipline.current} clean` : 'Daily discipline check-in',
+      coins: 20,
+      xp: 40,
+      color: '#FF8A3D',
+      icon: 'shield' as const,
+      done: Boolean(discipline?.checkedInToday || summary.todayRules?.includes('discipline.clean_day')),
+      actionLabel: 'Check in',
+      action: async () => {
+        const d = await act(() => life.discipline.checkIn(), 'Checked in clean')
+        if (d) {
+          soundSuccess()
+          onChange()
+        }
+      }
+    },
+    {
+      id: 'body',
+      label: 'Body Workout',
+      detail: body?.workoutDoneToday ? 'Workout logged today' : 'Daily physical training',
+      coins: 10,
+      xp: 25,
+      color: '#FF6B8B',
+      icon: 'bolt' as const,
+      done: Boolean(body?.workoutDoneToday || summary.todayRules?.includes('body.workout_done')),
+      actionLabel: 'Log',
+      action: () => onGo('body')
+    },
+    {
+      id: 'face',
+      label: 'Skincare Routine',
+      detail: 'Face care & protection',
+      coins: 5,
+      xp: 10,
+      color: '#7CC4FF',
+      icon: 'spark' as const,
+      done: Boolean(summary.todayRules?.includes('face.routine_done')),
+      actionLabel: 'Done',
+      action: async () => {
+        const s = await act(() => life.wallet.award('face.routine_done'), 'Skincare routine complete')
+        if (s) {
+          soundSuccess()
+          onChange(s)
+        }
+      }
+    },
+    {
+      id: 'money',
+      label: 'Spending Log',
+      detail: connections?.finance.today?.logged ? 'Daily spending recorded' : 'Log today expenses',
+      coins: 3,
+      xp: 5,
+      color: '#F5C84B',
+      icon: 'coin' as const,
+      done: Boolean(connections?.finance.today?.logged || summary.todayRules?.includes('money.logged')),
+      actionLabel: 'Open',
+      action: () => onOpenApp('money')
+    }
+  ]
+
+  const doneCount = rituals.filter((r) => r.done).length
+  const allDone = doneCount === rituals.length
+
+  return (
+    <section className="panel rituals-panel" aria-label="Daily Rituals">
+      <header className="panel-head">
+        <h2>
+          <Icon name="bolt" /> Daily Rituals
+        </h2>
+        <span className="hint">
+          {allDone
+            ? 'All 5 daily rituals completed! Supreme discipline today.'
+            : `${doneCount} of ${rituals.length} done · ${rituals.reduce((s, r) => s + (r.done ? r.coins : 0), 0)} coins earned`}
+        </span>
+      </header>
+      <div className="ritual-progress-bar">
+        <motion.i initial={false} animate={{ width: `${(doneCount / rituals.length) * 100}%` }} transition={{ duration: 0.3 }} />
+      </div>
+      <div className="rituals-grid">
+        {rituals.map((r) => (
+          <div key={r.id} className={`ritual-card ${r.done ? 'done' : ''}`} style={{ ['--c' as string]: r.color }}>
+            <div className="ritual-header">
+              <span className="ritual-icon">
+                <Icon name={r.done ? 'check' : r.icon} size={15} />
+              </span>
+              <span className="ritual-reward">+{r.coins}</span>
+            </div>
+            <div className="ritual-info">
+              <b>{r.label}</b>
+              <small>{r.detail}</small>
+            </div>
+            <div className="ritual-action">
+              {r.done ? (
+                <span className="ritual-badge">
+                  <Icon name="check" size={12} /> Done
+                </span>
+              ) : (
+                <motion.button className="btn small ritual-btn" whileTap={{ scale: 0.94 }} onClick={r.action}>
+                  {r.actionLabel}
+                </motion.button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   )
 }

@@ -72,6 +72,7 @@ export class Wallet {
       today,
       todayCoins: live.reduce((s, e) => s + e.coins, 0),
       todayXp: live.reduce((s, e) => s + e.xp, 0),
+      todayRules: [...new Set(live.map((e) => e.ruleId).filter(Boolean) as string[])],
       recent: all.slice(-12).reverse()
     }
   }

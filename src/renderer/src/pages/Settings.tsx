@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, UpdateStatus, VerifyResult } from '@shared/api'
+import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, UpdateStatus, VerifyResult } from '@shared/api'
 import { UpdatePanel } from '../updates'
 import { useUiPrefs } from '../uiPrefs'
 import { life } from '../bridge'
@@ -28,6 +28,24 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [prefs, setPrefs] = useState<AppPrefs | null>(null)
   const [ui, setUi] = useUiPrefs()
   const [logs, setLogs] = useState<LogEntry[] | null>(null)
+  const [tg, setTg] = useState<TelegramConfig>({ botToken: '', chatId: '', enabled: false, morningBriefing: true, eveningNudge: true })
+  const [testingTg, setTestingTg] = useState(false)
+
+  useEffect(() => {
+    life.telegram.config().then(setTg).catch(() => {})
+  }, [])
+
+  async function saveTg(patch: Partial<TelegramConfig>) {
+    const next = await act(() => life.telegram.saveConfig(patch), 'Telegram settings saved')
+    if (next) setTg(next)
+  }
+
+  async function testTg() {
+    setTestingTg(true)
+    const res = await act(() => life.telegram.test(), 'Test message sent to Telegram!')
+    setTestingTg(false)
+  }
+
 
   useEffect(() => {
     life.app.recentErrors().then(setLogs).catch(() => setLogs([]))

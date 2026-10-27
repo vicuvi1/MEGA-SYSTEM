@@ -6,7 +6,7 @@ The full roadmap is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-**Phases 0-3 are done, and Waky, Finance Helper and MAN are connected. Next: Body (workouts) and polish/installer.**
+**Phases 0-6 are fully implemented (v0.7.0): Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
 
 Apps inside Life System (same screens, same features):
 - **Money → Finance Helper**: the real Finance Helper (copied into `apps/finance`) runs in its own tab with its desktop features: folder and Drive sync, daily backups in Documents\Finance Helper\Backups, Binance, Telegram bot and Ctrl+Alt+N quick add. `src/main/apps/finance.ts` replaces only its main.cjs.

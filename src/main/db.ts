@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import { DEFAULT_RULES } from '@core/rules'
+import { DEFAULT_EXERCISES } from '@core/body'
 
 export type DB = Database.Database
 
@@ -133,6 +134,36 @@ const MIGRATIONS: string[] = [
     BEGIN SELECT RAISE(ABORT, 'discipline log is append-only'); END;
   CREATE TRIGGER discipline_no_delete BEFORE DELETE ON discipline_events
     BEGIN SELECT RAISE(ABORT, 'discipline log is append-only'); END;
+  `,
+  /* 005 body: workouts, exercises, body metrics */ `
+  CREATE TABLE exercises (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    unit TEXT NOT NULL DEFAULT 'reps',
+    target INTEGER NOT NULL DEFAULT 10,
+    category TEXT NOT NULL DEFAULT 'calisthenics',
+    sort INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE workouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    title TEXT NOT NULL,
+    items_json TEXT NOT NULL,
+    note TEXT,
+    ledger_id INTEGER REFERENCES ledger(id)
+  );
+  CREATE INDEX workouts_day ON workouts(day);
+
+  CREATE TABLE body_metrics (
+    day TEXT PRIMARY KEY,
+    weight REAL,
+    waist REAL,
+    note TEXT,
+    updated_at TEXT NOT NULL
+  );
   `
 ]
 
@@ -147,12 +178,18 @@ export function migrate(db: DB): void {
 }
 
 function seedDefaults(db: DB): void {
-  const insert = db.prepare(
+  const insertRule = db.prepare(
     `INSERT OR IGNORE INTO rules (id, module, title, coins, xp, daily_cap, cooldown_min, enabled, sort)
      VALUES (@id, @module, @title, @coins, @xp, @dailyCap, @cooldownMin, @enabled, @sort)`
   )
+  const insertExercise = db.prepare(
+    `INSERT OR IGNORE INTO exercises (id, name, unit, target, category, sort, archived)
+     VALUES (@id, @name, @unit, @target, @category, @sort, 0)`
+  )
+
   db.transaction(() => {
-    DEFAULT_RULES.forEach((r, i) => insert.run({ ...r, enabled: r.enabled ? 1 : 0, sort: i }))
+    DEFAULT_RULES.forEach((r, i) => insertRule.run({ ...r, enabled: r.enabled ? 1 : 0, sort: i }))
+    DEFAULT_EXERCISES.forEach((e) => insertExercise.run(e))
   })()
 }
 

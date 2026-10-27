@@ -51,6 +51,15 @@ export class Backups {
     return existsSync(this.o.driveRoot)
   }
 
+  setDir(dir: string, driveRoot?: string): void {
+    this.o.dir = dir
+    if (driveRoot) this.o.driveRoot = driveRoot
+  }
+
+  runNow(): BackupStatus {
+    return this.run(true)
+  }
+
   private list(dir: string): string[] {
     if (!existsSync(dir)) return []
     return readdirSync(dir).filter(isBackupName).sort()

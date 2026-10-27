@@ -62,6 +62,13 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     cancelUrge: () => call('discipline:cancelUrge'),
     setStealth: (on) => call('discipline:setStealth', on)
   },
+  body: {
+    state: () => call('body:state'),
+    logWorkout: (input) => call('body:logWorkout', input),
+    deleteWorkout: (id) => call('body:deleteWorkout', id),
+    logMetric: (input) => call('body:logMetric', input),
+    saveExercise: (ex) => call('body:saveExercise', ex)
+  },
   connections: {
     state: () => call('connections:state'),
     connect: (kind) => call('connections:connect', kind),
@@ -87,8 +94,14 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     prefs: () => call('app:prefs'),
     setPrefs: (p) => call('app:setPrefs', p)
   },
+  telegram: {
+    config: () => call('telegram:config'),
+    saveConfig: (c) => call('telegram:saveConfig', c),
+    test: () => call('telegram:test')
+  },
   backup: {
     status: () => call('backup:status'),
+    chooseDir: () => call('backup:chooseDir'),
     setPassphrase: (p) => call('backup:setPassphrase', p),
     runNow: () => call('backup:runNow'),
     list: () => call('backup:list'),
@@ -99,26 +112,30 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     ipcRenderer.on('auth:locked', () => cb())
   },
   onUrge: (cb) => {
-    ipcRenderer.on('nav:urge', () => cb())
+    ipcRenderer.on('discipline:urge', () => cb())
   },
   onWalletChanged: (cb) => {
     ipcRenderer.on('wallet:changed', () => cb())
   },
   onNavigate: (cb) => {
-    ipcRenderer.on('nav:page', (_e, page: string) => cb(page))
+    ipcRenderer.on('app:navigate', (_, page: string) => cb(page))
   },
   onUpdate: (cb) => {
-    ipcRenderer.on('update:event', (_e, s: UpdateStatus) => cb(s))
-  },
-  onFullScreen: (cb) => {
-    const fn = (_e: unknown, on: boolean) => cb(on)
-    ipcRenderer.on('ui:fullscreen', fn)
-    return () => ipcRenderer.removeListener('ui:fullscreen', fn)
+    ipcRenderer.on('update:status', (_, s: UpdateStatus) => cb(s))
   },
   onUiKey: (cb) => {
-    const fn = (_e: unknown, key: string) => cb(key)
-    ipcRenderer.on('ui:key', fn)
-    return () => ipcRenderer.removeListener('ui:key', fn)
+    const handler = (_: unknown, key: string) => cb(key)
+    ipcRenderer.on('app:uikey', handler)
+    return () => {
+      ipcRenderer.removeListener('app:uikey', handler)
+    }
+  },
+  onFullScreen: (cb) => {
+    const handler = (_: unknown, on: boolean) => cb(on)
+    ipcRenderer.on('app:fullscreen', handler)
+    return () => {
+      ipcRenderer.removeListener('app:fullscreen', handler)
+    }
   }
 }
 

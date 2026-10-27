@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { AuthStatus, BackupStatus, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
@@ -15,6 +15,7 @@ import { Shop } from './pages/Shop'
 import { Tasks } from './pages/Tasks'
 import { Schedule } from './pages/Schedule'
 import { Discipline } from './pages/Discipline'
+import { Body } from './pages/Body'
 import { Sleep } from './pages/Sleep'
 import { Money } from './pages/Money'
 import { Connected } from './pages/Connected'
@@ -29,7 +30,7 @@ import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
-import { soundCoin, soundSpend, soundTick } from './sound'
+import { soundCoin, soundSpend, soundTick, soundFanfare } from './sound'
 
 const IDLE_LOCK_MS = 10 * 60_000
 
@@ -101,6 +102,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [tasks, setTasks] = useState<TasksState | null>(null)
   const [schedule, setSchedule] = useState<ScheduleState | null>(null)
   const [discipline, setDiscipline] = useState<DisciplineState | null>(null)
+  const [body, setBody] = useState<BodyState | null>(null)
   const [connections, setConnections] = useState<ConnectionsState | null>(null)
   // Stealth reveal lasts until the app locks or restarts.
   const [revealed, setRevealed] = useState(false)
@@ -143,7 +145,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state(), life.tasks.state(), life.schedule.state(), life.discipline.state()
     ])
     setDiscipline(d)
+    life.body.state().then(setBody)
     life.connections.state().then(setConnections)
+    life.body.state().then(setBody)
     setSummary(s)
     setRules(r)
     setBackup(b)
@@ -196,6 +200,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     if (delta > 0) soundCoin()
     else soundSpend()
   }, [summary, rules])
+
+  const lastLevel = useRef<number | null>(null)
+  useEffect(() => {
+    if (!summary) return
+    const prev = lastLevel.current
+    lastLevel.current = summary.level.level
+    if (prev !== null && summary.level.level > prev) {
+      soundFanfare()
+    }
+  }, [summary])
 
   const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page)!
   const lv = summary?.level
@@ -442,8 +456,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
             {page === 'today' && summary && (
-              <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
+              <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
             )}
+            {page === 'body' && body && <Body state={body} onState={setBody} onWallet={onWallet} />}
             {page === 'discipline' && discipline && (
               <Discipline state={discipline} man={connections?.man.suggestion ?? null} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
             )}

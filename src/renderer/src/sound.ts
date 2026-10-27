@@ -41,3 +41,17 @@ export const soundSpend = () => play(() => {
 
 /** A short tick for opening things like the command palette. */
 export const soundTick = () => play(() => tone(1760, 0, 0.05, 0.025, 'square'))
+
+/** Level up or milestone fanfare: triumphant ascending arpeggio. */
+export const soundFanfare = () => play(() => {
+  tone(523.25, 0, 0.12, 0.05)
+  tone(659.25, 0.08, 0.12, 0.05)
+  tone(783.99, 0.16, 0.15, 0.06)
+  tone(1046.50, 0.26, 0.28, 0.07)
+})
+
+/** A crisp pleasant success chime for finishing tasks or rituals. */
+export const soundSuccess = () => play(() => {
+  tone(880, 0, 0.09, 0.04)
+  tone(1318.5, 0.07, 0.18, 0.05)
+})

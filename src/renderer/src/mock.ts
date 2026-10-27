@@ -9,6 +9,7 @@ import { createMockPlan } from './mockPlan'
 import { questRef, questState } from '@core/quests'
 import { createMockDiscipline } from './mockDiscipline'
 import { createMockConnections } from './mockConnections'
+import { createMockBody } from './mockBody'
 
 /** Browser-only stand-in for the Electron bridge, using the same core logic. */
 export function createMockApi(): Bridge {
@@ -44,6 +45,7 @@ export function createMockApi(): Bridge {
       today,
       todayCoins: live.reduce((s, e) => s + e.coins, 0),
       todayXp: live.reduce((s, e) => s + e.xp, 0),
+      todayRules: [...new Set(live.map((e) => e.ruleId).filter(Boolean) as string[])],
       recent: entries.slice(-12).reverse()
     }
   }
@@ -78,6 +80,7 @@ export function createMockApi(): Bridge {
   return {
     ...createMockPlan({ entries, add, rules: () => rules }),
     ...createMockDiscipline({ entries, add, rules: () => rules }),
+    ...createMockBody({ entries, add, rules: () => rules }),
     ...createMockConnections(),
     updates: {
       status: async () => ({ current: '0.5.0', state: 'dev' as const, latest: null, progress: 0, error: 'Updates work in the installed app', checkedAt: null }),
@@ -170,8 +173,14 @@ export function createMockApi(): Bridge {
         return shop()
       }
     },
+    telegram: {
+      config: async () => ({ botToken: '', chatId: '', enabled: false, morningBriefing: true, eveningNudge: true }),
+      saveConfig: async (c) => ({ botToken: '', chatId: '', enabled: false, morningBriefing: true, eveningNudge: true, ...c }),
+      test: async () => ({ ok: true })
+    },
     backup: {
       status: () => ok(backup()),
+      chooseDir: () => ok(backup()),
       setPassphrase: async (p) => {
         if (p.length < 8) throw new Error('Use at least 8 characters')
         pass = p

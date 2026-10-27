@@ -5,6 +5,7 @@ import type { Reward, RewardInput, ShopState, Tier } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction } from '../ui'
+import { soundFanfare } from '../sound'
 
 interface Props {
   state: ShopState
@@ -36,6 +37,7 @@ export function Shop({ state, onState, onWallet }: Props) {
   async function openChest(level: number) {
     const res = await act(() => life.shop.openChest(level))
     if (!res) return
+    soundFanfare()
     onState(res.state)
     onWallet()
     setCelebrate({ title: `+${res.coins} coins`, sub: `Level ${level} chest opened` })

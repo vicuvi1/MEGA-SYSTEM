@@ -5,7 +5,7 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage,
 import { dueReminders } from '@core/plan'
 import { isFlowRule } from '@core/rules'
 import { LedgerError } from '@core/ledger'
-import type { AppPrefs, BlockInput, Category, ConnectionKind, IpcReply, RewardInput, Rule, TaskInput } from '@shared/api'
+import type { AppPrefs, BlockInput, BodyMetricInput, Category, ConnectionKind, Exercise, IpcReply, RewardInput, Rule, TaskInput, TelegramConfig, WorkoutInput } from '@shared/api'
 import { getSetting, openDb, setSetting, type DB } from './db'
 import { Wallet } from './wallet'
 import { Auth } from './auth'
@@ -14,6 +14,8 @@ import { SecretStore } from './secrets'
 import { Shop } from './shop'
 import { Schedule, Tasks } from './planner'
 import { Discipline } from './discipline'
+import { Body } from './body'
+import { TelegramNotifier } from './telegram'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
 import {
@@ -62,6 +64,8 @@ let shop: Shop
 let tasks: Tasks
 let schedule: Schedule
 let discipline: Discipline
+let body: Body
+let telegram: TelegramNotifier
 let connections: Connections
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -75,6 +79,8 @@ function open(): void {
   tasks = new Tasks(db, wallet)
   schedule = new Schedule(db, wallet)
   discipline = new Discipline(db, wallet)
+  body = new Body(db, wallet)
+  telegram = new TelegramNotifier()
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.
   candidates.man.unshift(embeddedManLevelDb())
@@ -210,10 +216,25 @@ for (const action of ['checkIn', 'oath', 'reset', 'startUrge', 'finishUrge', 'ca
   })
 }
 handle('discipline:claim', (days: number) => ({ coins: discipline.claim(days), state: discipline.state() }))
+
+handle('body:state', () => body.state())
+handle('body:logWorkout', (input: WorkoutInput) => body.logWorkout(input))
+handle('body:deleteWorkout', (id: number) => body.deleteWorkout(id))
+handle('body:logMetric', (input: BodyMetricInput) => body.logMetric(input))
+handle('body:saveExercise', (ex: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }) => {
+  body.saveExercise(ex)
+  return body.state()
+})
+
 handle('discipline:setStealth', (on: boolean) => {
   discipline.setStealth(on)
   return discipline.state()
 })
+
+
+handle('telegram:config', () => telegram.getConfig())
+handle('telegram:saveConfig', (c: Partial<TelegramConfig>) => telegram.saveConfig(c))
+handle('telegram:test', () => telegram.sendTest())
 
 handle('connections:state', () => connections.state())
 handle('connections:connect', async (kind: 'waky' | 'finance') => {
@@ -401,6 +422,17 @@ handle('app:setPrefs', (p: Partial<AppPrefs>) => {
 })
 
 handle('backup:status', () => backups.status())
+handle('backup:chooseDir', async () => {
+  if (!win) return backups.status()
+  const res = await dialog.showOpenDialog(win, { title: 'Choose Backup Directory', properties: ['openDirectory', 'createDirectory'] })
+  if (!res.canceled && res.filePaths[0]) {
+    const chosen = res.filePaths[0]
+    setSetting(db, 'custom_backup_dir', chosen)
+    backups.setDir(chosen, chosen)
+    try { backups.runNow() } catch {}
+  }
+  return backups.status()
+})
 handle('backup:setPassphrase', (p: string) => {
   if (typeof p !== 'string' || p.length < 8) throw new LedgerError('Use at least 8 characters')
   secrets.set(p)
@@ -586,11 +618,14 @@ function eveningNudge(now = new Date()): void {
   if (d.setup && !d.checkedInToday && !d.resetToday) open.push('check in (+20)')
   const blocks = schedule.state(undefined, now).blocks.filter((b) => b.status === 'pending' && b.kind === 'study').length
   if (blocks) open.push(`${blocks} study block${blocks > 1 ? 's' : ''}`)
+  if (!body.state(now).workoutDoneToday) open.push('workout (+10)')
   const fin = connections.state(now).finance
   if (fin.connectedSince && fin.today && !fin.today.logged) open.push("log today's spending (+3)")
   const q = wallet.quests(now)
   if (!q.claimed) open.push(`daily quests ${q.quests.filter((x) => x.done).length}/3`)
   if (!open.length || !Notification.isSupported()) return
+  const s = wallet.summary(now)
+  telegram.sendEveningNudge({ today, coinsToday: s.todayCoins, openItems: open }).catch(() => {})
   const n = new Notification({ title: 'Before the day ends', body: `Still open: ${open.join(', ')}.`, icon })
   n.on('click', () => navigate('today'))
   n.show()

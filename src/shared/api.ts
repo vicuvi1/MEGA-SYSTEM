@@ -4,9 +4,12 @@ import type { Rule } from '@core/rules'
 import type { Reward, Tier } from '@core/shop'
 import type { QuestState } from '@core/quests'
 import type { Block, BlockKind, BlockStatus, Repeat, Task } from '@core/plan'
+import type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput } from '@core/body'
 
 export type { QuestState }
 export type { LedgerEntry, LevelInfo, Rule, Reward, Tier, Block, BlockKind, BlockStatus, Repeat, Task }
+export type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput }
+export type BodyState = BodySummary
 
 export interface ShopState {
   rewards: Reward[]
@@ -125,6 +128,15 @@ export interface ConnectionsState {
   }
 }
 
+
+export interface TelegramConfig {
+  botToken: string
+  chatId: string
+  enabled: boolean
+  morningBriefing: boolean
+  eveningNudge: boolean
+}
+
 export interface EmbeddedApps {
   finance: { url: string; partition: string; preloadReady: boolean }
   man: { url: string; partition: string }
@@ -165,6 +177,7 @@ export interface Summary {
   today: string
   todayCoins: number
   todayXp: number
+  todayRules?: string[]
   recent: LedgerEntry[]
 }
 
@@ -245,6 +258,13 @@ export interface LifeApi {
     cancelUrge(): Promise<DisciplineState>
     setStealth(on: boolean): Promise<DisciplineState>
   }
+  body: {
+    state(): Promise<BodyState>
+    logWorkout(input: WorkoutInput): Promise<{ workout: Workout; state: BodyState; awarded: boolean }>
+    deleteWorkout(id: number): Promise<BodyState>
+    logMetric(input: BodyMetricInput): Promise<BodyState>
+    saveExercise(exercise: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }): Promise<BodyState>
+  }
   connections: {
     state(): Promise<ConnectionsState>
     connect(kind: 'waky' | 'finance'): Promise<ConnectionsState>
@@ -273,8 +293,14 @@ export interface LifeApi {
     prefs(): Promise<AppPrefs>
     setPrefs(p: Partial<AppPrefs>): Promise<AppPrefs>
   }
+  telegram: {
+    config(): Promise<TelegramConfig>
+    saveConfig(cfg: Partial<TelegramConfig>): Promise<TelegramConfig>
+    test(): Promise<{ ok: boolean; error?: string }>
+  }
   backup: {
     status(): Promise<BackupStatus>
+    chooseDir(): Promise<BackupStatus>
     setPassphrase(passphrase: string): Promise<BackupStatus>
     runNow(): Promise<BackupStatus>
     list(): Promise<string[]>

@@ -60,7 +60,7 @@
 .content { padding-inline: max(28px, calc((100% - 1440px) / 2)); }
 
 /* Today: the apps inside, at a glance. */
-.app-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.app-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
 .app-tile {
   --c: var(--lime);
   display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px;
@@ -86,3 +86,32 @@
 
 /* The header lines up with the centered content below it. */
 .topbar:not(.compact) { padding-inline: max(28px, calc((100% - 1440px) / 2)); }
+
+/* Daily Rituals */
+.rituals-panel { margin-top: 14px; }
+.ritual-progress-bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
+.ritual-progress-bar i { display: block; height: 100%; background: var(--lime); border-radius: 2px; transition: width 0.3s ease; }
+.rituals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+
+.ritual-card {
+  --c: var(--lime);
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 14px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--c) 8%, transparent), transparent 60%), var(--panel);
+  min-height: 124px; transition: border-color 0.2s, background 0.2s;
+}
+.ritual-card.done {
+  border-color: color-mix(in srgb, var(--c) 35%, var(--line));
+  background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--c) 15%, transparent), transparent 70%), var(--panel);
+}
+.ritual-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ritual-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+.ritual-card.done .ritual-icon { color: var(--lime); background: color-mix(in srgb, var(--lime) 20%, transparent); }
+.ritual-reward { font-size: 12px; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); padding: 2px 7px; border-radius: 6px; }
+.ritual-info { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.ritual-info b { font-size: 14px; font-weight: 700; color: var(--fg); }
+.ritual-info small { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
+.ritual-action { display: flex; justify-content: flex-end; }
+.ritual-badge { font-size: 12px; font-weight: 600; color: var(--lime); background: color-mix(in srgb, var(--lime) 15%, transparent); padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; }
+.ritual-btn { width: 100%; justify-content: center; font-size: 12px; padding: 6px 12px; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--fg); border: 1px solid color-mix(in srgb, var(--c) 35%, var(--line)); }
+.ritual-btn:hover { background: color-mix(in srgb, var(--c) 28%, transparent); border-color: var(--c); }

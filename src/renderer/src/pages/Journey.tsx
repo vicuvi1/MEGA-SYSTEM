@@ -6,7 +6,7 @@ import type { LedgerEntry, Rule, Summary } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES } from '../modules'
-import { Coins, describeEntry } from '../ui'
+import { Coins, describeEntry, useToast } from '../ui'
 
 const COLOR: Record<string, string> = Object.fromEntries(MODULES.map((m) => [m.id, m.color]))
 const GOAL_KEY = 'ls.weekGoal'
@@ -14,6 +14,7 @@ const GOAL_KEY = 'ls.weekGoal'
 /** Levels and the weekly review: this week against last week, best day, what slipped. */
 export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] }) {
   const [rows, setRows] = useState<LedgerEntry[]>([])
+  const toast = useToast()
   const [goal, setGoal] = useState(() => {
     try {
       return localStorage.getItem(GOAL_KEY) ?? ''
@@ -46,6 +47,20 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
   const modMax = Math.max(1, ...Object.values(week.byModule))
   const diff = week.earned - week.last
   const lv = summary.level
+  const copyRecap = () => {
+    const text = [
+      `🏆 Life System Weekly Recap (${week.days[0].day} to ${week.days[6].day})`,
+      `🪙 Coins Earned: ${week.earned} coins (${diff >= 0 ? '+' : ''}${diff} vs last week)`,
+      `⚡ XP Gained: +${week.xp} XP (Current: Level ${lv.level} · ${lv.rank})`,
+      `📅 Best Day: ${week.best.day} (${week.best.coins} coins)`,
+      `🛡️ Slips: ${week.slips.length === 0 ? '0 (Clean week!)' : `${week.slips.length} slips`}`,
+      goal ? `🎯 Goal for Next Week: ${goal}` : ''
+    ].filter(Boolean).join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      toast('Weekly recap copied to clipboard!')
+    }).catch(() => {})
+  }
+
 
   return (
     <div className="journey">
@@ -80,6 +95,9 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
         <section className="panel">
           <header className="panel-head">
             <h2>Last 7 days</h2>
+            <button className="btn small" onClick={copyRecap} title="Copy week stats to clipboard">
+              <Icon name="spark" size={13} /> Copy recap
+            </button>
           </header>
           <div className="week-bars" role="img" aria-label="Coins earned each of the last 7 days">
             {week.days.map((d) => (
