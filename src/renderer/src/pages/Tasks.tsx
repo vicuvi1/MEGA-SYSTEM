@@ -354,7 +354,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
     }
 
     return list
-  }, [state.tasks, searchQuery, showDone, filterPriority, activeTab, todayStr])
+  }, [state.tasks, searchQuery, showDone, filterPriority, activeTab, todayStr, viewMode, groupBy])
 
   // DYNAMIC GROUPING COLUMNS (Ultimate Flexibility!)
   const boardColumns = useMemo(() => {

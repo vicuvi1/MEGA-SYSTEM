@@ -125,13 +125,20 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   }, [])
 
   const refresh = useCallback(async () => {
-    const [s, r, b, sh, t, sc, d] = await Promise.all([
-      life.wallet.summary(), life.rules.list(), life.backup.status(), life.shop.state(), life.tasks.state(), life.schedule.state(), life.discipline.state()
+    const [s, r, b, sh, t, sc, d, bd, c] = await Promise.all([
+      life.wallet.summary(),
+      life.rules.list(),
+      life.backup.status(),
+      life.shop.state(),
+      life.tasks.state(),
+      life.schedule.state(),
+      life.discipline.state(),
+      life.body.state(),
+      life.connections.state()
     ])
     setDiscipline(d)
-    life.body.state().then(setBody)
-    life.connections.state().then(setConnections)
-    life.body.state().then(setBody)
+    setConnections(c)
+    setBody(bd)
     setSummary(s)
     setRules(r)
     setBackup(b)
@@ -140,14 +147,26 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     setSchedule(sc)
   }, [])
 
-  // Coins moved: refresh everything that shows coins or completion.
-  const onWallet = useCallback(async () => {
-    const [s, sh, t, d, c] = await Promise.all([life.wallet.summary(), life.shop.state(), life.tasks.state(), life.discipline.state(), life.connections.state()])
-    setDiscipline(d)
-    setConnections(c)
-    setSummary(s)
-    setShop(sh)
-    setTasks(t)
+  // Coins moved: debounced refresh so rapid actions don't lag the UI
+  const walletDebounceTimer = useRef<any>(null)
+  const onWallet = useCallback(() => {
+    if (walletDebounceTimer.current) clearTimeout(walletDebounceTimer.current)
+    walletDebounceTimer.current = setTimeout(async () => {
+      const [s, sh, t, d, c, bd] = await Promise.all([
+        life.wallet.summary(),
+        life.shop.state(),
+        life.tasks.state(),
+        life.discipline.state(),
+        life.connections.state(),
+        life.body.state()
+      ])
+      setDiscipline(d)
+      setConnections(c)
+      setBody(bd)
+      setSummary(s)
+      setShop(sh)
+      setTasks(t)
+    }, 35)
   }, [])
 
   // Pick up a new day, missed blocks and backup state while the app stays open.
@@ -501,8 +520,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
         <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
 
-        <AnimatePresence mode="wait">
-          {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18, ease: 'easeOut' }}>
+        <AnimatePresence initial={false}>
+          {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.08 }}>
             <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />

@@ -1,26 +1,26 @@
-/* Solo Leveling Daily Quest Hologram Banner */
+/* Solo Leveling Daily Quest Hologram Banner - Performance Optimized */
 .solo-daily-quest-banner {
   position: relative;
-  background: linear-gradient(135deg, rgba(10, 18, 30, 0.95), rgba(15, 23, 42, 0.95));
+  background: linear-gradient(135deg, rgba(10, 18, 30, 0.98), rgba(15, 23, 42, 0.98));
   border: 1px solid rgba(0, 210, 255, 0.35);
   border-radius: 14px;
   padding: 20px 24px;
   margin-bottom: 24px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 210, 255, 0.12);
-  backdrop-filter: blur(12px);
-  transition: all 0.3s ease;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  contain: paint;
 }
 
 .solo-daily-quest-banner.completed {
   border-color: rgba(245, 200, 75, 0.6);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.55), 0 0 35px rgba(245, 200, 75, 0.25);
-  background: linear-gradient(135deg, rgba(20, 24, 20, 0.95), rgba(15, 25, 30, 0.95));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 20px rgba(245, 200, 75, 0.2);
+  background: linear-gradient(135deg, rgba(20, 24, 20, 0.98), rgba(15, 25, 30, 0.98));
 }
 
 .solo-daily-quest-banner.urgent {
   border-color: rgba(244, 63, 94, 0.6);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.55), 0 0 35px rgba(244, 63, 94, 0.25);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 20px rgba(244, 63, 94, 0.2);
 }
 
 .solo-quest-top-row {
@@ -83,7 +83,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  will-change: transform;
 }
 
 .solo-quest-item:hover {
@@ -134,7 +135,7 @@
   height: 100%;
   background: linear-gradient(90deg, #00d2ff, #38bdf8);
   border-radius: 999px;
-  transition: width 0.3s ease;
+  transition: width 0.2s ease;
 }
 
 .solo-quest-item.done .solo-quest-bar-fill {
@@ -157,14 +158,13 @@
   padding: 4px 8px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .solo-quest-mini-btn:hover {
   background: rgba(0, 210, 255, 0.2);
   border-color: #00d2ff;
   color: #ffffff;
-  transform: scale(1.04);
 }
 
 .solo-quest-mini-btn.primary {
@@ -204,7 +204,7 @@
   padding: 7px 16px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -213,5 +213,5 @@
 .solo-quest-action-all:hover {
   background: linear-gradient(135deg, #00d2ff, #38bdf8);
   color: #0a0f1d;
-  box-shadow: 0 0 20px rgba(0, 210, 255, 0.5);
+  box-shadow: 0 0 16px rgba(0, 210, 255, 0.4);
 }

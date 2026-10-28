@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import type { BodyState, Summary } from '@shared/api'
 import { life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
-import { soundCoin, soundSuccess, soundTick } from './sound'
+import { soundCoin, soundSuccess } from './sound'
 import type { PageId } from './modules'
 import './soloDailyQuest.css'
 
@@ -13,8 +13,47 @@ interface Props {
   onGo: (p: PageId) => void
 }
 
-export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) {
+/**
+ * Isolated countdown timer so only this tiny span updates every second,
+ * preventing the entire banner from re-rendering every 1000ms.
+ */
+const QuestCountdownTimer = React.memo(function QuestCountdownTimer({
+  isAllCompleted,
+  onUrgent
+}: {
+  isAllCompleted: boolean
+  onUrgent?: (urgent: boolean) => void
+}) {
   const [timeLeft, setTimeLeft] = useState('')
+
+  useEffect(() => {
+    if (isAllCompleted) return
+
+    const updateCountdown = () => {
+      const now = new Date()
+      const end = new Date(now)
+      end.setHours(23, 59, 59, 999)
+      const diff = Math.max(0, end.getTime() - now.getTime())
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const secs = Math.floor((diff % (1000 * 60)) / 1000)
+
+      setTimeLeft(
+        `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      )
+      if (onUrgent) onUrgent(hours < 3)
+    }
+
+    updateCountdown()
+    const timer = setInterval(updateCountdown, 1000)
+    return () => clearInterval(timer)
+  }, [isAllCompleted, onUrgent])
+
+  if (isAllCompleted) return <span>REST SECURED</span>
+  return <span>{timeLeft} LEFT</span>
+})
+
+export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) {
   const [isUrgent, setIsUrgent] = useState(false)
   const [waterMl, setWaterMl] = useState<number>(() => {
     try {
@@ -27,26 +66,6 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
     } catch {}
     return 0
   })
-
-  // Live countdown to 23:59:59
-  useEffect(() => {
-    const updateCountdown = () => {
-      const now = new Date()
-      const end = new Date(now)
-      end.setHours(23, 59, 59, 999)
-      const diff = Math.max(0, end.getTime() - now.getTime())
-      const hours = Math.floor(diff / (1000 * 60 * 60))
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-      const secs = Math.floor((diff % (1000 * 60)) / 1000)
-
-      setTimeLeft(`${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`)
-      setIsUrgent(hours < 3)
-    }
-
-    updateCountdown()
-    const timer = setInterval(updateCountdown, 1000)
-    return () => clearInterval(timer)
-  }, [])
 
   const todayKey = new Date().toISOString().slice(0, 10)
 
@@ -66,82 +85,91 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
     return map
   }, [body?.recentWorkouts, todayKey])
 
-  const objectives = [
-    {
-      id: 'pushups',
-      name: 'Push-ups',
-      icon: '💪',
-      current: doneMap['pushups'] || 0,
-      target: 123,
-      unit: 'reps'
+  const objectives = useMemo(
+    () => [
+      {
+        id: 'pushups',
+        name: 'Push-ups',
+        icon: '💪',
+        current: doneMap['pushups'] || 0,
+        target: 123,
+        unit: 'reps'
+      },
+      {
+        id: 'situps',
+        name: 'Sit-ups',
+        icon: '⚡',
+        current: doneMap['situps'] || 0,
+        target: 60,
+        unit: 'reps'
+      },
+      {
+        id: 'press',
+        name: 'Press',
+        icon: '🏋️',
+        current: doneMap['press'] || 0,
+        target: 50,
+        unit: 'reps'
+      },
+      {
+        id: 'water',
+        name: 'Hydration',
+        icon: '💧',
+        current: waterMl,
+        target: 2700,
+        unit: 'ml'
+      }
+    ],
+    [doneMap, waterMl]
+  )
+
+  const allCompleted = useMemo(() => objectives.every((o) => o.current >= o.target), [objectives])
+
+  const handleQuickLogWorkout = useCallback(
+    async (e: React.MouseEvent, objId: string, exName: string, amount: number) => {
+      const rect = e.currentTarget.getBoundingClientRect()
+      soundCoin()
+      triggerRpgPopup({
+        main: `+${amount} ${exName}`,
+        sub: '+10 STR XP',
+        kind: 'xp',
+        x: rect.left + rect.width / 2,
+        y: rect.top
+      })
+
+      await life.body.logWorkout({
+        title: `${exName} (+${amount})`,
+        items: [{ exerciseId: objId, name: exName, amount, unit: 'reps' as any }],
+        note: 'Logged from Daily Quest Banner'
+      })
+      onRefresh()
     },
-    {
-      id: 'situps',
-      name: 'Sit-ups',
-      icon: '⚡',
-      current: doneMap['situps'] || 0,
-      target: 60,
-      unit: 'reps'
+    [onRefresh]
+  )
+
+  const handleQuickLogWater = useCallback(
+    (e: React.MouseEvent, addedMl: number) => {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const nextVal = waterMl + addedMl
+      setWaterMl(nextVal)
+      try {
+        localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: nextVal }))
+      } catch {}
+
+      soundCoin()
+      triggerRpgPopup({
+        main: `+${addedMl}ml Water`,
+        sub: '+5 VIT XP',
+        kind: 'xp',
+        x: rect.left + rect.width / 2,
+        y: rect.top
+      })
+      onRefresh()
     },
-    {
-      id: 'press',
-      name: 'Press',
-      icon: '🏋️',
-      current: doneMap['press'] || 0,
-      target: 50,
-      unit: 'reps'
-    },
-    {
-      id: 'water',
-      name: 'Hydration',
-      icon: '💧',
-      current: waterMl,
-      target: 2700,
-      unit: 'ml'
-    }
-  ]
+    [waterMl, todayKey, onRefresh]
+  )
 
-  const allCompleted = objectives.every((o) => o.current >= o.target)
-
-  const handleQuickLogWorkout = async (e: React.MouseEvent, objId: string, exName: string, amount: number) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    soundCoin()
-    triggerRpgPopup({
-      main: `+${amount} ${exName}`,
-      sub: '+10 STR XP',
-      kind: 'xp',
-      x: rect.left + rect.width / 2,
-      y: rect.top
-    })
-
-    await life.body.logWorkout({
-      title: `${exName} (+${amount})`,
-      items: [{ exerciseId: objId, name: exName, amount, unit: 'reps' as any }],
-      note: 'Logged from Daily Quest Banner'
-    })
-    onRefresh()
-  }
-
-  const handleQuickLogWater = (e: React.MouseEvent, addedMl: number) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const nextVal = waterMl + addedMl
-    setWaterMl(nextVal)
-    try {
-      localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: nextVal }))
-    } catch {}
-
-    soundCoin()
-    triggerRpgPopup({
-      main: `+${addedMl}ml Water`,
-      sub: '+5 VIT XP',
-      kind: 'xp',
-      x: rect.left + rect.width / 2,
-      y: rect.top
-    })
-    onRefresh()
-  }
-
-  const handleCompleteAll = async () => {
+  const handleCompleteAll = useCallback(async () => {
     soundSuccess()
     triggerRpgPopup({
       main: 'QUEST COMPLETE!',
@@ -149,7 +177,6 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       kind: 'gold'
     })
 
-    // Log remaining reps for each exercise
     const itemsToLog = []
     for (const obj of objectives) {
       if (obj.id === 'water') {
@@ -174,7 +201,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       })
     }
     onRefresh()
-  }
+  }, [objectives, waterMl, todayKey, onRefresh])
 
   return (
     <section className={`solo-daily-quest-banner ${allCompleted ? 'completed' : isUrgent ? 'urgent' : ''}`}>
@@ -191,7 +218,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
 
         <div className="solo-quest-countdown" title="Time until midnight penalty check">
           <span>⏱️</span>
-          <span>{allCompleted ? 'REST SECURED' : `${timeLeft} LEFT`}</span>
+          <QuestCountdownTimer isAllCompleted={allCompleted} onUrgent={setIsUrgent} />
         </div>
       </div>
 
