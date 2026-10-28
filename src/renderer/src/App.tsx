@@ -22,6 +22,8 @@ import { Connected } from './pages/Connected'
 import { BotCenter } from './pages/BotCenter'
 import { Journey } from './pages/Journey'
 import { SystemOracleDrawer } from './SystemOracleDrawer'
+import { QuickCommandBar } from './QuickCommandBar'
+import { RpgFloatingPopups } from './RpgFloatingPopups'
 import { SoloSystemModal } from './SoloSystemModal'
 import { SoloPlayerModal } from './SoloPlayerModal'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
@@ -76,6 +78,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
   const [oracleOpen, setOracleOpen] = useState(false)
+  const [quickCommandOpen, setQuickCommandOpen] = useState(false)
   const [systemModal, setSystemModal] = useState<{ open: boolean; type: 'quest-complete' | 'level-up' | 'penalty-warning'; data?: any }>({ open: false, type: 'quest-complete' })
   const [playerModalOpen, setPlayerModalOpen] = useState(false)
   const [backup, setBackup] = useState<BackupStatus | null>(null)
@@ -225,6 +228,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       } else if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault()
         run('switch-view')
+      } else if (e.ctrlKey && (e.code === 'Space' || e.key === ' ')) {
+        e.preventDefault()
+        setQuickCommandOpen((o) => !o)
       } else if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         run('palette')
@@ -356,6 +362,19 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </div>
           )}
           <span className="spacer" />
+          <button
+            className="search-btn quick-omnibar-btn"
+            onClick={() => {
+              soundTick()
+              setQuickCommandOpen(true)
+            }}
+            title="Instant Quick Capture (Ctrl+Space)"
+            style={{ borderColor: 'rgba(0, 210, 255, 0.4)', background: 'rgba(0, 210, 255, 0.08)', color: '#00d2ff' }}
+          >
+            <span style={{ fontSize: '14px' }}>⚡</span>
+            <span className="chip-text" style={{ fontWeight: 700 }}>Quick Capture</span>
+            <kbd style={{ background: 'rgba(0, 210, 255, 0.15)', color: '#00d2ff', borderColor: 'rgba(0, 210, 255, 0.3)' }}>Ctrl Space</kbd>
+          </button>
           <button className="search-btn" onClick={() => { soundTick(); setPaletteOpen(true) }} title="Search and run anything (Ctrl+K)">
             <Icon name="search" size={14} />
             <span className="chip-text">Search or run…</span>
@@ -524,6 +543,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           summary={summary}
           onGo={go}
         />
+        <QuickCommandBar
+          open={quickCommandOpen}
+          onClose={() => setQuickCommandOpen(false)}
+          onRefreshWallet={onWallet}
+        />
+        <RpgFloatingPopups />
       </div>
     </div>
   )

@@ -12,6 +12,7 @@ import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { soundSuccess } from '../sound'
 import { SoloSystemModal } from '../SoloSystemModal'
 import { DungeonRaidCards } from '../DungeonRaidCards'
+import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -66,6 +67,14 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         pops={pops}
         onOpenApp={onOpenApp}
         onOpenShop={onOpenShop}
+      />
+
+      {/* Solo Leveling Physical Daily Quest Hologram Banner */}
+      <SoloDailyQuestBanner
+        body={body ?? null}
+        summary={summary}
+        onRefresh={() => onChange()}
+        onGo={onGo}
       />
 
       {/* Unified Daily Quest Command Hub (Replaces duplicate Quests + Rituals) */}

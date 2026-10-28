@@ -31,6 +31,7 @@ import { soundFanfare, soundSpend, soundTick } from '../sound'
 import { RenderMarkdown } from '../SystemOracleDrawer'
 import { ChestGachaModal } from '../ChestGachaModal'
 import { HunterSkillCards } from '../HunterSkillCards'
+import { EconomyCalibration } from '../EconomyCalibration'
 
 interface Props {
   state: ShopState
@@ -693,6 +694,16 @@ export function Shop({ state, onState, onWallet }: Props) {
           >
             <span>Savings Vault & Redemptions</span>
           </button>
+
+          <button
+            className={`shop-pill-btn ${activeTab === 'tuning' ? 'active' : ''}`}
+            onClick={() => {
+              soundTick()
+              setActiveTab('tuning')
+            }}
+          >
+            <span>⚖️ Economy & Price Points</span>
+          </button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1088,6 +1099,11 @@ export function Shop({ state, onState, onWallet }: Props) {
             </div>
           </div>
         </section>
+      )}
+
+      {/* TAB: ECONOMY & PRICE POINTS MATRIX */}
+      {activeTab === 'tuning' && (
+        <EconomyCalibration state={state} onState={onState} onWallet={onWallet} />
       )}
 
       {/* TAB: HUNTER CONSUMABLES */}

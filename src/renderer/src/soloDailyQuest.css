@@ -1,0 +1,217 @@
+/* Solo Leveling Daily Quest Hologram Banner */
+.solo-daily-quest-banner {
+  position: relative;
+  background: linear-gradient(135deg, rgba(10, 18, 30, 0.95), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(0, 210, 255, 0.35);
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 210, 255, 0.12);
+  backdrop-filter: blur(12px);
+  transition: all 0.3s ease;
+}
+
+.solo-daily-quest-banner.completed {
+  border-color: rgba(245, 200, 75, 0.6);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.55), 0 0 35px rgba(245, 200, 75, 0.25);
+  background: linear-gradient(135deg, rgba(20, 24, 20, 0.95), rgba(15, 25, 30, 0.95));
+}
+
+.solo-daily-quest-banner.urgent {
+  border-color: rgba(244, 63, 94, 0.6);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.55), 0 0 35px rgba(244, 63, 94, 0.25);
+}
+
+.solo-quest-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 14px;
+}
+
+.solo-quest-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: #00d2ff;
+  text-transform: uppercase;
+}
+
+.solo-daily-quest-banner.completed .solo-quest-tag-badge {
+  color: #fbbf24;
+}
+
+.solo-daily-quest-banner.urgent .solo-quest-tag-badge {
+  color: #f43f5e;
+}
+
+.solo-quest-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.solo-quest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.solo-quest-item {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.solo-quest-item:hover {
+  border-color: rgba(0, 210, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.solo-quest-item.done {
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.solo-quest-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.solo-quest-item-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.solo-quest-item-stat {
+  font-size: 12px;
+  font-weight: 700;
+  color: #00d2ff;
+  font-family: monospace;
+}
+
+.solo-quest-item.done .solo-quest-item-stat {
+  color: #4ade80;
+}
+
+.solo-quest-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.solo-quest-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00d2ff, #38bdf8);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.solo-quest-item.done .solo-quest-bar-fill {
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+}
+
+.solo-quest-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.solo-quest-mini-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.solo-quest-mini-btn:hover {
+  background: rgba(0, 210, 255, 0.2);
+  border-color: #00d2ff;
+  color: #ffffff;
+  transform: scale(1.04);
+}
+
+.solo-quest-mini-btn.primary {
+  background: rgba(0, 210, 255, 0.15);
+  border-color: rgba(0, 210, 255, 0.4);
+  color: #00d2ff;
+}
+
+.solo-quest-mini-btn.primary:hover {
+  background: #00d2ff;
+  color: #000;
+}
+
+.solo-quest-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.solo-quest-warning-text {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.solo-quest-action-all {
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(56, 189, 248, 0.25));
+  border: 1px solid rgba(0, 210, 255, 0.5);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 12px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.solo-quest-action-all:hover {
+  background: linear-gradient(135deg, #00d2ff, #38bdf8);
+  color: #0a0f1d;
+  box-shadow: 0 0 20px rgba(0, 210, 255, 0.5);
+}

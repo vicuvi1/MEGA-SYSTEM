@@ -1,0 +1,135 @@
+/* Quick Command Omnibar Modal */
+.quick-command-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.75);
+  backdrop-filter: blur(10px);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 14vh;
+}
+
+.quick-command-window {
+  position: relative;
+  width: 92%;
+  max-width: 640px;
+  background: linear-gradient(135deg, rgba(13, 20, 36, 0.98), rgba(15, 23, 42, 0.98));
+  border: 1px solid rgba(0, 210, 255, 0.5);
+  border-radius: 16px;
+  padding: 18px 22px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 210, 255, 0.25);
+  overflow: hidden;
+}
+
+.quick-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.quick-command-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: #00d2ff;
+  text-transform: uppercase;
+}
+
+.quick-command-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.quick-command-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(0, 210, 255, 0.3);
+  border-radius: 12px;
+  padding: 10px 16px;
+  transition: all 0.2s ease;
+}
+
+.quick-command-input-row:focus-within {
+  border-color: #00d2ff;
+  box-shadow: 0 0 16px rgba(0, 210, 255, 0.35);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.quick-command-icon {
+  font-size: 18px;
+  color: #00d2ff;
+}
+
+.quick-command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.quick-command-input::placeholder {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.quick-command-kbd {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.quick-command-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.quick-command-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quick-command-chip:hover {
+  background: rgba(0, 210, 255, 0.15);
+  border-color: #00d2ff;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.quick-command-status {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #38bdf8;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

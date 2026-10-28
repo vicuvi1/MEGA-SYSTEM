@@ -239,6 +239,10 @@ export function Tasks({ state, onState, onWallet }: Props) {
       toast('✅ Quest completed (+Coins)', 'good')
       return
     }
+    if (task.done) {
+      await life.tasks.uncomplete(task.id)
+      onWallet()
+    }
     let nextPriority = task.priority
     let nextDue = task.due
     if (colId === 'inprogress') {
@@ -265,7 +269,8 @@ export function Tasks({ state, onState, onWallet }: Props) {
     })
     const next = await life.tasks.state()
     onState(next)
-    toast(`Moved to ${colId.toUpperCase()}`, 'good')
+    onWallet()
+    toast(`Moved to ${colId === 'todo' ? 'To Do' : colId === 'inprogress' ? 'In Progress' : colId.toUpperCase()}`, 'good')
   }
 
   async function handleSetPriority(task: TaskView, p: 1 | 2 | 3) {
@@ -484,18 +489,8 @@ export function Tasks({ state, onState, onWallet }: Props) {
       const next = await life.tasks.save({ ...t, due: newDue })
       onState(next)
     } else if (groupBy === 'status') {
-      if (targetColId === 'done' && !t.done) {
-        const next = await life.tasks.complete(t.id)
-        soundCoin()
-        onState(next)
-        onWallet()
-      } else if (targetColId !== 'done' && t.done) {
-        const next = await life.tasks.uncomplete(t.id)
-        onState(next)
-        onWallet()
-      } else if (targetColId === 'inprogress' && t.priority !== 1) {
-        const next = await life.tasks.save({ ...t, priority: 1 })
-        onState(next)
+      if (['backlog', 'todo', 'inprogress', 'done'].includes(targetColId)) {
+        await handleMoveStatus(t, targetColId as any)
       }
     } else if (groupBy === 'project') {
       if (t.category !== targetColId) {
