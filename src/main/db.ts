@@ -61,10 +61,10 @@ const MIGRATIONS: string[] = [
     day TEXT NOT NULL
   );
   INSERT INTO rewards (title, price, tier, real_cost, pinned, note) VALUES
-    ('Face cream', 300, 'bronze', 250, 0, NULL),
-    ('New phone case', 600, 'bronze', 300, 1, NULL),
-    ('Shaver machine', 1500, 'silver', 900, 0, NULL),
-    ('Kaaba trip fund', 20000, 'legendary', 0, 0, 'The big one. Keep stacking.');
+    ('Face cream', 300, 'bronze', 30, 0, NULL),
+    ('New phone case', 600, 'bronze', 60, 1, NULL),
+    ('Shaver machine', 1500, 'silver', 150, 0, NULL),
+    ('Kaaba trip fund', 20000, 'legendary', 2000, 0, 'The big one. Keep stacking.');
   `,
   /* 003 plan: task categories, tasks, schedule blocks */ `
   CREATE TABLE categories (
@@ -260,6 +260,9 @@ const MIGRATIONS: string[] = [
     description TEXT NOT NULL,
     icon TEXT NOT NULL
   );
+  `,
+  /* 012 Align rewards real_cost with the standard 10 coins = 1 MDL exchange rate */ `
+  UPDATE rewards SET real_cost = CAST(ROUND(price / 10.0) AS INTEGER) WHERE real_cost != CAST(ROUND(price / 10.0) AS INTEGER) OR real_cost = 0;
   `
 ]
 

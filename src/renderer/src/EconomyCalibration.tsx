@@ -34,11 +34,18 @@ export function EconomyCalibration({ state, onState, onWallet }: Props) {
     return { casual: 25, medium: 75, epic: 250, legendary: 1000 }
   })
 
+  useEffect(() => {
+    life.economy.summary().then((eco) => {
+      if (eco?.exchangeRate) setExchangeRate(eco.exchangeRate)
+    }).catch(() => {})
+  }, [])
+
   const saveRate = (val: number) => {
     const rate = Math.max(1, val)
     setExchangeRate(rate)
     localStorage.setItem('ls.economy.rate', String(rate))
-    toast(`Exchange rate set: ${rate} Coins = 1 Currency Unit`, 'good')
+    life.economy.setExchangeRate(rate).catch(() => {})
+    toast(`Exchange rate set: ${rate} Coins = 1 ${state.currency}`, 'good')
   }
 
   const handlePriceChange = (tier: 'casual' | 'medium' | 'epic' | 'legendary', price: number) => {
@@ -242,7 +249,7 @@ export function EconomyCalibration({ state, onState, onWallet }: Props) {
               value={exchangeRate}
               onChange={(e) => saveRate(parseFloat(e.target.value) || 10)}
             />
-            <span style={{ color: '#fbbf24', fontWeight: 700 }}>Coins = $1.00 USD / MDL</span>
+            <span style={{ color: '#fbbf24', fontWeight: 700 }}>Coins = 1.00 {state.currency} (10 Coins = 1 MDL)</span>
           </div>
         </div>
 

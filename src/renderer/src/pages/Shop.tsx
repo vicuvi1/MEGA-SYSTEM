@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { redeemBlocker, TIERS, tierUnlocked } from '@core/shop'
-import { computeGoalProgress } from '@core/unifiedEconomy'
+import { computeGoalProgress, coinsToMoneyValue } from '@core/unifiedEconomy'
 import {
   calculateEffortEquivalence,
   formatDualCurrency,
@@ -836,11 +836,9 @@ export function Shop({ state, onState, onWallet }: Props) {
                 {r.note && <p className="note">{r.note}</p>}
                 <div className="price">
                   <Coins n={r.price} />
-                  {r.realCost > 0 && (
-                    <span className="real">
-                      ≈ {formatDualCurrency(r.realCost, r.currency ?? state.currency).combinedText}
-                    </span>
-                  )}
+                  <span className="real">
+                    ≈ {formatDualCurrency(coinsToMoneyValue(r.price, economy?.exchangeRate ?? 10), r.currency ?? state.currency).combinedText}
+                  </span>
                 </div>
                 <div className="effort-badge">
                   <Icon name="bolt" size={12} />
@@ -1386,6 +1384,7 @@ export function Shop({ state, onState, onWallet }: Props) {
         <RewardSheet
           value={editing}
           currency={state.currency}
+          exchangeRate={economy?.exchangeRate ?? 10}
           onCancel={() => setEditing(null)}
           onSave={save}
           onArchive={async (id) => {
@@ -1441,15 +1440,15 @@ export function Shop({ state, onState, onWallet }: Props) {
                     <button
                       type="button"
                       className="calc-coins-btn"
-                      title="Calculate coins based on exchange rate"
+                      title="Calculate coins based on 10 coins = 1 MDL"
                       onClick={() =>
                         setEditingGoal({
                           ...editingGoal,
-                          targetCoins: Math.round(editingGoal.targetRealCost * 1.25)
+                          targetCoins: Math.round(editingGoal.targetRealCost * (100 / (economy?.exchangeRate ?? 10)))
                         })
                       }
                     >
-                      ⚡ Calc
+                      ⚡ Calc Coins
                     </button>
                   )}
                 </div>
@@ -1823,12 +1822,14 @@ export function Shop({ state, onState, onWallet }: Props) {
 function RewardSheet({
   value,
   currency,
+  exchangeRate = 10,
   onCancel,
   onSave,
   onArchive
 }: {
   value: RewardInput
   currency: string
+  exchangeRate?: number
   onCancel: () => void
   onSave: (r: RewardInput) => void
   onArchive: (id: number) => void
@@ -1853,7 +1854,19 @@ function RewardSheet({
         <div className="grid3">
           <label>
             Price (coins)
-            <input type="number" min={1} value={r.price} onChange={int('price')} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="number" min={1} value={r.price} onChange={int('price')} style={{ flex: 1 }} />
+              {r.price > 0 && (
+                <button
+                  type="button"
+                  className="calc-coins-btn"
+                  title="Calculate cash equivalent based on 10 coins = 1 MDL"
+                  onClick={() => setR({ ...r, realCost: Math.max(0, Math.round(coinsToMoneyValue(r.price, exchangeRate))) })}
+                >
+                  ⚡ Cash
+                </button>
+              )}
+            </div>
           </label>
           <label>
             Real cost ({r.currency ?? currency})
@@ -1863,10 +1876,10 @@ function RewardSheet({
                 <button
                   type="button"
                   className="calc-coins-btn"
-                  title="Auto-calculate coins equivalent based on 100 coins = 10 MDL"
-                  onClick={() => setR({ ...r, price: Math.max(10, Math.round(r.realCost * 10)) })}
+                  title="Calculate coins equivalent based on 10 coins = 1 MDL"
+                  onClick={() => setR({ ...r, price: Math.max(10, Math.round(r.realCost * (100 / exchangeRate))) })}
                 >
-                  ⚡ Calc
+                  ⚡ Coins
                 </button>
               )}
             </div>

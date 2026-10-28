@@ -45,7 +45,7 @@ describe('shop service', () => {
     const ledgerId = shop.redeem(cream().id, now)
     let s = shop.state(now)
     expect(s.balance).toBe(100)
-    expect(s.monthSpent).toBe(250)
+    expect(s.monthSpent).toBe(30)
     expect(s.recent[0]).toMatchObject({ title: 'Face cream', undone: false })
     expect(() => shop.redeem(cream().id, now)).toThrow('200 more coins')
 
@@ -58,9 +58,9 @@ describe('shop service', () => {
 
   it('enforces the monthly real-money budget', () => {
     grant(2000)
-    shop.setBudget(400)
+    shop.setBudget(50)
     shop.redeem(cream().id, now)
-    expect(() => shop.redeem(cream().id, now)).toThrow(/budget \(150 left\)/)
+    expect(() => shop.redeem(cream().id, now)).toThrow(/budget \(20 left\)/)
     // A new month starts fresh
     expect(() => shop.redeem(cream().id, new Date('2026-11-02T12:00:00Z'))).not.toThrow()
     expect(() => shop.setBudget(-1)).toThrow()

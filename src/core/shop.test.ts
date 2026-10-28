@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calculateEffortEquivalence, chestRef, planRedeem, redeemBlocker, rollChest, tierUnlocked, unopenedChests, validateReward, type Reward } from './shop'
 
-const cream: Reward = { id: 1, title: 'Face cream', price: 300, tier: 'bronze', realCost: 250, pinned: false, archived: false, note: null }
+const cream: Reward = { id: 1, title: 'Face cream', price: 300, tier: 'bronze', realCost: 30, pinned: false, archived: false, note: null }
 const base = { reward: cream, balance: 500, level: 3, monthSpent: 0, budget: 0 }
 
 describe('shop', () => {
@@ -20,8 +20,8 @@ describe('shop', () => {
   it('explains why a redeem is blocked', () => {
     expect(redeemBlocker({ ...base, balance: 120 })).toBe('You need 180 more coins')
     expect(redeemBlocker({ ...base, reward: { ...cream, tier: 'gold' } })).toMatch(/unlock at level 10/)
-    expect(redeemBlocker({ ...base, budget: 400, monthSpent: 200 })).toMatch(/budget \(200 left\)/)
-    expect(redeemBlocker({ ...base, budget: 450, monthSpent: 200 })).toBeNull()
+    expect(redeemBlocker({ ...base, budget: 50, monthSpent: 30 })).toMatch(/budget \(20 left\)/)
+    expect(redeemBlocker({ ...base, budget: 70, monthSpent: 30 })).toBeNull()
     expect(redeemBlocker({ ...base, reward: { ...cream, archived: true } })).toMatch(/archived/)
     expect(() => planRedeem({ ...base, balance: 0 })).toThrow('more coins')
   })
