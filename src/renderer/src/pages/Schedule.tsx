@@ -5,6 +5,7 @@ import { BLOCK_RULES, EVERY_DAY, weekdayIndex, WEEKDAYS, WORK_DAYS } from '@core
 import type { BlockInput, BlockKind, BlockView, Rule, ScheduleState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
+import { DualTimeline } from '../DualTimeline'
 import { Coins, useAction } from '../ui'
 import { clock, mmss, WeekdayPicker, weekdayLabel } from './planUi'
 
@@ -38,6 +39,7 @@ export function Schedule({ state, rules, onState, onWallet }: Props) {
   const act = useAction()
   const [editing, setEditing] = useState<BlockInput | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; block: BlockView } | null>(null)
+  const [scheduleView, setScheduleView] = useState<'timeline' | 'blocks' | 'week'>('timeline')
   const running = state.blocks.find((b) => b.status === 'running')
   const now = useTicker(!!running)
   const isToday = state.day === state.today
@@ -103,8 +105,40 @@ export function Schedule({ state, rules, onState, onWallet }: Props) {
         </button>
       </div>
 
+      {/* View Switcher: Dual Timeline & Calendar vs Blocks vs Weekly Overview */}
+      <div className="seg-switch" style={{ margin: '14px 0 16px', alignSelf: 'flex-start' }}>
+        <button
+          className={scheduleView === 'timeline' ? 'on' : ''}
+          onClick={() => setScheduleView('timeline')}
+        >
+          <Icon name="calendar" size={14} />
+          Dual Timeline & Calendar
+        </button>
+        <button
+          className={scheduleView === 'blocks' ? 'on' : ''}
+          onClick={() => setScheduleView('blocks')}
+        >
+          <Icon name="list" size={14} />
+          Focus Blocks List ({state.blocks.length})
+        </button>
+        <button
+          className={scheduleView === 'week' ? 'on' : ''}
+          onClick={() => setScheduleView('week')}
+        >
+          <Icon name="spark" size={14} />
+          Weekly Overview ({state.all.length})
+        </button>
+      </div>
+
       {running && isToday && <FocusCard block={running} now={now} onFinish={() => run('finish', running)} onSkip={() => run('skip', running)} />}
 
+      {scheduleView === 'timeline' && (
+        <div style={{ marginBottom: 24 }}>
+          <DualTimeline schedule={state} onSchedule={onState} />
+        </div>
+      )}
+
+      {scheduleView === 'blocks' && (
       <section className="panel">
         <header className="panel-head">
           <h2>{isToday ? 'Today' : new Date(`${state.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
@@ -181,8 +215,9 @@ export function Schedule({ state, rules, onState, onWallet }: Props) {
           </ol>
         )}
       </section>
+      )}
 
-      {state.all.length > 0 && (
+      {scheduleView === 'week' && state.all.length > 0 && (
         <section className="panel">
           <header className="panel-head">
             <h2>Your week</h2>

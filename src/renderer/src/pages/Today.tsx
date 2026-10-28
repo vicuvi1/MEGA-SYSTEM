@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
-import type { BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
+import type { BodyState, CalendarEvent, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
-import { DualTimeline } from '../DualTimeline'
 import { useUiPrefs } from '../uiPrefs'
 import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
@@ -593,7 +592,81 @@ function UnifiedQuestHub({
 }
 
 function TodaySchedule({ schedule, onSchedule, onGo }: { schedule: ScheduleState | null; onSchedule: (s: ScheduleState) => void; onGo: (p: PageId) => void }) {
-  return <DualTimeline schedule={schedule} onSchedule={onSchedule} onGo={onGo} />
+  const [todayCal, setTodayCal] = useState<CalendarEvent[]>([])
+
+  useEffect(() => {
+    const today = schedule?.today || new Date().toISOString().slice(0, 10)
+    life.calendar
+      .events(today)
+      .then((evs) => setTodayCal(evs.slice(0, 6)))
+      .catch(() => {})
+  }, [schedule?.today])
+
+  const blocks = schedule && schedule.day === schedule.today ? schedule.blocks : []
+  const running = blocks.find((b) => b.status === 'running')
+  const pendingBlocks = blocks.filter((b) => b.status === 'pending').slice(0, 4)
+
+  return (
+    <section className="panel today-schedule-compact">
+      <header className="panel-head">
+        <h2>Schedule & Appointments</h2>
+        <button className="link" onClick={() => onGo('schedule')}>
+          Open Full Calendar →
+        </button>
+      </header>
+
+      {running && (
+        <div style={{ background: 'rgba(0, 210, 255, 0.1)', border: '1px solid rgba(0, 210, 255, 0.4)', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <span style={{ fontSize: '11px', color: '#00d2ff', fontWeight: 800, textTransform: 'uppercase' }}>▶ Current Focus Block</span>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>{running.title}</div>
+          </div>
+          <button className="btn small primary" onClick={() => onGo('schedule')}>
+            View Timer
+          </button>
+        </div>
+      )}
+
+      {blocks.length === 0 && todayCal.length === 0 ? (
+        <div className="empty small-empty">
+          <p>Nothing scheduled for today.</p>
+          <button className="btn small" onClick={() => onGo('schedule')}>
+            <Icon name="plus" size={14} /> Plan your day
+          </button>
+        </div>
+      ) : (
+        <ul className="feed" style={{ margin: 0, padding: 0 }}>
+          {pendingBlocks.map((b) => (
+            <li key={b.id} style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={() => onGo('schedule')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, color: '#7cc4ff', background: 'rgba(124, 196, 255, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>
+                  {b.start}
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{b.title}</span>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{b.minutes}m</span>
+            </li>
+          ))}
+
+          {todayCal.map((ev) => (
+            <li key={ev.id} style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={() => onGo('schedule')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>
+                  {ev.startTime}
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{ev.title}</span>
+              </div>
+              {ev.location && (
+                <span style={{ fontSize: '11px', color: 'var(--muted)', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  📍 {ev.location}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
 }
 
 function TodayTasks({ tasks, onTasks, onWallet, onGo }: { tasks: TasksState | null; onTasks: (t: TasksState) => void; onWallet: () => void; onGo: (p: PageId) => void }) {
