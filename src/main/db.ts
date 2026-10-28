@@ -267,6 +267,11 @@ const MIGRATIONS: string[] = [
   /* 013 Rich store URLs for rewards and wishlist_goals */ `
   ALTER TABLE rewards ADD COLUMN product_url TEXT;
   ALTER TABLE wishlist_goals ADD COLUMN product_url TEXT;
+  `,
+  /* 014 Performance indexes for ledger and expenses */ `
+  CREATE INDEX IF NOT EXISTS idx_ledger_day_id ON ledger(day, id);
+  CREATE INDEX IF NOT EXISTS idx_ledger_ts ON ledger(ts);
+  CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
   `
 ]
 
@@ -299,8 +304,10 @@ function seedDefaults(db: DB): void {
 export function openDb(file: string): DB {
   const db = new Database(file)
   db.pragma('journal_mode = WAL')
+  db.pragma('synchronous = NORMAL')
   db.pragma('foreign_keys = ON')
   db.pragma('busy_timeout = 3000')
+  db.pragma('temp_store = MEMORY')
   migrate(db)
   seedDefaults(db)
   // Ensure any legacy PIN lock is immediately wiped

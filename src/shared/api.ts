@@ -519,6 +519,11 @@ export interface LifeApi {
     events(day?: string): Promise<CalendarEvent[]>
     clear(): Promise<void>
   }
+  hud: {
+    hide(): Promise<void>
+    toggle(): Promise<void>
+    show(): Promise<void>
+  }
 }
 
 /** IPC replies are wrapped so error messages reach the UI cleanly. */

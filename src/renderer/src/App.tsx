@@ -262,6 +262,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         soundTick()
         setPaletteOpen((o) => !o)
       }
+      if (key === 'quick-command') {
+        soundTick()
+        setQuickCommandOpen((o) => !o)
+      }
+      if (key === 'oracle') {
+        soundSystemOracle()
+        setOracleOpen((o) => !o)
+      }
       if (key === 'fullscreen') life.app.toggleFullScreen()
     }
     const onKey = (e: KeyboardEvent) => {

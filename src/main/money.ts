@@ -2,6 +2,7 @@ import { computeDailyExpenseSummary, validateExpense, type DailyExpenseSummary, 
 import type { DB } from './db'
 import { getSetting, setSetting } from './db'
 import type { Wallet } from './wallet'
+import type { FinanceHost } from './apps/finance'
 
 interface ExpenseRow {
   id: number
@@ -32,7 +33,13 @@ function toExpense(r: ExpenseRow): Expense {
 }
 
 export class MoneyService {
+  private financeHost?: FinanceHost
+
   constructor(private db: DB, private wallet: Wallet) {}
+
+  setFinanceHost(fh: FinanceHost): void {
+    this.financeHost = fh
+  }
 
   currency(): string {
     return getSetting(this.db, 'money_currency') || 'MDL'
@@ -81,14 +88,16 @@ export class MoneyService {
     amountBani: number,
     category: string,
     note?: string,
-    now = new Date()
+    now = new Date(),
+    skipFinanceSync = false
   ): { expense: Expense; state: NativeMoneySummary; awarded: boolean } {
     validateExpense(amountBani, category)
     const today = this.wallet.today(now)
+    const roundedBani = Math.round(amountBani)
 
     const info = this.db
       .prepare('INSERT INTO expenses (day, amount, category, note, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(today, Math.round(amountBani), category.trim(), note?.trim() || null, now.toISOString())
+      .run(today, roundedBani, category.trim(), note?.trim() || null, now.toISOString())
 
     const row = this.db.prepare('SELECT * FROM expenses WHERE id = ?').get(info.lastInsertRowid) as ExpenseRow
 
@@ -98,6 +107,17 @@ export class MoneyService {
       awarded = true
     } catch {
       // already logged today
+    }
+
+    if (!skipFinanceSync && this.financeHost) {
+      this.financeHost.addTransaction({
+        type: 'expense',
+        amount: roundedBani,
+        category: category.trim(),
+        note: note?.trim() || undefined
+      }).catch((err) => {
+        console.warn('FinanceHost dual-write warning:', err)
+      })
     }
 
     return {

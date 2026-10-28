@@ -536,7 +536,7 @@ export class TelegramBotHub {
             res = this.money.addExpense(
               cents,
               cat as any,
-              note ? `[Telegram] ${note}` : '[Telegram]'
+              note ? `[Telegram] ${note}` : '[Telegram]', undefined, true
             )
             this.onWalletChangeCallback?.()
           }

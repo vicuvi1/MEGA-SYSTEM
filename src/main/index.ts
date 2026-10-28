@@ -1,4 +1,5 @@
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, safeStorage, screen, session, shell, Tray } from 'electron'
@@ -28,6 +29,7 @@ import { CalendarService } from './calendarService'
 import type { BotBridgeConfig, AIConfig, CalendarConfig } from '@shared/api'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
+import { HudManager } from './hud'
 import {
   appsDir, embeddedManLevelDb, ensureWaky, MAN_PARTITION, manUrl, migrateStandaloneData, registerEmbeddedSchemes, SPORT_PARTITION, sportUrl, WAKY_PARTITION, WAKY_URL,
   wakyRoot, type MigrationResult
@@ -449,6 +451,10 @@ handle('calendar:sync', () => calendarService.sync())
 handle('calendar:events', (day?: string) => calendarService.getEvents(day))
 handle('calendar:clear', () => calendarService.clear())
 
+handle('hud:hide', () => hudManager.hide())
+handle('hud:toggle', () => hudManager.toggle())
+handle('hud:show', () => hudManager.show())
+
 
 handle('connections:state', () => connections.state())
 handle('connections:connect', async (kind: 'waky' | 'finance') => {
@@ -490,6 +496,7 @@ handle('update:run', () => updater.update())
 
 // ---------- Apps inside Life System ----------
 let financeHost: FinanceHost | null = null
+const hudManager = new HudManager()
 let migration: MigrationResult | null = null
 handle('apps:info', () => ({
   finance: { url: FINANCE_URL, partition: FINANCE_PARTITION, preloadReady: !!financeHost },
@@ -554,6 +561,8 @@ app.on('web-contents-created', (_e, wc) => {
       if (input.control && !input.alt && !input.shift && key === 'b') action = 'toggle-sidebar'
       // Finance Helper has its own Ctrl+K search; Ctrl+Shift+K opens ours everywhere.
       else if (input.control && !input.alt && key === 'k' && (input.shift || !inFinance)) action = 'palette'
+      else if (input.control && !input.alt && (key === ' ' || input.code === 'Space')) action = 'quick-command'
+      else if ((input.control && input.shift && key === 'a') || (input.control && !input.alt && key === 'j')) action = 'oracle'
       else if (key === 'f11') action = 'fullscreen'
       else if (input.alt && !input.control && /^[1-9]$/.test(key)) action = `go:${key}`
       else if (input.control && key === 'tab') action = 'switch-view'
@@ -800,6 +809,7 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open LIFE', click: showWindow },
+      { label: 'Quick HUD (Ctrl+Space)', click: () => hudManager.toggle() },
       { label: 'Urge crusher', click: openUrgeCrusher },
       { type: 'separator' },
       { label: 'Quit', click: () => { quitting = true; app.quit() } }
@@ -890,12 +900,19 @@ app.whenReady().then(() => {
     financeHost = setupFinance(appsDir(), () => navigate('money'))
     if (financeHost) {
       telegramHub.setFinanceHost(financeHost)
+      moneyService.setFinanceHost(financeHost)
     }
-    if (!globalShortcut.register('CommandOrControl+Alt+N', () => financeHost?.quickAdd())) console.warn('could not register Ctrl+Alt+N')
+    if (!globalShortcut.register('CommandOrControl+Alt+N', () => hudManager.show())) console.warn('could not register Ctrl+Alt+N')
+    try {
+      globalShortcut.register('CommandOrControl+Space', () => hudManager.toggle())
+    } catch {
+      console.warn('could not register Ctrl+Space')
+    }
   } catch (e) {
     console.error('Finance Helper could not start', e)
   }
   createWindow()
+  hudManager.create()
   createTray()
   if (!globalShortcut.register(PANIC_KEY, openUrgeCrusher)) console.warn(`could not register ${PANIC_KEY}`)
   checkReminders()
@@ -907,7 +924,7 @@ app.whenReady().then(() => {
   setInterval(() => updater.check(), 4 * 3600_000)
   try {
     if (!secrets.get() && safeStorage.isEncryptionAvailable()) {
-      secrets.set('LIFE-Victor-Auto-Backup-2026')
+      secrets.set(randomBytes(32).toString('hex'))
     }
   } catch (e) {
     console.warn('Auto backup key initialization failed:', e)
@@ -920,13 +937,24 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   telegramHub.stopPolling()
   quitting = true
-  if (db?.open) backups.run()
+  if (db?.open) {
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)')
+    } catch {}
+    backups.run()
+  }
 })
 
 // Close the database last, after every window is gone (an update quits this way too).
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
-  if (db?.open) db.close()
+  hudManager.destroy()
+  if (db?.open) {
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)')
+    } catch {}
+    db.close()
+  }
 })
 
 app.on('window-all-closed', () => {

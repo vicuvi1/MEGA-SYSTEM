@@ -779,6 +779,11 @@ export function createMockApi(): Bridge {
       ],
       clear: async () => {}
     },
+    hud: {
+      hide: async () => {},
+      toggle: async () => {},
+      show: async () => {}
+    },
     onLocked: () => {},
     onUrge: () => {},
     onWalletChanged: () => {},

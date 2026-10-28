@@ -164,6 +164,7 @@ export function Shop({ state, onState, onWallet }: Props) {
   // Live countdown timer for active buffs
   useEffect(() => {
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       setActiveBuffs((prev) =>
         prev
           .map((b) => {

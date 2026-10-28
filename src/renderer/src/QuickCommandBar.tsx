@@ -3,6 +3,8 @@ import { life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
 import { soundCoin, soundSuccess, soundTick, soundMechanicalClick } from './sound'
 import { useToast } from './ui'
+import { parseTelegramText } from '@core/botCommands'
+import { formatMdl } from '@core/economy'
 import './quickCommand.css'
 
 interface Props {
@@ -147,19 +149,39 @@ export function QuickCommandBar({ open, onClose, onRefreshWallet }: Props) {
         return
       }
 
-      // 4. Expense: e.g. "spent 15 lunch", "paid 20 groceries"
+      // 4. Expense: parse with Unified Telegram grammar (e.g. "coffee 35", "35 coffee", "taxi 50", "spent 15 lunch")
+      const parsedCmd = parseTelegramText(text)
+      if (parsedCmd.type === 'expense' && parsedCmd.expenseAmount) {
+        const amtMdl = parsedCmd.expenseAmount
+        const cents = Math.round(amtMdl * 100)
+        const cat = parsedCmd.expenseCategory || 'other'
+        const note = parsedCmd.expenseNote || 'Quick Expense'
+        await life.money.addExpense(cents, cat, note)
+        soundSuccess()
+        triggerRpgPopup({
+          main: `-${formatMdl(amtMdl)}`,
+          sub: `${cat}: ${note}`,
+          kind: 'gold'
+        })
+        toast(`Logged ${formatMdl(amtMdl)} (${cat}): ${note}`, 'good')
+        onRefreshWallet()
+        onClose()
+        return
+      }
+
       const expenseMatch = text.match(/^(?:spent|expense|paid|cost)\s*\$?(\d+(?:\.\d+)?)\s*(.*)/i)
       if (expenseMatch) {
         const amount = parseFloat(expenseMatch[1])
         const note = expenseMatch[2].trim() || 'Quick Expense'
-        await life.money.addExpense(amount, 'general', note)
+        const cents = Math.round(amount * 100)
+        await life.money.addExpense(cents, 'other', note)
         soundSuccess()
         triggerRpgPopup({
-          main: `-$${amount.toFixed(2)}`,
+          main: `-${formatMdl(amount)}`,
           sub: note,
           kind: 'gold'
         })
-        toast(`Logged $${amount.toFixed(2)} expense: ${note}`, 'good')
+        toast(`Logged ${formatMdl(amount)} expense: ${note}`, 'good')
         onRefreshWallet()
         onClose()
         return

@@ -183,6 +183,11 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     events: (day) => call('calendar:events', day),
     clear: () => call('calendar:clear')
   },
+  hud: {
+    hide: () => call('hud:hide'),
+    toggle: () => call('hud:toggle'),
+    show: () => call('hud:show')
+  },
   onLocked: (cb) => {
     ipcRenderer.on('auth:locked', () => cb())
   },

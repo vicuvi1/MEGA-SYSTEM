@@ -62,4 +62,24 @@ describe('MoneyService backend', () => {
     money.setBudget(15000)
     expect(money.dailyBudget()).toBe(15000)
   })
+
+  it('dual-writes to FinanceHost when configured', async () => {
+    let syncedTx: any = null
+    const mockFinanceHost: any = {
+      addTransaction: async (tx: any) => {
+        syncedTx = tx
+        return { ok: true, txId: 'tx-123', balanceTotal: 50000, accountName: 'Cash' }
+      }
+    }
+    money.setFinanceHost(mockFinanceHost)
+    const now = new Date('2026-10-27T12:00:00Z')
+    money.addExpense(3500, 'food', 'Coffee', now)
+
+    expect(syncedTx).toEqual({
+      type: 'expense',
+      amount: 3500,
+      category: 'food',
+      note: 'Coffee'
+    })
+  })
 })

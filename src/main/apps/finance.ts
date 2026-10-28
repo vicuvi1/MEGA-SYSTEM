@@ -227,13 +227,14 @@ export function setupFinance(appsDir: string, onShow: () => void): FinanceHost {
     if (/^https:\/\/(t\.me|script\.google\.com)\//.test(url)) shell.openExternal(url)
     return true
   })
-  telegram.start()
-  const wake = () => {
-    telegram.wake?.()
-    telegram.start()
-  }
-  powerMonitor.on('resume', wake)
-  powerMonitor.on('unlock-screen', wake)
+  // Duplicate poller disabled: TelegramBotHub is the sole poller for Telegram updates to prevent 409 conflicts.
+  // telegram.start()
+  // const wake = () => {
+  //   telegram.wake?.()
+  //   telegram.start()
+  // }
+  // powerMonitor.on('resume', wake)
+  // powerMonitor.on('unlock-screen', wake)
 
   // A hidden page on app://finance that reads the saved state (works even if
   // the Money tab was never opened). Null when it is PIN-encrypted or empty.

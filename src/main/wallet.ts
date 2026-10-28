@@ -102,10 +102,29 @@ export class Wallet {
   }
 
   summary(now = new Date()): Summary {
-    const all = this.entries()
     const today = dayKey(now, this.timeZone)
-    const live = effective(all).filter((e) => e.day === today)
-    const xp = totalXp(all)
+    const totals = (this.db.prepare(`
+      SELECT 
+        COALESCE(SUM(coins), 0) AS balance,
+        COALESCE(SUM(CASE WHEN xp > 0 THEN xp ELSE 0 END), 0) AS total_xp
+      FROM ledger
+      WHERE kind != 'undo'
+        AND id NOT IN (SELECT undo_of FROM ledger WHERE kind = 'undo' AND undo_of IS NOT NULL)
+    `).get() as { balance: number; total_xp: number }) ?? { balance: 0, total_xp: 0 }
+
+    const todayRows = (this.db.prepare(`
+      SELECT * FROM ledger
+      WHERE day = ?
+        AND kind != 'undo'
+        AND id NOT IN (SELECT undo_of FROM ledger WHERE kind = 'undo' AND undo_of IS NOT NULL)
+      ORDER BY id ASC
+    `).all(today) as LedgerRow[]).map(toEntry)
+
+    const recentRows = (this.db.prepare(`
+      SELECT * FROM ledger ORDER BY id DESC LIMIT 12
+    `).all() as LedgerRow[]).map(toEntry)
+
+    const xp = totals.total_xp
     const allocated = this.getStatAllocation()
     let hunterStats: any = { allocated }
     try {
@@ -120,14 +139,14 @@ export class Wallet {
     }
 
     return {
-      balance: balance(all),
+      balance: totals.balance,
       totalXp: xp,
       level: levelInfo(xp, hunterStats),
       today,
-      todayCoins: live.reduce((s, e) => s + e.coins, 0),
-      todayXp: live.reduce((s, e) => s + e.xp, 0),
-      todayRules: [...new Set(live.map((e) => e.ruleId).filter(Boolean) as string[])],
-      recent: all.slice(-12).reverse()
+      todayCoins: todayRows.reduce((s, e) => s + e.coins, 0),
+      todayXp: todayRows.reduce((s, e) => s + e.xp, 0),
+      todayRules: [...new Set(todayRows.map((e) => e.ruleId).filter(Boolean) as string[])],
+      recent: recentRows
     }
   }
 
