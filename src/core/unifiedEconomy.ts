@@ -101,6 +101,7 @@ export interface WishlistGoal {
   note: string | null
   createdAt: string
   imageUrl?: string | null
+  productUrl?: string | null
   currency?: string | null
 }
 

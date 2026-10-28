@@ -263,6 +263,10 @@ const MIGRATIONS: string[] = [
   `,
   /* 012 Align rewards real_cost with the standard 10 coins = 1 MDL exchange rate */ `
   UPDATE rewards SET real_cost = CAST(ROUND(price / 10.0) AS INTEGER) WHERE real_cost != CAST(ROUND(price / 10.0) AS INTEGER) OR real_cost = 0;
+  `,
+  /* 013 Rich store URLs for rewards and wishlist_goals */ `
+  ALTER TABLE rewards ADD COLUMN product_url TEXT;
+  ALTER TABLE wishlist_goals ADD COLUMN product_url TEXT;
   `
 ]
 

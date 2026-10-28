@@ -1854,3 +1854,141 @@
   font-size: 11px;
   color: var(--muted);
 }
+
+
+/* ==========================================================================
+   AI Product Inspector & Store Deal Link Enhancements
+   ========================================================================== */
+.ai-inspector-box {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid rgba(110, 231, 216, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.ai-inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-sparkle-tag {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6ee7d8;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ai-inspector-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ai-inspector-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-inspector-input-row input {
+  flex: 1;
+  background: rgba(11, 15, 25, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+}
+
+.ai-inspector-input-row input:focus {
+  border-color: #6ee7d8 !important;
+  box-shadow: 0 0 8px rgba(110, 231, 216, 0.3) !important;
+}
+
+.ai-inspect-btn {
+  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%) !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 0 14px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+}
+
+.ai-inspect-btn:hover:not(:disabled) {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.ai-inspect-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reward-bottom-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.reward-bottom-actions .btn.primary {
+  flex: 1;
+}
+
+.reward-bottom-actions .lock-note {
+  flex: 1;
+  margin: 0;
+}
+
+.reward-store-btn {
+  background: rgba(30, 41, 59, 0.6) !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+  color: #38bdf8 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  padding: 7px 11px !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+}
+
+.reward-store-btn:hover {
+  background: rgba(56, 189, 248, 0.15) !important;
+  border-color: #38bdf8 !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+.reward-photo-container.placeholder {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reward-photo-placeholder-icon {
+  font-size: 34px;
+  opacity: 0.35;
+}

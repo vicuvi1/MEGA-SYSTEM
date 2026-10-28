@@ -440,6 +440,7 @@ handle('ai:generateRewards', (userPrompt?: string) => aiService.generateRewards(
 handle('ai:performanceReport', () => aiService.generatePerformanceReport())
 handle('ai:askCoach', (msg: string, history?: any[]) => aiService.askCoach(msg, history))
 handle('ai:decomposeTask', (title: string, notes?: string, category?: string) => aiService.decomposeTask(title, notes, category))
+handle('ai:inspectProduct', (queryOrUrl: string) => aiService.inspectProduct(queryOrUrl))
 
 // ---------- Google Calendar Integration ----------
 handle('calendar:config', () => calendarService.getConfig())

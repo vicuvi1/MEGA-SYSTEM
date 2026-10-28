@@ -24,6 +24,7 @@ export interface Reward {
   archived: boolean
   note: string | null
   imageUrl?: string | null
+  productUrl?: string | null
   currency?: string | null
 }
 
@@ -37,6 +38,7 @@ export const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
     archived: false,
     note: 'Premium facial cleanser & hydration moisturizer.',
     imageUrl: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&auto=format&fit=crop&q=80',
+    productUrl: 'https://farmaciafamiliei.md/skincare',
     currency: 'MDL'
   },
   {
@@ -48,6 +50,7 @@ export const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
     archived: false,
     note: 'Sleek matte shockproof protection.',
     imageUrl: 'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=600&auto=format&fit=crop&q=80',
+    productUrl: 'https://darwin.md/huse-accesorii-telefoane',
     currency: 'MDL'
   },
   {
@@ -59,6 +62,7 @@ export const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
     archived: false,
     note: 'Precision cordless beard & hair trimmer.',
     imageUrl: 'https://images.unsplash.com/photo-1621607512214-68297480165e?w=600&auto=format&fit=crop&q=80',
+    productUrl: 'https://darwin.md/aparate-de-tuns-barbierit',
     currency: 'MDL'
   },
   {
@@ -70,6 +74,7 @@ export const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
     archived: false,
     note: 'The big spiritual milestone. Keep stacking and building.',
     imageUrl: 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=600&auto=format&fit=crop&q=80',
+    productUrl: 'https://www.visitsaudi.com/en/umrah',
     currency: 'MDL'
   }
 ]

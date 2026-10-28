@@ -173,7 +173,8 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     generateRewards: (userPrompt) => call('ai:generateRewards', userPrompt),
     performanceReport: () => call('ai:performanceReport'),
     askCoach: (msg, history) => call('ai:askCoach', msg, history),
-    decomposeTask: (title, notes, category) => call('ai:decomposeTask', title, notes, category)
+    decomposeTask: (title, notes, category) => call('ai:decomposeTask', title, notes, category),
+    inspectProduct: (queryOrUrl) => call('ai:inspectProduct', queryOrUrl)
   },
   calendar: {
     config: () => call('calendar:config'),

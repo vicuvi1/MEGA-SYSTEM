@@ -2,6 +2,7 @@ import type {
   AIConfig,
   AIPerformanceReport,
   GeneratedReward,
+  InspectedProductResult,
   ModelChoice,
   TaskDecompositionItem,
   TaskDecompositionResult,
@@ -64,7 +65,7 @@ export interface NativeMoneySummary {
 export type { ChestLootDrop, MultiplierInfo, WishlistCategory, WishlistGoal, SupportedCurrency, CurrencyConfig, BankState, ActiveBuff, ConsumableItem, ConsumableId, EconomyConfig, EconomyPreset }
 export { CONSUMABLE_CATALOG, ECONOMY_PRESETS }
 export { CURRENCY_CONFIGS, convertCurrency, formatDualCurrency }
-export type { AIConfig, AIPerformanceReport, GeneratedReward, ModelChoice }
+export type { AIConfig, AIPerformanceReport, GeneratedReward, InspectedProductResult, ModelChoice }
 export { POPULAR_MODELS }
 
 export interface WishlistGoalInput {
@@ -76,6 +77,7 @@ export interface WishlistGoalInput {
   pinned?: boolean
   note?: string
   imageUrl?: string | null
+  productUrl?: string | null
   currency?: string | null
 }
 
@@ -501,6 +503,7 @@ export interface LifeApi {
       toolExecutions?: Array<{ tool: string; result: string; success: boolean }>
     }>
     decomposeTask(title: string, notes?: string, category?: string): Promise<TaskDecompositionResult>
+    inspectProduct(queryOrUrl: string): Promise<InspectedProductResult>
   }
   calendar: {
     config(): Promise<CalendarConfig>

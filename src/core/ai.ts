@@ -11,7 +11,7 @@ export interface AIConfig {
   enabled: boolean
 }
 
-export type AITask = 'reward_ideas' | 'performance_report' | 'coach_chat' | 'decompose_task'
+export type AITask = 'reward_ideas' | 'performance_report' | 'coach_chat' | 'decompose_task' | 'inspect_product'
 
 export interface TaskDecompositionItem {
   title: string
@@ -163,8 +163,8 @@ export function selectModelForTask(
   }
 
   // AUTO Routing based on task complexity:
-  // 1. Reward ideas & task decomposition -> Fast response (Gemini Flash or DeepSeek V3)
-  if (task === 'reward_ideas' || task === 'decompose_task') {
+  // 1. Reward ideas & task decomposition & product inspection -> Fast response (Gemini Flash or DeepSeek V3)
+  if (task === 'reward_ideas' || task === 'decompose_task' || task === 'inspect_product') {
     if (hasGemini) return { provider: 'gemini', model: 'gemini-3.5-flash' }
     return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
   }
@@ -198,6 +198,7 @@ export interface GeneratedReward {
   category: 'gear' | 'tech' | 'trip' | 'luxury' | 'wellness'
   note: string
   imageUrl: string
+  productUrl?: string
 }
 
 export function buildRewardPrompt(ctx: AIRewardContext): string {
@@ -234,6 +235,181 @@ Output MUST be a single valid JSON array of objects without markdown formatting 
     "imageUrl": "string"
   }
 ]`
+}
+
+export interface InspectedProductResult {
+  title: string
+  price: number
+  coins: number
+  tier: 'bronze' | 'silver' | 'gold' | 'legendary'
+  category: 'gear' | 'tech' | 'trip' | 'luxury' | 'wellness'
+  note: string
+  imageUrl: string
+  productUrl: string
+}
+
+export function heuristicInspectProduct(input: string, currency = 'MDL'): InspectedProductResult {
+  const cleanInput = input.trim()
+  let title = 'Custom Upgrade'
+  let productUrl = ''
+  let estimatedPrice = 450
+  let category: 'gear' | 'tech' | 'trip' | 'luxury' | 'wellness' = 'gear'
+  let imageUrl = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80'
+
+  const isUrl = /^https?:\/\//i.test(cleanInput)
+  if (isUrl) {
+    productUrl = cleanInput
+    try {
+      const parsed = new URL(cleanInput)
+      const pathname = parsed.pathname.replace(/\.(html|php|aspx|htm)$/i, '')
+      const parts = pathname.split('/').filter(Boolean)
+      const slug = parts[parts.length - 1] || parsed.hostname
+      title = slug
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+        .replace(/(\d+)\s*(gb|tb|mah|w|hz)/gi, '$1$2')
+        .slice(0, 60)
+    } catch {
+      title = 'Inspected Product'
+    }
+  } else {
+    title = cleanInput.slice(0, 60)
+    productUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanInput)}`
+  }
+
+  const lower = (cleanInput + ' ' + title).toLowerCase()
+
+  if (lower.includes('iphone') || lower.includes('macbook') || lower.includes('laptop') || lower.includes('ipad')) {
+    category = 'tech'
+    imageUrl = 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = lower.includes('macbook') ? 18000 : lower.includes('iphone') ? 15000 : 7000
+  } else if (lower.includes('headphone') || lower.includes('earphone') || lower.includes('airpod') || lower.includes('sound') || lower.includes('casti') || lower.includes('boxa')) {
+    category = 'tech'
+    imageUrl = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = lower.includes('airpod') ? 4200 : 1200
+  } else if (lower.includes('watch') || lower.includes('ceas') || lower.includes('garmin')) {
+    category = 'gear'
+    imageUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = 4500
+  } else if (lower.includes('shaver') || lower.includes('barbierit') || lower.includes('tuns') || lower.includes('trimmer')) {
+    category = 'gear'
+    imageUrl = 'https://images.unsplash.com/photo-1621607512214-68297480165e?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = 1500
+  } else if (lower.includes('cream') || lower.includes('skincare') || lower.includes('crema') || lower.includes('serum') || lower.includes('lotion')) {
+    category = 'wellness'
+    imageUrl = 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = 350
+  } else if (lower.includes('shoe') || lower.includes('pantofi') || lower.includes('sneaker') || lower.includes('nike') || lower.includes('adidas')) {
+    category = 'gear'
+    imageUrl = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = 2200
+  } else if (lower.includes('husa') || lower.includes('case') || lower.includes('armor') || lower.includes('sticla')) {
+    category = 'gear'
+    imageUrl = 'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = 350
+  } else if (lower.includes('game') || lower.includes('joc') || lower.includes('steam') || lower.includes('playstation')) {
+    category = 'luxury'
+    imageUrl = 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = 800
+  } else if (lower.includes('spa') || lower.includes('masaj') || lower.includes('retreat') || lower.includes('sauna')) {
+    category = 'wellness'
+    imageUrl = 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=600&auto=format&fit=crop&q=80'
+    estimatedPrice = 1200
+  } else if (lower.includes('travel') || lower.includes('trip') || lower.includes('flight') || lower.includes('hotel') || lower.includes('kaaba') || lower.includes('umrah')) {
+    category = 'trip'
+    imageUrl = 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80'
+    estimatedPrice = 15000
+  }
+
+  if (currency === 'USD' || currency === 'EUR') {
+    estimatedPrice = Math.max(10, Math.round(estimatedPrice / 18))
+  }
+
+  const coins = Math.round(estimatedPrice * 10)
+  const tier: 'bronze' | 'silver' | 'gold' | 'legendary' =
+    coins >= 15000 ? 'legendary' : coins >= 5000 ? 'gold' : coins >= 1000 ? 'silver' : 'bronze'
+
+  return {
+    title,
+    price: estimatedPrice,
+    coins,
+    tier,
+    category,
+    note: `Smart-extracted upgrade for ${title}. Fair 10:1 coin ratio locked.`,
+    imageUrl,
+    productUrl
+  }
+}
+
+export function buildInspectProductPrompt(input: string, currency: string): string {
+  return `You are the Solo Leveling System Item Inspector and Reward Architect.
+The player wants to inspect and convert an online product or query into a tangible, motivating Hunter Reward.
+Input product link or name: "${input}"
+Player's real-world currency: ${currency}.
+
+Analyze the product and output a JSON object with:
+- "title": Clean, concise product name (under 50 chars). Remove store slogans or messy tracking text.
+- "price": Realistic retail price in ${currency} (integer). If it's a known product (e.g. AirPods, Nike, Kindle, shaver), use accurate retail market price.
+- "coins": Strict 10:1 ratio with price (${currency} * 10). Example: If price is 450 ${currency}, coins MUST be 4500.
+- "tier": "bronze" (price < 500 ${currency}), "silver" (500 - 1999 ${currency}), "gold" (2000 - 9999 ${currency}), or "legendary" (10000+ ${currency}).
+- "category": One of "gear", "tech", "trip", "luxury", or "wellness".
+- "note": 1-2 motivating sentences on why this upgrade empowers the player and how to earn it.
+- "imageUrl": A high-quality, relevant Unsplash photo URL (use https://images.unsplash.com/photo-... with ?w=600&auto=format&fit=crop&q=80).
+- "productUrl": The original product URL if provided, or an official product/search link.
+
+Output MUST be a single valid JSON object without markdown fences or additional commentary:
+{
+  "title": "string",
+  "price": number,
+  "coins": number,
+  "tier": "bronze" | "silver" | "gold" | "legendary",
+  "category": "gear" | "tech" | "trip" | "luxury" | "wellness",
+  "note": "string",
+  "imageUrl": "string",
+  "productUrl": "string"
+}`
+}
+
+export function parseInspectProductResponse(text: string, input: string, currency: string): InspectedProductResult {
+  let cleaned = text.trim()
+  const objMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (objMatch) {
+    cleaned = objMatch[0]
+  }
+  try {
+    const p = JSON.parse(cleaned)
+    const price = Math.max(1, Math.round(Number(p.price) || 100))
+    const coins = Math.max(10, Math.round(Number(p.coins) || price * 10))
+    const tier = ['bronze', 'silver', 'gold', 'legendary'].includes(p.tier)
+      ? p.tier
+      : coins >= 15000
+      ? 'legendary'
+      : coins >= 5000
+      ? 'gold'
+      : coins >= 1000
+      ? 'silver'
+      : 'bronze'
+    const category = ['gear', 'tech', 'trip', 'luxury', 'wellness'].includes(p.category) ? p.category : 'gear'
+    const imageUrl = String(p.imageUrl || '').startsWith('http')
+      ? p.imageUrl
+      : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80'
+    const productUrl = String(p.productUrl || input).startsWith('http')
+      ? (p.productUrl || input)
+      : `https://www.google.com/search?q=${encodeURIComponent(p.title || input)}`
+
+    return {
+      title: String(p.title || 'Inspected Product').slice(0, 60),
+      price,
+      coins,
+      tier,
+      category,
+      note: String(p.note || 'Inspected warrior upgrade.').slice(0, 200),
+      imageUrl,
+      productUrl
+    }
+  } catch {
+    return heuristicInspectProduct(input, currency)
+  }
 }
 
 export function parseRewardResponse(text: string): GeneratedReward[] {

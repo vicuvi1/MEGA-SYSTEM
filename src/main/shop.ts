@@ -17,13 +17,14 @@ interface RewardRow {
   archived: number
   note: string | null
   image_url?: string | null
+  product_url?: string | null
   currency?: string | null
 }
 
 const toReward = (r: RewardRow): Reward => ({
   id: r.id, title: r.title, price: r.price, tier: r.tier, realCost: r.real_cost,
   pinned: !!r.pinned, archived: !!r.archived, note: r.note,
-  imageUrl: r.image_url ?? null, currency: r.currency ?? 'MDL'
+  imageUrl: r.image_url ?? null, productUrl: r.product_url ?? null, currency: r.currency ?? 'MDL'
 })
 
 export class Shop {
@@ -87,17 +88,35 @@ export class Shop {
   }
 
   save(input: RewardInput): void {
-    const r = { ...input, title: input.title.trim(), note: input.note?.trim() || null, imageUrl: input.imageUrl?.trim() || null, currency: input.currency?.trim() || 'MDL', archived: false }
+    const r = {
+      ...input,
+      title: input.title.trim(),
+      note: input.note?.trim() || null,
+      imageUrl: input.imageUrl?.trim() || null,
+      productUrl: input.productUrl?.trim() || null,
+      currency: input.currency?.trim() || 'MDL',
+      archived: false
+    }
     validateReward(r)
     this.db.transaction(() => {
       // Only one reward is the "next target" shown on Today.
       if (r.pinned) this.db.prepare('UPDATE rewards SET pinned = 0').run()
-      const params = { title: r.title, price: r.price, tier: r.tier, realCost: r.realCost, pinned: r.pinned ? 1 : 0, note: r.note, imageUrl: r.imageUrl, currency: r.currency }
+      const params = {
+        title: r.title,
+        price: r.price,
+        tier: r.tier,
+        realCost: r.realCost,
+        pinned: r.pinned ? 1 : 0,
+        note: r.note,
+        imageUrl: r.imageUrl,
+        productUrl: r.productUrl,
+        currency: r.currency
+      }
       if (input.id) {
         this.reward(input.id)
-        this.db.prepare('UPDATE rewards SET title = @title, price = @price, tier = @tier, real_cost = @realCost, pinned = @pinned, note = @note, image_url = @imageUrl, currency = @currency WHERE id = @id').run({ ...params, id: input.id })
+        this.db.prepare('UPDATE rewards SET title = @title, price = @price, tier = @tier, real_cost = @realCost, pinned = @pinned, note = @note, image_url = @imageUrl, product_url = @productUrl, currency = @currency WHERE id = @id').run({ ...params, id: input.id })
       } else {
-        this.db.prepare('INSERT INTO rewards (title, price, tier, real_cost, pinned, note, image_url, currency) VALUES (@title, @price, @tier, @realCost, @pinned, @note, @imageUrl, @currency)').run(params)
+        this.db.prepare('INSERT INTO rewards (title, price, tier, real_cost, pinned, note, image_url, product_url, currency) VALUES (@title, @price, @tier, @realCost, @pinned, @note, @imageUrl, @productUrl, @currency)').run(params)
       }
     })()
   }

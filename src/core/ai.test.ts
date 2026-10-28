@@ -9,6 +9,9 @@ import {
   buildTaskDecomposePrompt,
   parseTaskDecomposition,
   parseAgentToolCalls,
+  heuristicInspectProduct,
+  buildInspectProductPrompt,
+  parseInspectProductResponse,
   type AIConfig,
   type AIRewardContext,
   type AIPerformanceContext,
@@ -243,6 +246,57 @@ Great work keeping up the momentum!`
       expect(cleanedText).toContain('I have checked off task "ss"')
       expect(cleanedText).toContain('Great work keeping up the momentum!')
       expect(cleanedText).not.toContain('\`\`\`tool_call')
+    })
+  })
+describe('Product Link & Query Inspector', () => {
+    it('heuristically inspects a store URL extracting clean title and 10:1 coin pricing', () => {
+      const res = heuristicInspectProduct('https://darwin.md/casti-apple-airpods-pro-2-white.html', 'MDL')
+      expect(res.title).toContain('Airpods Pro 2')
+      expect(res.category).toBe('tech')
+      expect(res.productUrl).toBe('https://darwin.md/casti-apple-airpods-pro-2-white.html')
+      expect(res.coins).toBe(res.price * 10)
+      expect(res.imageUrl).toContain('images.unsplash.com')
+    })
+
+    it('heuristically inspects query text like "Nike Running Shoes"', () => {
+      const res = heuristicInspectProduct('Nike Running Shoes', 'MDL')
+      expect(res.title).toBe('Nike Running Shoes')
+      expect(res.category).toBe('gear')
+      expect(res.coins).toBe(res.price * 10)
+      expect(res.productUrl).toContain('google.com/search')
+    })
+
+    it('builds a prompt requiring strict 10:1 ratio and valid JSON', () => {
+      const prompt = buildInspectProductPrompt('Braun Series 9 shaver', 'MDL')
+      expect(prompt).toContain('Braun Series 9 shaver')
+      expect(prompt).toContain('Strict 10:1 ratio with price (MDL * 10)')
+      expect(prompt).toContain('Output MUST be a single valid JSON object')
+    })
+
+    it('parses valid AI JSON response into InspectedProductResult', () => {
+      const json = JSON.stringify({
+        title: 'Sony WH-1000XM5 ANC Headphones',
+        price: 6500,
+        coins: 65000,
+        tier: 'gold',
+        category: 'tech',
+        note: 'Flagship noise cancelling headphones.',
+        imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e',
+        productUrl: 'https://darwin.md/sony-wh-1000xm5'
+      })
+      const res = parseInspectProductResponse(json, 'https://darwin.md/sony-wh-1000xm5', 'MDL')
+      expect(res.title).toBe('Sony WH-1000XM5 ANC Headphones')
+      expect(res.price).toBe(6500)
+      expect(res.coins).toBe(65000)
+      expect(res.tier).toBe('gold')
+      expect(res.category).toBe('tech')
+      expect(res.productUrl).toBe('https://darwin.md/sony-wh-1000xm5')
+    })
+
+    it('falls back to heuristic inspection if AI output is malformed', () => {
+      const res = parseInspectProductResponse('not valid json', 'https://darwin.md/husa-silicon-iphone-15-pro-black.html', 'MDL')
+      expect(res.title).toContain('Husa Silicon Iphone 15 Pro')
+      expect(res.coins).toBe(res.price * 10)
     })
   })
 })

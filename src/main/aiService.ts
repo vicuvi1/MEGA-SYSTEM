@@ -6,6 +6,10 @@ import {
   buildRewardPrompt,
   buildSystemOraclePrompt,
   buildTaskDecomposePrompt,
+  buildInspectProductPrompt,
+  heuristicInspectProduct,
+  parseInspectProductResponse,
+  type InspectedProductResult,
   DEFAULT_AI_CONFIG,
   parsePerformanceResponse,
   parseRewardResponse,
@@ -282,6 +286,26 @@ export class AIService {
         message: err.message,
         model
       }
+    }
+  }
+
+  async inspectProduct(queryOrUrl: string): Promise<InspectedProductResult> {
+    const currency = this.money?.state()?.currency ?? 'MDL'
+    const clean = queryOrUrl?.trim() || ''
+    if (!clean) {
+      return heuristicInspectProduct('Reward Upgrade', currency)
+    }
+
+    try {
+      const cfg = this.getConfig()
+      if (!cfg.geminiKey && !cfg.openRouterKey) {
+        return heuristicInspectProduct(clean, currency)
+      }
+      const prompt = buildInspectProductPrompt(clean, currency)
+      const { text } = await this.executeTask('inspect_product', prompt)
+      return parseInspectProductResponse(text, clean, currency)
+    } catch {
+      return heuristicInspectProduct(clean, currency)
     }
   }
 

@@ -65,6 +65,33 @@ export function Shop({ state, onState, onWallet }: Props) {
   const [depositAmount, setDepositAmount] = useState<string>('')
   const [depositVaultDirectModal, setDepositVaultDirectModal] = useState(false)
   const [directVaultDraft, setDirectVaultDraft] = useState('')
+  const [goalInspectQuery, setGoalInspectQuery] = useState('')
+  const [goalInspecting, setGoalInspecting] = useState(false)
+
+  async function handleGoalAutoInspect() {
+    const q = goalInspectQuery.trim()
+    if (!q || !editingGoal) return
+    setGoalInspecting(true)
+    try {
+      const res = await life.ai.inspectProduct(q)
+      setEditingGoal({
+        ...editingGoal,
+        title: res.title,
+        targetCoins: res.coins,
+        targetRealCost: res.price,
+        category: (res.category === 'wellness' ? 'luxury' : res.category) as any,
+        note: res.note,
+        imageUrl: res.imageUrl,
+        productUrl: res.productUrl,
+        currency: editingGoal.currency ?? state.currency
+      })
+      toast(`Auto-filled details for "${res.title}"!`, 'good')
+    } catch (err: any) {
+      toast(err?.message || 'Failed to inspect product', 'bad')
+    } finally {
+      setGoalInspecting(false)
+    }
+  }
 
   // AI Reward Oracle state
   const [showAiModal, setShowAiModal] = useState(false)
@@ -94,6 +121,8 @@ export function Shop({ state, onState, onWallet }: Props) {
       tier: reward.tier as Tier,
       realCost: reward.realCost,
       note: reward.note,
+      imageUrl: reward.imageUrl,
+      productUrl: reward.productUrl,
       pinned: false
     }), `Added "${reward.title}" to catalog!`)
     if (next) onState(next)
@@ -107,6 +136,7 @@ export function Shop({ state, onState, onWallet }: Props) {
       currency: (economy?.currency ?? 'MDL') as SupportedCurrency,
       category: reward.category as any,
       imageUrl: reward.imageUrl,
+      productUrl: reward.productUrl,
       note: reward.note
     }), `Pinned "${reward.title}" as Wishlist Goal!`)
     await refreshEconomy()
@@ -524,6 +554,16 @@ export function Shop({ state, onState, onWallet }: Props) {
                     >
                       Deposit Vault Cash
                     </button>
+                    {pinned.productUrl && (
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        title="Open store deal in browser"
+                        onClick={() => window.open(pinned.productUrl!, '_blank')}
+                      >
+                        🌐 Store Deal
+                      </button>
+                    )}
                     {prog.isReady && (
                       <button className="btn primary small" onClick={() => claimGoal(pinned)}>
                         Claim Triumph!
@@ -800,7 +840,7 @@ export function Shop({ state, onState, onWallet }: Props) {
                 className={`reward ${locked ? 'locked' : ''} ${!why ? 'ready' : ''}`}
                 style={{ ['--tier' as string]: tier.color }}
               >
-                {r.imageUrl && (
+                {r.imageUrl ? (
                   <div className="reward-photo-container">
                     <img
                       src={r.imageUrl}
@@ -808,6 +848,11 @@ export function Shop({ state, onState, onWallet }: Props) {
                       className="reward-photo"
                       onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
                     />
+                    <div className="reward-photo-gradient" />
+                  </div>
+                ) : (
+                  <div className="reward-photo-container placeholder">
+                    <span className="reward-photo-placeholder-icon">🎁</span>
                     <div className="reward-photo-gradient" />
                   </div>
                 )}
@@ -847,17 +892,32 @@ export function Shop({ state, onState, onWallet }: Props) {
                 <div className="bar">
                   <i style={{ width: `${pct * 100}%` }} />
                 </div>
-                {locked ? (
-                  <div className="lock-note">
-                    <Icon name="lock" size={14} /> Unlocks at level {tier.minLevel}
-                  </div>
-                ) : why ? (
-                  <div className="lock-note">{why}</div>
-                ) : (
-                  <button className="btn primary" onClick={() => setConfirm(r)}>
-                    Redeem
-                  </button>
-                )}
+                <div className="reward-bottom-actions">
+                  {locked ? (
+                    <div className="lock-note">
+                      <Icon name="lock" size={14} /> Unlocks at level {tier.minLevel}
+                    </div>
+                  ) : why ? (
+                    <div className="lock-note">{why}</div>
+                  ) : (
+                    <button className="btn primary" onClick={() => setConfirm(r)}>
+                      Redeem
+                    </button>
+                  )}
+                  {r.productUrl && (
+                    <button
+                      type="button"
+                      className="reward-store-btn"
+                      title={`Open deal in browser: ${r.productUrl}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        window.open(r.productUrl!, '_blank')
+                      }}
+                    >
+                      🌐 Deal
+                    </button>
+                  )}
+                </div>
               </motion.article>
             )
           })}
@@ -1185,7 +1245,7 @@ export function Shop({ state, onState, onWallet }: Props) {
             const prog = computeGoalProgress(g)
             return (
               <div key={g.id} className={`goal-card ${g.completed ? 'completed' : ''}`}>
-                {g.imageUrl && (
+                {g.imageUrl ? (
                   <div className="goal-photo-container">
                     <img
                       src={g.imageUrl}
@@ -1193,6 +1253,11 @@ export function Shop({ state, onState, onWallet }: Props) {
                       className="goal-photo"
                       onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
                     />
+                    <div className="goal-photo-gradient" />
+                  </div>
+                ) : (
+                  <div className="goal-photo-container placeholder">
+                    <span className="reward-photo-placeholder-icon">🎯</span>
                     <div className="goal-photo-gradient" />
                   </div>
                 )}
@@ -1219,7 +1284,10 @@ export function Shop({ state, onState, onWallet }: Props) {
                           targetRealCost: g.targetRealCost,
                           category: g.category,
                           pinned: g.pinned,
-                          note: g.note ?? ''
+                          note: g.note ?? '',
+                          imageUrl: g.imageUrl ?? '',
+                          productUrl: g.productUrl ?? '',
+                          currency: g.currency ?? state.currency
                         })
                       }
                     >
@@ -1279,6 +1347,16 @@ export function Shop({ state, onState, onWallet }: Props) {
                       >
                         + Cash
                       </button>
+                      {g.productUrl && (
+                        <button
+                          type="button"
+                          className="reward-store-btn"
+                          title="Open store deal in browser"
+                          onClick={() => window.open(g.productUrl!, '_blank')}
+                        >
+                          🌐 Deal
+                        </button>
+                      )}
                       {prog.isReady && (
                         <button
                           className="btn primary small"
@@ -1402,6 +1480,31 @@ export function Shop({ state, onState, onWallet }: Props) {
         <div className="sheet" role="dialog" aria-label="Edit Wishlist Goal">
           <div className="sheet-card">
             <h3>{editingGoal.id ? 'Edit Wishlist Goal' : 'New Wishlist Mega Goal'}</h3>
+
+            <div className="ai-inspector-box">
+              <div className="ai-inspector-header">
+                <span className="ai-sparkle-tag">✨ AI Smart Inspector</span>
+                <span className="ai-inspector-sub">Paste store link or product query to auto-fill</span>
+              </div>
+              <div className="ai-inspector-input-row">
+                <input
+                  type="text"
+                  placeholder="Paste store link or query (e.g. MacBook Pro M3 or Darwin link)..."
+                  value={goalInspectQuery}
+                  onChange={(e) => setGoalInspectQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleGoalAutoInspect())}
+                />
+                <button
+                  type="button"
+                  className="ai-inspect-btn"
+                  disabled={goalInspecting || !goalInspectQuery.trim()}
+                  onClick={handleGoalAutoInspect}
+                >
+                  {goalInspecting ? '⚡ Analyzing...' : '⚡ Auto-Fill'}
+                </button>
+              </div>
+            </div>
+
             <label>
               Goal Name
               <input
@@ -1504,6 +1607,29 @@ export function Shop({ state, onState, onWallet }: Props) {
                 placeholder="https://images.unsplash.com/... or direct image link"
                 onChange={(e) => setEditingGoal({ ...editingGoal, imageUrl: e.target.value })}
               />
+            </label>
+
+            <label>
+              Product / Store Link (URL)
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="url"
+                  value={editingGoal.productUrl ?? ''}
+                  placeholder="https://darwin.md/... or store link"
+                  onChange={(e) => setEditingGoal({ ...editingGoal, productUrl: e.target.value })}
+                  style={{ flex: 1 }}
+                />
+                {editingGoal.productUrl && (
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={() => window.open(editingGoal.productUrl!, '_blank')}
+                    title="Test store link in browser"
+                  >
+                    🌐 Test
+                  </button>
+                )}
+              </div>
             </label>
             {editingGoal.imageUrl && (
               <div className="image-preview-row">
@@ -1775,6 +1901,16 @@ export function Shop({ state, onState, onWallet }: Props) {
                         </p>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {item.productUrl && (
+                          <button
+                            type="button"
+                            className="btn small ghost"
+                            title="Open store link in browser"
+                            onClick={() => window.open(item.productUrl!, '_blank')}
+                          >
+                            🌐 Store
+                          </button>
+                        )}
                         <button
                           className="btn small secondary"
                           title="Add this reward to the regular Shop catalog"
@@ -1922,6 +2058,29 @@ function RewardSheet({
             placeholder="https://images.unsplash.com/... or direct image link"
             onChange={(e) => setR({ ...r, imageUrl: e.target.value })}
           />
+        </label>
+
+        <label>
+          Product Store Link (URL)
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="url"
+              value={r.productUrl ?? ''}
+              placeholder="https://darwin.md/... or store link"
+              onChange={(e) => setR({ ...r, productUrl: e.target.value })}
+              style={{ flex: 1 }}
+            />
+            {r.productUrl && (
+              <button
+                type="button"
+                className="btn secondary small"
+                onClick={() => window.open(r.productUrl!, '_blank')}
+                title="Test link in browser"
+              >
+                🌐 Test
+              </button>
+            )}
+          </div>
         </label>
         {r.imageUrl && (
           <div className="image-preview-row">

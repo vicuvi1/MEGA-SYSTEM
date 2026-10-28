@@ -105,12 +105,14 @@ describe('shop service', () => {
       realCost: 200,
       currency: 'USD',
       imageUrl: 'https://example.com/airpods.jpg',
+      productUrl: 'https://darwin.md/apple-airpods-pro-2',
       pinned: false,
       note: 'Spatial audio'
     })
     const s = shop.state(now)
     const airpods = s.rewards.find((r) => r.title === 'AirPods Pro')!
     expect(airpods.imageUrl).toBe('https://example.com/airpods.jpg')
+    expect(airpods.productUrl).toBe('https://darwin.md/apple-airpods-pro-2')
     expect(airpods.currency).toBe('USD')
 
     shop.setCurrency('USD')

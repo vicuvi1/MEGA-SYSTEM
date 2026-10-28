@@ -660,6 +660,16 @@ export function createMockApi(): Bridge {
         warriorVerdict: 'You are ascending beyond the limits of common hunters. Maintain absolute focus—the Monarchs have noticed.',
         generatedAt: new Date().toISOString()
       }),
+      inspectProduct: async (queryOrUrl: string) => ({
+        title: queryOrUrl.replace(/^https?:\/\/[^/]+\//, '').replace(/[-_]/g, ' ').slice(0, 40) || 'Inspected Upgrade',
+        price: 450,
+        coins: 4500,
+        tier: 'silver',
+        category: 'tech',
+        note: 'Inspected warrior item calibrated to standard 10:1 coin economy.',
+        imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80',
+        productUrl: queryOrUrl.startsWith('http') ? queryOrUrl : 'https://darwin.md'
+      }),
       decomposeTask: async (title: string) => ({
         strategyTip: `Conquer the foundation of "${title}" in the first 10 minutes to generate momentum.`,
         subtasks: [
