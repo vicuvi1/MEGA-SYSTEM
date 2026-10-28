@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  detectExpenseCategory,
+  formatBalanceResponse,
   formatCleanCheckinResponse,
+  formatExpenseResponse,
   formatHelpMessage,
   formatMetricResponse,
   formatSportResponse,
@@ -8,7 +11,8 @@ import {
   formatTodayStatus,
   formatUrgeResponse,
   formatWorkoutResponse,
-  parseTelegramText
+  parseTelegramText,
+  tryParseNaturalExpense
 } from './botCommands'
 
 describe('botCommands core parser', () => {
@@ -131,5 +135,78 @@ describe('botCommands core parser', () => {
 
     const urge = formatUrgeResponse()
     expect(urge).toContain('URGE CRUSHER')
+  })
+
+  it('parses natural language expenses like "coffee 35", "35 coffee", "taxi 50"', () => {
+    // Note first, amount last
+    const coffeeRes = parseTelegramText('coffee 35')
+    expect(coffeeRes.type).toBe('expense')
+    expect(coffeeRes.expenseAmount).toBe(35)
+    expect(coffeeRes.expenseCategory).toBe('food')
+    expect(coffeeRes.expenseNote).toBe('coffee')
+
+    // Amount first, note last
+    const taxiRes = parseTelegramText('50 taxi')
+    expect(taxiRes.type).toBe('expense')
+    expect(taxiRes.expenseAmount).toBe(50)
+    expect(taxiRes.expenseCategory).toBe('transport')
+    expect(taxiRes.expenseNote).toBe('taxi')
+
+    // With currency suffix
+    const lunchRes = parseTelegramText('lunch with alex 120 mdl')
+    expect(lunchRes.type).toBe('expense')
+    expect(lunchRes.expenseAmount).toBe(120)
+    expect(lunchRes.expenseCategory).toBe('food')
+    expect(lunchRes.expenseNote).toBe('lunch with alex')
+
+    // Income
+    const incomeRes = parseTelegramText('+500 freelance project')
+    expect(incomeRes.type).toBe('expense')
+    expect(incomeRes.expenseAmount).toBe(500)
+    expect(incomeRes.expenseCategory).toBe('income')
+    expect(incomeRes.expenseNote).toBe('freelance project')
+
+    // Groceries
+    const grocRes = parseTelegramText('groceries 250 lei')
+    expect(grocRes.type).toBe('expense')
+    expect(grocRes.expenseAmount).toBe(250)
+    expect(grocRes.expenseCategory).toBe('food')
+  })
+
+  it('parses /balance and /accounts commands', () => {
+    expect(parseTelegramText('/balance').type).toBe('balance')
+    expect(parseTelegramText('balance').type).toBe('balance')
+    expect(parseTelegramText('/accounts').type).toBe('balance')
+  })
+
+  it('formats expense response with finance sync info', () => {
+    const formatted = formatExpenseResponse('35.00 MDL', 'food', 'coffee', '115.00 MDL', 3, {
+      synced: true,
+      totalBalance: '14,250.00 MDL',
+      accountName: 'Main Card'
+    })
+    expect(formatted).toContain('Expense Recorded & Synced to Finance Helper!')
+    expect(formatted).toContain('35.00 MDL · <i>coffee</i>')
+    expect(formatted).toContain('<b>Finance App Ledger:</b> Synced ✅ [Main Card] (Total: <b>14,250.00 MDL</b>)')
+  })
+
+  it('formats comprehensive multi-account balance response', () => {
+    const balanceReply = formatBalanceResponse({
+      currency: 'MDL',
+      walletCoins: 1250,
+      walletCoinsValueMdl: 125,
+      vaultSurplusMdl: 2800,
+      financeAccountsTotalMdl: 15400,
+      financeAccounts: [
+        { name: 'MAIB Card', balanceMdl: 12400, currency: 'MDL' },
+        { name: 'Cash Wallet', balanceMdl: 3000, currency: 'MDL' }
+      ],
+      dailyBudgetLeftMdl: 180
+    })
+    expect(balanceReply).toContain('FINANCIAL BALANCE & ASSET OVERVIEW')
+    expect(balanceReply).toContain('<b>MAIB Card:</b> 12400.00 MDL')
+    expect(balanceReply).toContain('<b>Accounts Total:</b> <b>15400.00 MDL</b>')
+    expect(balanceReply).toContain('1250 Coins')
+    expect(balanceReply).toContain('2800.00 MDL')
   })
 })

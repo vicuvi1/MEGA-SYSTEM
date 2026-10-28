@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, safeStorage } from 'electron'
 import {
+  formatBalanceResponse,
   formatCleanCheckinResponse,
   formatExpenseResponse,
   formatHelpMessage,
@@ -22,6 +23,7 @@ import type { SleepService } from './sleep'
 import type { Tasks } from './planner'
 import type { Wallet } from './wallet'
 import type { CalendarService } from './calendarService'
+import type { FinanceHost } from './apps/finance'
 
 export interface BotLogEntry {
   id: number
@@ -46,6 +48,13 @@ export interface BotBridgeConfig {
   financeBotChatId?: string
   manBotToken?: string
   manBotChatId?: string
+  wakyBotToken?: string
+  wakyBotChatId?: string
+  plannerBotToken?: string
+  plannerBotChatId?: string
+  coachBotToken?: string
+  coachBotChatId?: string
+  financeSyncEnabled?: boolean
 }
 
 const DEFAULT_BRIDGE_CONFIG: BotBridgeConfig = {
@@ -60,12 +69,20 @@ const DEFAULT_BRIDGE_CONFIG: BotBridgeConfig = {
   financeBotToken: '',
   financeBotChatId: '',
   manBotToken: '',
-  manBotChatId: ''
+  manBotChatId: '',
+  wakyBotToken: '',
+  wakyBotChatId: '',
+  plannerBotToken: '',
+  plannerBotChatId: '',
+  coachBotToken: '',
+  coachBotChatId: '',
+  financeSyncEnabled: true
 }
 
 export class TelegramBotHub {
   private economy?: UnifiedEconomyService
   private calendar?: CalendarService
+  private financeHost?: FinanceHost
   private file: string
   private logsList: BotLogEntry[] = []
   private isPolling = false
@@ -108,6 +125,10 @@ export class TelegramBotHub {
     this.calendar = cal
   }
 
+  setFinanceHost(fh: FinanceHost): void {
+    this.financeHost = fh
+  }
+
   setWalletCallback(cb: () => void): void {
     this.onWalletChangeCallback = cb
   }
@@ -142,9 +163,14 @@ export class TelegramBotHub {
       // fallback
     }
 
-    if (next.enabled && next.pollingEnabled && next.botToken && !this.isPolling) {
+    if (next.financeBotToken) {
+      this.financeHost?.syncTelegram(next.financeBotToken, next.financeBotChatId || next.chatId).catch(() => {})
+    }
+
+    const hasAnyToken = !!(next.botToken || next.financeBotToken || next.sportBotToken || next.manBotToken || next.wakyBotToken || next.plannerBotToken || next.coachBotToken)
+    if (next.enabled && next.pollingEnabled && hasAnyToken && !this.isPolling) {
       this.startPolling()
-    } else if ((!next.enabled || !next.pollingEnabled || !next.botToken) && this.isPolling) {
+    } else if ((!next.enabled || !next.pollingEnabled || !hasAnyToken) && this.isPolling) {
       this.stopPolling()
     }
 
@@ -206,9 +232,75 @@ export class TelegramBotHub {
     }
   }
 
-  async sendTest(): Promise<{ ok: boolean; error?: string }> {
+  async sendTest(botKey?: string): Promise<{ ok: boolean; error?: string }> {
+    const cfg = this.getConfig()
+
+    if (botKey === 'all') {
+      const bots = [
+        { name: 'Master Command Center', token: cfg.botToken, chat: cfg.chatId },
+        { name: 'Finance Bot', token: cfg.financeBotToken, chat: cfg.financeBotChatId || cfg.chatId },
+        { name: 'Sport Bot', token: cfg.sportBotToken, chat: cfg.sportBotChatId || cfg.chatId },
+        { name: 'MAN Discipline Bot', token: cfg.manBotToken, chat: cfg.manBotChatId || cfg.chatId },
+        { name: 'Waky Sleep Bot', token: cfg.wakyBotToken, chat: cfg.wakyBotChatId || cfg.chatId },
+        { name: 'Planner Quest Bot', token: cfg.plannerBotToken, chat: cfg.plannerBotChatId || cfg.chatId },
+        { name: 'AI Coach Bot', token: cfg.coachBotToken, chat: cfg.coachBotChatId || cfg.chatId }
+      ].filter((b) => b.token)
+
+      if (bots.length === 0) {
+        return { ok: false, error: 'No bots configured yet. Please configure at least one bot token.' }
+      }
+
+      let okCount = 0
+      let lastError: string | undefined
+      for (const b of bots) {
+        const res = await this.sendMessage(
+          `⚡ <b>Life System — ${b.name} Online!</b>\n\nBridge verified & active. Send <code>/help</code> or your logs to interact in real-time.`,
+          b.token,
+          b.chat
+        )
+        if (res.ok) okCount++
+        else lastError = `${b.name}: ${res.error}`
+      }
+
+      return okCount > 0
+        ? { ok: true }
+        : { ok: false, error: lastError || 'Failed to ping bots' }
+    }
+
+    let token = cfg.botToken
+    let chatId = cfg.chatId
+    let botTitle = 'Life System Bot Center'
+
+    if (botKey === 'finance') {
+      token = cfg.financeBotToken || cfg.botToken
+      chatId = cfg.financeBotChatId || cfg.chatId
+      botTitle = '💰 Life System Finance Bot'
+    } else if (botKey === 'sport') {
+      token = cfg.sportBotToken || cfg.botToken
+      chatId = cfg.sportBotChatId || cfg.chatId
+      botTitle = '🏃 Life System Sport Bot'
+    } else if (botKey === 'man') {
+      token = cfg.manBotToken || cfg.botToken
+      chatId = cfg.manBotChatId || cfg.chatId
+      botTitle = '🛡️ MAN Spartan Discipline Bot'
+    } else if (botKey === 'waky') {
+      token = cfg.wakyBotToken || cfg.botToken
+      chatId = cfg.wakyBotChatId || cfg.chatId
+      botTitle = '🌙 Waky Sleep & Circadian Bot'
+    } else if (botKey === 'planner') {
+      token = cfg.plannerBotToken || cfg.botToken
+      chatId = cfg.plannerBotChatId || cfg.chatId
+      botTitle = '🎯 Task & Quest Execution Bot'
+    } else if (botKey === 'coach') {
+      token = cfg.coachBotToken || cfg.botToken
+      chatId = cfg.coachBotChatId || cfg.chatId
+      botTitle = '🤖 AI System Coach Bot'
+    }
+
     return this.sendMessage(
-      '⚡ <b>Life System Bot Center Online!</b>\n\nYour 2-way Telegram control bridge is active. Send <code>/help</code> to this bot to view all commands.'
+      `⚡ <b>${botTitle} Online!</b>\n\nYour 2-way Telegram control bridge is active. Send <code>/help</code> to this bot to view all commands.`,
+      token,
+      chatId
     )
   }
 
@@ -220,7 +312,10 @@ export class TelegramBotHub {
       (cfg.chatId && String(senderChatId) === String(cfg.chatId)) ||
       (cfg.sportBotChatId && String(senderChatId) === String(cfg.sportBotChatId)) ||
       (cfg.financeBotChatId && String(senderChatId) === String(cfg.financeBotChatId)) ||
-      (cfg.manBotChatId && String(senderChatId) === String(cfg.manBotChatId))
+      (cfg.manBotChatId && String(senderChatId) === String(cfg.manBotChatId)) ||
+      (cfg.wakyBotChatId && String(senderChatId) === String(cfg.wakyBotChatId)) ||
+      (cfg.plannerBotChatId && String(senderChatId) === String(cfg.plannerBotChatId)) ||
+      (cfg.coachBotChatId && String(senderChatId) === String(cfg.coachBotChatId))
 
     if (!isWhitelisted) {
       const unauthorized = `⛔ <b>Unauthorized access.</b> Chat ID <code>${senderChatId}</code> is not in your allowed whitelist.`
@@ -431,28 +526,96 @@ export class TelegramBotHub {
         }
 
         case 'expense': {
-          if (!this.money) {
-            reply = '❌ Money expense service unavailable.'
-            break
-          }
           const amt = parsed.expenseAmount || 0
           const cat = parsed.expenseCategory || 'other'
           const note = parsed.expenseNote || ''
           const cents = Math.round(amt * 100)
-          const res = this.money.addExpense(
-            cents,
-            cat as any,
-            note ? `[Telegram] ${note}` : '[Telegram]'
-          )
-          this.onWalletChangeCallback?.()
-          const cur = res.state.currency
+          let res: any = null
+
+          if (this.money) {
+            res = this.money.addExpense(
+              cents,
+              cat as any,
+              note ? `[Telegram] ${note}` : '[Telegram]'
+            )
+            this.onWalletChangeCallback?.()
+          }
+
+          let fhSyncResult: { synced: boolean; totalBalance?: string; accountName?: string } | undefined
+          if (this.financeHost && (cfg.financeSyncEnabled ?? true)) {
+            try {
+              const fhRes = await this.financeHost.addTransaction({
+                type: 'expense',
+                amount: cents,
+                category: cat,
+                note: note || undefined
+              })
+              if (fhRes.ok) {
+                fhSyncResult = {
+                  synced: true,
+                  totalBalance: fhRes.balanceTotal != null ? `${(fhRes.balanceTotal / 100).toFixed(2)} MDL` : undefined,
+                  accountName: fhRes.accountName
+                }
+              }
+            } catch (err) {
+              console.warn('Finance sync warning:', err)
+            }
+          }
+
+          const cur = res?.state?.currency || 'MDL'
+          const remainingBudget = res ? formatMoney(Math.max(0, res.state.today.remaining), cur) : 'Unrestricted'
           reply = formatExpenseResponse(
             formatMoney(cents, cur),
             cat,
             note || null,
-            formatMoney(Math.max(0, res.state.today.remaining), cur),
-            res.awarded ? 3 : 0
+            remainingBudget,
+            res?.awarded ? 3 : 0,
+            fhSyncResult
           )
+          break
+        }
+
+        case 'balance': {
+          let fhAccountsTotalMdl = 0
+          let fhAccounts: { name: string; balanceMdl: number; currency: string }[] = []
+          if (this.financeHost) {
+            try {
+              const summary = await this.financeHost.getFinanceSummary()
+              if (summary) {
+                fhAccountsTotalMdl = summary.totalMdl
+                fhAccounts = summary.accounts.map((a) => ({
+                  name: a.name,
+                  balanceMdl: a.balanceMdl,
+                  currency: summary.currency
+                }))
+              }
+            } catch (e) {
+              console.warn('Failed to query finance summary for bot balance:', e)
+            }
+          }
+
+          const walletSummary = this.wallet?.summary()
+          const coins = walletSummary?.balance ?? 0
+          const coinsValueMdl = Math.round((coins / 10) * 100) / 100
+
+          let vaultSurplusMdl = 0
+          if (this.economy) {
+            const ecoSummary = this.economy.getEconomySummary()
+            vaultSurplusMdl = ecoSummary.vaultBalance
+          }
+
+          const moneyState = this.money?.state()
+          const budgetLeft = moneyState ? Math.max(0, moneyState.today.remaining) / 100 : undefined
+
+          reply = formatBalanceResponse({
+            currency: 'MDL',
+            walletCoins: coins,
+            walletCoinsValueMdl: coinsValueMdl,
+            vaultSurplusMdl: vaultSurplusMdl,
+            financeAccountsTotalMdl: fhAccountsTotalMdl,
+            financeAccounts: fhAccounts,
+            dailyBudgetLeftMdl: budgetLeft
+          })
           break
         }
 
@@ -583,10 +746,17 @@ export class TelegramBotHub {
     if (this.isPolling) return
     const cfg = this.getConfig()
     const tokens: string[] = []
-    if (cfg.botToken) tokens.push(cfg.botToken)
-    if (cfg.sportBotToken && !tokens.includes(cfg.sportBotToken)) tokens.push(cfg.sportBotToken)
-    if (cfg.financeBotToken && !tokens.includes(cfg.financeBotToken)) tokens.push(cfg.financeBotToken)
-    if (cfg.manBotToken && !tokens.includes(cfg.manBotToken)) tokens.push(cfg.manBotToken)
+    for (const tok of [
+      cfg.botToken,
+      cfg.financeBotToken,
+      cfg.sportBotToken,
+      cfg.manBotToken,
+      cfg.wakyBotToken,
+      cfg.plannerBotToken,
+      cfg.coachBotToken
+    ]) {
+      if (tok && !tokens.includes(tok)) tokens.push(tok)
+    }
     if (tokens.length === 0) return
 
     this.isPolling = true

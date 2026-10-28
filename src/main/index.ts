@@ -361,7 +361,7 @@ handle('bots:saveConfig', (c: Partial<BotBridgeConfig>) => telegramHub.saveConfi
 handle('bots:status', () => telegramHub.getStatus())
 handle('bots:logs', () => telegramHub.getLogs())
 handle('bots:clearLogs', () => telegramHub.clearLogs())
-handle('bots:test', () => telegramHub.sendTest())
+handle('bots:test', (botKey?: string) => telegramHub.sendTest(botKey))
 handle('bots:startPolling', () => {
   telegramHub.startPolling()
   return telegramHub.getPollingStatus()
@@ -888,6 +888,9 @@ app.whenReady().then(() => {
   }
   try {
     financeHost = setupFinance(appsDir(), () => navigate('money'))
+    if (financeHost) {
+      telegramHub.setFinanceHost(financeHost)
+    }
     if (!globalShortcut.register('CommandOrControl+Alt+N', () => financeHost?.quickAdd())) console.warn('could not register Ctrl+Alt+N')
   } catch (e) {
     console.error('Finance Helper could not start', e)

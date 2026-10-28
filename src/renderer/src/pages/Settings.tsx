@@ -9,7 +9,7 @@ function downloadBlob(content: string, mime: string, filename: string) {
 }
 
 import { useEffect, useState } from 'react'
-import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, UpdateStatus, VerifyResult, AIConfig, CalendarConfig } from '@shared/api'
+import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, BotBridgeConfig, UpdateStatus, VerifyResult, AIConfig, CalendarConfig } from '@shared/api'
 import { POPULAR_MODELS, DEFAULT_AI_CONFIG } from '@core/ai'
 import { DEFAULT_CALENDAR_CONFIG } from '@shared/api'
 import { UpdatePanel } from '../updates'
@@ -40,23 +40,129 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [prefs, setPrefs] = useState<AppPrefs | null>(null)
   const [ui, setUi] = useUiPrefs()
   const [logs, setLogs] = useState<LogEntry[] | null>(null)
-  const [tg, setTg] = useState<TelegramConfig>({ botToken: '', chatId: '', enabled: false, morningBriefing: true, eveningNudge: true })
-  const [testingTg, setTestingTg] = useState(false)
+  const [botCfg, setBotCfg] = useState<BotBridgeConfig>({
+    botToken: '',
+    chatId: '',
+    enabled: true,
+    pollingEnabled: false,
+    morningBriefing: true,
+    eveningNudge: true,
+    sportBotToken: '',
+    sportBotChatId: '',
+    financeBotToken: '',
+    financeBotChatId: '',
+    manBotToken: '',
+    manBotChatId: '',
+    wakyBotToken: '',
+    wakyBotChatId: '',
+    plannerBotToken: '',
+    plannerBotChatId: '',
+    coachBotToken: '',
+    coachBotChatId: '',
+    financeSyncEnabled: true
+  })
+  const [showTokens, setShowTokens] = useState<Record<string, boolean>>({})
+  const [testingBotKey, setTestingBotKey] = useState<string | null>(null)
+  const [botTestResult, setBotTestResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   useEffect(() => {
-    life.telegram.config().then(setTg).catch(() => {})
+    life.bots.config().then((c) => {
+      if (c) setBotCfg(c)
+    }).catch(() => {})
   }, [])
 
-  async function saveTg(patch: Partial<TelegramConfig>) {
-    const next = await act(() => life.telegram.saveConfig(patch), 'Telegram settings saved')
-    if (next) setTg(next)
+  async function saveBotArmy() {
+    const next = await act(() => life.bots.saveConfig(botCfg), 'Telegram Bot Army settings saved')
+    if (next) setBotCfg(next)
   }
 
-  async function testTg() {
-    setTestingTg(true)
-    const res = await act(() => life.telegram.test(), 'Test message sent to Telegram!')
-    setTestingTg(false)
+  async function testBotIndividual(botKey?: string) {
+    setTestingBotKey(botKey || 'master')
+    setBotTestResult(null)
+    try {
+      await life.bots.saveConfig(botCfg)
+      const res = await life.bots.test(botKey)
+      if (res.ok) {
+        setBotTestResult({ ok: true, message: `Ping message delivered successfully${botKey ? ` to ${botKey} bot` : ''}!` })
+      } else {
+        setBotTestResult({ ok: false, message: res.error || 'Failed to ping bot' })
+      }
+    } catch (e: any) {
+      setBotTestResult({ ok: false, message: e.message || 'Test delivery failed' })
+    } finally {
+      setTestingBotKey(null)
+    }
   }
+
+  const toggleTokenVisibility = (key: string) => {
+    setShowTokens((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const BOTS_METADATA = [
+    {
+      key: 'master',
+      tokenField: 'botToken' as const,
+      chatField: 'chatId' as const,
+      icon: '👑',
+      name: 'Master / Central Life System Bot',
+      badge: 'Hub Leader',
+      desc: 'Central brain & orchestrator: executes /today status overview, /checkin streak confirmations, /vault surplus balance, /tasks, and emergency /panic protocols.'
+    },
+    {
+      key: 'finance',
+      tokenField: 'financeBotToken' as const,
+      chatField: 'financeBotChatId' as const,
+      icon: '💰',
+      name: 'Finance & Money Bot',
+      badge: 'Auto-Sync Active',
+      desc: 'Fast natural expense logger: send "coffee 35", "taxi 50", "lunch 120", "+500 salary", or "/balance". Automatically synchronized with embedded Finance Helper App ledger!'
+    },
+    {
+      key: 'sport',
+      tokenField: 'sportBotToken' as const,
+      chatField: 'sportBotChatId' as const,
+      icon: '🏃',
+      name: 'Body, Sport & Athlete Bot',
+      badge: 'Hunter Power',
+      desc: 'Athletic counter & metrics: logs /sport run 5km, /pushups 50, /bench 80kg, body composition (/weight 74.5, /waist 82), and Hunter PR records.'
+    },
+    {
+      key: 'man',
+      tokenField: 'manBotToken' as const,
+      chatField: 'manBotChatId' as const,
+      icon: '🛡️',
+      name: 'MAN Spartan Discipline Bot',
+      badge: 'Discipline Shield',
+      desc: 'Discipline sentinel: morning warrior oath (/oath), clean streak affirmations (/checkin), and instant urge suppression protocols (/panic).'
+    },
+    {
+      key: 'waky',
+      tokenField: 'wakyBotToken' as const,
+      chatField: 'wakyBotChatId' as const,
+      icon: '🌙',
+      name: 'Waky Sleep & Circadian Bot',
+      badge: 'Circadian Guard',
+      desc: 'Sleep optimizer: on-time wake check-in (/wake), bedtime streak logging (/bed), and circadian alignment monitoring.'
+    },
+    {
+      key: 'planner',
+      tokenField: 'plannerBotToken' as const,
+      chatField: 'plannerBotChatId' as const,
+      icon: '🎯',
+      name: 'Task & Quest Execution Bot',
+      badge: 'Quest Dispatcher',
+      desc: 'Task command: lists active tasks (/tasks), completes to-dos remotely (/done 1), and tracks quest milestones.'
+    },
+    {
+      key: 'coach',
+      tokenField: 'coachBotToken' as const,
+      chatField: 'coachBotChatId' as const,
+      icon: '🤖',
+      name: 'AI System Tactical Coach Bot',
+      badge: 'Solo Leveling AI',
+      desc: 'Tactical mentor: Hunter strategic advice, habit debriefs, and real-time motivational coaching directly in Telegram.'
+    }
+  ]
 
   const [aiCfg, setAiCfg] = useState<AIConfig>(DEFAULT_AI_CONFIG)
   const [showGemini, setShowGemini] = useState(false)
@@ -425,6 +531,182 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
             onClick={syncCalendarNow}
           >
             {syncingCal ? 'Syncing...' : 'Sync Calendar Now'}
+          </button>
+        </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="bot" /> Telegram Multi-Bot Army & Tokens Hub
+          </h2>
+          <span className={`chip ${botCfg.enabled && botCfg.botToken ? 'ok' : 'muted'}`}>
+            {botCfg.enabled && botCfg.botToken ? 'Army Active' : 'Setup Required'}
+          </span>
+        </header>
+
+        <p className="hint block">
+          Connect your dedicated Telegram bots individually. Each bot specializes in a specific life domain, while all data, streaks, and balances synchronize in real-time across your entire Life System and embedded Finance Helper app!
+        </p>
+
+        {/* 7 Individual Bot Cards Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', margin: '1rem 0' }}>
+          {BOTS_METADATA.map((b) => {
+            const hasToken = !!botCfg[b.tokenField]
+            const isRevealed = !!showTokens[b.key]
+            const isTestingThis = testingBotKey === b.key
+            return (
+              <div
+                key={b.key}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: hasToken ? '1px solid rgba(0, 210, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '10px',
+                  padding: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.6rem',
+                  boxShadow: hasToken ? '0 0 15px rgba(0, 210, 255, 0.05)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.4rem' }}>{b.icon}</span>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>{b.name}</h3>
+                      <small style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>{b.badge}</small>
+                    </div>
+                  </div>
+                  <span className={`chip small ${hasToken ? 'ok' : 'ghost'}`}>
+                    {hasToken ? 'Connected' : 'Empty'}
+                  </span>
+                </div>
+
+                <p style={{ margin: '0.2rem 0', fontSize: '0.8rem', color: 'var(--muted)', lineHeight: 1.4 }}>
+                  {b.desc}
+                </p>
+
+                <div className="field" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Bot Token (from @BotFather)</label>
+                  <div className="row" style={{ gap: '0.4rem' }}>
+                    <input
+                      type={isRevealed ? 'text' : 'password'}
+                      placeholder="123456789:AA..."
+                      value={botCfg[b.tokenField] || ''}
+                      onChange={(e) => setBotCfg({ ...botCfg, [b.tokenField]: e.target.value.trim() })}
+                      style={{ fontSize: '0.82rem', padding: '0.4rem 0.6rem' }}
+                    />
+                    <button
+                      className="btn ghost small"
+                      type="button"
+                      onClick={() => toggleTokenVisibility(b.key)}
+                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
+                    >
+                      {isRevealed ? 'Hide' : 'Reveal'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="field" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Assigned Telegram Chat ID</label>
+                  <input
+                    type="text"
+                    placeholder={b.key === 'master' ? 'e.g. 12345678 (whitelist)' : `Defaults to ${botCfg.chatId || 'Master Chat ID'}`}
+                    value={botCfg[b.chatField] || ''}
+                    onChange={(e) => setBotCfg({ ...botCfg, [b.chatField]: e.target.value.trim() })}
+                    style={{ fontSize: '0.82rem', padding: '0.4rem 0.6rem' }}
+                  />
+                </div>
+
+                {b.key === 'finance' && (
+                  <label className="check toggle-row" style={{ margin: '0.2rem 0', fontSize: '0.8rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={botCfg.financeSyncEnabled ?? true}
+                      onChange={(e) => setBotCfg({ ...botCfg, financeSyncEnabled: e.target.checked })}
+                    />
+                    <span>
+                      Sync with Finance Helper App
+                      <small>Auto-records to Finance ledger and Google Drive backup</small>
+                    </span>
+                  </label>
+                )}
+
+                <div style={{ marginTop: 'auto', paddingTop: '0.4rem', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn ghost small"
+                    type="button"
+                    disabled={!botCfg[b.tokenField] || testingBotKey !== null}
+                    onClick={() => testBotIndividual(b.key)}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    {isTestingThis ? 'Testing...' : `Test ${b.name.split(' ')[0]} Bot`}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Global Hub Options */}
+        <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+          <label className="check toggle-row">
+            <input
+              type="checkbox"
+              checked={botCfg.pollingEnabled}
+              onChange={(e) => setBotCfg({ ...botCfg, pollingEnabled: e.target.checked })}
+            />
+            <span>
+              Enable Automatic 2-Way Long Polling on Startup
+              <small>Allows all configured bots to continuously receive commands and natural expenses in real time.</small>
+            </span>
+          </label>
+
+          <label className="check toggle-row">
+            <input
+              type="checkbox"
+              checked={botCfg.morningBriefing}
+              onChange={(e) => setBotCfg({ ...botCfg, morningBriefing: e.target.checked })}
+            />
+            <span>
+              Morning Briefing Notification
+              <small>Delivers your morning agenda, rituals status, and streak affirmations at wake-up time.</small>
+            </span>
+          </label>
+
+          <label className="check toggle-row">
+            <input
+              type="checkbox"
+              checked={botCfg.eveningNudge}
+              onChange={(e) => setBotCfg({ ...botCfg, eveningNudge: e.target.checked })}
+            />
+            <span>
+              Evening Bedtime & Habit Nudge
+              <small>Sends nightly habit wrap-up and reminds you to affirm your clean streak and bedtime.</small>
+            </span>
+          </label>
+        </div>
+
+        {botTestResult && (
+          <div
+            className={`notice ${botTestResult.ok ? 'ok' : 'warn'}`}
+            style={{ margin: '0.75rem 0', padding: '0.6rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem' }}
+          >
+            {botTestResult.ok ? '✅ ' : '❌ '} {botTestResult.message}
+          </div>
+        )}
+
+        <div className="row" style={{ marginTop: '1rem', gap: '0.8rem' }}>
+          <button className="btn primary" onClick={saveBotArmy}>
+            Save All Bot Tokens & Settings
+          </button>
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={testingBotKey !== null}
+            onClick={() => testBotIndividual('all')}
+          >
+            {testingBotKey === 'all' ? 'Testing Army...' : 'Test All Connected Bots'}
           </button>
         </div>
       </section>

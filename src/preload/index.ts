@@ -162,7 +162,7 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     status: () => call('bots:status'),
     logs: () => call('bots:logs'),
     clearLogs: () => call('bots:clearLogs'),
-    test: () => call('bots:test'),
+    test: (botKey) => call('bots:test', botKey),
     startPolling: () => call('bots:startPolling'),
     stopPolling: () => call('bots:stopPolling')
   },

@@ -120,6 +120,44 @@ describe('TelegramBotHub service', () => {
     expect(wallet.summary().balance).toBe(3) // +3 coins for money.logged
   })
 
+  it('processes natural language expenses and syncs with FinanceHost', async () => {
+    let syncedTx: any = null
+    const mockFinanceHost: any = {
+      readState: async () => JSON.stringify({ tx: [] }),
+      quickAdd: () => {},
+      addTransaction: async (tx: any) => {
+        syncedTx = tx
+        return { ok: true, txId: 'mock-tx-1', balanceTotal: 1540000, accountName: 'Main Card' }
+      },
+      getFinanceSummary: async () => ({
+        totalMdl: 15400,
+        currency: 'MDL',
+        accounts: [{ id: 'acc-1', name: 'Main Card', balanceMdl: 15400 }]
+      }),
+      syncTelegram: async () => true
+    }
+
+    hub.setFinanceHost(mockFinanceHost)
+
+    // Send natural expense "coffee 35"
+    const reply = await hub.handleIncomingCommand('coffee 35', '12345678')
+    expect(reply).toContain('Expense Recorded & Synced to Finance Helper!')
+    expect(reply).toContain('35 MDL · <i>coffee</i>')
+    expect(reply).toContain('food')
+    expect(reply).toContain('<b>Finance App Ledger:</b> Synced ✅ [Main Card]')
+
+    expect(syncedTx).not.toBeNull()
+    expect(syncedTx.amount).toBe(3500)
+    expect(syncedTx.category).toBe('food')
+    expect(syncedTx.note).toBe('coffee')
+
+    // Check balance command
+    const balReply = await hub.handleIncomingCommand('/balance', '12345678')
+    expect(balReply).toContain('FINANCIAL BALANCE & ASSET OVERVIEW')
+    expect(balReply).toContain('<b>Main Card:</b> 15400.00 MDL')
+    expect(balReply).toContain('<b>Accounts Total:</b> <b>15400.00 MDL</b>')
+  })
+
   it('processes /oath and /checkin', async () => {
     discipline.setStart('2026-10-25')
     const oathRes = await hub.handleIncomingCommand('/oath', '12345678')

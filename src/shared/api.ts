@@ -302,6 +302,13 @@ export interface BotBridgeConfig {
   financeBotChatId?: string
   manBotToken?: string
   manBotChatId?: string
+  wakyBotToken?: string
+  wakyBotChatId?: string
+  plannerBotToken?: string
+  plannerBotChatId?: string
+  coachBotToken?: string
+  coachBotChatId?: string
+  financeSyncEnabled?: boolean
 }
 
 export interface AuthStatus {
@@ -423,7 +430,7 @@ export interface LifeApi {
   telegram: {
     config(): Promise<TelegramConfig>
     saveConfig(cfg: Partial<TelegramConfig>): Promise<TelegramConfig>
-    test(): Promise<{ ok: boolean; error?: string }>
+    test(botKey?: string): Promise<{ ok: boolean; error?: string }>
   }
   backup: {
     status(): Promise<BackupStatus>
@@ -484,7 +491,7 @@ export interface LifeApi {
     status(): Promise<{ polling: boolean; enabled: boolean; configured: boolean; lastPollAt: string | null; lastError: string | null; processedCount: number }>
     logs(): Promise<BotLogEntry[]>
     clearLogs(): Promise<void>
-    test(): Promise<{ ok: boolean; error?: string }>
+    test(botKey?: string): Promise<{ ok: boolean; error?: string }>
     startPolling(): Promise<boolean>
     stopPolling(): Promise<boolean>
   }

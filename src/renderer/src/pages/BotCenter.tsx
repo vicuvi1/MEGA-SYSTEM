@@ -41,6 +41,20 @@ const COMMAND_CODEX = [
     desc: 'Log an expense into your ledger with category and note. Calculates daily budget.'
   },
   {
+    cmd: 'coffee 35',
+    syntax: 'coffee 35',
+    badge: 'Auto-Finance',
+    coins: '+3',
+    desc: 'Natural expense logging! Send "coffee 35", "taxi 50", "35 coffee" or "+500 salary" to auto-categorize and sync directly with Finance Helper App.'
+  },
+  {
+    cmd: '/balance',
+    syntax: '/balance',
+    badge: 'Assets',
+    coins: '0',
+    desc: 'Displays all Finance Helper accounts, Life System Coins wallet, and Reward Vault surplus balances.'
+  },
+  {
     cmd: '/tasks',
     syntax: '/tasks',
     badge: 'Planner',
@@ -98,7 +112,14 @@ export function BotCenter() {
     financeBotToken: '',
     financeBotChatId: '',
     manBotToken: '',
-    manBotChatId: ''
+    manBotChatId: '',
+    wakyBotToken: '',
+    wakyBotChatId: '',
+    plannerBotToken: '',
+    plannerBotChatId: '',
+    coachBotToken: '',
+    coachBotChatId: '',
+    financeSyncEnabled: true
   })
   const [status, setStatus] = useState<{
     polling: boolean
@@ -184,12 +205,13 @@ export function BotCenter() {
     }
   }
 
-  const handleSendTest = async () => {
+  const handleSendTest = async (botKey?: string) => {
+    const key = typeof botKey === 'string' ? botKey : undefined
     setIsTesting(true)
     try {
-      const res = await life.bots.test()
+      const res = await life.bots.test(key)
       if (res.ok) {
-        toast('Ping message delivered to your Telegram!', 'good')
+        toast(`Ping message delivered${key ? ` to ${key} bot` : ''} on Telegram!`, 'good')
       } else {
         toast(res.error || 'Failed to send test message', 'bad')
       }
@@ -276,7 +298,7 @@ export function BotCenter() {
             </button>
             <button
               className="btn btn-secondary"
-              onClick={handleSendTest}
+              onClick={() => handleSendTest()}
               disabled={isTesting || !config.botToken || !config.chatId}
             >
               {isTesting ? 'Sending...' : 'Send Test Ping'}
@@ -372,7 +394,7 @@ export function BotCenter() {
         >
           <Icon name="link" size={15} />
           <span>Ecosystem Bot Bridges</span>
-          <span className="count-pill">3</span>
+          <span className="count-pill">6</span>
         </button>
         <button
           className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`}
@@ -427,6 +449,54 @@ export function BotCenter() {
           </div>
 
           <div className="ecosystem-grid">
+            {/* Finance Helper Bot */}
+            <div className="ecosystem-card">
+              <div className="ecosystem-header">
+                <div className="badge-icon finance-icon">
+                  <Icon name="coin" size={18} />
+                </div>
+                <div>
+                  <h4>💰 Finance Helper & Money Bot</h4>
+                  <small>Natural expenses ("coffee 35", "taxi 50") & /balance sync</small>
+                </div>
+              </div>
+              <div className="ecosystem-inputs">
+                <label>Dedicated Bot Token</label>
+                <input
+                  type="password"
+                  placeholder="Finance bot token (from @BotFather)"
+                  value={config.financeBotToken || ''}
+                  onChange={(e) => setConfig({ ...config, financeBotToken: e.target.value.trim() })}
+                />
+                <label>Assigned Chat ID</label>
+                <input
+                  type="text"
+                  placeholder="Defaults to primary Chat ID"
+                  value={config.financeBotChatId || ''}
+                  onChange={(e) => setConfig({ ...config, financeBotChatId: e.target.value.trim() })}
+                />
+                <label className="checkbox-label" style={{ marginTop: '0.4rem', fontSize: '0.8rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={config.financeSyncEnabled ?? true}
+                    onChange={(e) => setConfig({ ...config, financeSyncEnabled: e.target.checked })}
+                  />
+                  <span>2-way real-time sync with Finance Helper App</span>
+                </label>
+              </div>
+              <div className="ecosystem-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="status-tag active">Auto-Sync & /balance</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!config.financeBotToken || isTesting}
+                  onClick={() => handleSendTest('finance')}
+                >
+                  Test Bridge
+                </button>
+              </div>
+            </div>
+
             {/* Sport Bot */}
             <div className="ecosystem-card">
               <div className="ecosystem-header">
@@ -434,12 +504,12 @@ export function BotCenter() {
                   <Icon name="bolt" size={18} />
                 </div>
                 <div>
-                  <h4>Sport & Workout Bot</h4>
-                  <small>Automated rep counter and fitness logger</small>
+                  <h4>🏃 Sport & Workout Bot</h4>
+                  <small>Automated rep counter, runs, weight & fitness logger</small>
                 </div>
               </div>
               <div className="ecosystem-inputs">
-                <label>Secondary Bot Token</label>
+                <label>Dedicated Bot Token</label>
                 <input
                   type="password"
                   placeholder="Sport bot token (optional)"
@@ -454,40 +524,16 @@ export function BotCenter() {
                   onChange={(e) => setConfig({ ...config, sportBotChatId: e.target.value.trim() })}
                 />
               </div>
-              <div className="ecosystem-footer">
-                <span className="status-tag active">Integrated with /workout</span>
-              </div>
-            </div>
-
-            {/* Finance Helper Bot */}
-            <div className="ecosystem-card">
-              <div className="ecosystem-header">
-                <div className="badge-icon finance-icon">
-                  <Icon name="coin" size={18} />
-                </div>
-                <div>
-                  <h4>Finance Helper Bot</h4>
-                  <small>Receipt parser & quick expense input</small>
-                </div>
-              </div>
-              <div className="ecosystem-inputs">
-                <label>Secondary Bot Token</label>
-                <input
-                  type="password"
-                  placeholder="Finance bot token (optional)"
-                  value={config.financeBotToken || ''}
-                  onChange={(e) => setConfig({ ...config, financeBotToken: e.target.value.trim() })}
-                />
-                <label>Assigned Chat ID</label>
-                <input
-                  type="text"
-                  placeholder="Defaults to primary Chat ID"
-                  value={config.financeBotChatId || ''}
-                  onChange={(e) => setConfig({ ...config, financeBotChatId: e.target.value.trim() })}
-                />
-              </div>
-              <div className="ecosystem-footer">
-                <span className="status-tag active">Integrated with /expense</span>
+              <div className="ecosystem-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="status-tag active">Integrated with /sport & /workout</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!config.sportBotToken || isTesting}
+                  onClick={() => handleSendTest('sport')}
+                >
+                  Test Bridge
+                </button>
               </div>
             </div>
 
@@ -498,12 +544,12 @@ export function BotCenter() {
                   <Icon name="shield" size={18} />
                 </div>
                 <div>
-                  <h4>MAN Recovery Bot</h4>
+                  <h4>🛡️ MAN Spartan Discipline Bot</h4>
                   <small>Discipline guard, urge protocol & streak defense</small>
                 </div>
               </div>
               <div className="ecosystem-inputs">
-                <label>Secondary Bot Token</label>
+                <label>Dedicated Bot Token</label>
                 <input
                   type="password"
                   placeholder="MAN bot token (optional)"
@@ -518,8 +564,136 @@ export function BotCenter() {
                   onChange={(e) => setConfig({ ...config, manBotChatId: e.target.value.trim() })}
                 />
               </div>
-              <div className="ecosystem-footer">
+              <div className="ecosystem-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="status-tag active">Integrated with /panic & /checkin</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!config.manBotToken || isTesting}
+                  onClick={() => handleSendTest('man')}
+                >
+                  Test Bridge
+                </button>
+              </div>
+            </div>
+
+            {/* Waky Sleep Bot */}
+            <div className="ecosystem-card">
+              <div className="ecosystem-header">
+                <div className="badge-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' }}>
+                  <Icon name="clock" size={18} />
+                </div>
+                <div>
+                  <h4>🌙 Waky Sleep & Circadian Bot</h4>
+                  <small>Wake-up logging, bedtime streaks & circadian alignment</small>
+                </div>
+              </div>
+              <div className="ecosystem-inputs">
+                <label>Dedicated Bot Token</label>
+                <input
+                  type="password"
+                  placeholder="Waky bot token (optional)"
+                  value={config.wakyBotToken || ''}
+                  onChange={(e) => setConfig({ ...config, wakyBotToken: e.target.value.trim() })}
+                />
+                <label>Assigned Chat ID</label>
+                <input
+                  type="text"
+                  placeholder="Defaults to primary Chat ID"
+                  value={config.wakyBotChatId || ''}
+                  onChange={(e) => setConfig({ ...config, wakyBotChatId: e.target.value.trim() })}
+                />
+              </div>
+              <div className="ecosystem-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="status-tag active">Integrated with /wake & /bed</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!config.wakyBotToken || isTesting}
+                  onClick={() => handleSendTest('waky')}
+                >
+                  Test Bridge
+                </button>
+              </div>
+            </div>
+
+            {/* Planner Quest Bot */}
+            <div className="ecosystem-card">
+              <div className="ecosystem-header">
+                <div className="badge-icon" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}>
+                  <Icon name="check" size={18} />
+                </div>
+                <div>
+                  <h4>🎯 Task & Quest Execution Bot</h4>
+                  <small>Task dispatch, /done remote completions & agenda</small>
+                </div>
+              </div>
+              <div className="ecosystem-inputs">
+                <label>Dedicated Bot Token</label>
+                <input
+                  type="password"
+                  placeholder="Planner bot token (optional)"
+                  value={config.plannerBotToken || ''}
+                  onChange={(e) => setConfig({ ...config, plannerBotToken: e.target.value.trim() })}
+                />
+                <label>Assigned Chat ID</label>
+                <input
+                  type="text"
+                  placeholder="Defaults to primary Chat ID"
+                  value={config.plannerBotChatId || ''}
+                  onChange={(e) => setConfig({ ...config, plannerBotChatId: e.target.value.trim() })}
+                />
+              </div>
+              <div className="ecosystem-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="status-tag active">Integrated with /tasks & /done</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!config.plannerBotToken || isTesting}
+                  onClick={() => handleSendTest('planner')}
+                >
+                  Test Bridge
+                </button>
+              </div>
+            </div>
+
+            {/* AI Coach Bot */}
+            <div className="ecosystem-card">
+              <div className="ecosystem-header">
+                <div className="badge-icon" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+                  <Icon name="spark" size={18} />
+                </div>
+                <div>
+                  <h4>🤖 AI System Tactical Coach Bot</h4>
+                  <small>Tactical Hunter coaching, debriefs & Solo Leveling AI</small>
+                </div>
+              </div>
+              <div className="ecosystem-inputs">
+                <label>Dedicated Bot Token</label>
+                <input
+                  type="password"
+                  placeholder="AI Coach bot token (optional)"
+                  value={config.coachBotToken || ''}
+                  onChange={(e) => setConfig({ ...config, coachBotToken: e.target.value.trim() })}
+                />
+                <label>Assigned Chat ID</label>
+                <input
+                  type="text"
+                  placeholder="Defaults to primary Chat ID"
+                  value={config.coachBotChatId || ''}
+                  onChange={(e) => setConfig({ ...config, coachBotChatId: e.target.value.trim() })}
+                />
+              </div>
+              <div className="ecosystem-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="status-tag active">Hunter AI Advisor</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!config.coachBotToken || isTesting}
+                  onClick={() => handleSendTest('coach')}
+                >
+                  Test Bridge
+                </button>
               </div>
             </div>
           </div>

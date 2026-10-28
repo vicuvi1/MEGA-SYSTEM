@@ -17,6 +17,7 @@ export type BotCommandType =
   | 'help'
   | 'vault'
   | 'goals'
+  | 'balance'
   | 'unknown'
 
 export interface ParsedCommand {
@@ -51,6 +52,81 @@ function parseAmountAndUnit(str: string, defaultUnit = 'reps'): { amount: number
   }
   const fallback = parseFloat(str)
   return { amount: isNaN(fallback) ? 1 : fallback, unit: defaultUnit }
+}
+
+
+export function detectExpenseCategory(text: string): string {
+  const t = text.toLowerCase()
+  if (/\b(coffee|cafe|cafea|cappuccino|tea|ceai|lunch|pranz|dinner|cina|breakfast|dejun|groceries|alimente|market|magazin|lidl|kaufland|linella|supermarket|food|mancare|mcdonalds|kfc|pizza|burger|shawarma|kebab|restaurant|bar|bere|beer|snack|water|apa)\b/i.test(t)) {
+    return 'food'
+  }
+  if (/\b(taxi|cab|uber|bolt|yandex|bus|troleibuz|autobuz|gas|benzina|fuel|motorina|car|auto|parking|parcare|metro|train|tren|transit|transport)\b/i.test(t)) {
+    return 'transport'
+  }
+  if (/\b(rent|chirie|bills|facturi|utilitati|gaz|lumina|electricitate|net|internet|wifi|moldtelecom|orange|clean|cleaning|intretinere|home|casa)\b/i.test(t)) {
+    return 'home'
+  }
+  if (/\b(gym|sala|fitness|workout|protein|proteina|creatine|sport|echipament|antrenament)\b/i.test(t)) {
+    return 'sport'
+  }
+  if (/\b(farmacie|pharmacy|pastile|medic|doctor|dentist|stomatolog|medicina|vitamine|spital|clinic|health|sanatate)\b/i.test(t)) {
+    return 'health'
+  }
+  if (/\b(movie|cinema|cineplex|game|steam|netflix|party|concert|club|fun|joc|distractie)\b/i.test(t)) {
+    return 'fun'
+  }
+  if (/\b(haine|clothes|shoes|pantofi|adibas|adadasi|mall|zara|bershka|shopping)\b/i.test(t)) {
+    return 'clothes'
+  }
+  if (/\b(salary|salariu|freelance|venit|bonus|profit|dividend|cash|income)\b/i.test(t)) {
+    return 'income'
+  }
+  return 'other'
+}
+
+export function tryParseNaturalExpense(text: string): ParsedCommand | null {
+  const trimmed = text.trim()
+  if (!trimmed || trimmed.startsWith('/')) return null
+
+  // Pattern A: Amount first: e.g. "35 coffee", "35.50 lunch with alex", "+500 salary", "45 lei pizza", "120 mdl groceries"
+  const amountFirstMatch = trimmed.match(/^([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?\s+(.+)$/i)
+  if (amountFirstMatch) {
+    const rawAmt = amountFirstMatch[1].replace(/\s+/g, '').replace(',', '.')
+    const amt = parseFloat(rawAmt)
+    const note = amountFirstMatch[2].replace(/\b(lei|mdl|\$|€)\b/gi, '').trim()
+    if (!isNaN(amt) && amt > 0 && note.length > 0) {
+      const cat = rawAmt.startsWith('+') ? 'income' : detectExpenseCategory(note)
+      return {
+        type: 'expense',
+        args: [String(amt), cat, note],
+        raw: trimmed,
+        expenseAmount: amt,
+        expenseCategory: cat,
+        expenseNote: note
+      }
+    }
+  }
+
+  // Pattern B: Note first, amount last: e.g. "coffee 35", "taxi 50", "lunch with alex 120", "groceries 250 lei", "freelance +1000"
+  const noteFirstMatch = trimmed.match(/^(.+?)\s+([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?$/i)
+  if (noteFirstMatch) {
+    const note = noteFirstMatch[1].replace(/\b(lei|mdl|\$|€)\b/gi, '').trim()
+    const rawAmt = noteFirstMatch[2].replace(/\s+/g, '').replace(',', '.')
+    const amt = parseFloat(rawAmt)
+    if (!isNaN(amt) && amt > 0 && note.length > 0) {
+      const cat = rawAmt.startsWith('+') ? 'income' : detectExpenseCategory(note)
+      return {
+        type: 'expense',
+        args: [String(amt), cat, note],
+        raw: trimmed,
+        expenseAmount: amt,
+        expenseCategory: cat,
+        expenseNote: note
+      }
+    }
+  }
+
+  return null
 }
 
 export function parseTelegramText(text: string): ParsedCommand {
@@ -280,6 +356,16 @@ export function parseTelegramText(text: string): ParsedCommand {
     return { type: 'crush', args, raw: trimmed }
   }
 
+  if (cmd === 'balance' || cmd === 'accounts' || cmd === 'money') {
+    return { type: 'balance', args, raw: trimmed }
+  }
+
+  // Natural language expense logging (e.g. "coffee 35", "35 coffee", "taxi 50", "lunch 120", "+500 salary")
+  const naturalExp = tryParseNaturalExpense(trimmed)
+  if (naturalExp) {
+    return naturalExp
+  }
+
   return { type: 'unknown', args, raw: trimmed }
 }
 
@@ -319,6 +405,8 @@ export function formatHelpMessage(): string {
     `• <code>/panic</code> — Instant urge crusher emergency protocol`,
     ``,
     `💳 <b>Money & Expenses</b>`,
+    `• <code>coffee 35</code> or <code>taxi 50</code> — Fast natural expense logging`,
+    `• <code>/balance</code> — View accounts, coins & vault balances`,
     `• <code>/expense &lt;amount&gt; &lt;category&gt; [note]</code>`,
     `  e.g. <code>/expense 45 food lunch</code> (+3 🪙)`,
     ``,
@@ -429,19 +517,71 @@ export function formatExpenseResponse(
   category: string,
   note: string | null,
   remainingBudget: string,
-  coinsAwarded: number
+  coinsAwarded: number,
+  financeSyncInfo?: { synced: boolean; totalBalance?: string; accountName?: string }
 ): string {
   const parts = [
-    `💳 <b>Expense Recorded</b>`,
+    `💳 <b>Expense Recorded${financeSyncInfo?.synced ? ' & Synced to Finance Helper!' : ''}</b>`,
     ``,
-    `• <b>Amount:</b> ${amountFormatted}`,
-    `• <b>Category:</b> ${category}${note ? ` (${note})` : ''}`,
+    `• <b>Amount:</b> ${amountFormatted}${note ? ` · <i>${note}</i>` : ''}`,
+    `• <b>Category:</b> ${category}`,
     `• <b>Daily Budget Left:</b> ${remainingBudget}`
   ]
+  if (financeSyncInfo?.synced) {
+    parts.push(
+      `• <b>Finance App Ledger:</b> Synced ✅${financeSyncInfo.accountName ? ` [${financeSyncInfo.accountName}]` : ''}${
+        financeSyncInfo.totalBalance ? ` (Total: <b>${financeSyncInfo.totalBalance}</b>)` : ''
+      }`
+    )
+  }
   if (coinsAwarded > 0) {
     parts.push(`• <b>Reward:</b> +${coinsAwarded} coins (first log of the day)`)
   }
   return parts.join('\n')
+}
+
+export function formatBalanceResponse(data: {
+  currency: string
+  walletCoins: number
+  walletCoinsValueMdl: number
+  vaultSurplusMdl: number
+  financeAccountsTotalMdl: number
+  financeAccounts: { name: string; balanceMdl: number; currency: string }[]
+  dailyBudgetLeftMdl?: number
+}): string {
+  const lines = [
+    `💰 <b>FINANCIAL BALANCE & ASSET OVERVIEW</b> 💰`,
+    ``
+  ]
+
+  if (data.financeAccounts.length > 0) {
+    lines.push(`🏦 <b>Finance Helper Accounts:</b>`)
+    for (const acc of data.financeAccounts) {
+      lines.push(`• <b>${acc.name}:</b> ${acc.balanceMdl.toFixed(2)} ${acc.currency}`)
+    }
+    lines.push(`💳 <b>Accounts Total:</b> <b>${data.financeAccountsTotalMdl.toFixed(2)} ${data.currency}</b>`)
+    lines.push(``)
+  }
+
+  lines.push(
+    `🪙 <b>Life System Points Wallet:</b>`,
+    `• <b>${data.walletCoins} Coins</b> (≈ <b>${data.walletCoinsValueMdl.toFixed(2)} ${data.currency}</b> at 10:1 ratio)`,
+    ``,
+    `🏛️ <b>Discipline Reward Vault:</b>`,
+    `• <b>${data.vaultSurplusMdl.toFixed(2)} ${data.currency}</b> (unlocked surplus reward cash)`,
+    ``,
+    `💎 <b>Combined Liquid & Stored Value:</b>`,
+    `• <b>${(data.financeAccountsTotalMdl + data.vaultSurplusMdl + data.walletCoinsValueMdl).toFixed(2)} ${data.currency}</b>`
+  )
+
+  if (data.dailyBudgetLeftMdl != null) {
+    lines.push(
+      ``,
+      `📊 <b>Today's Spending Budget:</b> ${data.dailyBudgetLeftMdl.toFixed(2)} ${data.currency} remaining`
+    )
+  }
+
+  return lines.join('\n')
 }
 
 export function formatCleanCheckinResponse(streak: number, coins: number): string {

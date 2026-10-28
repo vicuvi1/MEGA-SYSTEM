@@ -551,8 +551,18 @@ export function createMockApi(): Bridge {
         morningBriefing: true,
         eveningNudge: true,
         sportBotToken: '',
+        sportBotChatId: '',
         financeBotToken: '',
-        manBotToken: ''
+        financeBotChatId: '',
+        manBotToken: '',
+        manBotChatId: '',
+        wakyBotToken: '',
+        wakyBotChatId: '',
+        plannerBotToken: '',
+        plannerBotChatId: '',
+        coachBotToken: '',
+        coachBotChatId: '',
+        financeSyncEnabled: true
       }),
       saveConfig: async (c) => ({
         botToken: '',
@@ -561,6 +571,19 @@ export function createMockApi(): Bridge {
         pollingEnabled: false,
         morningBriefing: true,
         eveningNudge: true,
+        sportBotToken: '',
+        sportBotChatId: '',
+        financeBotToken: '',
+        financeBotChatId: '',
+        manBotToken: '',
+        manBotChatId: '',
+        wakyBotToken: '',
+        wakyBotChatId: '',
+        plannerBotToken: '',
+        plannerBotChatId: '',
+        coachBotToken: '',
+        coachBotChatId: '',
+        financeSyncEnabled: true,
         ...c
       }),
       status: async () => ({ polling: false, enabled: false, configured: false, lastPollAt: null, lastError: null, processedCount: 0 }),
@@ -569,7 +592,7 @@ export function createMockApi(): Bridge {
         { id: 2, ts: new Date().toISOString(), command: '/checkin', sender: '12345678', success: true, reply: '🛡️ Clean Day Affirmed!' }
       ],
       clearLogs: async () => {},
-      test: async () => ({ ok: true }),
+      test: async (_botKey?: string) => ({ ok: true }),
       startPolling: async () => true,
       stopPolling: async () => false
     },
