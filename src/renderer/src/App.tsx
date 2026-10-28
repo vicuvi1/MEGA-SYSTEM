@@ -187,6 +187,33 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     life.onWalletChanged(() => onWallet())
   }, [onWallet])
 
+  // Listen to discipline changes from the main process / background bots
+  useEffect(() => {
+    const unsub = life.onDisciplineChanged?.(() => {
+      life.discipline.state().then((d) => {
+        setDiscipline(d)
+        window.dispatchEvent(new CustomEvent('life-discipline-changed', { detail: d }))
+      })
+    })
+    return () => unsub?.()
+  }, [])
+
+  // Sync to MAN whenever discipline state changes in the renderer
+  useEffect(() => {
+    if (discipline) {
+      window.dispatchEvent(new CustomEvent('life-discipline-changed', { detail: discipline }))
+    }
+  }, [discipline])
+
+  // Refresh wallet & summary when MAN app triggers a checkin/oath sync
+  useEffect(() => {
+    const handleDisciplineSynced = () => {
+      onWallet()
+    }
+    window.addEventListener('life-discipline-synced', handleDisciplineSynced)
+    return () => window.removeEventListener('life-discipline-synced', handleDisciplineSynced)
+  }, [onWallet])
+
   // Coins flying into the wallet whenever the balance changes, from anywhere.
   const lastBalance = useRef<number | null>(null)
   useEffect(() => {

@@ -280,15 +280,23 @@ for (const action of ['start', 'finish', 'skip'] as const) {
 handle('discipline:state', () => discipline.state())
 handle('discipline:setStart', (day: string) => {
   discipline.setStart(day)
+  win?.webContents.send('discipline:changed')
   return discipline.state()
 })
 for (const action of ['checkIn', 'oath', 'reset', 'startUrge', 'finishUrge', 'cancelUrge'] as const) {
   handle(`discipline:${action}`, () => {
     discipline[action]()
+    win?.webContents.send('wallet:changed')
+    win?.webContents.send('discipline:changed')
     return discipline.state()
   })
 }
-handle('discipline:claim', (days: number) => ({ coins: discipline.claim(days), state: discipline.state() }))
+handle('discipline:claim', (days: number) => {
+  const coins = discipline.claim(days)
+  win?.webContents.send('wallet:changed')
+  win?.webContents.send('discipline:changed')
+  return { coins, state: discipline.state() }
+})
 
 handle('body:state', () => body.state())
 handle('body:logWorkout', (input: WorkoutInput) => body.logWorkout(input))

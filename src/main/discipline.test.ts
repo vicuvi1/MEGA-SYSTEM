@@ -88,4 +88,21 @@ describe('discipline service', () => {
     expect(d.state(oct25).stealth).toBe(true)
     expect(() => db.prepare('DELETE FROM discipline_events').run()).toThrow('append-only')
   })
+
+  it('awards clean day coins (+20), XP (+40), and oath coins (+10) for check-in synchronization', () => {
+    d.setStart('2026-10-15', oct25)
+    // Synchronize check-in
+    d.checkIn(oct25)
+    expect(d.state(oct25).checkedInToday).toBe(true)
+    let summary = wallet.summary(oct25)
+    expect(summary.balance).toBe(20)
+    expect(summary.totalXp).toBe(40)
+
+    // Synchronize oath
+    d.oath(oct25)
+    expect(d.state(oct25).oathToday).toBe(true)
+    summary = wallet.summary(oct25)
+    expect(summary.balance).toBe(23) // 20 + 3
+    expect(summary.totalXp).toBe(45) // 40 + 5
+  })
 })

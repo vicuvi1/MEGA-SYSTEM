@@ -2497,6 +2497,28 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                 triggerVictoryBurst();
                 refreshUI();
 
+                
+
+                // Notify Life System Host via console bridge
+
+                try {
+
+                    console.log("LIFE_SYSTEM_BRIDGE:MAN_CHECKIN:" + JSON.stringify({
+
+                        today: today,
+
+                        streakDays: appData.streakDays,
+
+                        longestStreak: appData.longestStreak,
+
+                        totalVictories: appData.totalVictories
+
+                    }));
+
+                } catch (e) {}
+
+                
+
                 const newlyUnlocked = getAllRewards().filter(r => r.days === appData.streakDays && !(appData.claimedRewards || []).includes(r.id));
                 if (newlyUnlocked.length > 0) {
                     showToast(`🎁 NEW FEAST UNLOCKED: Day ${appData.streakDays} ${newlyUnlocked[0].title}! Enjoy your reward!`);
@@ -2544,6 +2566,15 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                     triggerScreenShake();
                     triggerVictoryBurst();
                     refreshUI();
+                    
+                    // Notify Life System host of sworn oath
+                    try {
+                        console.log("LIFE_SYSTEM_BRIDGE:MAN_OATH:" + JSON.stringify({
+                            today: today,
+                            oathsSwornCount: appData.oathsSwornCount
+                        }));
+                    } catch (e) {}
+                    
                     alert("⚔️ SPARTAN OATH SWORN!\n\n\"I will not trade my masculine fire for cheap pixels today. My mind is an iron fortress. Molon Labe!\"\n\nStand firm in the phalanx today, warrior.");
                 }
             }, 100);
@@ -3538,6 +3569,124 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             });
         }
 
+        // -------------------------------------------------------------
+
+        // Life System Bi-directional Synchronization Bridge
+
+        // -------------------------------------------------------------
+
+        window.getManCheckinState = function() {
+
+            return {
+
+                lastCheckin: appData.lastCheckin,
+
+                streakDays: appData.streakDays,
+
+                longestStreak: appData.longestStreak,
+
+                totalVictories: appData.totalVictories,
+
+                lastOathDate: appData.lastOathDate
+
+            };
+
+        };
+
+        
+
+        window.syncFromLifeSystemCheckin = function(todayStr, streakCount) {
+
+            try {
+
+                const today = todayStr || getTodayString();
+
+                let changed = false;
+
+                if (appData.lastCheckin !== today) {
+
+                    if (streakCount !== undefined && streakCount !== null && Number(streakCount) > 0) {
+
+                        appData.streakDays = Number(streakCount);
+
+                    } else {
+
+                        appData.streakDays = (appData.streakDays || 0) + 1;
+
+                    }
+
+                    appData.longestStreak = Math.max(appData.longestStreak || 0, appData.streakDays);
+
+                    appData.totalVictories = (appData.totalVictories || 0) + 1;
+
+                    appData.lastCheckin = today;
+
+                    changed = true;
+
+                } else if (streakCount !== undefined && streakCount !== null && Number(streakCount) > 0 && appData.streakDays !== Number(streakCount)) {
+
+                    appData.streakDays = Number(streakCount);
+
+                    appData.longestStreak = Math.max(appData.longestStreak || 0, appData.streakDays);
+
+                    changed = true;
+
+                }
+
+                if (changed) {
+
+                    saveData();
+
+                    refreshUI();
+
+                    showToast('🛡️ Spartan Victory Synced: Day ' + appData.streakDays + '!');
+
+                }
+
+                return { ok: true, streak: appData.streakDays, lastCheckin: appData.lastCheckin };
+
+            } catch (e) {
+
+                console.error('syncFromLifeSystemCheckin error:', e);
+
+                return { ok: false, error: String(e) };
+
+            }
+
+        };
+
+        
+
+        window.syncFromLifeSystemOath = function(todayStr) {
+
+            try {
+
+                const today = todayStr || getTodayString();
+
+                if (appData.lastOathDate !== today) {
+
+                    appData.lastOathDate = today;
+
+                    appData.oathsSwornCount = (appData.oathsSwornCount || 0) + 1;
+
+                    saveData();
+
+                    refreshUI();
+
+                    showToast('⚔️ Spartan Oath Synced!');
+
+                }
+
+                return { ok: true, lastOathDate: appData.lastOathDate };
+
+            } catch (e) {
+
+                console.error('syncFromLifeSystemOath error:', e);
+
+                return { ok: false, error: String(e) };
+            }
+        };
+
         // Adjust Counter
         function handleAdjustStreak() {
             const val = prompt("Enter new streak day count (e.g. 0, 1, 3, 5, 10):", appData.streakDays);
@@ -3567,6 +3716,16 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             refreshUI();
             setRandomQuote();
             updateEmpireTeaser();
+            try {
+                console.log("LIFE_SYSTEM_BRIDGE:MAN_INIT:" + JSON.stringify({
+                    today: getTodayString(),
+                    lastCheckin: appData.lastCheckin,
+                    streakDays: appData.streakDays,
+                    longestStreak: appData.longestStreak,
+                    totalVictories: appData.totalVictories,
+                    lastOathDate: appData.lastOathDate
+                }));
+            } catch (e) {}
         } catch (e) {
             console.error("Initialization error:", e);
         }

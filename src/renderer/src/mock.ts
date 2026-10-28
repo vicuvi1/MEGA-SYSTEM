@@ -749,6 +749,7 @@ export function createMockApi(): Bridge {
     onLocked: () => {},
     onUrge: () => {},
     onWalletChanged: () => {},
+    onDisciplineChanged: () => () => {},
     onNavigate: () => {},
     onUpdate: () => {},
     onUiKey: () => () => {},

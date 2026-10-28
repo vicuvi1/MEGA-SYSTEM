@@ -7,7 +7,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return reply.data
 }
 
-const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void; onUiKey(cb: (key: string) => void): () => void; onFullScreen(cb: (on: boolean) => void): () => void } = {
+const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): void; onWalletChanged(cb: () => void): void; onDisciplineChanged(cb: () => void): () => void; onNavigate(cb: (page: string) => void): void; onUpdate(cb: (s: UpdateStatus) => void): void; onUiKey(cb: (key: string) => void): () => void; onFullScreen(cb: (on: boolean) => void): () => void } = {
   auth: {
     status: () => call('auth:status'),
     setPin: (pin, currentPin) => call('auth:setPin', pin, currentPin),
@@ -190,6 +190,13 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
   },
   onWalletChanged: (cb) => {
     ipcRenderer.on('wallet:changed', () => cb())
+  },
+  onDisciplineChanged: (cb) => {
+    const handler = () => cb()
+    ipcRenderer.on('discipline:changed', handler)
+    return () => {
+      ipcRenderer.removeListener('discipline:changed', handler)
+    }
   },
   onNavigate: (cb) => {
     ipcRenderer.on('app:navigate', (_, page: string) => cb(page))
