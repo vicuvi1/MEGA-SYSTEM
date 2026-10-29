@@ -556,6 +556,17 @@
       transform: translateY(0);
     }
 
+    .btn-complete-all.completed {
+      background: linear-gradient(135deg, #10B981 0%, #059669 50%, #F59E0B 100%);
+      color: #FFFFFF;
+      box-shadow: 0 8px 25px rgba(16, 185, 129, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-complete-all.completed:hover {
+      box-shadow: 0 10px 32px rgba(16, 185, 129, 0.75);
+    }
+
     .routine-shortcuts {
       display: flex;
       align-items: center;
@@ -1439,7 +1450,10 @@
               <span class="icon">📋</span>
               Today's Workout Routine (Sporty Bot Mode)
             </h2>
-            <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <span id="routine-status-badge" style="display: none; font-size: 11px; color: #10B981; font-weight: 800; background: rgba(16, 185, 129, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.4); align-items: center; gap: 4px;">
+                ✓ TODAY'S WORKOUT COMPLETED
+              </span>
               <span id="progression-badge" style="font-size: 11px; color: var(--gold-neon); font-weight: 800; background: rgba(249, 212, 35, 0.12); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(249, 212, 35, 0.3);">
                 AUTO-PROGRESSION: +5% (0/3)
               </span>
@@ -2186,6 +2200,24 @@
           </div>
         `;
       }).join('');
+
+      const allDone = activeExercises.length > 0 && activeExercises.every(e => (e.doneToday || 0) >= getEffectiveTarget(e));
+      const statusBadge = document.getElementById('routine-status-badge');
+      const completeAllBtn = document.getElementById('btn-complete-all');
+
+      if (statusBadge) {
+        statusBadge.style.display = allDone ? 'inline-flex' : 'none';
+      }
+
+      if (completeAllBtn) {
+        if (allDone) {
+          completeAllBtn.classList.add('completed');
+          completeAllBtn.innerHTML = `<span>🔥 ALL EXERCISES DONE! TAP FOR +1 EXTRA ROUND (+Target Reps) (+10 🪙 / +25 XP)</span>`;
+        } else {
+          completeAllBtn.classList.remove('completed');
+          completeAllBtn.innerHTML = `<span>⚡ COMPLETE ALL EXERCISES (+15 🪙 / +35 XP)</span>`;
+        }
+      }
     }
 
     // --- Routine Event Handling (Delegation) ---
@@ -2239,7 +2271,7 @@
       }
     }
 
-    // --- Complete All Button ---
+    // --- Complete All Button (Supports Multiple Click Extra Rounds) ---
     document.getElementById('btn-complete-all').addEventListener('click', () => {
       audio.playChime();
       const active = state.exercises.filter(e => e.active);
@@ -2248,29 +2280,45 @@
         return;
       }
 
-      active.forEach(ex => {
-        ex.doneToday = getEffectiveTarget(ex);
-      });
+      const allAlreadyDone = active.every(e => (e.doneToday || 0) >= getEffectiveTarget(e));
+
+      if (allAlreadyDone) {
+        // Multi-click / Extra Rounds!
+        // The user already crushed the required targets and wants to add another full round!
+        active.forEach(ex => {
+          ex.doneToday = (ex.doneToday || 0) + getEffectiveTarget(ex);
+        });
+        audio.playLevelUp();
+      } else {
+        // First completion: bring every exercise up to its effective target
+        // (preserving any exercises where the user already did extra reps!)
+        active.forEach(ex => {
+          ex.doneToday = Math.max(ex.doneToday || 0, getEffectiveTarget(ex));
+        });
+      }
 
       const summaryText = active.map(e => `${getEffectiveTarget(e)} ${e.name}`).join(', ');
+      const roundLabel = allAlreadyDone ? 'Extra Overdrive Round' : 'Daily Sporty Routine';
+      const earnedCoins = allAlreadyDone ? 10 : 15;
+      const earnedXp = allAlreadyDone ? 25 : 35;
 
       // Add workout record
       const record = {
         id: Date.now(),
         category: 'Calisthenics',
-        title: `Daily Sporty Routine: ${summaryText}`,
+        title: `${roundLabel}: ${summaryText}`,
         amount: `${active.length} exercises`,
         duration: '35m',
-        coins: 15,
-        xp: 35,
+        coins: earnedCoins,
+        xp: earnedXp,
         date: new Date().toLocaleDateString()
       };
 
       state.history.unshift(record);
-      state.xp += 35;
+      state.xp += earnedXp;
 
-      // Handle Auto-progression (+5% after 3 completed days)
-      if (state.sportySettings.autoProgression) {
+      // Handle Auto-progression (+5% after 3 completed days) - only on initial routine completion
+      if (state.sportySettings.autoProgression && !allAlreadyDone) {
         state.sportySettings.progressionStreak = (state.sportySettings.progressionStreak || 0) + 1;
         if (state.sportySettings.progressionStreak >= 3) {
           state.sportySettings.progressionStreak = 0;
@@ -2281,17 +2329,19 @@
           audio.playLevelUp();
           showToast('🔥 AUTO-PROGRESSION! All targets increased by +5%! Next tier reached!');
         } else {
-          showToast(`🏆 Routine Finished! Streak: ${state.sportySettings.progressionStreak}/3 for next +5% boost!`);
+          showToast(`🏆 Routine Finished! Streak: ${state.sportySettings.progressionStreak}/3 for next +5% boost! (+${earnedCoins} 🪙, +${earnedXp} XP)`);
         }
+      } else if (allAlreadyDone) {
+        showToast(`💥 EXTRA OVERDRIVE ROUND LOGGED! Added another full set! (+${earnedCoins} 🪙, +${earnedXp} XP)`);
       } else {
-        showToast('🏆 Daily Routine Finished! +15 Coins & +35 XP Awarded!');
+        showToast(`🏆 Daily Routine Finished! +${earnedCoins} Coins & +${earnedXp} XP Awarded!`);
       }
 
       saveState(state);
       updateHunterStats();
       renderTodayRoutine();
       renderHistory();
-      updateCoachQuote('"EVERY ROUTINE CONQUERED! Outstanding work, Hunter. Rest and re-hydrate!"');
+      updateCoachQuote(allAlreadyDone ? '"UNSTOPPABLE BEAST! Stacking extra rounds on top of victory!"' : '"EVERY ROUTINE CONQUERED! Outstanding work, Hunter. Rest and re-hydrate!"');
 
       // Electron IPC Broadcast
       if (window.parent && window.parent !== window) {
