@@ -11,6 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "web": "vite --config vite.web.mts",
+    "build:web": "vite build --config vite.web.mts",
+    "vercel-build": "vite build --config vite.web.mts",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "release": "node scripts/release.mjs"
   },
