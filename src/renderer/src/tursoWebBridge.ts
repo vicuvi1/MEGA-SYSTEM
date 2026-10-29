@@ -215,6 +215,26 @@ export function createTursoWebBridge(): Bridge {
       state: async (): Promise<DisciplineState> => {
         try {
           const t = dayKey(new Date())
+          let realStreak: number | null = null
+          let realBest: number | null = null
+          let realCheckin = false
+          let realOath = false
+
+          if (typeof localStorage !== 'undefined') {
+            try {
+              const rawMan = localStorage.getItem('MAN_SPARTAN_DATA')
+              if (rawMan) {
+                const manData = JSON.parse(rawMan)
+                if (manData && typeof manData.streakDays === 'number') {
+                  realStreak = manData.streakDays
+                  realBest = manData.longestStreak ?? manData.streakDays
+                  realCheckin = manData.lastCheckin === t
+                  realOath = manData.lastOathDate === t
+                }
+              }
+            } catch {}
+          }
+
           const rows = await client.query<any>(
             `SELECT id, kind, day, ts FROM discipline_events ORDER BY id ASC`
           )
@@ -225,22 +245,24 @@ export function createTursoWebBridge(): Bridge {
             ts: r.ts
           }))
           const stats = statsOf(events, t)
-          const rank = rankFor(stats.current)
+          const currentStreak = realStreak !== null ? realStreak : stats.current
+          const bestStreak = realBest !== null ? Math.max(realBest, currentStreak) : stats.best
+          const rank = rankFor(currentStreak)
           const has = (k: DisciplineEvent['kind']) => events.some((e) => e.kind === k && e.day === t)
 
           const res: DisciplineState = {
-            setup: !!startOf(events) || events.length > 0,
+            setup: true,
             today: t,
-            since: stats.since,
-            current: stats.current,
-            best: stats.best,
-            totalClean: stats.totalClean,
+            since: stats.since || addDays(t, -currentStreak),
+            current: currentStreak,
+            best: bestStreak,
+            totalClean: Math.max(stats.totalClean || 0, currentStreak),
             resets: stats.relapses,
             rank: rank.name,
             nextRank: rank.next,
-            checkedInToday: has('checkin'),
-            oathToday: has('oath'),
-            resetToday: has('reset'),
+            checkedInToday: realCheckin || has('checkin'),
+            oathToday: realOath || has('oath'),
+            resetToday: has('reset') || (realStreak === 0),
             canEditStart: !events.some((e) => e.kind === 'reset'),
             milestones: milestonesOf(events, t, new Set<string>(), (s) => dayKey(new Date(s.ts))),
             urgeStartedAt: null,
@@ -260,6 +282,18 @@ export function createTursoWebBridge(): Bridge {
         try {
           const now = new Date()
           const day = dayKey(now)
+          if (typeof localStorage !== 'undefined') {
+            try {
+              const raw = localStorage.getItem('MAN_SPARTAN_DATA')
+              if (raw) {
+                const parsed = JSON.parse(raw)
+                parsed.lastCheckin = day
+                parsed.streakDays = (parsed.streakDays || 0) + 1
+                parsed.longestStreak = Math.max(parsed.longestStreak || 0, parsed.streakDays)
+                localStorage.setItem('MAN_SPARTAN_DATA', JSON.stringify(parsed))
+              }
+            } catch {}
+          }
           await client.execute(
             `INSERT INTO discipline_events (kind, day, ts) VALUES ('checkin', ?, ?)`,
             [day, now.toISOString()]
@@ -278,6 +312,17 @@ export function createTursoWebBridge(): Bridge {
         try {
           const now = new Date()
           const day = dayKey(now)
+          if (typeof localStorage !== 'undefined') {
+            try {
+              const raw = localStorage.getItem('MAN_SPARTAN_DATA')
+              if (raw) {
+                const parsed = JSON.parse(raw)
+                parsed.lastOathDate = day
+                parsed.oathsSwornCount = (parsed.oathsSwornCount || 0) + 1
+                localStorage.setItem('MAN_SPARTAN_DATA', JSON.stringify(parsed))
+              }
+            } catch {}
+          }
           await client.execute(
             `INSERT INTO discipline_events (kind, day, ts) VALUES ('oath', ?, ?)`,
             [day, now.toISOString()]
@@ -296,6 +341,17 @@ export function createTursoWebBridge(): Bridge {
         try {
           const now = new Date()
           const day = dayKey(now)
+          if (typeof localStorage !== 'undefined') {
+            try {
+              const raw = localStorage.getItem('MAN_SPARTAN_DATA')
+              if (raw) {
+                const parsed = JSON.parse(raw)
+                parsed.streakDays = 0
+                parsed.lastCheckin = ''
+                localStorage.setItem('MAN_SPARTAN_DATA', JSON.stringify(parsed))
+              }
+            } catch {}
+          }
           await client.execute(
             `INSERT INTO discipline_events (kind, day, ts) VALUES ('reset', ?, ?)`,
             [day, now.toISOString()]
@@ -633,6 +689,7 @@ export function createTursoWebBridge(): Bridge {
         try {
           const rows = await client.query<any>('SELECT * FROM sleep_logs ORDER BY day DESC LIMIT 30')
           const today = dayKey(new Date())
+          const curMonth = today.slice(0, 7)
           const todayRow = rows.find((r) => r.day === today)
           const mornings = rows.map((r) => {
             let sleptMin = null
@@ -651,10 +708,89 @@ export function createTursoWebBridge(): Bridge {
             }
           })
 
+          // 1. Real Finance State from localStorage
+          let financeConn = baseConns.finance
+          if (typeof localStorage !== 'undefined') {
+            try {
+              const rawFin = localStorage.getItem('finance-helper.state')
+              if (rawFin) {
+                const finData = JSON.parse(rawFin)
+                if (finData && Array.isArray(finData.tx)) {
+                  const todayTxs = finData.tx.filter((t: any) => t.date === today && t.type === 'expense')
+                  const todaySpentBani = todayTxs.reduce((sum: number, t: any) => sum + (t.base || t.amount || 0), 0)
+                  const monthTxs = finData.tx.filter((t: any) => (t.date || '').startsWith(curMonth) && t.type === 'expense')
+                  const monthSpentBani = monthTxs.reduce((sum: number, t: any) => sum + (t.base || t.amount || 0), 0)
+                  const monthIncomeTxs = finData.tx.filter((t: any) => (t.date || '').startsWith(curMonth) && t.type === 'income')
+                  const monthIncomeBani = monthIncomeTxs.reduce((sum: number, t: any) => sum + (t.base || t.amount || 0), 0)
+
+                  financeConn = {
+                    path: 'localStorage:finance-helper.state',
+                    found: true,
+                    error: null,
+                    connectedSince: '2026-10-25',
+                    currency: finData.settings?.currency || 'MDL',
+                    savedAt: new Date().toISOString(),
+                    staleDays: 0,
+                    dailyBudget: 150,
+                    today: {
+                      logged: todayTxs.length > 0 || finData.tx.some((t: any) => t.date === today),
+                      everydaySpent: todaySpentBani
+                    },
+                    month: {
+                      spent: monthSpentBani,
+                      everyday: monthSpentBani,
+                      income: monthIncomeBani,
+                      days: new Set(monthTxs.map((t: any) => t.date)).size
+                    },
+                    days: []
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[Turso Web] finance parse error:', e)
+            }
+          }
+
+          // 2. Real MAN State from localStorage
+          let manConn = baseConns.man
+          if (typeof localStorage !== 'undefined') {
+            try {
+              const rawMan = localStorage.getItem('MAN_SPARTAN_DATA')
+              if (rawMan) {
+                const manData = JSON.parse(rawMan)
+                if (manData && typeof manData.streakDays === 'number') {
+                  manConn = {
+                    path: 'localStorage:MAN_SPARTAN_DATA',
+                    found: true,
+                    error: null,
+                    data: {
+                      streakDays: manData.streakDays,
+                      longestStreak: manData.longestStreak || manData.streakDays,
+                      totalVictories: manData.totalVictories || 0,
+                      lastCheckin: manData.lastCheckin || '',
+                      urgesCrushed: manData.urgesCrushedCount || 0,
+                      oathsSworn: manData.oathsSwornCount || 0
+                    },
+                    suggestion: {
+                      start: addDays(today, -manData.streakDays),
+                      showsDays: manData.streakDays,
+                      lastTapDaysAgo: 0,
+                      note: 'Spartan Citadel live sync active'
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[Turso Web] man parse error:', e)
+            }
+          }
+
           return {
             ...baseConns,
             today,
             lastSync: new Date().toISOString(),
+            finance: financeConn,
+            man: manConn,
             waky: {
               ...baseConns.waky,
               found: true,
@@ -821,62 +957,122 @@ export function createTursoWebBridge(): Bridge {
       ...base.body,
       state: async (): Promise<BodyState> => {
         try {
+          const t = dayKey(new Date())
+          let sportData: any = null
+          if (typeof localStorage !== 'undefined') {
+            try {
+              const rawSport = localStorage.getItem('life_sport_tracker_v1')
+              if (rawSport) sportData = JSON.parse(rawSport)
+            } catch {}
+          }
+
           const workouts = await client.query<any>('SELECT * FROM workouts ORDER BY id DESC LIMIT 50')
           const metrics = await client.query<any>('SELECT * FROM body_metrics ORDER BY day ASC')
           const exercises = await client.query<any>('SELECT * FROM exercises WHERE archived = 0 ORDER BY sort ASC')
-          if (exercises.length > 0 || workouts.length > 0) {
-            const mappedWorkouts: Workout[] = workouts.map((w) => ({
-              id: w.id,
-              day: w.day,
-              ts: w.ts,
-              title: w.title,
-              items: JSON.parse(w.items_json || '[]'),
-              note: w.note
-            }))
-            const mappedMetrics: BodyMetric[] = metrics.map((m) => ({
-              day: m.day,
-              weight: m.weight,
-              waist: m.waist,
-              note: m.note,
-              updatedAt: m.updated_at
-            }))
-            const mappedExercises: Exercise[] = exercises.map((e) => ({
-              id: e.id,
-              name: e.name,
-              unit: e.unit,
-              target: e.target,
-              category: e.category,
-              sort: e.sort,
-              archived: Boolean(e.archived)
-            }))
-            const t = dayKey(new Date())
-            const stats = computeWorkoutStats(mappedWorkouts, t)
-            const weeklyAverages = computeWeeklyAverages(mappedMetrics, 12)
-            const withWeight = mappedMetrics.filter((m) => m.weight != null)
-            const latestWeight = withWeight.length ? withWeight[withWeight.length - 1].weight! : null
-            const previousWeight = withWeight.length > 1 ? withWeight[withWeight.length - 2].weight! : null
-            const withWaist = mappedMetrics.filter((m) => m.waist != null)
-            const latestWaist = withWaist.length ? withWaist[withWaist.length - 1].waist! : null
-            const previousWaist = withWaist.length > 1 ? withWaist[withWaist.length - 2].waist! : null
 
-            return {
-              today: t,
-              streak: stats.streak,
-              bestStreak: stats.bestStreak,
-              totalWorkouts: stats.totalWorkouts,
-              workoutsThisWeek: stats.workoutsThisWeek,
-              workoutDoneToday: stats.workoutDoneToday,
-              latestWeight,
-              previousWeight,
-              latestWaist,
-              previousWaist,
-              weeklyAverages,
-              recentWorkouts: mappedWorkouts,
-              metrics: mappedMetrics,
-              exercises: mappedExercises.length ? mappedExercises : DEFAULT_EXERCISES
+          const mappedWorkouts: Workout[] = workouts.map((w) => ({
+            id: w.id,
+            day: w.day,
+            ts: w.ts,
+            title: w.title,
+            items: JSON.parse(w.items_json || '[]'),
+            note: w.note
+          }))
+
+          if (sportData && Array.isArray(sportData.history)) {
+            for (const h of sportData.history) {
+              const hDay = new Date(h.date || h.id).toISOString().slice(0, 10)
+              if (!mappedWorkouts.some((mw) => mw.id === h.id || (mw.day === hDay && mw.title === h.title))) {
+                mappedWorkouts.unshift({
+                  id: h.id || Date.now(),
+                  day: hDay,
+                  ts: new Date(h.id || Date.now()).toISOString(),
+                  title: h.title || 'Sport Track Routine',
+                  items: (sportData.exercises || []).map((e: any) => ({
+                    exerciseId: e.id,
+                    name: e.name,
+                    amount: e.doneToday || e.target,
+                    unit: e.unit || 'reps'
+                  })),
+                  note: h.amount || null
+                })
+              }
             }
           }
-        } catch {}
+
+          const mappedMetrics: BodyMetric[] = metrics.map((m) => ({
+            day: m.day,
+            weight: m.weight,
+            waist: m.waist,
+            note: m.note,
+            updatedAt: m.updated_at
+          }))
+
+          let mappedExercises: Exercise[] = exercises.map((e) => ({
+            id: e.id,
+            name: e.name,
+            unit: e.unit,
+            target: e.target,
+            category: e.category,
+            sort: e.sort,
+            archived: Boolean(e.archived)
+          }))
+
+          if (sportData && Array.isArray(sportData.exercises) && sportData.exercises.length > 0) {
+            mappedExercises = sportData.exercises.map((e: any, idx: number) => ({
+              id: e.id || `ex_${idx}`,
+              name: e.name,
+              unit: (!e.unit || String(e.unit).trim() === '1') ? 'reps' : String(e.unit).trim(),
+              target: e.target,
+              category: 'calisthenics',
+              sort: idx,
+              archived: !e.active
+            }))
+          }
+
+          const stats = computeWorkoutStats(mappedWorkouts, t)
+          const isRoutineDoneToday = Boolean(
+            sportData?.exercises?.length > 0 &&
+            sportData.exercises.every((e: any) => (e.doneToday || 0) >= (e.target || 0) && (e.target || 0) > 0)
+          )
+          const hasHistoryToday = Boolean(
+            sportData?.history?.some((h: any) => {
+              const hDate = new Date(h.date || h.id).toISOString().slice(0, 10)
+              return hDate === t
+            })
+          )
+          const workoutDoneToday = isRoutineDoneToday || hasHistoryToday || stats.workoutDoneToday
+          const streak = Math.max(sportData?.streak || 0, sportData?.activeStreak || 0, stats.streak, workoutDoneToday ? 1 : 0)
+          const workoutsThisWeek = Math.max(sportData?.history?.length || 0, stats.workoutsThisWeek, workoutDoneToday ? 1 : 0)
+          const totalWorkouts = Math.max(sportData?.history?.length || 0, stats.totalWorkouts, mappedWorkouts.length)
+
+          const weeklyAverages = computeWeeklyAverages(mappedMetrics, 12)
+          const withWeight = mappedMetrics.filter((m) => m.weight != null)
+          const latestWeight = withWeight.length ? withWeight[withWeight.length - 1].weight! : null
+          const previousWeight = withWeight.length > 1 ? withWeight[withWeight.length - 2].weight! : null
+          const withWaist = mappedMetrics.filter((m) => m.waist != null)
+          const latestWaist = withWaist.length ? withWaist[withWaist.length - 1].waist! : null
+          const previousWaist = withWaist.length > 1 ? withWaist[withWaist.length - 2].waist! : null
+
+          return {
+            today: t,
+            streak,
+            bestStreak: Math.max(stats.bestStreak, streak),
+            totalWorkouts,
+            workoutsThisWeek,
+            workoutDoneToday,
+            latestWeight,
+            previousWeight,
+            latestWaist,
+            previousWaist,
+            weeklyAverages,
+            recentWorkouts: mappedWorkouts,
+            metrics: mappedMetrics,
+            exercises: mappedExercises.length ? mappedExercises : DEFAULT_EXERCISES
+          }
+        } catch (e) {
+          console.warn('[Turso Web] body.state fallback:', e)
+        }
         return base.body.state()
       },
       logWorkout: async (input: WorkoutInput) => {

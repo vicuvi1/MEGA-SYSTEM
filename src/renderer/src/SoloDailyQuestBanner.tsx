@@ -69,6 +69,34 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
 
   const todayKey = new Date().toISOString().slice(0, 10)
 
+  // Live real-time Sport Track state from shared browser storage
+  const [sportState, setSportState] = useState<any>(() => {
+    if (typeof localStorage === 'undefined') return null
+    try {
+      const raw = localStorage.getItem('life_sport_tracker_v1')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })
+
+  useEffect(() => {
+    const syncSport = () => {
+      try {
+        const raw = localStorage.getItem('life_sport_tracker_v1')
+        if (raw) setSportState(JSON.parse(raw))
+      } catch {}
+    }
+    window.addEventListener('storage', syncSport)
+    window.addEventListener('focus', syncSport)
+    window.addEventListener('life-body-changed', syncSport)
+    return () => {
+      window.removeEventListener('storage', syncSport)
+      window.removeEventListener('focus', syncSport)
+      window.removeEventListener('life-body-changed', syncSport)
+    }
+  }, [])
+
   // Compute completed reps from body service
   const doneMap = useMemo(() => {
     const map: Record<string, number> = {}
@@ -85,43 +113,50 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
     return map
   }, [body?.recentWorkouts, todayKey])
 
-  const objectives = useMemo(
-    () => [
+  const objectives = useMemo(() => {
+    const exs = sportState?.exercises || []
+    const findEx = (key: string) => exs.find((e: any) => (e.id || '').toLowerCase().includes(key) || (e.name || '').toLowerCase().includes(key))
+
+    const pushups = findEx('push')
+    const situps = findEx('sit')
+    const press = findEx('press')
+    const water = sportState?.water
+
+    return [
       {
         id: 'pushups',
         name: 'Push-ups',
         icon: '💪',
-        current: doneMap['pushups'] || 0,
-        target: 123,
+        current: pushups ? (pushups.doneToday || 0) : (doneMap['pushups'] || 0),
+        target: pushups ? (pushups.target || 123) : 123,
         unit: 'reps'
       },
       {
         id: 'situps',
         name: 'Sit-ups',
         icon: '⚡',
-        current: doneMap['situps'] || 0,
-        target: 60,
+        current: situps ? (situps.doneToday || 0) : (doneMap['situps'] || 0),
+        target: situps ? (situps.target || 60) : 60,
         unit: 'reps'
       },
       {
         id: 'press',
         name: 'Press',
         icon: '🏋️',
-        current: doneMap['press'] || 0,
-        target: 50,
+        current: press ? (press.doneToday || 0) : (doneMap['press'] || 0),
+        target: press ? (press.target || 50) : 50,
         unit: 'reps'
       },
       {
         id: 'water',
         name: 'Hydration',
         icon: '💧',
-        current: waterMl,
-        target: 2700,
+        current: water?.currentMl ?? waterMl,
+        target: water?.targetMl ?? 2700,
         unit: 'ml'
       }
-    ],
-    [doneMap, waterMl]
-  )
+    ]
+  }, [sportState, doneMap, waterMl])
 
   const allCompleted = useMemo(() => objectives.every((o) => o.current >= o.target), [objectives])
 
@@ -137,11 +172,27 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         y: rect.top
       })
 
+      if (typeof localStorage !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('life_sport_tracker_v1')
+          if (raw) {
+            const data = JSON.parse(raw)
+            const targetEx = data.exercises?.find((x: any) => x.id?.toLowerCase().includes(objId) || x.name?.toLowerCase().includes(exName.toLowerCase()))
+            if (targetEx) {
+              targetEx.doneToday = (targetEx.doneToday || 0) + amount
+              localStorage.setItem('life_sport_tracker_v1', JSON.stringify(data))
+              setSportState(data)
+            }
+          }
+        } catch {}
+      }
+
       await life.body.logWorkout({
         title: `${exName} (+${amount})`,
         items: [{ exerciseId: objId, name: exName, amount, unit: 'reps' as any }],
         note: 'Logged from Daily Quest Banner'
       })
+      window.dispatchEvent(new CustomEvent('life-body-changed'))
       onRefresh()
     },
     [onRefresh]
@@ -154,6 +205,15 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       setWaterMl(nextVal)
       try {
         localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: nextVal }))
+        const raw = localStorage.getItem('life_sport_tracker_v1')
+        if (raw) {
+          const data = JSON.parse(raw)
+          if (data.water) {
+            data.water.currentMl = nextVal
+            localStorage.setItem('life_sport_tracker_v1', JSON.stringify(data))
+            setSportState(data)
+          }
+        }
       } catch {}
 
       soundCoin()
@@ -164,6 +224,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         x: rect.left + rect.width / 2,
         y: rect.top
       })
+      window.dispatchEvent(new CustomEvent('life-body-changed'))
       onRefresh()
     },
     [waterMl, todayKey, onRefresh]
@@ -176,6 +237,23 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       sub: '+50 Gold · +100 XP',
       kind: 'gold'
     })
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('life_sport_tracker_v1')
+        if (raw) {
+          const data = JSON.parse(raw)
+          data.exercises?.forEach((x: any) => {
+            x.doneToday = Math.max(x.doneToday || 0, x.target || 0)
+          })
+          if (data.water) {
+            data.water.currentMl = Math.max(data.water.currentMl || 0, data.water.targetMl || 2700)
+          }
+          localStorage.setItem('life_sport_tracker_v1', JSON.stringify(data))
+          setSportState(data)
+        }
+      } catch {}
+    }
 
     const itemsToLog = []
     for (const obj of objectives) {
@@ -200,6 +278,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         note: 'Completed all physical directives via Solo Quest banner'
       })
     }
+    window.dispatchEvent(new CustomEvent('life-body-changed'))
     onRefresh()
   }, [objectives, waterMl, todayKey, onRefresh])
 

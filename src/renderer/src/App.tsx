@@ -217,18 +217,29 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     return () => clearInterval(t)
   }, [])
 
-  // Auto-refresh when user switches back to the tab/app on phone or PC
+  // Auto-refresh when user switches back to the tab/app on phone or PC, or when any module emits a change
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         refresh()
       }
     }
+    const onModuleSync = () => refresh()
+
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('focus', onVisibilityChange)
+    window.addEventListener('life-body-changed', onModuleSync)
+    window.addEventListener('life-discipline-changed', onModuleSync)
+    window.addEventListener('life-wallet-changed', onModuleSync)
+    window.addEventListener('storage', onModuleSync)
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('focus', onVisibilityChange)
+      window.removeEventListener('life-body-changed', onModuleSync)
+      window.removeEventListener('life-discipline-changed', onModuleSync)
+      window.removeEventListener('life-wallet-changed', onModuleSync)
+      window.removeEventListener('storage', onModuleSync)
     }
   }, [refresh])
 

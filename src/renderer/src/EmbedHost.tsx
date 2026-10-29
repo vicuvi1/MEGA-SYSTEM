@@ -32,7 +32,13 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
       if (data.type === 'SPORT_WORKOUT_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_WORKOUT_LOGGED')) {
         try {
           const name = data.workout?.name || data.workout?.title || 'Workout completed'
+          await life.body.logWorkout({
+            title: name,
+            items: [],
+            note: 'Sport Track routine'
+          })
           await life.wallet.award('body.workout_done', `Iron Pulse: ${name}`)
+          window.dispatchEvent(new CustomEvent('life-body-changed'))
           window.dispatchEvent(new CustomEvent('life-wallet-changed'))
         } catch (err) {
           console.error('[EmbedHost Sport] award error:', err)
