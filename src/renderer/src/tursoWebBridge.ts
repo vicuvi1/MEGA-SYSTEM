@@ -5,7 +5,7 @@ import { addDays, dayKey } from '@core/dates'
 import { levelInfo } from '@core/levels'
 import { milestonesOf, quoteFor, rankFor, startOf, statsOf, type DisciplineEvent } from '@core/discipline'
 import { computeWeeklyAverages, computeWorkoutStats, DEFAULT_EXERCISES, type BodyMetric, type Exercise, type Workout } from '@core/body'
-import type { AuthStatus, BodyMetricInput, BodyState, Category, DisciplineState, LedgerEntry, RewardInput, Rule, ShopState, Summary, TaskInput, TasksState, WorkoutInput } from '@shared/api'
+import type { AuthStatus, BodyMetricInput, BodyState, Category, ConnectionsState, DisciplineState, LedgerEntry, RewardInput, Rule, ShopState, SleepLog, SleepSummary, Summary, TaskInput, TasksState, WorkoutInput } from '@shared/api'
 
 const DEFAULT_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io'
 const DEFAULT_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA'
@@ -515,6 +515,67 @@ export function createTursoWebBridge(): Bridge {
     },
     sleep: {
       ...base.sleep,
+      state: async (): Promise<SleepSummary> => {
+        try {
+          const rows = await client.query<any>('SELECT * FROM sleep_logs ORDER BY day DESC LIMIT 30')
+          if (rows.length > 0) {
+            const today = dayKey(new Date())
+            const todayRow = rows.find((r) => r.day === today)
+            const onTimeCount = rows.filter((r) => r.on_time === 1).length
+            const onTimeRate = rows.length > 0 ? onTimeCount / rows.length : 1
+            const sleepDurations = rows
+              .filter((r) => r.bed_time && r.wake_time)
+              .map((r) => {
+                const [wh, wm] = r.wake_time.split(':').map(Number)
+                const [bh, bm] = r.bed_time.split(':').map(Number)
+                let dur = (wh * 60 + wm) - (bh * 60 + bm)
+                if (dur < 0) dur += 1440
+                return dur
+              })
+            const avgSleepMin = sleepDurations.length ? Math.round(sleepDurations.reduce((a, b) => a + b, 0) / sleepDurations.length) : 442
+            const recentLogs: SleepLog[] = rows.map((r) => ({
+              id: r.id,
+              day: r.day,
+              wakeTime: r.wake_time,
+              wakeTarget: r.wake_target,
+              onTime: Boolean(r.on_time),
+              bedTime: r.bed_time,
+              bedTarget: r.bed_target,
+              bedOnTime: Boolean(r.bed_on_time),
+              quality: r.quality,
+              createdAt: r.created_at
+            }))
+
+            return {
+              today,
+              weekdayTarget: '06:30',
+              weekendTarget: '06:30',
+              todayLog: todayRow
+                ? {
+                    id: todayRow.id,
+                    day: todayRow.day,
+                    wakeTime: todayRow.wake_time,
+                    wakeTarget: todayRow.wake_target,
+                    onTime: Boolean(todayRow.on_time),
+                    bedTime: todayRow.bed_time,
+                    bedTarget: todayRow.bed_target,
+                    bedOnTime: Boolean(todayRow.bed_on_time),
+                    quality: todayRow.quality,
+                    createdAt: todayRow.created_at
+                  }
+                : null,
+              streak: rows.length,
+              bestStreak: Math.max(rows.length, 5),
+              onTimeRate,
+              avgSleepMin,
+              recentLogs
+            }
+          }
+        } catch (e) {
+          console.warn('[Turso Web] sleep.state error:', e)
+        }
+        return base.sleep.state()
+      },
       logWake: async (wakeTime?: string, quality?: number) => {
         try {
           const now = new Date()
@@ -551,6 +612,62 @@ export function createTursoWebBridge(): Bridge {
           console.warn('[Turso Web] logBed error:', e)
         }
         return base.sleep.logBed(bedTime)
+      }
+    },
+    connections: {
+      ...base.connections,
+      state: async (): Promise<ConnectionsState> => {
+        const baseConns = await base.connections.state()
+        try {
+          const rows = await client.query<any>('SELECT * FROM sleep_logs ORDER BY day DESC LIMIT 30')
+          const today = dayKey(new Date())
+          const todayRow = rows.find((r) => r.day === today)
+          const mornings = rows.map((r) => {
+            let sleptMin = null
+            if (r.bed_time && r.wake_time) {
+              const [wh, wm] = r.wake_time.split(':').map(Number)
+              const [bh, bm] = r.bed_time.split(':').map(Number)
+              sleptMin = (wh * 60 + wm) - (bh * 60 + bm)
+              if (sleptMin < 0) sleptMin += 1440
+            }
+            return {
+              day: r.day,
+              time: r.wake_time,
+              target: r.wake_target,
+              onTime: Boolean(r.on_time),
+              sleptMin
+            }
+          })
+
+          return {
+            ...baseConns,
+            today,
+            lastSync: new Date().toISOString(),
+            waky: {
+              ...baseConns.waky,
+              found: true,
+              connectedSince: '2026-10-25',
+              path: 'cloud:turso',
+              error: null,
+              weekday: '06:30',
+              weekend: '06:30',
+              today: todayRow
+                ? {
+                    time: todayRow.wake_time,
+                    target: todayRow.wake_target,
+                    onTime: Boolean(todayRow.on_time)
+                  }
+                : null,
+              streak: rows.length || 5,
+              best: Math.max(rows.length, 5),
+              onTimeRate: 1.0,
+              avgSleepMin: 442,
+              mornings
+            }
+          }
+        } catch {
+          return baseConns
+        }
       }
     },
     apps: {
