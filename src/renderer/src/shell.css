@@ -204,4 +204,24 @@
   .player.solo-apex-player-card {
     display: none !important;
   }
+  .mobile-nav-action-btn {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #e4ff7a, var(--lime) 55%, #9fd11a);
+    border: none;
+    color: var(--lime-ink);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 4px 18px rgba(200, 241, 53, 0.45);
+    margin-top: -16px;
+    cursor: pointer;
+    font-size: 20px;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-nav-action-btn:active {
+    transform: scale(0.9);
+  }
 }

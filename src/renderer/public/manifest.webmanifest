@@ -1,0 +1,17 @@
+{
+  "name": "Life System — Real Growth RPG",
+  "short_name": "Life System",
+  "description": "Solo Leveling RPG Real-Life Productivity & Self-Discipline Cockpit",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

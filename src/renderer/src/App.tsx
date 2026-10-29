@@ -515,6 +515,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
           <div className="top-actions">
             <button
+              className={`icon-btn ${page === 'settings' ? 'active' : ''}`}
+              aria-label="Settings"
+              title="Settings & Security PIN"
+              onClick={() => setPage('settings')}
+            >
+              <Icon name="gear" size={16} />
+            </button>
+            <button
               className={`icon-btn ${!ui.sound ? 'muted' : ''}`}
               aria-label={ui.sound ? 'Mute sound effects' : 'Unmute sound effects'}
               title={ui.sound ? `Cyberpunk SFX Active (${ui.volume ?? 80}%) — Click to mute` : 'SFX Muted — Click to unmute'}
@@ -658,7 +666,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           onClose={() => setQuickCommandOpen(false)}
           onRefreshWallet={onWallet}
         />
-        <MobileBottomBar page={page} onGo={go} />
+        <MobileBottomBar page={page} onGo={go} onQuickCommand={() => setQuickCommandOpen(true)} />
         <RpgFloatingPopups />
       </div>
     </div>
