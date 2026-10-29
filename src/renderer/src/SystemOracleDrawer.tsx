@@ -323,6 +323,37 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
 
             {/* Input Bar */}
             <div className="system-oracle-input-bar">
+              <div className="oracle-quick-chips">
+                <button
+                  type="button"
+                  className="oracle-quick-chip"
+                  onClick={() => handleSend('Generate my Solo Leveling Morning Tactical Briefing for today. Audit my Sleep, Spartan Discipline, Iron Pulse workout, and daily budget.')}
+                >
+                  🌅 Morning Briefing
+                </button>
+                <button
+                  type="button"
+                  className="oracle-quick-chip"
+                  onClick={() => handleSend('Conduct my Evening Debrief & Sovereign Audit. Review whether all 4 pillars were conquered today, calculate total XP/Coins, and flag any incomplete quests.')}
+                >
+                  🌙 Evening Audit
+                </button>
+                <button
+                  type="button"
+                  className="oracle-quick-chip"
+                  onClick={() => handleSend('Deliver a powerful King Leonidas / Shadow Monarch mindset transmission to crush procrastination.')}
+                >
+                  ⚔️ Spartan War Cry
+                </button>
+                <button
+                  type="button"
+                  className="oracle-quick-chip"
+                  onClick={() => handleSend('Analyze my progress over the last 7 days and recommend my main priorities for the upcoming week.')}
+                >
+                  📊 Weekly Strategy
+                </button>
+              </div>
+
               <div className="system-oracle-form">
                 <textarea
                   ref={inputRef}
