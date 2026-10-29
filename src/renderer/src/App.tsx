@@ -31,6 +31,7 @@ import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
 import { Notifications, type Alert } from './Notifications'
 import { Sidebar } from './Sidebar'
+import { MobileBottomBar } from './MobileBottomBar'
 import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
@@ -657,6 +658,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           onClose={() => setQuickCommandOpen(false)}
           onRefreshWallet={onWallet}
         />
+        <MobileBottomBar page={page} onGo={go} />
         <RpgFloatingPopups />
       </div>
     </div>

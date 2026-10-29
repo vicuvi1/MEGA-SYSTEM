@@ -1,8 +1,9 @@
 import type { Bridge } from './bridge'
 import { createMockApi } from './mock'
 import { TursoClient } from '@core/tursoClient'
-import { dayKey } from '@core/dates'
+import { addDays, dayKey } from '@core/dates'
 import { levelInfo } from '@core/levels'
+import { milestonesOf, quoteFor, rankFor, startOf, statsOf, type DisciplineEvent } from '@core/discipline'
 
 const DEFAULT_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io'
 const DEFAULT_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA'
@@ -109,6 +110,47 @@ export function createTursoWebBridge(): Bridge {
     },
     discipline: {
       ...base.discipline,
+      state: async () => {
+        try {
+          const t = dayKey(new Date())
+          const rows = await client.query<any>(
+            `SELECT id, kind, day, ts FROM discipline_events ORDER BY id ASC`
+          )
+          const events: DisciplineEvent[] = rows.map((r) => ({
+            id: r.id,
+            kind: r.kind,
+            day: r.day,
+            ts: r.ts
+          }))
+          const stats = statsOf(events, t)
+          const rank = rankFor(stats.current)
+          const has = (k: DisciplineEvent['kind']) => events.some((e) => e.kind === k && e.day === t)
+
+          return {
+            setup: !!startOf(events) || events.length > 0,
+            today: t,
+            since: stats.since,
+            current: stats.current,
+            best: stats.best,
+            totalClean: stats.totalClean,
+            resets: stats.relapses,
+            rank: rank.name,
+            nextRank: rank.next,
+            checkedInToday: has('checkin'),
+            oathToday: has('oath'),
+            resetToday: has('reset'),
+            canEditStart: !events.some((e) => e.kind === 'reset'),
+            milestones: milestonesOf(events, t, new Set<string>(), (s) => dayKey(new Date(s.ts))),
+            urgeStartedAt: null,
+            urgesThisWeek: events.filter((e) => e.kind === 'urge' && e.day >= addDays(t, -6)).length,
+            stealth: false,
+            quote: quoteFor(t)
+          }
+        } catch (e) {
+          console.warn('[Turso Web] discipline.state fallback:', e)
+          return base.discipline.state()
+        }
+      },
       checkIn: async () => {
         try {
           const now = new Date()
@@ -144,6 +186,27 @@ export function createTursoWebBridge(): Bridge {
           console.warn('[Turso Web] oath error:', e)
         }
         return base.discipline.oath()
+      }
+    },
+    tasks: {
+      ...base.tasks,
+      complete: async (id: number) => {
+        try {
+          const now = new Date()
+          const day = dayKey(now)
+          await client.execute(
+            `INSERT OR IGNORE INTO task_done (task_id, day, completed_at) VALUES (?, ?, ?)`,
+            [id, day, now.toISOString()]
+          )
+          await client.execute(
+            `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, ref, note)
+             VALUES (?, ?, 'tasks', 'earn', 10, 20, 'task.done', ?, 'Task completed')`,
+            [now.toISOString(), day, `task:${id}`]
+          )
+        } catch (e) {
+          console.warn('[Turso Web] task complete error:', e)
+        }
+        return base.tasks.complete(id)
       }
     },
     money: {

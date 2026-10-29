@@ -137,3 +137,71 @@
 .delete-btn:hover { opacity: 1; color: var(--bad); }
 .shields-card { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
 .shields-card .big { font-size: 20px; }
+
+
+/* Mobile Navigation Bar & Responsive App Cockpit */
+.mobile-nav-bar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .shell {
+    grid-template-columns: 1fr !important;
+    padding-bottom: 74px !important;
+  }
+  .side-cell {
+    display: none !important;
+  }
+  .mobile-nav-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 62px;
+    background: rgba(13, 15, 21, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
+  }
+  .mobile-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    gap: 3px;
+    padding: 6px 12px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: color 0.15s, transform 0.1s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-nav-btn:active {
+    transform: scale(0.92);
+  }
+  .mobile-nav-btn.active {
+    color: var(--lime);
+  }
+  .mobile-nav-btn.active .mobile-nav-icon {
+    filter: drop-shadow(0 0 8px rgba(200, 241, 53, 0.45));
+  }
+  .topbar {
+    padding: 8px 12px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .player.solo-apex-player-card {
+    display: none !important;
+  }
+}
