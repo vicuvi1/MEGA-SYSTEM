@@ -130,6 +130,43 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       }
     }
 
+    const handleManAction = async (action: string, payload: any) => {
+      try {
+        if (action === 'MAN_CHECKIN') {
+          const d = await life.discipline.state()
+          if (!d.setup) {
+            const streak = Number(payload?.streakDays) || 1
+            const startDay = streak > 1 ? addDays(d.today, -streak + 1) : d.today
+            await life.discipline.setStart(startDay)
+          }
+          const cur = await life.discipline.state()
+          if (!cur.checkedInToday && !cur.resetToday) {
+            await life.discipline.checkIn()
+            window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'checkin', ...payload } }))
+          }
+        } else if (action === 'MAN_OATH') {
+          const d = await life.discipline.state()
+          if (!d.oathToday) {
+            await life.discipline.oath()
+            window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'oath' } }))
+          }
+        } else if (action === 'MAN_RESET') {
+          await life.discipline.reset()
+          window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'reset', ...payload } }))
+        } else if (action === 'MAN_SET_STREAK') {
+          const streak = Math.max(0, Number(payload?.streakDays) || 0)
+          const d = await life.discipline.state()
+          const startDay = streak > 0 ? addDays(d.today, -streak + 1) : d.today
+          await life.discipline.setStart(startDay)
+          window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'set_streak', streak } }))
+        } else if (action === 'MAN_INIT') {
+          reconcile(payload)
+        }
+      } catch (err) {
+        console.error('[EmbedHost MAN] handleManAction error:', err)
+      }
+    }
+
     const onConsole = (e: any) => {
       const msg: string = e.message || ''
       if (!msg.startsWith('LIFE_SYSTEM_BRIDGE:')) return
@@ -137,35 +174,39 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_CHECKIN:')) {
         try {
           const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_CHECKIN:'.length))
-          life.discipline.state().then(async (d) => {
-            if (!d.setup) {
-              const streak = Number(payload.streakDays) || 1
-              const startDay = streak > 1 ? addDays(d.today, -streak + 1) : d.today
-              await life.discipline.setStart(startDay)
-            }
-            const cur = await life.discipline.state()
-            if (!cur.checkedInToday && !cur.resetToday) {
-              await life.discipline.checkIn()
-              window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'checkin', ...payload } }))
-            }
-          })
+          handleManAction('MAN_CHECKIN', payload)
         } catch (err) {
           console.error('[EmbedHost MAN] Error parsing checkin:', err)
         }
       } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_OATH:')) {
-        life.discipline.state().then(async (d) => {
-          if (!d.oathToday) {
-            await life.discipline.oath()
-            window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'oath' } }))
-          }
-        })
+        handleManAction('MAN_OATH', {})
+      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_RESET:')) {
+        try {
+          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_RESET:'.length))
+          handleManAction('MAN_RESET', payload)
+        } catch {
+          handleManAction('MAN_RESET', {})
+        }
+      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_SET_STREAK:')) {
+        try {
+          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_SET_STREAK:'.length))
+          handleManAction('MAN_SET_STREAK', payload)
+        } catch {}
       } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_INIT:')) {
         try {
           const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_INIT:'.length))
-          reconcile(payload)
+          handleManAction('MAN_INIT', payload)
         } catch (err) {
           console.error('[EmbedHost MAN] Error parsing init:', err)
         }
+      }
+    }
+
+    const onWindowMessage = (e: MessageEvent) => {
+      const data = e.data
+      if (!data || typeof data !== 'object') return
+      if (data.type === 'LIFE_SYSTEM_BRIDGE') {
+        handleManAction(data.action, data.payload)
       }
     }
 
@@ -175,6 +216,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
 
     el.addEventListener('console-message', onConsole)
     el.addEventListener('dom-ready', onDomReady)
+    window.addEventListener('message', onWindowMessage)
     window.addEventListener('life-discipline-changed', syncToMan)
 
     if (visible) {
@@ -184,6 +226,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     return () => {
       el.removeEventListener('console-message', onConsole)
       el.removeEventListener('dom-ready', onDomReady)
+      window.removeEventListener('message', onWindowMessage)
       window.removeEventListener('life-discipline-changed', syncToMan)
     }
   }, [appKey, visible])
