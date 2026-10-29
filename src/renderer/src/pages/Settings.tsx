@@ -65,6 +65,63 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [testingBotKey, setTestingBotKey] = useState<string | null>(null)
   const [botTestResult, setBotTestResult] = useState<{ ok: boolean; message: string } | null>(null)
 
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [pinError, setPinError] = useState<string | null>(null)
+  const [pinSuccess, setPinSuccess] = useState<string | null>(null)
+  const [isUpdatingPin, setIsUpdatingPin] = useState(false)
+
+  async function handleUpdatePin(e: React.FormEvent) {
+    e.preventDefault()
+    setPinError(null)
+    setPinSuccess(null)
+
+    if (auth.pinSet && !currentPin) {
+      setPinError('Please enter your current PIN (default is 2007)')
+      soundWarning()
+      return
+    }
+
+    if (!/^\d{4,12}$/.test(newPin)) {
+      setPinError('New PIN must be between 4 and 12 numeric digits')
+      soundWarning()
+      return
+    }
+
+    if (newPin !== confirmPin) {
+      setPinError('New PIN and Confirm PIN do not match')
+      soundWarning()
+      return
+    }
+
+    setIsUpdatingPin(true)
+    try {
+      const next = await life.auth.setPin(newPin, currentPin)
+      onAuth(next)
+      setPinSuccess('PIN updated successfully!')
+      setCurrentPin('')
+      setNewPin('')
+      setConfirmPin('')
+      soundFanfare()
+    } catch (err: any) {
+      setPinError(err.message || 'Failed to update PIN')
+      soundWarning()
+    } finally {
+      setIsUpdatingPin(false)
+    }
+  }
+
+  async function handleLockNow() {
+    try {
+      soundMechanicalClick()
+      const next = await life.auth.lock()
+      onAuth(next)
+    } catch (err: any) {
+      setPinError(err.message || 'Failed to lock app')
+    }
+  }
+
   useEffect(() => {
     life.bots.config().then((c) => {
       if (c) setBotCfg(c)
@@ -393,6 +450,92 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           )}
         </div>
         <p className="hint block">Size: Ctrl + and Ctrl − make everything bigger or smaller, Ctrl 0 resets. The apps inside keep their own dark look in the light theme.</p>
+      </section>
+
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="lock" /> Security & App PIN Lock
+          </h2>
+          <span className={`chip ${auth.pinSet ? 'ok' : 'warn'}`}>
+            {auth.pinSet ? 'PIN Protected (Default: 2007)' : 'No PIN Set'}
+          </span>
+        </header>
+        <p className="hint block">
+          Secure your Life System cockpit against unauthorized access. The default master PIN is <strong>2007</strong>. You can change it below at any time.
+        </p>
+
+        <form onSubmit={handleUpdatePin} className="pin-settings-form">
+          <div className="grid col-3 gap" style={{ gridTemplateColumns: auth.pinSet ? 'repeat(auto-fit, minmax(180px, 1fr))' : 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            {auth.pinSet && (
+              <div className="field">
+                <span>Current PIN</span>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  placeholder="Current PIN (e.g. 2007)"
+                  value={currentPin}
+                  maxLength={12}
+                  autoComplete="current-password"
+                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+            )}
+            <div className="field">
+              <span>New PIN (4–12 digits)</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="New numeric PIN"
+                value={newPin}
+                maxLength={12}
+                autoComplete="new-password"
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+            <div className="field">
+              <span>Confirm New PIN</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="Re-enter new PIN"
+                value={confirmPin}
+                maxLength={12}
+                autoComplete="new-password"
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+          </div>
+
+          {pinError && (
+            <div className="err" style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}>
+              ⚠️ {pinError}
+            </div>
+          )}
+          {pinSuccess && (
+            <div className="good" style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '6px', color: 'var(--green, #22c55e)' }}>
+              ✓ {pinSuccess}
+            </div>
+          )}
+
+          <div className="row" style={{ marginTop: '1rem', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              type="submit"
+              className="btn primary"
+              disabled={isUpdatingPin || newPin.length < 4 || confirmPin.length < 4}
+            >
+              {isUpdatingPin ? 'Saving PIN...' : 'Update PIN'}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={handleLockNow}
+              title="Immediately lock the application and return to the PIN screen"
+            >
+              <Icon name="lock" size={15} /> Lock App Now
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="panel">

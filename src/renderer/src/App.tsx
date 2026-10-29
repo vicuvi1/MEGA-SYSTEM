@@ -65,10 +65,21 @@ function WindowErrors() {
   return null
 }
 
-const UNLOCKED_AUTH: AuthStatus = { pinSet: false, locked: false }
-
 function Gate() {
-  return <Shell auth={UNLOCKED_AUTH} onAuth={() => {}} />
+  const [auth, setAuth] = useState<AuthStatus | null>(null)
+
+  useEffect(() => {
+    life.auth.status().then(setAuth)
+    return life.onLocked ? life.onLocked(() => setAuth((a) => (a ? { ...a, locked: true } : a))) : undefined
+  }, [])
+
+  if (!auth) return null
+
+  if (auth.pinSet && auth.locked) {
+    return <LockScreen onUnlocked={setAuth} />
+  }
+
+  return <Shell auth={auth} onAuth={setAuth} />
 }
 
 function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => void }) {

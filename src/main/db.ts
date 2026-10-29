@@ -321,8 +321,6 @@ export function openDb(file: string): DB {
   db.pragma('temp_store = MEMORY')
   migrate(db)
   seedDefaults(db)
-  // Ensure any legacy PIN lock is immediately wiped
-  db.prepare("DELETE FROM settings WHERE key = 'pin_hash'").run()
   return db
 }
 

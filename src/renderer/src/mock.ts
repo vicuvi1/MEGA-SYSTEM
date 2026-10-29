@@ -16,8 +16,8 @@ import { createMockBody } from './mockBody'
 export function createMockApi(): Bridge {
   let rules: Rule[] = DEFAULT_RULES.map((r) => ({ ...r }))
   const entries: LedgerEntry[] = []
-  let pin: string | null = null
-  let locked = false
+  let pin: string | null = typeof localStorage !== 'undefined' ? (localStorage.getItem('life.pin') ?? '2007') : '2007'
+  let locked = true
   let pass: string | null = null
   let id = 1
   let rewards: Reward[] = DEFAULT_REWARDS.map((r, i) => ({ ...r, id: i + 1 }))
@@ -97,9 +97,11 @@ export function createMockApi(): Bridge {
     },
     auth: {
       status: () => ok(auth()),
-      setPin: async (p) => {
+      setPin: async (p, currentPin) => {
+        if (pin && currentPin !== pin) throw new Error('Current PIN is wrong')
         if (!/^\d{4,12}$/.test(p)) throw new Error('PIN must be 4 to 12 digits')
         pin = p
+        if (typeof localStorage !== 'undefined') localStorage.setItem('life.pin', p)
         locked = false
         return auth()
       },

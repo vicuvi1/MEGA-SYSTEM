@@ -65,15 +65,39 @@ describe('wallet', () => {
 })
 
 describe('auth', () => {
-  it('permanently disables locks and keeps system unlocked', () => {
+  it('initializes default PIN 2007 and handles lock/unlock/change', () => {
     let t = 0
     const a = new Auth(db, () => t)
-    expect(a.status()).toEqual({ pinSet: false, locked: false })
+    expect(a.status()).toEqual({ pinSet: true, locked: true })
+    expect(a.isLocked()).toBe(true)
+
+    expect(() => a.unlock('9999')).toThrow('Wrong PIN')
+    expect(a.isLocked()).toBe(true)
+
+    expect(a.unlock('2007')).toEqual({ pinSet: true, locked: false })
     expect(a.isLocked()).toBe(false)
-    expect(a.lock()).toEqual({ pinSet: false, locked: false })
-    expect(a.unlock('1234')).toEqual({ pinSet: false, locked: false })
-    expect(a.setPin('1234')).toEqual({ pinSet: false, locked: false })
-    expect(new Auth(db).isLocked()).toBe(false)
+
+    expect(() => a.setPin('1234', '9999')).toThrow('Current PIN is wrong')
+    expect(() => a.setPin('abc', '2007')).toThrow('PIN must be 4 to 12 digits')
+
+    expect(a.setPin('1234', '2007')).toEqual({ pinSet: true, locked: false })
+
+    expect(a.lock()).toEqual({ pinSet: true, locked: true })
+    expect(a.isLocked()).toBe(true)
+
+    expect(a.unlock('1234')).toEqual({ pinSet: true, locked: false })
+  })
+
+  it('rate limits after 5 failed attempts', () => {
+    let t = 1000
+    const a = new Auth(db, () => t)
+    for (let i = 0; i < 4; i++) {
+      expect(() => a.unlock('0000')).toThrow('Wrong PIN')
+    }
+    expect(() => a.unlock('0000')).toThrow('Too many tries')
+    expect(() => a.unlock('2007')).toThrow(/Too many tries/)
+    t += 31_000
+    expect(a.unlock('2007')).toEqual({ pinSet: true, locked: false })
   })
 })
 

@@ -189,7 +189,11 @@ const free = { locked: true } // allowed while locked
 
 handle('auth:status', () => auth.status(), free)
 handle('auth:unlock', (pin: string) => auth.unlock(pin), free)
-handle('auth:lock', () => auth.lock(), free)
+handle('auth:lock', () => {
+  const s = auth.lock()
+  win?.webContents.send('auth:locked')
+  return s
+}, free)
 handle('auth:setPin', (pin: string, current?: string) => auth.setPin(pin, current), free)
 
 handle('wallet:summary', () => wallet.summary())
