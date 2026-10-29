@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waky</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@600;700;800&family=Cormorant+Garamond:ital,wght@1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="icon.svg" alt=""><span>waky</span></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="today">Today</button>
+      <button class="tab" data-view="journey">Journey</button>
+      <button class="tab" data-view="rewards">Rewards</button>
+      <button class="tab" data-view="progress">Progress</button>
+      <button class="tab" data-view="settings">Settings<i class="tab-dot" id="update-dot" hidden></i></button>
+    </nav>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+  <main>
+    <!-- TODAY -->
+    <section class="view active" id="view-today">
+      <div class="hello">
+        <h1 id="greeting">Good morning</h1>
+        <p id="today-date" class="muted"></p>
+      </div>
+
+      <div class="today-grid">
+      <div class="col-main">
+      <button class="why-banner reveal" id="why-banner" title="Edit your why"></button>
+
+      <div class="card night-card reveal" id="night-card" hidden></div>
+
+      <div class="hero card reveal" id="hero"></div>
+
+      <button class="card journey-card reveal" id="journey-card" data-goto="journey"></button>
+      </div>
+
+      <div class="col-side">
+      <button class="card avatar-card reveal" id="avatar-card" data-goto="journey"></button>
+      <div class="grid-3 side-stats">
+        <div class="card stat-card reveal">
+          <div class="label">Streak</div>
+          <div class="big"><span id="streak">0</span><small id="streak-unit">days</small></div>
+          <div class="muted small" id="streak-best"></div>
+        </div>
+        <button class="card stat-card clickable reveal" data-goto="rewards">
+          <div class="label">Coins</div>
+          <div class="big"><span id="coin-balance">0</span><small>🪙</small></div>
+          <div class="bar"><div class="bar-fill" id="goal-bar"></div></div>
+          <div class="muted small" id="goal-sub"></div>
+        </button>
+        <div class="card stat-card week-card reveal">
+          <div class="label">This week</div>
+          <div class="week" id="week"></div>
+          <div class="muted small" id="week-sub"></div>
+        </div>
+      </div>
+
+      <figure class="card quote-card reveal" id="quote-card"></figure>
+      </div>
+      </div>
+    </section>
+
+    <!-- JOURNEY -->
+    <section class="view" id="view-journey">
+      <div class="journey-hero card reveal" id="j-hero"></div>
+      <div class="ranks reveal" id="j-ranks"></div>
+      <div class="journey-layout">
+        <ol class="timeline" id="timeline"></ol>
+        <aside class="j-side" id="j-side"></aside>
+      </div>
+    </section>
+
+    <!-- REWARDS -->
+    <section class="view" id="view-rewards">
+      <div class="treasury card reveal" id="treasury"></div>
+
+      <div class="card chests-card reveal">
+        <div class="card-head"><h2>Chests</h2><span class="muted small">Earned with good mornings. Open them to see what's inside.</span></div>
+        <div class="chests" id="chests"></div>
+      </div>
+
+      <div id="shop-tiers"></div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>Add your own reward</h2>
+          <form class="add-reward" id="add-reward">
+            <input id="nr-emoji" value="🎁" maxlength="4" aria-label="Emoji">
+            <input id="nr-name" placeholder="e.g. Sushi night" required>
+            <select id="nr-tier" aria-label="Tier">
+              <option value="bronze">Bronze</option><option value="silver">Silver</option>
+              <option value="gold">Gold</option><option value="legendary">Legendary</option>
+            </select>
+            <input id="nr-cost" type="number" min="1" value="200" aria-label="Cost">
+            <button class="btn primary small">Add</button>
+          </form>
+          <p class="muted small">Bigger rewards belong in higher tiers: they unlock as your rank grows.</p>
+        </div>
+        <div class="card">
+          <h2>How the game works</h2>
+          <ul class="earn">
+            <li><b>+10</b> coins when you're up on time, <b>+15</b> before your target</li>
+            <li><b>+5</b> every 7 days in a row, <b>+20</b> for a new rank</li>
+            <li><b>🎁</b> a chest for every new journey day, every 7-day run and every new rank</li>
+            <li><b>🛡️</b> Streak Shield: saves your streak if you miss one day</li>
+            <li><b>⚡</b> Double Coins: your next on-time morning pays double</li>
+            <li><b>🎟️</b> Voucher: one reward of that tier, free</li>
+            <li class="muted">Late mornings earn nothing, but never cost coins.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card spent-card">
+        <div class="card-head"><h2>Recently claimed</h2></div>
+        <div class="history" id="spent"></div>
+      </div>
+    </section>
+
+    <!-- PROGRESS -->
+    <section class="view" id="view-progress">
+      <div class="grid-4">
+        <div class="card tile"><div class="label">Current streak</div><div class="tile-num" id="p-streak">0</div></div>
+        <div class="card tile"><div class="label">Best streak</div><div class="tile-num" id="p-best">0</div></div>
+        <div class="card tile"><div class="label">On time · 30 days</div><div class="tile-num" id="p-rate">–</div></div>
+        <div class="card tile"><div class="label">Average wake-up · 14 days</div><div class="tile-num" id="p-avg">–</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Last 5 weeks</h2>
+            <div class="legend"><i class="dot ontime"></i>On time <i class="dot late"></i>Late <i class="dot missed"></i>Missed</div>
+          </div>
+          <div class="cal-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+          <div class="calendar" id="calendar"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Wake-up time · 14 days</h2>
+            <div class="legend"><i class="line"></i>Target</div>
+          </div>
+          <div id="chart" class="chart"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card insights-card">
+          <div class="card-head"><h2>🧠 What your mornings say</h2><span class="muted small" id="mood-counts"></span></div>
+          <div id="insights"></div>
+        </div>
+        <div class="card recap-card">
+          <div class="card-head"><h2>📊 Monthly recap</h2></div>
+          <p class="muted small">Your month as a short story: best morning, longest streak, sleep, coins, rank.</p>
+          <div class="recap-months" id="recap-months"></div>
+        </div>
+      </div>
+
+      <div class="card sleep-card">
+        <div class="card-head"><h2>😴 Sleep · 14 nights</h2>
+          <div class="legend"><i class="line"></i>Goal</div></div>
+        <div class="sleep-stats" id="sleep-stats"></div>
+        <div class="sleep-bars" id="sleep-bars"></div>
+      </div>
+
+      <div class="card history-card">
+        <div class="card-head"><h2>History</h2><button class="btn ghost small" id="add-day">Add a day</button></div>
+        <div class="history" id="history"></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" id="view-settings">
+      <div class="settings-cols">
+        <div class="card set-card">
+          <h2>⏰ Wake-up</h2>
+          <div class="form">
+            <div class="row-2">
+              <label>Weekdays<input type="time" id="s-weekday"></label>
+              <label>Weekends<input type="time" id="s-weekend"></label>
+            </div>
+            <label>Counts as on time if you check in within
+              <span class="inline"><input type="number" id="s-grace" min="0" max="120"> minutes</span></label>
+            <label class="switch-row">Sounds in the app<input type="checkbox" id="s-sound" class="switch"></label>
+          </div>
+          <p class="muted small">Your phone's alarm wakes you. Charge it at your desk so you have to get up to turn it off.</p>
+        </div>
+
+        <div class="card set-card">
+          <div class="card-head"><h2>🔔 PC alarm</h2><input type="checkbox" id="s-pcalarm" class="switch" aria-label="PC alarm on"></div>
+          <p class="muted small">Windows wakes the PC (asleep, not shut down) and Waky rings, getting louder, until you press I'M UP.</p>
+          <div class="form" id="pcalarm-form">
+            <label>Rings<span class="inline"><select id="s-alarmOffset"><option value="-15">15 min before</option><option value="-10">10 min before</option><option value="-5">5 min before</option><option value="-2">2 min before</option><option value="-1">1 min before</option><option value="0">Right at</option><option value="2">2 min after</option><option value="5">5 min after</option><option value="10">10 min after</option><option value="15">15 min after</option></select> your wake-up time</span></label>
+            <label>Sound<select id="s-alarmSound"></select></label>
+            <div class="row-2">
+              <label>Gets louder over<select id="s-alarmRamp"><option value="10">10 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="90">1.5 minutes</option><option value="120">2 minutes</option><option value="180">3 minutes</option></select></label>
+              <label>Set PC volume to<select id="s-alarmVolume"><option value="0">Don't change it</option><option value="40">40%</option><option value="60">60%</option><option value="80">80%</option><option value="100">100%</option></select></label>
+            </div>
+            <label>Screen sunrise first<select id="s-sunrise"><option value="0">Off</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="20">20 minutes</option></select></label>
+            <label>Stops by itself after<select id="s-alarmMax"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+          </div>
+          <p class="small" id="pcalarm-status"></p>
+          <button class="btn ghost" id="alarm-test">▶ Test the alarm (15 s)</button>
+        </div>
+
+        <div class="card set-card">
+          <div class="card-head"><h2>🕒 Still-up check</h2><input type="checkbox" id="s-stillup" class="switch" aria-label="Still-up check on"></div>
+          <p class="muted small" id="stillup-desc"></p>
+          <div class="form row-2" id="stillup-form">
+            <label>Ask after check-in<select id="s-stillUpAfter"><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="20">20 minutes</option><option value="25">25 minutes</option><option value="30">30 minutes</option><option value="40">40 minutes</option><option value="60">1 hour</option></select></label>
+            <label>Time to answer<select id="s-stillUpWindow"><option value="3">3 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option></select></label>
+          </div>
+        </div>
+
+        <div class="card set-card">
+          <div class="card-head"><h2>🌙 Bedtime</h2><input type="checkbox" id="s-bedtimeOn" class="switch" aria-label="Bedtime on"></div>
+          <p class="muted small">Your bedtime is your wake-up time minus your sleep goal. In bed on time: +5 coins.</p>
+          <div class="form row-2" id="bed-form">
+            <label>Sleep goal<select id="s-sleepGoal"><option value="360">6 h</option><option value="390">6 h 30 min</option><option value="420">7 h</option><option value="450">7 h 30 min</option><option value="480">8 h</option><option value="510">8 h 30 min</option><option value="540">9 h</option><option value="570">9 h 30 min</option><option value="600">10 h</option></select></label>
+            <label>Remind me<select id="s-bedRemind"><option value="0">No reminder</option><option value="15">15 min before</option><option value="30">30 min before</option><option value="45">45 min before</option><option value="60">1 hour before</option><option value="90">1.5 hours before</option></select></label>
+          </div>
+          <p class="small bed-times" id="bed-times"></p>
+        </div>
+
+        <div class="card set-card">
+          <h2>🎨 Theme</h2>
+          <p class="muted small">New looks unlock as your rank grows.</p>
+          <div class="themes" id="themes"></div>
+        </div>
+
+        <div class="card set-card">
+          <div class="card-head"><h2>🔔 Windows notifications</h2><input type="checkbox" id="s-notifications" class="switch" aria-label="Notifications on"></div>
+          <p class="muted small">When the Waky window is closed, bedtime and still-up reminders pop up in the corner of the screen, with buttons that work right there.</p>
+          <button class="btn ghost small" id="notify-test">Send a test notification</button>
+        </div>
+
+        <div class="card set-card why-card">
+          <h2>✍️ Your why</h2>
+          <p class="why-preview" id="why-preview"></p>
+          <button class="btn ghost small" id="why-edit-settings">Edit</button>
+        </div>
+
+        <div class="card set-card">
+          <h2>✈️ Telegram</h2>
+          <div id="tg-box"></div>
+        </div>
+
+        <div class="card set-card update-card">
+          <div class="card-head"><h2>⬆️ Updates</h2><span class="muted small" id="u-version"></span></div>
+          <div id="u-box"></div>
+        </div>
+
+        <div class="card set-card">
+          <h2>💚 Health</h2>
+          <ul class="health" id="health"></ul>
+        </div>
+
+        <div class="card set-card">
+          <h2>📷 Camera (optional)</h2>
+          <p class="muted small">Check in with push-ups instead of the button. The camera has to see you from the side, whole body, on the floor.</p>
+          <label class="inline-label">Push-ups
+            <span class="stepper"><button data-step="-5">−</button><input type="number" id="s-reps" min="1" max="200"><button data-step="5">+</button></span></label>
+          <button class="btn ghost" id="cam-test">Test the camera</button>
+        </div>
+      </div>
+
+      <p class="muted small data-note" id="data-note"></p>
+    </section>
+  </main>
+
+  <!-- PUSH-UP SESSION -->
+  <div class="session" id="session" hidden>
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="session-top">
+      <button class="btn ghost" id="session-close">Cancel</button>
+      <div class="pill" id="session-hint">Starting camera…</div>
+      <button class="btn ghost small" id="session-manual" hidden>Camera can't see me</button>
+    </div>
+    <div class="counter">
+      <svg viewBox="0 0 200 200" class="ring">
+        <circle cx="100" cy="100" r="88" class="ring-bg"/>
+        <circle cx="100" cy="100" r="88" class="ring-fg" id="ring-fg"/>
+      </svg>
+      <div class="count"><span id="count">0</span><small id="count-of">/ 20</small></div>
+    </div>
+    <div class="manual-pad" id="manual-pad" hidden>
+      <button class="btn primary big-tap" id="manual-tap">+1 push-up</button>
+      <p class="muted small">Counted by hand. It's marked that way in your history.</p>
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div class="done" id="done" hidden>
+    <canvas id="confetti"></canvas>
+    <div class="done-card">
+      <div class="check"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg></div>
+      <h1 id="done-title">You're up.</h1>
+      <p class="done-why" id="done-why" hidden></p>
+      <p id="done-sub" class="muted"></p>
+      <div class="done-row">
+        <div class="done-stat"><span id="done-coins">+10</span><small>coins</small></div>
+        <div class="done-stat"><span id="done-streak">1</span><small id="done-streak-label">day streak</small></div>
+      </div>
+      <div class="milestone-hit" id="done-milestone" hidden></div>
+      <div class="done-extras" id="done-extras"></div>
+      <div class="mood-ask" id="done-mood"></div>
+      <p class="muted small" id="done-goal"></p>
+      <blockquote class="done-quote" id="done-quote"></blockquote>
+      <p class="water">Now go drink a glass of water. 💧</p>
+      <button class="btn primary" id="done-open" hidden>🎁 Open your chest</button>
+      <button class="btn primary" id="done-close">Done</button>
+    </div>
+  </div>
+
+  <dialog id="day-dialog">
+    <form method="dialog" class="form">
+      <h2 id="day-dialog-title">Add a day</h2>
+      <label>Date<input type="date" id="d-date" required></label>
+      <label>Woke up at<input type="time" id="d-time" required></label>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" id="d-save" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="time-dialog">
+    <form method="dialog" class="form">
+      <h2>Wake-up time</h2>
+      <input type="time" id="t-time" class="time-big" required>
+      <div class="seg" id="t-scope">
+        <button type="button" data-scope="all">Every day</button>
+        <button type="button" data-scope="weekday">Mon–Fri</button>
+        <button type="button" data-scope="weekend">Sat–Sun</button>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="why-dialog">
+    <form method="dialog" class="form">
+      <h2>Why do you get up?</h2>
+      <p class="muted small">One sentence, in your own words. You'll see it every morning.</p>
+      <textarea id="why-input" rows="3" maxlength="160" placeholder="I am the man who changes my family's destiny."></textarea>
+      <div class="chips" id="why-chips">
+        <button type="button">I am the man who changes my family's destiny.</button>
+        <button type="button">I rise before the world so my family never has to worry.</button>
+        <button type="button">Discipline today. Freedom tomorrow.</button>
+        <button type="button">The man I'm becoming doesn't stay in bed.</button>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="chest-open" id="chest-open" hidden>
+    <canvas id="chest-confetti"></canvas>
+    <div class="co-stage">
+      <div class="co-chest" id="co-chest"></div>
+      <div class="co-prize" id="co-prize" hidden></div>
+    </div>
+  </div>
+
+  <div class="alarm" id="alarm" hidden>
+    <div class="alarm-sky"></div>
+    <div class="alarm-sun-bg"></div>
+    <div class="alarm-content">
+      <div class="alarm-label" id="alarm-label">Time to get up</div>
+      <div class="alarm-clock" id="alarm-clock">06:30</div>
+      <p class="alarm-why" id="alarm-why"></p>
+      <button class="wake-btn alarm-btn" id="alarm-up" aria-label="I'm up">
+        <span class="rays"></span>
+        <span class="sun"><b>I'M UP</b><small>stop the alarm</small></span>
+      </button>
+      <button class="btn ghost" id="alarm-stop-test" hidden>Stop the test</button>
+    </div>
+  </div>
+
+  <div class="stillup" id="stillup" hidden>
+    <div class="stillup-card">
+      <div class="su-icon">🕒</div>
+      <h1>Still up?</h1>
+      <p class="muted">Prove you didn't go back to bed. <b id="su-left"></b></p>
+      <button class="btn primary big-tap" id="su-yes">Yes, I'm up (+5 coins)</button>
+    </div>
+  </div>
+
+  <div class="bed-prompt" id="bed-prompt" hidden>
+    <div class="bed-card">
+      <div class="moon"></div>
+      <h1 id="bp-title">Bedtime in 30 minutes</h1>
+      <p class="muted" id="bp-sub"></p>
+      <ul class="wind-down">
+        <li>📵 Screens off soon</li>
+        <li>🔌 Phone charging at the desk</li>
+        <li id="bp-alarm">⏰ Alarm set</li>
+      </ul>
+      <div class="bp-actions">
+        <button class="btn ghost" id="bp-later">Not yet</button>
+        <button class="btn primary" id="bp-bed">🌙 Going to bed now</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="story" id="story" hidden>
+    <div class="story-bars" id="story-bars"></div>
+    <button class="story-close" id="story-close" aria-label="Close">✕</button>
+    <div class="story-slide" id="story-slide"></div>
+    <div class="story-nav"><span id="story-prev"></span><span id="story-next"></span></div>
+  </div>
+
+  <div class="offline" id="offline" hidden>Reconnecting to Waky…</div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="mockApi.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

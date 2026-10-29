@@ -1,0 +1,52 @@
+{
+  "name": "Finance Helper",
+  "short_name": "Finance",
+  "description": "Log every expense, split income 70/10/10/10, see where your money goes and hit your savings goal.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d12",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Spent",
+      "short_name": "Spent",
+      "description": "Log an expense",
+      "url": "./#add-expense"
+    },
+    {
+      "name": "Earned",
+      "short_name": "Earned",
+      "description": "Log income",
+      "url": "./#add-income"
+    },
+    {
+      "name": "Plan",
+      "url": "./#plan"
+    }
+  ]
+}

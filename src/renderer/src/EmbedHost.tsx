@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EmbeddedApps } from '@shared/api'
-import { life } from './bridge'
+import { isDemo, life } from './bridge'
 import { addDays } from '@core/dates'
 import { Icon } from './Icon'
 
@@ -218,6 +218,18 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
   useEffect(() => {
     const el = ref.current
     if (!el) return
+
+    if (isDemo) {
+      const handleLoad = () => setProblem(null)
+      const handleError = () => setProblem(`${name} failed to load.`)
+      el.addEventListener('load', handleLoad)
+      el.addEventListener('error', handleError)
+      return () => {
+        el.removeEventListener('load', handleLoad)
+        el.removeEventListener('error', handleError)
+      }
+    }
+
     const failed = (e: Event) => {
       const ev = e as Event & { errorCode: number; errorDescription: string; isMainFrame: boolean }
       // -3 is "aborted": a normal navigation inside the app, not a failure.
@@ -269,7 +281,29 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
 
   return (
     <>
-      <webview ref={ref as never} className="embed" src={url} partition={partition} style={{ display: visible && !problem ? undefined : 'none' }} />
+      {isDemo ? (
+        <iframe
+          ref={ref as any}
+          className="embed"
+          src={url}
+          title={name}
+          style={{
+            display: visible && !problem ? 'block' : 'none',
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            background: '#07080b'
+          }}
+        />
+      ) : (
+        <webview
+          ref={ref as never}
+          className="embed"
+          src={url}
+          partition={partition}
+          style={{ display: visible && !problem ? undefined : 'none' }}
+        />
+      )}
       {visible && problem && (
         <div className="embed-msg">
           <Icon name="bolt" size={28} />
@@ -279,8 +313,14 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
             className="btn primary small"
             onClick={() => {
               setProblem(null)
-              const el = ref.current
-              if (el) el.loadURL(url).catch(() => el.reload())
+              const el = ref.current as any
+              if (el) {
+                if (isDemo && el.src) {
+                  el.src = url
+                } else if (el.loadURL) {
+                  el.loadURL(url).catch(() => el.reload())
+                }
+              }
             }}
           >
             Try again

@@ -90,10 +90,14 @@ export function createMockApi(): Bridge {
       run: async () => ({ current: '0.5.0', state: 'dev' as const, latest: null, progress: 0, error: 'Updates work in the installed app', checkedAt: null })
     },
     apps: {
-      info: async () => {
-        throw new Error('The apps run inside the desktop app')
-      },
-      startWaky: async () => ({ ok: false, error: 'Only in the desktop app' })
+      info: async () => ({
+        finance: { url: '/apps/finance/index.html', partition: 'web', preloadReady: false },
+        man: { url: '/apps/man/index.html', partition: 'web' },
+        waky: { url: '/apps/waky/index.html', partition: 'web' },
+        sport: { url: '/apps/sport/index.html', partition: 'web' },
+        migration: null
+      }),
+      startWaky: async () => ({ ok: true, error: null })
     },
     auth: {
       status: () => ok(auth()),
