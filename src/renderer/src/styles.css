@@ -414,3 +414,43 @@ label.check { display: flex !important; align-items: center; gap: 8px; color: va
 .celebrate-card { display: grid; justify-items: center; gap: 6px; padding: 30px 40px; border-radius: 20px; background: var(--panel); border: 1px solid rgba(200, 241, 53, 0.4); box-shadow: 0 0 60px rgba(200, 241, 53, 0.2); color: var(--lime); text-align: center; }
 .celebrate-card h2 { font-size: 26px; color: var(--text); }
 .celebrate-card p { margin: 0; color: var(--muted); }
+
+
+/* ---------- Mobile Cloud Sync Header Button ---------- */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.mobile-sync-header-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.12) 0%, rgba(58, 123, 213, 0.22) 100%);
+  border: 1px solid rgba(0, 210, 255, 0.35);
+  color: #00d2ff;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.12);
+}
+
+.mobile-sync-header-btn:hover {
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.24) 0%, rgba(58, 123, 213, 0.35) 100%);
+  border-color: rgba(0, 210, 255, 0.7);
+  box-shadow: 0 0 16px rgba(0, 210, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.mobile-sync-header-btn:active {
+  transform: translateY(0);
+}
+
+.mobile-sync-header-btn.syncing {
+  opacity: 0.85;
+  cursor: not-allowed;
+}

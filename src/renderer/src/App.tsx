@@ -36,7 +36,7 @@ import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
-import { soundTick, stopAllSounds, soundSystemOracle } from './sound'
+import { soundTick, stopAllSounds, soundSystemOracle, soundFanfare, soundCoin, soundWarning } from './sound'
 import './gameCards.css'
 
 // Sections that hold one of the apps living inside Life System.
@@ -97,6 +97,32 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [fullScreen, setFullScreen] = useState(false)
   const [pops, setPops] = useState<{ id: number; coins: number; label: string }[]>([])
   const act = useAction()
+  const toast = useToast()
+  const [isSyncingMobile, setIsSyncingMobile] = useState(false)
+
+  const triggerMobileSync = async () => {
+    if (isSyncingMobile) return
+    setIsSyncingMobile(true)
+    soundTick()
+    try {
+      const res = await life.sync.pull()
+      if (res.errors && res.errors.length > 0) {
+        toast(`Sync notice: ${res.errors.join('; ')}`, 'bad')
+      } else if (res.eventsProcessed > 0) {
+        const streakInfo = res.restoredStreak > res.previousStreak ? ` · Streak healed: ${res.previousStreak} → ${res.restoredStreak} days!` : ''
+        toast(`⚡ Auto-Synced ${res.eventsProcessed} mobile events!${streakInfo}`, 'good')
+        soundFanfare()
+        onWallet()
+      } else {
+        toast('Mobile Cloud Sync: Up to date! (0 pending)', 'good')
+        soundCoin()
+      }
+    } catch (e: any) {
+      toast(`Sync failed: ${e?.message || 'Check connection'}`, 'bad')
+    } finally {
+      setIsSyncingMobile(false)
+    }
+  }
 
   useEffect(() => saveLastPlace({ page, view: view as Record<string, 'app' | 'system'> }), [page, view])
   useEffect(() => life.onFullScreen(setFullScreen), [])
@@ -333,6 +359,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       { id: 'a:backup', label: 'Back up now', group: 'Actions', icon: 'cloud', run: () => act(() => life.backup.runNow(), 'Backup written').then((b) => b && setBackup(b)) },
       { id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) },
       { id: 'a:sync', label: 'Check connected apps now', group: 'Actions', icon: 'link', run: () => act(() => life.connections.sync()).then((r) => r && onWallet()) },
+      { id: 'a:mobile-sync', label: 'Sync Mobile Telegram Logs (Heal Streaks)', hint: 'Cloudflare 24/7', group: 'Actions', icon: 'cloud', color: '#00d2ff', run: triggerMobileSync },
       { id: 'a:system-quest', label: 'Summon Quest Complete Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#00d2ff', run: () => setSystemModal({ open: true, type: 'quest-complete', data: { coins: 50, xp: 100 } }) },
       { id: 'a:system-level', label: 'Summon Level Advancement Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#c8f135', run: () => setSystemModal({ open: true, type: 'level-up', data: { level: summary?.level.level ?? 1, prevLevel: Math.max(1, (summary?.level.level ?? 2) - 1), statPoints: 3, onAction: () => setPage('journey') } }) },
       { id: 'a:system-warning', label: 'Summon Penalty Warning Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'shield', color: '#f43f5e', run: () => setSystemModal({ open: true, type: 'penalty-warning', data: { onAction: () => { setView((v) => ({ ...v, discipline: 'system' })); setPage('discipline'); setRevealed(true); setUrgeOpen(true); } } }) },
@@ -455,6 +482,23 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           >
             <span style={{ fontSize: 13 }}>📜</span>
             <span>GAME RULES</span>
+          </button>
+
+          <button
+            className={`mobile-sync-header-btn ${isSyncingMobile ? 'syncing' : ''}`}
+            onClick={triggerMobileSync}
+            disabled={isSyncingMobile}
+            title="Sync Telegram mobile logs, heal streaks & credit XP/coins"
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                animation: isSyncingMobile ? 'spin 1s linear infinite' : 'none'
+              }}
+            >
+              {isSyncingMobile ? '🔄' : '⚡'}
+            </span>
+            <span>{isSyncingMobile ? 'SYNCING...' : 'SYNC MOBILE'}</span>
           </button>
 
           <div className="top-actions">
