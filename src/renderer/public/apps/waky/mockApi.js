@@ -45,7 +45,7 @@
       "pin": 19
     },
     "rewards": [
-      { "id": "b1", "tier": "bronze", "emoji": "🍫", "name": "My favourite snack", "cost": 100 },
+      { "id": "b1", "tier": "bronze", "emoji": "🍿", "name": "My favourite snack", "cost": 100 },
       { "id": "b2", "tier": "bronze", "emoji": "🎮", "name": "1 hour of gaming, guilt-free", "cost": 150 },
       { "id": "s1", "tier": "silver", "emoji": "🎬", "name": "Movie night", "cost": 300 },
       { "id": "s2", "tier": "silver", "emoji": "🍕", "name": "Pizza or shawarma", "cost": 400 },

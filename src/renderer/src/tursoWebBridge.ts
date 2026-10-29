@@ -304,6 +304,18 @@ export function createTursoWebBridge(): Bridge {
           console.warn('[Turso Web] reset error:', e)
         }
         return base.discipline.reset()
+      },
+      setStart: async (day: string): Promise<DisciplineState> => {
+        try {
+          const now = new Date()
+          await client.execute(
+            `INSERT INTO discipline_events (kind, day, ts) VALUES ('start', ?, ?)`,
+            [day, now.toISOString()]
+          )
+        } catch (e) {
+          console.warn('[Turso Web] setStart error:', e)
+        }
+        return base.discipline.setStart(day)
       }
     },
     tasks: {

@@ -66,7 +66,8 @@ function fresh() {
 
 export function load(storage = globalThis.localStorage) {
   const head = readHead(storage);
-  if (head?.enc) {
+  const encBox = storage?.getItem(ENC);
+  if (head?.enc && encBox) {
     const s = fresh();
     Object.assign(s.meta, head.meta || {});
     if (head.theme) s.settings.theme = head.theme;

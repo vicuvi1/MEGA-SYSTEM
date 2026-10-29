@@ -16,7 +16,7 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
   const [info, setInfo] = useState<EmbeddedApps | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [visited, setVisited] = useState<EmbedKind[]>([])
-  const [waky, setWaky] = useState<{ ok: boolean; error: string | null } | null>(null)
+  const [waky, setWaky] = useState<{ ok: boolean; error: string | null } | null>(isDemo ? { ok: true, error: null } : null)
 
   useEffect(() => {
     life.apps.info().then(setInfo, (e) => setError((e as Error).message))
@@ -159,6 +159,11 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           const startDay = streak > 0 ? addDays(d.today, -streak + 1) : d.today
           await life.discipline.setStart(startDay)
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'set_streak', streak } }))
+        } else if (action === 'MAN_DIARY') {
+          try {
+            await life.wallet.award('discipline.clean_day', `Warrior Diary: ${payload?.tag || 'Reflection'}`)
+          } catch {}
+          window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'diary', ...payload } }))
         } else if (action === 'MAN_INIT') {
           reconcile(payload)
         }
@@ -192,6 +197,11 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_SET_STREAK:'.length))
           handleManAction('MAN_SET_STREAK', payload)
         } catch {}
+      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_DIARY:')) {
+        try {
+          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_DIARY:'.length))
+          handleManAction('MAN_DIARY', payload)
+        } catch {}
       } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_INIT:')) {
         try {
           const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_INIT:'.length))
@@ -214,8 +224,12 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       reconcile()
     }
 
-    el.addEventListener('console-message', onConsole)
-    el.addEventListener('dom-ready', onDomReady)
+    if (isDemo) {
+      el.addEventListener('load', onDomReady)
+    } else {
+      el.addEventListener('console-message', onConsole)
+      el.addEventListener('dom-ready', onDomReady)
+    }
     window.addEventListener('message', onWindowMessage)
     window.addEventListener('life-discipline-changed', syncToMan)
 
@@ -224,8 +238,12 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     }
 
     return () => {
-      el.removeEventListener('console-message', onConsole)
-      el.removeEventListener('dom-ready', onDomReady)
+      if (isDemo) {
+        el.removeEventListener('load', onDomReady)
+      } else {
+        el.removeEventListener('console-message', onConsole)
+        el.removeEventListener('dom-ready', onDomReady)
+      }
       window.removeEventListener('message', onWindowMessage)
       window.removeEventListener('life-discipline-changed', syncToMan)
     }

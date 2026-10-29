@@ -4551,16 +4551,9 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             }
         };
 
-        // Adjust Counter
+        // Adjust Counter - Switch to full controls tab
         function handleAdjustStreak() {
-            const val = prompt("Enter new streak day count (e.g. 0, 1, 3, 5, 10):", appData.streakDays);
-            if (val !== null && !isNaN(parseInt(val))) {
-                appData.streakDays = Math.max(0, parseInt(val));
-                appData.longestStreak = Math.max(appData.longestStreak, appData.streakDays);
-                saveData();
-                refreshUI();
-                showToast(`Day counter set to Day ${appData.streakDays}`);
-            }
+            switchTab('tab-controls');
         }
 
         const btnAdjustStreak = document.getElementById("btn-adjust-streak");
