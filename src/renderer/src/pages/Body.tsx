@@ -76,7 +76,7 @@ export function Body({
     const activeExercises = state.exercises.length > 0 ? state.exercises : [
       { id: 'situps', name: 'Sit-ups', target: 60, unit: 'reps', category: 'calisthenics', sort: 0 },
       { id: 'pushups', name: 'Push-ups', target: 123, unit: 'reps', category: 'calisthenics', sort: 1 },
-      { id: 'press', name: 'press', target: 50, unit: '1', category: 'calisthenics', sort: 2 }
+      { id: 'press', name: 'press', target: 50, unit: 'reps', category: 'calisthenics', sort: 2 }
     ]
 
     const items: WorkoutExerciseItem[] = activeExercises.map((ex) => {
@@ -270,22 +270,25 @@ export function Body({
           {state.exercises.slice(0, 3).map((ex) => {
             const target = shortOnTime ? Math.max(1, Math.round(ex.target * 0.5)) : ex.target
             const done = doneMap[ex.id] || doneMap[ex.name.toLowerCase().replace(/[^a-z0-9]/g, '')] || 0
-            const pct = Math.min(100, Math.round((done / target) * 100))
+            const actualPct = target > 0 ? Math.round((done / target) * 100) : 0
             const isDone = done >= target
+            const isOver = done > target
+            const fillPct = Math.min(100, actualPct)
+            const unit = (!ex.unit || ex.unit === '1') ? 'reps' : ex.unit
 
             return (
-              <div key={ex.id} className={`sporty-routine-item ${isDone ? 'done' : ''}`}>
+              <div key={ex.id} className={`sporty-routine-item ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}`}>
                 <div className="sporty-item-top">
                   <span className="sporty-item-name">{ex.name}</span>
                   <span className="sporty-item-progress-text">
-                    {done} / {target} {ex.unit}{shortOnTime ? ' (50%)' : ''} {isDone ? '✓' : `(${pct}%)`}
+                    {done} / {target} {unit}{shortOnTime ? ' (50%)' : ''} {isOver ? `🔥 (${actualPct}%)` : isDone ? `✓ (${actualPct}%)` : `(${actualPct}%)`}
                   </span>
                 </div>
 
                 <div className="sporty-item-bar-bg">
                   <div
-                    className={`sporty-item-bar-fill ${isDone ? 'done' : ''}`}
-                    style={{ width: `${pct}%` }}
+                    className={`sporty-item-bar-fill ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}`}
+                    style={{ width: `${fillPct}%` }}
                   />
                 </div>
 
@@ -310,7 +313,7 @@ export function Body({
             <span className="hydration-amount">{waterMl.toLocaleString()} / 2,700 ml</span>
           </div>
           <span className="hydration-glasses">
-            {(waterMl / 250).toFixed(1)} of 11 glasses ({Math.min(100, Math.round((waterMl / 2700) * 100))}%)
+            {(waterMl / 250).toFixed(1)} of 11 glasses ({Math.round((waterMl / 2700) * 100)}%)
           </span>
         </div>
 
