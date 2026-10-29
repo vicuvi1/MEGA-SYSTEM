@@ -23,7 +23,8 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'body.workout_done', module: 'body', title: 'Workout done', coins: 10, xp: 25, dailyCap: 2, cooldownMin: 60, enabled: true },
   { id: 'face.routine_done', module: 'tasks', title: 'Skincare routine', coins: 5, xp: 10, dailyCap: 2, cooldownMin: 240, enabled: true },
   { id: 'money.under_budget', module: 'money', title: 'Stayed under budget', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
-  { id: 'money.logged', module: 'money', title: 'Logged spending', coins: 3, xp: 5, dailyCap: 1, cooldownMin: 0, enabled: true }
+  { id: 'money.logged', module: 'money', title: 'Logged spending', coins: 3, xp: 5, dailyCap: 1, cooldownMin: 0, enabled: true },
+  { id: 'grand_slam.all_four', module: 'general', title: '4-Pillar Grand Slam (Sovereign Day)', coins: 50, xp: 100, dailyCap: 1, cooldownMin: 0, enabled: true }
 ]
 
 /**

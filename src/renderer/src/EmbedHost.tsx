@@ -22,6 +22,48 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
     life.apps.info().then(setInfo, (e) => setError((e as Error).message))
   }, [])
 
+  // Cross-app economy bridge: credit main character wallet for sport workouts, sleep wakeups, and finance logs
+  useEffect(() => {
+    const onWindowMessage = async (e: MessageEvent) => {
+      const data = e.data
+      if (!data || typeof data !== 'object') return
+
+      // Sport Track (Iron Pulse)
+      if (data.type === 'SPORT_WORKOUT_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_WORKOUT_LOGGED')) {
+        try {
+          const name = data.workout?.name || data.workout?.title || 'Workout completed'
+          await life.wallet.award('body.workout_done', `Iron Pulse: ${name}`)
+          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          console.error('[EmbedHost Sport] award error:', err)
+        }
+      }
+
+      // Waky Sleep Companion
+      if (data.type === 'WAKY_CHECKIN_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'WAKY_CHECKIN_LOGGED')) {
+        try {
+          await life.wallet.award('sleep.up_on_time', 'Waky Alarm: Up on time')
+          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          console.error('[EmbedHost Waky] award error:', err)
+        }
+      }
+
+      // Finance Helper
+      if (data.type === 'FINANCE_TRANSACTION_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_TRANSACTION_LOGGED')) {
+        try {
+          await life.wallet.award('money.logged', 'Finance Helper: Spending logged')
+          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          console.error('[EmbedHost Finance] award error:', err)
+        }
+      }
+    }
+
+    window.addEventListener('message', onWindowMessage)
+    return () => window.removeEventListener('message', onWindowMessage)
+  }, [])
+
   useEffect(() => {
     if (active && !visited.includes(active)) setVisited((v) => [...v, active])
     if (active === 'waky' && !waky?.ok) life.apps.startWaky().then(setWaky)

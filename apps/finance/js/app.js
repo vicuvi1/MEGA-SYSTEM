@@ -133,6 +133,11 @@ function commit(opts) {
   persist(opts);
   render();
   Sync.changed();
+  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+    try {
+      window.parent.postMessage({ type: 'FINANCE_TRANSACTION_LOGGED', payload: opts }, '*');
+    } catch {}
+  }
 }
 
 // Ctrl+Z / Ctrl+Y and the Undo / Redo buttons.

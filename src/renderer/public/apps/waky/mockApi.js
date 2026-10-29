@@ -134,7 +134,12 @@
       const s = localStorage.getItem(STORAGE_KEY);
       if (s) {
         const parsed = JSON.parse(s);
-        if (parsed && parsed.days && Object.keys(parsed.days).length >= 5) {
+        if (parsed && typeof parsed === 'object') {
+          parsed.days = { ...SEED_DATA.days, ...(parsed.days || {}) };
+          parsed.settings = { ...SEED_DATA.settings, ...(parsed.settings || {}) };
+          parsed.rewards = parsed.rewards && parsed.rewards.length ? parsed.rewards : SEED_DATA.rewards;
+          parsed.opened = { ...SEED_DATA.opened, ...(parsed.opened || {}) };
+          parsed.nights = { ...SEED_DATA.nights, ...(parsed.nights || {}) };
           return parsed;
         }
       }
@@ -438,6 +443,11 @@
         stillUpWindow: 10
       };
       save(data);
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        try {
+          window.parent.postMessage({ type: 'WAKY_CHECKIN_LOGGED', payload: data.days[today] }, '*');
+        } catch {}
+      }
       const stats = computeStats(data, today);
       return new Response(JSON.stringify({ ok: true, day: data.days[today], stats }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }

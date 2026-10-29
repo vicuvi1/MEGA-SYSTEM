@@ -435,6 +435,23 @@
       border-color: rgba(16, 185, 129, 0.45);
     }
 
+    .routine-pct-badge.done.overachieved {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(239, 68, 68, 0.22) 100%);
+      color: #FBBF24;
+      border-color: rgba(245, 158, 11, 0.65);
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+    }
+
+    .routine-progress-fill.done.overachieved {
+      background: linear-gradient(90deg, #10b981 0%, #f59e0b 60%, #ef4444 100%);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+    }
+
+    .routine-item.done.overachieved {
+      border-color: rgba(245, 158, 11, 0.45);
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(13, 20, 36, 0.8) 100%);
+    }
+
     .routine-progress-wrap {
       width: 100%;
       height: 9px;
@@ -1907,7 +1924,7 @@
     const DEFAULT_EXERCISES = [
       { id: 'ex_situps', name: 'Sit-ups', target: 60, unit: 'reps', active: true, doneToday: 0 },
       { id: 'ex_pushups', name: 'Push-ups', target: 123, unit: 'reps', active: true, doneToday: 0 },
-      { id: 'ex_press', name: 'press', target: 50, unit: '1', active: true, doneToday: 0 }
+      { id: 'ex_press', name: 'press', target: 50, unit: 'reps', active: true, doneToday: 0 }
     ];
 
     const DEFAULT_STATE = {
@@ -1961,7 +1978,7 @@
         return {
           ...DEFAULT_STATE,
           ...parsed,
-          exercises: Array.isArray(parsed.exercises) && parsed.exercises.length > 0 ? parsed.exercises : DEFAULT_EXERCISES,
+          exercises: (Array.isArray(parsed.exercises) && parsed.exercises.length > 0 ? parsed.exercises : DEFAULT_EXERCISES).map(e => ({ ...e, unit: (!e.unit || e.unit === '1') ? 'reps' : e.unit })),
           water: { ...DEFAULT_STATE.water, ...(parsed.water || {}) },
           sportySettings: { ...DEFAULT_STATE.sportySettings, ...(parsed.sportySettings || {}) },
           prs: Array.isArray(parsed.prs) && parsed.prs.length > 0 ? parsed.prs : DEFAULT_STATE.prs,
@@ -2129,23 +2146,33 @@
       container.innerHTML = activeExercises.map(ex => {
         const target = getEffectiveTarget(ex);
         const done = ex.doneToday || 0;
-        const pct = Math.min(100, Math.round((done / target) * 100));
+        const actualPct = target > 0 ? Math.round((done / target) * 100) : 0;
         const isDone = done >= target;
+        const isOver = done > target;
+        const fillPct = Math.min(100, actualPct);
+        const unit = (!ex.unit || ex.unit === '1') ? 'reps' : ex.unit;
+
+        let pctBadgeText = `${actualPct}%`;
+        if (isOver) {
+          pctBadgeText = `🔥 ${actualPct}% DONE`;
+        } else if (isDone) {
+          pctBadgeText = `✓ 100% DONE`;
+        }
 
         return `
-          <div class="routine-item ${isDone ? 'done' : ''}" data-id="${ex.id}">
+          <div class="routine-item ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}" data-id="${ex.id}">
             <div class="routine-item-top">
               <div class="routine-item-info">
                 <span class="routine-item-title">${ex.name}</span>
-                <span class="routine-item-target">${done} / ${target} ${ex.unit}${state.sportySettings.shortOnTime ? ' (50%)' : ''}</span>
+                <span class="routine-item-target">${done} / ${target} ${unit}${state.sportySettings.shortOnTime ? ' (50%)' : ''}</span>
               </div>
               <div class="routine-item-badges">
-                <span class="routine-pct-badge ${isDone ? 'done' : ''}">${isDone ? '✓ 100% DONE' : pct + '%'}</span>
+                <span class="routine-pct-badge ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}">${pctBadgeText}</span>
               </div>
             </div>
 
             <div class="routine-progress-wrap">
-              <div class="routine-progress-fill ${isDone ? 'done' : ''}" style="width: ${pct}%;"></div>
+              <div class="routine-progress-fill ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}" style="width: ${fillPct}%;"></div>
             </div>
 
             <div class="routine-btn-row">

@@ -7,35 +7,64 @@ interface Props {
   onQuickCommand: () => void
 }
 
+function haptic(ms = 12) {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate(ms)
+    } catch {}
+  }
+}
+
 export function MobileBottomBar({ page, onGo, onQuickCommand }: Props) {
+  const handleNav = (p: PageId) => {
+    haptic(10)
+    onGo(p)
+  }
+
+  const handleAction = () => {
+    haptic(18)
+    onQuickCommand()
+  }
+
   return (
     <nav className="mobile-nav-bar" aria-label="Mobile Navigation">
       <button
         type="button"
         className={`mobile-nav-btn ${page === 'today' ? 'active' : ''}`}
-        onClick={() => onGo('today')}
+        onClick={() => handleNav('today')}
       >
         <span className="mobile-nav-icon">
-          <Icon name="home" size={20} />
+          <Icon name="home" size={19} />
         </span>
         <span>Today</span>
       </button>
 
       <button
         type="button"
-        className={`mobile-nav-btn ${page === 'tasks' ? 'active' : ''}`}
-        onClick={() => onGo('tasks')}
+        className={`mobile-nav-btn ${page === 'sleep' ? 'active' : ''}`}
+        onClick={() => handleNav('sleep')}
       >
         <span className="mobile-nav-icon">
-          <Icon name="tasks" size={20} />
+          <Icon name="moon" size={19} />
         </span>
-        <span>Tasks</span>
+        <span>Sleep</span>
+      </button>
+
+      <button
+        type="button"
+        className={`mobile-nav-btn ${page === 'discipline' ? 'active' : ''}`}
+        onClick={() => handleNav('discipline')}
+      >
+        <span className="mobile-nav-icon">
+          <Icon name="shield" size={19} />
+        </span>
+        <span>Discipline</span>
       </button>
 
       <button
         type="button"
         className="mobile-nav-action-btn"
-        onClick={onQuickCommand}
+        onClick={handleAction}
         title="Quick Command Omnibar"
       >
         <span className="mobile-nav-action-icon">⚡</span>
@@ -43,22 +72,22 @@ export function MobileBottomBar({ page, onGo, onQuickCommand }: Props) {
 
       <button
         type="button"
-        className={`mobile-nav-btn ${page === 'discipline' ? 'active' : ''}`}
-        onClick={() => onGo('discipline')}
+        className={`mobile-nav-btn ${page === 'body' ? 'active' : ''}`}
+        onClick={() => handleNav('body')}
       >
         <span className="mobile-nav-icon">
-          <Icon name="shield" size={20} />
+          <Icon name="bolt" size={19} />
         </span>
-        <span>Discipline</span>
+        <span>Sport</span>
       </button>
 
       <button
         type="button"
         className={`mobile-nav-btn ${page === 'money' ? 'active' : ''}`}
-        onClick={() => onGo('money')}
+        onClick={() => handleNav('money')}
       >
         <span className="mobile-nav-icon">
-          <Icon name="coin" size={20} />
+          <Icon name="coin" size={19} />
         </span>
         <span>Money</span>
       </button>

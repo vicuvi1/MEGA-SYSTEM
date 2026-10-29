@@ -823,7 +823,11 @@ export function createMockApi(): Bridge {
     },
     onLocked: () => {},
     onUrge: () => {},
-    onWalletChanged: () => {},
+    onWalletChanged: (cb: () => void) => {
+      if (typeof window !== 'undefined') {
+        window.addEventListener('life-wallet-changed', cb)
+      }
+    },
     onDisciplineChanged: () => () => {},
     onNavigate: () => {},
     onUpdate: () => {},

@@ -1052,6 +1052,677 @@
             margin-top: 14px;
             letter-spacing: 0.5px;
         }
+
+        /* ------------------------------------------------------------- */
+        /* UPGRADED SPARTAN COMMAND, DIARY & CONTROL STYLES              */
+        /* ------------------------------------------------------------- */
+        .nav-tabs {
+            display: flex;
+            gap: 6px;
+            background: rgba(18, 20, 29, 0.95);
+            border: 1px solid rgba(234, 179, 8, 0.25);
+            border-radius: 16px;
+            padding: 6px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            width: 100%;
+        }
+
+        .nav-tab {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: transparent;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 8px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+        }
+
+        .nav-tab:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-tab.active {
+            background: linear-gradient(135deg, rgba(234, 179, 8, 0.22), rgba(197, 155, 39, 0.12));
+            color: var(--spartan-gold);
+            border: 1px solid rgba(234, 179, 8, 0.5);
+            box-shadow: 0 2px 14px rgba(234, 179, 8, 0.2);
+        }
+
+        .nav-badge {
+            background: var(--spartan-gold);
+            color: #07080b;
+            font-size: 10px;
+            font-weight: 900;
+            padding: 1px 6px;
+            border-radius: 10px;
+            line-height: 1.2;
+        }
+
+        .tab-pane {
+            display: none;
+            width: 100%;
+            animation: paneFadeIn 0.22s ease-out;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+
+        @keyframes paneFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Tactical Action Deck (Command View) */
+        .combat-deck {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .combat-action-card {
+            border-radius: 14px;
+            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .combat-action-card:active {
+            transform: scale(0.99);
+        }
+
+        .action-card-victory {
+            background: linear-gradient(135deg, rgba(5, 150, 105, 0.22), rgba(6, 78, 59, 0.35));
+            border: 1px solid rgba(52, 211, 153, 0.45);
+            box-shadow: 0 4px 18px rgba(5, 150, 105, 0.25);
+        }
+        .action-card-victory:hover {
+            border-color: #34D399;
+            box-shadow: 0 6px 24px rgba(5, 150, 105, 0.4);
+            transform: translateY(-1px);
+        }
+        .action-card-victory.secured {
+            background: rgba(18, 24, 22, 0.7);
+            border-color: rgba(52, 211, 153, 0.25);
+            opacity: 0.85;
+            cursor: default;
+        }
+
+        .action-card-oath {
+            background: linear-gradient(135deg, rgba(34, 38, 54, 0.5), rgba(20, 24, 36, 0.7));
+            border: 1px solid rgba(234, 179, 8, 0.35);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            position: relative;
+        }
+        .action-card-oath:hover {
+            border-color: var(--spartan-gold);
+            box-shadow: 0 4px 20px rgba(234, 179, 8, 0.25);
+        }
+
+        .action-card-urge {
+            background: linear-gradient(135deg, rgba(168, 26, 26, 0.28), rgba(120, 13, 13, 0.4));
+            border: 1px solid rgba(239, 68, 68, 0.45);
+            box-shadow: 0 4px 18px rgba(239, 68, 68, 0.2);
+        }
+        .action-card-urge:hover {
+            border-color: #F87171;
+            box-shadow: 0 6px 26px rgba(239, 68, 68, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* Warrior Diary Styles */
+        .diary-composer-card {
+            background: linear-gradient(180deg, rgba(23, 26, 38, 0.95), rgba(15, 18, 26, 0.98));
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+        }
+
+        .diary-composer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .diary-title {
+            font-size: 15px;
+            font-weight: 900;
+            letter-spacing: 0.8px;
+            color: var(--spartan-gold);
+        }
+
+        .diary-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .diary-section-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: var(--spartan-bronze);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .tag-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .tag-pill {
+            background: rgba(25, 29, 43, 0.9);
+            border: 1px solid #2B3145;
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .tag-pill:hover {
+            border-color: var(--spartan-gold);
+            color: #fff;
+        }
+
+        .tag-pill.active {
+            background: rgba(234, 179, 8, 0.18);
+            border-color: var(--spartan-gold);
+            color: var(--spartan-gold);
+            box-shadow: 0 0 10px rgba(234, 179, 8, 0.25);
+        }
+
+        .diary-row-2 {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .rating-selector {
+            display: flex;
+            gap: 4px;
+        }
+
+        .rating-pill {
+            flex: 1;
+            background: rgba(25, 29, 43, 0.9);
+            border: 1px solid #2B3145;
+            color: var(--text-muted);
+            font-size: 10px;
+            font-weight: 800;
+            padding: 6px 4px;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .rating-pill:hover {
+            color: #fff;
+            border-color: var(--spartan-bronze);
+        }
+
+        .rating-pill.active {
+            background: rgba(234, 179, 8, 0.2);
+            border-color: var(--spartan-gold);
+            color: var(--spartan-gold);
+            font-weight: 900;
+        }
+
+        .diary-textarea {
+            width: 100%;
+            background: #0B0D14;
+            border: 1px solid #282D40;
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: var(--text-primary);
+            font-size: 13.5px;
+            line-height: 1.6;
+            resize: vertical;
+            min-height: 90px;
+            outline: none;
+            font-family: inherit;
+            margin-bottom: 12px;
+            transition: border-color 0.2s;
+        }
+
+        .diary-textarea:focus {
+            border-color: var(--spartan-gold);
+            box-shadow: 0 0 12px rgba(234, 179, 8, 0.2);
+        }
+
+        .btn-seal-entry {
+            background: linear-gradient(135deg, var(--spartan-gold), var(--spartan-bronze));
+            color: #07080B;
+            font-weight: 900;
+            letter-spacing: 0.8px;
+            box-shadow: 0 4px 18px rgba(234, 179, 8, 0.35);
+            margin-bottom: 0;
+        }
+        .btn-seal-entry:hover {
+            box-shadow: 0 6px 24px rgba(234, 179, 8, 0.5);
+            transform: translateY(-1px);
+        }
+
+        /* Diary Feed Timeline */
+        .diary-feed-container {
+            width: 100%;
+        }
+
+        .diary-feed-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .diary-feed-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 900;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+
+        .diary-count-pill {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--spartan-gold);
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .diary-filter-group {
+            display: flex;
+            gap: 4px;
+        }
+
+        .filter-btn {
+            background: transparent;
+            border: 1px solid #24293A;
+            color: var(--text-muted);
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            border-color: var(--spartan-gold);
+            color: var(--spartan-gold);
+            background: rgba(234, 179, 8, 0.1);
+        }
+
+        .diary-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .diary-card {
+            background: rgba(18, 20, 29, 0.85);
+            border: 1px solid #232738;
+            border-left: 3px solid var(--spartan-gold);
+            border-radius: 14px;
+            padding: 14px 16px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .diary-card:hover {
+            border-color: rgba(234, 179, 8, 0.4);
+            transform: translateX(2px);
+        }
+
+        .diary-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .diary-tag-badge {
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: rgba(234, 179, 8, 0.15);
+            color: var(--spartan-gold);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .diary-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .diary-text {
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .diary-delete-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 13px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: color 0.15s;
+        }
+        .diary-delete-btn:hover {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* 4-Stat Overview Grid (Controls View) */
+        .stats-grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .stat-box {
+            background: rgba(18, 20, 29, 0.9);
+            border: 1px solid #232738;
+            border-radius: 12px;
+            padding: 12px 10px;
+            text-align: center;
+        }
+
+        .stat-box-label {
+            font-size: 9px;
+            font-weight: 800;
+            color: var(--spartan-bronze);
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+
+        .stat-box-val {
+            font-size: 26px;
+            font-weight: 900;
+            color: var(--spartan-gold);
+            line-height: 1.1;
+            margin: 4px 0 2px;
+        }
+
+        .stat-box-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* Direct Streak Control Card */
+        .control-card {
+            background: linear-gradient(180deg, #161925, #11131C);
+            border: 1px solid rgba(234, 179, 8, 0.35);
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+
+        .control-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .control-title {
+            font-size: 14px;
+            font-weight: 900;
+            color: #fff;
+            letter-spacing: 0.8px;
+        }
+
+        .control-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .control-badge {
+            font-size: 9px;
+            font-weight: 800;
+            color: var(--spartan-gold);
+            background: rgba(234, 179, 8, 0.15);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .control-section-label {
+            font-size: 10px;
+            font-weight: 800;
+            color: var(--spartan-bronze);
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+        }
+
+        .preset-btn-group {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .btn-preset {
+            background: #181B26;
+            border: 1px solid #2B3145;
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 800;
+            padding: 10px 4px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-align: center;
+        }
+
+        .btn-preset:hover {
+            border-color: var(--spartan-gold);
+            color: #fff;
+            background: #202434;
+        }
+
+        .custom-streak-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .custom-streak-input {
+            flex: 1;
+            background: #0B0D14;
+            border: 1px solid #2B3145;
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 800;
+            outline: none;
+        }
+
+        .custom-streak-input:focus {
+            border-color: var(--spartan-gold);
+        }
+
+        .btn-gold-outline {
+            background: transparent;
+            border: 1px solid var(--spartan-gold);
+            color: var(--spartan-gold);
+            font-weight: 800;
+            font-size: 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn-gold-outline:hover {
+            background: var(--spartan-gold);
+            color: #07080B;
+        }
+
+        /* Relapse & Reset Card */
+        .reset-card {
+            background: linear-gradient(135deg, rgba(34, 16, 16, 0.9), rgba(20, 10, 10, 0.95));
+            border: 1px solid rgba(239, 68, 68, 0.45);
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.15);
+        }
+
+        .reset-card-title {
+            font-size: 13px;
+            font-weight: 900;
+            color: #F87171;
+            letter-spacing: 0.5px;
+        }
+
+        .reset-card-desc {
+            font-size: 11px;
+            line-height: 1.5;
+            color: #CBD5E1;
+            margin-top: 4px;
+        }
+
+        .btn-reset-protocol {
+            background: linear-gradient(135deg, rgba(168, 26, 26, 0.9), rgba(120, 13, 13, 0.95));
+            border: 1px solid #EF4444;
+            color: #fff;
+            font-weight: 900;
+            font-size: 12px;
+            letter-spacing: 0.8px;
+            padding: 14px;
+            border-radius: 10px;
+            margin-top: 14px;
+            margin-bottom: 0;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+            width: 100%;
+            text-align: center;
+        }
+        .btn-reset-protocol:hover {
+            background: #EF4444;
+            color: #fff;
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+        }
+
+        /* Relapse Modal Styles */
+        .stoic-quote-banner {
+            background: rgba(11, 13, 20, 0.9);
+            border-left: 3px solid var(--spartan-gold);
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 12px;
+            font-style: italic;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        .trigger-select-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .trigger-pill {
+            background: #181B26;
+            border: 1px solid #2B3145;
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .trigger-pill:hover {
+            border-color: #EF4444;
+            color: #fff;
+        }
+
+        .trigger-pill.active {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #EF4444;
+            color: #FCA5A5;
+        }
+
+        .diary-input {
+            width: 100%;
+            background: #0B0D14;
+            border: 1px solid #2B3145;
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #fff;
+            font-size: 12px;
+            outline: none;
+            margin-top: 4px;
+        }
+        .diary-input:focus {
+            border-color: #EF4444;
+        }
+
+        .btn-confirm-reset {
+            background: linear-gradient(135deg, #DC2626, #991B1B);
+            color: #fff;
+            border: 1px solid #EF4444;
+            font-weight: 900;
+            letter-spacing: 0.8px;
+            padding: 14px;
+            border-radius: 10px;
+            box-shadow: 0 4px 18px rgba(220, 38, 38, 0.4);
+            margin-bottom: 0;
+            cursor: pointer;
+            width: 100%;
+        }
+        .btn-confirm-reset:hover {
+            background: #EF4444;
+        }
+
     </style>
 </head>
 <body>
@@ -1084,127 +1755,320 @@
         </div>
         <div class="header-tagline">⚔️ SPARTAN CODE • IRON DISCIPLINE PROTOCOL ⚔️</div>
 
-        <!-- STREAK CARD -->
-        <div class="card streak-card">
-            <div class="streak-header">
-                <div>
-                    <div class="streak-label">SPARTAN STREAK</div>
-                    <div class="streak-number" id="streak-days">DAY 1</div>
+        <!-- SEGMENTED NAVIGATION TABS -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-tab="tab-command">
+                <span>⚔️</span> Command
+            </button>
+            <button class="nav-tab" data-tab="tab-diary">
+                <span>📖</span> Warrior Diary <span id="diary-badge" class="nav-badge" style="display:none;">0</span>
+            </button>
+            <button class="nav-tab" data-tab="tab-controls">
+                <span>⚙️</span> Streak & Reset
+            </button>
+            <button class="nav-tab" data-tab="tab-empire">
+                <span>🏛️</span> Empire & Codex
+            </button>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 1: COMMAND & TACTICAL HUD                  -->
+        <!-- ============================================== -->
+        <div id="tab-command" class="tab-pane active">
+            <!-- STREAK CARD -->
+            <div class="card streak-card">
+                <div class="streak-header">
+                    <div>
+                        <div class="streak-label">SPARTAN STREAK</div>
+                        <div class="streak-number" id="streak-days">DAY 1</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                        <div class="streak-status-badge">SHIELD ACTIVE</div>
+                        <button id="btn-quick-adjust-streak" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); color: var(--spartan-gold); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;" title="Adjust Day Count">
+                            ⚙️ Adjust / Reset
+                        </button>
+                    </div>
                 </div>
-                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-                    <div class="streak-status-badge">SHIELD ACTIVE</div>
-                    <button id="btn-quick-adjust-streak" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); color: var(--spartan-gold); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;" title="Adjust Day Count">
-                        ⚙️ Adjust Day
+
+                <div class="rank-info-row">
+                    <span class="rank-title" id="rank-title">⚔️ Level 1: The Agoge</span>
+                    <span class="next-milestone" id="next-milestone">Next: Day 3</span>
+                </div>
+
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="progress-fill" style="width: 33%;"></div>
+                </div>
+
+                <div class="victory-status-text" id="victory-status">
+                    ⚔️ Ready to log today's victory. Hold the line!
+                </div>
+            </div>
+
+            <!-- PRIMARY COMBAT BUTTONS (REFINED LUXURY CARDS) -->
+            <div class="combat-deck">
+                <!-- CLAIM VICTORY -->
+                <button id="btn-claim-victory" class="btn btn-victory" style="padding: 16px 20px; font-size: 14px; margin-bottom: 0;">
+                    ✅ CLAIM TODAY'S VICTORY (+40 XP, +20 COINS)
+                </button>
+
+                <!-- MORNING OATH -->
+                <button id="btn-morning-oath" class="btn btn-oath" style="padding: 16px 20px; font-size: 13.5px; margin-bottom: 0;">
+                    <div id="btn-oath-progress" class="btn-oath-progress"></div>
+                    <span id="btn-oath-text" style="position: relative; z-index: 2;">⚔️ SWEAR TODAY'S SPARTAN OATH (HOLD 3s)</span>
+                </button>
+
+                <!-- EMERGENCY URGE CRUSHER -->
+                <button id="btn-open-urge" class="btn btn-urge" style="padding: 16px 20px; font-size: 13.5px; margin-bottom: 0;">
+                    🚨 3-MIN URGE CRUSHER (EMERGENCY SHIELD)
+                </button>
+            </div>
+
+            <!-- QUICK DIARY PROMPT CARD -->
+            <div class="card" id="card-diary-quick" style="cursor: pointer; margin-bottom: 12px; border: 1px solid rgba(234, 179, 8, 0.35); background: linear-gradient(135deg, rgba(26, 22, 14, 0.85), rgba(18, 20, 29, 0.95)); padding: 12px 16px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 22px;">📖</span>
+                    <div>
+                        <div style="font-size: 12px; font-weight: 800; color: var(--spartan-gold);">WARRIOR DIARY & REFLECTION</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Log your battles, mental state, and thoughts today.</div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px; border-color: var(--spartan-gold); color: var(--spartan-gold); font-weight: 800; white-space: nowrap; margin-bottom: 0;">
+                    Write Entry →
+                </button>
+            </div>
+
+            <!-- NEXT SPOILS OF WAR TEASER CARD -->
+            <div class="card" id="reward-teaser-card" style="cursor: pointer; margin-bottom: 12px; border: 1px solid #374151; background: linear-gradient(135deg, rgba(30,34,48,0.92), rgba(20,24,35,0.96)); padding: 12px 14px; border-radius: 12px; transition: all 0.25s ease;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 10px; font-weight: 800; color: var(--spartan-gold); letter-spacing: 1px; text-transform: uppercase;">🎁 SPOILS OF WAR • NEXT MILESTONE FEAST</span>
+                    <span id="reward-unclaimed-pill" style="display: none; background: #22c55e; color: #000; font-weight: 900; font-size: 10px; padding: 2px 8px; border-radius: 10px; animation: pulse-glow 1.5s infinite;">READY TO CLAIM!</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div id="reward-teaser-icon" style="font-size: 26px; min-width: 34px; text-align: center;">🥛</div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div id="reward-teaser-title" style="font-size: 13px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Day 3: Preferred Drink / Iaurt</div>
+                        <div id="reward-teaser-status" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">2 days remaining to earn your treat</div>
+                    </div>
+                    <button class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px; border-color: var(--spartan-gold); color: var(--spartan-gold); font-weight: 700; white-space: nowrap; margin-bottom: 0;">Open Gifts</button>
+                </div>
+            </div>
+
+            <!-- EMPIRE & KINGDOM ROADMAP TEASER CARD -->
+            <div class="card" id="empire-teaser-card" style="background: linear-gradient(135deg, rgba(34, 25, 12, 0.95), rgba(17, 24, 39, 0.95)); border: 1px solid rgba(234, 179, 8, 0.55); box-shadow: 0 4px 18px rgba(234, 179, 8, 0.12); margin-bottom: 12px; cursor: pointer; padding: 12px 14px; border-radius: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 11px; font-weight: 800; color: var(--spartan-gold); letter-spacing: 0.8px;">👑 SPARTAN EMPIRE & KINGDOM</span>
+                    <span id="empire-main-status-badge" style="background: rgba(234, 179, 8, 0.18); color: var(--spartan-gold); border: 1px solid rgba(234, 179, 8, 0.4); font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">TIER 1 (19 Y/O) • $2.5K/MO</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div id="empire-teaser-headline" style="font-size: 13px; font-weight: 900; color: #fff;">CyberSec • $2,500 ➔ $5,000 Target</div>
+                        <div id="empire-teaser-sub" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">The King's Standard: Build the kingdom first, the queen follows.</div>
+                    </div>
+                    <button id="btn-open-empire-teaser" class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px; border-color: var(--spartan-gold); color: var(--spartan-gold); font-weight: 800; white-space: nowrap; margin-bottom: 0;">
+                        View Empire 👑
                     </button>
                 </div>
             </div>
 
-            <div class="rank-info-row">
-                <span class="rank-title" id="rank-title">⚔️ Level 1: The Agoge</span>
-                <span class="next-milestone" id="next-milestone">Next: Day 3</span>
-            </div>
-
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill" id="progress-fill" style="width: 33%;"></div>
-            </div>
-
-            <div class="victory-status-text" id="victory-status">
-                ⚔️ Ready to log today's victory. Hold the line!
+            <!-- CODEX QUOTE OF THE DAY -->
+            <div class="card quote-card">
+                <div class="quote-category" id="quote-category">⚡ FORCED ACTION</div>
+                <div class="quote-text" id="quote-text">"Your mind is the only citadel that matters. If you cannot command what happens between your ears, you command nothing."</div>
+                <div class="quote-author" id="quote-author">— King Leonidas</div>
+                <button id="btn-next-quote" class="btn-next-quote">⚔️ NEXT WARRIOR RULE</button>
             </div>
         </div>
 
-        <!-- PRIMARY COMBAT BUTTONS -->
-        <button id="btn-claim-victory" class="btn btn-victory">
-            ✅ CLAIM TODAY'S VICTORY
-        </button>
-
-        <button id="btn-morning-oath" class="btn btn-oath">
-            <div id="btn-oath-progress" class="btn-oath-progress"></div>
-            <span id="btn-oath-text" style="position: relative; z-index: 2;">⚔️ SWEAR TODAY'S SPARTAN OATH (HOLD 3s)</span>
-        </button>
-
-        <button id="btn-open-urge" class="btn btn-urge">
-            🚨 3-MIN URGE CRUSHER (EMERGENCY SHIELD)
-        </button>
-
-        <!-- NEXT SPOILS OF WAR TEASER CARD -->
-        <div class="card" id="reward-teaser-card" style="cursor: pointer; margin-bottom: 12px; border: 1px solid #374151; background: linear-gradient(135deg, rgba(30,34,48,0.92), rgba(20,24,35,0.96)); padding: 12px 14px; border-radius: 12px; transition: all 0.25s ease;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 10px; font-weight: 800; color: var(--spartan-gold); letter-spacing: 1px; text-transform: uppercase;">🎁 SPOILS OF WAR • NEXT MILESTONE FEAST</span>
-                <span id="reward-unclaimed-pill" style="display: none; background: #22c55e; color: #000; font-weight: 900; font-size: 10px; padding: 2px 8px; border-radius: 10px; animation: pulse-glow 1.5s infinite;">READY TO CLAIM!</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <div id="reward-teaser-icon" style="font-size: 26px; min-width: 34px; text-align: center;">🥛</div>
-                <div style="flex: 1; min-width: 0;">
-                    <div id="reward-teaser-title" style="font-size: 13px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Day 3: Preferred Drink / Iaurt</div>
-                    <div id="reward-teaser-status" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">2 days remaining to earn your treat</div>
+        <!-- ============================================== -->
+        <!-- TAB 2: WARRIOR DIARY                           -->
+        <!-- ============================================== -->
+        <div id="tab-diary" class="tab-pane">
+            <!-- DIARY COMPOSER CARD -->
+            <div class="card diary-composer-card">
+                <div class="diary-composer-header">
+                    <div>
+                        <div class="diary-title">📖 WARRIOR REFLECTION & LOG</div>
+                        <div class="diary-subtitle" id="diary-current-date">Today's Chronicle</div>
+                    </div>
+                    <span class="control-badge">SOVEREIGN MIND</span>
                 </div>
-                <button class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px; border-color: var(--spartan-gold); color: var(--spartan-gold); font-weight: 700; white-space: nowrap;">Open Gifts</button>
+
+                <div class="diary-section-label">SELECT WARRIOR MINDSET:</div>
+                <div class="tag-selector" id="diary-tag-selector">
+                    <button type="button" class="tag-pill active" data-tag="🛡️ Unshakable Fortress">🛡️ Unshakable Fortress</button>
+                    <button type="button" class="tag-pill" data-tag="⚔️ Battle Conquered">⚔️ Battle Conquered</button>
+                    <button type="button" class="tag-pill" data-tag="⚡ High Focus & Flow">⚡ High Focus & Flow</button>
+                    <button type="button" class="tag-pill" data-tag="🔥 Iron Recovery">🔥 Iron Recovery</button>
+                    <button type="button" class="tag-pill" data-tag="🧘 Stoic Clarity">🧘 Stoic Clarity</button>
+                </div>
+
+                <div class="diary-row-2">
+                    <div>
+                        <div class="diary-section-label">URGE INTENSITY (1-5):</div>
+                        <div class="rating-selector" id="diary-urge-selector">
+                            <button type="button" class="rating-pill active" data-level="1">1 • Calm</button>
+                            <button type="button" class="rating-pill" data-level="2">2 • Mild</button>
+                            <button type="button" class="rating-pill" data-level="3">3 • Moderate</button>
+                            <button type="button" class="rating-pill" data-level="4">4 • Intense</button>
+                            <button type="button" class="rating-pill" data-level="5">5 • Code Red</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="diary-section-label">PHYSICAL DRIVE:</div>
+                        <div class="rating-selector" id="diary-energy-selector">
+                            <button type="button" class="rating-pill" data-energy="Low">🔋 Low</button>
+                            <button type="button" class="rating-pill active" data-energy="Steady">⚡ Steady</button>
+                            <button type="button" class="rating-pill" data-energy="Peak Beast">🔥 Beast</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diary-section-label">THOUGHTS, REFLECTIONS & BATTLES TODAY:</div>
+                <textarea id="diary-entry-text" class="diary-textarea" rows="4" placeholder="Log your experience today... What urges or triggers appeared? What victory did you achieve? What is your oath for tomorrow? Write honestly, Spartan."></textarea>
+
+                <button id="btn-save-diary" class="btn btn-seal-entry">
+                    💾 SEAL TODAY'S REFLECTION (+25 XP, +10 COINS)
+                </button>
+            </div>
+
+            <!-- PAST REFLECTIONS FEED -->
+            <div class="diary-feed-container">
+                <div class="diary-feed-header">
+                    <div class="diary-feed-title">
+                        <span>WARRIOR CHRONICLES</span>
+                        <span id="diary-feed-count" class="diary-count-pill">0 ENTRIES</span>
+                    </div>
+                    <div class="diary-filter-group" id="diary-filter-group">
+                        <button class="filter-btn active" data-filter="ALL">All</button>
+                        <button class="filter-btn" data-filter="🛡️ Unshakable Fortress">Fortress</button>
+                        <button class="filter-btn" data-filter="⚔️ Battle Conquered">Battles</button>
+                        <button class="filter-btn" data-filter="🔥 Iron Recovery">Recoveries</button>
+                        <button class="filter-btn" data-filter="⚡ High Focus & Flow">Focus</button>
+                    </div>
+                </div>
+                <div id="diary-timeline-list" class="diary-timeline">
+                    <!-- Dynamic entries rendered here -->
+                </div>
             </div>
         </div>
 
-        <!-- EMPIRE & KINGDOM ROADMAP TEASER CARD -->
-        <div class="card" id="empire-teaser-card" style="background: linear-gradient(135deg, rgba(34, 25, 12, 0.95), rgba(17, 24, 39, 0.95)); border: 1px solid rgba(234, 179, 8, 0.55); box-shadow: 0 4px 18px rgba(234, 179, 8, 0.12); margin-bottom: 12px; cursor: pointer; padding: 12px 14px; border-radius: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-size: 11px; font-weight: 800; color: var(--spartan-gold); letter-spacing: 0.8px;">👑 SPARTAN EMPIRE & KINGDOM</span>
-                <span id="empire-main-status-badge" style="background: rgba(234, 179, 8, 0.18); color: var(--spartan-gold); border: 1px solid rgba(234, 179, 8, 0.4); font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">TIER 1 (19 Y/O) • $2.5K/MO</span>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-                <div style="flex: 1; min-width: 0;">
-                    <div id="empire-teaser-headline" style="font-size: 13px; font-weight: 900; color: #fff;">CyberSec • $2,500 ➔ $5,000 Target</div>
-                    <div id="empire-teaser-sub" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">The King's Standard: Build the kingdom first, the queen follows.</div>
+        <!-- ============================================== -->
+        <!-- TAB 3: STREAK & CONTROLS                       -->
+        <!-- ============================================== -->
+        <div id="tab-controls" class="tab-pane">
+            <!-- 4-STAT SUMMARY GRID -->
+            <div class="stats-grid-4">
+                <div class="stat-box">
+                    <div class="stat-box-label">CURRENT</div>
+                    <div class="stat-box-val" id="ctrl-current-streak">0</div>
+                    <div class="stat-box-sub">Days Active</div>
                 </div>
-                <button id="btn-open-empire-teaser" class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px; border-color: var(--spartan-gold); color: var(--spartan-gold); font-weight: 800; white-space: nowrap;">
-                    View Empire 👑
+                <div class="stat-box">
+                    <div class="stat-box-label">LONGEST</div>
+                    <div class="stat-box-val" id="ctrl-longest-streak">0</div>
+                    <div class="stat-box-sub">Best Streak</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-label">VICTORIES</div>
+                    <div class="stat-box-val" id="ctrl-total-victories">0</div>
+                    <div class="stat-box-sub">Total Won</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-label">DIARY</div>
+                    <div class="stat-box-val" id="ctrl-diary-count">0</div>
+                    <div class="stat-box-sub">Reflections</div>
+                </div>
+            </div>
+
+            <!-- DIRECT STREAK CONTROLLER -->
+            <div class="card control-card">
+                <div class="control-card-header">
+                    <div>
+                        <div class="control-title">⚡ DIRECT STREAK CONTROL</div>
+                        <div class="control-sub">Full authority over your streak counter. Set it to any day count immediately.</div>
+                    </div>
+                    <span class="control-badge">SOVEREIGNTY</span>
+                </div>
+
+                <div class="control-section-label">QUICK PRESET JUMP:</div>
+                <div class="preset-btn-group">
+                    <button class="btn-preset" data-days="0">Day 0 (Reset)</button>
+                    <button class="btn-preset" data-days="1">Day 1</button>
+                    <button class="btn-preset" data-days="3">Day 3</button>
+                    <button class="btn-preset" data-days="5">Day 5</button>
+                    <button class="btn-preset" data-days="7">Day 7</button>
+                    <button class="btn-preset" data-days="14">Day 14</button>
+                    <button class="btn-preset" data-days="30">Day 30</button>
+                    <button class="btn-preset" data-days="90">Day 90</button>
+                </div>
+
+                <div class="control-section-label" style="margin-top: 14px;">OR ENTER EXACT DAY COUNT:</div>
+                <div class="custom-streak-row">
+                    <input type="number" id="input-custom-days" class="custom-streak-input" min="0" max="9999" value="1" placeholder="Enter day #" />
+                    <button id="btn-apply-custom-days" class="btn btn-gold-outline" style="width: auto; margin-bottom: 0; padding: 12px 24px;">
+                        Set Streak
+                    </button>
+                </div>
+            </div>
+
+            <!-- RELAPSE & RESET PROTOCOL -->
+            <div class="card reset-card">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="font-size: 28px;">🛡️</div>
+                    <div style="flex: 1;">
+                        <div class="reset-card-title">SPARTAN RELAPSE & FRESH START PROTOCOL</div>
+                        <div class="reset-card-desc">
+                            If you slipped, relapsed, or want a clean start: a Spartan never hides or makes excuses. Reset the counter to Day 0, record the trigger in your diary, and begin your comeback immediately.
+                        </div>
+                    </div>
+                </div>
+                <button id="btn-open-reset-modal" class="btn btn-reset-protocol">
+                    🔄 INITIATE RELAPSE PROTOCOL (RESET TO DAY 0)
                 </button>
             </div>
         </div>
 
-        <!-- ACTION GRID -->
-        <div class="grid-2">
-            <button id="btn-open-empire" class="btn btn-secondary" style="border-color: rgba(234, 179, 8, 0.65); color: var(--spartan-gold); font-weight: 800;">
-                👑 Empire Roadmap ($10K)
-            </button>
-            <button id="btn-open-timeline" class="btn btn-secondary" style="border-color: rgba(56, 189, 248, 0.55); color: #38bdf8; font-weight: 800;">
-                🧬 Brain & Body Timeline
-            </button>
-            <button id="btn-open-rewards" class="btn btn-secondary" style="border-color: rgba(234, 179, 8, 0.45);">
-                🎁 Spartan Gifts (<span id="unclaimed-rewards-count">0</span>)
-            </button>
-            <button id="btn-open-map" class="btn btn-secondary">
-                🗺️ 90-Day Campaign Map
-            </button>
-            <button id="btn-open-achievements" class="btn btn-secondary">
-                🏅 Spartan Medals <span style="white-space: nowrap;">(<span id="medals-count">0/19</span>)</span>
-            </button>
-            <button id="btn-open-codex" class="btn btn-secondary">
-                📜 Spartan Codex (100+)
-            </button>
-        </div>
+        <!-- ============================================== -->
+        <!-- TAB 4: EMPIRE & CODEX                         -->
+        <!-- ============================================== -->
+        <div id="tab-empire" class="tab-pane">
+            <div class="grid-2">
+                <button id="btn-open-empire" class="btn btn-secondary" style="border-color: rgba(234, 179, 8, 0.65); color: var(--spartan-gold); font-weight: 800;">
+                    👑 Empire Roadmap ($10K)
+                </button>
+                <button id="btn-open-timeline" class="btn btn-secondary" style="border-color: rgba(56, 189, 248, 0.55); color: #38bdf8; font-weight: 800;">
+                    🧬 Brain & Body Timeline
+                </button>
+                <button id="btn-open-rewards" class="btn btn-secondary" style="border-color: rgba(234, 179, 8, 0.45);">
+                    🎁 Spartan Gifts (<span id="unclaimed-rewards-count">0</span>)
+                </button>
+                <button id="btn-open-map" class="btn btn-secondary">
+                    🗺️ 90-Day Campaign Map
+                </button>
+                <button id="btn-open-achievements" class="btn btn-secondary">
+                    🏅 Spartan Medals <span style="white-space: nowrap;">(<span id="medals-count">0/19</span>)</span>
+                </button>
+                <button id="btn-open-codex" class="btn btn-secondary">
+                    📜 Spartan Codex (100+)
+                </button>
+            </div>
 
-        <div class="grid-2">
-            <button id="btn-open-blocker" class="btn btn-secondary">
-                🔒 PC Adult Blocker
-            </button>
-            <button id="btn-test-notify" class="btn btn-secondary">
-                📯 Sound War Horn
-            </button>
-        </div>
-        <div class="grid-2" style="margin-top: 10px;">
-            <button id="btn-open-add-reward" class="btn btn-secondary">
-                ✨ + Custom Gift
-            </button>
-            <button id="btn-adjust-streak" class="btn btn-secondary">
-                ⚙️ Adjust Day Counter
-            </button>
-        </div>
-
-        <!-- CODEX QUOTE OF THE DAY -->
-        <div class="card quote-card">
-            <div class="quote-category" id="quote-category">⚡ FORCED ACTION</div>
-            <div class="quote-text" id="quote-text">"Your mind is the only citadel that matters. If you cannot command what happens between your ears, you command nothing."</div>
-            <div class="quote-author" id="quote-author">— King Leonidas</div>
-            <button id="btn-next-quote" class="btn-next-quote">⚔️ NEXT WARRIOR RULE</button>
+            <div class="grid-2">
+                <button id="btn-open-blocker" class="btn btn-secondary">
+                    🔒 PC Adult Blocker
+                </button>
+                <button id="btn-test-notify" class="btn btn-secondary">
+                    📯 Sound War Horn
+                </button>
+            </div>
+            <div class="grid-2" style="margin-top: 10px;">
+                <button id="btn-open-add-reward" class="btn btn-secondary">
+                    ✨ + Custom Gift
+                </button>
+                <button id="btn-jump-to-controls" class="btn btn-secondary">
+                    ⚙️ Day Counter & Reset
+                </button>
+            </div>
         </div>
 
         <div class="version-footer">
@@ -3687,16 +4551,9 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             }
         };
 
-        // Adjust Counter
+        // Adjust Counter - Switch to full controls tab
         function handleAdjustStreak() {
-            const val = prompt("Enter new streak day count (e.g. 0, 1, 3, 5, 10):", appData.streakDays);
-            if (val !== null && !isNaN(parseInt(val))) {
-                appData.streakDays = Math.max(0, parseInt(val));
-                appData.longestStreak = Math.max(appData.longestStreak, appData.streakDays);
-                saveData();
-                refreshUI();
-                showToast(`Day counter set to Day ${appData.streakDays}`);
-            }
+            switchTab('tab-controls');
         }
 
         const btnAdjustStreak = document.getElementById("btn-adjust-streak");
@@ -3729,6 +4586,369 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
         } catch (e) {
             console.error("Initialization error:", e);
         }
+
+        // -------------------------------------------------------------
+        // 9. NAVIGATION TABS CONTROLLER
+        // -------------------------------------------------------------
+        function switchTab(tabId) {
+            document.querySelectorAll('.nav-tab').forEach(t => {
+                t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
+            });
+            document.querySelectorAll('.tab-pane').forEach(p => {
+                p.classList.toggle('active', p.id === tabId);
+            });
+            if (tabId === 'tab-diary') {
+                renderDiaryFeed();
+            } else if (tabId === 'tab-controls') {
+                updateControlsTab();
+            }
+        }
+
+        document.querySelectorAll('.nav-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                switchTab(btn.getAttribute('data-tab'));
+            });
+        });
+
+        const quickDiaryCard = document.getElementById('card-diary-quick');
+        if (quickDiaryCard) {
+            quickDiaryCard.addEventListener('click', () => switchTab('tab-diary'));
+        }
+
+        const btnJumpControls = document.getElementById('btn-jump-to-controls');
+        if (btnJumpControls) {
+            btnJumpControls.addEventListener('click', () => switchTab('tab-controls'));
+        }
+
+        // -------------------------------------------------------------
+        // 10. WARRIOR DIARY ENGINE
+        // -------------------------------------------------------------
+        let currentDiaryFilter = 'ALL';
+        let selectedDiaryTag = '🛡️ Unshakable Fortress';
+        let selectedUrgeLevel = 1;
+        let selectedEnergy = 'Steady';
+
+        // Tag Selector
+        document.querySelectorAll('#diary-tag-selector .tag-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#diary-tag-selector .tag-pill').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                selectedDiaryTag = btn.getAttribute('data-tag');
+            });
+        });
+
+        // Urge Level Selector
+        document.querySelectorAll('#diary-urge-selector .rating-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#diary-urge-selector .rating-pill').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                selectedUrgeLevel = parseInt(btn.getAttribute('data-level')) || 1;
+            });
+        });
+
+        // Energy Selector
+        document.querySelectorAll('#diary-energy-selector .rating-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#diary-energy-selector .rating-pill').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                selectedEnergy = btn.getAttribute('data-energy');
+            });
+        });
+
+        // Filter Buttons
+        document.querySelectorAll('#diary-filter-group .filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#diary-filter-group .filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentDiaryFilter = btn.getAttribute('data-filter');
+                renderDiaryFeed();
+            });
+        });
+
+        function renderDiaryFeed() {
+            const container = document.getElementById('diary-timeline-list');
+            if (!container) return;
+            const entries = appData.diary || [];
+            
+            // Update counts
+            const countEl = document.getElementById('diary-feed-count');
+            if (countEl) countEl.innerText = `${entries.length} ENTRIES`;
+            
+            const badgeEl = document.getElementById('diary-badge');
+            if (badgeEl) {
+                if (entries.length > 0) {
+                    badgeEl.innerText = entries.length;
+                    badgeEl.style.display = 'inline-block';
+                } else {
+                    badgeEl.style.display = 'none';
+                }
+            }
+
+            const filtered = currentDiaryFilter === 'ALL' 
+                ? entries 
+                : entries.filter(e => e.tag === currentDiaryFilter);
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 36px 20px; background: rgba(18,20,29,0.6); border: 1px dashed #282D40; border-radius: 14px;">
+                        <div style="font-size: 32px; margin-bottom: 8px;">🛡️</div>
+                        <div style="font-size: 13px; font-weight: 800; color: #fff;">No warrior reflections recorded yet.</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px; max-width: 320px; margin-left: auto; margin-right: auto;">
+                            A Spartan never leaves his mind uncharted. Chronicle your battles and victories in the composer above.
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(item => {
+                const isRecovery = item.tag && item.tag.includes('Recovery');
+                const borderColor = isRecovery ? '#EF4444' : 'var(--spartan-gold)';
+                return `
+                    <div class="diary-card" style="border-left-color: ${borderColor};">
+                        <div class="diary-card-top">
+                            <span class="diary-tag-badge" style="${isRecovery ? 'color: #F87171; border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.15);' : ''}">
+                                ${item.tag || '🛡️ Reflection'}
+                            </span>
+                            <div class="diary-meta-row">
+                                <span>${item.date} ${item.time ? '• ' + item.time : ''}</span>
+                                <span style="color: var(--spartan-gold);">⚡ Urge: ${item.urgeLevel || 1}/5</span>
+                                <span>Drive: ${item.energy || 'Steady'}</span>
+                                <button class="diary-delete-btn" onclick="deleteDiaryEntry('${item.id}')" title="Delete reflection">🗑️</button>
+                            </div>
+                        </div>
+                        <div class="diary-text">${escapeHtml(item.text)}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        window.deleteDiaryEntry = function(id) {
+            if (!confirm("Delete this warrior reflection from your chronicle?")) return;
+            appData.diary = (appData.diary || []).filter(e => e.id !== id);
+            saveData();
+            renderDiaryFeed();
+            updateControlsTab();
+            showToast("Reflection deleted.");
+        };
+
+        const btnSaveDiary = document.getElementById('btn-save-diary');
+        if (btnSaveDiary) {
+            btnSaveDiary.addEventListener('click', () => {
+                const textEl = document.getElementById('diary-entry-text');
+                const text = textEl ? textEl.value.trim() : '';
+                if (!text) {
+                    showToast("⚠️ Enter your thoughts before sealing your entry, warrior.");
+                    return;
+                }
+
+                const d = new Date();
+                const entry = {
+                    id: 'diary_' + Date.now(),
+                    date: getTodayString(),
+                    time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    createdAt: d.toISOString(),
+                    tag: selectedDiaryTag,
+                    urgeLevel: selectedUrgeLevel,
+                    energy: selectedEnergy,
+                    text: text
+                };
+
+                if (!Array.isArray(appData.diary)) appData.diary = [];
+                appData.diary.unshift(entry);
+                saveData();
+                sound.playVictory();
+                triggerVictoryBurst();
+                textEl.value = '';
+                renderDiaryFeed();
+                updateControlsTab();
+                showToast("⚔️ Warrior reflection sealed in the Citadel! (+25 XP, +10 Coins)");
+
+                try {
+                    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_DIARY', payload: entry }, '*');
+                } catch (e) {}
+            });
+        }
+
+        // -------------------------------------------------------------
+        // 11. FULL STREAK CONTROL & RESET PROTOCOL
+        // -------------------------------------------------------------
+        function setStreakDays(val) {
+            const num = Math.max(0, parseInt(val) || 0);
+            appData.streakDays = num;
+            appData.longestStreak = Math.max(appData.longestStreak || 0, num);
+            if (num === 0) {
+                appData.lastCheckin = "";
+            }
+            saveData();
+            refreshUI();
+            updateControlsTab();
+            sound.playVictory();
+            showToast(`⚡ Spartan streak updated to Day ${num}!`);
+
+            try {
+                console.log("LIFE_SYSTEM_BRIDGE:MAN_SET_STREAK:" + JSON.stringify({ streakDays: num }));
+                window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_SET_STREAK', payload: { streakDays: num } }, '*');
+            } catch (e) {}
+        }
+
+        // Quick Preset Buttons
+        document.querySelectorAll('.btn-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const d = parseInt(btn.getAttribute('data-days'));
+                setStreakDays(d);
+            });
+        });
+
+        // Custom Input
+        const btnApplyCustomDays = document.getElementById('btn-apply-custom-days');
+        const inputCustomDays = document.getElementById('input-custom-days');
+        if (btnApplyCustomDays && inputCustomDays) {
+            btnApplyCustomDays.addEventListener('click', () => {
+                setStreakDays(inputCustomDays.value);
+            });
+        }
+
+        // Reset Modal Handlers
+        let selectedResetTrigger = 'Late Night Screen / Bed Phone';
+        document.querySelectorAll('#reset-trigger-selector .trigger-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#reset-trigger-selector .trigger-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedResetTrigger = btn.getAttribute('data-trigger');
+            });
+        });
+
+        const btnOpenResetModal = document.getElementById('btn-open-reset-modal');
+        if (btnOpenResetModal) {
+            btnOpenResetModal.addEventListener('click', () => {
+                openModal('modal-reset-streak');
+            });
+        }
+
+        const btnQuickAdjust = document.getElementById('btn-quick-adjust-streak');
+        if (btnQuickAdjust) {
+            btnQuickAdjust.addEventListener('click', () => {
+                switchTab('tab-controls');
+            });
+        }
+
+        const btnConfirmReset = document.getElementById('btn-confirm-reset');
+        if (btnConfirmReset) {
+            btnConfirmReset.addEventListener('click', () => {
+                const lessonInput = document.getElementById('reset-reflection-input');
+                const lesson = lessonInput ? lessonInput.value.trim() : '';
+                const autolog = document.getElementById('reset-autolog-diary')?.checked ?? true;
+
+                appData.streakDays = 0;
+                appData.lastCheckin = "";
+
+                if (autolog) {
+                    const d = new Date();
+                    const entry = {
+                        id: 'diary_' + Date.now(),
+                        date: getTodayString(),
+                        time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        createdAt: d.toISOString(),
+                        tag: '🔥 Iron Recovery',
+                        urgeLevel: 5,
+                        energy: 'Refocused',
+                        text: `Relapse Recovery Protocol Initiated (Day reset to 0).\nTrigger: ${selectedResetTrigger}\nForged Rule: ${lesson || 'Rising immediately with iron discipline and clean habits.'}`
+                    };
+                    if (!Array.isArray(appData.diary)) appData.diary = [];
+                    appData.diary.unshift(entry);
+                }
+
+                saveData();
+                sound.playWarDrum();
+                triggerScreenShake();
+                refreshUI();
+                updateControlsTab();
+                renderDiaryFeed();
+                closeModal('modal-reset-streak');
+                showToast("🛡️ Streak reset to Day 0. Your greatest comeback begins now, warrior!");
+
+                try {
+                    console.log("LIFE_SYSTEM_BRIDGE:MAN_RESET:" + JSON.stringify({ today: getTodayString() }));
+                    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_RESET', payload: { today: getTodayString() } }, '*');
+                } catch (e) {}
+            });
+        }
+
+        function updateControlsTab() {
+            const curEl = document.getElementById('ctrl-current-streak');
+            const bestEl = document.getElementById('ctrl-longest-streak');
+            const vicEl = document.getElementById('ctrl-total-victories');
+            const diaryEl = document.getElementById('ctrl-diary-count');
+            const inputVal = document.getElementById('input-custom-days');
+
+            if (curEl) curEl.innerText = appData.streakDays || 0;
+            if (bestEl) bestEl.innerText = appData.longestStreak || 0;
+            if (vicEl) vicEl.innerText = appData.totalVictories || 0;
+            if (diaryEl) diaryEl.innerText = (appData.diary || []).length;
+            if (inputVal) inputVal.value = appData.streakDays || 0;
+        }
+
+        // Set date string on diary tab
+        try {
+            const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+            const dateDisplayEl = document.getElementById('diary-current-date');
+            if (dateDisplayEl) dateDisplayEl.innerText = 'Today: ' + dateStr;
+        } catch (e) {}
+
+        // Initial sync from Turso Cloud in background
+        syncFromTursoCloud();
+
     </script>
+
+    <!-- MODAL: SPARTAN RELAPSE & COMEBACK PROTOCOL -->
+    <div id="modal-reset-streak" class="modal-overlay">
+        <div class="modal-card" style="border-color: #EF4444; box-shadow: 0 10px 40px rgba(239, 68, 68, 0.35);">
+            <div class="modal-header" style="border-bottom-color: rgba(239, 68, 68, 0.3);">
+                <div class="modal-title" style="color: #F87171;">🛡️ SPARTAN RELAPSE PROTOCOL</div>
+                <button class="modal-close" onclick="closeModal('modal-reset-streak')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="stoic-quote-banner">
+                    "The impediment to action advances action. What stands in the way becomes the way. You are not starting from zero — you are starting from experience."
+                    <div style="text-align: right; margin-top: 4px; font-weight: 700; color: var(--spartan-gold);">— Marcus Aurelius</div>
+                </div>
+
+                <div class="diary-section-label" style="margin-top: 14px;">WHAT TRIGGERED THIS SLIP?</div>
+                <div class="trigger-select-grid" id="reset-trigger-selector">
+                    <button type="button" class="trigger-pill active" data-trigger="Late Night Screen / Bed Phone">📱 Late Night Screen</button>
+                    <button type="button" class="trigger-pill" data-trigger="Aimless Boredom / Idleness">⏳ Aimless Boredom</button>
+                    <button type="button" class="trigger-pill" data-trigger="High Stress / Exhaustion">⚡ High Stress / Fatigue</button>
+                    <button type="button" class="trigger-pill" data-trigger="Social Media Algorithm">🌐 Social Media Trigger</button>
+                    <button type="button" class="trigger-pill" data-trigger="Intentional Clean Restart">🔄 Clean Restart / Testing</button>
+                </div>
+
+                <div class="diary-section-label" style="margin-top: 14px;">LESSON FORGED (WHAT RULE WILL PREVENT THIS?):</div>
+                <input type="text" id="reset-reflection-input" class="diary-input" placeholder="e.g. Phone stays outside bedroom at 23:00..." />
+
+                <div style="margin-top: 14px; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="reset-autolog-diary" checked style="accent-color: #ef4444; width: 16px; height: 16px; cursor: pointer;" />
+                    <label for="reset-autolog-diary" style="font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                        Log this comeback reflection in my Warrior Diary
+                    </label>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                    <button id="btn-confirm-reset" class="btn btn-confirm-reset">
+                        ⚔️ CONFIRM RESET TO DAY 0 & RISE STRONGER
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('modal-reset-streak')" style="margin-bottom: 0;">
+                        Cancel / Hold The Line
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

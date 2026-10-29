@@ -11,6 +11,30 @@
 
 import { normalizeState, defaultState } from './model.js';
 import { deriveKey, seal, open, openWithPin, newSalt, isSealed } from './cipher.js';
+import { SEED_FINANCE_STATE } from './seedFinance.js';
+
+const TURSO_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io';
+const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA';
+
+function syncFinanceToTurso(state) {
+  try {
+    fetch(TURSO_URL + '/v2/pipeline', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + TURSO_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [
+          {
+            type: 'execute',
+            stmt: {
+              sql: "INSERT INTO settings (key, value) VALUES ('finance_backup_json', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+              args: [{ type: 'text', value: JSON.stringify(state) }]
+            }
+          }
+        ]
+      })
+    }).catch(() => {});
+  } catch {}
+}
 
 const KEY = 'finance-helper.state';
 const ENC = 'finance-helper.enc';
@@ -42,7 +66,8 @@ function fresh() {
 
 export function load(storage = globalThis.localStorage) {
   const head = readHead(storage);
-  if (head?.enc) {
+  const encBox = storage?.getItem(ENC);
+  if (head?.enc && encBox) {
     const s = fresh();
     Object.assign(s.meta, head.meta || {});
     if (head.theme) s.settings.theme = head.theme;
@@ -51,9 +76,18 @@ export function load(storage = globalThis.localStorage) {
   }
   try {
     const raw = storage?.getItem(KEY);
-    if (raw) return normalizeState(JSON.parse(raw));
-  } catch {
-    // Corrupt or blocked storage: start clean rather than crash.
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.tx) && parsed.tx.length > 0) {
+        return normalizeState(parsed);
+      }
+    }
+  } catch {}
+  if (typeof SEED_FINANCE_STATE !== 'undefined' && SEED_FINANCE_STATE) {
+    try {
+      storage?.setItem(KEY, JSON.stringify(SEED_FINANCE_STATE));
+      return normalizeState(JSON.parse(JSON.stringify(SEED_FINANCE_STATE)));
+    } catch {}
   }
   return fresh();
 }
@@ -74,7 +108,7 @@ export function save(state, storage = globalThis.localStorage) {
     const head = readHead(storage);
     if (!head?.enc) {
       if (isPlaceholder(state)) return false;
-      storage?.setItem(KEY, JSON.stringify(state));
+      storage?.setItem(KEY, JSON.stringify(state)); syncFinanceToTurso(state);
       return true;
     }
     storage.setItem(HEAD, headerOf(state, head.enc));

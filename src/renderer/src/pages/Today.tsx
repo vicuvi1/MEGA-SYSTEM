@@ -69,6 +69,15 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       />
 
       {/* Solo Leveling Physical Daily Quest Hologram Banner */}
+      <DailyGrandSlamCard
+        summary={summary}
+        discipline={discipline}
+        connections={connections}
+        body={body ?? null}
+        onGo={onGo}
+        onChange={onChange}
+      />
+
       <SoloDailyQuestBanner
         body={body ?? null}
         summary={summary}
@@ -740,6 +749,90 @@ function TodayTasks({ tasks, onTasks, onWallet, onGo }: { tasks: TasksState | nu
         </ul>
       )}
       {tasks.tasks.length > 0 && <p className="hint block-hint">{doneCount} of {tasks.tasks.length} done</p>}
+    </section>
+  )
+}
+
+
+function DailyGrandSlamCard({
+  summary,
+  discipline,
+  connections,
+  body,
+  onGo,
+  onChange
+}: {
+  summary: Summary
+  discipline: DisciplineState | null
+  connections: ConnectionsState | null
+  body: BodyState | null
+  onGo: (p: PageId) => void
+  onChange: (s?: Summary) => void
+}) {
+  const act = useAction()
+  const todayRules = summary.todayRules || []
+  const sleepDone = Boolean(todayRules.some((r) => r.startsWith('sleep.')) || connections?.waky?.today?.onTime)
+  const discDone = Boolean(discipline?.checkedInToday || todayRules.some((r) => r.startsWith('discipline.')))
+  const sportDone = Boolean(body?.workoutDoneToday || todayRules.some((r) => r.startsWith('body.')))
+  const moneyDone = Boolean(connections?.finance?.today?.logged || todayRules.some((r) => r.startsWith('money.')))
+
+  const pillars = [
+    { id: 'sleep', name: 'Sleep', icon: '🌙', done: sleepDone, page: 'sleep' as PageId },
+    { id: 'discipline', name: 'Discipline', icon: '🛡️', done: discDone, page: 'discipline' as PageId },
+    { id: 'sport', name: 'Sport', icon: '⚔️', done: sportDone, page: 'body' as PageId },
+    { id: 'money', name: 'Money', icon: '💰', done: moneyDone, page: 'money' as PageId }
+  ]
+
+  const count = pillars.filter((p) => p.done).length
+  const allDone = count === 4
+  const claimed = todayRules.includes('grand_slam.all_four')
+
+  const handleClaim = async () => {
+    const s = await act(() => life.wallet.award('grand_slam.all_four', 'Daily 4-Pillar Grand Slam (Sovereign Day)'))
+    if (s) {
+      soundSuccess()
+      onChange(s)
+    }
+  }
+
+  return (
+    <section className={`grand-slam-card ${claimed || allDone ? 'completed' : ''}`}>
+      <div className="grand-slam-header">
+        <div className="grand-slam-title-group">
+          <span className="grand-slam-crest">{claimed ? '👑' : allDone ? '🌟' : '🏛️'}</span>
+          <div className="grand-slam-title">
+            <span>4-Pillar Sovereign Day</span>
+            <span className={`grand-slam-badge ${claimed ? 'achieved' : allDone ? 'achieved' : 'pending'}`}>
+              {claimed ? 'CLAIMED (+50 🪙)' : `${count} / 4 CONQUERED`}
+            </span>
+          </div>
+        </div>
+
+        {allDone && !claimed && (
+          <button className="grand-slam-claim-btn" onClick={handleClaim}>
+            ⚡ CLAIM GRAND SLAM (+50 🪙 / +100 XP)
+          </button>
+        )}
+      </div>
+
+      <div className="grand-slam-pillars">
+        {pillars.map((p) => (
+          <div
+            key={p.id}
+            className={`grand-slam-pillar ${p.done ? 'done' : ''}`}
+            onClick={() => onGo(p.page)}
+            role="button"
+            tabIndex={0}
+            title={`Click to open ${p.name}`}
+          >
+            <span className="grand-slam-pillar-icon">{p.icon}</span>
+            <div className="grand-slam-pillar-info">
+              <span className="grand-slam-pillar-name">{p.name}</span>
+              <span className="grand-slam-pillar-status">{p.done ? '✓ Complete' : 'Pending tap'}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
