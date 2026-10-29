@@ -188,6 +188,12 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     toggle: () => call('hud:toggle'),
     show: () => call('hud:show')
   },
+  sync: {
+    config: () => call('sync:config'),
+    saveConfig: (c) => call('sync:saveConfig', c),
+    test: (url, secret) => call('sync:test', url, secret),
+    pull: () => call('sync:pull')
+  },
   onLocked: (cb) => {
     ipcRenderer.on('auth:locked', () => cb())
   },

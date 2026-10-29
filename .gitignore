@@ -7,3 +7,5 @@ release/
 *.lsb
 .env
 .DS_Store
+
+*.bin

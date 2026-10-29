@@ -1,0 +1,14 @@
+name = "life-system-sync"
+main = "worker.ts"
+compatibility_date = "2024-10-01"
+
+# KV Namespace for buffering 7 days of events
+# Run: npx wrangler kv:namespace create LIFE_SYNC_KV
+# Then paste your id below:
+[[kv_namespaces]]
+binding = "LIFE_SYNC_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+[vars]
+TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+SYNC_SECRET_TOKEN = "YOUR_CUSTOM_SECRET_KEY"

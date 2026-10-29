@@ -41,8 +41,19 @@ import type { SleepLog, SleepSummary } from '@core/sleep'
 import type { Expense, ExpenseCategory, DailyExpenseSummary } from '@core/money'
 import type { CalendarConfig, CalendarEvent } from '@core/calendar'
 import { DEFAULT_CALENDAR_CONFIG } from '@core/calendar'
+import type { SyncEvent, SyncResult } from '@core/sync'
+
+export interface SyncConfig {
+  syncUrl: string
+  syncSecret: string
+  autoSyncOnStartup: boolean
+  syncIntervalMinutes: number
+  lastSyncedAt: string | null
+  lastSyncedCount: number
+}
 
 export type { CalendarConfig, CalendarEvent }
+export type { SyncEvent, SyncResult }
 export { DEFAULT_CALENDAR_CONFIG }
 
 export type { TaskDecompositionItem, TaskDecompositionResult, SystemCoachContext }
@@ -523,6 +534,12 @@ export interface LifeApi {
     hide(): Promise<void>
     toggle(): Promise<void>
     show(): Promise<void>
+  }
+  sync: {
+    config(): Promise<SyncConfig>
+    saveConfig(cfg: Partial<SyncConfig>): Promise<SyncConfig>
+    test(url?: string, secret?: string): Promise<{ success: boolean; latencyMs: number; message: string; count?: number }>
+    pull(): Promise<SyncResult>
   }
 }
 

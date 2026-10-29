@@ -784,6 +784,37 @@ export function createMockApi(): Bridge {
       toggle: async () => {},
       show: async () => {}
     },
+    sync: {
+      config: async () => ({
+        syncUrl: 'https://life-system-sync.mock.workers.dev',
+        syncSecret: 'mock_secret_key',
+        autoSyncOnStartup: true,
+        syncIntervalMinutes: 15,
+        lastSyncedAt: new Date().toISOString(),
+        lastSyncedCount: 4
+      }),
+      saveConfig: async (cfg) => ({
+        syncUrl: cfg.syncUrl ?? 'https://life-system-sync.mock.workers.dev',
+        syncSecret: cfg.syncSecret ?? 'mock_secret_key',
+        autoSyncOnStartup: cfg.autoSyncOnStartup ?? true,
+        syncIntervalMinutes: cfg.syncIntervalMinutes ?? 15,
+        lastSyncedAt: new Date().toISOString(),
+        lastSyncedCount: 4
+      }),
+      test: async () => ({
+        success: true,
+        latencyMs: 42,
+        message: 'Connected to mock Cloudflare sync buffer (4 events queued)',
+        count: 4
+      }),
+      pull: async () => ({
+        eventsProcessed: 2,
+        restoredDays: ['2026-10-28', '2026-10-29'],
+        restoredStreak: 12,
+        previousStreak: 10,
+        errors: []
+      })
+    },
     onLocked: () => {},
     onUrge: () => {},
     onWalletChanged: () => {},

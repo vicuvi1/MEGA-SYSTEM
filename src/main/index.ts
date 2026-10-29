@@ -26,7 +26,8 @@ import { TelegramNotifier } from './telegram'
 import { TelegramBotHub } from './telegramHub'
 import { AIService } from './aiService'
 import { CalendarService } from './calendarService'
-import type { BotBridgeConfig, AIConfig, CalendarConfig } from '@shared/api'
+import { SyncService } from './syncService'
+import type { BotBridgeConfig, AIConfig, CalendarConfig, SyncConfig } from '@shared/api'
 import { Connections, defaultCandidates } from './connections'
 import { FINANCE_PARTITION, FINANCE_URL, setupFinance, type FinanceHost } from './apps/finance'
 import { HudManager } from './hud'
@@ -86,6 +87,7 @@ let telegram: TelegramNotifier
 let telegramHub: TelegramBotHub
 let aiService: AIService
 let calendarService: CalendarService
+let syncService: SyncService
 let connections: Connections
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -137,6 +139,15 @@ function open(): void {
       win?.webContents.send('tasks:changed')
       win?.webContents.send('body:changed')
     }
+  )
+  syncService = new SyncService(
+    db,
+    wallet,
+    discipline,
+    moneyService,
+    body,
+    tasks,
+    sleepService
   )
   const candidates = defaultCandidates(homedir(), DRIVE_ROOT)
   // The MAN copy inside Life System is checked first.
@@ -454,6 +465,12 @@ handle('calendar:clear', () => calendarService.clear())
 handle('hud:hide', () => hudManager.hide())
 handle('hud:toggle', () => hudManager.toggle())
 handle('hud:show', () => hudManager.show())
+
+// ---------- 24/7 Mobile Cloud Sync & Telegram Buffer ----------
+handle('sync:config', () => syncService.getConfig())
+handle('sync:saveConfig', (c: Partial<SyncConfig>) => syncService.saveConfig(c))
+handle('sync:test', (url?: string, secret?: string) => syncService.testConnection(url, secret))
+handle('sync:pull', () => syncService.pullAndApply())
 
 
 handle('connections:state', () => connections.state())
@@ -912,6 +929,7 @@ app.whenReady().then(() => {
     console.error('Finance Helper could not start', e)
   }
   createWindow()
+  if (win) syncService.startBackgroundSync(win)
   hudManager.create()
   createTray()
   if (!globalShortcut.register(PANIC_KEY, openUrgeCrusher)) console.warn(`could not register ${PANIC_KEY}`)

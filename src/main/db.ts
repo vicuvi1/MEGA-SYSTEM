@@ -272,6 +272,17 @@ const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_ledger_day_id ON ledger(day, id);
   CREATE INDEX IF NOT EXISTS idx_ledger_ts ON ledger(ts);
   CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
+  `,
+  /* 015 Mobile 24/7 sync buffer tracking */ `
+  CREATE TABLE IF NOT EXISTS applied_sync_events (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    day TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    applied_at TEXT NOT NULL,
+    payload_json TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_applied_sync_day ON applied_sync_events(day);
   `
 ]
 
