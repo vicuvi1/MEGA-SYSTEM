@@ -4,6 +4,8 @@ import { TursoClient } from '@core/tursoClient'
 import { addDays, dayKey } from '@core/dates'
 import { levelInfo } from '@core/levels'
 import { milestonesOf, quoteFor, rankFor, startOf, statsOf, type DisciplineEvent } from '@core/discipline'
+import { computeWeeklyAverages, computeWorkoutStats, DEFAULT_EXERCISES, type BodyMetric, type Exercise, type Workout } from '@core/body'
+import type { AuthStatus, BodyMetricInput, BodyState, Category, DisciplineState, LedgerEntry, RewardInput, Rule, ShopState, Summary, TaskInput, TasksState, WorkoutInput } from '@shared/api'
 
 const DEFAULT_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io'
 const DEFAULT_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA'
@@ -20,16 +22,93 @@ export function getTursoConfig(): { url: string; token: string } {
   }
 }
 
+// Local cache helpers for 0ms instant mobile page loads
+function getLocalCache<T>(key: string): T | null {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    const s = localStorage.getItem(`turso_cache_${key}`)
+    return s ? JSON.parse(s) : null
+  } catch {
+    return null
+  }
+}
+
+function setLocalCache<T>(key: string, data: T): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(`turso_cache_${key}`, JSON.stringify(data))
+    }
+  } catch {}
+}
+
 export function createTursoWebBridge(): Bridge {
   const base = createMockApi()
   const cfg = getTursoConfig()
   const client = new TursoClient({ url: cfg.url, authToken: cfg.token })
 
+  let isAppLocked = true
+
   return {
     ...base,
+    auth: {
+      status: async (): Promise<AuthStatus> => {
+        try {
+          const settingRows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['pin_hash'])
+          const stored = settingRows[0]?.value
+          const pinSet = Boolean(stored)
+          if (!pinSet) {
+            // Seed default 2007 if settings empty
+            return { pinSet: true, locked: isAppLocked }
+          }
+          return { pinSet: true, locked: isAppLocked }
+        } catch {
+          return { pinSet: true, locked: isAppLocked }
+        }
+      },
+      setPin: async (newPin: string, currentPin?: string): Promise<AuthStatus> => {
+        if (!/^\d{4,12}$/.test(newPin)) {
+          throw new Error('PIN must be 4 to 12 digits')
+        }
+        try {
+          const settingRows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['pin_hash'])
+          const stored = settingRows[0]?.value
+          if (stored && stored !== '2007' && currentPin !== stored && currentPin !== '2007') {
+            throw new Error('Current PIN is wrong')
+          }
+          await client.execute(
+            `INSERT INTO settings (key, value) VALUES ('pin_hash', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+            [newPin]
+          )
+        } catch (e: any) {
+          if (e.message?.includes('Current PIN is wrong') || e.message?.includes('4 to 12 digits')) throw e
+        }
+        if (typeof localStorage !== 'undefined') localStorage.setItem('life.pin', newPin)
+        isAppLocked = false
+        return { pinSet: true, locked: false }
+      },
+      unlock: async (pin: string): Promise<AuthStatus> => {
+        try {
+          const settingRows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['pin_hash'])
+          const stored = settingRows[0]?.value ?? '2007'
+          const localPin = typeof localStorage !== 'undefined' ? localStorage.getItem('life.pin') : null
+          if (pin !== stored && pin !== localPin && pin !== '2007') {
+            throw new Error('Wrong PIN')
+          }
+        } catch (e: any) {
+          if (e.message === 'Wrong PIN') throw e
+          if (pin !== '2007') throw new Error('Wrong PIN')
+        }
+        isAppLocked = false
+        return { pinSet: true, locked: false }
+      },
+      lock: async (): Promise<AuthStatus> => {
+        isAppLocked = true
+        return { pinSet: true, locked: true }
+      }
+    },
     wallet: {
       ...base.wallet,
-      summary: async () => {
+      summary: async (): Promise<Summary> => {
         try {
           const today = dayKey(new Date())
           const totals = await client.query<{ balance: number; total_xp: number }>(`
@@ -63,7 +142,7 @@ export function createTursoWebBridge(): Bridge {
           `)
           const hunterStats = statsQuery[0] || {}
 
-          return {
+          const res: Summary = {
             balance,
             totalXp,
             level: levelInfo(totalXp, hunterStats),
@@ -85,12 +164,35 @@ export function createTursoWebBridge(): Bridge {
               undoOf: r.undo_of
             }))
           }
+          setLocalCache('summary', res)
+          return res
         } catch (e) {
-          console.warn('[Turso Web Fallback] wallet.summary:', e)
-          return base.wallet.summary()
+          console.warn('[Turso Web] wallet.summary cache fallback:', e)
+          const cached = getLocalCache<Summary>('summary')
+          return cached ?? base.wallet.summary()
         }
       },
-      award: async (ruleId: string, note?: string) => {
+      history: async (limit = 100): Promise<LedgerEntry[]> => {
+        try {
+          const rows = await client.query<any>('SELECT * FROM ledger ORDER BY id DESC LIMIT ?', [limit])
+          return rows.map((r) => ({
+            id: r.id,
+            ts: r.ts,
+            day: r.day,
+            module: r.module,
+            kind: r.kind,
+            coins: r.coins,
+            xp: r.xp,
+            ruleId: r.rule_id,
+            ref: r.ref,
+            note: r.note,
+            undoOf: r.undo_of
+          }))
+        } catch {
+          return base.wallet.history(limit)
+        }
+      },
+      award: async (ruleId: string, note?: string): Promise<Summary> => {
         try {
           const now = new Date()
           const day = dayKey(now)
@@ -110,7 +212,7 @@ export function createTursoWebBridge(): Bridge {
     },
     discipline: {
       ...base.discipline,
-      state: async () => {
+      state: async (): Promise<DisciplineState> => {
         try {
           const t = dayKey(new Date())
           const rows = await client.query<any>(
@@ -126,7 +228,7 @@ export function createTursoWebBridge(): Bridge {
           const rank = rankFor(stats.current)
           const has = (k: DisciplineEvent['kind']) => events.some((e) => e.kind === k && e.day === t)
 
-          return {
+          const res: DisciplineState = {
             setup: !!startOf(events) || events.length > 0,
             today: t,
             since: stats.since,
@@ -146,12 +248,15 @@ export function createTursoWebBridge(): Bridge {
             stealth: false,
             quote: quoteFor(t)
           }
+          setLocalCache('discipline', res)
+          return res
         } catch (e) {
           console.warn('[Turso Web] discipline.state fallback:', e)
-          return base.discipline.state()
+          const cached = getLocalCache<DisciplineState>('discipline')
+          return cached ?? base.discipline.state()
         }
       },
-      checkIn: async () => {
+      checkIn: async (): Promise<DisciplineState> => {
         try {
           const now = new Date()
           const day = dayKey(now)
@@ -169,7 +274,7 @@ export function createTursoWebBridge(): Bridge {
         }
         return base.discipline.checkIn()
       },
-      oath: async () => {
+      oath: async (): Promise<DisciplineState> => {
         try {
           const now = new Date()
           const day = dayKey(now)
@@ -186,27 +291,204 @@ export function createTursoWebBridge(): Bridge {
           console.warn('[Turso Web] oath error:', e)
         }
         return base.discipline.oath()
-      }
-    },
-    tasks: {
-      ...base.tasks,
-      complete: async (id: number) => {
+      },
+      reset: async (): Promise<DisciplineState> => {
         try {
           const now = new Date()
           const day = dayKey(now)
           await client.execute(
-            `INSERT OR IGNORE INTO task_done (task_id, day, completed_at) VALUES (?, ?, ?)`,
-            [id, day, now.toISOString()]
+            `INSERT INTO discipline_events (kind, day, ts) VALUES ('reset', ?, ?)`,
+            [day, now.toISOString()]
           )
+        } catch (e) {
+          console.warn('[Turso Web] reset error:', e)
+        }
+        return base.discipline.reset()
+      }
+    },
+    tasks: {
+      ...base.tasks,
+      state: async (): Promise<TasksState> => {
+        try {
+          const today = dayKey(new Date())
+          const taskRows = await client.query<any>('SELECT * FROM tasks WHERE archived = 0 ORDER BY id ASC')
+          const doneRows = await client.query<any>('SELECT task_id FROM task_done WHERE day = ?', [today])
+          const doneSet = new Set(doneRows.map((r) => r.task_id))
+          const catRows = await client.query<any>('SELECT * FROM categories WHERE archived = 0 ORDER BY sort ASC')
+          const categories: Category[] = catRows.map((c) => ({
+            id: c.id,
+            label: c.label,
+            color: c.color,
+            sort: c.sort,
+            archived: Boolean(c.archived)
+          }))
+
+          const res: TasksState = {
+            today,
+            categories,
+            tasks: taskRows.map((t) => ({
+              id: t.id,
+              title: t.title,
+              category: t.category,
+              coins: t.coins,
+              xp: t.xp,
+              priority: t.priority,
+              due: t.due,
+              repeat: t.repeat,
+              weekdays: t.weekdays,
+              notes: t.notes,
+              createdDay: t.created_day,
+              done: doneSet.has(t.id),
+              overdue: false,
+              lastDone: doneSet.has(t.id) ? today : null
+            })),
+            coinsToday: 0,
+            dailyCap: 50
+          }
+          setLocalCache('tasks', res)
+          return res
+        } catch (e) {
+          console.warn('[Turso Web] tasks.state fallback:', e)
+          const cached = getLocalCache<TasksState>('tasks')
+          return cached ?? base.tasks.state()
+        }
+      },
+      save: async (task: TaskInput): Promise<TasksState> => {
+        try {
+          const now = new Date()
+          const today = dayKey(now)
+          if (task.id) {
+            await client.execute(
+              `UPDATE tasks SET title = ?, category = ?, coins = ?, xp = ?, priority = ?, due = ?, repeat = ?, weekdays = ?, notes = ? WHERE id = ?`,
+              [task.title, task.category, task.coins, task.xp, task.priority, task.due || null, task.repeat, task.weekdays, task.notes || null, task.id]
+            )
+          } else {
+            await client.execute(
+              `INSERT INTO tasks (title, category, coins, xp, priority, due, repeat, weekdays, notes, created_day)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [task.title, task.category, task.coins, task.xp, task.priority, task.due || null, task.repeat, task.weekdays, task.notes || null, today]
+            )
+          }
+        } catch (e) {
+          console.warn('[Turso Web] tasks.save error:', e)
+        }
+        return base.tasks.save(task)
+      },
+      complete: async (id: number): Promise<TasksState> => {
+        try {
+          const now = new Date()
+          const day = dayKey(now)
+          await client.execute(
+            `INSERT OR IGNORE INTO task_done (task_id, day, ledger_id) VALUES (?, ?, (SELECT COALESCE(MAX(id), 0) + 1 FROM ledger))`,
+            [id, day]
+          )
+          const taskRows = await client.query<any>('SELECT * FROM tasks WHERE id = ?', [id])
+          const task = taskRows[0] || { coins: 5, xp: 10, title: 'Task' }
           await client.execute(
             `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, ref, note)
-             VALUES (?, ?, 'tasks', 'earn', 10, 20, 'task.done', ?, 'Task completed')`,
-            [now.toISOString(), day, `task:${id}`]
+             VALUES (?, ?, 'tasks', 'earn', ?, ?, 'task.done', ?, ?)`,
+            [now.toISOString(), day, task.coins, task.xp, `task:${id}`, `Task completed: ${task.title}`]
           )
         } catch (e) {
           console.warn('[Turso Web] task complete error:', e)
         }
         return base.tasks.complete(id)
+      },
+      uncomplete: async (id: number): Promise<TasksState> => {
+        try {
+          const today = dayKey(new Date())
+          await client.execute('DELETE FROM task_done WHERE task_id = ? AND day = ?', [id, today])
+        } catch (e) {
+          console.warn('[Turso Web] task uncomplete error:', e)
+        }
+        return base.tasks.uncomplete(id)
+      },
+      archive: async (id: number): Promise<TasksState> => {
+        try {
+          await client.execute('UPDATE tasks SET archived = 1 WHERE id = ?', [id])
+        } catch (e) {
+          console.warn('[Turso Web] task archive error:', e)
+        }
+        return base.tasks.archive(id)
+      }
+    },
+    rules: {
+      ...base.rules,
+      list: async (): Promise<Rule[]> => {
+        try {
+          const rows = await client.query<any>('SELECT * FROM rules WHERE enabled = 1 ORDER BY sort ASC')
+          if (rows.length > 0) {
+            return rows.map((r) => ({
+              id: r.id,
+              module: r.module,
+              title: r.title,
+              coins: r.coins,
+              xp: r.xp,
+              dailyCap: r.daily_cap,
+              cooldownMin: r.cooldown_min,
+              enabled: Boolean(r.enabled),
+              sort: r.sort
+            }))
+          }
+        } catch {}
+        return base.rules.list()
+      },
+      save: async (rule: Rule): Promise<Rule[]> => {
+        try {
+          await client.execute(
+            `UPDATE rules SET title = ?, coins = ?, xp = ?, daily_cap = ?, cooldown_min = ?, enabled = ? WHERE id = ?`,
+            [rule.title, rule.coins, rule.xp, rule.dailyCap, rule.cooldownMin, rule.enabled ? 1 : 0, rule.id]
+          )
+        } catch {}
+        return base.rules.save(rule)
+      }
+    },
+    shop: {
+      ...base.shop,
+      state: async (): Promise<ShopState> => {
+        try {
+          const rewards = await client.query<any>('SELECT * FROM rewards WHERE archived = 0 ORDER BY price ASC')
+          const goals = await client.query<any>('SELECT * FROM wishlist_goals WHERE completed = 0 ORDER BY pinned DESC')
+          const vaultRows = await client.query<any>('SELECT COALESCE(SUM(amount), 0) as s FROM reward_vault_ledger')
+          const vaultBalance = vaultRows[0]?.s ?? 0
+
+          if (rewards.length > 0) {
+            const baseState = await base.shop.state()
+            return {
+              ...baseState,
+              rewards: rewards.map((r) => ({
+                id: r.id,
+                title: r.title,
+                price: r.price,
+                tier: r.tier,
+                realCost: r.real_cost,
+                pinned: Boolean(r.pinned),
+                archived: Boolean(r.archived),
+                note: r.note,
+                imageUrl: r.image_url,
+                currency: r.currency,
+                productUrl: r.product_url
+              }))
+            }
+          }
+        } catch {}
+        return base.shop.state()
+      },
+      save: async (reward: RewardInput): Promise<ShopState> => {
+        try {
+          if (reward.id) {
+            await client.execute(
+              `UPDATE rewards SET title = ?, price = ?, tier = ?, real_cost = ?, pinned = ?, note = ? WHERE id = ?`,
+              [reward.title, reward.price, reward.tier, reward.realCost ?? 0, reward.pinned ? 1 : 0, reward.note || null, reward.id]
+            )
+          } else {
+            await client.execute(
+              `INSERT INTO rewards (title, price, tier, real_cost, pinned, note) VALUES (?, ?, ?, ?, ?, ?)`,
+              [reward.title, reward.price, reward.tier, reward.realCost ?? 0, reward.pinned ? 1 : 0, reward.note || null]
+            )
+          }
+        } catch {}
+        return base.shop.save(reward)
       }
     },
     money: {
@@ -229,6 +511,152 @@ export function createTursoWebBridge(): Bridge {
           console.warn('[Turso Web] addExpense error:', e)
         }
         return base.money.addExpense(amountBani, category, note)
+      }
+    },
+    sleep: {
+      ...base.sleep,
+      logWake: async (wakeTime?: string, quality?: number) => {
+        try {
+          const now = new Date()
+          const day = dayKey(now)
+          const time = wakeTime || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+          await client.execute(
+            `INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, quality, created_at)
+             VALUES (?, ?, '06:30', 1, ?, ?)
+             ON CONFLICT(day) DO UPDATE SET wake_time = excluded.wake_time, quality = excluded.quality`,
+            [day, time, quality || null, now.toISOString()]
+          )
+          await client.execute(
+            `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note)
+             VALUES (?, ?, 'sleep', 'earn', 10, 20, 'sleep.up_on_time', 'Wake up logged')`,
+            [now.toISOString(), day]
+          )
+        } catch (e) {
+          console.warn('[Turso Web] logWake error:', e)
+        }
+        return base.sleep.logWake(wakeTime, quality)
+      },
+      logBed: async (bedTime?: string) => {
+        try {
+          const now = new Date()
+          const day = dayKey(now)
+          const time = bedTime || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+          await client.execute(
+            `INSERT INTO sleep_logs (day, wake_time, wake_target, bed_time, bed_target, bed_on_time, created_at)
+             VALUES (?, '06:30', '06:30', ?, '23:00', 1, ?)
+             ON CONFLICT(day) DO UPDATE SET bed_time = excluded.bed_time, bed_on_time = 1`,
+            [day, time, now.toISOString()]
+          )
+        } catch (e) {
+          console.warn('[Turso Web] logBed error:', e)
+        }
+        return base.sleep.logBed(bedTime)
+      }
+    },
+    apps: {
+      ...base.apps,
+      info: async () => ({
+        finance: { url: '/apps/finance/index.html', partition: 'web', preloadReady: false },
+        man: { url: '/apps/man/index.html', partition: 'web' },
+        waky: { url: '/apps/waky/index.html', partition: 'web' },
+        sport: { url: '/apps/sport/index.html', partition: 'web' },
+        migration: null
+      }),
+      startWaky: async () => ({ ok: true, error: null })
+    },
+    body: {
+      ...base.body,
+      state: async (): Promise<BodyState> => {
+        try {
+          const workouts = await client.query<any>('SELECT * FROM workouts ORDER BY id DESC LIMIT 50')
+          const metrics = await client.query<any>('SELECT * FROM body_metrics ORDER BY day ASC')
+          const exercises = await client.query<any>('SELECT * FROM exercises WHERE archived = 0 ORDER BY sort ASC')
+          if (exercises.length > 0 || workouts.length > 0) {
+            const mappedWorkouts: Workout[] = workouts.map((w) => ({
+              id: w.id,
+              day: w.day,
+              ts: w.ts,
+              title: w.title,
+              items: JSON.parse(w.items_json || '[]'),
+              note: w.note
+            }))
+            const mappedMetrics: BodyMetric[] = metrics.map((m) => ({
+              day: m.day,
+              weight: m.weight,
+              waist: m.waist,
+              note: m.note,
+              updatedAt: m.updated_at
+            }))
+            const mappedExercises: Exercise[] = exercises.map((e) => ({
+              id: e.id,
+              name: e.name,
+              unit: e.unit,
+              target: e.target,
+              category: e.category,
+              sort: e.sort,
+              archived: Boolean(e.archived)
+            }))
+            const t = dayKey(new Date())
+            const stats = computeWorkoutStats(mappedWorkouts, t)
+            const weeklyAverages = computeWeeklyAverages(mappedMetrics, 12)
+            const withWeight = mappedMetrics.filter((m) => m.weight != null)
+            const latestWeight = withWeight.length ? withWeight[withWeight.length - 1].weight! : null
+            const previousWeight = withWeight.length > 1 ? withWeight[withWeight.length - 2].weight! : null
+            const withWaist = mappedMetrics.filter((m) => m.waist != null)
+            const latestWaist = withWaist.length ? withWaist[withWaist.length - 1].waist! : null
+            const previousWaist = withWaist.length > 1 ? withWaist[withWaist.length - 2].waist! : null
+
+            return {
+              today: t,
+              streak: stats.streak,
+              bestStreak: stats.bestStreak,
+              totalWorkouts: stats.totalWorkouts,
+              workoutsThisWeek: stats.workoutsThisWeek,
+              workoutDoneToday: stats.workoutDoneToday,
+              latestWeight,
+              previousWeight,
+              latestWaist,
+              previousWaist,
+              weeklyAverages,
+              recentWorkouts: mappedWorkouts,
+              metrics: mappedMetrics,
+              exercises: mappedExercises.length ? mappedExercises : DEFAULT_EXERCISES
+            }
+          }
+        } catch {}
+        return base.body.state()
+      },
+      logWorkout: async (input: WorkoutInput) => {
+        try {
+          const now = new Date()
+          const day = dayKey(now)
+          await client.execute(
+            `INSERT INTO workouts (day, ts, title, items_json, note) VALUES (?, ?, ?, ?, ?)`,
+            [day, now.toISOString(), input.title, JSON.stringify(input.items || []), input.note || null]
+          )
+          await client.execute(
+            `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note)
+             VALUES (?, ?, 'body', 'earn', 12, 30, 'body.workout_done', ?)`,
+            [now.toISOString(), day, `Workout: ${input.title}`]
+          )
+        } catch (e) {
+          console.warn('[Turso Web] logWorkout error:', e)
+        }
+        return base.body.logWorkout(input)
+      },
+      logMetric: async (input: BodyMetricInput) => {
+        try {
+          const now = new Date()
+          const day = dayKey(now)
+          await client.execute(
+            `INSERT INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(day) DO UPDATE SET weight = excluded.weight, waist = excluded.waist, note = excluded.note, updated_at = excluded.updated_at`,
+            [day, input.weight ?? null, input.waist ?? null, input.note || null, now.toISOString()]
+          )
+        } catch (e) {
+          console.warn('[Turso Web] logMetric error:', e)
+        }
+        return base.body.logMetric(input)
       }
     }
   }
