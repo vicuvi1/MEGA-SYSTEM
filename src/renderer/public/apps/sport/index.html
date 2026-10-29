@@ -2150,11 +2150,11 @@
         const isDone = done >= target;
         const isOver = done > target;
         const fillPct = Math.min(100, actualPct);
-        const unit = (!ex.unit || ex.unit === '1') ? 'reps' : ex.unit;
+        const unit = (!ex.unit || String(ex.unit).trim() === '1' || String(ex.unit).trim() === '') ? 'reps' : String(ex.unit).trim();
 
         let pctBadgeText = `${actualPct}%`;
         if (isOver) {
-          pctBadgeText = `🔥 ${actualPct}% DONE`;
+          pctBadgeText = `🔥 ${actualPct}% (+${actualPct - 100}% OVER)`;
         } else if (isDone) {
           pctBadgeText = `✓ 100% DONE`;
         }

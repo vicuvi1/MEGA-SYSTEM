@@ -78,7 +78,9 @@ export function load(storage = globalThis.localStorage) {
     const raw = storage?.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.tx) && parsed.tx.length > 0) {
+      const seedTxCount = (typeof SEED_FINANCE_STATE !== 'undefined' && Array.isArray(SEED_FINANCE_STATE?.tx)) ? SEED_FINANCE_STATE.tx.length : 0;
+      const storedTxCount = Array.isArray(parsed?.tx) ? parsed.tx.length : 0;
+      if (storedTxCount >= seedTxCount && storedTxCount > 0) {
         return normalizeState(parsed);
       }
     }
@@ -86,6 +88,7 @@ export function load(storage = globalThis.localStorage) {
   if (typeof SEED_FINANCE_STATE !== 'undefined' && SEED_FINANCE_STATE) {
     try {
       storage?.setItem(KEY, JSON.stringify(SEED_FINANCE_STATE));
+      syncFinanceToTurso(SEED_FINANCE_STATE);
       return normalizeState(JSON.parse(JSON.stringify(SEED_FINANCE_STATE)));
     } catch {}
   }

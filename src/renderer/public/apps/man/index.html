@@ -2427,6 +2427,50 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
         </div>
     </div>
 
+    <!-- MODAL: SPARTAN RELAPSE & COMEBACK PROTOCOL -->
+    <div id="modal-reset-streak" class="modal-overlay">
+        <div class="modal-card" style="border-color: #EF4444; box-shadow: 0 10px 40px rgba(239, 68, 68, 0.35);">
+            <div class="modal-header" style="border-bottom-color: rgba(239, 68, 68, 0.3);">
+                <div class="modal-title" style="color: #F87171;">🛡️ SPARTAN RELAPSE PROTOCOL</div>
+                <button class="modal-close" onclick="closeModal('modal-reset-streak')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="stoic-quote-banner">
+                    "The impediment to action advances action. What stands in the way becomes the way. You are not starting from zero — you are starting from experience."
+                    <div style="text-align: right; margin-top: 4px; font-weight: 700; color: var(--spartan-gold);">— Marcus Aurelius</div>
+                </div>
+
+                <div class="diary-section-label" style="margin-top: 14px;">WHAT TRIGGERED THIS SLIP?</div>
+                <div class="trigger-select-grid" id="reset-trigger-selector">
+                    <button type="button" class="trigger-pill active" data-trigger="Late Night Screen / Bed Phone" onclick="selectResetTrigger(this)">📱 Late Night Screen</button>
+                    <button type="button" class="trigger-pill" data-trigger="Aimless Boredom / Idleness" onclick="selectResetTrigger(this)">⏳ Aimless Boredom</button>
+                    <button type="button" class="trigger-pill" data-trigger="High Stress / Exhaustion" onclick="selectResetTrigger(this)">⚡ High Stress / Fatigue</button>
+                    <button type="button" class="trigger-pill" data-trigger="Social Media Algorithm" onclick="selectResetTrigger(this)">🌐 Social Media Trigger</button>
+                    <button type="button" class="trigger-pill" data-trigger="Intentional Clean Restart" onclick="selectResetTrigger(this)">🔄 Clean Restart / Testing</button>
+                </div>
+
+                <div class="diary-section-label" style="margin-top: 14px;">LESSON FORGED (WHAT RULE WILL PREVENT THIS?):</div>
+                <input type="text" id="reset-reflection-input" class="diary-input" placeholder="e.g. Phone stays outside bedroom at 23:00..." />
+
+                <div style="margin-top: 14px; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="reset-autolog-diary" checked style="accent-color: #ef4444; width: 16px; height: 16px; cursor: pointer;" />
+                    <label for="reset-autolog-diary" style="font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                        Log this comeback reflection in my Warrior Diary
+                    </label>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                    <button id="btn-confirm-reset" class="btn btn-confirm-reset" onclick="confirmResetProtocol()">
+                        ⚔️ CONFIRM RESET TO DAY 0 & RISE STRONGER
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('modal-reset-streak')" style="margin-bottom: 0;">
+                        Cancel / Hold The Line
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast">Citadel Updated</div>
 
     <!-- SCRIPT ENGINE -->
@@ -3187,10 +3231,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                     };
                 }
 
-                // ONE-TIME COMPENSATORY +1 EXCEPTION FOR PERSISTENCE BUG
                 if (!appData.persistenceCompensationApplied) {
-                    appData.streakDays = Math.max(3, (appData.streakDays || 1) + 1);
-                    appData.longestStreak = Math.max(appData.longestStreak || 1, appData.streakDays);
                     appData.persistenceCompensationApplied = true;
                     saveData();
                 }
@@ -4814,14 +4855,73 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             });
         }
 
-        // Reset Modal Handlers
+        // Reset Modal Handlers & Fail-Safe Global Protocol
         let selectedResetTrigger = 'Late Night Screen / Bed Phone';
-        document.querySelectorAll('#reset-trigger-selector .trigger-pill').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('#reset-trigger-selector .trigger-pill').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                selectedResetTrigger = btn.getAttribute('data-trigger');
-            });
+
+        window.selectResetTrigger = function(btn) {
+            if (!btn) return;
+            document.querySelectorAll('#reset-trigger-selector .trigger-pill').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedResetTrigger = btn.getAttribute('data-trigger') || btn.innerText.trim();
+        };
+
+        window.confirmResetProtocol = function() {
+            try {
+                const lessonInput = document.getElementById('reset-reflection-input');
+                const lesson = lessonInput ? lessonInput.value.trim() : '';
+                const autologEl = document.getElementById('reset-autolog-diary');
+                const autolog = autologEl ? autologEl.checked : true;
+
+                appData.streakDays = 0;
+                appData.lastCheckin = "";
+                appData.persistenceCompensationApplied = true;
+
+                if (autolog) {
+                    const d = new Date();
+                    const entry = {
+                        id: 'diary_' + Date.now(),
+                        date: getTodayString(),
+                        time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        createdAt: d.toISOString(),
+                        tag: '🔥 Iron Recovery',
+                        urgeLevel: 5,
+                        energy: 'Refocused',
+                        text: `Relapse Recovery Protocol Initiated (Day reset to 0).\nTrigger: ${selectedResetTrigger || 'Late Night Screen / Bed Phone'}\nForged Rule: ${lesson || 'Rising immediately with iron discipline and clean habits.'}`
+                    };
+                    if (!Array.isArray(appData.diary)) appData.diary = [];
+                    appData.diary.unshift(entry);
+                }
+
+                saveData();
+                try { if (window.sound && typeof sound.playWarDrum === 'function') sound.playWarDrum(); } catch (e) {}
+                try { if (typeof triggerScreenShake === 'function') triggerScreenShake(); } catch (e) {}
+                refreshUI();
+                updateControlsTab();
+                try { if (typeof renderDiaryFeed === 'function') renderDiaryFeed(); } catch (e) {}
+                closeModal('modal-reset-streak');
+                showToast("🛡️ Streak reset to Day 0. Your greatest comeback begins now, warrior!");
+
+                try {
+                    console.log("LIFE_SYSTEM_BRIDGE:MAN_RESET:" + JSON.stringify({ today: getTodayString() }));
+                    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_RESET', payload: { today: getTodayString() } }, '*');
+                } catch (e) {}
+            } catch (err) {
+                console.error("confirmResetProtocol error:", err);
+                appData.streakDays = 0;
+                appData.lastCheckin = "";
+                saveData();
+                refreshUI();
+                updateControlsTab();
+                closeModal('modal-reset-streak');
+                showToast("🛡️ Streak reset to Day 0.");
+            }
+        };
+
+        // Event delegation fallback for reset button
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.closest('#btn-confirm-reset')) {
+                confirmResetProtocol();
+            }
         });
 
         const btnOpenResetModal = document.getElementById('btn-open-reset-modal');
@@ -4835,48 +4935,6 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
         if (btnQuickAdjust) {
             btnQuickAdjust.addEventListener('click', () => {
                 switchTab('tab-controls');
-            });
-        }
-
-        const btnConfirmReset = document.getElementById('btn-confirm-reset');
-        if (btnConfirmReset) {
-            btnConfirmReset.addEventListener('click', () => {
-                const lessonInput = document.getElementById('reset-reflection-input');
-                const lesson = lessonInput ? lessonInput.value.trim() : '';
-                const autolog = document.getElementById('reset-autolog-diary')?.checked ?? true;
-
-                appData.streakDays = 0;
-                appData.lastCheckin = "";
-
-                if (autolog) {
-                    const d = new Date();
-                    const entry = {
-                        id: 'diary_' + Date.now(),
-                        date: getTodayString(),
-                        time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                        createdAt: d.toISOString(),
-                        tag: '🔥 Iron Recovery',
-                        urgeLevel: 5,
-                        energy: 'Refocused',
-                        text: `Relapse Recovery Protocol Initiated (Day reset to 0).\nTrigger: ${selectedResetTrigger}\nForged Rule: ${lesson || 'Rising immediately with iron discipline and clean habits.'}`
-                    };
-                    if (!Array.isArray(appData.diary)) appData.diary = [];
-                    appData.diary.unshift(entry);
-                }
-
-                saveData();
-                sound.playWarDrum();
-                triggerScreenShake();
-                refreshUI();
-                updateControlsTab();
-                renderDiaryFeed();
-                closeModal('modal-reset-streak');
-                showToast("🛡️ Streak reset to Day 0. Your greatest comeback begins now, warrior!");
-
-                try {
-                    console.log("LIFE_SYSTEM_BRIDGE:MAN_RESET:" + JSON.stringify({ today: getTodayString() }));
-                    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_RESET', payload: { today: getTodayString() } }, '*');
-                } catch (e) {}
             });
         }
 
@@ -4901,54 +4959,39 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             if (dateDisplayEl) dateDisplayEl.innerText = 'Today: ' + dateStr;
         } catch (e) {}
 
-        // Initial sync from Turso Cloud in background
+        // Turso Cloud Sync for Spartan Citadel State
+        const TURSO_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io';
+        const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA';
+
+        async function syncFromTursoCloud() {
+            try {
+                const res = await fetch(TURSO_URL + '/v2/pipeline', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + TURSO_TOKEN, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        requests: [{ type: 'execute', stmt: { sql: "SELECT value FROM settings WHERE key = 'man_spartan_data' LIMIT 1" } }]
+                    })
+                });
+                const data = await res.json();
+                const val = data?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value;
+                if (val) {
+                    const cloud = JSON.parse(val);
+                    if (cloud && typeof cloud.streakDays === 'number') {
+                        // Merge diary entries
+                        if (Array.isArray(cloud.diary) && cloud.diary.length > (appData.diary || []).length) {
+                            appData.diary = cloud.diary;
+                        }
+                        refreshUI();
+                        updateControlsTab();
+                    }
+                }
+            } catch (e) {
+                console.log("[Spartan Turso Sync] Offline or skipped:", e);
+            }
+        }
+
         syncFromTursoCloud();
 
     </script>
-
-    <!-- MODAL: SPARTAN RELAPSE & COMEBACK PROTOCOL -->
-    <div id="modal-reset-streak" class="modal-overlay">
-        <div class="modal-card" style="border-color: #EF4444; box-shadow: 0 10px 40px rgba(239, 68, 68, 0.35);">
-            <div class="modal-header" style="border-bottom-color: rgba(239, 68, 68, 0.3);">
-                <div class="modal-title" style="color: #F87171;">🛡️ SPARTAN RELAPSE PROTOCOL</div>
-                <button class="modal-close" onclick="closeModal('modal-reset-streak')">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="stoic-quote-banner">
-                    "The impediment to action advances action. What stands in the way becomes the way. You are not starting from zero — you are starting from experience."
-                    <div style="text-align: right; margin-top: 4px; font-weight: 700; color: var(--spartan-gold);">— Marcus Aurelius</div>
-                </div>
-
-                <div class="diary-section-label" style="margin-top: 14px;">WHAT TRIGGERED THIS SLIP?</div>
-                <div class="trigger-select-grid" id="reset-trigger-selector">
-                    <button type="button" class="trigger-pill active" data-trigger="Late Night Screen / Bed Phone">📱 Late Night Screen</button>
-                    <button type="button" class="trigger-pill" data-trigger="Aimless Boredom / Idleness">⏳ Aimless Boredom</button>
-                    <button type="button" class="trigger-pill" data-trigger="High Stress / Exhaustion">⚡ High Stress / Fatigue</button>
-                    <button type="button" class="trigger-pill" data-trigger="Social Media Algorithm">🌐 Social Media Trigger</button>
-                    <button type="button" class="trigger-pill" data-trigger="Intentional Clean Restart">🔄 Clean Restart / Testing</button>
-                </div>
-
-                <div class="diary-section-label" style="margin-top: 14px;">LESSON FORGED (WHAT RULE WILL PREVENT THIS?):</div>
-                <input type="text" id="reset-reflection-input" class="diary-input" placeholder="e.g. Phone stays outside bedroom at 23:00..." />
-
-                <div style="margin-top: 14px; display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="reset-autolog-diary" checked style="accent-color: #ef4444; width: 16px; height: 16px; cursor: pointer;" />
-                    <label for="reset-autolog-diary" style="font-size: 12px; color: var(--text-secondary); cursor: pointer;">
-                        Log this comeback reflection in my Warrior Diary
-                    </label>
-                </div>
-
-                <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
-                    <button id="btn-confirm-reset" class="btn btn-confirm-reset">
-                        ⚔️ CONFIRM RESET TO DAY 0 & RISE STRONGER
-                    </button>
-                    <button class="btn btn-secondary" onclick="closeModal('modal-reset-streak')" style="margin-bottom: 0;">
-                        Cancel / Hold The Line
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
 </body>
 </html>

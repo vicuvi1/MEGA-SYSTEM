@@ -58,6 +58,37 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
           console.error('[EmbedHost Finance] award error:', err)
         }
       }
+
+      // MAN Spartan Discipline Protocol
+      if (data.type === 'MAN_RESET' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'MAN_RESET')) {
+        try {
+          await life.discipline.reset()
+          window.dispatchEvent(new CustomEvent('life-discipline-changed'))
+          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          console.error('[EmbedHost MAN] reset error:', err)
+        }
+      }
+
+      if (data.type === 'MAN_CHECKIN' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'MAN_CHECKIN')) {
+        try {
+          await life.discipline.checkIn()
+          window.dispatchEvent(new CustomEvent('life-discipline-changed'))
+          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          console.error('[EmbedHost MAN] checkin error:', err)
+        }
+      }
+
+      if (data.type === 'MAN_DIARY' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'MAN_DIARY')) {
+        try {
+          await life.wallet.award('discipline.checkin', 'Warrior Diary Reflection Logged')
+          window.dispatchEvent(new CustomEvent('life-discipline-changed'))
+          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          console.error('[EmbedHost MAN] diary award error:', err)
+        }
+      }
     }
 
     window.addEventListener('message', onWindowMessage)
