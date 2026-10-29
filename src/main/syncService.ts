@@ -143,7 +143,7 @@ export class SyncService {
       return {
         success: true,
         latencyMs,
-        message: `Connected successfully! 7-Day Cloud Buffer holds ${data.count ?? 0} events.`,
+        message: `Connected successfully! 60-Day Cloud Buffer holds ${data.count ?? 0} events.`,
         count: data.count ?? 0
       }
     } catch (err: any) {

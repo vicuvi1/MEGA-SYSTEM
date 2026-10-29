@@ -3,7 +3,7 @@
  *
  * Runs 24/7 on Cloudflare's edge network for $0/month.
  * 1. Listens to Telegram Bot Webhook (when you message your bot on phone).
- * 2. Buffers all check-ins, tasks, workouts, and expenses in KV with a 7-day TTL.
+ * 2. Buffers all check-ins, tasks, workouts, and expenses in KV with a 60-Day (2 Months) TTL.
  * 3. Provides secure /api/sync and /api/ack endpoints for the PC Desktop App.
  */
 
@@ -286,7 +286,7 @@ export default {
           const count = list.keys.length
           const statusText =
             `📊 <b>Life System Sync Buffer Status</b>\n` +
-            `• Events in 7-day queue: <b>${count}</b>\n` +
+            `• Events in 60-Day (2 Months) queue: <b>${count}</b>\n` +
             `• Server Time: <code>${new Date().toISOString().replace('T', ' ').slice(0, 19)}</code>\n` +
             `• Status: 🟢 <i>Online & buffering</i>\n\n` +
             `When you launch Life System on PC, these will auto-sync instantly!`
@@ -302,9 +302,9 @@ export default {
             ...parsed.event
           }
 
-          // Store in Cloudflare KV with 7-Day TTL (604,800 seconds)
+          // Store in Cloudflare KV with 60-Day (2 Months) TTL (604,800 seconds)
           await env.LIFE_SYNC_KV.put(eventId, JSON.stringify(syncEvent), {
-            expirationTtl: 604800
+            expirationTtl: 5184000 /* 60 days (2 months) */
           })
 
           await sendTelegramReply(env.TELEGRAM_BOT_TOKEN, chatId, parsed.reply)
