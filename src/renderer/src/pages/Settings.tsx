@@ -518,22 +518,49 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
     try {
       const text = await file.text()
       const data = JSON.parse(text)
-      if (!data.tables && !data.version && !data.settings) {
-        throw new Error('Invalid backup file structure')
-      }
-      if (!window.confirm(`Restore data from "${file.name}"? This will update your cloud database and local state.`)) return
+      let importedType = ''
 
-      if (data.financeState) {
-        localStorage.setItem('finance-helper.state', JSON.stringify(data.financeState))
+      // 1. Finance Helper standalone backup (e.g. finance-helper-2026-10-29.json)
+      if (data.app === 'finance-helper' || (Array.isArray(data.tx) && data.tx.length > 0)) {
+        const count = Array.isArray(data.tx) ? data.tx.length : 0
+        if (!window.confirm(`Import Finance Helper backup from "${file.name}" (${count} transactions)?`)) return
+        localStorage.setItem('finance-helper.state', JSON.stringify(data))
+        importedType = `Finance Helper (${count} transactions)`
       }
-      if (data.wakyState) {
-        localStorage.setItem('waky_web_data_v2', JSON.stringify(data.wakyState))
+      // 2. Waky sleep companion standalone backup (e.g. waky.json)
+      else if (data.days && data.settings) {
+        const daysCount = Object.keys(data.days).length
+        if (!window.confirm(`Import Waky sleep backup from "${file.name}" (${daysCount} days logged)?`)) return
+        localStorage.setItem('waky_web_data_v2', JSON.stringify(data))
+        importedType = `Waky Sleep Companion (${daysCount} days logged)`
       }
-      setBackupStatusMsg(`🎉 Successfully restored backup from "${file.name}"! Reloading...`)
+      // 3. MAN Spartan discipline backup
+      else if (data.streakDays != null) {
+        const streak = Number(data.streakDays) || 1
+        if (!window.confirm(`Import MAN Spartan streak from "${file.name}" (Streak: Day ${streak})?`)) return
+        const now = new Date().toISOString().slice(0, 10)
+        await life.discipline.setStart(now)
+        importedType = `MAN Spartan Discipline (Day ${streak})`
+      }
+      // 4. Full Life System Unified Backup
+      else if (data.tables || data.version || data.financeState || data.wakyState) {
+        if (!window.confirm(`Restore full Life System backup from "${file.name}"? This will update your cloud database and local state.`)) return
+        if (data.financeState) {
+          localStorage.setItem('finance-helper.state', JSON.stringify(data.financeState))
+        }
+        if (data.wakyState) {
+          localStorage.setItem('waky_web_data_v2', JSON.stringify(data.wakyState))
+        }
+        importedType = 'Full Life System Unified State'
+      } else {
+        throw new Error('Unrecognized backup format. Please select a valid Life System, Finance Helper, Waky, or MAN export file.')
+      }
+
+      setBackupStatusMsg(`🎉 Successfully imported ${importedType} from "${file.name}"! Reloading in 1s...`)
       soundSuccess()
       setTimeout(() => {
         window.location.reload()
-      }, 1500)
+      }, 1200)
     } catch (err: any) {
       setBackupStatusMsg('Failed to restore backup: ' + (err as Error).message)
       soundWarning()

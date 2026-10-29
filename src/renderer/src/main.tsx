@@ -27,3 +27,9 @@ createRoot(document.getElementById('root')!).render(
     {isHud ? <HudBar /> : <App />}
   </StrictMode>
 )
+
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
