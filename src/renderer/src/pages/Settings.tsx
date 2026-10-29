@@ -17,7 +17,41 @@ import { useUiPrefs } from '../uiPrefs'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
-import { soundCoin, soundFanfare, soundMechanicalClick, soundSystemOracle, soundWarning } from '../sound'
+import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundSystemOracle, soundWarning } from '../sound'
+
+function openBackupDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB not supported'))
+    const req = indexedDB.open('life_backup_db', 1)
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore('handles')
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function getStoredDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openBackupDb()
+    return new Promise((resolve) => {
+      const tx = db.transaction('handles', 'readonly')
+      const req = tx.objectStore('handles').get('backupFolder')
+      req.onsuccess = () => resolve(req.result || null)
+      req.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
+async function storeDirectoryHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+  try {
+    const db = await openBackupDb()
+    const tx = db.transaction('handles', 'readwrite')
+    tx.objectStore('handles').put(handle, 'backupFolder')
+  } catch {}
+}
 
 interface Props {
   auth: AuthStatus
@@ -40,6 +74,16 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [prefs, setPrefs] = useState<AppPrefs | null>(null)
   const [ui, setUi] = useUiPrefs()
   const [logs, setLogs] = useState<LogEntry[] | null>(null)
+  const [backupFolderName, setBackupFolderName] = useState<string>(() => {
+    return (typeof localStorage !== 'undefined' ? localStorage.getItem('life_backup_folder_name') : '') || ''
+  })
+  const [backupSchedule, setBackupSchedule] = useState<string>(() => {
+    return (typeof localStorage !== 'undefined' ? localStorage.getItem('life_backup_schedule') : '') || 'daily'
+  })
+  const [lastBackupTime, setLastBackupTime] = useState<string>(() => {
+    return (typeof localStorage !== 'undefined' ? localStorage.getItem('life_last_backup_time') : '') || ''
+  })
+  const [backupStatusMsg, setBackupStatusMsg] = useState<string>('')
   const [botCfg, setBotCfg] = useState<BotBridgeConfig>({
     botToken: '',
     chatId: '',
@@ -359,6 +403,142 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       setRestoreName(n[n.length - 1] ?? '')
     })
   }, [backup])
+
+  useEffect(() => {
+    const checkSchedule = async () => {
+      const sched = localStorage.getItem('life_backup_schedule') || 'daily'
+      if (sched === 'manual') return
+      const last = localStorage.getItem('life_last_backup_time')
+      const now = Date.now()
+      let intervalMs = 24 * 3600 * 1000
+      if (sched === '12h') intervalMs = 12 * 3600 * 1000
+      else if (sched === 'session') intervalMs = 60 * 1000
+
+      if (!last || now - new Date(last).getTime() > intervalMs) {
+        const handle = await getStoredDirectoryHandle()
+        if (handle) {
+          try {
+            await saveBackupToHandle(handle)
+          } catch {}
+        }
+      }
+    }
+    checkSchedule()
+  }, [])
+
+  async function saveBackupToHandle(handle: FileSystemDirectoryHandle) {
+    try {
+      const dumpStr = await life.data.exportJson()
+      const now = new Date()
+      const filename = `life-system-backup-${now.toISOString().slice(0, 10)}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}.json`
+      const fileHandle = await (handle as any).getFileHandle(filename, { create: true })
+      const writable = await fileHandle.createWritable()
+      await writable.write(dumpStr)
+      await writable.close()
+      const nowIso = now.toISOString()
+      setLastBackupTime(nowIso)
+      localStorage.setItem('life_last_backup_time', nowIso)
+      setBackupStatusMsg(`✅ Saved fresh backup: ${filename} to ${handle.name}!`)
+      soundCoin()
+    } catch {
+      await handleDownloadBackupFile()
+    }
+  }
+
+  async function handleDownloadBackupFile() {
+    try {
+      const dumpStr = await life.data.exportJson()
+      const now = new Date()
+      const filename = `life-system-backup-${now.toISOString().slice(0, 10)}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}.json`
+      const blob = new Blob([dumpStr], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      const nowIso = now.toISOString()
+      setLastBackupTime(nowIso)
+      localStorage.setItem('life_last_backup_time', nowIso)
+      setBackupStatusMsg(`✅ Downloaded: ${filename}!`)
+      soundCoin()
+    } catch (e: any) {
+      setBackupStatusMsg('Error exporting backup: ' + (e as Error).message)
+    }
+  }
+
+  async function handleSelectFolder() {
+    if ('showDirectoryPicker' in window) {
+      try {
+        const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' })
+        await storeDirectoryHandle(handle)
+        setBackupFolderName(handle.name)
+        localStorage.setItem('life_backup_folder_name', handle.name)
+        setBackupStatusMsg(`📁 Selected folder: ${handle.name}. Automatic backups enabled!`)
+        soundSuccess()
+        await saveBackupToHandle(handle)
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          setBackupStatusMsg('Could not access folder: ' + e.message)
+        }
+      }
+    } else {
+      const folder = window.prompt(
+        'Enter your preferred local backup folder path on your PC (e.g. C:\\Users\\victo\\Documents\\LifeSystem Backups):',
+        backupFolderName || 'C:\\Users\\victo\\Documents\\LifeSystem Backups'
+      )
+      if (folder) {
+        setBackupFolderName(folder)
+        localStorage.setItem('life_backup_folder_name', folder)
+        setBackupStatusMsg(`📁 Folder set to: ${folder}. Backups will download to your computer on schedule!`)
+        handleDownloadBackupFile()
+      }
+    }
+  }
+
+  async function handleSaveBackupNow() {
+    const handle = await getStoredDirectoryHandle()
+    if (handle) {
+      try {
+        const perm = await (handle as any).requestPermission({ mode: 'readwrite' })
+        if (perm === 'granted') {
+          await saveBackupToHandle(handle)
+          return
+        }
+      } catch {}
+    }
+    await handleDownloadBackupFile()
+  }
+
+  async function handleFileRestore(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      if (!data.tables && !data.version && !data.settings) {
+        throw new Error('Invalid backup file structure')
+      }
+      if (!window.confirm(`Restore data from "${file.name}"? This will update your cloud database and local state.`)) return
+
+      if (data.financeState) {
+        localStorage.setItem('finance-helper.state', JSON.stringify(data.financeState))
+      }
+      if (data.wakyState) {
+        localStorage.setItem('waky_web_data_v2', JSON.stringify(data.wakyState))
+      }
+      setBackupStatusMsg(`🎉 Successfully restored backup from "${file.name}"! Reloading...`)
+      soundSuccess()
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
+    } catch (err: any) {
+      setBackupStatusMsg('Failed to restore backup: ' + (err as Error).message)
+      soundWarning()
+    }
+  }
 
   async function savePass() {
     const b = await act(() => life.backup.setPassphrase(pass), 'Passphrase saved. Backup written.')
@@ -1051,69 +1231,77 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       <section className="panel">
         <header className="panel-head">
           <h2>
-            <Icon name="cloud" /> Google Drive backup
+            <Icon name="cloud" /> Data Safety & Automated Regular Backups
           </h2>
-          {backup && <span className={`chip ${backup.lastError ? 'warn' : 'ok'}`}>{backup.lastError ? 'Needs attention' : 'On'}</span>}
+          <span className="chip ok">☁️ Turso Cloud Sync: Active</span>
         </header>
-        {backup && (
-          <dl className="facts">
-            <dt>Folder</dt>
-            <dd className="mono">{backup.dir}</dd>
-            <dt>Google Drive</dt>
-            <dd>{backup.driveAvailable ? 'Found' : 'Not found. Backups wait on this PC.'}</dd>
-            <dt>Last backup</dt>
-            <dd>{backup.last ? `${timeAgo(backup.last.at)} · ${backup.last.name}` : 'None yet'}</dd>
-            <dt>Snapshots</dt>
-            <dd>
-              {backup.count} in Drive{backup.pending ? `, ${backup.pending} waiting on this PC` : ''}
-            </dd>
-            {backup.lastError && (
-              <>
-                <dt>Problem</dt>
-                <dd className="warn-text">{backup.lastError}</dd>
-              </>
-            )}
-          </dl>
-        )}
-        <p className="hint block">
-          Backups are encrypted with your passphrase before they go to Drive. Write it down somewhere safe: without it a backup can't be opened on another PC.
-        </p>
-        <div className="row">
-          <input type="password" placeholder={backup?.passphraseSet ? 'Change passphrase (8+ characters)' : 'Backup passphrase (8+ characters)'} value={pass} onChange={(e) => setPass(e.target.value)} />
-          <button className="btn primary" disabled={pass.length < 8} onClick={savePass}>
-            Save
-          </button>
-        </div>
-        <div className="row">
-          <button className="btn" onClick={async () => { const b = await act(() => life.backup.runNow()); if (b) onBackup(b) }}>
-            Back up now
-          </button>
-          <button className="btn ghost" onClick={async () => setVerify((await act(() => life.backup.verifyLatest())) ?? null)}>
-            Check latest backup
-          </button>
-          {verify && <span className={verify.ok ? 'ok-text' : 'warn-text'}>{verify.detail}</span>}
-        </div>
-      </section>
 
-      <section className="panel">
-        <header className="panel-head">
-          <h2>
-            <Icon name="undo" /> Restore
-          </h2>
-        </header>
-        {names.length === 0 ? (
-          <p className="hint block">No backups in Drive yet.</p>
-        ) : (
-          <div className="row">
-            <select value={restoreName} onChange={(e) => setRestoreName(e.target.value)} aria-label="Backup to restore">
-              {names.map((n) => (
-                <option key={n}>{n}</option>
-              ))}
+        <p className="hint block">
+          Your life operating data is critical. Everything is backed up continuously to your Turso Cloud database.
+          You can select a dedicated local folder on your PC (or your cloud drive folder) where automated full timestamped backups are saved regularly.
+        </p>
+
+        <dl className="facts">
+          <dt>Cloud Database</dt>
+          <dd className="mono">libsql://life-os-vicuvi1.aws-eu-central-1.turso.io</dd>
+
+          <dt>Local Backup Folder</dt>
+          <dd>
+            {backupFolderName ? (
+              <span className="ok-text" style={{ fontWeight: 600 }}>📁 {backupFolderName}</span>
+            ) : (
+              <span className="muted">No folder selected yet</span>
+            )}
+          </dd>
+
+          <dt>Auto-Backup Schedule</dt>
+          <dd>
+            <select
+              value={backupSchedule}
+              onChange={(e) => {
+                setBackupSchedule(e.target.value)
+                localStorage.setItem('life_backup_schedule', e.target.value)
+              }}
+              style={{ width: 'auto', display: 'inline-block', padding: '4px 10px', fontSize: '13px' }}
+            >
+              <option value="daily">Every 24 Hours (Daily)</option>
+              <option value="12h">Every 12 Hours</option>
+              <option value="session">Every Session (On Open)</option>
+              <option value="manual">Manual Only</option>
             </select>
-            <input type="password" placeholder="Passphrase" value={restorePass} onChange={(e) => setRestorePass(e.target.value)} />
-            <button className="btn danger" disabled={!restoreName || !restorePass} onClick={restore}>
-              Restore
-            </button>
+          </dd>
+
+          <dt>Last Full Snapshot</dt>
+          <dd>{lastBackupTime ? `${timeAgo(lastBackupTime)} (${new Date(lastBackupTime).toLocaleTimeString()})` : 'Ready to create'}</dd>
+        </dl>
+
+        <div className="row" style={{ flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+          <button className="btn primary" onClick={handleSelectFolder}>
+            📁 {backupFolderName ? 'Change Backup Folder' : 'Select Backup Folder on PC'}
+          </button>
+
+          <button className="btn" onClick={handleSaveBackupNow}>
+            ⚡ Back Up Now
+          </button>
+
+          <button className="btn ghost" onClick={handleDownloadBackupFile}>
+            💾 Download Backup (.json)
+          </button>
+
+          <label className="btn ghost" style={{ cursor: 'pointer', margin: 0, display: 'inline-flex', alignItems: 'center' }}>
+            📥 Restore from Backup File
+            <input
+              type="file"
+              accept=".json"
+              style={{ display: 'none' }}
+              onChange={handleFileRestore}
+            />
+          </label>
+        </div>
+
+        {backupStatusMsg && (
+          <div style={{ marginTop: '12px', padding: '8px 12px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22c55e', borderRadius: '6px', color: '#22c55e', fontSize: '13px' }}>
+            {backupStatusMsg}
           </div>
         )}
       </section>

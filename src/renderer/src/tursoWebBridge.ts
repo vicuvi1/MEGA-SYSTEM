@@ -681,6 +681,51 @@ export function createTursoWebBridge(): Bridge {
       }),
       startWaky: async () => ({ ok: true, error: null })
     },
+    data: {
+      ...base.data,
+      exportJson: async (): Promise<string> => {
+        try {
+          const tables = [
+            'ledger',
+            'tasks',
+            'task_done',
+            'categories',
+            'rules',
+            'rewards',
+            'reward_vault_ledger',
+            'discipline_events',
+            'discipline_oaths',
+            'sleep_logs',
+            'workouts',
+            'body_metrics',
+            'exercises',
+            'wishlist_goals',
+            'settings'
+          ]
+          const dump: Record<string, any> = {
+            version: 2,
+            exportedAt: new Date().toISOString(),
+            source: 'Turso Cloud & Life System Web',
+            tables: {}
+          }
+          for (const tbl of tables) {
+            try {
+              const rows = await client.query(`SELECT * FROM ${tbl}`)
+              dump.tables[tbl] = rows
+            } catch {}
+          }
+          if (typeof localStorage !== 'undefined') {
+            try {
+              dump.financeState = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+              dump.wakyState = JSON.parse(localStorage.getItem('waky_web_data_v2') || 'null')
+            } catch {}
+          }
+          return JSON.stringify(dump, null, 2)
+        } catch {
+          return base.data.exportJson()
+        }
+      }
+    },
     body: {
       ...base.body,
       state: async (): Promise<BodyState> => {
