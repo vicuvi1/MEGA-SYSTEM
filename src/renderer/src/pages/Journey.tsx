@@ -281,21 +281,49 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
             </button>
           </header>
           <div className="week-bars">
-            {week.days.map((d) => (
-              <div key={d.day} className="day-col">
-                <span className="bar">
-                  <i
-                    style={{
-                      height: `${Math.min(100, (d.coins / Math.max(1, week.best.coins)) * 100)}%`
-                    }}
-                  />
-                </span>
-                <span className="day-label">
-                  {new Date(`${d.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}
-                </span>
-                <span className="day-val">{d.coins}</span>
-              </div>
-            ))}
+            {week.days.map((d) => {
+              const dayEntries = rows.filter((e) => e.day === d.day)
+              const sleep = dayEntries.some((e) => e.module === 'sleep' || e.ruleId?.startsWith('sleep.'))
+              const disc = dayEntries.some((e) => e.module === 'discipline' || e.ruleId?.startsWith('discipline.'))
+              const sport = dayEntries.some((e) => e.module === 'body' || e.ruleId?.startsWith('body.'))
+              const money = dayEntries.some((e) => e.module === 'money' || e.ruleId?.startsWith('money.'))
+              const sovereign = (sleep && disc && sport && money) || dayEntries.some((e) => e.ruleId === 'grand_slam.all_four')
+
+              return (
+                <div key={d.day} className={`day-col ${sovereign ? 'sovereign-day-col' : ''}`}>
+                  <span className="bar">
+                    <i
+                      style={{
+                        height: `${Math.min(100, (d.coins / Math.max(1, week.best.coins)) * 100)}%`,
+                        background: sovereign ? 'linear-gradient(180deg, #ffd700, #ff9800)' : undefined
+                      }}
+                    />
+                  </span>
+                  <span className="day-label">
+                    {new Date(`${d.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}
+                  </span>
+                  <span className="day-val">{d.coins}</span>
+
+                  <div className="day-pillar-dots" title={`Sleep: ${sleep ? '✓' : '–'}, Disc: ${disc ? '✓' : '–'}, Sport: ${sport ? '✓' : '–'}, Money: ${money ? '✓' : '–'}`}>
+                    <span className={`p-dot ${sleep ? 'on' : ''}`} style={{ color: sleep ? '#6ee7d8' : 'rgba(255,255,255,0.1)' }}>🌙</span>
+                    <span className={`p-dot ${disc ? 'on' : ''}`} style={{ color: disc ? '#c8f135' : 'rgba(255,255,255,0.1)' }}>🛡️</span>
+                    <span className={`p-dot ${sport ? 'on' : ''}`} style={{ color: sport ? '#00f2fe' : 'rgba(255,255,255,0.1)' }}>⚔️</span>
+                    <span className={`p-dot ${money ? 'on' : ''}`} style={{ color: money ? '#ffd700' : 'rgba(255,255,255,0.1)' }}>💰</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+            <span style={{ color: '#ffd700', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>👑</span>
+              <span>4-Pillar Sovereign Days: {week.days.filter((d) => {
+                const de = rows.filter((e) => e.day === d.day)
+                return (de.some(e => e.module === 'sleep') && de.some(e => e.module === 'discipline') && de.some(e => e.module === 'body') && de.some(e => e.module === 'money')) || de.some(e => e.ruleId === 'grand_slam.all_four')
+              }).length} / 7</span>
+            </span>
+            <span className="muted">All 4 pillars conquered</span>
           </div>
         </section>
 

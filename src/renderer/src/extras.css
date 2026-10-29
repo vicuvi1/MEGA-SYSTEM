@@ -163,3 +163,19 @@
 .rank-step.current { border-color: rgba(200, 241, 53, 0.5); box-shadow: 0 0 18px rgba(200, 241, 53, 0.15); }
 .rank-step.current b { color: var(--lime); }
 .rank-step small { color: var(--muted); font-size: 11.5px; }
+
+.day-pillar-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 4px;
+}
+.p-dot {
+  font-size: 8.5px;
+  line-height: 1;
+  transition: opacity 0.15s;
+}
+.sovereign-day-col {
+  filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.35));
+}

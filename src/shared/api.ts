@@ -472,6 +472,9 @@ export interface LifeApi {
   data: {
     exportJson(): Promise<string>
     exportCsv(kind: 'workouts' | 'expenses'): Promise<string>
+    cloudSnapshots?(): Promise<{ day: string; exportedAt: string; sizeBytes: number }[]>
+    saveDailySnapshot?(): Promise<boolean>
+    restoreCloudSnapshot?(day: string): Promise<boolean>
   }
     economy: {
     summary(): Promise<EconomySummary>

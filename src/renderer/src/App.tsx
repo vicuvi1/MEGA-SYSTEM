@@ -32,6 +32,7 @@ import { buildCommands, Palette, type Command } from './Palette'
 import { Notifications, type Alert } from './Notifications'
 import { Sidebar } from './Sidebar'
 import { MobileBottomBar } from './MobileBottomBar'
+import { PwaInstallBanner } from './PwaInstallBanner'
 import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
 import { tierUnlocked } from '@core/shop'
@@ -233,6 +234,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   useEffect(() => {
     refresh()
+    life.data.saveDailySnapshot?.().catch(() => {})
   }, [refresh])
 
   // A connected app paid something in the background.
@@ -631,6 +633,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </div>
           )}
         </header>
+
+        <PwaInstallBanner />
 
         <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
 

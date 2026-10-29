@@ -276,7 +276,10 @@ export function createMockApi(): Bridge {
     },
     data: {
       exportJson: async () => JSON.stringify({ demo: true }, null, 2),
-      exportCsv: async () => 'Date,Amount\n2026-10-27,50.00'
+      exportCsv: async () => 'Date,Amount\n2026-10-27,50.00',
+      cloudSnapshots: async () => [],
+      saveDailySnapshot: async () => true,
+      restoreCloudSnapshot: async () => true
     },
         economy: {
       summary: async () => ({

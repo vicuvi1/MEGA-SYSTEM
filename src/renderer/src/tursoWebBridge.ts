@@ -736,6 +736,85 @@ export function createTursoWebBridge(): Bridge {
         } catch {
           return base.data.exportJson()
         }
+      },
+      cloudSnapshots: async () => {
+        try {
+          await client.execute('CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)')
+          const rows = await client.query<any>('SELECT day, exported_at, size_bytes FROM cloud_snapshots ORDER BY day DESC LIMIT 30')
+          return rows.map((r) => ({ day: r.day, exportedAt: r.exported_at, sizeBytes: r.size_bytes }))
+        } catch {
+          return []
+        }
+      },
+      saveDailySnapshot: async () => {
+        try {
+          await client.execute('CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)')
+          const tables = [
+            'ledger', 'tasks', 'task_done', 'categories', 'rules', 'rewards', 'reward_vault_ledger',
+            'discipline_events', 'discipline_oaths', 'sleep_logs', 'workouts', 'body_metrics', 'exercises', 'wishlist_goals', 'settings'
+          ]
+          const dump: Record<string, any> = {
+            version: 2,
+            exportedAt: new Date().toISOString(),
+            source: 'Turso Cloud 30-Day Vault',
+            tables: {}
+          }
+          for (const tbl of tables) {
+            try {
+              const rows = await client.query(`SELECT * FROM ${tbl}`)
+              dump.tables[tbl] = rows
+            } catch {}
+          }
+          if (typeof localStorage !== 'undefined') {
+            try {
+              dump.financeState = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+              dump.wakyState = JSON.parse(localStorage.getItem('waky_web_data_v2') || 'null')
+            } catch {}
+          }
+          const dumpStr = JSON.stringify(dump)
+          const now = new Date()
+          const day = dayKey(now)
+          const bytes = new Blob([dumpStr]).size
+          await client.execute(
+            `INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?)
+             ON CONFLICT(day) DO UPDATE SET exported_at = excluded.exported_at, size_bytes = excluded.size_bytes, data = excluded.data`,
+            [day, now.toISOString(), bytes, dumpStr]
+          )
+          await client.execute("DELETE FROM cloud_snapshots WHERE day < date('now', '-30 days')")
+          return true
+        } catch {
+          return false
+        }
+      },
+      restoreCloudSnapshot: async (day: string) => {
+        try {
+          const rows = await client.query<any>('SELECT data FROM cloud_snapshots WHERE day = ?', [day])
+          if (!rows || !rows.length || !rows[0].data) return false
+          const parsed = JSON.parse(rows[0].data)
+          if (parsed.financeState && typeof localStorage !== 'undefined') {
+            localStorage.setItem('finance-helper.state', JSON.stringify(parsed.financeState))
+          }
+          if (parsed.wakyState && typeof localStorage !== 'undefined') {
+            localStorage.setItem('waky_web_data_v2', JSON.stringify(parsed.wakyState))
+          }
+          if (parsed.tables && typeof parsed.tables === 'object') {
+            for (const [tbl, tRows] of Object.entries(parsed.tables)) {
+              if (Array.isArray(tRows) && tRows.length > 0) {
+                try {
+                  await client.execute(`DELETE FROM ${tbl}`)
+                  for (const r of tRows) {
+                    const keys = Object.keys(r)
+                    const placeholders = keys.map(() => '?').join(', ')
+                    await client.execute(`INSERT INTO ${tbl} (${keys.join(', ')}) VALUES (${placeholders})`, Object.values(r))
+                  }
+                } catch {}
+              }
+            }
+          }
+          return true
+        } catch {
+          return false
+        }
       }
     },
     body: {

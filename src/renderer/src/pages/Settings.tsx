@@ -80,6 +80,13 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [backupSchedule, setBackupSchedule] = useState<string>(() => {
     return (typeof localStorage !== 'undefined' ? localStorage.getItem('life_backup_schedule') : '') || 'daily'
   })
+  const [cloudSnapshots, setCloudSnapshots] = useState<{ day: string; exportedAt: string; sizeBytes: number }[]>([])
+
+  useEffect(() => {
+    life.data.cloudSnapshots?.().then((snaps) => {
+      if (snaps) setCloudSnapshots(snaps)
+    }).catch(() => {})
+  }, [])
   const [lastBackupTime, setLastBackupTime] = useState<string>(() => {
     return (typeof localStorage !== 'undefined' ? localStorage.getItem('life_last_backup_time') : '') || ''
   })
@@ -1329,6 +1336,36 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         {backupStatusMsg && (
           <div style={{ marginTop: '12px', padding: '8px 12px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22c55e', borderRadius: '6px', color: '#22c55e', fontSize: '13px' }}>
             {backupStatusMsg}
+          </div>
+        )}
+
+        {cloudSnapshots.length > 0 && (
+          <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>
+            <h3 style={{ fontSize: '13px', margin: '0 0 8px', color: '#c8f135', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>☁️</span> 30-Day Automated Cloud Snapshot Vault
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+              {cloudSnapshots.map((snap) => (
+                <div key={snap.day} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px', fontSize: '12px' }}>
+                  <span><b>{snap.day}</b> <span className="muted">({Math.round(snap.sizeBytes / 1024)} KB · {timeAgo(snap.exportedAt)})</span></span>
+                  <button
+                    className="btn small ghost"
+                    style={{ fontSize: '11px', padding: '3px 8px' }}
+                    onClick={async () => {
+                      if (!window.confirm(`Restore entire system state to ${snap.day}? A full snapshot is restored across all 4 apps.`)) return
+                      const ok = await life.data.restoreCloudSnapshot?.(snap.day)
+                      if (ok) {
+                        setBackupStatusMsg(`🎉 Successfully restored cloud snapshot for ${snap.day}! Reloading...`)
+                        soundSuccess()
+                        setTimeout(() => window.location.reload(), 1200)
+                      }
+                    }}
+                  >
+                    Restore This Day
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
