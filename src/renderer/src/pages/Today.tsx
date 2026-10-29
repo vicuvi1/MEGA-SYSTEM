@@ -152,42 +152,64 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
 function Greeting({ summary, shop, tasks, schedule }: { summary: Summary; shop: ShopState | null; tasks: TasksState | null; schedule: ScheduleState | null }) {
   const [ui] = useUiPrefs()
   const h = new Date().getHours()
-  const hello = h < 5 ? 'Still up' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+  const hello = h < 5 ? 'Night Watch' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Evening Command'
   const blocksLeft = schedule && schedule.day === schedule.today ? schedule.blocks.filter((b) => b.status === 'pending' || b.status === 'running').length : 0
   const tasksLeft = tasks?.tasks.filter((t) => !t.done).length ?? 0
   const goal = shop?.rewards.find((r) => r.pinned)
-  const bits: string[] = []
-  if (blocksLeft) bits.push(`${blocksLeft} block${blocksLeft > 1 ? 's' : ''} left`)
-  if (tasksLeft) bits.push(`${tasksLeft} task${tasksLeft > 1 ? 's' : ''} open`)
-  if (goal) bits.push(goal.price > summary.balance ? `${goal.price - summary.balance} coins to ${goal.title.toLowerCase()}` : `${goal.title} is ready to redeem`)
+  const ANTI_LAZINESS_QUOTES = [
+    '⚡ ARISE · The system grants zero rewards to the hesitant. Strike now.',
+    '⚔️ DISCIPLINE PROTOCOL ACTIVE · Every rep, focus block, and clean hour fuels S-Rank power.',
+    '🛡️ ZERO DOPAMINE SLIPS · Sloth is the only dungeon boss you must execute today.',
+    '👑 MONARCH AWAKENING · The weak make excuses; the strong conquer the slate.',
+    '🔥 CONQUER THE SLATE · One focused action right now destroys hours of procrastination.',
+    '💎 IRON STANDARD · What you do today echoes into your stats forever.'
+  ]
+  const quote = ANTI_LAZINESS_QUOTES[new Date().getDate() % ANTI_LAZINESS_QUOTES.length]
+  const pct = goal ? Math.min(100, Math.round((summary.balance / goal.price) * 100)) : 0
+
   return (
-    <header className="greeting">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <h2>
-          {hello}
-          {ui.name ? `, ${ui.name}` : ''}
-        </h2>
+    <header className="greeting-cockpit">
+      <div className="greeting-top">
+        <div className="greeting-title-wrap">
+          <span className="greeting-pulse-beacon" />
+          <h2>
+            {hello}
+            {ui.name ? `, ${ui.name}` : ''}
+          </h2>
+          <span className="greeting-status-tag">SYSTEM ACTIVE · S-RANK</span>
+        </div>
         <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '3px 10px',
-            borderRadius: 6,
-            fontSize: 11,
-            fontFamily: 'var(--mono)',
-            fontWeight: 700,
-            letterSpacing: '0.12em',
-            color: '#c8f135',
-            background: 'rgba(200, 241, 53, 0.08)',
-            border: '1px solid rgba(200, 241, 53, 0.25)'
-          }}
+          className="greeting-life-badge"
           title="LIFE · Every real-life action fuels real human growth"
         >
           <span>🌱</span> LIFE · REAL GROWTH
         </span>
       </div>
-      <p>{bits.length ? bits.join(' · ') : 'A clean slate. Pick one thing and conquer your day.'}</p>
+
+      <div className="greeting-quote-row">
+        <span className="greeting-quote-text">{quote}</span>
+      </div>
+
+      <div className="greeting-telemetry-row">
+        <div className="telemetry-pill">
+          <span className="telemetry-dot cyan" />
+          <span><b>{blocksLeft}</b> Block{blocksLeft === 1 ? '' : 's'} Left</span>
+        </div>
+        <div className="telemetry-pill">
+          <span className="telemetry-dot lime" />
+          <span><b>{tasksLeft}</b> Open Task{tasksLeft === 1 ? '' : 's'}</span>
+        </div>
+        {goal && (
+          <div className="telemetry-pill" title={goal.price - summary.balance > 0 ? `${goal.price - summary.balance} coins to go` : 'Ready to redeem!'}>
+            <span className="telemetry-dot gold" />
+            <span>🎯 <b>{goal.title}</b> ({pct}%)</span>
+          </div>
+        )}
+        <div className="telemetry-pill">
+          <span className="telemetry-dot purple" />
+          <span>🔥 <b>+{summary.todayCoins}</b> 🪙 Harvested</span>
+        </div>
+      </div>
     </header>
   )
 }

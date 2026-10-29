@@ -577,14 +577,14 @@
 }
 
 /* ==========================================================================
-   SLEEK 4-CARD METRIC STRIP (TODAY DASHBOARD)
+   SLEEK 5-CARD METRIC STRIP (TODAY DASHBOARD)
    ========================================================================== */
 .stats-strip-4,
 .stats-strip-5 {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 @media (max-width: 1400px) {
@@ -613,11 +613,11 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 14px 16px;
-  background: linear-gradient(135deg, rgba(20, 24, 34, 0.95), rgba(15, 18, 26, 0.95));
-  border: 1px solid var(--line);
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(14, 19, 30, 0.9), rgba(9, 12, 20, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   min-width: 0;
   text-align: left;
 }
@@ -628,13 +628,13 @@
 
 .metric-strip-card:hover {
   transform: translateY(-1.5px);
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 15px color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 15px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .metric-strip-card.hero-card {
   --accent: var(--lime);
-  background: radial-gradient(120% 140% at 0% 0%, rgba(200, 241, 53, 0.12), transparent 60%), linear-gradient(180deg, rgba(20, 24, 34, 0.95), rgba(15, 18, 26, 0.95));
+  background: radial-gradient(120% 140% at 0% 0%, rgba(200, 241, 53, 0.12), transparent 60%), linear-gradient(180deg, rgba(14, 19, 30, 0.92), rgba(9, 12, 20, 0.96));
   border-color: rgba(200, 241, 53, 0.35);
 }
 
@@ -642,19 +642,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 
 .metric-strip-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .metric-strip-head svg {
@@ -663,7 +663,7 @@
 
 .metric-strip-chevron {
   color: var(--faint);
-  font-size: 14px;
+  font-size: 13px;
   transition: transform 0.15s, color 0.15s;
 }
 
@@ -673,7 +673,7 @@
 }
 
 .metric-strip-value {
-  font: 800 22px/1.2 var(--display);
+  font: 800 20px/1.15 var(--display);
   color: #f8fafc;
   margin: 2px 0;
   white-space: nowrap;
@@ -682,7 +682,7 @@
 }
 
 .metric-strip-sub {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -690,18 +690,18 @@
 }
 
 .metric-strip-progress {
-  margin-top: 6px;
+  margin-top: 4px;
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--muted);
 }
 
 .metric-strip-progress-bar {
   flex: 1;
   height: 4px;
-  background: #232938;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -711,14 +711,15 @@
   height: 100%;
   border-radius: 999px;
   background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
 }
 
 /* ==========================================================================
    UNIFIED DAILY QUEST COMMAND HUB (SOLO LEVELING HUD)
    ========================================================================== */
 .unified-quest-hub {
-  margin-bottom: 20px;
-  padding: 18px 22px;
+  margin-bottom: 12px;
+  padding: 12px 16px;
 }
 
 .quest-hub-head {
@@ -726,53 +727,53 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .quest-hub-title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .quest-hub-icon-shield {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   background: rgba(0, 210, 255, 0.15);
   border: 1.5px solid #00d2ff;
   color: #00d2ff;
   display: grid;
   place-items: center;
-  font-size: 18px;
-  box-shadow: 0 0 14px rgba(0, 210, 255, 0.3);
+  font-size: 15px;
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.35);
   flex-shrink: 0;
 }
 
 .quest-hub-title {
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: #00d2ff;
   margin: 0;
   text-transform: uppercase;
 }
 
 .quest-hub-sub {
-  font-size: 12px;
+  font-size: 11.5px;
   color: #94a3b8;
-  margin-top: 2px;
+  margin-top: 1px;
   display: block;
 }
 
 .quest-hub-overall-bar {
-  height: 5px;
+  height: 4px;
   background: rgba(15, 23, 42, 0.8);
   border-radius: 999px;
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   border: 1px solid rgba(0, 210, 255, 0.2);
 }
 
@@ -788,8 +789,20 @@
 /* Grid of Directives */
 .quest-hub-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 1000px) {
+  .quest-hub-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .quest-hub-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .quest-directive-card {
@@ -797,35 +810,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  background: rgba(8, 15, 30, 0.7);
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(10, 16, 28, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  transition: all 0.2s ease;
+  border-radius: 8px;
+  transition: all 0.18s ease;
 }
 
 .quest-directive-card:hover {
-  border-color: color-mix(in srgb, var(--c) 40%, rgba(255, 255, 255, 0.1));
-  background: rgba(12, 22, 42, 0.85);
+  border-color: color-mix(in srgb, var(--c) 45%, rgba(255, 255, 255, 0.12));
+  background: rgba(14, 22, 38, 0.85);
+  transform: translateY(-1px);
 }
 
 .quest-directive-card.done {
-  border-color: rgba(74, 222, 128, 0.3);
-  background: rgba(74, 222, 128, 0.05);
+  border-color: rgba(74, 222, 128, 0.35);
+  background: rgba(74, 222, 128, 0.06);
 }
 
 .quest-directive-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .quest-directive-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   background: color-mix(in srgb, var(--c) 15%, transparent);
   color: var(--c);
   display: grid;
@@ -845,7 +859,7 @@
 }
 
 .quest-directive-info b {
-  font-size: 12.5px;
+  font-size: 12px;
   color: #f8fafc;
   white-space: nowrap;
   overflow: hidden;
@@ -853,11 +867,11 @@
 }
 
 .quest-directive-info small {
-  font-size: 10.5px;
+  font-size: 10px;
   color: #94a3b8;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .quest-directive-reward {
@@ -867,8 +881,8 @@
 }
 
 .quest-directive-btn {
-  font-size: 11px !important;
-  padding: 4px 10px !important;
+  font-size: 10.5px !important;
+  padding: 4px 9px !important;
   border-radius: 6px !important;
   white-space: nowrap;
   flex-shrink: 0;
@@ -878,11 +892,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #4ade80;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 3px 7px;
+  border-radius: 5px;
   background: rgba(74, 222, 128, 0.15);
   border: 1px solid rgba(74, 222, 128, 0.3);
   flex-shrink: 0;

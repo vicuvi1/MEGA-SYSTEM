@@ -774,13 +774,13 @@
 }
 
 /* =========================================================================
-   HIGH-STAKES DUNGEON RAID CONTRACT CARDS
+   HIGH-STAKES DUNGEON RAID CONTRACT CARDS (STREAMLINED & HIGH-DOPAMINE)
    ========================================================================= */
 .dungeon-raids-section {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-top: 20px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .raids-header {
@@ -792,13 +792,13 @@
 .raids-tag-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 2px;
 }
 
 .raids-beacon {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #ef4444;
   box-shadow: 0 0 8px #ef4444;
@@ -807,7 +807,7 @@
 
 .raids-tag {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   color: #ef4444;
   letter-spacing: 0.08em;
@@ -815,14 +815,14 @@
 
 .raids-title {
   font-family: var(--display);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
   color: #fff;
-  margin: 0 0 2px 0;
+  margin: 0;
 }
 
 .raids-sub {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   margin: 0;
 }
@@ -830,7 +830,7 @@
 .raids-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 8px;
 }
 
 @media (max-width: 900px) {
@@ -840,22 +840,27 @@
 }
 
 .raid-contract-card {
-  background: linear-gradient(145deg, rgba(20, 24, 38, 0.95), rgba(12, 16, 26, 0.98));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-  padding: 18px 20px;
+  background: linear-gradient(145deg, rgba(14, 18, 30, 0.9), rgba(9, 12, 20, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 14px;
+  gap: 8px;
   position: relative;
   overflow: hidden;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.raid-contract-card:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 
 .raid-contract-card.c { border-color: rgba(56, 189, 248, 0.35); }
 .raid-contract-card.b { border-color: rgba(168, 85, 247, 0.35); }
-.raid-contract-card.s { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 0 20px rgba(239, 68, 68, 0.15); }
+.raid-contract-card.s { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 0 16px rgba(239, 68, 68, 0.15); }
 
 .raid-card-top {
   display: flex;
@@ -865,9 +870,9 @@
 
 .raid-rank-pill {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 4px;
   letter-spacing: 0.06em;
 }
@@ -877,7 +882,7 @@
 .raid-rank-pill.s { background: rgba(239, 68, 68, 0.25); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
 
 .raid-status-chip {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--muted);
 }
@@ -885,52 +890,52 @@
 .raid-card-main {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .raid-gate-name {
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   color: #fff;
   margin: 0;
 }
 
 .raid-boss-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .raid-objective {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
-  line-height: 1.4;
-  margin: 4px 0 0 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.35;
+  margin: 2px 0 0 0;
 }
 
 /* Boss HP Bar */
 .raid-boss-hp-box {
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .boss-hp-header {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #ef4444;
 }
 
 .boss-hp-track {
-  height: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
   overflow: hidden;
 }
 
@@ -938,19 +943,19 @@
   height: 100%;
   background: linear-gradient(90deg, #ef4444, #f97316);
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
-  border-radius: 4px;
+  border-radius: 999px;
 }
 
 .btn-deal-damage {
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.4);
   color: #ef4444;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
   cursor: pointer;
-  margin-top: 4px;
+  margin-top: 2px;
   transition: all 0.15s;
 }
 
@@ -963,21 +968,21 @@
 .raid-bounty-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  padding: 6px 8px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .bounty-col {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .bounty-label {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--muted);
@@ -985,36 +990,36 @@
 
 .bounty-val {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 800;
 }
 
 .bounty-val.stake { color: #f87171; }
 .bounty-val.win { color: #4ade80; }
-.bounty-loot-tag { font-size: 10px; color: #f5c84b; font-weight: 700; }
+.bounty-loot-tag { font-size: 9.5px; color: #f5c84b; font-weight: 700; }
 
 .raid-card-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .btn-raid-enter {
   width: 100%;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(249, 115, 22, 0.2));
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(249, 115, 22, 0.25));
   border: 1px solid rgba(239, 68, 68, 0.5);
   color: #fff;
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .btn-raid-enter:hover {
   background: #ef4444;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
 }
 
 .btn-raid-claim {
@@ -1023,21 +1028,21 @@
   color: #fff;
   border: none;
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 800;
-  padding: 9px 12px;
-  border-radius: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
   cursor: pointer;
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.5);
 }
 
 .btn-raid-forfeit {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--muted);
-  font-size: 11px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  font-size: 10.5px;
+  padding: 5px 8px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -1045,11 +1050,11 @@
   width: 100%;
   text-align: center;
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   color: #4ade80;
   background: rgba(34, 197, 94, 0.12);
   border: 1px solid rgba(34, 197, 94, 0.3);
-  padding: 6px;
-  border-radius: 6px;
+  padding: 5px;
+  border-radius: 5px;
 }
