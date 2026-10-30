@@ -127,7 +127,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         id: 'pushups',
         name: 'Push-ups',
         icon: '💪',
-        current: pushups ? (pushups.doneToday || 0) : (doneMap['pushups'] || 0),
+        current: Math.max(pushups?.doneToday || 0, doneMap['pushups'] || 0, doneMap['pushup'] || 0),
         target: pushups ? (pushups.target || 123) : 123,
         unit: 'reps'
       },
@@ -135,7 +135,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         id: 'situps',
         name: 'Sit-ups',
         icon: '⚡',
-        current: situps ? (situps.doneToday || 0) : (doneMap['situps'] || 0),
+        current: Math.max(situps?.doneToday || 0, doneMap['situps'] || 0, doneMap['situp'] || 0),
         target: situps ? (situps.target || 60) : 60,
         unit: 'reps'
       },
@@ -143,7 +143,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         id: 'press',
         name: 'Press',
         icon: '🏋️',
-        current: press ? (press.doneToday || 0) : (doneMap['press'] || 0),
+        current: Math.max(press?.doneToday || 0, doneMap['press'] || 0),
         target: press ? (press.target || 50) : 50,
         unit: 'reps'
       },

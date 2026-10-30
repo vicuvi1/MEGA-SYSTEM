@@ -508,6 +508,7 @@ export interface LifeApi {
     test(botKey?: string): Promise<{ ok: boolean; error?: string }>
     startPolling(): Promise<boolean>
     stopPolling(): Promise<boolean>
+    pollOnce?(): Promise<{ processedCount: number; replies: string[] }>
   }
   ai: {
     config(): Promise<AIConfig>

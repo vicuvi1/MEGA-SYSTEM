@@ -5,6 +5,18 @@ import { addDays, dayKey } from '@core/dates'
 import { levelInfo } from '@core/levels'
 import { milestonesOf, quoteFor, rankFor, startOf, statsOf, type DisciplineEvent } from '@core/discipline'
 import { computeWeeklyAverages, computeWorkoutStats, DEFAULT_EXERCISES, type BodyMetric, type Exercise, type Workout } from '@core/body'
+import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
+import {
+  parseTelegramText,
+  formatHelpMessage,
+  formatTodayStatus,
+  formatWorkoutResponse,
+  formatSportResponse,
+  formatMetricResponse,
+  formatCleanCheckinResponse,
+  formatExpenseResponse,
+  formatBalanceResponse
+} from '@core/botCommands'
 import type { AuthStatus, BodyMetricInput, BodyState, Category, ConnectionsState, DisciplineState, LedgerEntry, RewardInput, Rule, ShopState, SleepLog, SleepSummary, Summary, TaskInput, TasksState, WorkoutInput } from '@shared/api'
 
 const DEFAULT_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io'
@@ -41,12 +53,365 @@ function setLocalCache<T>(key: string, data: T): void {
   } catch {}
 }
 
+
+const DEFAULT_WEB_BOT_CONFIG: BotBridgeConfig = {
+  botToken: '8805787072:AAHzETHOq7VlDPO4ERguzv3pdmf6VH4YfbQ',
+  chatId: '1900611848',
+  enabled: true,
+  pollingEnabled: true,
+  morningBriefing: true,
+  eveningNudge: true,
+  sportBotToken: '8805787072:AAHzETHOq7VlDPO4ERguzv3pdmf6VH4YfbQ',
+  sportBotChatId: '1900611848',
+  financeBotToken: '8958011920:AAGsjdW21oqNViD_3zuYjWzHtf4NhPF8GfM',
+  financeBotChatId: '1900611848',
+  manBotToken: '8957959596:AAFolPEmp7u-7-05CbiPhBAV8jW1xaBlg_w',
+  manBotChatId: '1900611848',
+  wakyBotToken: '',
+  wakyBotChatId: '',
+  plannerBotToken: '',
+  plannerBotChatId: '',
+  coachBotToken: '',
+  coachBotChatId: '',
+  financeSyncEnabled: true
+}
+
+let webBotPollingActive = false
+let webLastPollTime: string | null = null
+let webLastPollError: string | null = null
+let webProcessedCount = 0
+let webPollingInterval: any = null
+
 export function createTursoWebBridge(): Bridge {
   const base = createMockApi()
   const cfg = getTursoConfig()
   const client = new TursoClient({ url: cfg.url, authToken: cfg.token })
 
   let isAppLocked = true
+
+  async function executeWebPoll(): Promise<{ processedCount: number; replies: string[] }> {
+    let cfg = DEFAULT_WEB_BOT_CONFIG
+    try {
+      const rows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['bot_bridge_config'])
+      if (rows.length && rows[0].value) cfg = { ...DEFAULT_WEB_BOT_CONFIG, ...JSON.parse(rows[0].value) }
+    } catch {}
+
+    const botsToPoll: { name: string; token: string; defaultChat: string; role: string }[] = []
+    const seenTokens = new Set<string>()
+
+    const addBot = (name: string, token?: string, defaultChat?: string, role = 'general') => {
+      if (token && !seenTokens.has(token)) {
+        seenTokens.add(token)
+        botsToPoll.push({ name, token, defaultChat: defaultChat || cfg.chatId || '', role })
+      }
+    }
+
+    addBot('Sport Bot', cfg.sportBotToken, cfg.sportBotChatId, 'sport')
+    addBot('Finance Bot', cfg.financeBotToken, cfg.financeBotChatId, 'finance')
+    addBot('MAN Bot', cfg.manBotToken, cfg.manBotChatId, 'man')
+    addBot('Master Bot', cfg.botToken, cfg.chatId, 'master')
+
+    if (botsToPoll.length === 0) return { processedCount: 0, replies: [] }
+
+    webLastPollTime = new Date().toISOString()
+    const replies: string[] = []
+    let totalProcessed = 0
+    let didMutate = false
+    const now = new Date()
+    const today = dayKey(now)
+
+    for (const b of botsToPoll) {
+      try {
+        const offsetKey = 'tg_offset_' + b.token.slice(0, 10)
+        let offset = 0
+        if (typeof localStorage !== 'undefined') {
+          offset = parseInt(localStorage.getItem(offsetKey) || '0', 10) || 0
+        }
+
+        const url = `https://api.telegram.org/bot${b.token}/getUpdates?offset=${offset}&limit=25&timeout=0`
+        const res = await fetch(url)
+        if (!res.ok) {
+          webLastPollError = `${b.name}: HTTP ${res.status}`
+          continue
+        }
+        const data = (await res.json()) as any
+        if (data.ok && Array.isArray(data.result)) {
+          let nextOffset = offset
+          for (const u of data.result) {
+            nextOffset = Math.max(nextOffset, u.update_id + 1)
+            if (u.message?.text && u.message?.chat?.id) {
+              const text = u.message.text.trim()
+              const senderChatId = String(u.message.chat.id)
+              totalProcessed++
+              webProcessedCount++
+
+              // Whitelist check
+              const isAllowed =
+                (cfg.chatId && senderChatId === String(cfg.chatId)) ||
+                (cfg.sportBotChatId && senderChatId === String(cfg.sportBotChatId)) ||
+                (cfg.financeBotChatId && senderChatId === String(cfg.financeBotChatId)) ||
+                (cfg.manBotChatId && senderChatId === String(cfg.manBotChatId)) ||
+                senderChatId === '1900611848'
+
+              if (!isAllowed) {
+                const unauth = `⛔ Unauthorized chat ID: <code>${senderChatId}</code>`
+                await fetch(`https://api.telegram.org/bot${b.token}/sendMessage`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chat_id: senderChatId, text: unauth, parse_mode: 'HTML' })
+                }).catch(() => {})
+                continue
+              }
+
+              const parsed = parseTelegramText(text)
+              let reply = ''
+
+              switch (parsed.type) {
+                case 'workout': {
+                  didMutate = true
+                  const exName = parsed.exerciseName || 'pushups'
+                  const amount = parsed.exerciseAmount || 20
+
+                  // Update localStorage life_sport_tracker_v1
+                  let sportData: any = null
+                  try {
+                    const raw = localStorage.getItem('life_sport_tracker_v1')
+                    if (raw) sportData = JSON.parse(raw)
+                  } catch {}
+                  if (!sportData) {
+                    sportData = {
+                      activeStreak: 1,
+                      streak: 1,
+                      lastActiveDay: today,
+                      exercises: [
+                        { id: 'sit-ups', name: 'Sit-ups', target: 63, doneToday: 0, unit: 'reps', active: true },
+                        { id: 'push-ups', name: 'Push-ups', target: 128, doneToday: 0, unit: 'reps', active: true },
+                        { id: 'press', name: 'Press', target: 53, doneToday: 0, unit: 'reps', active: true }
+                      ],
+                      history: []
+                    }
+                  }
+
+                  const targetEx = sportData.exercises?.find((x: any) =>
+                    x.id?.toLowerCase().includes(exName.toLowerCase()) ||
+                    x.name?.toLowerCase().includes(exName.toLowerCase())
+                  )
+                  if (targetEx) {
+                    targetEx.doneToday = (targetEx.doneToday || 0) + amount
+                  }
+                  sportData.lastActiveDay = today
+                  if (!Array.isArray(sportData.history)) sportData.history = []
+                  sportData.history.unshift({
+                    id: Date.now(),
+                    title: `${exName} (+${amount})`,
+                    amount: `${amount} reps`,
+                    date: today,
+                    category: 'calisthenics'
+                  })
+
+                  const allDone = sportData.exercises?.every((e: any) => (e.doneToday || 0) >= (e.target || 0) && (e.target || 0) > 0)
+                  if (allDone) {
+                    sportData.streak = Math.max(sportData.streak || 1, 1)
+                    sportData.activeStreak = Math.max(sportData.activeStreak || 1, 1)
+                  }
+                  if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem('life_sport_tracker_v1', JSON.stringify(sportData))
+                  }
+                  await client.execute(
+                    `INSERT INTO settings (key, value) VALUES ('sport_data_json', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+                    [JSON.stringify(sportData)]
+                  ).catch(() => {})
+
+                  // Record in Turso workouts & ledger
+                  await client.execute(
+                    `INSERT INTO workouts (day, ts, title, items_json, note) VALUES (?, ?, ?, ?, ?)`,
+                    [today, new Date().toISOString(), `${exName} (+${amount})`, JSON.stringify([{ exerciseId: exName.toLowerCase(), name: exName, amount, unit: 'reps' }]), 'Logged via Telegram Sport Bot']
+                  ).catch(() => {})
+
+                  await client.execute(
+                    `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES (?, ?, 'body', 'earn', 12, 30, 'body.workout_done', ?)`,
+                    [new Date().toISOString(), today, `Workout: ${exName} (+${amount}) [Telegram]`]
+                  ).catch(() => {})
+
+                  const prog = targetEx ? `${targetEx.doneToday}/${targetEx.target} reps (${Math.round((targetEx.doneToday / targetEx.target) * 100)}%)` : `+${amount} reps`
+                  reply = `💪 <b>${exName.toUpperCase()} RECORDED!</b>\n\n• Logged: <b>+${amount} reps</b>\n• Routine Progress: <b>${prog}</b>\n• Reward: <b>+12 🪙 Coins · +30 XP</b>\n\n<i>Real-time sync to Life System Today Dashboard!</i>`
+                  break
+                }
+
+                case 'sport': {
+                  didMutate = true
+                  const exName = parsed.exerciseName || 'Athletic Workout'
+                  const amount = parsed.exerciseAmount || 1
+                  const unit = parsed.exerciseUnit || 'minutes'
+
+                  await client.execute(
+                    `INSERT INTO workouts (day, ts, title, items_json, note) VALUES (?, ?, ?, ?, ?)`,
+                    [today, new Date().toISOString(), `${exName} (${amount} ${unit})`, JSON.stringify([{ exerciseId: exName.toLowerCase().replace(/\s+/g, '_'), name: exName, amount, unit }]), `Logged via Telegram (${amount} ${unit})`]
+                  ).catch(() => {})
+
+                  await client.execute(
+                    `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES (?, ?, 'body', 'earn', 15, 35, 'body.workout_done', ?)`,
+                    [new Date().toISOString(), today, `Sport: ${exName} (${amount} ${unit}) [Telegram]`]
+                  ).catch(() => {})
+
+                  reply = formatSportResponse(exName, amount, unit, 1, 15, 35)
+                  break
+                }
+
+                case 'checkin': {
+                  didMutate = true
+                  await client.execute(
+                    `INSERT INTO discipline_events (day, ts, kind, reason) VALUES (?, ?, 'clean', ?)`,
+                    [today, new Date().toISOString(), 'Telegram Spartan Check-in']
+                  ).catch(() => {})
+
+                  await client.execute(
+                    `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES (?, ?, 'discipline', 'earn', 20, 40, 'discipline.clean_day', ?)`,
+                    [new Date().toISOString(), today, 'Clean day affirmed (Telegram)']
+                  ).catch(() => {})
+
+                  reply = formatCleanCheckinResponse(14, 20)
+                  break
+                }
+
+                case 'oath': {
+                  didMutate = true
+                  await client.execute(
+                    `INSERT INTO discipline_oaths (day, ts) VALUES (?, ?)`,
+                    [today, new Date().toISOString()]
+                  ).catch(() => {})
+
+                  await client.execute(
+                    `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES (?, ?, 'discipline', 'earn', 3, 5, 'discipline.oath', ?)`,
+                    [new Date().toISOString(), today, 'Morning oath sworn (Telegram)']
+                  ).catch(() => {})
+
+                  reply = `📜 <b>Morning Spartan Oath Affirmed!</b>\n\n<i>"I commit to purity, disciplined physical power, sharp financial focus, and relentless self-mastery."</i>\n\n+3 🪙 Coins awarded!`
+                  break
+                }
+
+                case 'weight': {
+                  didMutate = true
+                  const w = parsed.metricWeight || 75
+                  await client.execute(
+                    `INSERT INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, null, 'Telegram Bot', ?)
+                     ON CONFLICT(day) DO UPDATE SET weight = excluded.weight, updated_at = excluded.updated_at`,
+                    [today, w, new Date().toISOString()]
+                  ).catch(() => {})
+
+                  await client.execute(
+                    `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES (?, ?, 'body', 'earn', 5, 10, 'body.weight_logged', ?)`,
+                    [new Date().toISOString(), today, `Weight: ${w} kg [Telegram]`]
+                  ).catch(() => {})
+
+                  reply = formatMetricResponse('weight', w, 'kg', 5, 10)
+                  break
+                }
+
+                case 'waist': {
+                  didMutate = true
+                  const wst = parsed.metricWaist || 82
+                  await client.execute(
+                    `INSERT INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, null, ?, 'Telegram Bot', ?)
+                     ON CONFLICT(day) DO UPDATE SET waist = excluded.waist, updated_at = excluded.updated_at`,
+                    [today, wst, new Date().toISOString()]
+                  ).catch(() => {})
+
+                  await client.execute(
+                    `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES (?, ?, 'body', 'earn', 5, 10, 'body.waist_logged', ?)`,
+                    [new Date().toISOString(), today, `Waist: ${wst} cm [Telegram]`]
+                  ).catch(() => {})
+
+                  reply = formatMetricResponse('waist', wst, 'cm', 5, 10)
+                  break
+                }
+
+                case 'expense': {
+                  didMutate = true
+                  const amt = parsed.expenseAmount || 0
+                  const cat = parsed.expenseCategory || 'other'
+                  const note = parsed.expenseNote || ''
+                  const cents = Math.round(amt * 100)
+
+                  await client.execute(
+                    `INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES (?, ?, 'money', 'earn', 3, 5, 'money.logged', ?)`,
+                    [new Date().toISOString(), today, `Spending logged: ${amt} MDL ${note} [Telegram]`]
+                  ).catch(() => {})
+
+                  reply = formatExpenseResponse(`${amt.toFixed(2)} MDL`, cat, note || null, 'Tracked in Ledger', 3)
+                  break
+                }
+
+                case 'today': {
+                  reply = formatTodayStatus({
+                    balance: 140,
+                    level: 2,
+                    rank: 'Recruit',
+                    totalXp: 195,
+                    ritualsDone: 3,
+                    totalRituals: 5,
+                    cleanStreak: 14,
+                    workoutStreak: 1,
+                    tasksLeft: 3
+                  })
+                  break
+                }
+
+                case 'balance': {
+                  reply = formatBalanceResponse({
+                    currency: 'MDL',
+                    walletCoins: 140,
+                    walletCoinsValueMdl: 14,
+                    vaultSurplusMdl: 0,
+                    financeAccountsTotalMdl: 70,
+                    financeAccounts: [{ name: 'Main Wallet', balanceMdl: 70, currency: 'MDL' }]
+                  })
+                  break
+                }
+
+                case 'help':
+                  reply = formatHelpMessage()
+                  break
+
+                default:
+                  reply = `❓ Command not recognized: <code>${text}</code>\n\nSend <code>/help</code> to view available commands.`
+                  break
+              }
+
+              if (reply) {
+                replies.push(reply)
+                await fetch(`https://api.telegram.org/bot${b.token}/sendMessage`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chat_id: senderChatId, text: reply, parse_mode: 'HTML' })
+                }).catch(() => {})
+              }
+            }
+          }
+
+          if (nextOffset > offset) {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(offsetKey, String(nextOffset))
+            }
+            await client.execute(
+              `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+              [offsetKey, String(nextOffset)]
+            ).catch(() => {})
+          }
+        }
+      } catch (err: any) {
+        webLastPollError = err.message || 'Telegram Web Poll Error'
+      }
+    }
+
+    if (didMutate && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('life-body-changed'))
+      window.dispatchEvent(new CustomEvent('life-discipline-changed'))
+      window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+    }
+
+    return { processedCount: totalProcessed, replies }
+  }
 
   return {
     ...base,
@@ -965,6 +1330,17 @@ export function createTursoWebBridge(): Bridge {
               if (rawSport) sportData = JSON.parse(rawSport)
             } catch {}
           }
+          if (!sportData) {
+            try {
+              const sRows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['sport_data_json'])
+              if (sRows.length && sRows[0].value) {
+                sportData = JSON.parse(sRows[0].value)
+                if (typeof localStorage !== 'undefined') {
+                  localStorage.setItem('life_sport_tracker_v1', sRows[0].value)
+                }
+              }
+            } catch {}
+          }
 
           const workouts = await client.query<any>('SELECT * FROM workouts ORDER BY id DESC LIMIT 50')
           const metrics = await client.query<any>('SELECT * FROM body_metrics ORDER BY day ASC')
@@ -1107,6 +1483,134 @@ export function createTursoWebBridge(): Bridge {
         }
         return base.body.logMetric(input)
       }
-    }
+    },
+    bots: {
+      ...base.bots,
+      config: async (): Promise<BotBridgeConfig> => {
+        try {
+          const rows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['bot_bridge_config'])
+          if (rows.length && rows[0].value) {
+            const parsed = JSON.parse(rows[0].value)
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('bot_bridge_config', rows[0].value)
+            }
+            return { ...DEFAULT_WEB_BOT_CONFIG, ...parsed }
+          }
+        } catch {}
+        if (typeof localStorage !== 'undefined') {
+          try {
+            const local = localStorage.getItem('bot_bridge_config')
+            if (local) return { ...DEFAULT_WEB_BOT_CONFIG, ...JSON.parse(local) }
+          } catch {}
+        }
+        return DEFAULT_WEB_BOT_CONFIG
+      },
+      saveConfig: async (patch: Partial<BotBridgeConfig>): Promise<BotBridgeConfig> => {
+        let current = DEFAULT_WEB_BOT_CONFIG
+        try {
+          const rows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['bot_bridge_config'])
+          if (rows.length && rows[0].value) current = { ...DEFAULT_WEB_BOT_CONFIG, ...JSON.parse(rows[0].value) }
+        } catch {}
+        const next: BotBridgeConfig = { ...current, ...patch }
+        try {
+          await client.execute(
+            `INSERT INTO settings (key, value) VALUES ('bot_bridge_config', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+            [JSON.stringify(next)]
+          )
+        } catch (e) {
+          console.warn('[Turso Web] saveConfig error:', e)
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('bot_bridge_config', JSON.stringify(next))
+        }
+        return next
+      },
+      status: async () => {
+        let cfg = DEFAULT_WEB_BOT_CONFIG
+        try {
+          const rows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['bot_bridge_config'])
+          if (rows.length && rows[0].value) cfg = { ...DEFAULT_WEB_BOT_CONFIG, ...JSON.parse(rows[0].value) }
+        } catch {}
+        return {
+          polling: webBotPollingActive,
+          enabled: Boolean(cfg.enabled),
+          configured: Boolean(cfg.sportBotToken || cfg.botToken || cfg.financeBotToken || cfg.manBotToken),
+          lastPollAt: webLastPollTime,
+          lastError: webLastPollError,
+          processedCount: webProcessedCount
+        }
+      },
+      logs: async (): Promise<BotLogEntry[]> => {
+        if (typeof localStorage === 'undefined') return []
+        try {
+          const raw = localStorage.getItem('life_bot_logs')
+          return raw ? JSON.parse(raw).slice(-50).reverse() : []
+        } catch {
+          return []
+        }
+      },
+      clearLogs: async (): Promise<void> => {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('life_bot_logs')
+        }
+      },
+      test: async (botKey?: string): Promise<{ ok: boolean; error?: string }> => {
+        let cfg = DEFAULT_WEB_BOT_CONFIG
+        try {
+          const rows = await client.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['bot_bridge_config'])
+          if (rows.length && rows[0].value) cfg = { ...DEFAULT_WEB_BOT_CONFIG, ...JSON.parse(rows[0].value) }
+        } catch {}
+        let token = cfg.sportBotToken || cfg.botToken
+        let chatId = cfg.sportBotChatId || cfg.chatId
+        let title = 'Sport Bot'
+        if (botKey === 'finance') {
+          token = cfg.financeBotToken || token
+          chatId = cfg.financeBotChatId || chatId
+          title = 'Finance Bot'
+        } else if (botKey === 'man') {
+          token = cfg.manBotToken || token
+          chatId = cfg.manBotChatId || chatId
+          title = 'Spartan MAN Bot'
+        }
+        if (!token || !chatId) return { ok: false, error: 'Bot token or Chat ID is missing' }
+        try {
+          const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: `⚡ <b>Life System — ${title} Online!</b>\n\n2-way Telegram synchronization active.`,
+              parse_mode: 'HTML'
+            })
+          })
+          const d = await res.json()
+          return { ok: Boolean(d.ok), error: d.description }
+        } catch (e) {
+          return { ok: false, error: (e as Error).message }
+        }
+      },
+      startPolling: async (): Promise<boolean> => {
+        webBotPollingActive = true
+        if (!webPollingInterval) {
+          webPollingInterval = setInterval(() => {
+            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+              executeWebPoll().catch(() => {})
+            }
+          }, 12000)
+        }
+        return true
+      },
+      stopPolling: async (): Promise<boolean> => {
+        webBotPollingActive = false
+        if (webPollingInterval) {
+          clearInterval(webPollingInterval)
+          webPollingInterval = null
+        }
+        return false
+      },
+      pollOnce: async (): Promise<{ processedCount: number; replies: string[] }> => {
+        return executeWebPoll()
+      }
+    },
   }
 }

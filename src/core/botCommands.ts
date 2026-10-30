@@ -147,12 +147,31 @@ export function parseTelegramText(text: string): ParsedCommand {
 
   const args = parts.slice(1)
 
-  // 1. Direct exercise shortcuts like /pushups 50 or /pullups 20
+  // 1. Direct exercise shortcuts like /pushups 50, /situps 30, /press 20
   const exerciseShortcuts: Record<string, string> = {
     pushups: 'pushups',
+    pushup: 'pushups',
+    push_ups: 'pushups',
+    push_up: 'pushups',
+    flotari: 'pushups',
+    situps: 'situps',
+    situp: 'situps',
+    sit_ups: 'situps',
+    sit_up: 'situps',
+    abdomene: 'situps',
+    press: 'press',
+    shoulderpress: 'press',
+    benchpress: 'press',
+    bench_press: 'press',
     pullups: 'pullups',
+    pullup: 'pullups',
+    pull_ups: 'pullups',
+    tractiuni: 'pullups',
     squats: 'squats',
+    squat: 'squats',
+    genuflexiuni: 'squats',
     dips: 'dips',
+    dip: 'dips',
     plank: 'plank'
   }
   if (exerciseShortcuts[cmd]) {
@@ -164,6 +183,22 @@ export function parseTelegramText(text: string): ParsedCommand {
       exerciseName: exerciseShortcuts[cmd],
       exerciseAmount: amount,
       exerciseUnit: 'reps'
+    }
+  }
+
+  // 1b. Inverted natural format: e.g. "50 pushups", "30 situps", "25 press"
+  if (/^\d+$/.test(cmd) && args.length > 0) {
+    const exCandidate = args[0].toLowerCase().replace(/[^a-z_]/g, '')
+    if (exerciseShortcuts[exCandidate]) {
+      const amount = parseInt(cmd, 10)
+      return {
+        type: 'workout',
+        args: [cmd],
+        raw: trimmed,
+        exerciseName: exerciseShortcuts[exCandidate],
+        exerciseAmount: amount,
+        exerciseUnit: 'reps'
+      }
     }
   }
 

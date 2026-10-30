@@ -115,7 +115,16 @@ function open(): void {
   telegramHub.setEconomy(economyService)
   telegramHub.setWalletCallback(() => win?.webContents.send('wallet:changed'))
   const hubCfg = telegramHub.getConfig()
-  if (hubCfg.enabled && hubCfg.pollingEnabled && hubCfg.botToken) {
+  const hasAnyToken = Boolean(
+    hubCfg.botToken ||
+    hubCfg.sportBotToken ||
+    hubCfg.financeBotToken ||
+    hubCfg.manBotToken ||
+    hubCfg.wakyBotToken ||
+    hubCfg.plannerBotToken ||
+    hubCfg.coachBotToken
+  )
+  if (hubCfg.enabled && hubCfg.pollingEnabled && hasAnyToken) {
     telegramHub.startPolling()
   }
   calendarService = new CalendarService(dataDir)

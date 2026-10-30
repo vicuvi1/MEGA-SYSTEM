@@ -31,6 +31,24 @@ describe('botCommands core parser', () => {
     expect(res.exerciseAmount).toBe(40)
   })
 
+
+  it('parses situps, press, and natural number-first workout shortcuts', () => {
+    const sit = parseTelegramText('/situps 30')
+    expect(sit.type).toBe('workout')
+    expect(sit.exerciseName).toBe('situps')
+    expect(sit.exerciseAmount).toBe(30)
+
+    const press = parseTelegramText('/press 20')
+    expect(press.type).toBe('workout')
+    expect(press.exerciseName).toBe('press')
+    expect(press.exerciseAmount).toBe(20)
+
+    const nat = parseTelegramText('50 pushups')
+    expect(nat.type).toBe('workout')
+    expect(nat.exerciseName).toBe('pushups')
+    expect(nat.exerciseAmount).toBe(50)
+  })
+
   it('parses workout with args like /workout 50 squats', () => {
     const res = parseTelegramText('/workout 50 squats')
     expect(res.type).toBe('workout')

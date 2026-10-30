@@ -221,6 +221,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        life.bots?.pollOnce?.().then((res) => {
+          if (res && res.processedCount > 0) refresh()
+        }).catch(() => {})
         refresh()
       }
     }
@@ -243,8 +246,20 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     }
   }, [refresh])
 
+  // Periodic real-time background Telegram sync (every 12 seconds when visible)
   useEffect(() => {
-    refresh()
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        life.bots?.pollOnce?.().then((res) => {
+          if (res && res.processedCount > 0) refresh()
+        }).catch(() => {})
+      }
+    }, 12_000)
+    return () => clearInterval(interval)
+  }, [refresh])
+
+  useEffect(() => {
+    life.bots?.pollOnce?.().catch(() => {}).finally(() => refresh())
     life.data.saveDailySnapshot?.().catch(() => {})
   }, [refresh])
 
