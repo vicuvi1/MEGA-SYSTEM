@@ -21,12 +21,13 @@ afterEach(() => vi.unstubAllGlobals())
 const json = (body: unknown, status = 200) => ({ ok: status < 300, status, text: async () => JSON.stringify(body) }) as unknown as Response
 
 describe('Todoist API client', () => {
-  it("reads today's tasks (all pages) with project names, completes and quick-adds", async () => {
+  it("reads today's tasks (all pages) with project and section names, completes and quick-adds", async () => {
     const calls: string[] = []
     const fetchImpl = (async (url: string, init?: RequestInit) => {
       calls.push(`${init?.method ?? 'GET'} ${url.replace('https://api.todoist.com', '')}`)
       if (url.includes('/projects')) return json({ results: [{ id: 'p1', name: 'University' }], next_cursor: null })
-      if (url.includes('/tasks/filter') && !url.includes('cursor=')) return json({ results: [{ id: '1', content: 'Essay', priority: 4, project_id: 'p1', due: { date: '2026-10-31' } }], next_cursor: 'c2' })
+      if (url.includes('/sections')) return json({ results: [{ id: 's1', name: 'Essays' }], next_cursor: null })
+      if (url.includes('/tasks/filter') && !url.includes('cursor=')) return json({ results: [{ id: '1', content: 'Essay', priority: 4, project_id: 'p1', section_id: 's1', due: { date: '2026-10-31' } }], next_cursor: 'c2' })
       if (url.includes('/tasks/filter')) return json({ results: [{ id: '2', content: 'Gym', priority: 1, project_id: 'x', due: { date: '2026-10-30T18:00:00', is_recurring: true } }], next_cursor: null })
       if (url.endsWith('/close')) return { ok: true, status: 204, text: async () => '' } as unknown as Response
       if (url.endsWith('/tasks/quick')) return json({ id: '9', content: 'Call Leo', priority: 4, project_id: 'p1', due: { date: '2026-11-01T17:00:00' } })
@@ -35,8 +36,8 @@ describe('Todoist API client', () => {
     const api = createTodoistApi('tok', fetchImpl)
     const tasks = await api.today()
     expect(tasks).toEqual([
-      { id: '1', content: 'Essay', priority: 4, due: '2026-10-31', dueTime: null, project: 'University', recurring: false },
-      { id: '2', content: 'Gym', priority: 1, due: '2026-10-30', dueTime: '18:00', project: null, recurring: true }
+      { id: '1', content: 'Essay', priority: 4, due: '2026-10-31', dueTime: null, project: 'University', section: 'Essays', recurring: false },
+      { id: '2', content: 'Gym', priority: 1, due: '2026-10-30', dueTime: '18:00', project: null, section: null, recurring: true }
     ])
     await api.close('1')
     expect(await api.quickAdd('Call Leo tomorrow 17:00 p1 #University')).toMatchObject({ content: 'Call Leo', dueTime: '17:00', project: 'University' })

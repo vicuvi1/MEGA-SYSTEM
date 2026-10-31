@@ -56,7 +56,15 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
     return projectNames
   }
 
-  const toTask = (t: any, names: Map<string, string>): TodoTask => {
+  let sectionNames: Map<string, string> | null = null
+  const sections = async () => {
+    if (sectionNames) return sectionNames
+    const list = await either(() => all(`${V1}/sections`), () => all(`${V2}/sections`)).catch(() => [])
+    sectionNames = new Map(list.map((x: any) => [String(x.id), String(x.name)]))
+    return sectionNames
+  }
+
+  const toTask = (t: any, names: Map<string, string>, secs: Map<string, string> = new Map()): TodoTask => {
     const due = t.due ?? null
     const dt = String(due?.datetime ?? due?.date ?? '')
     return {
@@ -66,6 +74,7 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
       due: dt ? dt.slice(0, 10) : null,
       dueTime: /T\d{2}:\d{2}/.test(dt) ? dt.slice(11, 16) : null,
       project: names.get(String(t.project_id)) ?? null,
+      section: t.section_id ? (secs.get(String(t.section_id)) ?? null) : null,
       recurring: !!due?.is_recurring
     }
   }
@@ -74,8 +83,8 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
     /** Due today or overdue, not completed. */
     async today(): Promise<TodoTask[]> {
       const q = encodeURIComponent('today | overdue')
-      const [list, names] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects()])
-      return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names))
+      const [list, names, secs] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects(), sections()])
+      return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs))
     },
     async close(id: string): Promise<void> {
       await either(

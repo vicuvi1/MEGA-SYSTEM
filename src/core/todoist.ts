@@ -11,6 +11,8 @@ export interface TodoTask {
   due: string | null // YYYY-MM-DD
   dueTime: string | null // HH:MM, when it has a time
   project: string | null
+  /** The section it sits in (your areas: University, Cyber, …), when any. */
+  section?: string | null
   recurring: boolean
 }
 

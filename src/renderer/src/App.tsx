@@ -71,6 +71,15 @@ export function App() {
 function WindowErrors() {
   const toast = useToast()
   useEffect(() => installWindowErrorHandlers((t) => toast(t, 'bad')), [toast])
+  // Tasks you ticked in the Todoist app itself, paid when this page checks.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const n = Number((e as CustomEvent).detail?.paid) || 0
+      if (n) toast(`✅ ${n} Todoist task${n > 1 ? 's' : ''} done: coins added`, 'good')
+    }
+    window.addEventListener('life-todoist-paid', on)
+    return () => window.removeEventListener('life-todoist-paid', on)
+  }, [toast])
   return null
 }
 

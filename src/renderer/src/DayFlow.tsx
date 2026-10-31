@@ -29,6 +29,9 @@ interface Habit {
   run: () => void | Promise<void>
 }
 
+/** Today's Todoist list shows this many first (late and P1 on top). */
+const TODO_SHOWN = 5
+
 function useTodoist() {
   const [tasks, setTasks] = useState<TodoTask[] | null>(null)
   const load = useCallback(async () => {
@@ -65,6 +68,7 @@ export function DayFlow(props: Props) {
   const act = useAction()
   const [st, loadFocus] = useFocus()
   const [todo, loadTodo, setTodo] = useTodoist()
+  const [showAllTodo, setShowAllTodo] = useState(false)
   const habits = useHabits(props, st?.todayMin ?? 0)
   const [skipped, setSkipped] = useState<string[]>([])
   const [adding, setAdding] = useState('')
@@ -248,7 +252,7 @@ export function DayFlow(props: Props) {
             <h3 className="dl-head">Todoist</h3>
             {todoList.length === 0 && <p className="hint">Nothing due in Todoist today.</p>}
             <ul className="dl">
-              {todoList.map((t) => (
+              {(showAllTodo ? todoList : todoList.slice(0, TODO_SHOWN)).map((t) => (
                 <li key={t.id}>
                   <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={() => void doneTodo(t)} />
                   <span className="dl-text">
@@ -256,12 +260,18 @@ export function DayFlow(props: Props) {
                     {t.due && t.due < today && <em className="dl-late"> late</em>}
                   </span>
                   <span className="dl-hint">
+                    {t.section ? `${t.section} · ` : t.project && t.project !== 'Inbox' ? `${t.project} · ` : ''}
                     {t.dueTime ?? ''}
                     {t.priority > 1 ? ` ${pLabel(t.priority)}` : ''}
                   </span>
                 </li>
               ))}
             </ul>
+            {todoList.length > TODO_SHOWN && (
+              <button className="btn ghost dl-more" onClick={() => setShowAllTodo(!showAllTodo)}>
+                {showAllTodo ? 'Show fewer' : `Show all ${todoList.length} (the most urgent are on top)`}
+              </button>
+            )}
           </>
         )}
       </section>

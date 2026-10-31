@@ -146,3 +146,4 @@ html.calm [class*='loading'] {
 .dl-late { color: #ff6b6b; font-style: normal; font-size: 12px; }
 .dl-add { display: flex; gap: 8px; margin: 6px 0 2px; }
 .dl-add input { flex: 1; background: transparent; border: 1px dashed rgba(255, 255, 255, 0.15); }
+.dl-more { margin-top: 6px; font-size: 13px; }

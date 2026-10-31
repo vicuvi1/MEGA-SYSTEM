@@ -345,7 +345,9 @@ export function createTursoWebBridge(): Bridge {
         midnight.setHours(0, 0, 0, 0)
         const items = ((await todoistCall('completed', { since: midnight.toISOString() })).items ?? []) as TodoCompleted[]
         if (!items.length) return 0
-        return (await svcP).write((s) => payTodoist(s, items), 'life-wallet-changed')
+        const paid = await (await svcP).write((s) => payTodoist(s, items), 'life-wallet-changed')
+        if (paid) window.dispatchEvent(new CustomEvent('life-todoist-paid', { detail: { paid } }))
+        return paid
       }
     },
     // Things the desktop window does, the browser's way.

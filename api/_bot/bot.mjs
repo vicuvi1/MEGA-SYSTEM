@@ -8176,7 +8176,14 @@ function createTodoistApi(token, fetchImpl = fetch) {
 		projectNames = new Map(list.map((p) => [String(p.id), String(p.name)]));
 		return projectNames;
 	};
-	const toTask = (t, names) => {
+	let sectionNames = null;
+	const sections = async () => {
+		if (sectionNames) return sectionNames;
+		const list = await either(() => all(`${V1}/sections`), () => all(`${V2}/sections`)).catch(() => []);
+		sectionNames = new Map(list.map((x) => [String(x.id), String(x.name)]));
+		return sectionNames;
+	};
+	const toTask = (t, names, secs = /* @__PURE__ */ new Map()) => {
 		const due = t.due ?? null;
 		const dt = String(due?.datetime ?? due?.date ?? "");
 		return {
@@ -8186,6 +8193,7 @@ function createTodoistApi(token, fetchImpl = fetch) {
 			due: dt ? dt.slice(0, 10) : null,
 			dueTime: /T\d{2}:\d{2}/.test(dt) ? dt.slice(11, 16) : null,
 			project: names.get(String(t.project_id)) ?? null,
+			section: t.section_id ? secs.get(String(t.section_id)) ?? null : null,
 			recurring: !!due?.is_recurring
 		};
 	};
@@ -8193,8 +8201,12 @@ function createTodoistApi(token, fetchImpl = fetch) {
 		/** Due today or overdue, not completed. */
 		async today() {
 			const q = encodeURIComponent("today | overdue");
-			const [list, names] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects()]);
-			return list.filter((t) => !t.checked && !t.is_completed).map((t) => toTask(t, names));
+			const [list, names, secs] = await Promise.all([
+				either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)),
+				projects(),
+				sections()
+			]);
+			return list.filter((t) => !t.checked && !t.is_completed).map((t) => toTask(t, names, secs));
 		},
 		async close(id) {
 			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }), () => call(`${V2}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }));
@@ -8254,11 +8266,50 @@ async function botsFor(env) {
 	};
 	return warm;
 }
+var todoistCheckedAt = 0;
+var TODOIST_COINS = DEFAULT_RULES.find((r) => r.id === "tasks.todoist_done")?.coins ?? 8;
+/**
+* Coins for what you completed in Todoist itself (each task once, see
+* payTodoist), checked by the server so they arrive with no device open:
+* at the daily messages and, at most every few minutes, with a bot message.
+* `since` defaults to today's midnight in your time zone.
+*/
+async function payTodoistDone(env, opts = {}) {
+	if (!env.todoistToken) return {
+		paid: 0,
+		done: 0
+	};
+	if (opts.minGapMs && Date.now() - todoistCheckedAt < opts.minGapMs) return {
+		paid: 0,
+		done: 0
+	};
+	todoistCheckedAt = Date.now();
+	const { mirror, services } = await botsFor(env);
+	const since = opts.since ?? localMidnight(0);
+	const items = await createTodoistApi(env.todoistToken).completedSince(since.toISOString());
+	if (!items.length) return {
+		paid: 0,
+		done: 0
+	};
+	return {
+		paid: await mirror.write((db) => payTodoist(services.services(db), items)),
+		done: items.length
+	};
+}
+/** Midnight `daysAgo` days back, in process.env.TZ. */
+function localMidnight(daysAgo) {
+	const d = /* @__PURE__ */ new Date();
+	d.setHours(0, 0, 0, 0);
+	d.setDate(d.getDate() - daysAgo);
+	return d;
+}
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 async function handleTelegramUpdate(env, token, update) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { bots } = await botsFor(env);
-	return bots.handleUpdate(token, update);
+	const reply = await bots.handleUpdate(token, update);
+	await payTodoistDone(env, { minGapMs: 18e4 }).catch(() => null);
+	return reply;
 }
 /**
 * The daily messages (Vercel runs them on a schedule, api/cron.mjs):
@@ -8282,6 +8333,7 @@ async function runDaily(env, job) {
 		const j = await res.json().catch(() => ({}));
 		if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`);
 	};
+	const todo = await payTodoistDone(env, { since: localMidnight(job === "morning" ? 1 : 0) }).catch(() => null);
 	const st = await services.focus.state();
 	const sent = [];
 	if (job === "morning") {
@@ -8299,7 +8351,8 @@ async function runDaily(env, job) {
 		});
 		sent.push("morning");
 	} else {
-		await send(eveningText(st.plan, st.todayMin), st.plan.items.length ? planKeyboard(st.plan, true) : void 0);
+		const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ""}` : "";
+		await send(eveningText(st.plan, st.todayMin) + todoLine, st.plan.items.length ? planKeyboard(st.plan, true) : void 0);
 		sent.push("evening");
 		if ((/* @__PURE__ */ new Date()).getDay() === 0) {
 			await send(weekText(st.week, st.goals));
@@ -8308,4 +8361,4 @@ async function runDaily(env, job) {
 	}
 	return sent;
 }
-export { createTodoistApi, handleTelegramUpdate, runDaily };
+export { createTodoistApi, handleTelegramUpdate, payTodoistDone, runDaily };

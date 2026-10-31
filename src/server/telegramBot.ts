@@ -11,6 +11,8 @@ import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
 import { createWebBots } from '../renderer/src/web/webBots'
 import { createTodoistApi } from './todoistApi'
+import { payTodoist } from '../renderer/src/web/todoistCoins'
+import { DEFAULT_RULES } from '@core/rules'
 import { eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 
 export { createTodoistApi }
@@ -44,12 +46,43 @@ async function botsFor(env: BotEnv) {
   return warm
 }
 
+let todoistCheckedAt = 0
+const TODOIST_COINS = DEFAULT_RULES.find((r) => r.id === 'tasks.todoist_done')?.coins ?? 8
+
+/**
+ * Coins for what you completed in Todoist itself (each task once, see
+ * payTodoist), checked by the server so they arrive with no device open:
+ * at the daily messages and, at most every few minutes, with a bot message.
+ * `since` defaults to today's midnight in your time zone.
+ */
+export async function payTodoistDone(env: BotEnv, opts: { since?: Date; minGapMs?: number } = {}): Promise<{ paid: number; done: number }> {
+  if (!env.todoistToken) return { paid: 0, done: 0 }
+  if (opts.minGapMs && Date.now() - todoistCheckedAt < opts.minGapMs) return { paid: 0, done: 0 }
+  todoistCheckedAt = Date.now()
+  const { mirror, services } = await botsFor(env)
+  const since = opts.since ?? localMidnight(0)
+  const items = await createTodoistApi(env.todoistToken).completedSince(since.toISOString())
+  if (!items.length) return { paid: 0, done: 0 }
+  const paid = await mirror.write((db) => payTodoist(services.services(db), items))
+  return { paid, done: items.length }
+}
+
+/** Midnight `daysAgo` days back, in process.env.TZ. */
+function localMidnight(daysAgo: number): Date {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - daysAgo)
+  return d
+}
+
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 export async function handleTelegramUpdate(env: BotEnv, token: string, update: unknown): Promise<string | null> {
   // Days, wake-up times and streaks follow your time zone, not the server's.
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { bots } = await botsFor(env)
-  return bots.handleUpdate(token, update)
+  const reply = await bots.handleUpdate(token, update)
+  await payTodoistDone(env, { minGapMs: 3 * 60_000 }).catch(() => null)
+  return reply
 }
 
 /**
@@ -69,6 +102,9 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string 
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
     if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`)
   }
+  // Todoist tasks you completed in Todoist pay here even if no device opened
+  // the app: the morning picks up last evening's, the evening today's.
+  const todo = await payTodoistDone(env, { since: localMidnight(job === 'morning' ? 1 : 0) }).catch(() => null)
   const st = await services.focus.state()
   const sent: string[] = []
   if (job === 'morning') {
@@ -81,7 +117,8 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string 
     )
     sent.push('morning')
   } else {
-    await send(eveningText(st.plan, st.todayMin), st.plan.items.length ? planKeyboard(st.plan, true) : undefined)
+    const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ''}` : ''
+    await send(eveningText(st.plan, st.todayMin) + todoLine, st.plan.items.length ? planKeyboard(st.plan, true) : undefined)
     sent.push('evening')
     if (new Date().getDay() === 0) {
       await send(weekText(st.week, st.goals))
