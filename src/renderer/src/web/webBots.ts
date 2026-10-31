@@ -367,6 +367,13 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
           const data = await tg(token, `getUpdates?offset=${offset}&limit=25&timeout=0`)
           if (!data?.ok) {
             const why = String(data?.description ?? 'no answer')
+            // The Mega bot used to send its messages to the old Cloudflare
+            // worker: take it back (waiting messages are kept) and read it
+            // on the next round.
+            if (/webhook/i.test(why) && token === cfg.megaBotToken) {
+              const freed = await tg(token, 'deleteWebhook?drop_pending_updates=false').catch(() => null)
+              if (freed?.ok) continue
+            }
             lastError = /webhook/i.test(why)
               ? `Bot ${botId} sends its messages to a webhook (e.g. the Cloudflare worker), so it can't be read here. Remove the webhook to use it.`
               : `Bot ${botId}: ${why}`
