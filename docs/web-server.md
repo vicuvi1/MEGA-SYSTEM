@@ -22,6 +22,7 @@ in `api/` use them:
 | `TELEGRAM_CHAT_ID` | your Telegram chat id |
 | `FINANCE_BOT_TOKEN` | optional: the Finance bot token |
 | `MAN_BOT_TOKEN` | optional: the MAN bot token |
+| `MEGA_BOT_TOKEN` | optional: one bot that controls everything (sport, money, discipline, sleep, tasks) |
 | `SESSION_SECRET` | optional: any long random text (default: derived from `TURSO_TOKEN`) |
 
 Changing `TURSO_TOKEN` (or `SESSION_SECRET`) logs every device out; they

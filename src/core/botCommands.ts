@@ -408,7 +408,7 @@ export function formatHelpMessage(): string {
   return [
     `⚡ <b>Life System — Telegram Command Center</b> ⚡`,
     ``,
-    `Control your habits, workouts, sports, and wallet from your phone:`,
+    `One bot for everything: Sport, Money (Finance Helper), Discipline (MAN), Sleep (Waky), Tasks and your wallet.`,
     ``,
     `📊 <b>Dashboard & Status</b>`,
     `• <code>/today</code> — View balance, level, streak & rituals`,

@@ -65,7 +65,7 @@ describe('web server', () => {
   })
 
   it('gives the bot tokens from its own settings', () => {
-    const bots = botDefaults({ TELEGRAM_BOT_TOKEN: '1:a', TELEGRAM_CHAT_ID: '42', FINANCE_BOT_TOKEN: '2:b' })
-    expect(bots).toMatchObject({ botToken: '1:a', sportBotToken: '1:a', financeBotToken: '2:b', chatId: '42' })
+    const bots = botDefaults({ TELEGRAM_BOT_TOKEN: '1:a', TELEGRAM_CHAT_ID: '42', FINANCE_BOT_TOKEN: '2:b', MEGA_BOT_TOKEN: '3:c' })
+    expect(bots).toMatchObject({ botToken: '1:a', sportBotToken: '1:a', financeBotToken: '2:b', chatId: '42', megaBotToken: '3:c' })
   })
 })

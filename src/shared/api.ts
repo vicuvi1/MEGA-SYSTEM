@@ -303,6 +303,8 @@ export interface BotLogEntry {
 export interface BotBridgeConfig {
   botToken: string
   chatId: string
+  /** One bot for everything (sport, money, discipline, sleep, tasks). */
+  megaBotToken?: string
   enabled: boolean
   pollingEnabled: boolean
   morningBriefing: boolean

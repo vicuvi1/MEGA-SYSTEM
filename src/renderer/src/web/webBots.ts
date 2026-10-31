@@ -351,7 +351,7 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
       // The Finance bot belongs to Finance Helper, which reads it itself (on
       // the PC, or its always-on server). Reading it here took its messages
       // away and answered them as Life System commands.
-      const tokens = [cfg.sportBotToken, cfg.manBotToken, cfg.botToken, cfg.wakyBotToken, cfg.plannerBotToken, cfg.coachBotToken]
+      const tokens = [cfg.megaBotToken, cfg.sportBotToken, cfg.manBotToken, cfg.botToken, cfg.wakyBotToken, cfg.plannerBotToken, cfg.coachBotToken]
         .filter((t): t is string => !!t && t.includes(':'))
         .filter((t, i, all) => all.indexOf(t) === i)
       const replies: string[] = []
@@ -364,7 +364,10 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
         try {
           const data = await tg(token, `getUpdates?offset=${offset}&limit=25&timeout=0`)
           if (!data?.ok) {
-            lastError = `Bot ${botId}: ${data?.description ?? 'no answer'}`
+            const why = String(data?.description ?? 'no answer')
+            lastError = /webhook/i.test(why)
+              ? `Bot ${botId} sends its messages to a webhook (e.g. the Cloudflare worker), so it can't be read here. Remove the webhook to use it.`
+              : `Bot ${botId}: ${why}`
             continue
           }
           for (const u of data.result ?? []) {
@@ -409,7 +412,7 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
       return {
         polling,
         enabled: !!cfg.enabled,
-        configured: !!(cfg.sportBotToken || cfg.botToken || cfg.financeBotToken || cfg.manBotToken),
+        configured: !!(cfg.megaBotToken || cfg.sportBotToken || cfg.botToken || cfg.financeBotToken || cfg.manBotToken),
         lastPollAt,
         lastError,
         processedCount: processed
@@ -431,7 +434,8 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
         finance: [cfg.financeBotToken, cfg.financeBotChatId, 'Finance Bot'],
         man: [cfg.manBotToken, cfg.manBotChatId, 'MAN Bot'],
         waky: [cfg.wakyBotToken, cfg.wakyBotChatId, 'Waky Bot'],
-        sport: [cfg.sportBotToken, cfg.sportBotChatId, 'Sport Bot']
+        sport: [cfg.sportBotToken, cfg.sportBotChatId, 'Sport Bot'],
+        mega: [cfg.megaBotToken, cfg.chatId, 'Mega Bot']
       }
       const [tok, chat, title] = pick[botKey ?? 'sport'] ?? pick.sport
       const token = tok || cfg.botToken

@@ -119,6 +119,7 @@ export function botDefaults(env = process.env) {
   const chat = env.TELEGRAM_CHAT_ID || ''
   const main = env.TELEGRAM_BOT_TOKEN || ''
   return {
+    megaBotToken: env.MEGA_BOT_TOKEN || '',
     botToken: main,
     chatId: chat,
     sportBotToken: env.SPORT_BOT_TOKEN || main,
