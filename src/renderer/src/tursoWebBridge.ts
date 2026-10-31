@@ -15,7 +15,9 @@ import { createWebServices, type WebServices } from './web/webServices'
 import { createWebAuth } from './web/webAuth'
 import { createWebBots } from './web/webBots'
 import { createFinanceInbox } from './web/financeInbox'
-import { SPORT_KEY, createSportSync } from './web/sportSync'
+import { SPORT } from './web/sportSync'
+import { MAN, WAKY, createAppSync } from './web/appSync'
+import { FINANCE } from './web/financeSync'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -166,15 +168,24 @@ export function createTursoWebBridge(): Bridge {
   )
   const svcP: Promise<WebServices> = mirrorP.then((m) => createWebServices(m))
   const authP = mirrorP.then((m) => createWebAuth(m))
-  // Sport Track's data, copied to Turso and back (it lives in this browser).
-  const sportP = mirrorP.then((m) => {
-    const sync = createSportSync(m)
-    void sync.sync()
-    return sync
+  // The embedded apps' data (Sport Track, Finance Helper, Waky, MAN) lives in
+  // this browser: copied to Turso and back so every device shows the same.
+  const syncsP = mirrorP.then((m) => {
+    const list = [SPORT, FINANCE, WAKY, MAN].map((spec) => createAppSync(m, spec))
+    for (const s of list) void s.sync()
+    return list
   })
+  const syncAll = () => syncsP.then((list) => Promise.all(list.map((s) => s.sync())))
   if (typeof window !== 'undefined') {
-    window.addEventListener('storage', (e) => e.key === SPORT_KEY && sportP.then((s) => s.soon()))
-    window.addEventListener('life-sport-changed', (e) => !(e as CustomEvent).detail?.fromSync && sportP.then((s) => s.soon()))
+    // The app saved (its page is a same-site frame, so this page hears it).
+    window.addEventListener('storage', (e) => syncsP.then((list) => list.find((s) => s.spec.localKey === e.key)?.soon()))
+    // Changed here (the bot, the daily quest, the Telegram inbox), not by a sync.
+    for (const spec of [SPORT, FINANCE, WAKY, MAN]) {
+      window.addEventListener(spec.event, (e) => {
+        if ((e as CustomEvent).detail?.fromSync) return
+        syncsP.then((list) => list.find((s) => s.spec === spec)?.soon())
+      })
+    }
   }
   // Telegram expenses waiting for Finance Helper on this device.
   const financeP = mirrorP.then((m) => {
@@ -205,7 +216,8 @@ export function createTursoWebBridge(): Bridge {
     const refresh = () =>
       mirrorP
         .then((m) => m.refresh())
-        .then(() => Promise.all([sportP.then((s) => s.sync()), applyFinance()]))
+        .then(() => applyFinance())
+        .then(() => syncAll())
         .then(() => {
           for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed']) window.dispatchEvent(new CustomEvent(n))
         })

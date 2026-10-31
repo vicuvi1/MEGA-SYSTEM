@@ -146,7 +146,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
   // Telegram or another device changed Sport Track's (or Finance Helper's)
   // data: reload it, or it would save its older copy over the change.
   useEffect(() => {
-    const event = appKey === 'sport' ? 'life-sport-changed' : appKey === 'finance' ? 'life-finance-changed' : null
+    const event = ({ sport: 'life-sport-changed', finance: 'life-finance-changed', waky: 'life-waky-changed', man: 'life-man-changed' } as Record<string, string>)[appKey] ?? null
     if (!event) return
     const onChange = () => {
       const el = ref.current as any
