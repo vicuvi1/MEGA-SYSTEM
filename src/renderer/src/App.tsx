@@ -493,7 +493,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">
             <h1>{current.label}</h1>
-            {!compact && <p>{current.blurb}</p>}
+            {!compact && <p>{page === 'today' ? new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : current.blurb}</p>}
           </div>
           {embed && !hiddenByStealth && (
             <div className="seg-switch" role="tablist" aria-label={`${current.label} views`}>
@@ -521,165 +521,84 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </button>
           )}
           <span className="spacer" />
-          <button
-            className="search-btn quick-omnibar-btn"
-            onClick={() => {
-              soundTick()
-              setQuickCommandOpen(true)
-            }}
-            title="Instant Quick Capture (Ctrl+Space)"
-            style={{ borderColor: 'rgba(0, 210, 255, 0.4)', background: 'rgba(0, 210, 255, 0.08)', color: '#00d2ff' }}
-          >
-            <span style={{ fontSize: '14px' }}>⚡</span>
-            <span className="chip-text" style={{ fontWeight: 700 }}>Quick Capture</span>
-            <kbd style={{ background: 'rgba(0, 210, 255, 0.15)', color: '#00d2ff', borderColor: 'rgba(0, 210, 255, 0.3)' }}>Ctrl Space</kbd>
-          </button>
-          <button className="search-btn" onClick={() => { soundTick(); setPaletteOpen(true) }} title="Search and run anything (Ctrl+K)">
-            <Icon name="search" size={14} />
-            <span className="chip-text">Search or run…</span>
+          {/* One search box for pages, actions and quick logging (Ctrl K); ＋ Log opens quick capture. */}
+          <button className="tb-search" onClick={() => { soundTick(); setPaletteOpen(true) }} title="Search pages and actions (Ctrl K)">
+            <Icon name="search" size={15} />
+            <span>Search or go to…</span>
             <kbd>Ctrl K</kbd>
           </button>
-          {activeEmbed && (
-            <button className="icon-btn" aria-label="Full screen" title="Full screen (F11)" onClick={() => life.app.toggleFullScreen()}>
-              <Icon name="expand" size={15} />
+          <button className="tb-log" onClick={() => { soundTick(); setQuickCommandOpen(true) }} title="Log something: 45 lunch, 50 pushups, focus 50 math… (Ctrl Space)">
+            <Icon name="plus" size={15} />
+            <span>Log</span>
+          </button>
+          {features.ai && (
+            <button className="tb-icon" aria-label="System Oracle" title="System Oracle (Ctrl+Shift+A)" onClick={() => setOracleOpen(true)}>
+              <Icon name="spark" size={17} />
             </button>
           )}
-          {features.ai && <button
-            className="system-oracle-header-btn"
-            onClick={() => setOracleOpen(true)}
-            title="Summon Solo Leveling System Oracle (Ctrl+Shift+A)"
-          >
-            <span className="oracle-dot" />
-            <span className="oracle-text">SYSTEM ORACLE</span>
-            <kbd>Ctrl+Shift+A</kbd>
-          </button>}
+          {activeEmbed && (
+            <button className="tb-icon" aria-label="Full screen" title="Full screen (F11)" onClick={() => life.app.toggleFullScreen()}>
+              <Icon name="expand" size={16} />
+            </button>
+          )}
           <button
-            className="game-rules-header-btn"
-            onClick={() => setPage('rules')}
-            title="Solo Leveling System Codex & Game Rules"
-          >
-            <span style={{ fontSize: 13 }}>📜</span>
-            <span>GAME RULES</span>
-          </button>
-
-          <button
-            className={`mobile-sync-header-btn ${isSyncingMobile ? 'syncing' : ''}`}
+            className={`tb-icon ${isSyncingMobile ? 'spinning' : ''}`}
             onClick={triggerMobileSync}
             disabled={isSyncingMobile}
-            title={features.cloudflareSync ? 'Sync Telegram mobile logs, heal streaks & credit XP/coins' : 'Get what your other devices and the bots changed, right now'}
+            aria-label="Sync now"
+            title={features.cloudflareSync ? 'Sync Telegram mobile logs' : 'Sync now: get what your other devices and the bots changed'}
           >
-            <span
-              style={{
-                display: 'inline-block',
-                animation: isSyncingMobile ? 'spin 1s linear infinite' : 'none'
-              }}
-            >
-              {isSyncingMobile ? '🔄' : '⚡'}
-            </span>
-            <span>{isSyncingMobile ? 'SYNCING...' : features.cloudflareSync ? 'SYNC MOBILE' : 'SYNC NOW'}</span>
+            <Icon name="refresh" size={16} />
+          </button>
+          <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
+          <UpdateChip status={update} onClick={() => setPage('settings')} />
+          {backup && !isDemo && (
+            <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>
+              <Icon name="cloud" size={15} />
+              <span className="chip-text">{backup.lastError ? 'Backup off' : 'Backed up'}</span>
+            </button>
+          )}
+          <button className={`tb-icon ${page === 'settings' ? 'active' : ''}`} aria-label="Settings" title="Settings" onClick={() => setPage('settings')}>
+            <Icon name="gear" size={16} />
           </button>
 
-          <div className="top-actions">
-            <button
-              className={`icon-btn ${page === 'settings' ? 'active' : ''}`}
-              aria-label="Settings"
-              title="Settings & Security PIN"
-              onClick={() => setPage('settings')}
-            >
-              <Icon name="gear" size={16} />
-            </button>
-            <button
-              className={`icon-btn ${!ui.sound ? 'muted' : ''}`}
-              aria-label={ui.sound ? 'Mute sound effects' : 'Unmute sound effects'}
-              title={ui.sound ? `Cyberpunk SFX Active (${ui.volume ?? 80}%) — Click to mute` : 'SFX Muted — Click to unmute'}
-              onClick={() => {
-                const next = !ui.sound
-                setUiPrefs({ sound: next })
-                if (next) soundTick()
-                else stopAllSounds()
-              }}
-              style={{
-                opacity: ui.sound ? 1 : 0.6
-              }}
-            >
-              <span style={{ fontSize: 16 }}>{ui.sound ? '🔊' : '🔇'}</span>
-            </button>
-            <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
-            <UpdateChip status={update} onClick={() => setPage('settings')} />
-            {/* On the web the data lives in Turso (with daily cloud snapshots); the desktop backup doesn't apply. */}
-            {backup && !isDemo && (
-              <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>
-                <Icon name="cloud" size={15} />
-                <span className="chip-text">{backup.lastError ? 'Backup off' : 'Backed up'}</span>
-              </button>
-            )}
-
-          </div>
-
+          {/* You: level ring + coins. Tap for rank, XP and stats. */}
           {lv && summary && (
-            <div
-              className="player player-interactive solo-apex-player-card"
-              role="button"
-              tabIndex={0}
+            <button
+              className="tb-me"
               onClick={() => {
                 soundSystemOracle()
                 setPlayerModalOpen(true)
               }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  soundSystemOracle()
-                  setPlayerModalOpen(true)
-                }
-              }}
-              title="⚡ Hunter Status Window · Click to view level progression, attributes & combat power"
+              title={`Level ${lv.level} · ${lv.rank} · ${lv.xpIntoLevel}/${lv.xpForNext} XP`}
             >
-              <div className="apex-crest-badge">
-                <span className="apex-crest-icon">⚔️</span>
-                <span className="apex-crest-lvl">LV.{lv.level}</span>
-              </div>
-              <div className="apex-xp-section">
-                <div className="apex-rank-row">
-                  <span className="apex-grade-pill" style={{ background: lv.rankColor }}>
-                    {lv.hunterGrade}
-                  </span>
-                  <span className="apex-rank-title">{lv.rank}</span>
-                  <span className="apex-xp-digits">
-                    {lv.xpIntoLevel} / {lv.xpForNext} XP
-                  </span>
-                </div>
-                <div className="apex-micro-bar">
-                  <motion.i
-                    initial={false}
-                    animate={{ width: `${Math.round(lv.progress * 100)}%` }}
-                    transition={{ type: 'spring', stiffness: 120, damping: 20 }}
-                  />
-                </div>
-              </div>
-              <div className="apex-wallet" title="Coins you can spend">
+              <span className="tb-ring" style={{ ['--p' as string]: `${Math.round((lv.xpIntoLevel / Math.max(1, lv.xpForNext)) * 100)}` }}>
+                <b>{lv.level}</b>
+              </span>
+              <span className="tb-coins">
                 <Coins n={summary.balance} />
-                <div className="wallet-pops" aria-live="polite">
-                  <AnimatePresence>
-                    {pops.map((p) => (
-                      <motion.span
-                        key={p.id}
-                        className={`wallet-pop ${p.coins < 0 ? 'neg' : ''}`}
-                        initial={{ opacity: 0, y: 14, scale: 0.8 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-                      >
-                        <b>
-                          {p.coins > 0 ? '+' : ''}
-                          {p.coins}
-                        </b>
-                        {p.label && <small>{p.label}</small>}
-                      </motion.span>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
+              </span>
+              <span className="wallet-pops" aria-live="polite">
+                <AnimatePresence>
+                  {pops.map((p) => (
+                    <motion.span
+                      key={p.id}
+                      className={`wallet-pop ${p.coins < 0 ? 'neg' : ''}`}
+                      initial={{ opacity: 0, y: 14, scale: 0.8 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                    >
+                      <b>
+                        {p.coins > 0 ? '+' : ''}
+                        {p.coins}
+                      </b>
+                      {p.label && <small>{p.label}</small>}
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+              </span>
+            </button>
           )}
         </header>
 
