@@ -4017,6 +4017,81 @@ var ProgressService = class {
 		return progressReport(this.input(spending, now));
 	}
 };
+// src/core/weekPlan.ts
+var weekday$1 = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+/**
+* The week a plan made today is for: this week's Monday, but on Sunday the
+* coming week (Sunday is planning day).
+*/
+function planWeek(today) {
+	const wd = weekday$1(today);
+	return wd === 0 ? addDays$1(today, 1) : addDays$1(today, 1 - wd);
+}
+/** The Monday of the week today is in (Sunday counts with the week before). */
+function currentWeek(today) {
+	const wd = weekday$1(today);
+	return addDays$1(today, wd === 0 ? -6 : 1 - wd);
+}
+/** Sunday, or no plan for this week yet: time to plan. */
+function shouldPlan(plan, today) {
+	if (weekday$1(today) === 0) return !plan || plan.week !== planWeek(today);
+	return !plan || plan.week !== currentWeek(today);
+}
+/** The plan in force today (made last Sunday or during this week). */
+function activePlan(plan, today) {
+	return plan && plan.week === currentWeek(today) ? plan : null;
+}
+/** Checks and tidies a plan before it's saved. */
+function cleanPlan(p, today, now = /* @__PURE__ */ new Date()) {
+	const big3 = (p.big3 ?? []).map((b) => ({
+		text: String(b?.text ?? "").trim().slice(0, 140),
+		done: !!b?.done,
+		todoistId: b?.todoistId ? String(b.todoistId) : null
+	})).filter((b) => b.text).slice(0, 3);
+	return {
+		week: p.week && /^\d{4}-\d{2}-\d{2}$/.test(p.week) ? p.week : planWeek(today),
+		focus: p.focus ?? "focus",
+		note: String(p.note ?? "").trim().slice(0, 140),
+		big3,
+		savedAt: now.toISOString()
+	};
+}
+// src/main/weekPlan.ts
+var KEY$1 = "week_plan";
+var WeekPlanService = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	/** The last plan saved (may be for an earlier week). */
+	saved() {
+		try {
+			return JSON.parse(getSetting(this.db, KEY$1) || "null");
+		} catch {
+			return null;
+		}
+	}
+	/** The plan for the week today is in, if one was made. */
+	active(now = /* @__PURE__ */ new Date()) {
+		return activePlan(this.saved(), this.wallet.today(now));
+	}
+	save(p, now = /* @__PURE__ */ new Date()) {
+		const plan = cleanPlan(p, this.wallet.today(now), now);
+		if (!plan.big3.length) throw new LedgerError("Add at least one big task for the week");
+		setSetting(this.db, KEY$1, JSON.stringify(plan));
+		return plan;
+	}
+	/** Ticks (or unticks) one of the big 3. */
+	toggle(i, now = /* @__PURE__ */ new Date()) {
+		const plan = this.active(now);
+		if (!plan || !plan.big3[i]) throw new LedgerError("No such task in this week’s plan");
+		plan.big3[i].done = !plan.big3[i].done;
+		setSetting(this.db, KEY$1, JSON.stringify(plan));
+		return plan;
+	}
+};
 // src/core/unifiedEconomy.ts
 var DISCIPLINE_MULTIPLIERS = [
 	{
@@ -5322,6 +5397,7 @@ function servicesFor(db) {
 		sleep: new SleepService(d, wallet),
 		focus: new FocusService(d, wallet),
 		progress: new ProgressService(d, wallet),
+		weekPlan: new WeekPlanService(d, wallet),
 		economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
 		exporter: new DataExportService(d, body, money)
 	};
@@ -5466,6 +5542,11 @@ syncFinance: (recordDays) => write((s) => {
 			fun: (minutes, what) => write((s) => s.focus.fun(minutes, what), W)
 		},
 		progress: { report: (spending) => read((s) => s.progress.report(spending)) },
+		weekPlan: {
+			saved: () => read((s) => s.weekPlan.saved()),
+			save: (p) => write((s) => s.weekPlan.save(p), "life-week-changed"),
+			toggle: (i) => write((s) => s.weekPlan.toggle(i), "life-week-changed")
+		},
 		sleep: {
 			state: () => read((s) => s.sleep.state()),
 			logWake: (time, quality) => write((s) => s.sleep.logWake(time, quality), W),
@@ -8708,6 +8789,19 @@ function windDownText(o) {
 		o.first ? `🎯 First thing tomorrow: <b>${esc(o.first)}</b>` : "🎯 Decide your first thing for tomorrow, then sleep on it."
 	].join("\n");
 }
+/** This week's chosen focus, when it's behind a good week: the coach's first point. */
+function weekFocusFact(plan, r) {
+	if (!plan) return null;
+	const m = r.metrics.find((x) => x.id === plan.focus);
+	if (!m || !m.target || m.now >= m.target) return null;
+	const open = plan.big3.filter((b) => !b.done).map((b) => b.text);
+	return {
+		id: "week-focus",
+		weight: 9.5,
+		text: `Your focus this week is ${m.label.toLowerCase()}: ${m.text} in the last 7 days, a good week is ${m.targetText}.${plan.note ? ` Your plan: ${plan.note}.` : ""}`,
+		step: plan.note || (open[0] ? `Put one block on “${open[0]}” in your calendar today.` : "One small step on it today.")
+	};
+}
 // src/server/telegramBot.ts
 var warm = null;
 async function botsFor(env) {
@@ -8812,7 +8906,7 @@ async function runDaily(env, job) {
 	const todo = await payTodoistDone(env, { since: localMidnight(job === "morning" ? 1 : 0) }).catch(() => null);
 	const st = await services.focus.state();
 	const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null) : null;
-	const { input, report } = await mirror.read((db) => {
+	const { input, report, weekPlan, savedPlan } = await mirror.read((db) => {
 		const svc = services.services(db);
 		const fin = getSetting(db, "app_sync_finance");
 		let spending = null;
@@ -8824,10 +8918,13 @@ async function runDaily(env, job) {
 		const input = svc.progress.input(spending);
 		return {
 			input,
-			report: progressReport(input)
+			report: progressReport(input),
+			weekPlan: svc.weekPlan.active(),
+			savedPlan: svc.weekPlan.saved()
 		};
 	});
-	const facts = coachFacts(input, report);
+	const weekFact = weekFocusFact(weekPlan, report);
+	const facts = [...weekFact ? [weekFact] : [], ...coachFacts(input, report)];
 	/** Gemini says it in its own words; the plain text when there's no key or it fails. */
 	const coach = async (when, fallback) => {
 		if (!env.ai) return fallback;
@@ -8906,6 +9003,13 @@ async function runDaily(env, job) {
 		if ((/* @__PURE__ */ new Date()).getDay() === 0) {
 			await send(weekText(st.week, st.goals));
 			await send(progressText(report));
+			if (shouldPlan(savedPlan, input.today)) {
+				const url = env.appUrl ? `${env.appUrl.replace(/\/$/, "")}/` : null;
+				await send("🗓 <b>Plan next week</b> (15 minutes)\n\nPick <b>one</b> area to focus on and your <b>3 big tasks</b>. Open Progress in the app; the coach then checks that focus every day.", url ? { inline_keyboard: [[{
+					text: "🗓 Plan my week",
+					url
+				}]] } : void 0);
+			}
 			sent.push("weekly");
 		}
 	}

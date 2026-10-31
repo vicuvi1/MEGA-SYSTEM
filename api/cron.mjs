@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   const ai = key ? async (prompt) => (await askGemini(key, prompt)).text : undefined
   try {
     const sent = await runDaily(
-      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, botToken: bot.token, chatId, ai },
+      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, botToken: bot.token, chatId, ai, appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '') },
       job
     )
     send(res, 200, { ok: true, sent })

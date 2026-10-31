@@ -8,6 +8,8 @@ import { life } from './bridge'
 import { Icon } from './Icon'
 import type { PageId } from './modules'
 import { useFocus } from './pages/Focus'
+import { WeekCard, useWeekPlan } from './WeekPlanner'
+import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
 import { useAction } from './ui'
 
@@ -77,6 +79,7 @@ export function DayFlow(props: Props) {
   const [st, loadFocus] = useFocus()
   const [todo, loadTodo, setTodo] = useTodoist()
   const [showAllTodo, setShowAllTodo] = useState(false)
+  const [weekPlan] = useWeekPlan()
   const habits = useHabits(props, st?.todayMin ?? 0)
   const [skipped, setSkipped] = useState<string[]>([])
   const [adding, setAdding] = useState('')
@@ -326,6 +329,7 @@ export function DayFlow(props: Props) {
           </>
         )}
       </section>
+      {weekPlan && activePlan(weekPlan, today) && <WeekCard plan={activePlan(weekPlan, today)!} compact onFocus={(text) => void startFocus(subjectOf(text))} />}
     </>
   )
 }

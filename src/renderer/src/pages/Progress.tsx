@@ -6,6 +6,8 @@ import type { Metric, ProgressReport } from '@core/progress'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import type { PageId } from '../modules'
+import { WeekCard, WeekPlanner, shouldPlan, useWeekPlan } from '../WeekPlanner'
+import { activePlan } from '@core/weekPlan'
 
 export function useProgress(): ProgressReport | null | undefined {
   const [r, setR] = useState<ProgressReport | null | undefined>(undefined)
@@ -191,13 +193,19 @@ function MetricCard({ m, index, onGo }: { m: Metric; index: number; onGo?: (p: P
 /** The full page. */
 export function Progress({ onGo }: { onGo?: (p: PageId) => void }) {
   const r = useProgress()
+  const [plan] = useWeekPlan()
+  const [editing, setEditing] = useState(false)
   if (r === undefined) return <section className="panel"><p className="hint">Adding up your weeks…</p></section>
   if (r === null) return <section className="panel"><p className="hint">Progress needs your data on this device. Open it on the website.</p></section>
   const diff = r.score - r.prevScore
   const best = r.metrics.filter((m) => m.trend === 'better')
   const worst = r.metrics.filter((m) => m.trend === 'worse')
+  const active = plan ? activePlan(plan, r.to) : null
+  const planNow = plan !== undefined && (editing || shouldPlan(plan, r.to))
   return (
     <div className="pg">
+      {planNow && <WeekPlanner report={r} plan={plan ?? null} today={r.to} onDone={() => setEditing(false)} />}
+      {!planNow && active && <WeekCard plan={active} report={r} onEdit={() => setEditing(true)} />}
       <section className="panel pg-hero">
         <ScoreRing score={r.score} />
         <div className="pg-hero-text">
@@ -225,7 +233,9 @@ export function Progress({ onGo }: { onGo?: (p: PageId) => void }) {
 /** The short version on Today: the score, the verdict and one chip per area. */
 export function ProgressCard({ onOpen }: { onOpen: () => void }) {
   const r = useProgress()
+  const [plan] = useWeekPlan()
   if (!r) return null
+  const sunday = new Date(`${r.to}T12:00:00Z`).getUTCDay() === 0
   return (
     <section className="panel pg-mini">
       <ScoreRing score={r.score} size={76} />
@@ -234,9 +244,15 @@ export function ProgressCard({ onOpen }: { onOpen: () => void }) {
           <h3>
             <Icon name="chart" size={16} /> This week
           </h3>
-          <button className="btn small ghost" onClick={onOpen}>
-            See all
-          </button>
+          {sunday && plan !== undefined && shouldPlan(plan, r.to) ? (
+            <button className="btn small primary" onClick={onOpen}>
+              Plan your week
+            </button>
+          ) : (
+            <button className="btn small ghost" onClick={onOpen}>
+              See all
+            </button>
+          )}
         </header>
         <p className="pg-verdict">{r.verdict}</p>
         <div className="pg-chips">

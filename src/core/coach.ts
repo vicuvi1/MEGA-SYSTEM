@@ -6,7 +6,7 @@ import { addDays } from './dates'
 import type { ProgressInput, ProgressReport } from './progress'
 
 export interface CoachFact {
-  id: 'no-focus' | 'late-wake' | 'no-sport' | 'reset' | 'focus-down' | 'no-plan' | 'good-streak' | 'improving'
+  id: 'no-focus' | 'late-wake' | 'no-sport' | 'reset' | 'focus-down' | 'no-plan' | 'good-streak' | 'improving' | 'week-focus'
   /** Higher first. */
   weight: number
   text: string
@@ -91,4 +91,18 @@ export function windDownText(o: { bedTarget: string; wakeTarget: string; late: n
     `💡 Lights out at <b>${o.bedTarget}</b>, up at <b>${o.wakeTarget}</b>.`,
     o.first ? `🎯 First thing tomorrow: <b>${esc(o.first)}</b>` : '🎯 Decide your first thing for tomorrow, then sleep on it.'
   ].join('\n')
+}
+
+/** This week's chosen focus, when it's behind a good week: the coach's first point. */
+export function weekFocusFact(plan: { focus: string; note: string; big3: { text: string; done: boolean }[] } | null, r: ProgressReport): CoachFact | null {
+  if (!plan) return null
+  const m = r.metrics.find((x) => x.id === plan.focus)
+  if (!m || !m.target || m.now >= m.target) return null
+  const open = plan.big3.filter((b) => !b.done).map((b) => b.text)
+  return {
+    id: 'week-focus',
+    weight: 9.5,
+    text: `Your focus this week is ${m.label.toLowerCase()}: ${m.text} in the last 7 days, a good week is ${m.targetText}.${plan.note ? ` Your plan: ${plan.note}.` : ''}`,
+    step: plan.note || (open[0] ? `Put one block on “${open[0]}” in your calendar today.` : 'One small step on it today.')
+  }
 }

@@ -243,3 +243,26 @@ html.calm [class*='loading'] {
 .dl-play:hover { background: color-mix(in srgb, var(--lime) 15%, transparent); transform: scale(1.08); }
 @media (hover: none) { .dl-play { opacity: 1; } }
 .now-card.ended { border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+
+/* Week plan (Sunday) */
+.wp { display: flex; flex-direction: column; gap: 4px; border-color: color-mix(in srgb, var(--lime) 35%, var(--line)); animation: pg-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.wp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wp-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; }
+.wp-step { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+.wp-step h3 { margin: 0 0 4px; font-size: 15px; }
+.wp-step p { margin: 2px 0; }
+.wp-step > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.wp-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: color-mix(in srgb, var(--lime) 18%, transparent); color: var(--lime); }
+.wp-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.wp-chip { font-size: 13px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.wp-chip:hover:not(:disabled) { border-color: color-mix(in srgb, var(--lime) 50%, var(--line)); }
+.wp-chip.on { border-color: var(--lime); background: color-mix(in srgb, var(--lime) 14%, transparent); color: var(--lime); }
+.wp-chip em { font-style: normal; color: var(--muted); font-size: 11px; }
+.wp-chip:disabled { opacity: 0.45; cursor: default; }
+.wp-note, .wp-big { width: 100%; }
+.wp-actions { padding-top: 10px; border-top: 1px solid var(--line); gap: 8px; }
+.wk-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.wk-head h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; }
+.wk-head .hint { display: flex; align-items: center; gap: 8px; }
+.wk-focus { margin: 6px 0 4px; font-size: 14px; }
+@media (max-width: 640px) { .wp-step { gap: 10px; } }

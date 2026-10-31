@@ -13,7 +13,8 @@ import { createWebBots, focusKeyboard } from '../renderer/src/web/webBots'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
-import { coachFacts, coachPrompt, coachText, wakeSlipping, windDownText, worthSaying } from '@core/coach'
+import { coachFacts, coachPrompt, coachText, wakeSlipping, weekFocusFact, windDownText, worthSaying } from '@core/coach'
+import { shouldPlan } from '@core/weekPlan'
 import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
@@ -99,7 +100,7 @@ export type DailyJob = 'morning' | 'midday' | 'evening' | 'night'
  * evening: the review with tap-buttons, and on Sundays the week and
  * "Am I improving?".
  */
-export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string> }, job: DailyJob): Promise<string[]> {
+export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string>; appUrl?: string }, job: DailyJob): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { services, mirror } = await botsFor(env)
   const send = async (text: string, reply_markup?: unknown) => {
@@ -117,7 +118,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
   const st = await services.focus.state()
   const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null) : null
   // Same numbers as the Progress page (spending from Finance Helper's synced copy).
-  const { input, report } = await mirror.read((db) => {
+  const { input, report, weekPlan, savedPlan } = await mirror.read((db) => {
     const svc = services.services(db)
     const fin = getSetting(db as any, 'app_sync_finance')
     let spending: ReturnType<typeof financeSpending> = null
@@ -127,9 +128,10 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       spending = null
     }
     const input = svc.progress.input(spending)
-    return { input, report: progressReport(input) }
+    return { input, report: progressReport(input), weekPlan: svc.weekPlan.active(), savedPlan: svc.weekPlan.saved() }
   })
-  const facts = coachFacts(input, report)
+  const weekFact = weekFocusFact(weekPlan, report)
+  const facts = [...(weekFact ? [weekFact] : []), ...coachFacts(input, report)]
   /** Gemini says it in its own words; the plain text when there's no key or it fails. */
   const coach = async (when: DailyJob, fallback: string) => {
     if (!env.ai) return fallback
@@ -190,6 +192,14 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
     if (new Date().getDay() === 0) {
       await send(weekText(st.week, st.goals))
       await send(progressText(report))
+      // Sunday is planning day: a nudge to make next week's plan, unless it's done.
+      if (shouldPlan(savedPlan, input.today)) {
+        const url = env.appUrl ? `${env.appUrl.replace(/\/$/, '')}/` : null
+        await send(
+          '🗓 <b>Plan next week</b> (15 minutes)\n\nPick <b>one</b> area to focus on and your <b>3 big tasks</b>. Open Progress in the app; the coach then checks that focus every day.',
+          url ? { inline_keyboard: [[{ text: '🗓 Plan my week', url }]] } : undefined
+        )
+      }
       sent.push('weekly')
     }
   }

@@ -22,6 +22,8 @@ import { Shop } from '../../../main/shop'
 import { SleepService } from '../../../main/sleep'
 import { FocusService, type FocusTask } from '../../../main/focus'
 import { ProgressService } from '../../../main/progress'
+import { WeekPlanService } from '../../../main/weekPlan'
+import type { WeekPlan } from '@core/weekPlan'
 import { UnifiedEconomyService } from '../../../main/unifiedEconomy'
 import { Wallet } from '../../../main/wallet'
 import { addDays } from '@core/dates'
@@ -53,6 +55,7 @@ function servicesFor(db: BrowserDb) {
     sleep: new SleepService(d, wallet),
     focus: new FocusService(d, wallet),
     progress: new ProgressService(d, wallet),
+    weekPlan: new WeekPlanService(d, wallet),
     economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
     exporter: new DataExportService(d, body, money)
   }
@@ -203,6 +206,11 @@ export function createWebServices(mirror: Mirror) {
     },
     progress: {
       report: (spending: { day: string; bani: number }[] | null) => read((s) => s.progress.report(spending))
+    },
+    weekPlan: {
+      saved: () => read((s) => s.weekPlan.saved()),
+      save: (p: Partial<WeekPlan>) => write((s) => s.weekPlan.save(p), 'life-week-changed'),
+      toggle: (i: number) => write((s) => s.weekPlan.toggle(i), 'life-week-changed')
     },
     sleep: {
       state: () => read((s) => s.sleep.state()),
