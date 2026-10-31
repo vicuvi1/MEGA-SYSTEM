@@ -59,11 +59,41 @@ function addRepsToSportTrack(name: string, amount: number): { done: number; targ
   return prog
 }
 
-/** Finance Helper's accounts on this device, for /balance (own currency each). */
-function financeAccounts(): { name: string; balanceMdl: number; currency: string }[] {
-  if (!store) return []
+/**
+ * Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
+ * for the server: reps land there and every device picks them up.
+ */
+function addRepsInDb(db: any, name: string, amount: number): { done: number; target: number } | null {
+  const saved = (() => {
+    try {
+      return JSON.parse(getSetting(db, 'sport_tracker_json') || 'null')
+    } catch {
+      return null
+    }
+  })()
+  const st = saved?.data
+  if (!st || !Array.isArray(st.exercises)) return null
+  const today = new Date().toISOString().slice(0, 10) // Sport Track's day is the UTC date
+  if (st.lastDate !== today) {
+    st.lastDate = today
+    st.exercises.forEach((e: any) => (e.doneToday = 0))
+    if (st.water) st.water.currentMl = 0
+  }
+  const ex = findExercise(st, name)
+  if (!ex) return null
+  ex.doneToday = (Number(ex.doneToday) || 0) + amount
+  setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
+  return { done: ex.doneToday, target: Number(ex.target) || 0 }
+}
+
+/**
+ * Finance Helper's accounts, for /balance (own currency each): this device's
+ * copy, else the backup Finance Helper keeps in Turso (the server has no device).
+ */
+function financeAccounts(db?: any): { name: string; balanceMdl: number; currency: string }[] {
   try {
-    const st = JSON.parse(store.getItem('finance-helper.state') || 'null')
+    const raw = store?.getItem('finance-helper.state') || (db ? getSetting(db, 'finance_backup_json') : null)
+    const st = JSON.parse(raw || 'null')
     const accounts: any[] = st?.settings?.accounts ?? []
     const tx: any[] = Array.isArray(st?.tx) ? st.tx : []
     return accounts
@@ -91,9 +121,11 @@ export interface WebBotsDeps {
   defaults: BotBridgeConfig
   /** An expense was saved (Finance Helper picks it up from the inbox). */
   onExpense?: () => void
+  /** Running on the server: Sport reps go to Turso, not this browser. */
+  server?: boolean
 }
 
-export function createWebBots({ mirror, services, defaults, onExpense }: WebBotsDeps) {
+export function createWebBots({ mirror, services, defaults, onExpense, server = false }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
   let lastPollAt: string | null = null
@@ -138,6 +170,8 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
       .some((id) => String(id) === chat)
 
   /** One command, on the services. Returns the reply and what changed. */
+  let currentDb: any = null
+
   function run(s: Services, text: string): { reply: string; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' } } {
     const parsed = parseTelegramText(text)
     switch (parsed.type) {
@@ -229,7 +263,7 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
       }
       case 'balance': {
         const coins = s.wallet.summary().balance
-        const accounts = financeAccounts()
+        const accounts = financeAccounts(currentDb)
         const money = s.money.state()
         return {
           reply: formatBalanceResponse({
@@ -244,7 +278,7 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
         }
       }
       case 'wake': {
-        const res = s.sleep.logWake(new Date().toTimeString().slice(0, 5))
+        const res = s.sleep.logWake(new Date().toTimeString().slice(0, 5)) // local time (the server runs in your time zone)
         return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}` }
       }
       case 'bed': {
@@ -313,9 +347,15 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
           // A command can fail its own rule (already checked in, daily cap…):
           // the message is still marked seen and the reply says why.
           const svc = services.services(db)
+          currentDb = db
           try {
             const r = db.transaction(() => {
               const out = run(svc, text)
+              if (server && out.sport) {
+                const prog = addRepsInDb(db, out.sport.name, out.sport.amount)
+                if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
+                out.sport = undefined
+              }
               // Finance Helper gets it too (see financeInbox.ts).
               if (out.expense) {
                 const now = new Date()
@@ -325,6 +365,7 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
             })()
             return { skip: false as const, reply: r.reply, ok: true, sport: r.sport, expense: !!r.expense }
           } catch (e) {
+            currentDb = null
             return { skip: false as const, reply: `⚠️ ${esc((e as Error).message)}`, ok: false }
           }
         })
@@ -350,6 +391,12 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
     if (running) return running
     running = (async () => {
       const cfg = await config()
+      // The server answers every bot 24/7; reading them here too would fail.
+      if (cfg.serverBots && !server) {
+        lastPollAt = new Date().toISOString()
+        lastError = null
+        return { processedCount: 0, replies: [] }
+      }
       // The Finance bot too: Finance Helper only reads it while it runs on
       // the PC, and its money messages ("45 lunch") reach Finance Helper
       // through the inbox either way.
@@ -403,11 +450,19 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
     return running
   }
 
+  /** One update Telegram sent to the server (webhook) for the bot with this token. */
+  async function handleUpdate(token: string, update: any): Promise<string | null> {
+    const cfg = await config()
+    return handle(token.split(':')[0], { ...update, __token: token }, cfg)
+  }
+
   return {
     pollOnce,
+    handleUpdate,
     config,
     saveConfig: async (patch: Partial<BotBridgeConfig>): Promise<BotBridgeConfig> => {
-      const next = { ...(await config()), ...patch }
+      const next: BotBridgeConfig = { ...(await config()), ...patch }
+      delete next.serverBots // comes from the server each time, never saved
       await mirror.write((db) => setSetting(db as any, 'bot_bridge_config', JSON.stringify(next)))
       try {
         store?.setItem('bot_bridge_config', JSON.stringify(next))

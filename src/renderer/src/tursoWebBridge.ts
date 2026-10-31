@@ -188,7 +188,14 @@ export function createTursoWebBridge(): Bridge {
     : sessionReady
         .then(() => fetch('/api/config', { headers: { Authorization: `Bearer ${currentSession()}` } }))
         .then((r) => (r.ok ? r.json() : {}))
-        .then((j: any) => ({ ...DEFAULT_WEB_BOT_CONFIG, ...(j?.bots ?? {}) }))
+        .then(async (j: any) => {
+          // Point the bots at the server so they answer 24/7 (no device
+          // needed); when that works this page stops reading them itself.
+          const setup = await fetch('/api/bot-setup', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}` } })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+          return { ...DEFAULT_WEB_BOT_CONFIG, ...(j?.bots ?? {}), serverBots: !!setup?.ok }
+        })
         .catch(() => DEFAULT_WEB_BOT_CONFIG)
   const botsP = Promise.all([mirrorP, svcP, botDefaultsP]).then(([mirror, services, defaults]) => createWebBots({ mirror, services, defaults, onExpense: () => void applyFinance() }))
 

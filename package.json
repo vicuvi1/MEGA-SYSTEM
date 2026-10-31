@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "web": "vite --config vite.web.mts",
     "build:web": "vite build --config vite.web.mts",
+    "build:bot": "vite build --config vite.bot.mts",
     "vercel-build": "vite build --config vite.web.mts",
     "dist": "npm run build:electron && electron-builder --win --publish never",
     "release": "node scripts/release.mjs"

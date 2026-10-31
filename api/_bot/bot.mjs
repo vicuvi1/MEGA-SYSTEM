@@ -1,0 +1,5993 @@
+import { createRequire } from "node:module";
+import initSqlJs from "sql.js";
+// src/core/schema.ts
+var MIGRATIONS = [
+	`
+  CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+  CREATE TABLE ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    day TEXT NOT NULL,
+    module TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('earn', 'spend', 'adjust', 'undo')),
+    coins INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0 CHECK (xp >= 0),
+    rule_id TEXT,
+    ref TEXT,
+    note TEXT,
+    undo_of INTEGER REFERENCES ledger(id)
+  );
+  CREATE INDEX ledger_day ON ledger(day);
+  CREATE INDEX ledger_rule ON ledger(rule_id);
+  CREATE TRIGGER ledger_no_update BEFORE UPDATE ON ledger
+    BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
+  CREATE TRIGGER ledger_no_delete BEFORE DELETE ON ledger
+    BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
+
+  CREATE TABLE rules (
+    id TEXT PRIMARY KEY,
+    module TEXT NOT NULL,
+    title TEXT NOT NULL,
+    coins INTEGER NOT NULL,
+    xp INTEGER NOT NULL DEFAULT 0 CHECK (xp >= 0),
+    daily_cap INTEGER NOT NULL DEFAULT 0,
+    cooldown_min INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    sort INTEGER NOT NULL DEFAULT 0
+  );
+  `,
+	`
+  CREATE TABLE rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    price INTEGER NOT NULL CHECK (price > 0),
+    tier TEXT NOT NULL CHECK (tier IN ('bronze', 'silver', 'gold', 'legendary')),
+    real_cost INTEGER NOT NULL DEFAULT 0 CHECK (real_cost >= 0),
+    pinned INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0,
+    note TEXT
+  );
+  CREATE TABLE redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ledger_id INTEGER NOT NULL UNIQUE REFERENCES ledger(id),
+    reward_id INTEGER NOT NULL REFERENCES rewards(id),
+    title TEXT NOT NULL,
+    real_cost INTEGER NOT NULL DEFAULT 0,
+    day TEXT NOT NULL
+  );
+  INSERT INTO rewards (title, price, tier, real_cost, pinned, note) VALUES
+    ('Face cream', 300, 'bronze', 30, 0, NULL),
+    ('New phone case', 600, 'bronze', 60, 1, NULL),
+    ('Shaver machine', 1500, 'silver', 150, 0, NULL),
+    ('Kaaba trip fund', 20000, 'legendary', 2000, 0, 'The big one. Keep stacking.');
+  `,
+	`
+  CREATE TABLE categories (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  INSERT INTO categories (id, label, color, sort) VALUES
+    ('body', 'Body', '#FF6B8B', 1), ('face', 'Face', '#F9A8D4', 2), ('finance', 'Finance', '#F5C84B', 3),
+    ('university', 'University', '#7CC4FF', 4), ('life', 'Life', '#C8F135', 5);
+
+  CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL REFERENCES categories(id),
+    coins INTEGER NOT NULL DEFAULT 5,
+    xp INTEGER NOT NULL DEFAULT 10,
+    priority INTEGER NOT NULL DEFAULT 2,
+    due TEXT,
+    repeat TEXT NOT NULL DEFAULT 'none' CHECK (repeat IN ('none', 'daily', 'weekly')),
+    weekdays INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_day TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  -- A completion is the ledger row; this links it to the task and day.
+  CREATE TABLE task_done (
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    day TEXT NOT NULL,
+    ledger_id INTEGER NOT NULL REFERENCES ledger(id),
+    PRIMARY KEY (task_id, day)
+  );
+
+  CREATE TABLE blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('study', 'workout', 'other')),
+    start TEXT NOT NULL,
+    minutes INTEGER NOT NULL CHECK (minutes BETWEEN 5 AND 600),
+    weekdays INTEGER NOT NULL DEFAULT 0,
+    date TEXT,
+    remind_min INTEGER NOT NULL DEFAULT 5,
+    created_day TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE block_log (
+    block_id INTEGER NOT NULL REFERENCES blocks(id),
+    day TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('running', 'done', 'skipped', 'missed')),
+    started_at TEXT,
+    ended_at TEXT,
+    ledger_id INTEGER REFERENCES ledger(id),
+    PRIMARY KEY (block_id, day)
+  );
+  `,
+	`
+  CREATE TABLE discipline_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL CHECK (kind IN ('start', 'reset', 'checkin', 'oath', 'urge')),
+    day TEXT NOT NULL,
+    ts TEXT NOT NULL
+  );
+  CREATE INDEX discipline_day ON discipline_events(day);
+  CREATE TRIGGER discipline_no_update BEFORE UPDATE ON discipline_events
+    BEGIN SELECT RAISE(ABORT, 'discipline log is append-only'); END;
+  CREATE TRIGGER discipline_no_delete BEFORE DELETE ON discipline_events
+    BEGIN SELECT RAISE(ABORT, 'discipline log is append-only'); END;
+  `,
+	`
+  CREATE TABLE exercises (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    unit TEXT NOT NULL DEFAULT 'reps',
+    target INTEGER NOT NULL DEFAULT 10,
+    category TEXT NOT NULL DEFAULT 'calisthenics',
+    sort INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE workouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    title TEXT NOT NULL,
+    items_json TEXT NOT NULL,
+    note TEXT,
+    ledger_id INTEGER REFERENCES ledger(id)
+  );
+  CREATE INDEX workouts_day ON workouts(day);
+
+  CREATE TABLE body_metrics (
+    day TEXT PRIMARY KEY,
+    weight REAL,
+    waist REAL,
+    note TEXT,
+    updated_at TEXT NOT NULL
+  );
+  `,
+	`
+  CREATE TABLE sleep_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL UNIQUE,
+    wake_time TEXT NOT NULL,
+    wake_target TEXT NOT NULL,
+    on_time INTEGER NOT NULL DEFAULT 0,
+    bed_time TEXT,
+    bed_target TEXT,
+    bed_on_time INTEGER,
+    quality INTEGER,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX sleep_day ON sleep_logs(day);
+
+  CREATE TABLE expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    note TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX expenses_day ON expenses(day);
+  `,
+	`
+  CREATE TABLE wishlist_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    target_coins INTEGER NOT NULL,
+    target_real_cost INTEGER NOT NULL,
+    allocated_coins INTEGER NOT NULL DEFAULT 0,
+    allocated_real_cost INTEGER NOT NULL DEFAULT 0,
+    category TEXT NOT NULL DEFAULT 'gear',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    completed INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX wishlist_pinned ON wishlist_goals(pinned, completed);
+
+  CREATE TABLE reward_vault_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    day TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('surplus_credit', 'manual_deposit', 'goal_allocation', 'reward_payout', 'chest_bonus')),
+    amount INTEGER NOT NULL,
+    ref TEXT,
+    note TEXT NOT NULL
+  );
+  CREATE INDEX vault_day ON reward_vault_ledger(day);
+
+  CREATE TABLE chest_loot_drops (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    level INTEGER NOT NULL,
+    loot_type TEXT NOT NULL,
+    loot_value INTEGER NOT NULL,
+    loot_label TEXT NOT NULL,
+    ts TEXT NOT NULL
+  );
+  `,
+	`
+  ALTER TABLE rewards ADD COLUMN image_url TEXT;
+  ALTER TABLE rewards ADD COLUMN currency TEXT NOT NULL DEFAULT 'MDL';
+  ALTER TABLE wishlist_goals ADD COLUMN image_url TEXT;
+  ALTER TABLE wishlist_goals ADD COLUMN currency TEXT NOT NULL DEFAULT 'MDL';
+  `,
+	`
+  UPDATE tasks SET category = 'life' WHERE category IN ('today', 'tomorrow');
+  UPDATE categories SET archived = 1 WHERE id IN ('today', 'tomorrow');
+  `,
+	`
+  DELETE FROM settings WHERE key = 'pin_hash';
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS active_buffs (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    effect_kind TEXT NOT NULL,
+    effect_val REAL NOT NULL,
+    icon TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS active_buffs_expiry ON active_buffs(expires_at);
+
+  CREATE TABLE IF NOT EXISTS inventory_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    description TEXT NOT NULL,
+    icon TEXT NOT NULL
+  );
+  `,
+	`
+  UPDATE rewards SET real_cost = CAST(ROUND(price / 10.0) AS INTEGER) WHERE real_cost != CAST(ROUND(price / 10.0) AS INTEGER) OR real_cost = 0;
+  `,
+	`
+  ALTER TABLE rewards ADD COLUMN product_url TEXT;
+  ALTER TABLE wishlist_goals ADD COLUMN product_url TEXT;
+  `,
+	`
+  CREATE INDEX IF NOT EXISTS idx_ledger_day_id ON ledger(day, id);
+  CREATE INDEX IF NOT EXISTS idx_ledger_ts ON ledger(ts);
+  CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS applied_sync_events (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    day TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    applied_at TEXT NOT NULL,
+    payload_json TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_applied_sync_day ON applied_sync_events(day);
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS bot_seen_updates (key TEXT PRIMARY KEY, ts TEXT NOT NULL);
+  `
+];
+// src/core/ledger.ts
+var LedgerError = class extends Error {
+	name = "LedgerError";
+};
+/** Rows that still count: not undo rows and not undone. */
+function effective(entries) {
+	const undone = /* @__PURE__ */ new Set();
+	for (const e of entries) if (e.kind === "undo" && e.undoOf != null) undone.add(e.undoOf);
+	return entries.filter((e) => e.kind !== "undo" && !undone.has(e.id));
+}
+function balance(entries) {
+	return effective(entries).reduce((s, e) => s + e.coins, 0);
+}
+/** XP only ever goes up; undoing an earn is the one way it is corrected. */
+function totalXp(entries) {
+	return effective(entries).reduce((s, e) => s + Math.max(0, e.xp), 0);
+}
+/**
+* Penalties dock coins but never push the balance below zero, so one bad day
+* can't wipe out the wallet.
+*/
+function clampPenalty(currentBalance, coins) {
+	if (coins >= 0) return coins;
+	return Math.max(coins, -Math.max(0, currentBalance));
+}
+/** Validates an undo and returns the row to insert. */
+function planUndo(entries, id, note, ts, day) {
+	if (!note.trim()) throw new LedgerError("An undo needs a reason");
+	const target = entries.find((e) => e.id === id);
+	if (!target) throw new LedgerError("Entry not found");
+	if (target.kind === "undo") throw new LedgerError("Cannot undo an undo");
+	if (target.ref?.startsWith("chest:")) throw new LedgerError("Chest prizes are final");
+	if (entries.some((e) => e.kind === "undo" && e.undoOf === id)) throw new LedgerError("Already undone");
+	if (balance(entries) - target.coins < 0) throw new LedgerError("Those coins were already spent");
+	return {
+		ts,
+		day,
+		module: target.module,
+		kind: "undo",
+		coins: 0,
+		xp: 0,
+		ruleId: target.ruleId ?? null,
+		ref: target.ref ?? null,
+		note,
+		undoOf: id
+	};
+}
+// src/core/rules.ts
+var DEFAULT_RULES = [
+	{
+		id: "sleep.up_on_time",
+		module: "sleep",
+		title: "Up by 07:00",
+		coins: 10,
+		xp: 20,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "sleep.bed_on_time",
+		module: "sleep",
+		title: "In bed on time",
+		coins: 5,
+		xp: 10,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "study.block_done",
+		module: "schedule",
+		title: "Study block completed",
+		coins: 15,
+		xp: 30,
+		dailyCap: 6,
+		cooldownMin: 20,
+		enabled: true
+	},
+	{
+		id: "study.block_skipped",
+		module: "schedule",
+		title: "Study block skipped",
+		coins: -5,
+		xp: 0,
+		dailyCap: 6,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "discipline.clean_day",
+		module: "discipline",
+		title: "Clean day",
+		coins: 20,
+		xp: 40,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "discipline.urge_resisted",
+		module: "discipline",
+		title: "Urge crushed",
+		coins: 10,
+		xp: 20,
+		dailyCap: 5,
+		cooldownMin: 10,
+		enabled: true
+	},
+	{
+		id: "discipline.oath",
+		module: "discipline",
+		title: "Morning oath",
+		coins: 3,
+		xp: 5,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "discipline.reset",
+		module: "discipline",
+		title: "Streak reset",
+		coins: -20,
+		xp: 0,
+		dailyCap: 3,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "body.workout_done",
+		module: "body",
+		title: "Workout done",
+		coins: 10,
+		xp: 25,
+		dailyCap: 2,
+		cooldownMin: 60,
+		enabled: true
+	},
+	{
+		id: "face.routine_done",
+		module: "tasks",
+		title: "Skincare routine",
+		coins: 5,
+		xp: 10,
+		dailyCap: 2,
+		cooldownMin: 240,
+		enabled: true
+	},
+	{
+		id: "money.under_budget",
+		module: "money",
+		title: "Stayed under budget",
+		coins: 5,
+		xp: 10,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "money.logged",
+		module: "money",
+		title: "Logged spending",
+		coins: 3,
+		xp: 5,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "grand_slam.all_four",
+		module: "general",
+		title: "4-Pillar Grand Slam (Sovereign Day)",
+		coins: 50,
+		xp: 100,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	}
+];
+/**
+* Rules paid only through their own section or a connected app (focus timer,
+* check-in, urge crusher, Waky, Finance Helper), never by a quick-log tap, so
+* the proof behind them can't be skipped.
+*/
+function isFlowRule(id) {
+	return [
+		"discipline.",
+		"study.",
+		"sleep.",
+		"money."
+	].some((p) => id.startsWith(p));
+}
+/** Checks caps and cooldowns and returns the row to insert for this rule. */
+function planAward(rule, entries, now, day, note) {
+	if (!rule.enabled) throw new LedgerError(`"${rule.title}" is turned off`);
+	const mine = effective(entries).filter((e) => e.ruleId === rule.id);
+	if (rule.dailyCap > 0 && mine.filter((e) => e.day === day).length >= rule.dailyCap) throw new LedgerError(`Daily limit reached for "${rule.title}"`);
+	if (rule.cooldownMin > 0 && mine.length) {
+		const waitMs = Math.max(...mine.map((e) => Date.parse(e.ts))) + rule.cooldownMin * 6e4 - now.getTime();
+		if (waitMs > 0) throw new LedgerError(`Wait ${Math.ceil(waitMs / 6e4)} min before "${rule.title}" again`);
+	}
+	return {
+		ts: now.toISOString(),
+		day,
+		module: rule.module,
+		kind: rule.coins < 0 ? "adjust" : "earn",
+		coins: clampPenalty(balance(entries), rule.coins),
+		xp: Math.max(0, rule.xp),
+		ruleId: rule.id,
+		ref: null,
+		note: note ?? null,
+		undoOf: null
+	};
+}
+var fmtCache = /* @__PURE__ */ new Map();
+function formatter(timeZone) {
+	const key = timeZone ?? "";
+	let f = fmtCache.get(key);
+	if (!f) {
+		f = new Intl.DateTimeFormat("en-CA", {
+			timeZone,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit"
+		});
+		fmtCache.set(key, f);
+	}
+	return f;
+}
+/** Local day key (YYYY-MM-DD) for an instant, shifted by DAY_START_HOUR. */
+function dayKey(at, timeZone, startHour = 4) {
+	const t = typeof at === "string" ? new Date(at) : at;
+	const shifted = /* @__PURE__ */ new Date(t.getTime() - startHour * 36e5);
+	return formatter(timeZone).format(shifted);
+}
+function toUtc(day) {
+	const [y, m, d] = day.split("-").map(Number);
+	return Date.UTC(y, m - 1, d);
+}
+/** Whole days from a to b (b - a). */
+function daysBetween(a, b) {
+	return Math.round((toUtc(b) - toUtc(a)) / 864e5);
+}
+function addDays(day, n) {
+	return new Date(toUtc(day) + n * 864e5).toISOString().slice(0, 10);
+}
+function monthKey(day) {
+	return day.slice(0, 7);
+}
+// src/core/streaks.ts
+/**
+* Consecutive days ending today. If today isn't done yet the streak is still
+* alive as long as yesterday was.
+*/
+function dayStreak(doneDays, today) {
+	const set = new Set(doneDays);
+	let cursor = set.has(today) ? today : addDays(today, -1);
+	let n = 0;
+	while (set.has(cursor)) {
+		n++;
+		cursor = addDays(cursor, -1);
+	}
+	return n;
+}
+function bestDayStreak(doneDays) {
+	const days = [...new Set(doneDays)].sort();
+	let best = 0;
+	let run = 0;
+	for (let i = 0; i < days.length; i++) {
+		run = i > 0 && daysBetween(days[i - 1], days[i]) === 1 ? run + 1 : 1;
+		best = Math.max(best, run);
+	}
+	return best;
+}
+/**
+* Clean-day stats derived from a start date and relapse dates. The count is
+* the number of whole days since the last reset, so it can't be bumped by hand.
+*/
+function cleanStats(start, relapses, today) {
+	if (!start) return {
+		current: 0,
+		best: 0,
+		totalClean: 0,
+		relapses: 0,
+		since: null
+	};
+	const resets = relapses.filter((d) => d >= start && d <= today).sort();
+	const points = [
+		start,
+		...resets,
+		today
+	];
+	const segments = [];
+	for (let i = 0; i < points.length - 1; i++) segments.push(Math.max(0, daysBetween(points[i], points[i + 1])));
+	const since = resets.length ? resets[resets.length - 1] : start;
+	return {
+		current: segments[segments.length - 1] ?? 0,
+		best: Math.max(0, ...segments),
+		totalClean: segments.reduce((s, n) => s + n, 0),
+		relapses: resets.length,
+		since
+	};
+}
+// src/core/body.ts
+var DEFAULT_EXERCISES = [
+	{
+		id: "situps",
+		name: "Sit-ups",
+		unit: "reps",
+		target: 60,
+		category: "calisthenics",
+		sort: 0
+	},
+	{
+		id: "pushups",
+		name: "Push-ups",
+		unit: "reps",
+		target: 123,
+		category: "calisthenics",
+		sort: 1
+	},
+	{
+		id: "press",
+		name: "press",
+		unit: "reps",
+		target: 50,
+		category: "calisthenics",
+		sort: 2
+	},
+	{
+		id: "pullups",
+		name: "Pull-ups",
+		unit: "reps",
+		target: 12,
+		category: "calisthenics",
+		sort: 3
+	},
+	{
+		id: "squats",
+		name: "Squats",
+		unit: "reps",
+		target: 50,
+		category: "calisthenics",
+		sort: 4
+	},
+	{
+		id: "running",
+		name: "Running",
+		unit: "min",
+		target: 20,
+		category: "cardio",
+		sort: 5
+	}
+];
+var WEIGHT_RANGE = [25, 300];
+var WAIST_RANGE = [40, 200];
+function validateWeight(w) {
+	if (w == null) return null;
+	if (Number.isNaN(w) || w < WEIGHT_RANGE[0] || w > WEIGHT_RANGE[1]) return `Weight must be between ${WEIGHT_RANGE[0]} and ${WEIGHT_RANGE[1]} kg`;
+	return null;
+}
+function validateWaist(w) {
+	if (w == null) return null;
+	if (Number.isNaN(w) || w < WAIST_RANGE[0] || w > WAIST_RANGE[1]) return `Waist measurement must be between ${WAIST_RANGE[0]} and ${WAIST_RANGE[1]} cm`;
+	return null;
+}
+function validateWorkout(input) {
+	if (!input.title || !input.title.trim()) return "Workout title is required";
+	if (!input.items || input.items.length === 0) return "At least one exercise is required";
+	for (const it of input.items) {
+		if (!it.name || !it.name.trim()) return "Exercise name cannot be empty";
+		if (it.amount <= 0 || Number.isNaN(it.amount)) return `Amount for ${it.name} must be greater than 0`;
+	}
+	return null;
+}
+/** Compute Monday of the week for a given YYYY-MM-DD */
+function weekMonday(day) {
+	const [y, m, d] = day.split("-").map(Number);
+	const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+	return addDays(day, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+}
+function computeWorkoutStats(workouts, today) {
+	const workoutDays = Array.from(new Set(workouts.filter((w) => w.day <= today).map((w) => w.day))).sort();
+	const streak = dayStreak(workoutDays, today);
+	const bestStreak = bestDayStreak(workoutDays);
+	const totalWorkouts = workouts.length;
+	const workoutDoneToday = workoutDays.includes(today);
+	const thisMonday = weekMonday(today);
+	const nextMonday = addDays(thisMonday, 7);
+	return {
+		streak,
+		bestStreak,
+		totalWorkouts,
+		workoutsThisWeek: workouts.filter((w) => w.day >= thisMonday && w.day < nextMonday).length,
+		workoutDoneToday
+	};
+}
+function computeWeeklyAverages(metrics, weeks = 12) {
+	const withWeight = metrics.filter((m) => m.weight != null && !Number.isNaN(m.weight));
+	if (withWeight.length === 0) return [];
+	const groups = /* @__PURE__ */ new Map();
+	for (const m of withWeight) {
+		const monday = weekMonday(m.day);
+		const list = groups.get(monday) ?? [];
+		list.push(m.weight);
+		groups.set(monday, list);
+	}
+	return Array.from(groups.keys()).sort().slice(-weeks).map((monday) => {
+		const weights = groups.get(monday);
+		const sum = weights.reduce((a, b) => a + b, 0);
+		return {
+			week: monday,
+			avg: Math.round(sum / weights.length * 10) / 10,
+			count: weights.length
+		};
+	});
+}
+// src/renderer/src/web/browserDb.ts
+var isPlainObject = (v) => !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Uint8Array);
+var toParam = (v) => {
+	if (v === void 0 || v === null) return null;
+	if (typeof v === "boolean") return v ? 1 : 0;
+	if (typeof v === "bigint") return Number(v);
+	if (typeof v === "number" || typeof v === "string" || v instanceof Uint8Array) return v;
+	return String(v);
+};
+/**
+* better-sqlite3 accepts `run(a, b)`, `run([a, b])` and `run({ name })` with
+* `@name`/`:name`/`$name` in the SQL. Both sql.js and Turso get the same plain
+* `?` form, so they always see exactly the same statement.
+*/
+function normalize(sql, raw) {
+	if (raw.length === 1 && isPlainObject(raw[0])) {
+		const obj = raw[0];
+		const args = [];
+		let out = "";
+		let quote = null;
+		for (let i = 0; i < sql.length; i++) {
+			const c = sql[i];
+			if (quote) {
+				out += c;
+				if (c === quote) quote = null;
+				continue;
+			}
+			if (c === "'" || c === "\"") {
+				quote = c;
+				out += c;
+				continue;
+			}
+			if ((c === "@" || c === ":" || c === "$") && /[A-Za-z_]/.test(sql[i + 1] ?? "")) {
+				let j = i + 1;
+				while (j < sql.length && /[A-Za-z0-9_]/.test(sql[j])) j++;
+				const name = sql.slice(i + 1, j);
+				if (!(name in obj)) throw new Error(`Missing named parameter "${name}"`);
+				args.push(toParam(obj[name]));
+				out += "?";
+				i = j - 1;
+				continue;
+			}
+			out += c;
+		}
+		return {
+			sql: out,
+			args
+		};
+	}
+	return {
+		sql,
+		args: raw.flat().map(toParam)
+	};
+}
+var isWrite = (sql) => !/^\s*(SELECT|WITH\s[\s\S]*SELECT|PRAGMA\s+\w+\s*$|EXPLAIN)/i.test(sql);
+var BrowserDb = class {
+	raw;
+	depth = 0;
+	sp = 0;
+	/** Changes made since the last `takeChanges()`, in order. */
+	changes = [];
+	pkCache = /* @__PURE__ */ new Map();
+	constructor(raw) {
+		this.raw = raw;
+	}
+	takeChanges() {
+		const c = this.changes;
+		this.changes = [];
+		return c;
+	}
+	dropChanges() {
+		this.changes = [];
+	}
+	rows(sql, args) {
+		const stmt = this.raw.prepare(sql);
+		try {
+			stmt.bind(args);
+			const out = [];
+			while (stmt.step()) out.push(stmt.getAsObject());
+			return out;
+		} finally {
+			stmt.free();
+		}
+	}
+	scalar(sql) {
+		const r = this.raw.exec(sql);
+		return Number(r[0]?.values[0]?.[0] ?? 0);
+	}
+	/** The INTEGER PRIMARY KEY column of a table (its rowid), if it has one. */
+	rowidColumn(table) {
+		if (this.pkCache.has(table)) return this.pkCache.get(table);
+		const pk = this.rows(`PRAGMA table_info(${JSON.stringify(table)})`, []).filter((c) => Number(c.pk) > 0);
+		const col = pk.length === 1 && String(pk[0].type).toUpperCase() === "INTEGER" ? String(pk[0].name) : null;
+		this.pkCache.set(table, col);
+		return col;
+	}
+	/**
+	* A new row got its id here; Turso must store the same id, or records that
+	* point at it (undo_of, ledger_id…) would point at the wrong row.
+	*/
+	withExplicitId(change, id) {
+		const m = /^\s*INSERT(\s+OR\s+\w+)?\s+INTO\s+["`]?(\w+)["`]?\s*\(([^)]*)\)\s*VALUES\s*\(/i.exec(change.sql);
+		if (!m || /\bSELECT\b/i.test(change.sql) || (change.sql.match(/\bVALUES\b/gi) || []).length !== 1) return change;
+		const col = this.rowidColumn(m[2]);
+		if (!col) return change;
+		if (m[3].split(",").map((c) => c.trim().replace(/["`]/g, "").toLowerCase()).includes(col.toLowerCase())) return change;
+		return {
+			sql: `INSERT${m[1] ?? ""} INTO ${m[2]} (${col}, ${m[3].trim()}) VALUES (?, ` + change.sql.slice(m[0].length),
+			args: [id, ...change.args]
+		};
+	}
+	run(sql, raw) {
+		const change = normalize(sql, raw);
+		const before = this.scalar("SELECT last_insert_rowid()");
+		this.raw.run(change.sql, change.args);
+		const changes = this.raw.getRowsModified();
+		const after = this.scalar("SELECT last_insert_rowid()");
+		if (isWrite(change.sql)) {
+			const inserted = changes > 0 && after !== before && /^\s*INSERT/i.test(change.sql);
+			this.changes.push(inserted ? this.withExplicitId(change, after) : change);
+		}
+		return {
+			changes,
+			lastInsertRowid: after
+		};
+	}
+	prepare(sql) {
+		return {
+			run: (...args) => this.run(sql, args),
+			get: (...args) => {
+				const c = normalize(sql, args);
+				return this.rows(c.sql, c.args)[0];
+			},
+			all: (...args) => {
+				const c = normalize(sql, args);
+				return this.rows(c.sql, c.args);
+			}
+		};
+	}
+	exec(sql) {
+		this.raw.exec(sql);
+		if (isWrite(sql)) this.changes.push({
+			sql,
+			args: []
+		});
+	}
+	pragma(source, opts) {
+		const r = this.rows(`PRAGMA ${source}`, []);
+		if (opts?.simple) return r[0] ? Object.values(r[0])[0] : void 0;
+		return r;
+	}
+	/** Like better-sqlite3: nested calls become savepoints; a throw rolls back. */
+	transaction(fn) {
+		const run = (...args) => {
+			const outer = this.depth === 0;
+			const name = `sp${++this.sp}`;
+			const mark = this.changes.length;
+			this.raw.run(outer ? "BEGIN" : `SAVEPOINT ${name}`);
+			this.depth++;
+			try {
+				const res = fn(...args);
+				this.depth--;
+				this.raw.run(outer ? "COMMIT" : `RELEASE ${name}`);
+				return res;
+			} catch (e) {
+				this.depth--;
+				if (outer) this.raw.run("ROLLBACK");
+				else {
+					this.raw.run(`ROLLBACK TO ${name}`);
+					this.raw.run(`RELEASE ${name}`);
+				}
+				this.changes.length = mark;
+				throw e;
+			}
+		};
+		return Object.assign(run, {
+			immediate: run,
+			deferred: run,
+			exclusive: run,
+			default: run
+		});
+	}
+};
+// src/renderer/src/web/mirror.ts
+var SKIP = /^(sqlite_|libsql_|_litestream|_cf_)/;
+var MirrorError = class extends Error {};
+var Mirror = class {
+	SQL;
+	turso;
+	store;
+	db = null;
+	queue = Promise.resolve();
+	listeners = /* @__PURE__ */ new Set();
+	refreshing = null;
+	/** When the copy last matched Turso (null: only the cached copy so far). */
+	syncedAt = null;
+	lastError = null;
+	ready;
+	constructor(SQL, turso, store = null) {
+		this.SQL = SQL;
+		this.turso = turso;
+		this.store = store;
+		this.ready = this.start();
+	}
+	onChange(cb) {
+		this.listeners.add(cb);
+		return () => this.listeners.delete(cb);
+	}
+	emit() {
+		this.listeners.forEach((cb) => {
+			try {
+				cb();
+			} catch {}
+		});
+	}
+	/** One thing at a time: a refresh never swaps the copy under a write. */
+	lock(fn) {
+		const run = this.queue.then(fn, fn);
+		this.queue = run.catch(() => {});
+		return run;
+	}
+	async start() {
+		const cached = this.store ? await this.store.load() : null;
+		if (cached) try {
+			this.db = new BrowserDb(new this.SQL.Database(cached));
+			this.refresh().catch(() => {});
+			return;
+		} catch {
+			this.db = null;
+		}
+		await this.lock(() => this.rebuild());
+	}
+	get current() {
+		if (!this.db) throw new MirrorError("Your data is still loading");
+		return this.db;
+	}
+	/** A read on the current copy. */
+	async read(fn) {
+		await this.ready;
+		return this.lock(() => fn(this.current));
+	}
+	/**
+	* A change: runs on the copy, then goes to Turso in one transaction. Only
+	* when Turso has it does the caller get the result.
+	*/
+	async write(fn) {
+		await this.ready;
+		return this.lock(async () => {
+			const db = this.current;
+			db.dropChanges();
+			const result = db.transaction(() => fn(db))();
+			const changes = db.takeChanges();
+			if (!changes.length) return result;
+			try {
+				await this.turso.writeAtomic(changes);
+				this.lastError = null;
+			} catch (e) {
+				this.lastError = e.message;
+				await this.rebuild().catch(() => {});
+				this.emit();
+				throw new MirrorError(navigator.onLine === false ? "You are offline, so this was not saved. Try again when you are back online." : `Not saved: ${e.message}`);
+			}
+			this.persist();
+			this.emit();
+			return result;
+		});
+	}
+	/** Reloads the copy from Turso (e.g. after the phone or a bot changed something). */
+	refresh() {
+		if (this.refreshing) return this.refreshing;
+		this.refreshing = this.lock(() => this.rebuild()).then(() => this.emit()).finally(() => {
+			this.refreshing = null;
+		});
+		return this.refreshing;
+	}
+	persist() {
+		if (!this.store || !this.db) return;
+		try {
+			this.store.save(this.db.raw.export()).catch(() => {});
+		} catch {}
+	}
+	/** Reference schema: what the desktop app's migrations produce. */
+	referenceDb() {
+		const ref = new this.SQL.Database();
+		for (const m of MIGRATIONS) ref.exec(m);
+		return ref;
+	}
+	async rebuild() {
+		const schema = (await this.turso.readMany([{
+			sql: "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, rowid",
+			args: []
+		}]))[0];
+		if (schema instanceof Error) throw schema;
+		const objects = schema.rows.map(([type, name, tbl, sql]) => ({
+			type: String(type),
+			name: String(name),
+			tbl: String(tbl),
+			sql: String(sql)
+		})).filter((o) => !SKIP.test(o.name) && !SKIP.test(o.tbl));
+		const raw = new this.SQL.Database();
+		const local = new BrowserDb(raw);
+		for (const o of objects.filter((x) => x.type === "table")) raw.exec(o.sql);
+		const ddl = [];
+		const ref = this.referenceDb();
+		const refTables = ref.exec("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? [];
+		const have = new Set(objects.filter((x) => x.type === "table").map((x) => x.name));
+		for (const [name, sql] of refTables) {
+			if (!have.has(name)) {
+				const create = sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, "CREATE TABLE IF NOT EXISTS ");
+				raw.exec(create);
+				ddl.push({
+					sql: create,
+					args: []
+				});
+				const idx = ref.exec(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = '${name}' AND sql IS NOT NULL`)[0]?.values ?? [];
+				for (const [isql] of idx) {
+					const c = isql.replace(/^CREATE (UNIQUE )?INDEX\s+(IF NOT EXISTS\s+)?/i, (_m, u) => `CREATE ${u ?? ""}INDEX IF NOT EXISTS `);
+					raw.exec(c);
+					ddl.push({
+						sql: c,
+						args: []
+					});
+				}
+				continue;
+			}
+			const localCols = new Set((raw.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []).map((r) => String(r[1]).toLowerCase()));
+			for (const col of ref.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []) {
+				const [, cname, ctype, notnull, dflt] = col;
+				if (localCols.has(cname.toLowerCase())) continue;
+				const def = `ALTER TABLE ${name} ADD COLUMN ${cname} ${ctype}${notnull && dflt != null ? " NOT NULL" : ""}${dflt != null ? ` DEFAULT ${dflt}` : ""}`;
+				raw.exec(def);
+				ddl.push({
+					sql: def,
+					args: []
+				});
+			}
+		}
+		ref.close();
+		if (ddl.length) await this.turso.writeAtomic(ddl);
+		const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]));
+		const data = await this.turso.readMany(tables.map((t) => ({
+			sql: `SELECT * FROM "${t}"`,
+			args: []
+		})));
+		raw.run("BEGIN");
+		tables.forEach((t, i) => {
+			const res = data[i];
+			if (res instanceof Error || !res.rows.length) return;
+			const stmt = raw.prepare(`INSERT INTO "${t}" (${res.cols.map((c) => `"${c}"`).join(", ")}) VALUES (${res.cols.map(() => "?").join(", ")})`);
+			for (const row of res.rows) stmt.run(row);
+			stmt.free();
+		});
+		raw.run("COMMIT");
+		for (const o of objects.filter((x) => x.type !== "table")) try {
+			raw.exec(o.sql);
+		} catch {}
+		const old = this.db;
+		this.db = local;
+		this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+		old?.raw.close();
+		await this.seedDefaults();
+		this.persist();
+	}
+	async seedDefaults() {
+		const db = this.current;
+		const haveRules = new Set(db.prepare("SELECT id FROM rules").all().map((r) => String(r.id)));
+		const haveEx = new Set(db.prepare("SELECT id FROM exercises").all().map((r) => String(r.id)));
+		const rules = DEFAULT_RULES.map((r, i) => ({
+			...r,
+			enabled: r.enabled ? 1 : 0,
+			sort: i
+		})).filter((r) => !haveRules.has(r.id));
+		const exercises = DEFAULT_EXERCISES.filter((e) => !haveEx.has(e.id));
+		if (!rules.length && !exercises.length) return;
+		db.dropChanges();
+		db.transaction(() => {
+			const rule = db.prepare(`INSERT OR IGNORE INTO rules (id, module, title, coins, xp, daily_cap, cooldown_min, enabled, sort)
+         VALUES (@id, @module, @title, @coins, @xp, @dailyCap, @cooldownMin, @enabled, @sort)`);
+			rules.forEach((r) => rule.run(r));
+			const ex = db.prepare(`INSERT OR IGNORE INTO exercises (id, name, unit, target, category, sort, archived)
+         VALUES (@id, @name, @unit, @target, @category, @sort, 0)`);
+			exercises.forEach((e) => ex.run(e));
+		})();
+		await this.turso.writeAtomic(db.takeChanges()).catch(() => {});
+	}
+};
+// src/renderer/src/web/tursoHttp.ts
+var toHrana = (v) => {
+	if (v === null) return { type: "null" };
+	if (typeof v === "number") return Number.isInteger(v) ? {
+		type: "integer",
+		value: String(v)
+	} : {
+		type: "float",
+		value: v
+	};
+	if (v instanceof Uint8Array) {
+		let s = "";
+		v.forEach((b) => s += String.fromCharCode(b));
+		return {
+			type: "blob",
+			base64: btoa(s)
+		};
+	}
+	return {
+		type: "text",
+		value: String(v)
+	};
+};
+var fromHrana = (v) => {
+	if (!v || v.type === "null") return null;
+	if (v.type === "integer") return Number(v.value);
+	if (v.type === "float") return Number(v.value);
+	if (v.type === "blob") {
+		const s = atob(v.base64 ?? "");
+		return Uint8Array.from(s, (c) => c.charCodeAt(0));
+	}
+	return v.value ?? "";
+};
+/** Turso said the session is over (the web server answers 401). */
+var UnauthorizedError = class extends Error {};
+var TursoHttp = class {
+	onUnauthorized;
+	url;
+	token;
+	/**
+	* `url` is a Turso database URL, or a path on this site ("/api/db") that
+	* passes the request on with the server's key.
+	*/
+	constructor(url, token, onUnauthorized) {
+		this.onUnauthorized = onUnauthorized;
+		let base = (url || "").trim();
+		if (base.startsWith("/")) this.url = base;
+		else {
+			if (base.startsWith("libsql://")) base = "https://" + base.slice(9);
+			if (!/^https?:\/\//.test(base)) base = "https://" + base;
+			this.url = base.replace(/\/+$/, "") + "/v2/pipeline";
+		}
+		this.token = typeof token === "function" ? token : () => token;
+	}
+	async pipeline(requests) {
+		const res = await fetch(this.url, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${this.token()}`,
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify({ requests: [...requests, { type: "close" }] })
+		});
+		if (res.status === 401 && this.onUnauthorized) {
+			this.onUnauthorized();
+			throw new UnauthorizedError("Locked: enter your PIN again");
+		}
+		if (!res.ok) throw new Error(`Turso HTTP ${res.status}: ${await res.text().catch(() => "") || res.statusText}`);
+		return (await res.json()).results ?? [];
+	}
+	/** Several reads in one round trip; a failed one comes back as an Error. */
+	async readMany(stmts) {
+		const results = await this.pipeline(stmts.map((s) => ({
+			type: "execute",
+			stmt: {
+				sql: s.sql,
+				args: s.args.map(toHrana)
+			}
+		})));
+		return stmts.map((_, i) => {
+			const r = results[i];
+			if (!r || r.type === "error") return new Error(r?.error?.message ?? "Turso read failed");
+			const result = r.response?.result;
+			return {
+				cols: (result?.cols ?? []).map((c) => String(c.name)),
+				rows: (result?.rows ?? []).map((row) => row.map(fromHrana))
+			};
+		});
+	}
+	/** Runs the statements in one transaction: all of them, or none. */
+	async writeAtomic(stmts) {
+		if (!stmts.length) return;
+		const steps = [{ stmt: { sql: "BEGIN" } }];
+		stmts.forEach((s, i) => steps.push({
+			condition: {
+				type: "ok",
+				step: i
+			},
+			stmt: {
+				sql: s.sql,
+				args: s.args.map(toHrana)
+			}
+		}));
+		const last = steps.length - 1;
+		steps.push({
+			condition: {
+				type: "ok",
+				step: last
+			},
+			stmt: { sql: "COMMIT" }
+		});
+		steps.push({
+			condition: {
+				type: "not",
+				cond: {
+					type: "ok",
+					step: last + 1
+				}
+			},
+			stmt: { sql: "ROLLBACK" }
+		});
+		const [r] = await this.pipeline([{
+			type: "batch",
+			batch: { steps }
+		}]);
+		if (!r || r.type === "error") throw new Error(r?.error?.message ?? "Turso write failed");
+		const res = r.response?.result;
+		const errs = res?.step_errors ?? [];
+		if (!(res?.step_results?.[last + 1] != null)) {
+			const firstErr = errs.find((e) => e);
+			throw new Error(firstErr?.message ?? "Turso did not save the change");
+		}
+	}
+};
+// src/main/body.ts
+var Body = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	exercises() {
+		let rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
+		if (rows.length === 0) {
+			for (const ex of DEFAULT_EXERCISES) this.saveExercise(ex);
+			rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
+		} else {
+			const existingIds = new Set(rows.map((r) => r.id));
+			for (const ex of DEFAULT_EXERCISES.slice(0, 3)) if (!existingIds.has(ex.id)) this.saveExercise(ex);
+			rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
+		}
+		return rows.map((r) => ({
+			id: r.id,
+			name: r.name,
+			unit: r.unit,
+			target: r.target,
+			category: r.category,
+			sort: r.sort,
+			archived: Boolean(r.archived)
+		}));
+	}
+	saveExercise(ex) {
+		if (!ex.name || !ex.name.trim()) throw new LedgerError("Exercise name is required");
+		const id = ex.id?.trim() || ex.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+		const sort = ex.sort ?? 99;
+		this.db.prepare(`INSERT INTO exercises (id, name, unit, target, category, sort, archived)
+       VALUES (?, ?, ?, ?, ?, ?, 0)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         unit = excluded.unit,
+         target = excluded.target,
+         category = excluded.category,
+         sort = excluded.sort,
+         archived = 0`).run(id, ex.name.trim(), ex.unit || "reps", Math.max(1, ex.target || 10), ex.category || "calisthenics", sort);
+	}
+	workouts(limit = 100) {
+		return this.db.prepare("SELECT id, day, ts, title, items_json, note, ledger_id FROM workouts ORDER BY ts DESC LIMIT ?").all(limit).map((r) => ({
+			id: r.id,
+			day: r.day,
+			ts: r.ts,
+			title: r.title,
+			items: JSON.parse(r.items_json),
+			note: r.note ?? void 0,
+			ledgerId: r.ledger_id
+		}));
+	}
+	metrics(limit = 60) {
+		return this.db.prepare("SELECT day, weight, waist, note, updated_at FROM body_metrics ORDER BY day ASC LIMIT ?").all(limit).map((r) => ({
+			day: r.day,
+			weight: r.weight,
+			waist: r.waist,
+			note: r.note,
+			updatedAt: r.updated_at
+		}));
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const allWorkouts = this.workouts(200);
+		const allMetrics = this.metrics(100);
+		const exercises = this.exercises();
+		const stats = computeWorkoutStats(allWorkouts, today);
+		const weeklyAverages = computeWeeklyAverages(allMetrics, 12);
+		const withWeight = allMetrics.filter((m) => m.weight != null);
+		const latestWeight = withWeight.length ? withWeight[withWeight.length - 1].weight : null;
+		const previousWeight = withWeight.length > 1 ? withWeight[withWeight.length - 2].weight : null;
+		const withWaist = allMetrics.filter((m) => m.waist != null);
+		const latestWaist = withWaist.length ? withWaist[withWaist.length - 1].waist : null;
+		const previousWaist = withWaist.length > 1 ? withWaist[withWaist.length - 2].waist : null;
+		return {
+			today,
+			streak: stats.streak,
+			bestStreak: stats.bestStreak,
+			totalWorkouts: stats.totalWorkouts,
+			workoutsThisWeek: stats.workoutsThisWeek,
+			workoutDoneToday: stats.workoutDoneToday,
+			latestWeight,
+			previousWeight,
+			latestWaist,
+			previousWaist,
+			weeklyAverages,
+			recentWorkouts: allWorkouts.slice(0, 25),
+			metrics: allMetrics,
+			exercises
+		};
+	}
+	logWorkout(input, now = /* @__PURE__ */ new Date()) {
+		const err = validateWorkout(input);
+		if (err) throw new LedgerError(err);
+		const today = input.day ?? this.wallet.today(now);
+		const ts = now.toISOString();
+		return this.db.transaction(() => {
+			let ledgerId = null;
+			let awarded = false;
+			try {
+				ledgerId = this.wallet.awardRule("body.workout_done", {
+					note: input.title,
+					now,
+					day: today,
+					ref: `workout:${today}:${ts}`
+				});
+				awarded = true;
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+			const res = this.db.prepare(`INSERT INTO workouts (day, ts, title, items_json, note, ledger_id)
+         VALUES (?, ?, ?, ?, ?, ?)`).run(today, ts, input.title.trim(), JSON.stringify(input.items), input.note?.trim() || null, ledgerId);
+			return {
+				workout: {
+					id: Number(res.lastInsertRowid),
+					day: today,
+					ts,
+					title: input.title.trim(),
+					items: input.items,
+					note: input.note?.trim() || void 0,
+					ledgerId
+				},
+				state: this.state(now),
+				awarded
+			};
+		})();
+	}
+	deleteWorkout(id, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const row = this.db.prepare("SELECT ledger_id FROM workouts WHERE id = ?").get(id);
+			if (!row) throw new LedgerError("Workout not found");
+			if (row.ledger_id != null) try {
+				this.wallet.undo(row.ledger_id, "Workout deleted", now);
+			} catch {}
+			this.db.prepare("DELETE FROM workouts WHERE id = ?").run(id);
+			return this.state(now);
+		})();
+	}
+	logMetric(input, now = /* @__PURE__ */ new Date()) {
+		const wErr = validateWeight(input.weight);
+		if (wErr) throw new LedgerError(wErr);
+		const waistErr = validateWaist(input.waist);
+		if (waistErr) throw new LedgerError(waistErr);
+		if (input.weight == null && input.waist == null) throw new LedgerError("Enter at least a weight or a waist measurement");
+		const today = input.day ?? this.wallet.today(now);
+		const ts = now.toISOString();
+		this.db.prepare(`INSERT INTO body_metrics (day, weight, waist, note, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(day) DO UPDATE SET
+         weight = COALESCE(excluded.weight, body_metrics.weight),
+         waist = COALESCE(excluded.waist, body_metrics.waist),
+         note = COALESCE(excluded.note, body_metrics.note),
+         updated_at = excluded.updated_at`).run(today, input.weight ?? null, input.waist ?? null, input.note?.trim() || null, ts);
+		return this.state(now);
+	}
+};
+// src/core/dataExport.ts
+function toWorkoutsCsv(workouts) {
+	return ["Date,Title,Notes,Exercises", ...workouts.map((w) => {
+		const exs = w.items.map((i) => `${i.name || i.exerciseId}:${i.amount}${i.unit}`).join(";");
+		const note = (w.note ?? "").replace(/"/g, "\"\"");
+		const title = (w.title ?? "").replace(/"/g, "\"\"");
+		return `"${w.day}","${title}","${note}","${exs}"`;
+	})].join("\n");
+}
+function toExpensesCsv(expenses, currency = "MDL") {
+	return ["Date,Amount,Currency,Category,Note", ...expenses.map((e) => {
+		const amt = (e.amount / 100).toFixed(2);
+		const note = (e.note ?? "").replace(/"/g, "\"\"");
+		return `"${e.day}",${amt},"${currency}","${e.category}","${note}"`;
+	})].join("\n");
+}
+// src/main/dataExport.ts
+var DataExportService = class {
+	db;
+	body;
+	money;
+	constructor(db, body, money) {
+		this.db = db;
+		this.body = body;
+		this.money = money;
+	}
+	exportJson() {
+		const payload = {
+			version: "0.8.0",
+			exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+			ledger: this.db.prepare("SELECT * FROM ledger ORDER BY id ASC").all(),
+			workouts: this.body.workouts(1e3),
+			bodyMetrics: this.body.metrics(),
+			exercises: this.body.exercises(),
+			sleepLogs: this.db.prepare("SELECT * FROM sleep_logs ORDER BY day ASC").all(),
+			expenses: this.money.expenses(1e3),
+			rules: this.db.prepare("SELECT * FROM rules ORDER BY sort ASC").all(),
+			disciplineEvents: this.db.prepare("SELECT * FROM discipline_events ORDER BY id ASC").all(),
+			tasks: this.db.prepare("SELECT * FROM tasks ORDER BY id ASC").all(),
+			blocks: this.db.prepare("SELECT * FROM blocks ORDER BY id ASC").all(),
+			settings: this.db.prepare("SELECT * FROM settings").all()
+		};
+		return JSON.stringify(payload, null, 2);
+	}
+	exportCsv(kind) {
+		if (kind === "workouts") return toWorkoutsCsv(this.body.workouts(1e3));
+		return toExpensesCsv(this.money.expenses(1e3), this.money.currency());
+	}
+};
+// src/core/discipline.ts
+var MILESTONES = [
+	{
+		days: 3,
+		coins: 15
+	},
+	{
+		days: 7,
+		coins: 40
+	},
+	{
+		days: 10,
+		coins: 60
+	},
+	{
+		days: 14,
+		coins: 80
+	},
+	{
+		days: 30,
+		coins: 200
+	},
+	{
+		days: 60,
+		coins: 350
+	},
+	{
+		days: 90,
+		coins: 600
+	},
+	{
+		days: 180,
+		coins: 1e3
+	},
+	{
+		days: 365,
+		coins: 2e3
+	}
+];
+var DISCIPLINE_RANKS = [
+	{
+		days: 0,
+		name: "Initiate"
+	},
+	{
+		days: 3,
+		name: "Squire"
+	},
+	{
+		days: 7,
+		name: "Warrior"
+	},
+	{
+		days: 14,
+		name: "Guardian"
+	},
+	{
+		days: 30,
+		name: "Knight"
+	},
+	{
+		days: 60,
+		name: "Champion"
+	},
+	{
+		days: 90,
+		name: "Spartan"
+	},
+	{
+		days: 180,
+		name: "Legend"
+	}
+];
+var QUOTES = [
+	"Discipline is choosing what you want most over what you want now.",
+	"The urge is a wave. You do not have to surf it, you only have to let it pass.",
+	"Every clean day is a vote for the person you are becoming.",
+	"You are not your impulses. You are the one who notices them.",
+	"Hard choices, easy life. Easy choices, hard life.",
+	"One day at a time is still a day won.",
+	"Boredom is not an emergency. Stand up, move, breathe.",
+	"Strong is built in the moments nobody sees.",
+	"A slip is a lesson, not a verdict. Start again today.",
+	"Your future self is watching. Give them a reason to be proud.",
+	"Energy saved is energy you get to spend on your goals.",
+	"Comfort is the enemy of progress. Do the harder thing.",
+	"The first five minutes are the hardest. After that it gets quiet.",
+	"You have done hard things before. This is one more.",
+	"Win the morning, win the day.",
+	"Control the phone or the phone controls you.",
+	"Real confidence is a promise to yourself, kept.",
+	"Cold water, ten push-ups, fresh air. Then decide.",
+	"Small daily wins beat big rare ones.",
+	"The streak is the proof. Keep stacking days."
+];
+function quoteFor(day) {
+	return QUOTES[(daysBetween("2026-01-01", day) % QUOTES.length + QUOTES.length) % QUOTES.length];
+}
+function rankFor(days) {
+	let i = 0;
+	for (let k = 0; k < DISCIPLINE_RANKS.length; k++) if (days >= DISCIPLINE_RANKS[k].days) i = k;
+	const next = DISCIPLINE_RANKS[i + 1];
+	return {
+		name: DISCIPLINE_RANKS[i].name,
+		next: next ?? null
+	};
+}
+/** The current start date is the latest `start` event. */
+function startOf(events) {
+	const starts = events.filter((e) => e.kind === "start").sort((a, b) => a.id - b.id);
+	return starts[starts.length - 1] ?? null;
+}
+function statsOf(events, today) {
+	return cleanStats(startOf(events)?.day ?? null, events.filter((e) => e.kind === "reset").map((e) => e.day), today);
+}
+function milestoneRef(since, days) {
+	return `milestone:${since}:${days}`;
+}
+/**
+* Milestones of the current streak. A milestone whose day came before the
+* streak was entered in the app shows as reached but pays nothing, so a
+* backdated start date can't unlock a pile of coins at once.
+*/
+function milestonesOf(events, today, claimedRefs, setupDay) {
+	const start = startOf(events);
+	const stats = statsOf(events, today);
+	if (!start || !stats.since) return MILESTONES.map((m) => ({
+		...m,
+		status: "locked",
+		reachedOn: null
+	}));
+	const recorded = setupDay(start);
+	return MILESTONES.map((m) => {
+		if (stats.current < m.days) return {
+			...m,
+			status: "locked",
+			reachedOn: null
+		};
+		const reachedOn = addDays(stats.since, m.days);
+		if (claimedRefs.has(milestoneRef(stats.since, m.days))) return {
+			...m,
+			status: "claimed",
+			reachedOn
+		};
+		return {
+			...m,
+			status: reachedOn < recorded ? "before-setup" : "claimable",
+			reachedOn
+		};
+	});
+}
+function validateStart(day, today, events) {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new LedgerError("Pick a date");
+	if (day > today) throw new LedgerError("The start date cannot be in the future");
+	if (daysBetween(day, today) > 3650) throw new LedgerError("That date is too far back");
+	if (events.some((e) => e.kind === "reset")) throw new LedgerError("After a reset the date comes from the reset itself");
+}
+function planCheckIn(events, today) {
+	if (!startOf(events)) throw new LedgerError("Set your start date first");
+	if (events.some((e) => e.kind === "reset" && e.day === today)) throw new LedgerError("Today was a reset day. Check in again tomorrow.");
+	if (events.some((e) => e.kind === "checkin" && e.day === today)) throw new LedgerError("Already checked in today");
+}
+function planUrgeFinish(startedAt, now) {
+	if (!startedAt) throw new LedgerError("Start the urge crusher first");
+	const elapsed = (now.getTime() - Date.parse(startedAt)) / 1e3;
+	if (elapsed < 170) throw new LedgerError(`Stay with it ${Math.ceil(170 - elapsed)} more seconds`);
+}
+// src/main/settings.ts
+function getSetting(db, key) {
+	return db.prepare("SELECT value FROM settings WHERE key = ?").get(key)?.value ?? null;
+}
+function setSetting(db, key, value) {
+	db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
+// src/main/discipline.ts
+var Discipline = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	events() {
+		return this.db.prepare("SELECT id, kind, day, ts FROM discipline_events ORDER BY id").all();
+	}
+	record(kind, day, now) {
+		this.db.prepare("INSERT INTO discipline_events (kind, day, ts) VALUES (?, ?, ?)").run(kind, day, now.toISOString());
+	}
+	claimedRefs() {
+		return new Set(effective(this.wallet.entries()).map((e) => e.ref ?? "").filter((r) => r.startsWith("milestone:")));
+	}
+	milestones(events, today) {
+		return milestonesOf(events, today, this.claimedRefs(), (start) => this.wallet.today(new Date(start.ts)));
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const events = this.events();
+		const stats = statsOf(events, today);
+		const rank = rankFor(stats.current);
+		const weekAgo = addDays(today, -6);
+		const has = (kind) => events.some((e) => e.kind === kind && e.day === today);
+		return {
+			setup: !!startOf(events),
+			today,
+			since: stats.since,
+			current: stats.current,
+			best: stats.best,
+			totalClean: stats.totalClean,
+			resets: stats.relapses,
+			rank: rank.name,
+			nextRank: rank.next,
+			checkedInToday: has("checkin"),
+			oathToday: has("oath"),
+			resetToday: has("reset"),
+			canEditStart: !events.some((e) => e.kind === "reset"),
+			milestones: this.milestones(events, today),
+			urgeStartedAt: getSetting(this.db, "urge_started_at") || null,
+			urgesThisWeek: events.filter((e) => e.kind === "urge" && e.day >= weekAgo).length,
+			stealth: getSetting(this.db, "discipline_stealth") === "1",
+			quote: quoteFor(today)
+		};
+	}
+	setStart(day, now = /* @__PURE__ */ new Date()) {
+		const events = this.events();
+		validateStart(day, this.wallet.today(now), events);
+		this.record("start", day, now);
+	}
+	checkIn(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			planCheckIn(this.events(), today);
+			this.wallet.awardRule("discipline.clean_day", {
+				now,
+				ref: `discipline:checkin:${today}`
+			});
+			this.record("checkin", today, now);
+		}).immediate();
+	}
+	oath(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			if (this.events().some((e) => e.kind === "oath" && e.day === today)) throw new LedgerError("Oath already sworn today");
+			this.wallet.awardRule("discipline.oath", { now });
+			this.record("oath", today, now);
+		}).immediate();
+	}
+	/** An honest reset: the current streak starts again; best and total stay. */
+	reset(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			const events = this.events();
+			if (!startOf(events)) throw new LedgerError("Set your start date first");
+			if (events.some((e) => e.kind === "reset" && e.day === today)) throw new LedgerError("Already reset today. Tomorrow is day 1.");
+			let penaltyAwarded = false;
+			try {
+				this.wallet.awardRule("discipline.reset", { now });
+				penaltyAwarded = true;
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+			if (penaltyAwarded) try {
+				if (this.wallet.summary(now).level.perks.some((p) => p.id === "rulers_authority" && p.unlocked)) {
+					const entries = this.wallet.entries();
+					const lastEntry = entries[entries.length - 1];
+					if (lastEntry && lastEntry.ruleId === "discipline.reset" && lastEntry.coins < 0) {
+						const refundCoins = Math.round(Math.abs(lastEntry.coins) * .5);
+						if (refundCoins > 0) this.wallet.append({
+							ts: now.toISOString(),
+							day: today,
+							module: "perks",
+							kind: "earn",
+							coins: refundCoins,
+							xp: 0,
+							ref: "perk:rulers_authority",
+							note: "Ruler's Authority: 50% Urge Reset Penalty Refund"
+						});
+					}
+				}
+			} catch {}
+			this.record("reset", today, now);
+			setSetting(this.db, "urge_started_at", "");
+		}).immediate();
+	}
+	claim(days, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			const events = this.events();
+			const m = this.milestones(events, today).find((x) => x.days === days);
+			if (!m || m.status !== "claimable") throw new LedgerError("Nothing to claim for that milestone");
+			const since = statsOf(events, today).since;
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: today,
+				module: "discipline",
+				kind: "earn",
+				coins: m.coins,
+				xp: m.coins,
+				ref: milestoneRef(since, days),
+				note: `${days}-day milestone`
+			});
+			return m.coins;
+		}).immediate();
+	}
+	startUrge(now = /* @__PURE__ */ new Date()) {
+		if (getSetting(this.db, "urge_started_at")) return;
+		setSetting(this.db, "urge_started_at", now.toISOString());
+	}
+	finishUrge(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			planUrgeFinish(getSetting(this.db, "urge_started_at") || null, now);
+			try {
+				this.wallet.awardRule("discipline.urge_resisted", { now });
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+			this.record("urge", this.wallet.today(now), now);
+			setSetting(this.db, "urge_started_at", "");
+		}).immediate();
+	}
+	cancelUrge() {
+		setSetting(this.db, "urge_started_at", "");
+	}
+	setStealth(on) {
+		setSetting(this.db, "discipline_stealth", on ? "1" : "0");
+	}
+};
+// src/core/money.ts
+function validateExpense(amount, category) {
+	if (typeof amount !== "number" || isNaN(amount) || amount <= 0) throw new Error("Expense amount must be greater than zero");
+	if (!category || typeof category !== "string" || !category.trim()) throw new Error("Category is required");
+}
+function computeDailyExpenseSummary(expenses, day, dailyBudgetBani) {
+	const dayExpenses = expenses.filter((e) => e.day === day);
+	let totalSpent = 0;
+	let everydaySpent = 0;
+	const byCategory = {};
+	for (const e of dayExpenses) {
+		totalSpent += e.amount;
+		if (e.category !== "bills") everydaySpent += e.amount;
+		byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amount;
+	}
+	const remaining = dailyBudgetBani - everydaySpent;
+	return {
+		day,
+		totalSpent,
+		everydaySpent,
+		budget: dailyBudgetBani,
+		underBudget: dailyBudgetBani > 0 && everydaySpent <= dailyBudgetBani,
+		remaining,
+		byCategory
+	};
+}
+function formatMoney(bani, currency = "MDL") {
+	return `${(bani / 100).toLocaleString(void 0, {
+		minimumFractionDigits: bani % 100 === 0 ? 0 : 2,
+		maximumFractionDigits: 2
+	})} ${currency}`;
+}
+// src/main/money.ts
+function toExpense(r) {
+	return {
+		id: r.id,
+		day: r.day,
+		amount: r.amount,
+		category: r.category,
+		note: r.note,
+		createdAt: r.created_at
+	};
+}
+var MoneyService = class {
+	db;
+	wallet;
+	financeHost;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	setFinanceHost(fh) {
+		this.financeHost = fh;
+	}
+	currency() {
+		return getSetting(this.db, "money_currency") || "MDL";
+	}
+	setCurrency(cur) {
+		setSetting(this.db, "money_currency", cur || "MDL");
+		return this.state();
+	}
+	dailyBudget() {
+		const val = getSetting(this.db, "money_daily_budget");
+		return val ? parseInt(val, 10) : 1e4;
+	}
+	setBudget(budgetBani) {
+		setSetting(this.db, "money_daily_budget", String(Math.max(0, budgetBani)));
+		return this.state();
+	}
+	expenses(limit = 100) {
+		return this.db.prepare("SELECT * FROM expenses ORDER BY day DESC, id DESC LIMIT ?").all(limit).map(toExpense);
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const all = this.expenses(300);
+		const budget = this.dailyBudget();
+		const todaySummary = computeDailyExpenseSummary(all, today, budget);
+		const thisMonth = today.slice(0, 7);
+		const monthSpent = all.filter((e) => e.day.startsWith(thisMonth)).reduce((s, e) => s + e.amount, 0);
+		return {
+			currency: this.currency(),
+			dailyBudget: budget,
+			today: todaySummary,
+			monthSpent,
+			recentExpenses: all.slice(0, 25)
+		};
+	}
+	addExpense(amountBani, category, note, now = /* @__PURE__ */ new Date(), skipFinanceSync = false) {
+		validateExpense(amountBani, category);
+		const today = this.wallet.today(now);
+		const roundedBani = Math.round(amountBani);
+		const info = this.db.prepare("INSERT INTO expenses (day, amount, category, note, created_at) VALUES (?, ?, ?, ?, ?)").run(today, roundedBani, category.trim(), note?.trim() || null, now.toISOString());
+		const row = this.db.prepare("SELECT * FROM expenses WHERE id = ?").get(info.lastInsertRowid);
+		let awarded = false;
+		try {
+			this.wallet.award("money.logged", `Logged expense: ${category}`, now);
+			awarded = true;
+		} catch {}
+		if (!skipFinanceSync && this.financeHost) this.financeHost.addTransaction({
+			type: "expense",
+			amount: roundedBani,
+			category: category.trim(),
+			note: note?.trim() || void 0
+		}).catch((err) => {
+			console.warn("FinanceHost dual-write warning:", err);
+		});
+		return {
+			expense: toExpense(row),
+			state: this.state(now),
+			awarded
+		};
+	}
+	deleteExpense(id) {
+		this.db.prepare("DELETE FROM expenses WHERE id = ?").run(id);
+		return this.state();
+	}
+};
+function weekdayIndex(day) {
+	const [y, m, d] = day.split("-").map(Number);
+	return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+}
+function onWeekday(mask, day) {
+	return (mask & 1 << weekdayIndex(day)) !== 0;
+}
+function validateTask(t) {
+	if (!t.title.trim()) throw new LedgerError("A task needs a title");
+	if (!Number.isInteger(t.coins) || t.coins < 0 || t.coins > 30) throw new LedgerError(`Coins must be 0 to 30`);
+	if (!Number.isInteger(t.xp) || t.xp < 0 || t.xp > 60) throw new LedgerError(`XP must be 0 to 60`);
+	if (![
+		1,
+		2,
+		3
+	].includes(t.priority)) throw new LedgerError("Priority must be high, normal or low");
+	if (![
+		"none",
+		"daily",
+		"weekly"
+	].includes(t.repeat)) throw new LedgerError("Unknown repeat");
+	if (t.repeat === "weekly" && !(t.weekdays & 127)) throw new LedgerError("Pick at least one weekday");
+	if (t.due && !/^\d{4}-\d{2}-\d{2}$/.test(t.due)) throw new LedgerError("Due date must be YYYY-MM-DD");
+}
+/**
+* Does the task show up on `day`? One-off tasks show from creation until
+* done; repeating ones on their days.
+*/
+function taskOn(t, day, doneDays) {
+	if (day < t.createdDay) return false;
+	if (t.repeat === "daily") return true;
+	if (t.repeat === "weekly") return onWeekday(t.weekdays, day);
+	const doneOn = [...doneDays].sort()[0];
+	return doneOn ? doneOn === day : true;
+}
+/** The day a completion is recorded under: one-offs finish once, repeats once per day. */
+function alreadyDone(t, day, doneDays) {
+	return t.repeat === "none" ? doneDays.size > 0 : doneDays.has(day);
+}
+function isOverdue(t, day, doneDays) {
+	return t.repeat === "none" && !!t.due && t.due < day && doneDays.size === 0;
+}
+function planTaskComplete(t, day, doneDays, coinsFromTasksToday) {
+	if (alreadyDone(t, day, doneDays)) throw new LedgerError("Already done");
+	if (t.repeat !== "none" && !taskOn(t, day, doneDays)) throw new LedgerError("This task is not scheduled today");
+	const room = Math.max(0, 150 - coinsFromTasksToday);
+	return {
+		coins: Math.min(t.coins, room),
+		xp: t.xp
+	};
+}
+/** High priority first, then overdue, then by due date, then title. */
+function sortTasks(list) {
+	return list.slice().sort((a, b) => Number(a.done) - Number(b.done) || a.priority - b.priority || (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.title.localeCompare(b.title));
+}
+/** Which rule a block pays out through when finished or skipped. */
+var BLOCK_RULES = {
+	study: {
+		done: "study.block_done",
+		skipped: "study.block_skipped"
+	},
+	workout: {
+		done: "body.workout_done",
+		skipped: null
+	},
+	other: {
+		done: null,
+		skipped: null
+	}
+};
+/** A block must run for this share of its length before it can be finished. */
+var FINISH_SHARE = .8;
+function validateBlock(b) {
+	if (!b.title.trim()) throw new LedgerError("A block needs a title");
+	if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(b.start)) throw new LedgerError("Start must be HH:MM");
+	if (!Number.isInteger(b.minutes) || b.minutes < 5 || b.minutes > 600) throw new LedgerError("Length must be 5 to 600 minutes");
+	if (!(b.kind in BLOCK_RULES)) throw new LedgerError("Unknown block type");
+	if (!b.date && !(b.weekdays & 127)) throw new LedgerError("Pick weekdays or a date");
+	if (!Number.isInteger(b.remindMin) || b.remindMin < 0 || b.remindMin > 120) throw new LedgerError("Reminder must be 0 to 120 minutes");
+}
+function blockOn(b, day) {
+	if (day < b.createdDay && !b.date) return false;
+	return b.date ? b.date === day : onWeekday(b.weekdays, day);
+}
+/** Earliest instant a running block may be finished. */
+function finishAllowedAt(startedAt, minutes) {
+	return new Date(Date.parse(startedAt) + Math.round(minutes * FINISH_SHARE) * 6e4);
+}
+function planFinish(status, startedAt, minutes, now) {
+	if (status === "done" || status === "skipped" || status === "missed") throw new LedgerError("This block is already closed");
+	if (status !== "running" || !startedAt) throw new LedgerError("Start the focus timer first");
+	const at = finishAllowedAt(startedAt, minutes);
+	if (now < at) throw new LedgerError(`Keep going: ${Math.ceil((at.getTime() - now.getTime()) / 6e4)} more min before this block counts`);
+}
+function planSkip(status) {
+	if (status === "done" || status === "skipped" || status === "missed") throw new LedgerError("This block is already closed");
+}
+/**
+* Study blocks from past days that were never closed. They count as missed
+* (with the skip penalty), so ignoring a block isn't a way around it.
+*/
+function blocksToMiss(blocks, closed, today, lookbackDays = 7) {
+	const out = [];
+	for (let i = lookbackDays; i >= 1; i--) {
+		const day = addDays(today, -i);
+		for (const b of blocks) {
+			if (b.kind !== "study" || day < b.createdDay || !blockOn(b, day)) continue;
+			if (!closed.has(`${b.id}:${day}`)) out.push({
+				block: b,
+				day
+			});
+		}
+	}
+	return out;
+}
+// src/main/planner.ts
+var toTask = (r) => ({
+	id: r.id,
+	title: r.title,
+	category: r.category,
+	coins: r.coins,
+	xp: r.xp,
+	priority: r.priority,
+	due: r.due,
+	repeat: r.repeat,
+	weekdays: r.weekdays,
+	notes: r.notes,
+	createdDay: r.created_day
+});
+var toBlock = (r) => ({
+	id: r.id,
+	title: r.title,
+	kind: r.kind,
+	start: r.start,
+	minutes: r.minutes,
+	weekdays: r.weekdays,
+	date: r.date,
+	remindMin: r.remind_min,
+	createdDay: r.created_day
+});
+/** Local wall-clock time on a day key, as an instant. */
+function atLocal(day, hhmm) {
+	return /* @__PURE__ */ new Date(`${day}T${hhmm}:00`);
+}
+var Tasks = class {
+	db;
+	wallet;
+	shieldService;
+	economy;
+	constructor(db, wallet, shieldService) {
+		this.db = db;
+		this.wallet = wallet;
+		this.shieldService = shieldService;
+	}
+	setEconomy(economy) {
+		this.economy = economy;
+	}
+	liveLedgerIds() {
+		return new Set(effective(this.wallet.entries()).map((e) => e.id));
+	}
+	/** Days each task was completed, ignoring completions undone in History. */
+	doneDays(live) {
+		const out = /* @__PURE__ */ new Map();
+		const rows = this.db.prepare("SELECT task_id, day, ledger_id FROM task_done").all();
+		for (const r of rows) {
+			if (!live.has(r.ledger_id)) continue;
+			if (!out.has(r.task_id)) out.set(r.task_id, /* @__PURE__ */ new Set());
+			out.get(r.task_id).add(r.day);
+		}
+		return out;
+	}
+	task(id) {
+		const row = this.db.prepare("SELECT * FROM tasks WHERE id = ? AND archived = 0").get(id);
+		if (!row) throw new LedgerError("Task not found");
+		return toTask(row);
+	}
+	coinsToday(today) {
+		return effective(this.wallet.entries()).filter((e) => e.module === "tasks" && e.day === today && e.ref?.startsWith("task:")).reduce((s, e) => s + Math.max(0, e.coins), 0);
+	}
+	categories() {
+		return this.db.prepare("SELECT id, label, color FROM categories WHERE archived = 0 ORDER BY sort, label").all();
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const live = this.liveLedgerIds();
+		const done = this.doneDays(live);
+		const rows = this.db.prepare("SELECT * FROM tasks WHERE archived = 0").all().map(toTask);
+		const views = [];
+		for (const t of rows) {
+			const days = done.get(t.id) ?? /* @__PURE__ */ new Set();
+			if (!taskOn(t, today, days)) continue;
+			const sorted = [...days].sort();
+			views.push({
+				...t,
+				done: t.repeat === "none" ? days.size > 0 : days.has(today),
+				overdue: isOverdue(t, today, days),
+				lastDone: sorted[sorted.length - 1] ?? null
+			});
+		}
+		return {
+			today,
+			categories: this.categories(),
+			tasks: sortTasks(views),
+			coinsToday: this.coinsToday(today),
+			dailyCap: 150
+		};
+	}
+	save(input, now = /* @__PURE__ */ new Date()) {
+		const t = {
+			...input,
+			title: input.title.trim(),
+			notes: input.notes?.trim() || null,
+			due: input.due || null
+		};
+		validateTask(t);
+		if (!this.categories().some((c) => c.id === t.category)) throw new LedgerError("Unknown category");
+		const params = {
+			title: t.title,
+			category: t.category,
+			coins: t.coins,
+			xp: t.xp,
+			priority: t.priority,
+			due: t.due,
+			repeat: t.repeat,
+			weekdays: t.weekdays,
+			notes: t.notes
+		};
+		if (input.id) {
+			this.task(input.id);
+			this.db.prepare("UPDATE tasks SET title=@title, category=@category, coins=@coins, xp=@xp, priority=@priority, due=@due, repeat=@repeat, weekdays=@weekdays, notes=@notes WHERE id=@id").run({
+				...params,
+				id: input.id
+			});
+		} else this.db.prepare("INSERT INTO tasks (title, category, coins, xp, priority, due, repeat, weekdays, notes, created_day) VALUES (@title, @category, @coins, @xp, @priority, @due, @repeat, @weekdays, @notes, @createdDay)").run({
+			...params,
+			createdDay: this.wallet.today(now)
+		});
+	}
+	archive(id) {
+		this.task(id);
+		this.db.prepare("UPDATE tasks SET archived = 1 WHERE id = ?").run(id);
+	}
+	complete(id, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const t = this.task(id);
+			const today = this.wallet.today(now);
+			let { coins, xp } = planTaskComplete(t, today, this.doneDays(this.liveLedgerIds()).get(id) ?? /* @__PURE__ */ new Set(), this.coinsToday(today));
+			if (this.economy?.isBuffActive("multiplier_boost", now)) {
+				const mult = this.economy.getBuffMultiplier("multiplier_boost", now) || 2;
+				coins = Math.round(coins * mult);
+			}
+			if (this.economy?.isBuffActive("xp_boost", now)) {
+				const xpMult = this.economy.getBuffMultiplier("xp_boost", now) || 1.5;
+				xp = Math.round(xp * xpMult);
+			}
+			const ledgerId = this.wallet.append({
+				ts: now.toISOString(),
+				day: today,
+				module: "tasks",
+				kind: "earn",
+				coins,
+				xp,
+				ref: `task:${id}`,
+				note: t.title
+			});
+			this.db.prepare("DELETE FROM task_done WHERE task_id = ? AND day = ?").run(id, today);
+			this.db.prepare("INSERT INTO task_done (task_id, day, ledger_id) VALUES (?, ?, ?)").run(id, today, ledgerId);
+			if (t.priority === 1) try {
+				if (this.wallet.summary(now).level.perks.some((p) => p.id === "shadow_monarch_extraction" && p.unlocked)) {
+					const currentStreak = parseInt(getSetting(this.db, "perk.shadow_monarch.p1_streak") || "0", 10) + 1;
+					if (currentStreak >= 7) {
+						setSetting(this.db, "perk.shadow_monarch.p1_streak", "0");
+						this.shieldService?.awardFreeShield("Shadow Monarch Extraction: 7 consecutive P1 tasks");
+					} else setSetting(this.db, "perk.shadow_monarch.p1_streak", String(currentStreak));
+				}
+			} catch {}
+			return ledgerId;
+		}).immediate();
+	}
+	uncomplete(id, now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const t = this.task(id);
+			const today = this.wallet.today(now);
+			const live = this.liveLedgerIds();
+			const row = this.db.prepare("SELECT day, ledger_id FROM task_done WHERE task_id = ?").all(id).find((r) => live.has(r.ledger_id) && (t.repeat === "none" || r.day === today));
+			if (!row) throw new LedgerError("This task is not done");
+			this.wallet.undo(row.ledger_id, "Task unticked", now);
+			this.db.prepare("DELETE FROM task_done WHERE task_id = ? AND day = ?").run(id, row.day);
+		}).immediate();
+	}
+	saveCategory(c) {
+		const id = c.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+		if (!id || !c.label.trim()) throw new LedgerError("A category needs a name");
+		if (!/^#[0-9a-fA-F]{6}$/.test(c.color)) throw new LedgerError("Color must look like #A1B2C3");
+		this.db.prepare(`INSERT INTO categories (id, label, color, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM categories))
+         ON CONFLICT(id) DO UPDATE SET label = excluded.label, color = excluded.color, archived = 0`).run(id, c.label.trim(), c.color);
+	}
+	archiveCategory(id) {
+		this.db.prepare("UPDATE categories SET archived = 1 WHERE id = ?").run(id);
+	}
+};
+var Schedule = class {
+	db;
+	wallet;
+	economy;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	setEconomy(economy) {
+		this.economy = economy;
+	}
+	blocks() {
+		return this.db.prepare("SELECT * FROM blocks WHERE archived = 0 ORDER BY start").all().map(toBlock);
+	}
+	block(id) {
+		const row = this.db.prepare("SELECT * FROM blocks WHERE id = ? AND archived = 0").get(id);
+		if (!row) throw new LedgerError("Block not found");
+		return toBlock(row);
+	}
+	log(id, day) {
+		return this.db.prepare("SELECT * FROM block_log WHERE block_id = ? AND day = ?").get(id, day);
+	}
+	/** Pays out a block's rule if it has one; limits that block it just mean no coins. */
+	payout(ruleId, b, day, now) {
+		if (!ruleId) return null;
+		try {
+			return this.wallet.awardRule(ruleId, {
+				now,
+				day,
+				ref: `block:${b.id}:${day}`,
+				note: b.title
+			});
+		} catch (e) {
+			if (e instanceof LedgerError) return null;
+			throw e;
+		}
+	}
+	/** Closes study blocks from past days that were left open, with the skip penalty. */
+	closeMissed(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const closed = new Set(this.db.prepare("SELECT block_id, day FROM block_log WHERE status != 'running'").all().map((r) => `${r.block_id}:${r.day}`));
+		const misses = blocksToMiss(this.blocks(), closed, today);
+		this.db.transaction(() => {
+			for (const { block, day } of misses) {
+				const ledgerId = this.payout(BLOCK_RULES[block.kind].skipped, block, day, now);
+				this.db.prepare(`INSERT INTO block_log (block_id, day, status, ended_at, ledger_id) VALUES (?, ?, 'missed', ?, ?)
+             ON CONFLICT(block_id, day) DO UPDATE SET status = 'missed', ended_at = excluded.ended_at, ledger_id = excluded.ledger_id`).run(block.id, day, now.toISOString(), ledgerId);
+			}
+		})();
+		return misses.length;
+	}
+	state(day, now = /* @__PURE__ */ new Date()) {
+		this.closeMissed(now);
+		const today = this.wallet.today(now);
+		const d = day ?? today;
+		return {
+			day: d,
+			today,
+			blocks: this.blocks().filter((b) => blockOn(b, d)).map((b) => {
+				const log = this.log(b.id, d);
+				const startsAt = atLocal(d, b.start);
+				return {
+					...b,
+					day: d,
+					status: log?.status ?? "pending",
+					startsAt: startsAt.toISOString(),
+					endsAt: new Date(startsAt.getTime() + b.minutes * 6e4).toISOString(),
+					startedAt: log?.started_at ?? null,
+					finishAllowedAt: log?.status === "running" && log.started_at ? finishAllowedAt(log.started_at, b.minutes).toISOString() : null
+				};
+			}),
+			all: this.blocks()
+		};
+	}
+	save(input, now = /* @__PURE__ */ new Date()) {
+		const b = {
+			...input,
+			title: input.title.trim(),
+			date: input.date || null,
+			weekdays: input.date ? 0 : input.weekdays
+		};
+		validateBlock(b);
+		const params = {
+			title: b.title,
+			kind: b.kind,
+			start: b.start,
+			minutes: b.minutes,
+			weekdays: b.weekdays,
+			date: b.date,
+			remindMin: b.remindMin
+		};
+		if (input.id) {
+			this.block(input.id);
+			this.db.prepare("UPDATE blocks SET title=@title, kind=@kind, start=@start, minutes=@minutes, weekdays=@weekdays, date=@date, remind_min=@remindMin WHERE id=@id").run({
+				...params,
+				id: input.id
+			});
+		} else this.db.prepare("INSERT INTO blocks (title, kind, start, minutes, weekdays, date, remind_min, created_day) VALUES (@title, @kind, @start, @minutes, @weekdays, @date, @remindMin, @createdDay)").run({
+			...params,
+			createdDay: this.wallet.today(now)
+		});
+	}
+	archive(id) {
+		this.block(id);
+		this.db.prepare("UPDATE blocks SET archived = 1 WHERE id = ?").run(id);
+	}
+	todayBlock(id, now) {
+		const b = this.block(id);
+		const day = this.wallet.today(now);
+		if (!blockOn(b, day)) throw new LedgerError("This block is not on today");
+		return {
+			b,
+			day,
+			log: this.log(id, day)
+		};
+	}
+	start(id, now = /* @__PURE__ */ new Date()) {
+		const { b, day, log } = this.todayBlock(id, now);
+		if (log) throw new LedgerError(log.status === "running" ? "Already running" : "This block is already closed");
+		const running = this.db.prepare("SELECT b.title FROM block_log l JOIN blocks b ON b.id = l.block_id WHERE l.day = ? AND l.status = 'running'").get(day);
+		if (running) throw new LedgerError(`Finish or skip "${running.title}" first`);
+		this.db.prepare("INSERT INTO block_log (block_id, day, status, started_at) VALUES (?, ?, 'running', ?)").run(b.id, day, now.toISOString());
+	}
+	finish(id, now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const { b, day, log } = this.todayBlock(id, now);
+			planFinish(log?.status ?? "pending", log?.started_at ?? null, b.minutes, now);
+			const ledgerId = this.payout(BLOCK_RULES[b.kind].done, b, day, now);
+			this.db.prepare("UPDATE block_log SET status = 'done', ended_at = ?, ledger_id = ? WHERE block_id = ? AND day = ?").run(now.toISOString(), ledgerId, b.id, day);
+			if (ledgerId && b.kind === "study") try {
+				if (this.wallet.summary(now).level.perks.some((p) => p.id === "iron_focus" && p.unlocked)) {
+					const baseCoins = this.wallet.entries().find((e) => e.id === ledgerId)?.coins ?? 0;
+					if (baseCoins > 0) {
+						const bonusCoins = Math.max(1, Math.round(baseCoins * .2));
+						this.wallet.append({
+							ts: now.toISOString(),
+							day,
+							module: "perks",
+							kind: "earn",
+							coins: bonusCoins,
+							xp: 0,
+							ref: `perk:iron_focus:${b.id}:${day}`,
+							note: "Perk: Iron Focus (+20% coins)"
+						});
+					}
+				}
+			} catch {}
+		}).immediate();
+	}
+	skip(id, now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const { b, day, log } = this.todayBlock(id, now);
+			planSkip(log?.status ?? "pending");
+			const ledgerId = this.payout(BLOCK_RULES[b.kind].skipped, b, day, now);
+			this.db.prepare(`INSERT INTO block_log (block_id, day, status, ended_at, ledger_id) VALUES (?, ?, 'skipped', ?, ?)
+           ON CONFLICT(block_id, day) DO UPDATE SET status = 'skipped', ended_at = excluded.ended_at, ledger_id = excluded.ledger_id`).run(b.id, day, now.toISOString(), ledgerId);
+		}).immediate();
+	}
+};
+function planBuyShield(balance, currentShields, maxShields = 5) {
+	if (balance < 50) throw new LedgerError(`Need 50 coins to buy a Streak Shield (you have ${balance})`);
+	if (currentShields >= maxShields) throw new LedgerError(`Shield inventory full (maximum ${maxShields} shields)`);
+	return {
+		coins: 50,
+		shields: currentShields + 1
+	};
+}
+// src/main/shields.ts
+var ShieldService = class {
+	db;
+	wallet;
+	timeZone;
+	constructor(db, wallet, timeZone = "UTC") {
+		this.db = db;
+		this.wallet = wallet;
+		this.timeZone = timeZone;
+	}
+	count() {
+		const val = getSetting(this.db, "streak_shields");
+		return val ? parseInt(val, 10) : 0;
+	}
+	buy(now = /* @__PURE__ */ new Date()) {
+		const summary = this.wallet.summary(now);
+		const current = this.count();
+		const plan = planBuyShield(summary.balance, current);
+		const day = dayKey(now, this.timeZone);
+		this.wallet.append({
+			ts: now.toISOString(),
+			day,
+			module: "shop",
+			kind: "spend",
+			coins: -plan.coins,
+			xp: 0,
+			ref: "shield:buy",
+			note: "Purchased Streak Shield"
+		});
+		setSetting(this.db, "streak_shields", String(plan.shields));
+		return {
+			shields: plan.shields,
+			balance: this.wallet.summary(now).balance
+		};
+	}
+	awardFreeShield(reason = "Bonus") {
+		const next = this.count() + 1;
+		setSetting(this.db, "streak_shields", String(next));
+		return next;
+	}
+	consume() {
+		const current = this.count();
+		if (current <= 0) return false;
+		setSetting(this.db, "streak_shields", String(current - 1));
+		return true;
+	}
+};
+function xpToNext(level) {
+	return Math.round(80 * Math.pow(level, 1.3));
+}
+var RANKS = [
+	{
+		minLevel: 1,
+		name: "Recruit (E-Rank)",
+		title: "The Weakest Hunter",
+		grade: "E-Rank",
+		badge: "⚔️",
+		color: "#8A93A6",
+		auraGlow: "rgba(138, 147, 166, 0.4)",
+		desc: "You have awakened at the bottom of the world. Even if called the weakest, the System has chosen you. Take your daily quest and begin your ascent.",
+		perk: "Awakening Spark: +10% XP on first daily ritual",
+		dailyQuestBonus: 5
+	},
+	{
+		minLevel: 3,
+		name: "E-Rank Scout",
+		title: "Dungeon Scout",
+		grade: "E-Rank",
+		badge: "🗡️",
+		color: "#A0AEC0",
+		auraGlow: "rgba(160, 174, 192, 0.4)",
+		desc: "Learning the terrain of your mind. You spot old addictive triggers and complacency before they strike.",
+		perk: "Pattern Sense: +5% Urge Resistance",
+		dailyQuestBonus: 5
+	},
+	{
+		minLevel: 5,
+		name: "D-Rank Survivor",
+		title: "Dungeon Survivor",
+		grade: "D-Rank",
+		badge: "🛡️",
+		color: "#4ADE80",
+		auraGlow: "rgba(74, 222, 128, 0.4)",
+		desc: "You no longer panic when habits get hard. Workouts and clean days are becoming your new normal.",
+		perk: "Iron Will: Workout fatigue reduced by 10%",
+		dailyQuestBonus: 8
+	},
+	{
+		minLevel: 8,
+		name: "D-Rank Gate Clearer",
+		title: "Gate Breaker",
+		grade: "D-Rank",
+		badge: "⚡",
+		color: "#52E38B",
+		auraGlow: "rgba(82, 227, 139, 0.4)",
+		desc: "Entering basic habit dungeons with certainty. Morning wake-ups and focused blocks are completed with steady rhythm.",
+		perk: "Momentum Pulse: +5 coins on completed focus blocks",
+		dailyQuestBonus: 8
+	},
+	{
+		minLevel: 10,
+		name: "C-Rank Striker",
+		title: "Dungeon Striker",
+		grade: "C-Rank",
+		badge: "🏹",
+		color: "#38BDF8",
+		auraGlow: "rgba(56, 189, 248, 0.45)",
+		desc: "You possess real destructive power against procrastination. The gap between your intentions and execution has shrunk dramatically.",
+		perk: "Striking Velocity: Tasks completed before noon pay +20% XP",
+		dailyQuestBonus: 10
+	},
+	{
+		minLevel: 14,
+		name: "C-Rank Raid Vanguard",
+		title: "Raid Vanguard",
+		grade: "C-Rank",
+		badge: "🔱",
+		color: "#0EA5E9",
+		auraGlow: "rgba(14, 165, 233, 0.45)",
+		desc: "First through the gate. When adversity strikes your schedule, you spearhead the solution instead of retreating.",
+		perk: "Frontline Fortitude: Streak Shield durability increased",
+		dailyQuestBonus: 12
+	},
+	{
+		minLevel: 18,
+		name: "B-Rank Raider",
+		title: "Dungeon Raider",
+		grade: "B-Rank",
+		badge: "🔮",
+		color: "#818CF8",
+		auraGlow: "rgba(129, 140, 248, 0.45)",
+		desc: "A respected warrior. Common temptations, binge spending, and impulse distractions no longer defeat you in standard encounters.",
+		perk: "Budget Fortification: Daily budget remaining bonus +10%",
+		dailyQuestBonus: 15
+	},
+	{
+		minLevel: 22,
+		name: "B-Rank High Striker",
+		title: "High Striker",
+		grade: "B-Rank",
+		badge: "💥",
+		color: "#6366F1",
+		auraGlow: "rgba(99, 102, 241, 0.5)",
+		desc: "High workout volume and intense focus sessions feel second nature. Your daily output outclasses 95% of your peers.",
+		perk: "Dual Strike: Double XP on days with 2+ completed study blocks",
+		dailyQuestBonus: 15
+	},
+	{
+		minLevel: 26,
+		name: "B-Rank Raid Commander",
+		title: "Tactical Commander",
+		grade: "B-Rank",
+		badge: "🦅",
+		color: "#A855F7",
+		auraGlow: "rgba(168, 85, 247, 0.5)",
+		desc: "Orchestrating every hour with tactical clarity. No time is wasted in mindless scrolling or hesitation.",
+		perk: "Commander Domain: All 5 daily rituals completed grants +15 bonus coins",
+		dailyQuestBonus: 18
+	},
+	{
+		minLevel: 30,
+		name: "A-Rank Elite Vanguard",
+		title: "Red Gate Conqueror",
+		grade: "A-Rank",
+		badge: "🔥",
+		color: "#C084FC",
+		auraGlow: "rgba(192, 132, 252, 0.5)",
+		desc: "You enter red gates without fear. Extreme workloads and intense physical challenges are systematically conquered.",
+		perk: "Red Gate Resilience: Missed block penalty reduced by 50%",
+		dailyQuestBonus: 20
+	},
+	{
+		minLevel: 35,
+		name: "A-Rank Shadow Assassin",
+		title: "Stealth Infiltrator",
+		grade: "A-Rank",
+		badge: "🥷",
+		color: "#E879F9",
+		auraGlow: "rgba(232, 121, 249, 0.5)",
+		desc: "Moving silently through your goals. Stealth discipline mode: results speak so loudly that explanations are unnecessary.",
+		perk: "Silent Mastery: Stealth check-ins yield +10 XP",
+		dailyQuestBonus: 22
+	},
+	{
+		minLevel: 40,
+		name: "A-Rank Master of Iron",
+		title: "Ironclad Titan",
+		grade: "A-Rank",
+		badge: "🦾",
+		color: "#F43F5E",
+		auraGlow: "rgba(244, 63, 94, 0.55)",
+		desc: "The physical temple is hardened. Heavy weights, push-up sets, and cold discipline have sculpted an unbreakable warrior body.",
+		perk: "Muscle Memory: Workouts logged award +5 extra coins",
+		dailyQuestBonus: 25
+	},
+	{
+		minLevel: 45,
+		name: "A-Rank Apex Hunter",
+		title: "Guild Champion",
+		grade: "A-Rank",
+		badge: "👑",
+		color: "#FB7185",
+		auraGlow: "rgba(251, 113, 133, 0.55)",
+		desc: "Standing at the peak of standard humanity. Every project and financial challenge is conquered before the deadline.",
+		perk: "Apex Will: Task streaks award +25 bonus coins",
+		dailyQuestBonus: 28
+	},
+	{
+		minLevel: 50,
+		name: "S-Rank Calamity Buster",
+		title: "National Awakening",
+		grade: "S-Rank",
+		badge: "⭐",
+		color: "#F5C84B",
+		auraGlow: "rgba(245, 200, 75, 0.6)",
+		desc: "THE MAGIC MEASURING DEVICE SHATTERS. You have entered the realm of S-Rank Hunters. Your discipline bends reality to your favor.",
+		perk: "S-Rank Authority: +25% permanent multiplier across all coin earnings",
+		dailyQuestBonus: 35
+	},
+	{
+		minLevel: 55,
+		name: "S-Rank Demon Castle Pioneer",
+		title: "Demon Slayer",
+		grade: "S-Rank",
+		badge: "👹",
+		color: "#EAB308",
+		auraGlow: "rgba(234, 179, 8, 0.6)",
+		desc: "Ascending the 100 floors of the Demon Castle. The demons of past addiction, regret, and low self-worth are permanently slain.",
+		perk: "Demon Slayer Will: Urge crusher completions award double coins",
+		dailyQuestBonus: 38
+	},
+	{
+		minLevel: 60,
+		name: "S-Rank Sovereign Striker",
+		title: "Apex Sovereign",
+		grade: "S-Rank",
+		badge: "☄️",
+		color: "#FACC15",
+		auraGlow: "rgba(250, 204, 21, 0.65)",
+		desc: "Speed, power, precision. Circadian wake-ups are clockwork; spending is surgically controlled; fitness is non-negotiable.",
+		perk: "Apex Focus: On-time wakeups award +15 coins",
+		dailyQuestBonus: 40
+	},
+	{
+		minLevel: 65,
+		name: "National Level Hunter",
+		title: "World Authority",
+		grade: "National Level",
+		badge: "🌍",
+		color: "#00D2FF",
+		auraGlow: "rgba(0, 210, 255, 0.7)",
+		desc: "Possessing power rivaling entire nations. You control your fate with absolute sovereignty. A beacon of relentless self-discipline.",
+		perk: "National Authority: Level mystery chests guarantee rare loot drops",
+		dailyQuestBonus: 50
+	},
+	{
+		minLevel: 70,
+		name: "National Level Titan",
+		title: "Living Monolith",
+		grade: "National Level",
+		badge: "🏛️",
+		color: "#38BDF8",
+		auraGlow: "rgba(56, 189, 248, 0.7)",
+		desc: "Unshakable by peer pressure, immune to dopamine traps. You stand as an indestructible monolith of habit execution.",
+		perk: "Titan Shield: 1 free Streak Shield awarded upon reaching this rank",
+		dailyQuestBonus: 55
+	},
+	{
+		minLevel: 75,
+		name: "Ruler’s Vessel",
+		title: "Vessel of the Brilliant Light",
+		grade: "National Level",
+		badge: "☀️",
+		color: "#67E8F9",
+		auraGlow: "rgba(103, 232, 249, 0.75)",
+		desc: "Channeling divine power. Telekinetic mastery over your focus: distractions bounce off your attention span like dust.",
+		perk: "Ruler’s Reach: Focus timers flow effortlessly with zero mental friction",
+		dailyQuestBonus: 60
+	},
+	{
+		minLevel: 80,
+		name: "Monarch Candidate",
+		title: "Shadow Heir",
+		grade: "Monarch Candidate",
+		badge: "🌑",
+		color: "#7C3AED",
+		auraGlow: "rgba(124, 58, 237, 0.8)",
+		desc: "The System chooses you. You stand between the world of light and sovereign darkness. Your past failures become soldiers in your shadow army.",
+		perk: "Arise Extraction: Every past slip converted into permanent wisdom and XP",
+		dailyQuestBonus: 70
+	},
+	{
+		minLevel: 85,
+		name: "Commander of Shadows",
+		title: "Lord of the Undead",
+		grade: "Monarch Candidate",
+		badge: "💀",
+		color: "#6D28D9",
+		auraGlow: "rgba(109, 40, 217, 0.8)",
+		desc: "Summoning Igris, Tank, and Iron. Your daily routines march forward automatically without conscious willpower strain.",
+		perk: "Shadow Army: Recurring habits execute with zero friction",
+		dailyQuestBonus: 75
+	},
+	{
+		minLevel: 90,
+		name: "Sovereign of the Abyss",
+		title: "Void Sovereign",
+		grade: "Monarch",
+		badge: "🌌",
+		color: "#5B21B6",
+		auraGlow: "rgba(91, 33, 182, 0.85)",
+		desc: "Master of the infinite expanse. Time bends to your priorities. When you decide a goal is done, the universe aligns.",
+		perk: "Void Mastery: Reward Vault surplus earns 5% monthly dividend",
+		dailyQuestBonus: 80
+	},
+	{
+		minLevel: 95,
+		name: "Shadow Monarch",
+		title: "Monarch of Shadows (True Form)",
+		grade: "Monarch",
+		badge: "👑",
+		color: "#9D4EDD",
+		auraGlow: "rgba(157, 78, 221, 0.9)",
+		desc: "\"ARISE.\" The true Shadow Monarch awakens. Death of bad habits is permanent; resurrection of your highest potential is absolute.",
+		perk: "True Monarch Domain: 2x permanent coin multiplier on all discipline rituals",
+		dailyQuestBonus: 100
+	},
+	{
+		minLevel: 100,
+		name: "Sovereign of Eternal Rebirth",
+		title: "Centennial Monarch",
+		grade: "Monarch",
+		badge: "♾️",
+		color: "#C77DFF",
+		auraGlow: "rgba(199, 125, 255, 0.9)",
+		desc: "Centennial titan. One hundred levels of relentless sweat, restraint, and calculated focus. You rule your mind with iron certainty.",
+		perk: "Centennial Aura: Level 100 Legendary Chest unlocked with guaranteed mega drop",
+		dailyQuestBonus: 110
+	},
+	{
+		minLevel: 110,
+		name: "Transcendent Sovereign",
+		title: "Master of Dimensions",
+		grade: "Transcendent",
+		badge: "🌀",
+		color: "#E0AAFF",
+		auraGlow: "rgba(224, 170, 255, 0.95)",
+		desc: "You operate across dimensions of financial wealth, physical elite status, and spiritual alignment. A master of total life architecture.",
+		perk: "Dimensional Vault: Real-money reward budget cap removed",
+		dailyQuestBonus: 125
+	},
+	{
+		minLevel: 120,
+		name: "Monarch of Total Sovereignty",
+		title: "Unbreakable Ruler",
+		grade: "Transcendent",
+		badge: "🩸",
+		color: "#FF3366",
+		auraGlow: "rgba(255, 51, 102, 0.95)",
+		desc: "The entire system recognizes your supremacy. No urge can breach your armor; no financial turbulence can shake your foundation.",
+		perk: "Supreme Will: Complete urge immunity protocol",
+		dailyQuestBonus: 140
+	},
+	{
+		minLevel: 130,
+		name: "Absolute Being Avatar",
+		title: "Divine Creator",
+		grade: "Divine Sovereign",
+		badge: "✨",
+		color: "#C8F135",
+		auraGlow: "rgba(200, 241, 53, 0.95)",
+		desc: "Possessing the spark of the creator. Every daily action creates ripples of excellence across your university, fitness, and family life.",
+		perk: "Divine Spark: Triple XP on all master goals",
+		dailyQuestBonus: 160
+	},
+	{
+		minLevel: 140,
+		name: "Primordial Architect",
+		title: "Forge of Destiny",
+		grade: "Divine Sovereign",
+		badge: "⚜️",
+		color: "#FFD700",
+		auraGlow: "rgba(255, 215, 0, 1.0)",
+		desc: "You do not adapt to the world; the world adapts to your discipline. A mastercraft of relentless execution.",
+		perk: "Destiny Forge: Max daily coin cap increased to 500 coins",
+		dailyQuestBonus: 180
+	},
+	{
+		minLevel: 145,
+		name: "Eternal Monarch of the Cosmos",
+		title: "Cosmic Ruler",
+		grade: "Divine Sovereign",
+		badge: "🌠",
+		color: "#00FFFF",
+		auraGlow: "rgba(0, 255, 255, 1.0)",
+		desc: "A legendary myth made flesh. The weakest E-Rank has conquered the cosmos of his own mind and soul.",
+		perk: "Cosmic Dominion: Permanent 3x multiplier on all study and body blocks",
+		dailyQuestBonus: 200
+	},
+	{
+		minLevel: 150,
+		name: "The Apex Sovereign (Unrivaled)",
+		title: "Omnipotent Ruler of Fate",
+		grade: "Absolute Supreme",
+		badge: "🏆",
+		color: "#FF0055",
+		auraGlow: "rgba(255, 0, 85, 1.0)",
+		desc: "MAX LEVEL 150. The summit of human potential. You have completed the System's grand purpose: becoming the supreme ruler of your own destiny.",
+		perk: "Omnipotent Sovereign: Master of all domains, permanently crowned in eternal glory.",
+		dailyQuestBonus: 250
+	}
+];
+function hunterDefFor(level) {
+	let def = RANKS[0];
+	for (const r of RANKS) if (level >= r.minLevel) def = r;
+	return def;
+}
+function nextHunterRank(level) {
+	for (const r of RANKS) if (r.minLevel > level) return r;
+	return null;
+}
+function totalStatPointsForLevel(level) {
+	if (level <= 1) return 0;
+	let total = 0;
+	for (let l = 2; l <= level; l++) if (l <= 10) total += 1;
+	else if (l <= 25) total += 2;
+	else total += 3;
+	return total;
+}
+var HUNTER_PERK_DEFINITIONS = [
+	{
+		id: "awakening_spark",
+		name: "Awakening Spark",
+		category: "combat",
+		reqDesc: "Level 1",
+		levelReq: 1,
+		icon: "⚡",
+		color: "#8A93A6",
+		desc: "Awakened spark grants +10% bonus XP on the first ritual completed each day."
+	},
+	{
+		id: "sprint_velocity",
+		name: "Sprint Velocity",
+		category: "mind",
+		reqDesc: "AGI 20",
+		statReq: {
+			stat: "agi",
+			value: 20
+		},
+		icon: "💨",
+		color: "#38bdf8",
+		desc: "Morning circadian momentum: on-time wakeups yield +5 bonus coins."
+	},
+	{
+		id: "iron_focus",
+		name: "Iron Focus",
+		category: "mind",
+		reqDesc: "INT 25",
+		statReq: {
+			stat: "int",
+			value: 25
+		},
+		icon: "🧠",
+		color: "#a78bfa",
+		desc: "Hyper-focused cognition: planned study and focus blocks yield +20% bonus coins."
+	},
+	{
+		id: "indomitable_bastion",
+		name: "Indomitable Bastion",
+		category: "recovery",
+		reqDesc: "VIT 25",
+		statReq: {
+			stat: "vit",
+			value: 25
+		},
+		icon: "🛡️",
+		color: "#4ade80",
+		desc: "Metabolic resilience: healthy sleep quality and budget discipline reinforce streak fortitude."
+	},
+	{
+		id: "bloodlust",
+		name: "Bloodlust Strike",
+		category: "combat",
+		reqDesc: "STR 30",
+		statReq: {
+			stat: "str",
+			value: 30
+		},
+		icon: "⚔️",
+		color: "#f87171",
+		desc: "Relentless physical intensity: workout sessions award +25% bonus XP toward leveling."
+	},
+	{
+		id: "rulers_authority",
+		name: "Ruler's Authority",
+		category: "sovereign",
+		reqDesc: "SEN 30",
+		statReq: {
+			stat: "sen",
+			value: 30
+		},
+		icon: "👑",
+		color: "#fbbf24",
+		desc: "Sovereign willpower barrier: urge reset coin penalties are permanently reduced by 50%."
+	},
+	{
+		id: "shadow_monarch_extraction",
+		name: "Shadow Monarch's Extraction",
+		category: "sovereign",
+		reqDesc: "Level 50",
+		levelReq: 50,
+		icon: "🌑",
+		color: "#c084fc",
+		desc: "Extracting shadow remnants: completing 7 consecutive Priority 1 (P1) tasks refunds 1 streak shield."
+	}
+];
+function computeHunterPerks(level, attributes) {
+	return HUNTER_PERK_DEFINITIONS.map((def) => {
+		let unlocked = false;
+		let progressPct = 0;
+		if (def.levelReq != null) {
+			unlocked = level >= def.levelReq;
+			progressPct = Math.min(100, Math.round(level / def.levelReq * 100));
+		} else if (def.statReq != null) {
+			const currentStat = attributes[def.statReq.stat];
+			unlocked = currentStat >= def.statReq.value;
+			progressPct = Math.min(100, Math.round(currentStat / def.statReq.value * 100));
+		}
+		return {
+			...def,
+			unlocked,
+			progressPct
+		};
+	});
+}
+function calculateHunterAttributes(level, params) {
+	const base = Math.max(10, Math.floor(level * 2.5));
+	const strBonus = Math.floor((params?.workoutCount ?? 0) * 1.5);
+	const senBonus = Math.floor((params?.cleanStreakDays ?? 0) * 2);
+	const intBonus = Math.floor((params?.focusBlocksCount ?? 0) * 1.8);
+	const agiBonus = Math.floor((params?.onTimeWakeups ?? 0) * 1.2);
+	const vitBonus = Math.floor((params?.budgetDays ?? 0) * 1);
+	const allocated = {
+		str: Math.max(0, Math.floor(params?.allocated?.str ?? 0)),
+		agi: Math.max(0, Math.floor(params?.allocated?.agi ?? 0)),
+		vit: Math.max(0, Math.floor(params?.allocated?.vit ?? 0)),
+		int: Math.max(0, Math.floor(params?.allocated?.int ?? 0)),
+		sen: Math.max(0, Math.floor(params?.allocated?.sen ?? 0))
+	};
+	const str = base + strBonus + allocated.str;
+	const sen = base + senBonus + allocated.sen;
+	const int = base + intBonus + allocated.int;
+	const agi = base + agiBonus + allocated.agi;
+	const vit = base + vitBonus + allocated.vit;
+	const totalCombatPower = str * 3 + agi * 2 + vit * 2 + int * 3 + sen * 4;
+	const totalEarnedPoints = totalStatPointsForLevel(level);
+	const spent = allocated.str + allocated.agi + allocated.vit + allocated.int + allocated.sen;
+	return {
+		str,
+		agi,
+		vit,
+		int,
+		sen,
+		totalCombatPower,
+		allocated,
+		unallocatedPoints: Math.max(0, totalEarnedPoints - spent),
+		totalEarnedPoints
+	};
+}
+function levelInfo(totalXp, hunterStatsInput) {
+	let level = 1;
+	let left = Number.isFinite(totalXp) ? Math.max(0, Math.floor(totalXp)) : 0;
+	while (level < 150 && left >= xpToNext(level)) {
+		left -= xpToNext(level);
+		level++;
+	}
+	const xpForNext = level >= 150 ? 0 : xpToNext(level);
+	const def = hunterDefFor(level);
+	const next = nextHunterRank(level);
+	const attributes = calculateHunterAttributes(level, hunterStatsInput);
+	const perks = computeHunterPerks(level, attributes);
+	return {
+		level,
+		xpIntoLevel: left,
+		xpForNext,
+		progress: xpForNext ? left / xpForNext : 1,
+		rank: def.name,
+		hunterTitle: def.title,
+		hunterGrade: def.grade,
+		rankBadge: def.badge,
+		rankColor: def.color,
+		rankAura: def.auraGlow,
+		rankDesc: def.desc,
+		rankPerk: def.perk,
+		attributes,
+		perks,
+		nextRank: next,
+		allRanks: RANKS
+	};
+}
+// src/core/shop.ts
+var TIERS = {
+	bronze: {
+		label: "Bronze",
+		minLevel: 1,
+		color: "#D59A6A"
+	},
+	silver: {
+		label: "Silver",
+		minLevel: 5,
+		color: "#C9D3E3"
+	},
+	gold: {
+		label: "Gold",
+		minLevel: 10,
+		color: "#F5C84B"
+	},
+	legendary: {
+		label: "Legendary",
+		minLevel: 20,
+		color: "#B892FF"
+	}
+};
+function isTier(t) {
+	return t in TIERS;
+}
+function tierUnlocked(tier, level) {
+	return level >= TIERS[tier].minLevel;
+}
+/** Why a reward can't be bought right now, or null if it can. */
+function redeemBlocker(c) {
+	const { reward, balance, level, monthSpent, budget } = c;
+	if (reward.archived) return "This reward is archived";
+	if (!tierUnlocked(reward.tier, level)) return `${TIERS[reward.tier].label} rewards unlock at level ${TIERS[reward.tier].minLevel}`;
+	if (balance < reward.price) return `You need ${reward.price - balance} more coins`;
+	if (budget > 0 && monthSpent + reward.realCost > budget) return `Over this month's reward budget (${budget - monthSpent} left)`;
+	return null;
+}
+function planRedeem(c) {
+	const why = redeemBlocker(c);
+	if (why) throw new LedgerError(why);
+}
+function validateReward(r) {
+	if (!r.title.trim()) throw new LedgerError("A reward needs a name");
+	if (!Number.isInteger(r.price) || r.price <= 0) throw new LedgerError("Price must be a whole number of coins above 0");
+	if (!Number.isInteger(r.realCost) || r.realCost < 0) throw new LedgerError("Real cost must be a whole number, 0 or more");
+	if (!isTier(r.tier)) throw new LedgerError("Unknown tier");
+}
+function chestRef(level) {
+	return `chest:L${level}`;
+}
+/** Levels whose chest is earned (level 2 and up) but not opened yet. */
+function unopenedChests(level, openedRefs) {
+	const opened = new Set(openedRefs);
+	const out = [];
+	for (let l = 2; l <= level; l++) if (!opened.has(chestRef(l))) out.push(l);
+	return out;
+}
+/** Bigger chests at higher levels. `rand` is 0..1. */
+function rollChest(level, rand) {
+	const min = 10 + level * 2;
+	const max = 40 + level * 5;
+	return Math.round(min + rand * (max - min));
+}
+// src/main/shop.ts
+var toReward = (r) => ({
+	id: r.id,
+	title: r.title,
+	price: r.price,
+	tier: r.tier,
+	realCost: r.real_cost,
+	pinned: !!r.pinned,
+	archived: !!r.archived,
+	note: r.note,
+	imageUrl: r.image_url ?? null,
+	productUrl: r.product_url ?? null,
+	currency: r.currency ?? "MDL"
+});
+var Shop = class {
+	db;
+	wallet;
+	timeZone;
+	rand;
+	economy;
+	constructor(db, wallet, timeZone, rand = Math.random, economy) {
+		this.db = db;
+		this.wallet = wallet;
+		this.timeZone = timeZone;
+		this.rand = rand;
+		this.economy = economy;
+	}
+	setEconomy(eco) {
+		this.economy = eco;
+	}
+	rewards() {
+		return this.db.prepare("SELECT * FROM rewards WHERE archived = 0 ORDER BY pinned DESC, price").all().map(toReward);
+	}
+	reward(id) {
+		const row = this.db.prepare("SELECT * FROM rewards WHERE id = ?").get(id);
+		if (!row) throw new LedgerError("Reward not found");
+		return toReward(row);
+	}
+	budget() {
+		return Number(getSetting(this.db, "reward_budget") ?? 0);
+	}
+	/** Real money spent on rewards this month, ignoring undone purchases. */
+	monthSpent(day, undoneIds) {
+		return this.db.prepare("SELECT ledger_id, real_cost FROM redemptions WHERE substr(day, 1, 7) = ?").all(monthKey(day)).filter((r) => !undoneIds.has(r.ledger_id)).reduce((s, r) => s + r.real_cost, 0);
+	}
+	undoneIds() {
+		const all = this.wallet.entries();
+		const live = new Set(effective(all).map((e) => e.id));
+		return new Set(all.filter((e) => e.kind !== "undo" && !live.has(e.id)).map((e) => e.id));
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const all = this.wallet.entries();
+		const day = dayKey(now, this.timeZone);
+		const undone = this.undoneIds();
+		const level = levelInfo(totalXp(all)).level;
+		const openedRefs = effective(all).map((e) => e.ref ?? "").filter((r) => r.startsWith("chest:"));
+		const recent = this.db.prepare("SELECT ledger_id, title, real_cost, day FROM redemptions ORDER BY id DESC LIMIT 8").all();
+		return {
+			rewards: this.rewards(),
+			balance: balance(all),
+			level,
+			budget: this.budget(),
+			monthSpent: this.monthSpent(day, undone),
+			currency: getSetting(this.db, "currency") ?? "MDL",
+			chests: unopenedChests(level, openedRefs),
+			recent: recent.map((r) => ({
+				title: r.title,
+				realCost: r.real_cost,
+				day: r.day,
+				undone: undone.has(r.ledger_id)
+			})),
+			economy: this.economy?.getEconomySummary(now)
+		};
+	}
+	save(input) {
+		const r = {
+			...input,
+			title: input.title.trim(),
+			note: input.note?.trim() || null,
+			imageUrl: input.imageUrl?.trim() || null,
+			productUrl: input.productUrl?.trim() || null,
+			currency: input.currency?.trim() || "MDL",
+			archived: false
+		};
+		validateReward(r);
+		this.db.transaction(() => {
+			if (r.pinned) this.db.prepare("UPDATE rewards SET pinned = 0").run();
+			const params = {
+				title: r.title,
+				price: r.price,
+				tier: r.tier,
+				realCost: r.realCost,
+				pinned: r.pinned ? 1 : 0,
+				note: r.note,
+				imageUrl: r.imageUrl,
+				productUrl: r.productUrl,
+				currency: r.currency
+			};
+			if (input.id) {
+				this.reward(input.id);
+				this.db.prepare("UPDATE rewards SET title = @title, price = @price, tier = @tier, real_cost = @realCost, pinned = @pinned, note = @note, image_url = @imageUrl, product_url = @productUrl, currency = @currency WHERE id = @id").run({
+					...params,
+					id: input.id
+				});
+			} else this.db.prepare("INSERT INTO rewards (title, price, tier, real_cost, pinned, note, image_url, product_url, currency) VALUES (@title, @price, @tier, @realCost, @pinned, @note, @imageUrl, @productUrl, @currency)").run(params);
+		})();
+	}
+	archive(id) {
+		this.reward(id);
+		this.db.prepare("UPDATE rewards SET archived = 1, pinned = 0 WHERE id = ?").run(id);
+	}
+	redeem(id, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const reward = this.reward(id);
+			const all = this.wallet.entries();
+			const day = dayKey(now, this.timeZone);
+			planRedeem({
+				reward,
+				balance: balance(all),
+				level: levelInfo(totalXp(all)).level,
+				monthSpent: this.monthSpent(day, this.undoneIds()),
+				budget: this.budget()
+			});
+			const ledgerId = this.wallet.append({
+				ts: now.toISOString(),
+				day,
+				module: "shop",
+				kind: "spend",
+				coins: -reward.price,
+				xp: 0,
+				ref: `reward:${id}`,
+				note: reward.title
+			});
+			this.db.prepare("INSERT INTO redemptions (ledger_id, reward_id, title, real_cost, day) VALUES (?, ?, ?, ?, ?)").run(ledgerId, id, reward.title, reward.realCost, day);
+			return ledgerId;
+		}).immediate();
+	}
+	openChest(level, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			if (!this.state(now).chests.includes(level)) throw new LedgerError("No chest waiting for that level");
+			const coins = rollChest(level, this.rand());
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: dayKey(now, this.timeZone),
+				module: "shop",
+				kind: "earn",
+				coins,
+				xp: 0,
+				ref: chestRef(level),
+				note: `Level ${level} chest`
+			});
+			return coins;
+		}).immediate();
+	}
+	setBudget(amount) {
+		if (!Number.isInteger(amount) || amount < 0) throw new LedgerError("Budget must be a whole number, 0 or more");
+		setSetting(this.db, "reward_budget", String(amount));
+	}
+	setCurrency(cur) {
+		const code = cur?.trim().toUpperCase() || "MDL";
+		setSetting(this.db, "currency", code);
+		setSetting(this.db, "money_currency", code);
+	}
+};
+// src/core/sleep.ts
+function toMinutes(hhmm) {
+	const [h, m] = hhmm.split(":").map((x) => parseInt(x, 10));
+	if (isNaN(h) || isNaN(m)) return 0;
+	return h * 60 + m;
+}
+/**
+* On-time check: wake up at or before target (with up to 15 min grace, consistent with Waky).
+*/
+function isWakeOnTime(wakeTime, targetTime, graceMinutes = 15) {
+	return toMinutes(wakeTime) <= toMinutes(targetTime) + graceMinutes;
+}
+/** Bedtime check: in bed within 30 min of bedtime target. */
+function isBedOnTime(bedTime, targetTime, graceMinutes = 30) {
+	const b = toMinutes(bedTime);
+	const t = toMinutes(targetTime);
+	const diff = Math.abs(b - t);
+	return diff <= graceMinutes || diff >= 1440 - graceMinutes;
+}
+function targetForDay(day, weekdayTarget, weekendTarget) {
+	const dow = (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+	return dow === 0 || dow === 6 ? weekendTarget : weekdayTarget;
+}
+function computeSleepStats(logs, today, weekdayTarget = "07:00", weekendTarget = "08:30") {
+	const valid = logs.filter((l) => l.day <= today).sort((a, b) => b.day.localeCompare(a.day));
+	const todayLog = valid.find((l) => l.day === today) ?? null;
+	const onTimeDays = valid.filter((l) => l.onTime).map((l) => l.day);
+	const streak = dayStreak(onTimeDays, today);
+	const bestStreak = bestDayStreak(onTimeDays);
+	const last14Days = valid.slice(0, 14);
+	const onTimeRate = last14Days.length > 0 ? last14Days.filter((l) => l.onTime).length / last14Days.length : null;
+	let sleepMinsTotal = 0;
+	let sleepCount = 0;
+	for (const l of valid) if (l.wakeTime && l.bedTime) {
+		const w = toMinutes(l.wakeTime);
+		const b = toMinutes(l.bedTime);
+		const dur = w >= b ? w - b : 1440 - b + w;
+		if (dur >= 180 && dur <= 900) {
+			sleepMinsTotal += dur;
+			sleepCount++;
+		}
+	}
+	return {
+		today,
+		weekdayTarget,
+		weekendTarget,
+		todayLog,
+		streak,
+		bestStreak,
+		onTimeRate,
+		avgSleepMin: sleepCount > 0 ? Math.round(sleepMinsTotal / sleepCount) : null,
+		recentLogs: valid.slice(0, 14)
+	};
+}
+// src/main/sleep.ts
+function toLog(r) {
+	return {
+		id: r.id,
+		day: r.day,
+		wakeTime: r.wake_time,
+		wakeTarget: r.wake_target,
+		onTime: Boolean(r.on_time),
+		bedTime: r.bed_time,
+		bedTarget: r.bed_target,
+		bedOnTime: r.bed_on_time !== null ? Boolean(r.bed_on_time) : null,
+		quality: r.quality,
+		createdAt: r.created_at
+	};
+}
+var SleepService = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	weekdayTarget() {
+		return getSetting(this.db, "sleep_weekday_target") || "07:00";
+	}
+	weekendTarget() {
+		return getSetting(this.db, "sleep_weekend_target") || "08:30";
+	}
+	bedtimeTarget() {
+		return getSetting(this.db, "sleep_bed_target") || "23:00";
+	}
+	setTargets(weekday, weekend, bedtime) {
+		if (weekday) setSetting(this.db, "sleep_weekday_target", weekday);
+		if (weekend) setSetting(this.db, "sleep_weekend_target", weekend);
+		if (bedtime) setSetting(this.db, "sleep_bed_target", bedtime);
+		return this.state();
+	}
+	logs() {
+		return this.db.prepare("SELECT * FROM sleep_logs ORDER BY day DESC").all().map(toLog);
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		return computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget());
+	}
+	logWake(time, quality, now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const hh = String(now.getHours()).padStart(2, "0");
+		const mm = String(now.getMinutes()).padStart(2, "0");
+		const wakeTime = time || `${hh}:${mm}`;
+		const target = targetForDay(today, this.weekdayTarget(), this.weekendTarget());
+		const onTime = isWakeOnTime(wakeTime, target);
+		const existing = this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today);
+		if (existing) this.db.prepare("UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?").run(wakeTime, target, onTime ? 1 : 0, quality ?? existing.quality, today);
+		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)").run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString());
+		let awarded = false;
+		if (onTime) try {
+			this.wallet.award("sleep.up_on_time", `Up at ${wakeTime} (target ${target})`, now);
+			awarded = true;
+		} catch {}
+		return {
+			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)),
+			state: this.state(now),
+			awarded
+		};
+	}
+	logBed(time, now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const hh = String(now.getHours()).padStart(2, "0");
+		const mm = String(now.getMinutes()).padStart(2, "0");
+		const bedTime = time || `${hh}:${mm}`;
+		const target = this.bedtimeTarget();
+		const onTime = isBedOnTime(bedTime, target);
+		if (this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)) this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(bedTime, target, onTime ? 1 : 0, today);
+		else {
+			const wakeTarget = targetForDay(today, this.weekdayTarget(), this.weekendTarget());
+			this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)").run(today, "07:00", wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString());
+		}
+		let awarded = false;
+		if (onTime) try {
+			this.wallet.award("sleep.bed_on_time", `In bed at ${bedTime} (target ${target})`, now);
+			awarded = true;
+		} catch {}
+		return {
+			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)),
+			state: this.state(now),
+			awarded
+		};
+	}
+};
+// src/core/unifiedEconomy.ts
+var DISCIPLINE_MULTIPLIERS = [
+	{
+		minStreak: 30,
+		multiplier: 2,
+		label: "Ascendant (2.0x)"
+	},
+	{
+		minStreak: 14,
+		multiplier: 1.5,
+		label: "Spartan (1.5x)"
+	},
+	{
+		minStreak: 7,
+		multiplier: 1.25,
+		label: "Disciplined (1.25x)"
+	},
+	{
+		minStreak: 3,
+		multiplier: 1.1,
+		label: "Focused (1.1x)"
+	},
+	{
+		minStreak: 0,
+		multiplier: 1,
+		label: "Standard (1.0x)"
+	}
+];
+/**
+* Computes active multiplier based on clean discipline streak and budget consistency.
+*/
+function computeActiveMultiplier(cleanStreak, budgetStreak) {
+	const safeClean = Math.max(0, cleanStreak || 0);
+	const safeBudget = Math.max(0, budgetStreak || 0);
+	const tier = DISCIPLINE_MULTIPLIERS.find((t) => safeClean >= t.minStreak) || DISCIPLINE_MULTIPLIERS[DISCIPLINE_MULTIPLIERS.length - 1];
+	const budgetBonus = safeBudget >= 3 ? .15 : 0;
+	const totalRate = Math.round((tier.multiplier + budgetBonus) * 100) / 100;
+	let label = tier.label;
+	if (budgetBonus > 0) label += " + 💰 Budget Shield (+15%)";
+	return {
+		rate: tier.multiplier,
+		cleanStreak: safeClean,
+		budgetStreak: safeBudget,
+		budgetBonus,
+		totalRate,
+		label
+	};
+}
+/**
+* Converts coins into equivalent real-world money value based on exchange rate.
+* e.g., ratePerHundred = 10 means 100 coins = 10.00 currency (1 coin = 0.10 currency).
+*/
+function coinsToMoneyValue(coins, ratePerHundred = 10) {
+	return Math.round(Math.max(0, coins || 0) * (Math.max(1, ratePerHundred || 10) / 100) * 100) / 100;
+}
+/**
+* Enhanced chest roll engine with tiered mystery loot drops:
+* - 60% chance: Coins Jackpot (scaled with level)
+* - 20% chance: Streak Shield (free shield added to inventory)
+* - 15% chance: Reward Vault Real-Money Boost (+25..+100 real currency)
+* - 5% chance: 24h 2x Super Multiplier
+*/
+function rollEnhancedChest(level, rand = Math.random()) {
+	const roll = rand * 100;
+	if (roll < 60) {
+		const baseMin = 15 + level * 3;
+		const baseMax = 50 + level * 8;
+		const coins = Math.round(baseMin + Math.random() * (baseMax - baseMin));
+		return {
+			type: "coins",
+			value: coins,
+			label: `+${coins} Coins Jackpot!`,
+			description: `Discipline dividends credited directly to your points wallet.`
+		};
+	}
+	if (roll < 80) return {
+		type: "shield",
+		value: 1,
+		label: "🛡️ Legendary Streak Shield!",
+		description: "Added 1 Streak Shield to your inventory. Your streaks are protected!"
+	};
+	if (roll < 95) {
+		const boost = 25 + Math.floor(Math.random() * 4) * 25;
+		return {
+			type: "vault_boost",
+			value: boost,
+			label: `💰 +${boost} Vault Cash Bonus!`,
+			description: `Real money surplus credited to your Reward Vault for real-world rewards.`
+		};
+	}
+	return {
+		type: "multiplier_24h",
+		value: 2,
+		label: "⚡ 24h 2x Super Multiplier Shard!",
+		description: "Double all coin earnings across all tasks and workouts for the next 24 hours!"
+	};
+}
+/**
+* Calculates staking cap based on hunter level:
+* Formula: 250 + (level * 250) coins.
+*/
+function computeMaxStakingCap(level) {
+	return 250 + Math.max(1, Math.floor(level || 1)) * 250;
+}
+/**
+* Computes daily dividend interest rate for staked coins:
+* - Base rate: 0.5% daily (0.005)
+* - 7+ day clean streak: 0.8% daily (0.008)
+* - 14+ day clean streak: 1.2% daily (0.012)
+* - 30+ day clean streak: 1.5% daily (0.015)
+*/
+function computeDailyInterestRate(cleanStreak) {
+	const safeStreak = Math.max(0, cleanStreak || 0);
+	if (safeStreak >= 30) return {
+		rate: .015,
+		percent: 1.5,
+		streakBonusActive: true
+	};
+	if (safeStreak >= 14) return {
+		rate: .012,
+		percent: 1.2,
+		streakBonusActive: true
+	};
+	if (safeStreak >= 7) return {
+		rate: .008,
+		percent: .8,
+		streakBonusActive: true
+	};
+	return {
+		rate: .005,
+		percent: .5,
+		streakBonusActive: false
+	};
+}
+/**
+* Computes estimated daily coin dividend from staked amount:
+* If staked >= 50 coins, minimum yield is 1 coin/day.
+*/
+function computeDailyDividend(stakedCoins, cleanStreak) {
+	if (stakedCoins <= 0) return 0;
+	const { rate } = computeDailyInterestRate(cleanStreak);
+	const calculated = Math.floor(stakedCoins * rate);
+	return stakedCoins >= 50 ? Math.max(1, calculated) : calculated;
+}
+/**
+* Calculates accrued pending interest between lastClaimDay and currentDay.
+*/
+function calculateAccruedInterest(stakedCoins, lastClaimDay, currentDay, cleanStreak) {
+	if (stakedCoins <= 0 || !currentDay) return {
+		pendingInterest: 0,
+		daysPassed: 0
+	};
+	if (!lastClaimDay) return {
+		pendingInterest: 0,
+		daysPassed: 0
+	};
+	if (lastClaimDay >= currentDay) return {
+		pendingInterest: 0,
+		daysPassed: 0
+	};
+	const lastTime = Date.parse(`${lastClaimDay}T00:00:00Z`);
+	const currTime = Date.parse(`${currentDay}T00:00:00Z`);
+	if (isNaN(lastTime) || isNaN(currTime) || currTime <= lastTime) return {
+		pendingInterest: 0,
+		daysPassed: 0
+	};
+	const daysPassed = Math.floor((currTime - lastTime) / 864e5);
+	if (daysPassed <= 0) return {
+		pendingInterest: 0,
+		daysPassed: 0
+	};
+	return {
+		pendingInterest: computeDailyDividend(stakedCoins, cleanStreak) * daysPassed,
+		daysPassed
+	};
+}
+var CONSUMABLE_CATALOG = [
+	{
+		id: "focus_elixir",
+		name: "Focus Elixir of the Shadow Monarch",
+		title: "Focus Elixir",
+		description: "Doubles (2.0x) all coin earnings on completed tasks and schedule blocks for 2 hours.",
+		costCoins: 20,
+		durationHours: 2,
+		icon: "🧪",
+		effectKind: "multiplier_boost",
+		effectValue: 2,
+		rarity: "rare",
+		quote: "\"Your senses sharpen into absolute, unbroken focus.\""
+	},
+	{
+		id: "xp_booster",
+		name: "Grand Hunter Awakening Draught",
+		title: "XP Booster",
+		description: "Increases all XP earned from tasks, blocks, and workouts by +50% for 3 hours.",
+		costCoins: 25,
+		durationHours: 3,
+		icon: "⚡",
+		effectKind: "xp_boost",
+		effectValue: 1.5,
+		rarity: "rare",
+		quote: "\"The flow of mana accelerates your cellular ascension.\""
+	},
+	{
+		id: "streak_shield",
+		name: "Aegis of the Immortal Vanguard",
+		title: "Streak Aegis Shield",
+		description: "Adds +1 Streak Shield to your inventory. Protects all streaks from resetting if you miss a day.",
+		costCoins: 50,
+		durationHours: 0,
+		icon: "🛡️",
+		effectKind: "streak_shield",
+		effectValue: 1,
+		rarity: "epic",
+		quote: "\"An unyielding barrier shielding your hard-won discipline from rupture.\""
+	},
+	{
+		id: "fatigue_neutralizer",
+		name: "System Fatigue Recovery Capsule",
+		title: "Fatigue Neutralizer",
+		description: "Instantly cleanses workout muscle exhaustion and resets daily workout coin caps.",
+		costCoins: 15,
+		durationHours: 0,
+		icon: "💊",
+		effectKind: "workout_cap_reset",
+		effectValue: 1,
+		rarity: "common",
+		quote: "\"Lactic acid dissolved. Physical vitality restored to baseline.\""
+	}
+];
+var ECONOMY_PRESETS = {
+	balanced: {
+		id: "balanced",
+		name: "Balanced Hunter",
+		tagline: "Standard Progression",
+		description: "Realistic, sustainable reward pacing. Standard daily yields and balanced consumable prices.",
+		badge: "⚖️ BALANCED",
+		bankBaseRate: .5,
+		bankCapPerLevel: 250,
+		consumablePrices: {
+			focus_elixir: 20,
+			xp_booster: 25,
+			streak_shield: 50,
+			fatigue_neutralizer: 15
+		},
+		ruleOverrides: {
+			"sleep.up_on_time": {
+				coins: 10,
+				xp: 20
+			},
+			"sleep.bed_on_time": {
+				coins: 5,
+				xp: 10
+			},
+			"study.block_done": {
+				coins: 15,
+				xp: 30
+			},
+			"study.block_skipped": {
+				coins: -5,
+				xp: 0
+			},
+			"discipline.clean_day": {
+				coins: 20,
+				xp: 40
+			},
+			"discipline.urge_resisted": {
+				coins: 10,
+				xp: 20
+			},
+			"discipline.oath": {
+				coins: 3,
+				xp: 5
+			},
+			"discipline.reset": {
+				coins: -20,
+				xp: 0
+			},
+			"body.workout_done": {
+				coins: 10,
+				xp: 25
+			},
+			"face.routine_done": {
+				coins: 5,
+				xp: 10
+			},
+			"money.under_budget": {
+				coins: 5,
+				xp: 10
+			},
+			"money.logged": {
+				coins: 3,
+				xp: 5
+			}
+		}
+	},
+	spartan: {
+		id: "spartan",
+		name: "Hardcore Spartan",
+		tagline: "High Stakes & Extreme Discipline",
+		description: "Stricter discipline, punishing slip penalties, and precious coin rewards. For elite focus.",
+		badge: "⚔️ SPARTAN",
+		bankBaseRate: .3,
+		bankCapPerLevel: 150,
+		consumablePrices: {
+			focus_elixir: 30,
+			xp_booster: 35,
+			streak_shield: 75,
+			fatigue_neutralizer: 25
+		},
+		ruleOverrides: {
+			"sleep.up_on_time": {
+				coins: 8,
+				xp: 25
+			},
+			"sleep.bed_on_time": {
+				coins: 5,
+				xp: 15
+			},
+			"study.block_done": {
+				coins: 12,
+				xp: 35
+			},
+			"study.block_skipped": {
+				coins: -15,
+				xp: 0
+			},
+			"discipline.clean_day": {
+				coins: 25,
+				xp: 60
+			},
+			"discipline.urge_resisted": {
+				coins: 15,
+				xp: 30
+			},
+			"discipline.oath": {
+				coins: 5,
+				xp: 10
+			},
+			"discipline.reset": {
+				coins: -50,
+				xp: 0
+			},
+			"body.workout_done": {
+				coins: 12,
+				xp: 35
+			},
+			"face.routine_done": {
+				coins: 4,
+				xp: 10
+			},
+			"money.under_budget": {
+				coins: 8,
+				xp: 15
+			},
+			"money.logged": {
+				coins: 2,
+				xp: 5
+			}
+		}
+	},
+	turbo: {
+		id: "turbo",
+		name: "Turbo Velocity",
+		tagline: "High Motivation & Fast Milestones",
+		description: "Generous coin and XP payouts to rapidly celebrate habit consistency and unlock master wishlist rewards.",
+		badge: "⚡ TURBO",
+		bankBaseRate: 1,
+		bankCapPerLevel: 500,
+		consumablePrices: {
+			focus_elixir: 15,
+			xp_booster: 20,
+			streak_shield: 35,
+			fatigue_neutralizer: 10
+		},
+		ruleOverrides: {
+			"sleep.up_on_time": {
+				coins: 20,
+				xp: 40
+			},
+			"sleep.bed_on_time": {
+				coins: 10,
+				xp: 20
+			},
+			"study.block_done": {
+				coins: 30,
+				xp: 60
+			},
+			"study.block_skipped": {
+				coins: -5,
+				xp: 0
+			},
+			"discipline.clean_day": {
+				coins: 40,
+				xp: 80
+			},
+			"discipline.urge_resisted": {
+				coins: 20,
+				xp: 40
+			},
+			"discipline.oath": {
+				coins: 10,
+				xp: 15
+			},
+			"discipline.reset": {
+				coins: -15,
+				xp: 0
+			},
+			"body.workout_done": {
+				coins: 25,
+				xp: 50
+			},
+			"face.routine_done": {
+				coins: 10,
+				xp: 20
+			},
+			"money.under_budget": {
+				coins: 15,
+				xp: 30
+			},
+			"money.logged": {
+				coins: 5,
+				xp: 10
+			}
+		}
+	}
+};
+// src/main/unifiedEconomy.ts
+var toGoal = (r) => ({
+	id: r.id,
+	title: r.title,
+	targetCoins: r.target_coins,
+	targetRealCost: r.target_real_cost,
+	allocatedCoins: r.allocated_coins,
+	allocatedRealCost: r.allocated_real_cost,
+	category: r.category,
+	pinned: !!r.pinned,
+	completed: !!r.completed,
+	completedAt: r.completed_at,
+	note: r.note,
+	createdAt: r.created_at,
+	imageUrl: r.image_url ?? null,
+	productUrl: r.product_url ?? null,
+	currency: r.currency ?? "MDL"
+});
+var UnifiedEconomyService = class {
+	db;
+	wallet;
+	discipline;
+	money;
+	shields;
+	timeZone;
+	constructor(db, wallet, discipline, money, shields, timeZone) {
+		this.db = db;
+		this.wallet = wallet;
+		this.discipline = discipline;
+		this.money = money;
+		this.shields = shields;
+		this.timeZone = timeZone;
+		this.seedInitialGoals();
+	}
+	seedInitialGoals() {
+		try {
+			const count = this.db.prepare("SELECT COUNT(*) as c FROM wishlist_goals").get();
+			if (count && count.c === 0) {
+				const now = (/* @__PURE__ */ new Date()).toISOString();
+				const insert = this.db.prepare(`INSERT INTO wishlist_goals (title, target_coins, target_real_cost, allocated_coins, allocated_real_cost, category, pinned, completed, note, created_at, image_url, product_url, currency)
+           VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, ?, ?, ?)`);
+				this.db.transaction(() => {
+					insert.run("Kaaba Pilgrimage Fund", 2e4, 15e3, "trip", 1, "The supreme spiritual milestone. Keep stacking.", now, "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80", "https://www.visitsaudi.com/en/umrah", "MDL");
+					insert.run("MacBook / Pro Warrior Setup", 12e3, 8e3, "tech", 0, "High-performance battle workstation.", now, "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=80", "https://darwin.md/apple-macbook-pro", "MDL");
+					insert.run("Luxury Recovery & Spa Retreat", 3500, 1500, "luxury", 0, "Deep restorative rest and rejuvenation.", now, "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&auto=format&fit=crop&q=80", "https://aquaterra.md/spa", "MDL");
+				})();
+			}
+		} catch {}
+	}
+	getExchangeRate() {
+		return Number(getSetting(this.db, "coin_exchange_rate") ?? 10);
+	}
+	setExchangeRate(rate) {
+		if (rate <= 0) throw new LedgerError("Exchange rate must be greater than zero");
+		setSetting(this.db, "coin_exchange_rate", String(rate));
+	}
+	getCurrency() {
+		return getSetting(this.db, "currency") ?? getSetting(this.db, "money_currency") ?? "MDL";
+	}
+	setCurrency(cur) {
+		const code = cur?.trim().toUpperCase() || "MDL";
+		setSetting(this.db, "currency", code);
+		setSetting(this.db, "money_currency", code);
+	}
+	getVaultBalance() {
+		return this.db.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM reward_vault_ledger").get()?.total ?? 0;
+	}
+	getVaultHistory(limit = 25) {
+		return this.db.prepare("SELECT * FROM reward_vault_ledger ORDER BY id DESC LIMIT ?").all(limit).map((r) => ({
+			id: r.id,
+			ts: r.ts,
+			day: r.day,
+			kind: r.kind,
+			amount: r.amount,
+			ref: r.ref,
+			note: r.note
+		}));
+	}
+	creditVault(kind, amount, note, ref = null, now = /* @__PURE__ */ new Date()) {
+		if (amount <= 0) return this.getVaultBalance();
+		const day = dayKey(now, this.timeZone);
+		this.db.prepare("INSERT INTO reward_vault_ledger (ts, day, kind, amount, ref, note) VALUES (?, ?, ?, ?, ?, ?)").run(now.toISOString(), day, kind, amount, ref, note);
+		return this.getVaultBalance();
+	}
+	debitVault(kind, amount, note, ref = null, now = /* @__PURE__ */ new Date()) {
+		if (amount <= 0) return this.getVaultBalance();
+		const balance = this.getVaultBalance();
+		if (balance < amount) throw new LedgerError(`Insufficient Reward Vault funds (${balance} available, requested ${amount})`);
+		const day = dayKey(now, this.timeZone);
+		this.db.prepare("INSERT INTO reward_vault_ledger (ts, day, kind, amount, ref, note) VALUES (?, ?, ?, ?, ?, ?)").run(now.toISOString(), day, kind, -amount, ref, note);
+		return this.getVaultBalance();
+	}
+	goals() {
+		return this.db.prepare("SELECT * FROM wishlist_goals ORDER BY completed ASC, pinned DESC, id ASC").all().map(toGoal);
+	}
+	pinnedGoal() {
+		const row = this.db.prepare("SELECT * FROM wishlist_goals WHERE pinned = 1 AND completed = 0 LIMIT 1").get();
+		return row ? toGoal(row) : null;
+	}
+	saveGoal(input) {
+		if (!input.title || !input.title.trim()) throw new LedgerError("Goal title is required");
+		if (input.targetCoins <= 0 && input.targetRealCost <= 0) throw new LedgerError("Goal must have a target in coins or real money");
+		const title = input.title.trim();
+		const targetCoins = Math.max(0, Math.round(input.targetCoins || 0));
+		const targetRealCost = Math.max(0, Math.round(input.targetRealCost || 0));
+		const category = input.category || "gear";
+		const note = input.note?.trim() || null;
+		const imageUrl = input.imageUrl?.trim() || null;
+		const productUrl = input.productUrl?.trim() || null;
+		const currency = input.currency?.trim() || "MDL";
+		const pinned = input.pinned ? 1 : 0;
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		return this.db.transaction(() => {
+			if (pinned) this.db.prepare("UPDATE wishlist_goals SET pinned = 0").run();
+			if (input.id) {
+				this.db.prepare(`UPDATE wishlist_goals
+             SET title = ?, target_coins = ?, target_real_cost = ?, category = ?, pinned = ?, note = ?, image_url = ?, product_url = ?, currency = ?
+             WHERE id = ?`).run(title, targetCoins, targetRealCost, category, pinned, note, imageUrl, productUrl, currency, input.id);
+				return toGoal(this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(input.id));
+			} else {
+				const info = this.db.prepare(`INSERT INTO wishlist_goals (title, target_coins, target_real_cost, allocated_coins, allocated_real_cost, category, pinned, completed, note, created_at, image_url, product_url, currency)
+             VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, ?, ?, ?)`).run(title, targetCoins, targetRealCost, category, pinned, note, now, imageUrl, productUrl, currency);
+				return toGoal(this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(info.lastInsertRowid));
+			}
+		})();
+	}
+	pinGoal(id) {
+		this.db.transaction(() => {
+			this.db.prepare("UPDATE wishlist_goals SET pinned = 0").run();
+			this.db.prepare("UPDATE wishlist_goals SET pinned = 1 WHERE id = ?").run(id);
+		})();
+	}
+	deleteGoal(id) {
+		this.db.prepare("DELETE FROM wishlist_goals WHERE id = ?").run(id);
+	}
+	depositCoinsToGoal(goalId, amount, now = /* @__PURE__ */ new Date()) {
+		if (amount <= 0) throw new LedgerError("Deposit amount must be greater than zero");
+		const currentBalance = balance(this.wallet.entries());
+		if (currentBalance < amount) throw new LedgerError(`Insufficient coins balance (${currentBalance} available)`);
+		const row = this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(goalId);
+		if (!row) throw new LedgerError("Goal not found");
+		if (row.completed) throw new LedgerError("Goal is already completed");
+		const day = dayKey(now, this.timeZone);
+		return this.db.transaction(() => {
+			this.wallet.append({
+				ts: now.toISOString(),
+				day,
+				module: "shop",
+				kind: "spend",
+				coins: -amount,
+				xp: 0,
+				ref: `goal:${goalId}`,
+				note: `Wishlist Allocation: ${row.title}`
+			});
+			const newAllocated = row.allocated_coins + amount;
+			const isCompleted = newAllocated >= row.target_coins && row.allocated_real_cost >= row.target_real_cost;
+			const completedAt = isCompleted ? now.toISOString() : null;
+			this.db.prepare("UPDATE wishlist_goals SET allocated_coins = ?, completed = ?, completed_at = ? WHERE id = ?").run(newAllocated, isCompleted ? 1 : 0, completedAt, goalId);
+			return {
+				goal: toGoal(this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(goalId)),
+				balance: balance(this.wallet.entries())
+			};
+		})();
+	}
+	depositVaultCashToGoal(goalId, amount, now = /* @__PURE__ */ new Date()) {
+		if (amount <= 0) throw new LedgerError("Deposit amount must be greater than zero");
+		const vaultBal = this.getVaultBalance();
+		if (vaultBal < amount) throw new LedgerError(`Insufficient Reward Vault funds (${vaultBal} available)`);
+		const row = this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(goalId);
+		if (!row) throw new LedgerError("Goal not found");
+		if (row.completed) throw new LedgerError("Goal is already completed");
+		return this.db.transaction(() => {
+			this.debitVault("goal_allocation", amount, `Allocated to ${row.title}`, `goal:${goalId}`, now);
+			const newAllocated = row.allocated_real_cost + amount;
+			const isCompleted = row.allocated_coins >= row.target_coins && newAllocated >= row.target_real_cost;
+			const completedAt = isCompleted ? now.toISOString() : null;
+			this.db.prepare("UPDATE wishlist_goals SET allocated_real_cost = ?, completed = ?, completed_at = ? WHERE id = ?").run(newAllocated, isCompleted ? 1 : 0, completedAt, goalId);
+			return {
+				goal: toGoal(this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(goalId)),
+				vaultBalance: this.getVaultBalance()
+			};
+		})();
+	}
+	claimGoal(goalId, now = /* @__PURE__ */ new Date()) {
+		if (!this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(goalId)) throw new LedgerError("Goal not found");
+		const completedAt = now.toISOString();
+		this.db.prepare("UPDATE wishlist_goals SET completed = 1, completed_at = ? WHERE id = ?").run(completedAt, goalId);
+		return toGoal(this.db.prepare("SELECT * FROM wishlist_goals WHERE id = ?").get(goalId));
+	}
+	openEnhancedChest(level, now = /* @__PURE__ */ new Date()) {
+		const all = this.wallet.entries();
+		const lvl = levelInfo(totalXp(all)).level;
+		if (!unopenedChests(lvl, all.filter((e) => e.kind !== "undo").map((e) => e.ref ?? "").filter((r) => r.startsWith("chest:"))).includes(level)) throw new LedgerError("No chest waiting for that level");
+		return this.db.transaction(() => {
+			const drop = rollEnhancedChest(level);
+			let coinsAwarded = 0;
+			const day = dayKey(now, this.timeZone);
+			switch (drop.type) {
+				case "coins":
+					coinsAwarded = drop.value;
+					this.wallet.append({
+						ts: now.toISOString(),
+						day,
+						module: "shop",
+						kind: "earn",
+						coins: coinsAwarded,
+						xp: 0,
+						ref: chestRef(level),
+						note: `Level ${level} Chest: Coins Jackpot (+${coinsAwarded})`
+					});
+					break;
+				case "shield":
+					if (this.shields) this.shields.awardFreeShield(`Level ${level} Mystery Chest drop`);
+					this.wallet.append({
+						ts: now.toISOString(),
+						day,
+						module: "shop",
+						kind: "earn",
+						coins: 0,
+						xp: 0,
+						ref: chestRef(level),
+						note: `Level ${level} Chest: Streak Shield Awarded`
+					});
+					break;
+				case "vault_boost":
+					this.creditVault("chest_bonus", drop.value, `Level ${level} Chest Bonus`, chestRef(level), now);
+					this.wallet.append({
+						ts: now.toISOString(),
+						day,
+						module: "shop",
+						kind: "earn",
+						coins: 0,
+						xp: 0,
+						ref: chestRef(level),
+						note: `Level ${level} Chest: +${drop.value} Vault Cash Bonus`
+					});
+					break;
+				case "multiplier_24h":
+					coinsAwarded = 25;
+					this.wallet.append({
+						ts: now.toISOString(),
+						day,
+						module: "shop",
+						kind: "earn",
+						coins: coinsAwarded,
+						xp: 0,
+						ref: chestRef(level),
+						note: `Level ${level} Chest: 2x Multiplier Shard (+25 coins)`
+					});
+			}
+			this.db.prepare("INSERT INTO chest_loot_drops (level, loot_type, loot_value, loot_label, ts) VALUES (?, ?, ?, ?, ?)").run(level, drop.type, drop.value, drop.label, now.toISOString());
+			const nextAll = this.wallet.entries();
+			const nextOpened = nextAll.filter((e) => e.kind !== "undo").map((e) => e.ref ?? "").filter((r) => r.startsWith("chest:"));
+			const remainingChests = unopenedChests(lvl, nextOpened);
+			return {
+				drop,
+				coins: coinsAwarded,
+				balance: balance(nextAll),
+				chests: remainingChests
+			};
+		})();
+	}
+	getEconomySummary(now = /* @__PURE__ */ new Date()) {
+		const coinsBalance = balance(this.wallet.entries());
+		const rate = this.getExchangeRate();
+		const coinsRealValue = coinsToMoneyValue(coinsBalance, rate);
+		const vaultBalance = this.getVaultBalance();
+		const currency = this.getCurrency();
+		const monthlyBudget = Number(getSetting(this.db, "reward_budget") ?? 0);
+		const month = dayKey(now, this.timeZone).slice(0, 7);
+		const monthSpent = this.db.prepare("SELECT COALESCE(SUM(real_cost), 0) as total FROM redemptions WHERE substr(day, 1, 7) = ?").get(month)?.total ?? 0;
+		const multiplier = computeActiveMultiplier(this.discipline?.state().current ?? 0, this.money?.state().today.underBudget ? 3 : 0);
+		const goals = this.goals();
+		return {
+			coinsBalance,
+			coinsRealValue,
+			exchangeRate: rate,
+			vaultBalance,
+			currency,
+			monthlyBudget,
+			monthSpent,
+			multiplier,
+			pinnedGoal: goals.find((g) => g.pinned && !g.completed) ?? null,
+			goals,
+			recentVaultEntries: this.getVaultHistory(10),
+			bank: this.getBankState(now),
+			activeBuffs: this.getActiveBuffs(now)
+		};
+	}
+	getBankState(now = /* @__PURE__ */ new Date()) {
+		const stakedCoins = Number(getSetting(this.db, "bank_staked_coins") ?? 0);
+		const totalInterestEarned = Number(getSetting(this.db, "bank_total_interest_earned") ?? 0);
+		const lastClaimDay = getSetting(this.db, "bank_last_interest_day");
+		const lvl = levelInfo(totalXp(this.wallet.entries())).level;
+		const maxStakingCap = computeMaxStakingCap(lvl);
+		const cleanStreak = this.discipline?.state(now).current ?? 0;
+		const rateInfo = computeDailyInterestRate(cleanStreak);
+		const { pendingInterest } = calculateAccruedInterest(stakedCoins, lastClaimDay, dayKey(now, this.timeZone), cleanStreak);
+		return {
+			stakedCoins,
+			maxStakingCap,
+			dailyRatePercent: rateInfo.percent,
+			pendingInterest,
+			totalInterestEarned,
+			lastClaimDay,
+			streakBonusActive: rateInfo.streakBonusActive,
+			cleanStreak
+		};
+	}
+	stakeCoins(amount, now = /* @__PURE__ */ new Date()) {
+		if (amount <= 0) throw new LedgerError("Staking amount must be greater than zero");
+		const currentBalance = balance(this.wallet.entries());
+		if (currentBalance < amount) throw new LedgerError(`Insufficient coins in wallet (${currentBalance} available, ${amount} requested)`);
+		const state = this.getBankState(now);
+		if (state.stakedCoins + amount > state.maxStakingCap) throw new LedgerError(`Staking would exceed your Rank limit of ${state.maxStakingCap} coins. Level up to increase cap!`);
+		const currentDay = dayKey(now, this.timeZone);
+		return this.db.transaction(() => {
+			if (state.pendingInterest > 0) {
+				this.wallet.append({
+					ts: now.toISOString(),
+					day: currentDay,
+					module: "shop",
+					kind: "earn",
+					coins: state.pendingInterest,
+					xp: 0,
+					ref: "bank:interest",
+					note: "Iron Bank Auto-Accrued Dividend on Deposit"
+				});
+				setSetting(this.db, "bank_total_interest_earned", String(state.totalInterestEarned + state.pendingInterest));
+			}
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: currentDay,
+				module: "shop",
+				kind: "spend",
+				coins: -amount,
+				xp: 0,
+				ref: "bank:stake",
+				note: `Iron Bank Vault Deposit: ${amount} coins staked`
+			});
+			const nextStaked = state.stakedCoins + amount;
+			setSetting(this.db, "bank_staked_coins", String(nextStaked));
+			setSetting(this.db, "bank_last_interest_day", currentDay);
+			return this.getBankState(now);
+		})();
+	}
+	withdrawCoins(amount, now = /* @__PURE__ */ new Date()) {
+		if (amount <= 0) throw new LedgerError("Withdrawal amount must be greater than zero");
+		const state = this.getBankState(now);
+		if (state.stakedCoins < amount) throw new LedgerError(`Insufficient staked coins (${state.stakedCoins} staked, requested ${amount})`);
+		const currentDay = dayKey(now, this.timeZone);
+		return this.db.transaction(() => {
+			if (state.pendingInterest > 0) {
+				this.wallet.append({
+					ts: now.toISOString(),
+					day: currentDay,
+					module: "shop",
+					kind: "earn",
+					coins: state.pendingInterest,
+					xp: 0,
+					ref: "bank:interest",
+					note: "Iron Bank Accrued Dividend on Withdrawal"
+				});
+				setSetting(this.db, "bank_total_interest_earned", String(state.totalInterestEarned + state.pendingInterest));
+			}
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: currentDay,
+				module: "shop",
+				kind: "earn",
+				coins: amount,
+				xp: 0,
+				ref: "bank:withdraw",
+				note: `Iron Bank Vault Withdrawal: ${amount} coins released`
+			});
+			const nextStaked = state.stakedCoins - amount;
+			setSetting(this.db, "bank_staked_coins", String(nextStaked));
+			setSetting(this.db, "bank_last_interest_day", currentDay);
+			return this.getBankState(now);
+		})();
+	}
+	claimInterest(now = /* @__PURE__ */ new Date()) {
+		const state = this.getBankState(now);
+		if (state.pendingInterest <= 0) throw new LedgerError("No dividend yield available to claim yet today");
+		const currentDay = dayKey(now, this.timeZone);
+		const claimed = state.pendingInterest;
+		return this.db.transaction(() => {
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: currentDay,
+				module: "shop",
+				kind: "earn",
+				coins: claimed,
+				xp: 0,
+				ref: "bank:interest",
+				note: `Iron Bank Daily Dividend Yield: +${claimed} coins`
+			});
+			setSetting(this.db, "bank_last_interest_day", currentDay);
+			setSetting(this.db, "bank_total_interest_earned", String(state.totalInterestEarned + claimed));
+			return {
+				bank: this.getBankState(now),
+				claimedCoins: claimed
+			};
+		})();
+	}
+	getActiveBuffs(now = /* @__PURE__ */ new Date()) {
+		const nowIso = now.toISOString();
+		try {
+			this.db.prepare("DELETE FROM active_buffs WHERE expires_at <= ?").run(nowIso);
+			return this.db.prepare("SELECT * FROM active_buffs WHERE expires_at > ?").all(nowIso).map((r) => {
+				const remainingSeconds = Math.max(0, Math.floor((Date.parse(r.expires_at) - now.getTime()) / 1e3));
+				return {
+					id: r.id,
+					itemId: r.item_id,
+					title: r.title,
+					expiresAt: r.expires_at,
+					effectKind: r.effect_kind,
+					effectVal: r.effect_val,
+					icon: r.icon,
+					remainingSeconds
+				};
+			});
+		} catch {
+			return [];
+		}
+	}
+	isBuffActive(effectKind, now = /* @__PURE__ */ new Date()) {
+		try {
+			const nowIso = now.toISOString();
+			return (this.db.prepare("SELECT COUNT(*) as c FROM active_buffs WHERE effect_kind = ? AND expires_at > ?").get(effectKind, nowIso)?.c ?? 0) > 0;
+		} catch {
+			return false;
+		}
+	}
+	getBuffMultiplier(effectKind, now = /* @__PURE__ */ new Date()) {
+		try {
+			const nowIso = now.toISOString();
+			return this.db.prepare("SELECT MAX(effect_val) as val FROM active_buffs WHERE effect_kind = ? AND expires_at > ?").get(effectKind, nowIso)?.val ?? 1;
+		} catch {
+			return 1;
+		}
+	}
+	buyConsumable(itemId, now = /* @__PURE__ */ new Date()) {
+		const defaultItem = CONSUMABLE_CATALOG.find((c) => c.id === itemId);
+		if (!defaultItem) throw new LedgerError(`Unknown consumable item: "${itemId}"`);
+		const customCost = Number(getSetting(this.db, `price_${itemId}`)) || defaultItem.costCoins;
+		const item = {
+			...defaultItem,
+			costCoins: customCost
+		};
+		const currentBalance = balance(this.wallet.entries());
+		if (currentBalance < item.costCoins) throw new LedgerError(`Insufficient coins (${currentBalance} available, ${item.costCoins} required)`);
+		const currentDay = dayKey(now, this.timeZone);
+		return this.db.transaction(() => {
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: currentDay,
+				module: "shop",
+				kind: "spend",
+				coins: -item.costCoins,
+				xp: 0,
+				ref: `consumable:${item.id}`,
+				note: `Purchased ${item.name}`
+			});
+			const nextBalance = balance(this.wallet.entries());
+			if (item.effectKind === "streak_shield") {
+				this.shields?.awardFreeShield("Purchased from Hunter Tactical Store");
+				return {
+					balance: nextBalance,
+					message: "🛡️ Streak Aegis Shield added to your tactical inventory!"
+				};
+			}
+			if (item.effectKind === "workout_cap_reset") return {
+				balance: nextBalance,
+				message: "💊 System Fatigue Cleansed! Workout muscle limits reset."
+			};
+			const existing = this.db.prepare("SELECT * FROM active_buffs WHERE item_id = ? AND expires_at > ?").get(item.id, now.toISOString());
+			const durationMs = item.durationHours * 3600 * 1e3;
+			let newExpiresAt;
+			if (existing) {
+				newExpiresAt = new Date(Date.parse(existing.expires_at) + durationMs).toISOString();
+				this.db.prepare("UPDATE active_buffs SET expires_at = ? WHERE id = ?").run(newExpiresAt, existing.id);
+			} else {
+				newExpiresAt = new Date(now.getTime() + durationMs).toISOString();
+				const buffId = `buff_${item.id}_${Date.now()}`;
+				this.db.prepare("INSERT INTO active_buffs (id, item_id, title, expires_at, effect_kind, effect_val, icon) VALUES (?, ?, ?, ?, ?, ?, ?)").run(buffId, item.id, item.title, newExpiresAt, item.effectKind, item.effectValue, item.icon);
+			}
+			return {
+				buff: this.getActiveBuffs(now).find((b) => b.itemId === item.id),
+				balance: nextBalance,
+				message: `${item.icon} ${item.title} Activated! Active for ${item.durationHours} hours.`
+			};
+		})();
+	}
+	getEconomyConfig() {
+		return {
+			exchangeRate: this.getExchangeRate(),
+			currency: this.getCurrency(),
+			monthlyBudget: Number(getSetting(this.db, "reward_budget") ?? 0),
+			bankBaseRate: Number(getSetting(this.db, "bank_base_rate") ?? .5),
+			bankCapPerLevel: Number(getSetting(this.db, "bank_cap_per_level") ?? 250),
+			consumablePrices: {
+				focus_elixir: Number(getSetting(this.db, "price_focus_elixir") ?? 20),
+				xp_booster: Number(getSetting(this.db, "price_xp_booster") ?? 25),
+				streak_shield: Number(getSetting(this.db, "price_streak_shield") ?? 50),
+				fatigue_neutralizer: Number(getSetting(this.db, "price_fatigue_neutralizer") ?? 15)
+			}
+		};
+	}
+	saveEconomyConfig(patch) {
+		if (patch.exchangeRate !== void 0 && patch.exchangeRate > 0) this.setExchangeRate(patch.exchangeRate);
+		if (patch.currency !== void 0 && patch.currency.trim()) this.setCurrency(patch.currency);
+		if (patch.monthlyBudget !== void 0 && patch.monthlyBudget >= 0) setSetting(this.db, "reward_budget", String(patch.monthlyBudget));
+		if (patch.bankBaseRate !== void 0 && patch.bankBaseRate > 0) setSetting(this.db, "bank_base_rate", String(patch.bankBaseRate));
+		if (patch.bankCapPerLevel !== void 0 && patch.bankCapPerLevel > 0) setSetting(this.db, "bank_cap_per_level", String(patch.bankCapPerLevel));
+		if (patch.consumablePrices) {
+			for (const [k, v] of Object.entries(patch.consumablePrices)) if (typeof v === "number" && v > 0) setSetting(this.db, `price_${k}`, String(v));
+		}
+		return this.getEconomyConfig();
+	}
+	applyEconomyPreset(presetId) {
+		const preset = ECONOMY_PRESETS[presetId];
+		if (!preset) throw new LedgerError(`Unknown preset: "${presetId}"`);
+		setSetting(this.db, "bank_base_rate", String(preset.bankBaseRate));
+		setSetting(this.db, "bank_cap_per_level", String(preset.bankCapPerLevel));
+		for (const [k, v] of Object.entries(preset.consumablePrices)) setSetting(this.db, `price_${k}`, String(v));
+		const allRules = this.wallet.rules();
+		for (const [ruleId, override] of Object.entries(preset.ruleOverrides)) {
+			const existing = allRules.find((r) => r.id === ruleId);
+			if (existing) this.wallet.saveRule({
+				...existing,
+				coins: override.coins,
+				xp: override.xp,
+				dailyCap: override.dailyCap ?? existing.dailyCap
+			});
+		}
+		return this.getEconomyConfig();
+	}
+};
+// src/core/quests.ts
+var rule = (id) => (day) => day.filter((e) => e.ruleId === id).length;
+var QUEST_POOL = [
+	{
+		id: "study2",
+		title: "Finish 2 study blocks",
+		goal: 2,
+		count: rule("study.block_done")
+	},
+	{
+		id: "wake",
+		title: "Wake up on time",
+		goal: 1,
+		count: rule("sleep.up_on_time")
+	},
+	{
+		id: "bed",
+		title: "Be in bed on time",
+		goal: 1,
+		count: rule("sleep.bed_on_time")
+	},
+	{
+		id: "money",
+		title: "Log your spending",
+		goal: 1,
+		count: rule("money.logged")
+	},
+	{
+		id: "tasks3",
+		title: "Complete 3 tasks",
+		goal: 3,
+		count: (d) => d.filter((e) => e.ref?.startsWith("task:")).length
+	},
+	{
+		id: "clean",
+		title: "Check in clean",
+		goal: 1,
+		count: rule("discipline.clean_day")
+	},
+	{
+		id: "workout",
+		title: "Work out",
+		goal: 1,
+		count: rule("body.workout_done")
+	},
+	{
+		id: "face",
+		title: "Do your skincare",
+		goal: 1,
+		count: rule("face.routine_done")
+	},
+	{
+		id: "earn60",
+		title: "Earn 60 coins",
+		goal: 60,
+		count: (d) => d.reduce((s, e) => s + Math.max(0, e.coins), 0)
+	}
+];
+var QUEST_BONUS = {
+	coins: 30,
+	xp: 50
+};
+function hash(s) {
+	let h = 2166136261;
+	for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+	return h >>> 0;
+}
+/** The day's three quests, always the same for the same day. */
+function questsFor(day) {
+	return QUEST_POOL.map((q) => ({
+		q,
+		k: hash(`${day}:${q.id}`)
+	})).sort((a, b) => a.k - b.k).slice(0, 3).map((x) => x.q);
+}
+var questRef = (day) => `quest:${day}`;
+function questState(day, entries) {
+	const live = effective(entries);
+	const today = live.filter((e) => e.day === day && !e.ref?.startsWith("quest:"));
+	const quests = questsFor(day).map((q) => {
+		const progress = Math.min(q.goal, q.count(today));
+		return {
+			id: q.id,
+			title: q.title,
+			goal: q.goal,
+			progress,
+			done: progress >= q.goal
+		};
+	});
+	return {
+		day,
+		quests,
+		allDone: quests.every((q) => q.done),
+		claimed: live.some((e) => e.ref === questRef(day)),
+		bonus: QUEST_BONUS
+	};
+}
+// src/main/wallet.ts
+var toEntry = (r) => ({
+	id: r.id,
+	ts: r.ts,
+	day: r.day,
+	module: r.module,
+	kind: r.kind,
+	coins: r.coins,
+	xp: r.xp,
+	ruleId: r.rule_id,
+	ref: r.ref,
+	note: r.note,
+	undoOf: r.undo_of
+});
+var toRule = (r) => ({
+	id: r.id,
+	module: r.module,
+	title: r.title,
+	coins: r.coins,
+	xp: r.xp,
+	dailyCap: r.daily_cap,
+	cooldownMin: r.cooldown_min,
+	enabled: !!r.enabled
+});
+/** Database side of the wallet; all decisions are made by the pure core. */
+var Wallet = class {
+	db;
+	timeZone;
+	constructor(db, timeZone) {
+		this.db = db;
+		this.timeZone = timeZone;
+	}
+	entries() {
+		return this.db.prepare("SELECT * FROM ledger ORDER BY id").all().map(toEntry);
+	}
+	/** Appends a row the core already validated. Call inside a transaction. */
+	append(e) {
+		const res = this.db.prepare(`INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, ref, note, undo_of)
+         VALUES (@ts, @day, @module, @kind, @coins, @xp, @ruleId, @ref, @note, @undoOf)`).run({
+			ruleId: null,
+			ref: null,
+			note: null,
+			undoOf: null,
+			...e
+		});
+		return Number(res.lastInsertRowid);
+	}
+	getStatAllocation() {
+		try {
+			const row = this.db.prepare("SELECT value FROM settings WHERE key = 'hunter.stat_allocation'").get();
+			if (!row?.value) return {
+				str: 0,
+				agi: 0,
+				vit: 0,
+				int: 0,
+				sen: 0
+			};
+			const parsed = JSON.parse(row.value);
+			return {
+				str: Math.max(0, Math.floor(Number(parsed.str) || 0)),
+				agi: Math.max(0, Math.floor(Number(parsed.agi) || 0)),
+				vit: Math.max(0, Math.floor(Number(parsed.vit) || 0)),
+				int: Math.max(0, Math.floor(Number(parsed.int) || 0)),
+				sen: Math.max(0, Math.floor(Number(parsed.sen) || 0))
+			};
+		} catch {
+			return {
+				str: 0,
+				agi: 0,
+				vit: 0,
+				int: 0,
+				sen: 0
+			};
+		}
+	}
+	saveStatAllocation(alloc) {
+		this.db.prepare(`INSERT INTO settings (key, value) VALUES ('hunter.stat_allocation', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify(alloc));
+	}
+	allocateStats(stat, points = 1) {
+		if (points <= 0) return this.summary();
+		if (this.summary().level.attributes.unallocatedPoints < points) throw new LedgerError("Not enough unallocated stat points available");
+		const alloc = this.getStatAllocation();
+		alloc[stat] = (alloc[stat] ?? 0) + points;
+		this.saveStatAllocation(alloc);
+		return this.summary();
+	}
+	resetStatAllocation() {
+		this.saveStatAllocation({
+			str: 0,
+			agi: 0,
+			vit: 0,
+			int: 0,
+			sen: 0
+		});
+		return this.summary();
+	}
+	summary(now = /* @__PURE__ */ new Date()) {
+		const today = dayKey(now, this.timeZone);
+		const totals = this.db.prepare(`
+      SELECT 
+        COALESCE(SUM(coins), 0) AS balance,
+        COALESCE(SUM(CASE WHEN xp > 0 THEN xp ELSE 0 END), 0) AS total_xp
+      FROM ledger
+      WHERE kind != 'undo'
+        AND id NOT IN (SELECT undo_of FROM ledger WHERE kind = 'undo' AND undo_of IS NOT NULL)
+    `).get() ?? {
+			balance: 0,
+			total_xp: 0
+		};
+		const todayRows = this.db.prepare(`
+      SELECT * FROM ledger
+      WHERE day = ?
+        AND kind != 'undo'
+        AND id NOT IN (SELECT undo_of FROM ledger WHERE kind = 'undo' AND undo_of IS NOT NULL)
+      ORDER BY id ASC
+    `).all(today).map(toEntry);
+		const recentRows = this.db.prepare(`
+      SELECT * FROM ledger ORDER BY id DESC LIMIT 12
+    `).all().map(toEntry);
+		const xp = totals.total_xp;
+		const allocated = this.getStatAllocation();
+		let hunterStats = { allocated };
+		try {
+			hunterStats = {
+				workoutCount: this.db.prepare("SELECT COUNT(*) as c FROM workouts").get()?.c ?? 0,
+				cleanStreakDays: this.db.prepare("SELECT COUNT(*) as c FROM discipline_events WHERE kind = 'checkin'").get()?.c ?? 0,
+				focusBlocksCount: this.db.prepare("SELECT COUNT(*) as c FROM block_log WHERE status = 'done'").get()?.c ?? 0,
+				onTimeWakeups: this.db.prepare("SELECT COUNT(*) as c FROM sleep_logs WHERE on_time = 1").get()?.c ?? 0,
+				budgetDays: this.db.prepare("SELECT COUNT(*) as c FROM reward_vault_ledger WHERE kind = 'surplus_credit'").get()?.c ?? 0,
+				allocated
+			};
+		} catch {}
+		return {
+			balance: totals.balance,
+			totalXp: xp,
+			level: levelInfo(xp, hunterStats),
+			today,
+			todayCoins: todayRows.reduce((s, e) => s + e.coins, 0),
+			todayXp: todayRows.reduce((s, e) => s + e.xp, 0),
+			todayRules: [...new Set(todayRows.map((e) => e.ruleId).filter(Boolean))],
+			recent: recentRows
+		};
+	}
+	history(limit = 100) {
+		return this.db.prepare("SELECT * FROM ledger ORDER BY id DESC LIMIT ?").all(limit).map(toEntry);
+	}
+	rules() {
+		return this.db.prepare("SELECT * FROM rules ORDER BY sort, id").all().map(toRule);
+	}
+	rule(id) {
+		const row = this.db.prepare("SELECT * FROM rules WHERE id = ?").get(id);
+		if (!row) throw new LedgerError(`Unknown rule ${id}`);
+		return toRule(row);
+	}
+	saveRule(rule) {
+		if (!rule.id.trim() || !rule.title.trim()) throw new LedgerError("A rule needs an id and a title");
+		for (const n of [
+			rule.coins,
+			rule.xp,
+			rule.dailyCap,
+			rule.cooldownMin
+		]) if (!Number.isInteger(n)) throw new LedgerError("Numbers must be whole numbers");
+		if (rule.xp < 0 || rule.dailyCap < 0 || rule.cooldownMin < 0) throw new LedgerError("XP, cap and cooldown cannot be negative");
+		this.db.prepare(`INSERT INTO rules (id, module, title, coins, xp, daily_cap, cooldown_min, enabled, sort)
+         VALUES (@id, @module, @title, @coins, @xp, @dailyCap, @cooldownMin, @enabled,
+                 COALESCE((SELECT sort FROM rules WHERE id = @id), (SELECT COALESCE(MAX(sort), 0) + 1 FROM rules)))
+         ON CONFLICT(id) DO UPDATE SET module = excluded.module, title = excluded.title, coins = excluded.coins,
+           xp = excluded.xp, daily_cap = excluded.daily_cap, cooldown_min = excluded.cooldown_min, enabled = excluded.enabled`).run({
+			...rule,
+			enabled: rule.enabled ? 1 : 0
+		});
+	}
+	award(ruleId, note, now = /* @__PURE__ */ new Date()) {
+		return this.awardRule(ruleId, {
+			note,
+			now
+		});
+	}
+	/** Awards a rule; `day` books it on another day (e.g. a missed block from yesterday). */
+	awardRule(ruleId, opts = {}) {
+		const now = opts.now ?? /* @__PURE__ */ new Date();
+		return this.db.transaction(() => {
+			const row = planAward(this.rule(ruleId), this.entries(), now, opts.day ?? dayKey(now, this.timeZone), opts.note);
+			return this.append({
+				...row,
+				ref: opts.ref ?? null
+			});
+		}).immediate();
+	}
+	quests(now = /* @__PURE__ */ new Date()) {
+		return questState(this.today(now), this.entries());
+	}
+	/** Pays the daily quest bonus once all three are done. */
+	claimQuests(now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const q = this.quests(now);
+			if (!q.allDone) throw new LedgerError("Finish all three quests first");
+			if (q.claimed) throw new LedgerError("Already claimed today");
+			return this.append({
+				ts: now.toISOString(),
+				day: q.day,
+				module: "quests",
+				kind: "earn",
+				coins: q.bonus.coins,
+				xp: q.bonus.xp,
+				ref: questRef(q.day),
+				note: "Daily quests complete"
+			});
+		}).immediate();
+	}
+	today(now = /* @__PURE__ */ new Date()) {
+		return dayKey(now, this.timeZone);
+	}
+	undo(id, note, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const row = planUndo(this.entries(), id, note, now.toISOString(), dayKey(now, this.timeZone));
+			return this.append(row);
+		}).immediate();
+	}
+};
+// src/renderer/src/web/webServices.ts
+/** All services, built for one copy of the database. */
+function servicesFor(db) {
+	const d = db;
+	const wallet = new Wallet(d);
+	const shields = new ShieldService(d, wallet);
+	const discipline = new Discipline(d, wallet);
+	const money = new MoneyService(d, wallet);
+	const body = new Body(d, wallet);
+	return {
+		db: d,
+		wallet,
+		shields,
+		discipline,
+		money,
+		body,
+		shop: new Shop(d, wallet),
+		tasks: new Tasks(d, wallet, shields),
+		schedule: new Schedule(d, wallet),
+		sleep: new SleepService(d, wallet),
+		economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
+		exporter: new DataExportService(d, body, money)
+	};
+}
+var notify = (...names) => {
+	if (typeof window === "undefined") return;
+	for (const n of names) window.dispatchEvent(new CustomEvent(n));
+};
+/** The LifeApi namespaces the services cover, like src/main/index.ts maps them. */
+function createWebServices(mirror) {
+	const read = (fn) => mirror.read((db) => fn(servicesFor(db)));
+	const write = (fn, ...events) => mirror.write((db) => fn(servicesFor(db))).then((r) => {
+		notify(...events);
+		return r;
+	});
+	const W = "life-wallet-changed";
+	const D = "life-discipline-changed";
+	const B = "life-body-changed";
+	return {
+		read,
+		write,
+		services: servicesFor,
+		wallet: {
+			summary: () => read((s) => s.wallet.summary()),
+			history: (limit) => read((s) => s.wallet.history(limit)),
+			award: (ruleId, note) => write((s) => {
+				if (isFlowRule(ruleId)) throw new LedgerError("This one is logged from its own section");
+				s.wallet.award(ruleId, note);
+				return s.wallet.summary();
+			}, W),
+			undo: (id, note) => write((s) => {
+				s.wallet.undo(id, note);
+				return s.wallet.summary();
+			}, W),
+			quests: () => read((s) => s.wallet.quests()),
+			claimQuests: () => write((s) => {
+				s.wallet.claimQuests();
+				return s.wallet.summary();
+			}, W),
+			allocateStats: (stat, points) => write((s) => s.wallet.allocateStats(stat, points), W),
+			resetStats: () => write((s) => s.wallet.resetStatAllocation(), W)
+		},
+		connections: { 
+		/**
+		* Pays "Spending logged" for each day Finance Helper (on this device) has
+		* a record, like the desktop's connection sync: from the day it was
+		* first connected, the last 31 days at most, each day once (same refs
+		* as the desktop, so the PC and the web never both pay a day).
+		*/
+syncFinance: (recordDays) => write((s) => {
+			const db = s.db;
+			const today = s.wallet.today();
+			let since = getSetting(db, "conn_finance_since");
+			if (!since) setSetting(db, "conn_finance_since", since = today);
+			const from = since < addDays(today, -31) ? addDays(today, -31) : since;
+			const handled = new Set(s.wallet.entries().map((e) => e.ref ?? "").filter(Boolean));
+			let paid = 0;
+			for (const d of new Set(recordDays)) {
+				if (d < from || d > today || handled.has(`fin:logged:${d}`)) continue;
+				try {
+					s.wallet.awardRule("money.logged", {
+						day: d,
+						ref: `fin:logged:${d}`,
+						note: "Spending logged (Finance Helper)"
+					});
+					paid++;
+				} catch (e) {
+					if (!(e instanceof LedgerError)) throw e;
+				}
+			}
+			return paid;
+		}, W) },
+		rules: {
+			list: () => read((s) => s.wallet.rules()),
+			save: (rule) => write((s) => {
+				s.wallet.saveRule(rule);
+				return s.wallet.rules();
+			})
+		},
+		shop: {
+			state: () => read((s) => s.shop.state()),
+			save: (r) => write((s) => (s.shop.save(r), s.shop.state())),
+			archive: (id) => write((s) => (s.shop.archive(id), s.shop.state())),
+			redeem: (id) => write((s) => (s.shop.redeem(id), s.shop.state()), W),
+			openChest: (level) => write((s) => ({
+				coins: s.shop.openChest(level),
+				state: s.shop.state()
+			}), W),
+			setBudget: (amount) => write((s) => (s.shop.setBudget(amount), s.shop.state())),
+			setCurrency: (cur) => write((s) => (s.shop.setCurrency(cur), s.shop.state()))
+		},
+		tasks: {
+			state: () => read((s) => s.tasks.state()),
+			save: (t) => write((s) => (s.tasks.save(t), s.tasks.state())),
+			archive: (id) => write((s) => (s.tasks.archive(id), s.tasks.state())),
+			complete: (id) => write((s) => (s.tasks.complete(id), s.tasks.state()), W),
+			uncomplete: (id) => write((s) => (s.tasks.uncomplete(id), s.tasks.state()), W),
+			saveCategory: (c) => write((s) => (s.tasks.saveCategory(c), s.tasks.state())),
+			archiveCategory: (id) => write((s) => (s.tasks.archiveCategory(id), s.tasks.state()))
+		},
+		schedule: {
+			state: (day) => read((s) => s.schedule.state(day)),
+			save: (b) => write((s) => (s.schedule.save(b), s.schedule.state())),
+			archive: (id) => write((s) => (s.schedule.archive(id), s.schedule.state())),
+			start: (id) => write((s) => (s.schedule.start(id), s.schedule.state())),
+			finish: (id) => write((s) => (s.schedule.finish(id), s.schedule.state()), W),
+			skip: (id) => write((s) => (s.schedule.skip(id), s.schedule.state()), W)
+		},
+		discipline: {
+			state: () => read((s) => s.discipline.state()),
+			setStart: (day) => write((s) => (s.discipline.setStart(day), s.discipline.state()), D),
+			checkIn: () => write((s) => (s.discipline.checkIn(), s.discipline.state()), W, D),
+			oath: () => write((s) => (s.discipline.oath(), s.discipline.state()), W, D),
+			reset: () => write((s) => (s.discipline.reset(), s.discipline.state()), W, D),
+			startUrge: () => write((s) => (s.discipline.startUrge(), s.discipline.state()), W, D),
+			finishUrge: () => write((s) => (s.discipline.finishUrge(), s.discipline.state()), W, D),
+			cancelUrge: () => write((s) => (s.discipline.cancelUrge(), s.discipline.state()), W, D),
+			claim: (days) => write((s) => ({
+				coins: s.discipline.claim(days),
+				state: s.discipline.state()
+			}), W, D),
+			setStealth: (on) => write((s) => (s.discipline.setStealth(on), s.discipline.state()))
+		},
+		body: {
+			state: () => read((s) => s.body.state()),
+			logWorkout: (input) => write((s) => s.body.logWorkout(input), W, B),
+			deleteWorkout: (id) => write((s) => s.body.deleteWorkout(id), W, B),
+			logMetric: (input) => write((s) => s.body.logMetric(input), W, B),
+			saveExercise: (ex) => write((s) => (s.body.saveExercise(ex), s.body.state()), B)
+		},
+		sleep: {
+			state: () => read((s) => s.sleep.state()),
+			logWake: (time, quality) => write((s) => s.sleep.logWake(time, quality), W),
+			logBed: (time) => write((s) => s.sleep.logBed(time), W),
+			setTargets: (weekday, weekend, bedtime) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime))
+		},
+		money: {
+			state: () => read((s) => s.money.state()),
+			addExpense: (amountBani, category, note) => write((s) => s.money.addExpense(amountBani, category, note), W),
+			deleteExpense: (id) => write((s) => s.money.deleteExpense(id)),
+			setBudget: (budgetBani) => write((s) => s.money.setBudget(budgetBani)),
+			setCurrency: (cur) => write((s) => s.money.setCurrency(cur))
+		},
+		shields: {
+			count: () => read((s) => s.shields.count()),
+			buy: () => write((s) => s.shields.buy(), W)
+		},
+		exporter: {
+			exportCsv: (kind) => read((s) => s.exporter.exportCsv(kind)),
+			exportJson: () => read((s) => s.exporter.exportJson())
+		},
+		economy: {
+			summary: () => read((s) => s.economy.getEconomySummary()),
+			goals: () => read((s) => s.economy.goals()),
+			saveGoal: (g) => write((s) => s.economy.saveGoal(g)),
+			deleteGoal: (id) => write((s) => s.economy.deleteGoal(id)),
+			pinGoal: (id) => write((s) => s.economy.pinGoal(id)),
+			depositCoins: (goalId, amount) => write((s) => s.economy.depositCoinsToGoal(goalId, amount), W),
+			depositVault: (goalId, amount) => write((s) => s.economy.depositVaultCashToGoal(goalId, amount)),
+			claimGoal: (goalId) => write((s) => s.economy.claimGoal(goalId)),
+			creditVault: (amount, note) => write((s) => s.economy.creditVault("manual_deposit", amount, note)),
+			setExchangeRate: (rate) => write((s) => (s.economy.setExchangeRate(rate), s.economy.getExchangeRate())),
+			setCurrency: (cur) => write((s) => (s.economy.setCurrency(cur), s.economy.getEconomySummary())),
+			openChest: (level) => write((s) => s.economy.openEnhancedChest(level), W),
+			bankState: () => read((s) => s.economy.getBankState()),
+			stakeCoins: (amount) => write((s) => s.economy.stakeCoins(amount), W),
+			withdrawCoins: (amount) => write((s) => s.economy.withdrawCoins(amount), W),
+			claimInterest: () => write((s) => s.economy.claimInterest(), W),
+			activeBuffs: () => read((s) => s.economy.getActiveBuffs()),
+			buyConsumable: (itemId) => write((s) => s.economy.buyConsumable(itemId), W),
+			getConfig: () => read((s) => s.economy.getEconomyConfig()),
+			saveConfig: (patch) => write((s) => s.economy.saveEconomyConfig(patch), W),
+			applyPreset: (preset) => write((s) => s.economy.applyEconomyPreset(preset), W)
+		}
+	};
+}
+// src/core/botCommands.ts
+function parseAmountAndUnit(str, defaultUnit = "reps") {
+	if (!str) return {
+		amount: 1,
+		unit: defaultUnit
+	};
+	const match = str.match(/^([\d.]+)\s*([a-zA-Z]*)$/);
+	if (match) {
+		const amount = parseFloat(match[1]) || 1;
+		let unit = (match[2] || defaultUnit).toLowerCase();
+		if (unit === "k" || unit === "km" || unit === "kms") unit = "km";
+		else if (unit === "m" || unit === "min" || unit === "mins" || unit === "minute" || unit === "minutes") unit = "minutes";
+		else if (unit === "sec" || unit === "secs" || unit === "s") unit = "seconds";
+		else if (unit === "kg" || unit === "kgs") unit = "kg";
+		else if (unit === "r" || unit === "rep" || unit === "reps") unit = "reps";
+		return {
+			amount,
+			unit
+		};
+	}
+	const fallback = parseFloat(str);
+	return {
+		amount: isNaN(fallback) ? 1 : fallback,
+		unit: defaultUnit
+	};
+}
+function detectExpenseCategory(text) {
+	const t = text.toLowerCase();
+	if (/\b(coffee|cafe|cafea|cappuccino|tea|ceai|lunch|pranz|dinner|cina|breakfast|dejun|groceries|alimente|market|magazin|lidl|kaufland|linella|supermarket|food|mancare|mcdonalds|kfc|pizza|burger|shawarma|kebab|restaurant|bar|bere|beer|snack|water|apa)\b/i.test(t)) return "food";
+	if (/\b(taxi|cab|uber|bolt|yandex|bus|troleibuz|autobuz|gas|benzina|fuel|motorina|car|auto|parking|parcare|metro|train|tren|transit|transport)\b/i.test(t)) return "transport";
+	if (/\b(rent|chirie|bills|facturi|utilitati|gaz|lumina|electricitate|net|internet|wifi|moldtelecom|orange|clean|cleaning|intretinere|home|casa)\b/i.test(t)) return "home";
+	if (/\b(gym|sala|fitness|workout|protein|proteina|creatine|sport|echipament|antrenament)\b/i.test(t)) return "sport";
+	if (/\b(farmacie|pharmacy|pastile|medic|doctor|dentist|stomatolog|medicina|vitamine|spital|clinic|health|sanatate)\b/i.test(t)) return "health";
+	if (/\b(movie|cinema|cineplex|game|steam|netflix|party|concert|club|fun|joc|distractie)\b/i.test(t)) return "fun";
+	if (/\b(haine|clothes|shoes|pantofi|adibas|adadasi|mall|zara|bershka|shopping)\b/i.test(t)) return "clothes";
+	if (/\b(salary|salariu|freelance|venit|bonus|profit|dividend|cash|income)\b/i.test(t)) return "income";
+	return "other";
+}
+function tryParseNaturalExpense(text) {
+	const trimmed = text.trim();
+	if (!trimmed || trimmed.startsWith("/")) return null;
+	const amountFirstMatch = trimmed.match(/^([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?\s+(.+)$/i);
+	if (amountFirstMatch) {
+		const rawAmt = amountFirstMatch[1].replace(/\s+/g, "").replace(",", ".");
+		const amt = parseFloat(rawAmt);
+		const note = amountFirstMatch[2].replace(/\b(lei|mdl|\$|€)\b/gi, "").trim();
+		if (!isNaN(amt) && amt > 0 && note.length > 0) {
+			const cat = rawAmt.startsWith("+") ? "income" : detectExpenseCategory(note);
+			return {
+				type: "expense",
+				args: [
+					String(amt),
+					cat,
+					note
+				],
+				raw: trimmed,
+				expenseAmount: amt,
+				expenseCategory: cat,
+				expenseNote: note
+			};
+		}
+	}
+	const noteFirstMatch = trimmed.match(/^(.+?)\s+([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?$/i);
+	if (noteFirstMatch) {
+		const note = noteFirstMatch[1].replace(/\b(lei|mdl|\$|€)\b/gi, "").trim();
+		const rawAmt = noteFirstMatch[2].replace(/\s+/g, "").replace(",", ".");
+		const amt = parseFloat(rawAmt);
+		if (!isNaN(amt) && amt > 0 && note.length > 0) {
+			const cat = rawAmt.startsWith("+") ? "income" : detectExpenseCategory(note);
+			return {
+				type: "expense",
+				args: [
+					String(amt),
+					cat,
+					note
+				],
+				raw: trimmed,
+				expenseAmount: amt,
+				expenseCategory: cat,
+				expenseNote: note
+			};
+		}
+	}
+	return null;
+}
+function parseTelegramText(text) {
+	const trimmed = (text || "").trim();
+	if (!trimmed) return {
+		type: "unknown",
+		args: [],
+		raw: ""
+	};
+	const parts = trimmed.split(/\s+/);
+	let cmd = parts[0].toLowerCase();
+	if (cmd.startsWith("/")) cmd = cmd.slice(1);
+	if (cmd.includes("@")) cmd = cmd.split("@")[0];
+	const args = parts.slice(1);
+	const exerciseShortcuts = {
+		pushups: "pushups",
+		pushup: "pushups",
+		push_ups: "pushups",
+		push_up: "pushups",
+		flotari: "pushups",
+		situps: "situps",
+		situp: "situps",
+		sit_ups: "situps",
+		sit_up: "situps",
+		abdomene: "situps",
+		press: "press",
+		shoulderpress: "press",
+		benchpress: "press",
+		bench_press: "press",
+		pullups: "pullups",
+		pullup: "pullups",
+		pull_ups: "pullups",
+		tractiuni: "pullups",
+		squats: "squats",
+		squat: "squats",
+		genuflexiuni: "squats",
+		dips: "dips",
+		dip: "dips",
+		plank: "plank"
+	};
+	if (exerciseShortcuts[cmd]) {
+		const amount = parseInt(args[0], 10) || 20;
+		return {
+			type: "workout",
+			args,
+			raw: trimmed,
+			exerciseName: exerciseShortcuts[cmd],
+			exerciseAmount: amount,
+			exerciseUnit: "reps"
+		};
+	}
+	if (/^\d+$/.test(cmd) && args.length > 0) {
+		const exCandidate = args[0].toLowerCase().replace(/[^a-z_]/g, "");
+		if (exerciseShortcuts[exCandidate]) {
+			const amount = parseInt(cmd, 10);
+			return {
+				type: "workout",
+				args: [cmd],
+				raw: trimmed,
+				exerciseName: exerciseShortcuts[exCandidate],
+				exerciseAmount: amount,
+				exerciseUnit: "reps"
+			};
+		}
+	}
+	const sportDirectShortcuts = {
+		run: {
+			name: "Running",
+			defaultUnit: "km"
+		},
+		running: {
+			name: "Running",
+			defaultUnit: "km"
+		},
+		football: {
+			name: "Football",
+			defaultUnit: "minutes"
+		},
+		soccer: {
+			name: "Football",
+			defaultUnit: "minutes"
+		},
+		boxing: {
+			name: "Boxing",
+			defaultUnit: "minutes"
+		},
+		combat: {
+			name: "Combat Sports",
+			defaultUnit: "minutes"
+		},
+		gym: {
+			name: "Gym Session",
+			defaultUnit: "minutes"
+		},
+		swim: {
+			name: "Swimming",
+			defaultUnit: "m"
+		},
+		swimming: {
+			name: "Swimming",
+			defaultUnit: "m"
+		},
+		cycling: {
+			name: "Cycling",
+			defaultUnit: "km"
+		},
+		bike: {
+			name: "Cycling",
+			defaultUnit: "km"
+		},
+		bench: {
+			name: "Bench Press",
+			defaultUnit: "kg"
+		}
+	};
+	if (sportDirectShortcuts[cmd]) {
+		const spec = sportDirectShortcuts[cmd];
+		const parsed = parseAmountAndUnit(args[0], spec.defaultUnit);
+		return {
+			type: "sport",
+			args,
+			raw: trimmed,
+			exerciseName: spec.name,
+			exerciseAmount: parsed.amount,
+			exerciseUnit: parsed.unit
+		};
+	}
+	if (cmd === "weight") return {
+		type: "weight",
+		args,
+		raw: trimmed,
+		metricWeight: parseAmountAndUnit(args[0], "kg").amount
+	};
+	if (cmd === "waist") return {
+		type: "waist",
+		args,
+		raw: trimmed,
+		metricWaist: parseAmountAndUnit(args[0], "cm").amount
+	};
+	if (cmd === "pr" || cmd === "record") {
+		if (args.length === 0) return {
+			type: "pr",
+			args,
+			raw: trimmed
+		};
+		return {
+			type: "pr",
+			args,
+			raw: trimmed,
+			prExercise: args[0],
+			prValue: args.slice(1).join(" ")
+		};
+	}
+	if (cmd === "sport" || cmd === "sports" || cmd === "athlete") {
+		if (args.length === 0 || args[0].toLowerCase() === "status" || args[0].toLowerCase() === "stats") return {
+			type: "sport_status",
+			args,
+			raw: trimmed
+		};
+		const act = args[0].toLowerCase();
+		let exName = args[0].charAt(0).toUpperCase() + args[0].slice(1);
+		let defUnit = "minutes";
+		if (act.includes("run")) {
+			exName = "Running";
+			defUnit = "km";
+		} else if (act.includes("foot") || act.includes("soccer")) {
+			exName = "Football";
+			defUnit = "minutes";
+		} else if (act.includes("box")) {
+			exName = "Boxing";
+			defUnit = "minutes";
+		} else if (act.includes("swim")) {
+			exName = "Swimming";
+			defUnit = "m";
+		} else if (act.includes("cycl") || act.includes("bike")) {
+			exName = "Cycling";
+			defUnit = "km";
+		} else if (act.includes("push") || act.includes("pull") || act.includes("squat")) defUnit = "reps";
+		else if (act.includes("bench") || act.includes("deadlift")) defUnit = "kg";
+		const parsed = parseAmountAndUnit(args[1], defUnit);
+		return {
+			type: "sport",
+			args,
+			raw: trimmed,
+			exerciseName: exName,
+			exerciseAmount: parsed.amount,
+			exerciseUnit: parsed.unit
+		};
+	}
+	if (cmd === "start" || cmd === "help" || cmd === "commands") return {
+		type: "help",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "vault" || cmd === "economy") return {
+		type: "vault",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "goals" || cmd === "wishlist") return {
+		type: "goals",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "today" || cmd === "status" || cmd === "stat") return {
+		type: "today",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "checkin" || cmd === "clean") return {
+		type: "checkin",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "oath") return {
+		type: "oath",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "workout" || cmd === "train") {
+		let amount = 20;
+		let ex = "pushups";
+		if (args.length >= 2) {
+			if (/^\d+$/.test(args[0])) {
+				amount = parseInt(args[0], 10);
+				ex = args[1].toLowerCase();
+			} else {
+				ex = args[0].toLowerCase();
+				amount = parseInt(args[1], 10) || 20;
+			}
+		} else if (args.length === 1) {
+			if (/^\d+$/.test(args[0])) amount = parseInt(args[0], 10);
+			else ex = args[0].toLowerCase();
+		}
+		return {
+			type: "workout",
+			args,
+			raw: trimmed,
+			exerciseName: ex,
+			exerciseAmount: amount,
+			exerciseUnit: "reps"
+		};
+	}
+	if (cmd === "expense" || cmd === "buy" || cmd === "spent" || cmd === "pay") {
+		let amount = 0;
+		let cat = "food";
+		let note = "";
+		if (args.length > 0) {
+			amount = parseFloat(args[0]) || 0;
+			if (args.length > 1) {
+				cat = args[1].toLowerCase();
+				note = args.slice(2).join(" ");
+			}
+		}
+		return {
+			type: "expense",
+			args,
+			raw: trimmed,
+			expenseAmount: amount,
+			expenseCategory: cat,
+			expenseNote: note || void 0
+		};
+	}
+	if (cmd === "tasks" || cmd === "todo") return {
+		type: "tasks",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "done" || cmd === "tick" || cmd === "complete") return {
+		type: "done",
+		args,
+		raw: trimmed,
+		taskIndex: parseInt(args[0], 10) || 1
+	};
+	if (cmd === "wake" || cmd === "up") return {
+		type: "wake",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "bed" || cmd === "sleep") return {
+		type: "bed",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "crush" || cmd === "panic" || cmd === "urge") return {
+		type: "crush",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "balance" || cmd === "accounts" || cmd === "money") return {
+		type: "balance",
+		args,
+		raw: trimmed
+	};
+	const naturalExp = tryParseNaturalExpense(trimmed);
+	if (naturalExp) return naturalExp;
+	return {
+		type: "unknown",
+		args,
+		raw: trimmed
+	};
+}
+function formatHelpMessage() {
+	return [
+		`⚡ <b>Life System — Telegram Command Center</b> ⚡`,
+		``,
+		`One bot for everything: Sport, Money (Finance Helper), Discipline (MAN), Sleep (Waky), Tasks and your wallet.`,
+		``,
+		`📊 <b>Dashboard & Status</b>`,
+		`• <code>/today</code> — View balance, level, streak & rituals`,
+		`• <code>/vault</code> — Real-money Reward Vault surplus, coin valuation & multiplier`,
+		`• <code>/goals</code> — Wishlist Mega Goals & savings progress`,
+		`• <code>/tasks</code> — View open tasks for today`,
+		`• <code>/done &lt;num&gt;</code> — Complete a task (e.g. <code>/done 1</code>)`,
+		``,
+		`⚡ <b>Sport & Athletic Tracking</b>`,
+		`• <code>/sport &lt;activity&gt; &lt;amount&gt;</code> — e.g. <code>/sport run 5km</code> (+15 🪙)`,
+		`• <code>/run &lt;km&gt;</code> — e.g. <code>/run 5km</code>`,
+		`• <code>/football &lt;min&gt;</code> — e.g. <code>/football 90m</code>`,
+		`• <code>/boxing &lt;min&gt;</code> — e.g. <code>/boxing 45m</code>`,
+		`• <code>/gym &lt;min&gt;</code> — e.g. <code>/gym 60m</code>`,
+		`• <code>/bench &lt;kg&gt;</code> — e.g. <code>/bench 80kg</code>`,
+		`• <code>/weight &lt;kg&gt;</code> — e.g. <code>/weight 74.5</code> (+5 🪙)`,
+		`• <code>/waist &lt;cm&gt;</code> — e.g. <code>/waist 82</code> (+5 🪙)`,
+		`• <code>/sport status</code> — View Hunter athletic stats & PRs`,
+		``,
+		`💪 <b>Quick Body Exercises</b>`,
+		`• <code>/pushups &lt;reps&gt;</code> — Quick log push-ups`,
+		`• <code>/pullups &lt;reps&gt;</code> — Quick log pull-ups`,
+		`• <code>/squats &lt;reps&gt;</code> — Quick log squats`,
+		`• <code>/workout &lt;reps&gt; &lt;exercise&gt;</code> — e.g. <code>/workout 50 pushups</code> (+10 🪙)`,
+		``,
+		`🛡️ <b>Discipline & Standard</b>`,
+		`• <code>/checkin</code> — Log daily clean check-in (+20 🪙)`,
+		`• <code>/oath</code> — Take morning oath (+3 🪙)`,
+		`• <code>/panic</code> — Instant urge crusher emergency protocol`,
+		``,
+		`💳 <b>Money & Expenses</b>`,
+		`• <code>coffee 35</code> or <code>taxi 50</code> — Fast natural expense logging`,
+		`• <code>/balance</code> — View accounts, coins & vault balances`,
+		`• <code>/expense &lt;amount&gt; &lt;category&gt; [note]</code>`,
+		`  e.g. <code>/expense 45 food lunch</code> (+3 🪙)`,
+		``,
+		`🌙 <b>Sleep & Wake</b>`,
+		`• <code>/wake</code> — Log on-time morning check-in (+10 🪙)`,
+		`• <code>/bed</code> — Log bedtime check-in (+5 🪙)`
+	].join("\n");
+}
+function formatTodayStatus(data) {
+	return [
+		`👑 <b>Life System Status</b>`,
+		``,
+		`🪙 <b>Balance:</b> ${data.balance} coins`,
+		`⭐ <b>Level:</b> ${data.level} (${data.rank}) · ${data.totalXp} XP`,
+		`🔥 <b>Clean Streak:</b> ${data.cleanStreak} days`,
+		`💪 <b>Workout Streak:</b> ${data.workoutStreak} days`,
+		`⚡ <b>Daily Rituals:</b> ${data.ritualsDone}/${data.totalRituals} completed today`,
+		`📋 <b>Tasks Remaining:</b> ${data.tasksLeft} open tasks`,
+		``,
+		data.ritualsDone === data.totalRituals ? `🏆 <i>All daily rituals complete! Supreme focus today.</i>` : `<i>Use /checkin, /sport or /expense to log today wins.</i>`
+	].join("\n");
+}
+function formatWorkoutResponse(exName, amount, streak, coins) {
+	return [
+		`💪 <b>Workout Recorded!</b>`,
+		``,
+		`• <b>Exercise:</b> ${amount} ${exName}`,
+		`• <b>Reward:</b> +${coins} coins · +25 XP`,
+		`• <b>Workout Streak:</b> ${streak} days in a row!`,
+		``,
+		`<i>The iron never lies. Keep pushing forward!</i>`
+	].join("\n");
+}
+function formatSportResponse(activity, amount, unit, streak, coins, xp) {
+	return [
+		`⚔️ <b>HUNTER ATHLETIC LOG: RECORDED</b> ⚔️`,
+		``,
+		`• <b>Sport / Activity:</b> ${activity} (${amount} ${unit})`,
+		`• <b>Attribute Gains:</b> +2 STR · +2 VIT · +1 AGI`,
+		`• <b>Hunter Rewards:</b> +${coins} 🪙 Coins · +${xp} XP`,
+		`• <b>Continuous Streak:</b> ${streak} days active!`,
+		``,
+		`<i>"Your physical combat power ascends. The System acknowledges your relentless dedication!"</i>`
+	].join("\n");
+}
+function formatMetricResponse(type, val, unit, coins, xp) {
+	return [
+		`⚖️ <b>BODY COMPOSITION LOGGED</b> ⚖️`,
+		``,
+		`• <b>${type === "weight" ? "Body Weight" : "Waist Circumference"}:</b> ${val} ${unit}`,
+		`• <b>Reward:</b> +${coins} 🪙 Coins · +${xp} XP`,
+		`• <b>Ledger:</b> Saved to physical metrics archive.`,
+		``,
+		`<i>"Consistency in tracking breeds absolute control over physical form."</i>`
+	].join("\n");
+}
+function formatSportStatusResponse(data) {
+	return [
+		`⚡ <b>HUNTER ATHLETIC STATUS & POWER</b> ⚡`,
+		``,
+		`🔥 <b>Workout Streak:</b> ${data.streak} Days Continuous`,
+		`🏋️ <b>Sessions Logged:</b> ${data.totalWorkouts} total (${data.thisWeek} this week)`,
+		`⚖️ <b>Current Weight:</b> ${data.latestWeight ? `${data.latestWeight} kg` : "Not recorded"}`,
+		`📏 <b>Current Waist:</b> ${data.latestWaist ? `${data.latestWaist} cm` : "Not recorded"}`,
+		``,
+		`<i>Tip: Send <code>/sport run 5km</code>, <code>/bench 80kg</code>, <code>/boxing 45m</code> or <code>/weight 75</code> to log directly!</i>`
+	].join("\n");
+}
+function formatExpenseResponse(amountFormatted, category, note, remainingBudget, coinsAwarded, financeSyncInfo) {
+	const parts = [
+		`💳 <b>Expense Recorded${financeSyncInfo?.synced ? " & Synced to Finance Helper!" : ""}</b>`,
+		``,
+		`• <b>Amount:</b> ${amountFormatted}${note ? ` · <i>${note}</i>` : ""}`,
+		`• <b>Category:</b> ${category}`,
+		`• <b>Daily Budget Left:</b> ${remainingBudget}`
+	];
+	if (financeSyncInfo?.synced) parts.push(`• <b>Finance App Ledger:</b> Synced ✅${financeSyncInfo.accountName ? ` [${financeSyncInfo.accountName}]` : ""}${financeSyncInfo.totalBalance ? ` (Total: <b>${financeSyncInfo.totalBalance}</b>)` : ""}`);
+	if (coinsAwarded > 0) parts.push(`• <b>Reward:</b> +${coinsAwarded} coins (first log of the day)`);
+	return parts.join("\n");
+}
+function formatBalanceResponse(data) {
+	const lines = [`💰 <b>FINANCIAL BALANCE & ASSET OVERVIEW</b> 💰`, ``];
+	if (data.financeAccounts.length > 0) {
+		lines.push(`🏦 <b>Finance Helper Accounts:</b>`);
+		for (const acc of data.financeAccounts) lines.push(`• <b>${acc.name}:</b> ${acc.balanceMdl.toFixed(2)} ${acc.currency}`);
+		lines.push(`💳 <b>Accounts Total:</b> <b>${data.financeAccountsTotalMdl.toFixed(2)} ${data.currency}</b>`);
+		lines.push(``);
+	}
+	lines.push(`🪙 <b>Life System Points Wallet:</b>`, `• <b>${data.walletCoins} Coins</b> (≈ <b>${data.walletCoinsValueMdl.toFixed(2)} ${data.currency}</b> at 10:1 ratio)`, ``, `🏛️ <b>Discipline Reward Vault:</b>`, `• <b>${data.vaultSurplusMdl.toFixed(2)} ${data.currency}</b> (unlocked surplus reward cash)`, ``, `💎 <b>Combined Liquid & Stored Value:</b>`, `• <b>${(data.financeAccountsTotalMdl + data.vaultSurplusMdl + data.walletCoinsValueMdl).toFixed(2)} ${data.currency}</b>`);
+	if (data.dailyBudgetLeftMdl != null) lines.push(``, `📊 <b>Today's Spending Budget:</b> ${data.dailyBudgetLeftMdl.toFixed(2)} ${data.currency} remaining`);
+	return lines.join("\n");
+}
+function formatCleanCheckinResponse(streak, coins) {
+	return [
+		`🛡️ <b>Clean Day Affirmed!</b>`,
+		``,
+		`• <b>Current Streak:</b> ${streak} days clean!`,
+		`• <b>Reward:</b> +${coins} coins · +40 XP`,
+		``,
+		`<i>"Stand fast, keep the standard, give today everything."</i>`
+	].join("\n");
+}
+function formatUrgeResponse() {
+	return [
+		`🚨 <b>URGE CRUSHER ACTIVATED</b> 🚨`,
+		``,
+		`<b>STOP. DO NOT NEGOTIATE.</b>`,
+		`1. Stand up from where you are immediately.`,
+		`2. Take 5 slow, deep breaths through your nose.`,
+		`3. Drop to the floor and do 20 push-ups right now.`,
+		`4. Splash cold water on your face.`,
+		``,
+		`<i>A few seconds of temporary comfort is not worth your self-respect and progress. You are stronger than any momentary impulse. STAND FAST!</i>`
+	].join("\n");
+}
+// src/renderer/src/web/financeInbox.ts
+var SETTING = "finance_inbox_json";
+var KEEP_DAYS = 60;
+var parse = (raw, fallback) => {
+	try {
+		return raw ? JSON.parse(raw) : fallback;
+	} catch {
+		return fallback;
+	}
+};
+/** Adds an expense to the inbox (call inside the bot's change). */
+function queueFinanceExpense(db, entry) {
+	const cutoff = entry.at - KEEP_DAYS * 864e5;
+	const list = parse(getSetting(db, SETTING), []).filter((e) => e.at >= cutoff && e.id !== entry.id);
+	list.push(entry);
+	setSetting(db, SETTING, JSON.stringify(list));
+}
+// src/renderer/src/sportTrack.ts
+var KEY = "life_sport_tracker_v1";
+var sportDay = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+/** Sport Track's data with today's checklist (reset if its day has passed). */
+function readSport() {
+	try {
+		const s = JSON.parse(localStorage.getItem(KEY) || "null");
+		if (!s || !Array.isArray(s.exercises)) return s;
+		if (s.lastDate !== sportDay()) {
+			s.lastDate = sportDay();
+			s.exercises.forEach((e) => e.doneToday = 0);
+			if (s.water) s.water.currentMl = 0;
+		}
+		return s;
+	} catch {
+		return null;
+	}
+}
+/** Changes Sport Track's data and tells its open page to reload. */
+function updateSport(fn) {
+	const s = readSport();
+	if (!s) return null;
+	fn(s);
+	try {
+		localStorage.setItem(KEY, JSON.stringify(s));
+	} catch {
+		return null;
+	}
+	if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-sport-changed"));
+	return s;
+}
+/** The exercise a name like "pushups", "Push-ups" or "ex_situps" means. */
+function findExercise(s, name) {
+	const key = name.toLowerCase().replace(/[^a-z]/g, "");
+	if (!key || !Array.isArray(s?.exercises)) return null;
+	return s.exercises.find((e) => {
+		const id = String(e.id ?? "").toLowerCase().replace(/[^a-z]/g, "");
+		const n = String(e.name ?? "").toLowerCase().replace(/[^a-z]/g, "");
+		return id.includes(key) || n.includes(key) || n.length > 3 && key.includes(n);
+	}) ?? null;
+}
+// src/renderer/src/web/webBots.ts
+var esc = (s) => s.replace(/[<>&]/g, (c) => ({
+	"<": "&lt;",
+	">": "&gt;",
+	"&": "&amp;"
+})[c]);
+var LOGS_KEY = "life_bot_logs";
+var store = typeof localStorage !== "undefined" ? localStorage : null;
+/** Telegram's Bot API, small and with a timeout so a hung call can't stall the app. */
+async function tg(token, method, body) {
+	const ctrl = new AbortController();
+	const t = setTimeout(() => ctrl.abort(), 15e3);
+	try {
+		const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+			method: body ? "POST" : "GET",
+			headers: body ? { "Content-Type": "application/json" } : void 0,
+			body: body ? JSON.stringify(body) : void 0,
+			signal: ctrl.signal
+		});
+		return await res.json().catch(() => ({
+			ok: false,
+			description: `HTTP ${res.status}`
+		}));
+	} finally {
+		clearTimeout(t);
+	}
+}
+/** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
+function addRepsToSportTrack(name, amount) {
+	let prog = null;
+	updateSport((st) => {
+		const ex = findExercise(st, name);
+		if (!ex) return;
+		ex.doneToday = (Number(ex.doneToday) || 0) + amount;
+		prog = {
+			done: ex.doneToday,
+			target: Number(ex.target) || 0
+		};
+	});
+	return prog;
+}
+/**
+* Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
+* for the server: reps land there and every device picks them up.
+*/
+function addRepsInDb(db, name, amount) {
+	const st = (() => {
+		try {
+			return JSON.parse(getSetting(db, "sport_tracker_json") || "null");
+		} catch {
+			return null;
+		}
+	})()?.data;
+	if (!st || !Array.isArray(st.exercises)) return null;
+	const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+	if (st.lastDate !== today) {
+		st.lastDate = today;
+		st.exercises.forEach((e) => e.doneToday = 0);
+		if (st.water) st.water.currentMl = 0;
+	}
+	const ex = findExercise(st, name);
+	if (!ex) return null;
+	ex.doneToday = (Number(ex.doneToday) || 0) + amount;
+	setSetting(db, "sport_tracker_json", JSON.stringify({
+		savedAt: Date.now(),
+		data: st
+	}));
+	return {
+		done: ex.doneToday,
+		target: Number(ex.target) || 0
+	};
+}
+/**
+* Finance Helper's accounts, for /balance (own currency each): this device's
+* copy, else the backup Finance Helper keeps in Turso (the server has no device).
+*/
+function financeAccounts(db) {
+	try {
+		const raw = store?.getItem("finance-helper.state") || (db ? getSetting(db, "finance_backup_json") : null);
+		const st = JSON.parse(raw || "null");
+		const accounts = st?.settings?.accounts ?? [];
+		const tx = Array.isArray(st?.tx) ? st.tx : [];
+		return accounts.filter((a) => !a.archived).map((a) => {
+			let bal = Number(a.start) || 0;
+			for (const t of tx) if (t.type === "income" && t.account === a.id) bal += Number(t.amount) || 0;
+			else if (t.type === "expense" && t.account === a.id) bal -= Number(t.amount) || 0;
+			else if (t.type === "transfer") {
+				if (t.from === a.id) bal -= Number(t.amount) || 0;
+				if (t.to === a.id) bal += Number(t.toAmount ?? t.amount) || 0;
+			}
+			return {
+				name: String(a.name),
+				balanceMdl: Math.round(bal) / 100,
+				currency: a.currency || st?.settings?.currency || "MDL"
+			};
+		});
+	} catch {
+		return [];
+	}
+}
+function createWebBots({ mirror, services, defaults, onExpense, server = false }) {
+	let polling = false;
+	let timer = null;
+	let lastPollAt = null;
+	let lastError = null;
+	let processed = 0;
+	let running = null;
+	let pruned = false;
+	const merge = (saved) => {
+		const out = { ...defaults };
+		for (const [k, v] of Object.entries(saved ?? {})) if (v !== "" && v != null) out[k] = v;
+		return out;
+	};
+	const config = () => mirror.read((db) => getSetting(db, "bot_bridge_config")).then((raw) => merge(raw ? JSON.parse(raw) : {})).catch(() => {
+		try {
+			const local = store?.getItem("bot_bridge_config");
+			return merge(local ? JSON.parse(local) : {});
+		} catch {
+			return defaults;
+		}
+	});
+	const addLog = (command, sender, success, reply) => {
+		if (!store) return;
+		try {
+			const list = JSON.parse(store.getItem(LOGS_KEY) || "[]");
+			list.push({
+				id: Date.now() + Math.random(),
+				ts: (/* @__PURE__ */ new Date()).toISOString(),
+				command,
+				sender,
+				success,
+				reply
+			});
+			store.setItem(LOGS_KEY, JSON.stringify(list.slice(-100)));
+		} catch {}
+	};
+	const allowed = (cfg, chat) => [
+		cfg.chatId,
+		cfg.sportBotChatId,
+		cfg.financeBotChatId,
+		cfg.manBotChatId,
+		cfg.wakyBotChatId,
+		cfg.plannerBotChatId,
+		cfg.coachBotChatId
+	].filter(Boolean).some((id) => String(id) === chat);
+	/** One command, on the services. Returns the reply and what changed. */
+	let currentDb = null;
+	function run(s, text) {
+		const parsed = parseTelegramText(text);
+		switch (parsed.type) {
+			case "help": return { reply: formatHelpMessage() };
+			case "today": {
+				const sum = s.wallet.summary();
+				return { reply: formatTodayStatus({
+					balance: sum.balance,
+					level: sum.level.level,
+					rank: sum.level.rank,
+					totalXp: sum.totalXp,
+					ritualsDone: sum.todayRules?.length ?? 0,
+					totalRituals: 5,
+					cleanStreak: s.discipline.state().current,
+					workoutStreak: s.body.state().streak,
+					tasksLeft: s.tasks.state().tasks.filter((t) => !t.done).length
+				}) };
+			}
+			case "checkin": {
+				s.discipline.checkIn();
+				const st = s.discipline.state();
+				return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), 20) };
+			}
+			case "oath":
+				s.discipline.oath();
+				return { reply: "📜 <b>Morning Oath Affirmed!</b>\n\n<i>\"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery.\"</i>\n\n+3 coins awarded!" };
+			case "workout": {
+				const name = parsed.exerciseName || "pushups";
+				const amount = parsed.exerciseAmount || 20;
+				const res = s.body.logWorkout({
+					title: `${name} (+${amount})`,
+					items: [{
+						exerciseId: name.toLowerCase(),
+						name,
+						amount,
+						unit: "reps"
+					}],
+					note: "Logged via Telegram"
+				});
+				return {
+					reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? 10 : 0),
+					sport: {
+						name,
+						amount
+					}
+				};
+			}
+			case "sport": {
+				const name = parsed.exerciseName || "Workout";
+				const amount = parsed.exerciseAmount || 1;
+				const rawUnit = parsed.exerciseUnit || "minutes";
+				const unit = rawUnit === "reps" || rawUnit === "kg" || rawUnit === "sets" ? rawUnit : "minutes";
+				const res = s.body.logWorkout({
+					title: `${name} (${amount} ${rawUnit})`,
+					items: [{
+						exerciseId: name.toLowerCase().replace(/\s+/g, "_"),
+						name,
+						amount,
+						unit
+					}],
+					note: `Logged via Telegram (${amount} ${rawUnit})`
+				});
+				return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? 10 : 0, res.awarded ? 25 : 0) };
+			}
+			case "weight": {
+				const w = parsed.metricWeight;
+				if (!w || w < 30 || w > 300) return { reply: "⚠️ Send a real weight, e.g. <code>/weight 74.5</code>." };
+				s.body.logMetric({
+					weight: w,
+					note: "Telegram"
+				});
+				return { reply: formatMetricResponse("weight", w, "kg", 0, 0) };
+			}
+			case "waist": {
+				const w = parsed.metricWaist;
+				if (!w || w < 40 || w > 200) return { reply: "⚠️ Send a real waist size, e.g. <code>/waist 82</code>." };
+				s.body.logMetric({
+					waist: w,
+					note: "Telegram"
+				});
+				return { reply: formatMetricResponse("waist", w, "cm", 0, 0) };
+			}
+			case "sport_status":
+			case "pr": {
+				const st = s.body.state();
+				return { reply: formatSportStatusResponse({
+					streak: st.streak,
+					totalWorkouts: st.totalWorkouts,
+					thisWeek: st.workoutsThisWeek,
+					latestWeight: st.latestWeight,
+					latestWaist: st.latestWaist
+				}) };
+			}
+			case "expense": {
+				const cents = Math.round((parsed.expenseAmount || 0) * 100);
+				if (!(cents > 0)) return { reply: "⚠️ How much? e.g. <code>/expense 45 food lunch</code>" };
+				const cat = parsed.expenseCategory || "other";
+				const note = parsed.expenseNote || "";
+				if (cat === "income") return {
+					reply: `💰 <b>Income noted:</b> ${formatMoney(cents, "MDL")}${note ? ` · ${esc(note)}` : ""}\n\nAdded to Finance Helper.`,
+					expense: {
+						amount: cents,
+						category: "income",
+						note,
+						type: "income"
+					}
+				};
+				const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : "[Telegram]", /* @__PURE__ */ new Date(), true);
+				const cur = res.state.currency || "MDL";
+				return {
+					reply: formatExpenseResponse(formatMoney(cents, cur), cat, note || null, formatMoney(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
+					expense: {
+						amount: cents,
+						category: res.expense?.category ?? cat,
+						note
+					}
+				};
+			}
+			case "balance": {
+				const coins = s.wallet.summary().balance;
+				const accounts = financeAccounts(currentDb);
+				const money = s.money.state();
+				return { reply: formatBalanceResponse({
+					currency: "MDL",
+					walletCoins: coins,
+					walletCoinsValueMdl: Math.round(coins / 10 * 100) / 100,
+					vaultSurplusMdl: s.economy.getEconomySummary().vaultBalance,
+					financeAccountsTotalMdl: accounts.filter((a) => a.currency === "MDL").reduce((t, a) => t + a.balanceMdl, 0),
+					financeAccounts: accounts,
+					dailyBudgetLeftMdl: Math.max(0, money.today.remaining) / 100
+				}) };
+			}
+			case "wake": {
+				const res = s.sleep.logWake((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
+				return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? "🎯 On time! <b>+10 coins</b>" : res.log.onTime ? "On time." : "Saved to your sleep history."}` };
+			}
+			case "bed": {
+				const res = s.sleep.logBed((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
+				return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? "🎯 On time! <b>+5 coins</b>" : "Saved to your sleep history."}` };
+			}
+			case "tasks": {
+				const open = s.tasks.state().tasks.filter((t) => !t.done).slice(0, 8);
+				return { reply: open.length ? `📋 <b>Open tasks</b>\n\n${open.map((t, i) => `${i + 1}. [${esc(t.category)}] <b>${esc(t.title)}</b>`).join("\n")}\n\n<i>Done one? Send</i> <code>/done 1</code>` : "📋 <b>No open tasks.</b> All clear!" };
+			}
+			case "done": {
+				const open = s.tasks.state().tasks.filter((t) => !t.done);
+				const num = parsed.taskIndex ?? parseInt(parsed.args[0], 10);
+				const target = open.find((t) => t.id === num) ?? (num > 0 && num <= open.length ? open[num - 1] : void 0);
+				if (!target) return { reply: "⚠️ No task with that number. Send <code>/tasks</code> to see them." };
+				s.tasks.complete(target.id);
+				return { reply: `✅ Done: <b>${esc(target.title)}</b>` };
+			}
+			case "vault": {
+				const v = s.economy.getEconomySummary();
+				return { reply: [
+					"🏛️ <b>Reward vault</b>",
+					"",
+					`🪙 Coins: <b>${v.coinsBalance}</b> (≈ ${v.coinsRealValue} ${v.currency})`,
+					`💰 Vault: <b>${v.vaultBalance} ${v.currency}</b>`,
+					`🔥 Multiplier: ${v.multiplier.label}`,
+					v.pinnedGoal ? `🌟 Goal: ${esc(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} coins)` : ""
+				].filter(Boolean).join("\n") };
+			}
+			case "goals": {
+				const goals = s.economy.goals().filter((g) => !g.completed);
+				return { reply: goals.length ? `🎯 <b>Goals</b>\n\n${goals.map((g, i) => `${i + 1}. ${g.pinned ? "⭐ " : ""}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} coins`).join("\n")}` : "🎯 No open goals. Add one in the Shop." };
+			}
+			case "crush": return { reply: formatUrgeResponse() };
+			default: return { reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.` };
+		}
+	}
+	/**
+	* Handles one message in one Turso transaction (with its "seen" mark). If
+	* another device got there first, the copy reloads and we skip it.
+	*/
+	async function handle(botId, update, cfg) {
+		const key = `${botId}:${update.update_id}`;
+		const text = String(update.message?.text ?? "").trim();
+		const chat = String(update.message?.chat?.id ?? "");
+		for (let attempt = 0; attempt < 2; attempt++) try {
+			const out = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return { skip: true };
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				if (!text || !chat) return { skip: true };
+				if (!allowed(cfg, chat)) return {
+					skip: false,
+					reply: `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`,
+					ok: false
+				};
+				const svc = services.services(db);
+				currentDb = db;
+				try {
+					const r = db.transaction(() => {
+						const out = run(svc, text);
+						if (server && out.sport) {
+							const prog = addRepsInDb(db, out.sport.name, out.sport.amount);
+							if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
+							out.sport = void 0;
+						}
+						if (out.expense) {
+							const now = /* @__PURE__ */ new Date();
+							queueFinanceExpense(db, {
+								id: `tg-life-${key.replace(/[^\w-]/g, "-")}`,
+								...out.expense,
+								date: svc.wallet.today(now),
+								at: now.getTime()
+							});
+						}
+						return out;
+					})();
+					return {
+						skip: false,
+						reply: r.reply,
+						ok: true,
+						sport: r.sport,
+						expense: !!r.expense
+					};
+				} catch (e) {
+					currentDb = null;
+					return {
+						skip: false,
+						reply: `⚠️ ${esc(e.message)}`,
+						ok: false
+					};
+				}
+			});
+			if (out.skip) return null;
+			processed++;
+			if (out.ok && "sport" in out && out.sport) {
+				const prog = addRepsToSportTrack(out.sport.name, out.sport.amount);
+				if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
+			}
+			if (out.ok && "expense" in out && out.expense) onExpense?.();
+			addLog(text, chat, out.ok, out.reply);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: out.reply,
+				parse_mode: "HTML"
+			}).catch(() => null);
+			return out.reply;
+		} catch (e) {
+			if (e instanceof MirrorError && attempt === 0) continue;
+			throw e;
+		}
+		return null;
+	}
+	async function pollOnce() {
+		if (running) return running;
+		running = (async () => {
+			const cfg = await config();
+			if (cfg.serverBots && !server) {
+				lastPollAt = (/* @__PURE__ */ new Date()).toISOString();
+				lastError = null;
+				return {
+					processedCount: 0,
+					replies: []
+				};
+			}
+			const tokens = [
+				cfg.megaBotToken,
+				cfg.sportBotToken,
+				cfg.financeBotToken,
+				cfg.manBotToken,
+				cfg.botToken,
+				cfg.wakyBotToken,
+				cfg.plannerBotToken,
+				cfg.coachBotToken
+			].filter((t) => !!t && t.includes(":")).filter((t, i, all) => all.indexOf(t) === i);
+			const replies = [];
+			const before = processed;
+			lastPollAt = (/* @__PURE__ */ new Date()).toISOString();
+			for (const token of tokens) {
+				const botId = token.split(":")[0];
+				const offsetKey = `tg_offset_${botId}`;
+				const offset = Number(store?.getItem(offsetKey) || 0) || 0;
+				try {
+					const data = await tg(token, `getUpdates?offset=${offset}&limit=25&timeout=0`);
+					if (!data?.ok) {
+						const why = String(data?.description ?? "no answer");
+						if (/webhook/i.test(why) && token === cfg.megaBotToken) {
+							if ((await tg(token, "deleteWebhook?drop_pending_updates=false").catch(() => null))?.ok) continue;
+						}
+						lastError = /webhook/i.test(why) ? `Bot ${botId} sends its messages to a webhook (e.g. the Cloudflare worker), so it can't be read here. Remove the webhook to use it.` : `Bot ${botId}: ${why}`;
+						continue;
+					}
+					for (const u of data.result ?? []) {
+						u.__token = token;
+						const reply = await handle(botId, u, cfg);
+						if (reply) replies.push(reply);
+						store?.setItem(offsetKey, String(u.update_id + 1));
+					}
+					lastError = null;
+				} catch (e) {
+					lastError = `Bot ${botId}: ${e.message}`;
+				}
+			}
+			if (!pruned && tokens.length) {
+				pruned = true;
+				const cutoff = addDays((/* @__PURE__ */ new Date()).toISOString().slice(0, 10), -14);
+				mirror.write((db) => db.prepare("DELETE FROM bot_seen_updates WHERE ts < ?").run(cutoff)).catch(() => {});
+			}
+			return {
+				processedCount: processed - before,
+				replies
+			};
+		})().finally(() => {
+			running = null;
+		});
+		return running;
+	}
+	/** One update Telegram sent to the server (webhook) for the bot with this token. */
+	async function handleUpdate(token, update) {
+		const cfg = await config();
+		return handle(token.split(":")[0], {
+			...update,
+			__token: token
+		}, cfg);
+	}
+	return {
+		pollOnce,
+		handleUpdate,
+		config,
+		saveConfig: async (patch) => {
+			const next = {
+				...await config(),
+				...patch
+			};
+			delete next.serverBots;
+			await mirror.write((db) => setSetting(db, "bot_bridge_config", JSON.stringify(next)));
+			try {
+				store?.setItem("bot_bridge_config", JSON.stringify(next));
+			} catch {}
+			return next;
+		},
+		status: async () => {
+			const cfg = await config();
+			return {
+				polling,
+				enabled: !!cfg.enabled,
+				configured: !!(cfg.megaBotToken || cfg.sportBotToken || cfg.botToken || cfg.financeBotToken || cfg.manBotToken),
+				lastPollAt,
+				lastError,
+				processedCount: processed
+			};
+		},
+		logs: async () => {
+			try {
+				return JSON.parse(store?.getItem(LOGS_KEY) || "[]").slice(-50).reverse();
+			} catch {
+				return [];
+			}
+		},
+		clearLogs: async () => {
+			store?.removeItem(LOGS_KEY);
+		},
+		test: async (botKey) => {
+			const cfg = await config();
+			const pick = {
+				finance: [
+					cfg.financeBotToken,
+					cfg.financeBotChatId,
+					"Finance Bot"
+				],
+				man: [
+					cfg.manBotToken,
+					cfg.manBotChatId,
+					"MAN Bot"
+				],
+				waky: [
+					cfg.wakyBotToken,
+					cfg.wakyBotChatId,
+					"Waky Bot"
+				],
+				sport: [
+					cfg.sportBotToken,
+					cfg.sportBotChatId,
+					"Sport Bot"
+				],
+				mega: [
+					cfg.megaBotToken,
+					cfg.chatId,
+					"Mega Bot"
+				]
+			};
+			const [tok, chat, title] = pick[botKey ?? "sport"] ?? pick.sport;
+			const token = tok || cfg.botToken;
+			const chatId = chat || cfg.chatId;
+			if (!token || !chatId) return {
+				ok: false,
+				error: "Bot token or chat ID is missing"
+			};
+			try {
+				const d = await tg(token, "sendMessage", {
+					chat_id: chatId,
+					text: `⚡ <b>Life System — ${title} online</b>`,
+					parse_mode: "HTML"
+				});
+				return {
+					ok: !!d.ok,
+					error: d.ok ? void 0 : d.description
+				};
+			} catch (e) {
+				return {
+					ok: false,
+					error: e.message
+				};
+			}
+		},
+		startPolling: async () => {
+			polling = true;
+			if (!timer) timer = setInterval(() => {
+				if (typeof document === "undefined" || document.visibilityState === "visible") pollOnce().catch(() => {});
+			}, 12e3);
+			return true;
+		},
+		stopPolling: async () => {
+			polling = false;
+			if (timer) clearInterval(timer);
+			timer = null;
+			return false;
+		}
+	};
+}
+// src/server/telegramBot.ts
+var warm = null;
+async function botsFor(env) {
+	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12);
+	if (warm && warm.key === key) {
+		await warm.mirror.refresh();
+		return warm.bots;
+	}
+	const require = createRequire(import.meta.url);
+	const mirror = new Mirror(await initSqlJs({ locateFile: (f) => require.resolve(`sql.js/dist/${f}`) }), new TursoHttp(env.tursoUrl, env.tursoToken), null);
+	await mirror.ready;
+	const bots = createWebBots({
+		mirror,
+		services: createWebServices(mirror),
+		defaults: {
+			enabled: true,
+			pollingEnabled: true,
+			morningBriefing: true,
+			eveningNudge: true,
+			...env.defaults
+		},
+		server: true
+	});
+	warm = {
+		key,
+		bots,
+		mirror
+	};
+	return bots;
+}
+/** Handles one Telegram update for the bot with this token; returns the reply sent. */
+async function handleTelegramUpdate(env, token, update) {
+	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	return (await botsFor(env)).handleUpdate(token, update);
+}
+export { handleTelegramUpdate };

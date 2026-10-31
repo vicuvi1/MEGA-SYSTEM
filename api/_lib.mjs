@@ -147,3 +147,18 @@ export function send(res, status, body) {
   res.setHeader('Cache-Control', 'no-store')
   res.end(JSON.stringify(body))
 }
+
+/** The bots in the server's settings, one entry per bot (same token twice is one bot). */
+export function serverBots(env = process.env) {
+  const out = []
+  for (const name of ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN']) {
+    const token = (env[name] || '').trim()
+    if (!token.includes(':')) continue
+    const id = token.split(':')[0]
+    if (!out.some((b) => b.id === id)) out.push({ name, id, token })
+  }
+  return out
+}
+
+/** The secret Telegram sends with each message to a bot, so nobody else can post as it. */
+export const webhookSecret = (cfg, botId) => sign(cfg.secret, 'telegram:' + botId)

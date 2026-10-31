@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "functions": {
+    "api/telegram.mjs": {
+      "maxDuration": 30,
+      "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
+    }
+  }
 }

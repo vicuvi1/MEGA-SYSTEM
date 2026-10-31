@@ -305,6 +305,8 @@ export interface BotBridgeConfig {
   chatId: string
   /** One bot for everything (sport, money, discipline, sleep, tasks). */
   megaBotToken?: string
+  /** The web server answers the bots 24/7 (Telegram webhooks): the app doesn't poll. */
+  serverBots?: boolean
   enabled: boolean
   pollingEnabled: boolean
   morningBriefing: boolean
