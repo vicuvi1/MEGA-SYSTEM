@@ -400,9 +400,11 @@
       return new Response(JSON.stringify({ app: 'waky', commit: 'web' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (u.includes('/api/state')) {
+    // Every action answers with the full state (the app re-renders from it);
+    // a bare {ok:true} made it crash on 'today' (e.g. editing a day).
+    const buildState = () => {
       const stats = computeStats(data, today);
-      const state = {
+      return {
         settings: data.settings || SEED_DATA.settings,
         days: data.days || {},
         nights: data.nights || {},
@@ -416,9 +418,15 @@
           marble: { name: 'Gold & marble', level: 4 },
           legend: { name: 'Legend', level: 5 }
         },
-        insights: [
-          { icon: '☀️', title: '5-day Spartan Streak', text: 'You have been on time 5 days in a row! Agoge rank unlocked.' }
-        ],
+        // The shape the app reads (mood counts and what helps); an array here
+        // made every redraw crash ("reading 'length'").
+        insights: (() => {
+          const counts = { great: 0, okay: 0, tired: 0 };
+          for (const r of Object.values(data.days || {})) if (r && counts[r.mood] !== undefined) counts[r.mood]++;
+          const logged = counts.great + counts.okay + counts.tired;
+          const lines = logged >= 7 ? [`You felt great on ${counts.great} of ${logged} mornings you logged.`] : [];
+          return { logged, counts, lines, needed: 7 };
+        })(),
         recapMonths: ['2026-10'],
         spent: data.spent || [],
         stats: stats,
@@ -426,8 +434,73 @@
         alarm: { active: false, test: false },
         pcAlarm: { armed: false },
         update: { available: false }
-      };
-      return new Response(JSON.stringify(state), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+    };
+    const reply = (extra) => new Response(JSON.stringify(Object.assign(buildState(), extra || {})), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const method = String(options.method || 'GET').toUpperCase();
+    const readBody = () => { try { return JSON.parse(options.body || '{}'); } catch { return {}; } };
+    const targetFor = (date) => { const wd = new Date(date + 'T12:00:00Z').getUTCDay(); return (wd === 0 || wd === 6 ? data.settings?.weekend : data.settings?.weekday) || '06:30'; };
+
+    if (u.includes('/api/state')) return reply();
+
+    // Edit or add a morning (History → Edit day / Add a day), or delete one.
+    if (u.includes('/api/days')) {
+      data.days = data.days || {};
+      const m = /\/api\/days\/(\d{4}-\d{2}-\d{2})/.exec(u);
+      if (method === 'DELETE' && m) {
+        delete data.days[m[1]];
+        save(data);
+        return reply();
+      }
+      const body = readBody();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '') || !/^\d{1,2}:\d{2}$/.test(body.time || '')) {
+        return new Response(JSON.stringify({ error: 'Pick a day and a time' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (body.date > today) return new Response(JSON.stringify({ error: 'That day has not come yet' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const time = body.time.padStart(5, '0');
+      data.days[body.date] = Object.assign({ reps: 0, mode: 'manual', sent: true }, data.days[body.date] || {}, { time, target: (data.days[body.date] || {}).target || targetFor(body.date) });
+      save(data);
+      // Life System corrects its sleep record too (coins only for today).
+      try { window.parent && window.parent !== window && window.parent.postMessage({ type: 'WAKY_DAY_EDITED', payload: { date: body.date, time } }, '*'); } catch {}
+      return reply();
+    }
+
+    if (u.includes('/api/bed') && method === 'DELETE') {
+      if (data.nights) delete data.nights[today];
+      save(data);
+      return reply();
+    }
+
+    if (u.includes('/api/spent/') && method === 'DELETE') {
+      const id = decodeURIComponent(u.split('/api/spent/')[1] || '');
+      data.spent = (data.spent || []).filter((x, i) => String(x.id) !== id && String(i) !== id);
+      save(data);
+      return reply();
+    }
+
+    if (u.includes('/api/rewards')) {
+      data.rewards = data.rewards || [];
+      if (method === 'DELETE') {
+        const id = decodeURIComponent(u.split('/api/rewards/')[1] || '');
+        data.rewards = data.rewards.filter((r) => String(r.id) !== id);
+      } else {
+        const b = readBody();
+        if (b.name) data.rewards.push({ id: 'r-' + Date.now().toString(36), emoji: b.emoji || '🎁', name: String(b.name).slice(0, 60), tier: b.tier || 'small', cost: Number(b.cost) || 100 });
+      }
+      save(data);
+      return reply();
+    }
+
+    if (u.includes('/api/update')) {
+      return new Response(JSON.stringify({ available: false, behind: 0, error: null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (u.includes('/api/recap')) {
+      const month = (u.split('month=')[1] || today.slice(0, 7)).slice(0, 7);
+      const days = Object.entries(data.days || {}).filter(([d]) => d.startsWith(month));
+      const onTime = days.filter(([, r]) => r.time <= (r.target || '06:30')).length;
+      const earliest = days.slice().sort((a, b) => a[1].time.localeCompare(b[1].time))[0];
+      return new Response(JSON.stringify({ label: month, rankFrom: '', rankTo: '', mornings: days.length, onTime, earliest: earliest ? { date: earliest[0], time: earliest[1].time } : null, longestStreak: 0, avgSleep: 0, sleepHours: 0, coins: 0, chests: 0, bestChest: null, moods: { great: 0, okay: 0, tired: 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (u.includes('/api/checkin')) {
@@ -450,14 +523,14 @@
         } catch {}
       }
       const stats = computeStats(data, today);
-      return new Response(JSON.stringify({ ok: true, day: data.days[today], stats }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return reply({ ok: true, day: data.days[today], stats });
     }
 
     if (u.includes('/api/bed')) {
       data.nights = data.nights || {};
       data.nights[today] = { time: timeStr, target: '23:30', onTime: true };
       save(data);
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return reply({ ok: true });
     }
 
     if (u.includes('/api/stillup')) {
@@ -465,7 +538,7 @@
         data.days[today].stillUp = timeStr;
         save(data);
       }
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return reply({ ok: true });
     }
 
     if (u.includes('/api/mood')) {
@@ -475,7 +548,7 @@
         data.days[today].mood = body.mood || 'great';
         save(data);
       }
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return reply({ ok: true });
     }
 
     if (u.includes('/api/chests/open')) {
@@ -486,7 +559,7 @@
       const prize = { rarity: 'rare', items: [{ type: 'coins', amount: 35 }] };
       data.opened[chestId] = { prize, openedOn: today };
       save(data);
-      return new Response(JSON.stringify({ ok: true, prize }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return reply({ ok: true, prize });
     }
 
     if (u.includes('/api/redeem')) {
@@ -495,7 +568,7 @@
       data.spent = data.spent || [];
       data.spent.push({ id: body.id, cost: body.cost || 100, at: now.toISOString() });
       save(data);
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return reply({ ok: true });
     }
 
     if (u.includes('/api/settings')) {
@@ -503,9 +576,9 @@
       try { body = JSON.parse(options.body || '{}'); } catch {}
       data.settings = Object.assign(data.settings || {}, body);
       save(data);
-      return new Response(JSON.stringify({ ok: true, settings: data.settings }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return reply({ ok: true });
     }
 
-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return reply({ ok: true });
   };
 })();

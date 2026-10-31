@@ -57,6 +57,20 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         }
       }
 
+      // A morning edited or added in Waky's History: Life System's sleep
+      // record gets the same time (coins only for today, as in "Fix wake-up").
+      if (data.type === 'WAKY_DAY_EDITED') {
+        const { date, time } = data.payload ?? {}
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time)) {
+          try {
+            const r = await life.sleep.setWake(date, time)
+            if (r.awarded) window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+          } catch {
+            /* older than 14 days: Waky keeps it, Life's record stays */
+          }
+        }
+      }
+
       // Finance Helper saved: pay "Spending logged" for days with records,
       // through the connection sync (the same refs on PC and web, never twice).
       if (data.type === 'FINANCE_TRANSACTION_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_TRANSACTION_LOGGED')) {

@@ -464,7 +464,7 @@ export function createTursoWebBridge(): Bridge {
       setWake: async (day: string, time: string) => {
         const res = await (await svcP).sleep.setWake(day, time)
         const waky = readJson<any>('waky_web_data_v2')
-        if (waky && typeof waky === 'object') {
+        if (waky && typeof waky === 'object' && waky.days?.[day]?.time !== res.log.wakeTime) {
           waky.days = waky.days || {}
           waky.days[day] = { reps: 0, mode: 'edited', sent: true, ...(waky.days[day] || {}), time: res.log.wakeTime, target: waky.days[day]?.target || waky.settings?.weekday || res.log.wakeTarget }
           store?.setItem('waky_web_data_v2', JSON.stringify(waky))
