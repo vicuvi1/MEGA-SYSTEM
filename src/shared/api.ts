@@ -63,6 +63,10 @@ export { calculateEffortEquivalence }
 export type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput }
 export type BodyState = BodySummary
 export type { SleepLog, SleepSummary, Expense, ExpenseCategory, DailyExpenseSummary }
+export type { FocusState, RunningFocus } from '../main/focus'
+export type { DayPlan, FocusSession, GoalProgress, WeekReport } from '@core/focus'
+import type { FocusState } from '../main/focus'
+import type { DayPlan, FocusSession } from '@core/focus'
 
 export interface NativeMoneySummary {
   currency: string
@@ -457,6 +461,19 @@ export interface LifeApi {
     list(): Promise<string[]>
     verifyLatest(): Promise<VerifyResult>
     restore(name: string, passphrase: string): Promise<void>
+  }
+  focus: {
+    state(): Promise<FocusState>
+    start(subject: string, planned?: number): Promise<FocusState>
+    stop(): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    cancel(): Promise<FocusState>
+    add(subject: string, minutes: number, day?: string): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    setPlan(items: string[]): Promise<DayPlan>
+    togglePlan(index: number): Promise<{ plan: DayPlan; coins: number }>
+    review(text: string | null, reasons: string[]): Promise<DayPlan>
+    saveGoal(g: { id?: number; title: string; subject: string; deadline: string; hours: number }): Promise<FocusState>
+    archiveGoal(id: number): Promise<FocusState>
+    fun(minutes: number, what?: string): Promise<{ cost: number; balance: number }>
   }
   sleep: {
     state(): Promise<SleepSummary>

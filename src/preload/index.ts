@@ -112,6 +112,19 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     verifyLatest: () => call('backup:verifyLatest'),
     restore: (name, passphrase) => call('backup:restore', name, passphrase)
   },
+  focus: {
+    state: () => call('focus:state'),
+    start: (subject, planned) => call('focus:start', subject, planned),
+    stop: () => call('focus:stop'),
+    cancel: () => call('focus:cancel'),
+    add: (subject, minutes, day) => call('focus:add', subject, minutes, day),
+    setPlan: (items) => call('focus:setPlan', items),
+    togglePlan: (index) => call('focus:togglePlan', index),
+    review: (text, reasons) => call('focus:review', text, reasons),
+    saveGoal: (g) => call('focus:saveGoal', g),
+    archiveGoal: (id) => call('focus:archiveGoal', id),
+    fun: (minutes, what) => call('focus:fun', minutes, what)
+  },
   sleep: {
     state: () => call('sleep:state'),
     logWake: (time, quality) => call('sleep:logWake', time, quality),

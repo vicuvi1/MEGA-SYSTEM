@@ -6,6 +6,20 @@
     "api/telegram.mjs": {
       "maxDuration": 30,
       "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
+    },
+    "api/cron.mjs": {
+      "maxDuration": 30,
+      "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron?job=morning",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron?job=evening",
+      "schedule": "30 19 * * *"
+    }
+  ]
 }

@@ -24,6 +24,8 @@ import { queueFinanceExpense } from './financeInbox'
 import { logMoney, moneyButton } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
+import { REASONS, hm, parsePlan } from '@core/focus'
+import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
@@ -229,7 +231,58 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return { reply: money.reply + (res.awarded ? '\n🪙 <b>+3 coins</b> (first spending logged today)' : ''), keyboard: money.keyboard }
   }
 
+  /** /focus, /stop, /plan, /fun, /week, /deadlines (focus.ts). */
+  function runFocus(s: Services, text: string): RunOut | null {
+    const m = /^\/(focus|stop|plan|fun|week|deadlines|review)(?:@\w+)?(?:\s+([\s\S]+))?$/i.exec(text.trim())
+    if (!m) return null
+    const cmd = m[1].toLowerCase()
+    const arg = (m[2] ?? '').trim()
+    const f = s.focus
+    if (cmd === 'focus') {
+      const st = f.state()
+      if (!arg) {
+        if (st.running) {
+          const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 60000)
+          return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` }
+        }
+        return { reply: `⏱ Today: <b>${hm(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` }
+      }
+      const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50)
+      const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, '').trim() || st.subjects[0] || 'Focus'
+      f.start(subject, minutes)
+      return { reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Send <code>/stop</code> when you finish.` }
+    }
+    if (cmd === 'stop') {
+      const r = f.stop()
+      return { reply: `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ''}\nToday: ${hm(r.state.todayMin)}` }
+    }
+    if (cmd === 'plan') {
+      if (arg) f.setPlan(parsePlan(arg))
+      const plan = f.plan(s.wallet.today())
+      return { reply: planText(plan, arg ? '📝 <b>Plan saved</b>' : undefined), keyboard: plan.items.length ? planKeyboard(plan, false) : undefined }
+    }
+    if (cmd === 'fun') {
+      const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 0)
+      if (!minutes) return { reply: '🎮 How long? e.g. <code>/fun 30 youtube</code> (1 coin a minute)' }
+      const what = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, '').trim() || 'Fun'
+      const r = f.fun(minutes, what)
+      return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} coins (left: ${r.balance})` }
+    }
+    if (cmd === 'review') {
+      if (!arg) return { reply: '📝 Send one line about today, e.g. <code>/review good focus, phone was the problem</code>' }
+      const today = s.wallet.today()
+      const cur = f.plan(today)
+      f.review(cur.review ? `${cur.review}\n${arg}` : arg, cur.reasons)
+      return { reply: '📝 <b>Saved.</b> Thanks: this is what makes next week better.' }
+    }
+    const st = f.state()
+    if (cmd === 'week') return { reply: weekText(st.week, st.goals) }
+    return { reply: goalsText(st.goals) }
+  }
+
   function run(s: Services, text: string, key = ''): RunOut {
+    const viaFocus = runFocus(s, text)
+    if (viaFocus) return viaFocus
     const parsed = parseTelegramText(text)
     if ((parsed.type === 'expense' || parsed.type === 'unknown') && !text.startsWith('/')) {
       const money = runMoney(s, text, key)
@@ -409,7 +462,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^f[acbku]\|/.test(data)) return null
+    if (!cq || !/^(f[acbku]|p[pr])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -419,6 +472,26 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null
       db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
       const svc = services.services(db)
+      if (data.startsWith('p')) {
+        // pp|day|i ticks a must-do; pr|day|n marks what got in the way
+        const [kind, day, n] = data.split('|')
+        return db.transaction(() => {
+          let toast = ''
+          if (kind === 'pp') {
+            const r = svc.focus.togglePlan(Number(n), new Date(), day)
+            toast = r.coins ? `+${r.coins} coins` : '✓'
+          } else {
+            const reason = REASONS[Number(n)]
+            const cur = svc.focus.plan(day).reasons
+            svc.focus.review(null, cur.includes(reason) ? cur.filter((x) => x !== reason) : [...cur, reason], new Date(), day)
+            toast = 'Noted'
+          }
+          const plan = svc.focus.plan(day)
+          const evening = String(cq.message?.text ?? '').includes('Evening review')
+          const focusMin = svc.focus.state().todayMin
+          return { text: evening ? eveningText(plan, focusMin) : planText(plan), keyboard: planKeyboard(plan, evening), toast }
+        })()
+      }
       return db.transaction(() => {
         const r = moneyButton(db as any, data, svc.wallet.today())
         // Undo removes it from Life System's spending log too.
@@ -508,7 +581,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const viaTodoist = await handleTodoist(botId, update, cfg)
     if (viaTodoist !== undefined) return viaTodoist
     const key = `${botId}:${update.update_id}`
-    const text = String(update.message?.text ?? '').trim()
+    let text = String(update.message?.text ?? '').trim()
+    // A reply to the morning question is today's plan.
+    const asked = String(update.message?.reply_to_message?.text ?? '')
+    if (text && !text.startsWith('/') && asked.includes(PLAN_ASK)) text = `/plan ${text}`
+    // A reply to the evening review or the weekly report is your note for the day.
+    else if (text && !text.startsWith('/') && /Evening review|One thing to change next week/.test(asked)) text = `/review ${asked.includes('next week') ? 'Next week: ' : ''}${text}`
     const chat = String(update.message?.chat?.id ?? '')
     for (let attempt = 0; attempt < 2; attempt++) {
       try {

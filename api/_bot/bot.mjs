@@ -282,6 +282,34 @@ var MIGRATIONS = [
   `,
 	`
   CREATE TABLE IF NOT EXISTS bot_seen_updates (key TEXT PRIMARY KEY, ts TEXT NOT NULL);
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS focus_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    minutes INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    coins INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS focus_day ON focus_sessions(day);
+  CREATE TABLE IF NOT EXISTS focus_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    deadline TEXT NOT NULL,
+    hours REAL NOT NULL,
+    created_day TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS day_plans (
+    day TEXT PRIMARY KEY,
+    items TEXT NOT NULL DEFAULT '[]',
+    review TEXT,
+    reasons TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+  );
   `
 ];
 // src/core/ledger.ts
@@ -3391,6 +3419,340 @@ var SleepService = class {
 		};
 	}
 };
+// src/core/focus.ts
+/** Coins for a focus session: 1 per 5 minutes, +5 for a full 50-minute block. */
+function focusCoins(minutes) {
+	const m = Math.max(0, Math.floor(minutes));
+	return Math.floor(m / 5) + (m >= 50 ? 5 : 0);
+}
+/** A session longer than planned counts up to 30 minutes extra; never more than 4 hours. */
+function sessionMinutes(startedAt, planned, now) {
+	const elapsed = Math.round((now.getTime() - Date.parse(startedAt)) / 6e4);
+	return Math.max(1, Math.min(elapsed, planned + 30, 240));
+}
+/** Fun (games, YouTube, scrolling) costs 1 coin a minute. */
+var funCost = (minutes) => Math.max(1, Math.round(minutes));
+/** Why a must-do didn't happen (one tap in the evening). */
+var REASONS = [
+	"Tired",
+	"Phone / social media",
+	"Task unclear",
+	"No time",
+	"Forgot",
+	"Other"
+];
+/** "1. Essay\n2) gym; call Leo" → ["Essay", "gym", "call Leo"] (at most 5). */
+function parsePlan(text) {
+	return String(text || "").split(/\n|;|•/).flatMap((l) => /,/.test(l) && !/\d,\d/.test(l) && l.split(",").length <= 3 && l.length < 120 ? l.split(",") : [l]).map((l) => l.replace(/^\s*(\d+[.)]|[-*✅⬜☐]|\[\s?[xX]?\s?\])\s*/, "").trim()).filter((l) => l.length > 0).slice(0, 5);
+}
+/** Where a goal stands: hours done, the weekly target from here, ahead or behind. */
+function goalProgress(g, doneMin, today) {
+	const total = Math.max(1, daysBetween$1(g.createdDay, g.deadline));
+	const elapsed = Math.min(total, Math.max(0, daysBetween$1(g.createdDay, today)));
+	const daysLeft = Math.max(0, daysBetween$1(today, g.deadline));
+	const leftH = Math.max(0, g.hours - doneMin / 60);
+	const perWeekH = leftH === 0 ? 0 : leftH / Math.max(1, daysLeft / 7);
+	const expectedH = g.hours * elapsed / total;
+	return {
+		...g,
+		doneMin,
+		perWeekH: Math.round(perWeekH * 10) / 10,
+		aheadH: Math.round((doneMin / 60 - expectedH) * 10) / 10,
+		daysLeft
+	};
+}
+/** The last 7 days (today included), for the weekly review. */
+function weekReport(sessions, plans, funMin, today) {
+	const from = addDays$1(today, -6);
+	const inWeek = (d) => d >= from && d <= today;
+	const s = sessions.filter((x) => inWeek(x.day));
+	const bySub = /* @__PURE__ */ new Map();
+	for (const x of s) bySub.set(x.subject, (bySub.get(x.subject) ?? 0) + x.minutes);
+	const byDay = Array.from({ length: 7 }, (_, i) => {
+		const day = addDays$1(from, i);
+		return {
+			day,
+			minutes: s.filter((x) => x.day === day).reduce((t, x) => t + x.minutes, 0)
+		};
+	});
+	const p = plans.filter((x) => inWeek(x.day));
+	const reasons = /* @__PURE__ */ new Map();
+	for (const x of p) for (const r of x.reasons) reasons.set(r, (reasons.get(r) ?? 0) + 1);
+	return {
+		from,
+		to: today,
+		totalMin: s.reduce((t, x) => t + x.minutes, 0),
+		bySubject: [...bySub].map(([subject, minutes]) => ({
+			subject,
+			minutes
+		})).sort((a, b) => b.minutes - a.minutes),
+		byDay,
+		planDone: p.reduce((t, x) => t + x.items.filter((i) => i.done).length, 0),
+		planTotal: p.reduce((t, x) => t + x.items.length, 0),
+		topReasons: [...reasons].map(([reason, count]) => ({
+			reason,
+			count
+		})).sort((a, b) => b.count - a.count).slice(0, 3),
+		funMin
+	};
+}
+/** "2h 05m", "45m". */
+var hm = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
+// src/main/focus.ts
+var RUNNING = "focus_running";
+var FocusService = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	sessions(sinceDay) {
+		return this.db.prepare("SELECT id, day, subject, minutes, coins FROM focus_sessions WHERE day >= ? ORDER BY id DESC").all(sinceDay).map((r) => ({
+			...r,
+			minutes: Number(r.minutes),
+			coins: Number(r.coins)
+		}));
+	}
+	running() {
+		try {
+			return JSON.parse(getSetting(this.db, RUNNING) || "null");
+		} catch {
+			return null;
+		}
+	}
+	funMin(fromDay, toDay) {
+		return this.db.prepare("SELECT coins FROM ledger WHERE module = 'fun' AND kind = 'spend' AND day >= ? AND day <= ?").all(fromDay, toDay).reduce((t, r) => t - Number(r.coins), 0);
+	}
+	plan(day) {
+		const row = this.db.prepare("SELECT * FROM day_plans WHERE day = ?").get(day);
+		if (!row) return {
+			day,
+			items: [],
+			review: null,
+			reasons: []
+		};
+		const parse = (s) => {
+			try {
+				return JSON.parse(s);
+			} catch {
+				return [];
+			}
+		};
+		return {
+			day,
+			items: parse(row.items),
+			review: row.review,
+			reasons: parse(row.reasons)
+		};
+	}
+	savePlan(p, now) {
+		this.db.prepare(`INSERT INTO day_plans (day, items, review, reasons, updated_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET items = excluded.items, review = excluded.review, reasons = excluded.reasons, updated_at = excluded.updated_at`).run(p.day, JSON.stringify(p.items.slice(0, 5)), p.review, JSON.stringify(p.reasons), now.toISOString());
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const all = this.sessions(addDays$1(today, -400));
+		const todays = all.filter((s) => s.day === today);
+		const by = /* @__PURE__ */ new Map();
+		for (const s of todays) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
+		const goals = this.db.prepare("SELECT * FROM focus_goals WHERE archived = 0 ORDER BY deadline").all().map((g) => {
+			const goal = {
+				id: Number(g.id),
+				title: String(g.title),
+				subject: String(g.subject),
+				deadline: String(g.deadline),
+				hours: Number(g.hours),
+				createdDay: String(g.created_day)
+			};
+			return goalProgress(goal, all.filter((s) => s.day >= goal.createdDay && s.subject.toLowerCase() === goal.subject.toLowerCase()).reduce((t, s) => t + s.minutes, 0), today);
+		});
+		const plans = Array.from({ length: 7 }, (_, i) => this.plan(addDays$1(today, -i)));
+		const subjects = [.../* @__PURE__ */ new Set([...goals.map((g) => g.subject), ...all.map((s) => s.subject)])].slice(0, 8);
+		return {
+			today,
+			running: this.running(),
+			todayMin: todays.reduce((t, s) => t + s.minutes, 0),
+			todayBySubject: [...by].map(([subject, minutes]) => ({
+				subject,
+				minutes
+			})).sort((a, b) => b.minutes - a.minutes),
+			subjects,
+			recent: all.slice(0, 10),
+			goals,
+			plan: this.plan(today),
+			week: weekReport(all, plans, this.funMin(addDays$1(today, -6), today), today),
+			funToday: this.funMin(today, today),
+			focusCoinsToday: todays.reduce((t, s) => t + s.coins, 0)
+		};
+	}
+	/** Starts the timer (one at a time; it keeps running across devices). */
+	start(subject, planned = 50, now = /* @__PURE__ */ new Date()) {
+		const name = String(subject || "").trim().slice(0, 40);
+		if (!name) throw new LedgerError("What are you focusing on? e.g. Math");
+		if (this.running()) throw new LedgerError("A focus session is already running: stop it first");
+		const minutes = Math.min(180, Math.max(5, Math.round(planned) || 50));
+		setSetting(this.db, RUNNING, JSON.stringify({
+			subject: name,
+			startedAt: now.toISOString(),
+			planned: minutes
+		}));
+		return this.state(now);
+	}
+	/** Stops the timer and logs the minutes; coins for them (up to the daily limit). */
+	stop(now = /* @__PURE__ */ new Date()) {
+		const run = this.running();
+		if (!run) throw new LedgerError("No focus session is running");
+		const minutes = sessionMinutes(run.startedAt, run.planned, now);
+		return this.db.transaction(() => {
+			setSetting(this.db, RUNNING, "null");
+			return this.log(run.subject, minutes, now, run.startedAt);
+		})();
+	}
+	/** Drops the running timer without logging it. */
+	cancel(now = /* @__PURE__ */ new Date()) {
+		setSetting(this.db, RUNNING, "null");
+		return this.state(now);
+	}
+	/** A session you did without the timer (today pays coins; earlier days count without). */
+	add(subject, minutes, day, now = /* @__PURE__ */ new Date()) {
+		const name = String(subject || "").trim().slice(0, 40);
+		if (!name) throw new LedgerError("Which subject?");
+		const m = Math.round(minutes);
+		if (!(m >= 1 && m <= 600)) throw new LedgerError("Minutes from 1 to 600");
+		return this.db.transaction(() => this.log(name, m, now, null, day))();
+	}
+	log(subject, minutes, now, startedAt, day) {
+		const today = this.wallet.today(now);
+		const d = day && day <= today && day >= addDays$1(today, -14) ? day : today;
+		const earned = this.sessions(today).filter((s) => s.day === today).reduce((t, s) => t + s.coins, 0);
+		const coins = d === today ? Math.max(0, Math.min(focusCoins(minutes), 80 - earned)) : 0;
+		const end = now.toISOString();
+		const start = startedAt ?? (/* @__PURE__ */ new Date(now.getTime() - minutes * 6e4)).toISOString();
+		const id = Number(this.db.prepare("INSERT INTO focus_sessions (day, subject, minutes, started_at, ended_at, coins) VALUES (?, ?, ?, ?, ?, ?)").run(d, subject, minutes, start, end, coins).lastInsertRowid);
+		if (coins > 0 || minutes > 0) this.wallet.append({
+			ts: end,
+			day: today,
+			module: "focus",
+			kind: "earn",
+			coins,
+			xp: minutes,
+			ruleId: "focus.session",
+			ref: `focus:${id}`,
+			note: `Focus ${minutes} min · ${subject}`
+		});
+		return {
+			session: {
+				id,
+				day: d,
+				subject,
+				minutes,
+				coins
+			},
+			coins,
+			state: this.state(now)
+		};
+	}
+	/** Today's 1–3 (up to 5) must-dos. Keeps what was already ticked. */
+	setPlan(items, now = /* @__PURE__ */ new Date(), day) {
+		const d = day ?? this.wallet.today(now);
+		const cur = this.plan(d);
+		const next = items.map((t) => String(t).trim().slice(0, 140)).filter(Boolean).slice(0, 5).map((text) => ({
+			text,
+			done: cur.items.find((i) => i.text === text)?.done ?? false
+		}));
+		if (!next.length) throw new LedgerError("Write at least one must-do");
+		this.savePlan({
+			...cur,
+			items: next
+		}, now);
+		return this.plan(d);
+	}
+	/** Ticks (or unticks) a must-do. The first tick of each pays its coins (3 a day). */
+	togglePlan(index, now = /* @__PURE__ */ new Date(), day) {
+		const d = day ?? this.wallet.today(now);
+		const p = this.plan(d);
+		const item = p.items[index];
+		if (!item) throw new LedgerError("No must-do with that number");
+		item.done = !item.done;
+		let coins = 0;
+		return this.db.transaction(() => {
+			this.savePlan(p, now);
+			if (item.done && d === this.wallet.today(now)) {
+				const ref = `plan:${d}:${index}`;
+				const entries = this.wallet.entries();
+				const paidToday = entries.filter((e) => e.ruleId === "plan.item_done" && e.day === d).length;
+				if (!entries.some((e) => e.ref === ref) && paidToday < 3) {
+					this.wallet.append({
+						ts: now.toISOString(),
+						day: d,
+						module: "plan",
+						kind: "earn",
+						coins: 10,
+						xp: 15,
+						ruleId: "plan.item_done",
+						ref,
+						note: `Must-do: ${item.text.slice(0, 80)}`
+					});
+					coins = 10;
+				}
+			}
+			return {
+				plan: this.plan(d),
+				coins
+			};
+		})();
+	}
+	/** The evening review: what got in the way, a line about the day. */
+	review(text, reasons, now = /* @__PURE__ */ new Date(), day) {
+		const d = day ?? this.wallet.today(now);
+		const p = this.plan(d);
+		this.savePlan({
+			...p,
+			review: text?.trim().slice(0, 500) || p.review,
+			reasons: [...new Set(reasons.map((r) => String(r).slice(0, 40)))].slice(0, 6)
+		}, now);
+		return this.plan(d);
+	}
+	saveGoal(g, now = /* @__PURE__ */ new Date()) {
+		const title = String(g.title || "").trim().slice(0, 80);
+		const subject = String(g.subject || title).trim().slice(0, 40);
+		if (!title) throw new LedgerError("Name the goal, e.g. \"Math exam\"");
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(g.deadline)) throw new LedgerError("Pick the deadline");
+		if (!(g.hours > 0 && g.hours <= 2e3)) throw new LedgerError("How many hours does it need?");
+		if (g.id) this.db.prepare("UPDATE focus_goals SET title = ?, subject = ?, deadline = ?, hours = ? WHERE id = ?").run(title, subject, g.deadline, g.hours, g.id);
+		else this.db.prepare("INSERT INTO focus_goals (title, subject, deadline, hours, created_day) VALUES (?, ?, ?, ?, ?)").run(title, subject, g.deadline, g.hours, this.wallet.today(now));
+		return this.state(now);
+	}
+	archiveGoal(id, now = /* @__PURE__ */ new Date()) {
+		this.db.prepare("UPDATE focus_goals SET archived = 1 WHERE id = ?").run(id);
+		return this.state(now);
+	}
+	/** Fun time costs coins (1 a minute); you can't spend coins you don't have. */
+	fun(minutes, what = "Fun", now = /* @__PURE__ */ new Date()) {
+		const cost = funCost(minutes);
+		if (!(minutes >= 1 && minutes <= 600)) throw new LedgerError("Minutes from 1 to 600");
+		return this.db.transaction(() => {
+			const bal = balance(this.wallet.entries());
+			if (bal < cost) throw new LedgerError(`Not enough coins: ${minutes} min of fun costs ${cost}, you have ${bal}. Focus first!`);
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: this.wallet.today(now),
+				module: "fun",
+				kind: "spend",
+				coins: -cost,
+				xp: 0,
+				ruleId: null,
+				ref: null,
+				note: `${String(what).slice(0, 40)} · ${minutes} min`
+			});
+			return {
+				cost,
+				balance: bal - cost
+			};
+		})();
+	}
+};
 // src/core/unifiedEconomy.ts
 var DISCIPLINE_MULTIPLIERS = [
 	{
@@ -4694,6 +5056,7 @@ function servicesFor(db) {
 		tasks: new Tasks(d, wallet, shields),
 		schedule: new Schedule(d, wallet),
 		sleep: new SleepService(d, wallet),
+		focus: new FocusService(d, wallet),
 		economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
 		exporter: new DataExportService(d, body, money)
 	};
@@ -4823,6 +5186,19 @@ syncFinance: (recordDays) => write((s) => {
 			deleteWorkout: (id) => write((s) => s.body.deleteWorkout(id), W, B),
 			logMetric: (input) => write((s) => s.body.logMetric(input), W, B),
 			saveExercise: (ex) => write((s) => (s.body.saveExercise(ex), s.body.state()), B)
+		},
+		focus: {
+			state: () => read((s) => s.focus.state()),
+			start: (subject, planned) => write((s) => s.focus.start(subject, planned)),
+			stop: () => write((s) => s.focus.stop(), W),
+			cancel: () => write((s) => s.focus.cancel()),
+			add: (subject, minutes, day) => write((s) => s.focus.add(subject, minutes, day), W),
+			setPlan: (items) => write((s) => s.focus.setPlan(items)),
+			togglePlan: (index) => write((s) => s.focus.togglePlan(index), W),
+			review: (text, reasons) => write((s) => s.focus.review(text, reasons)),
+			saveGoal: (g) => write((s) => s.focus.saveGoal(g)),
+			archiveGoal: (id) => write((s) => s.focus.archiveGoal(id)),
+			fun: (minutes, what) => write((s) => s.focus.fun(minutes, what), W)
 		},
 		sleep: {
 			state: () => read((s) => s.sleep.state()),
@@ -6589,12 +6965,12 @@ function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = D
 		source: "telegram"
 	};
 }
-var esc$2 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
+var esc$3 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;"
 })[c]);
-var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
+var fm = (state, c) => esc$3(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
 var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
@@ -6602,15 +6978,15 @@ function loggedText(state, t, today = null) {
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
 	const work = t.type === "expense" ? workText(state, B(t), t.date) : "";
-	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
-	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
+	const lines = [`✅ <b>${sign}${esc$3(formatMoney(t.amount, t.currency))}</b> · ${esc$3(t.note || c)}`, `${esc$3(c)} · ${esc$3(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
+	if (work) lines.push(`⏱ ${esc$3(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
 		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
-		lines.push(`${esc$2(c || "This category")} this month: ${fm(state, catMonth)}`);
+		lines.push(`${esc$3(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
-	if (alert) lines.push(`⚠️ ${esc$2(alert.text)}`);
+	if (alert) lines.push(`⚠️ ${esc$3(alert.text)}`);
 	if (today && t.type === "expense" && (state.recurring?.length || state.tx.length > 10)) lines.push(safeLine(state, today, (c) => fm(state, c)));
 	return lines.join("\n");
 }
@@ -6792,7 +7168,7 @@ function sortToday(tasks, today) {
 		return String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99"));
 	});
 }
-var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
+var esc$2 = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
 	">": "&gt;",
 	"&": "&amp;"
@@ -6810,8 +7186,8 @@ function todayText(tasks, today) {
 	const lines = list.slice(0, 15).map((t, i) => {
 		const late = t.due && t.due < today ? " <i>(late)</i>" : "";
 		const time = t.dueTime ? ` · ${t.dueTime}` : "";
-		const proj = t.project ? ` · #${esc$1(t.project)}` : "";
-		return `${i + 1}. ${P_ICON[t.priority] ?? "⚪"} <b>${esc$1(t.content)}</b>${time}${proj}${late}`;
+		const proj = t.project ? ` · #${esc$2(t.project)}` : "";
+		return `${i + 1}. ${P_ICON[t.priority] ?? "⚪"} <b>${esc$2(t.content)}</b>${time}${proj}${late}`;
 	});
 	return `📋 <b>Todoist today</b> (${list.length})\n\n${lines.join("\n")}${list.length > 15 ? `\n…and ${list.length - 15} more` : ""}\n\n<i>Done one? Send</i> <code>/done 1</code> · <i>add:</i> <code>/task …</code>`;
 }
@@ -6834,6 +7210,69 @@ function payTodoist(s, done) {
 		}
 	}
 	return n;
+}
+// src/core/focusBot.ts
+var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
+	"<": "&lt;",
+	">": "&gt;",
+	"&": "&amp;"
+})[c]);
+/** Marker the bot looks for when you reply to the morning question. */
+var PLAN_ASK = "What are your 1–3 must-dos today?";
+function morningText(o) {
+	const lines = ["☀️ <b>Good morning!</b>", ""];
+	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm(o.focusYesterdayMin)}</b> of focus.`);
+	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$1(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
+	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
+	if (lines.length > 2) lines.push("");
+	lines.push(o.planAlready ? "You already have a plan for today: /plan to see it." : `<b>${PLAN_ASK}</b>\nReply to this message, one per line.`);
+	return lines.join("\n");
+}
+function planText(plan, title = "📝 <b>Today's must-dos</b>") {
+	if (!plan.items.length) return `${title}\n\nNo plan yet. Send <code>/plan essay; gym; call Leo</code>.`;
+	const done = plan.items.filter((i) => i.done).length;
+	const lines = plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`);
+	return `${title} (${done}/${plan.items.length})\n\n${lines.join("\n")}\n\n<i>Tap to tick · +10 coins each</i>`;
+}
+/** Buttons under a plan: tick each must-do; in the evening, what got in the way. */
+function planKeyboard(plan, withReasons) {
+	const rows = plan.items.map((it, i) => [{
+		text: `${it.done ? "✅" : "⬜"} ${i + 1}. ${it.text}`.slice(0, 60),
+		callback_data: `pp|${plan.day}|${i}`
+	}]);
+	if (withReasons && plan.items.some((i) => !i.done)) {
+		const rs = REASONS.map((r, i) => ({
+			text: `${plan.reasons.includes(r) ? "● " : ""}${r}`,
+			callback_data: `pr|${plan.day}|${i}`
+		}));
+		rows.push(rs.slice(0, 3), rs.slice(3));
+	}
+	return { inline_keyboard: rows };
+}
+function eveningText(plan, focusMin) {
+	const head = `🌙 <b>Evening review</b> · ${hm(focusMin)} of focus today`;
+	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
+	const done = plan.items.filter((i) => i.done).length;
+	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
+	return `${head}\n\n${plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`).join("\n")}\n\n${verdict}`;
+}
+function weekText(w, goals) {
+	const lines = [
+		`📊 <b>Your week</b> (${w.from.slice(5)} → ${w.to.slice(5)})`,
+		"",
+		`⏱ Focus: <b>${hm(w.totalMin)}</b>`
+	];
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm(s.minutes)}`);
+	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
+	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$1(r.reason)} ×${r.count}`).join(", ")}`);
+	if (w.funMin) lines.push(`🎮 Fun: ${hm(w.funMin)}`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	lines.push("", "<b>One thing to change next week?</b> Reply here.");
+	return lines.join("\n");
+}
+function goalsText(goals) {
+	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
@@ -7067,7 +7506,60 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			keyboard: money.keyboard
 		};
 	}
+	/** /focus, /stop, /plan, /fun, /week, /deadlines (focus.ts). */
+	function runFocus(s, text) {
+		const m = /^\/(focus|stop|plan|fun|week|deadlines|review)(?:@\w+)?(?:\s+([\s\S]+))?$/i.exec(text.trim());
+		if (!m) return null;
+		const cmd = m[1].toLowerCase();
+		const arg = (m[2] ?? "").trim();
+		const f = s.focus;
+		if (cmd === "focus") {
+			const st = f.state();
+			if (!arg) {
+				if (st.running) {
+					const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
+					return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
+				}
+				return { reply: `⏱ Today: <b>${hm(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
+			}
+			const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
+			const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
+			f.start(subject, minutes);
+			return { reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Send <code>/stop</code> when you finish.` };
+		}
+		if (cmd === "stop") {
+			const r = f.stop();
+			return { reply: `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ""}\nToday: ${hm(r.state.todayMin)}` };
+		}
+		if (cmd === "plan") {
+			if (arg) f.setPlan(parsePlan(arg));
+			const plan = f.plan(s.wallet.today());
+			return {
+				reply: planText(plan, arg ? "📝 <b>Plan saved</b>" : void 0),
+				keyboard: plan.items.length ? planKeyboard(plan, false) : void 0
+			};
+		}
+		if (cmd === "fun") {
+			const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 0);
+			if (!minutes) return { reply: "🎮 How long? e.g. <code>/fun 30 youtube</code> (1 coin a minute)" };
+			const what = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || "Fun";
+			const r = f.fun(minutes, what);
+			return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} coins (left: ${r.balance})` };
+		}
+		if (cmd === "review") {
+			if (!arg) return { reply: "📝 Send one line about today, e.g. <code>/review good focus, phone was the problem</code>" };
+			const today = s.wallet.today();
+			const cur = f.plan(today);
+			f.review(cur.review ? `${cur.review}\n${arg}` : arg, cur.reasons);
+			return { reply: "📝 <b>Saved.</b> Thanks: this is what makes next week better." };
+		}
+		const st = f.state();
+		if (cmd === "week") return { reply: weekText(st.week, st.goals) };
+		return { reply: goalsText(st.goals) };
+	}
 	function run(s, text, key = "") {
+		const viaFocus = runFocus(s, text);
+		if (viaFocus) return viaFocus;
 		const parsed = parseTelegramText(text);
 		if ((parsed.type === "expense" || parsed.type === "unknown") && !text.startsWith("/")) {
 			const money = runMoney(s, text, key);
@@ -7260,7 +7752,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^f[acbku]\|/.test(data)) return null;
+		if (!cq || !/^(f[acbku]|p[pr])\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -7273,6 +7765,29 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
 			db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
 			const svc = services.services(db);
+			if (data.startsWith("p")) {
+				const [kind, day, n] = data.split("|");
+				return db.transaction(() => {
+					let toast = "";
+					if (kind === "pp") {
+						const r = svc.focus.togglePlan(Number(n), /* @__PURE__ */ new Date(), day);
+						toast = r.coins ? `+${r.coins} coins` : "✓";
+					} else {
+						const reason = REASONS[Number(n)];
+						const cur = svc.focus.plan(day).reasons;
+						svc.focus.review(null, cur.includes(reason) ? cur.filter((x) => x !== reason) : [...cur, reason], /* @__PURE__ */ new Date(), day);
+						toast = "Noted";
+					}
+					const plan = svc.focus.plan(day);
+					const evening = String(cq.message?.text ?? "").includes("Evening review");
+					const focusMin = svc.focus.state().todayMin;
+					return {
+						text: evening ? eveningText(plan, focusMin) : planText(plan),
+						keyboard: planKeyboard(plan, evening),
+						toast
+					};
+				})();
+			}
 			return db.transaction(() => {
 				const r = moneyButton(db, data, svc.wallet.today());
 				const life = r && data.startsWith("fu|") ? takeLink(db, data.split("|")[1]) : null;
@@ -7354,7 +7869,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const viaTodoist = await handleTodoist(botId, update, cfg);
 		if (viaTodoist !== void 0) return viaTodoist;
 		const key = `${botId}:${update.update_id}`;
-		const text = String(update.message?.text ?? "").trim();
+		let text = String(update.message?.text ?? "").trim();
+		const asked = String(update.message?.reply_to_message?.text ?? "");
+		if (text && !text.startsWith("/") && asked.includes("What are your 1–3 must-dos today?")) text = `/plan ${text}`;
+		else if (text && !text.startsWith("/") && /Evening review|One thing to change next week/.test(asked)) text = `/review ${asked.includes("next week") ? "Next week: " : ""}${text}`;
 		const chat = String(update.message?.chat?.id ?? "");
 		for (let attempt = 0; attempt < 2; attempt++) try {
 			const out = await mirror.write((db) => {
@@ -7710,34 +8228,84 @@ async function botsFor(env) {
 	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6);
 	if (warm && warm.key === key) {
 		await warm.mirror.refresh();
-		return warm.bots;
+		return warm;
 	}
 	const require = createRequire(import.meta.url);
 	const mirror = new Mirror(await initSqlJs({ locateFile: (f) => require.resolve(`sql.js/dist/${f}`) }), new TursoHttp(env.tursoUrl, env.tursoToken), null);
 	await mirror.ready;
-	const bots = createWebBots({
-		mirror,
-		services: createWebServices(mirror),
-		defaults: {
-			enabled: true,
-			pollingEnabled: true,
-			morningBriefing: true,
-			eveningNudge: true,
-			...env.defaults
-		},
-		server: true,
-		todoist: env.todoistToken ? createTodoistApi(env.todoistToken) : null
-	});
+	const services = createWebServices(mirror);
 	warm = {
 		key,
-		bots,
-		mirror
+		bots: createWebBots({
+			mirror,
+			services,
+			defaults: {
+				enabled: true,
+				pollingEnabled: true,
+				morningBriefing: true,
+				eveningNudge: true,
+				...env.defaults
+			},
+			server: true,
+			todoist: env.todoistToken ? createTodoistApi(env.todoistToken) : null
+		}),
+		mirror,
+		services
 	};
-	return bots;
+	return warm;
 }
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 async function handleTelegramUpdate(env, token, update) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
-	return (await botsFor(env)).handleUpdate(token, update);
+	const { bots } = await botsFor(env);
+	return bots.handleUpdate(token, update);
 }
-export { createTodoistApi, handleTelegramUpdate };
+/**
+* The daily messages (Vercel runs them on a schedule, api/cron.mjs):
+* morning: the plan question (reply to it with your must-dos);
+* evening: the review with tap-buttons, and on Sundays the weekly report.
+*/
+async function runDaily(env, job) {
+	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	const { services } = await botsFor(env);
+	const send = async (text, reply_markup) => {
+		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				chat_id: env.chatId,
+				text,
+				parse_mode: "HTML",
+				...reply_markup ? { reply_markup } : {}
+			})
+		});
+		const j = await res.json().catch(() => ({}));
+		if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`);
+	};
+	const st = await services.focus.state();
+	const sent = [];
+	if (job === "morning") {
+		let todoistToday = null;
+		if (env.todoistToken) todoistToday = await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null);
+		const planAlready = st.plan.items.length > 0;
+		await send(morningText({
+			focusYesterdayMin: st.week.byDay[5]?.minutes ?? 0,
+			goalsBehind: st.goals.filter((g) => g.aheadH < 0),
+			todoistToday,
+			planAlready
+		}), planAlready ? void 0 : {
+			force_reply: true,
+			input_field_placeholder: "Essay intro; gym; call Leo"
+		});
+		sent.push("morning");
+	} else {
+		await send(eveningText(st.plan, st.todayMin), st.plan.items.length ? planKeyboard(st.plan, true) : void 0);
+		sent.push("evening");
+		if ((/* @__PURE__ */ new Date()).getDay() === 0) {
+			await send(weekText(st.week, st.goals));
+			sent.push("weekly");
+		}
+	}
+	return sent;
+}
+export { createTodoistApi, handleTelegramUpdate, runDaily };

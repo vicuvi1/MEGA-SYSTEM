@@ -457,6 +457,7 @@ export function createTursoWebBridge(): Bridge {
     shop: S('shop') as Bridge['shop'],
     tasks: S('tasks') as Bridge['tasks'],
     schedule: S('schedule') as Bridge['schedule'],
+    focus: S('focus') as Bridge['focus'],
     sleep: S('sleep', {
       // A corrected wake-up also goes into Waky's own copy of that morning, so
       // both show the same (Waky's data then syncs to your other devices).

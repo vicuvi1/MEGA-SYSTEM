@@ -1,7 +1,7 @@
 import type { IconName } from './Icon'
 
 export type PageId =
-  | 'today' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
+  | 'today' | 'focus' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
   | 'history' | 'rules' | 'connected' | 'settings' | 'bots'
 
 export interface ModuleDef {
@@ -17,6 +17,7 @@ export interface ModuleDef {
 // The sidebar is built from this list; a new section is one entry plus its page.
 export const MODULES: ModuleDef[] = [
   { id: 'today', label: 'Today', icon: 'home', color: 'var(--lime)', phase: 0, blurb: 'Your day at a glance' },
+  { id: 'focus', label: 'Focus', icon: 'clock', color: 'var(--lime)', phase: 0, blurb: 'Focus timer, today\'s must-dos, goals and your week' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'To-dos by category: Body, Face, Finance, University, Life' },
   { id: 'schedule', label: 'Schedule', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Day timeline with study blocks that pay out or cost coins' },
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },

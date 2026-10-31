@@ -17,6 +17,7 @@ import { Schedule, Tasks } from './planner'
 import { Discipline } from './discipline'
 import { Body } from './body'
 import { SleepService } from './sleep'
+import { FocusService } from './focus'
 import { MoneyService } from './money'
 import { ShieldService } from './shields'
 import { UnifiedEconomyService } from './unifiedEconomy'
@@ -79,6 +80,7 @@ let schedule: Schedule
 let discipline: Discipline
 let body: Body
 let sleepService: SleepService
+let focusService: FocusService
 let moneyService: MoneyService
 let shieldService: ShieldService
 let economyService: UnifiedEconomyService
@@ -104,6 +106,7 @@ function open(): void {
   discipline = new Discipline(db, wallet)
   body = new Body(db, wallet)
   sleepService = new SleepService(db, wallet)
+  focusService = new FocusService(db, wallet)
   moneyService = new MoneyService(db, wallet)
   economyService = new UnifiedEconomyService(db, wallet, discipline, moneyService, shieldService)
   shop.setEconomy(economyService)
@@ -339,6 +342,21 @@ handle('discipline:setStealth', (on: boolean) => {
 })
 
 // ---------- Sleep Tracker (Standalone) ----------
+const focusChanged = <T,>(r: T): T => {
+  win?.webContents.send('wallet:changed')
+  return r
+}
+handle('focus:state', () => focusService.state())
+handle('focus:start', (subject: string, planned?: number) => focusService.start(subject, planned))
+handle('focus:stop', () => focusChanged(focusService.stop()))
+handle('focus:cancel', () => focusService.cancel())
+handle('focus:add', (subject: string, minutes: number, day?: string) => focusChanged(focusService.add(subject, minutes, day)))
+handle('focus:setPlan', (items: string[]) => focusService.setPlan(items))
+handle('focus:togglePlan', (index: number) => focusChanged(focusService.togglePlan(index)))
+handle('focus:review', (text: string | null, reasons: string[]) => focusService.review(text, reasons))
+handle('focus:saveGoal', (g: { id?: number; title: string; subject: string; deadline: string; hours: number }) => focusService.saveGoal(g))
+handle('focus:archiveGoal', (id: number) => focusService.archiveGoal(id))
+handle('focus:fun', (minutes: number, what?: string) => focusChanged(focusService.fun(minutes, what)))
 handle('sleep:state', () => sleepService.state())
 handle('sleep:logWake', (time?: string, quality?: number) => {
   const res = sleepService.logWake(time, quality)

@@ -71,3 +71,34 @@ html.calm [class*='loading'] {
 /* Sleep → Fix a wake-up time */
 .wake-editor-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 .wake-editor-row .field { margin: 0; min-width: 160px; }
+
+/* Focus */
+.focus-clock { font-family: var(--mono); font-size: 44px; font-weight: 700; letter-spacing: 1px; color: var(--lime); line-height: 1.1; }
+.focus-sub { margin: 4px 0 10px; color: var(--muted); }
+.focus-run .bar, .goal-row .bar { height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin: 8px 0; }
+.focus-run .bar i, .goal-row .bar i { display: block; height: 100%; background: var(--lime); border-radius: 4px; }
+.focus-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.focus-chips .chip { cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.1); background: transparent; }
+.focus-chips .chip.on { border-color: var(--lime); color: var(--lime); }
+.focus-start-row { flex-wrap: wrap; gap: 8px; }
+.focus-start-row input { flex: 1; min-width: 160px; }
+.focus-add { margin-top: 10px; color: var(--muted); font-size: 13px; }
+.focus-add .row { gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.day-plan textarea { width: 100%; resize: vertical; }
+.plan-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.plan-list li { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.plan-list li.done span { text-decoration: line-through; color: var(--muted); }
+.plan-check { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--lime); background: transparent; color: var(--lime); font-weight: 800; cursor: pointer; flex-shrink: 0; line-height: 1; }
+.plan-review { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); display: flex; flex-direction: column; gap: 6px; }
+.plan-review h3 { font-size: 13px; margin: 0; }
+.goal-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.goal-row .row { gap: 8px; flex-wrap: wrap; align-items: center; }
+.goal-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.goal-form input:not([type='number']) { flex: 1; min-width: 140px; }
+.week-bars { display: flex; align-items: flex-end; gap: 8px; height: 110px; margin: 6px 0 12px; }
+.week-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.week-bar i { display: block; width: 100%; max-width: 28px; background: var(--lime); border-radius: 4px 4px 0 0; opacity: 0.85; }
+.week-bar span { font-size: 11px; color: var(--muted); }
+.week-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.week-facts li { display: flex; justify-content: space-between; gap: 12px; }
+.week-facts li span { color: var(--muted); }

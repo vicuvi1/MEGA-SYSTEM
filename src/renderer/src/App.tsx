@@ -29,6 +29,7 @@ function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(l
   return lazy(() => load().then((m) => ({ default: m[name] })))
 }
 const History = lazyNamed(() => import('./pages/History'), 'History')
+const Focus = lazyNamed(() => import('./pages/Focus'), 'Focus')
 const Rules = lazyNamed(() => import('./pages/Rules'), 'Rules')
 const Settings = lazyNamed(() => import('./pages/Settings'), 'Settings')
 const Shop = lazyNamed(() => import('./pages/Shop'), 'Shop')
@@ -701,6 +702,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'bots' && <BotCenter />}
+            {page === 'focus' && <Focus onWallet={onWallet} />}
             {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
             {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}

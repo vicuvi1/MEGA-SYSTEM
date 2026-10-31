@@ -282,5 +282,33 @@ export const MIGRATIONS: string[] = [
   `,
   /* 016 telegram: messages already handled, so two devices polling the same bot never log one twice */ `
   CREATE TABLE IF NOT EXISTS bot_seen_updates (key TEXT PRIMARY KEY, ts TEXT NOT NULL);
+  `,
+  /* 017 focus: timed focus sessions, goals with deadlines, the daily plan and its review */ `
+  CREATE TABLE IF NOT EXISTS focus_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    minutes INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    coins INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS focus_day ON focus_sessions(day);
+  CREATE TABLE IF NOT EXISTS focus_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    deadline TEXT NOT NULL,
+    hours REAL NOT NULL,
+    created_day TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS day_plans (
+    day TEXT PRIMARY KEY,
+    items TEXT NOT NULL DEFAULT '[]',
+    review TEXT,
+    reasons TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+  );
   `
 ]

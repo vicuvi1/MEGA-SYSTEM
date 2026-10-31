@@ -21,8 +21,8 @@ function haptic(ms = 12) {
 
 const MAIN: { id: PageId; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
   { id: 'today', label: 'Today', icon: 'home' },
-  { id: 'tasks', label: 'Tasks', icon: 'tasks' },
-  { id: 'discipline', label: 'Discipline', icon: 'shield' }
+  { id: 'focus', label: 'Focus', icon: 'clock' },
+  { id: 'tasks', label: 'Tasks', icon: 'tasks' }
 ]
 
 export function MobileBottomBar({ page, onGo, onQuickCommand }: Props) {

@@ -20,6 +20,7 @@ import { Schedule, Tasks } from '../../../main/planner'
 import { ShieldService } from '../../../main/shields'
 import { Shop } from '../../../main/shop'
 import { SleepService } from '../../../main/sleep'
+import { FocusService } from '../../../main/focus'
 import { UnifiedEconomyService } from '../../../main/unifiedEconomy'
 import { Wallet } from '../../../main/wallet'
 import { addDays } from '@core/dates'
@@ -49,6 +50,7 @@ function servicesFor(db: BrowserDb) {
     tasks: new Tasks(d, wallet, shields),
     schedule: new Schedule(d, wallet),
     sleep: new SleepService(d, wallet),
+    focus: new FocusService(d, wallet),
     economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
     exporter: new DataExportService(d, body, money)
   }
@@ -183,6 +185,19 @@ export function createWebServices(mirror: Mirror) {
       deleteWorkout: (id: number) => write((s) => s.body.deleteWorkout(id), W, B),
       logMetric: (input: BodyMetricInput) => write((s) => s.body.logMetric(input), W, B),
       saveExercise: (ex: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }) => write((s) => (s.body.saveExercise(ex), s.body.state()), B)
+    },
+    focus: {
+      state: () => read((s) => s.focus.state()),
+      start: (subject: string, planned?: number) => write((s) => s.focus.start(subject, planned)),
+      stop: () => write((s) => s.focus.stop(), W),
+      cancel: () => write((s) => s.focus.cancel()),
+      add: (subject: string, minutes: number, day?: string) => write((s) => s.focus.add(subject, minutes, day), W),
+      setPlan: (items: string[]) => write((s) => s.focus.setPlan(items)),
+      togglePlan: (index: number) => write((s) => s.focus.togglePlan(index), W),
+      review: (text: string | null, reasons: string[]) => write((s) => s.focus.review(text, reasons)),
+      saveGoal: (g: { id?: number; title: string; subject: string; deadline: string; hours: number }) => write((s) => s.focus.saveGoal(g)),
+      archiveGoal: (id: number) => write((s) => s.focus.archiveGoal(id)),
+      fun: (minutes: number, what?: string) => write((s) => s.focus.fun(minutes, what), W)
     },
     sleep: {
       state: () => read((s) => s.sleep.state()),
