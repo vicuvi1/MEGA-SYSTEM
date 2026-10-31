@@ -18,7 +18,11 @@ export function useFocus(): [FocusState | null, () => void, (s: FocusState) => v
   useEffect(() => {
     load()
     window.addEventListener('life-wallet-changed', load)
-    return () => window.removeEventListener('life-wallet-changed', load)
+    window.addEventListener('life-focus-changed', load)
+    return () => {
+      window.removeEventListener('life-wallet-changed', load)
+      window.removeEventListener('life-focus-changed', load)
+    }
   }, [load])
   return [st, load, setSt]
 }
@@ -387,9 +391,22 @@ export function Focus({ onWallet }: { onWallet: () => void }) {
 }
 
 /** Today's compact version: the timer and the must-dos. */
-export function FocusToday({ onWallet }: { onWallet: () => void }) {
+export function FocusToday({ onWallet, timerOnly = false }: { onWallet: () => void; timerOnly?: boolean }) {
   const [st, load, setSt] = useFocus()
   if (!st) return null
+  if (timerOnly) {
+    return (
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="clock" /> Focus
+          </h2>
+          <span className="hint">today {hm(st.todayMin)}</span>
+        </header>
+        <FocusTimer st={st} onState={setSt} onWallet={onWallet} />
+      </section>
+    )
+  }
   return (
     <div className="cols even">
       <section className="panel">

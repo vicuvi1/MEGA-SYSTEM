@@ -457,7 +457,14 @@ export function createTursoWebBridge(): Bridge {
     shop: S('shop') as Bridge['shop'],
     tasks: S('tasks') as Bridge['tasks'],
     schedule: S('schedule') as Bridge['schedule'],
-    focus: S('focus') as Bridge['focus'],
+    // Every focus change tells the open screens (the Now card, the timer, Focus).
+    focus: new Proxy({} as Bridge['focus'], {
+      get: (_t, method: string) => async (...args: unknown[]) => {
+        const r = await ((await svcP).focus as any)[method](...args)
+        if (method !== 'state') window.dispatchEvent(new CustomEvent('life-focus-changed'))
+        return r
+      }
+    }),
     sleep: S('sleep', {
       // A corrected wake-up also goes into Waky's own copy of that morning, so
       // both show the same (Waky's data then syncs to your other devices).
