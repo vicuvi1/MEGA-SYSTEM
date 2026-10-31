@@ -2,7 +2,7 @@
 // and one daily list (must-dos, habits and Todoist together).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
-import { pLabel, sortToday, type TodoTask } from '@core/todoist'
+import { deadlineRadar, pLabel, sortToday, whenText, type TodoTask } from '@core/todoist'
 import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
@@ -80,6 +80,12 @@ export function DayFlow(props: Props) {
   const [todo, loadTodo, setTodo] = useTodoist()
   const [showAllTodo, setShowAllTodo] = useState(false)
   const [weekPlan] = useWeekPlan()
+  // Deadline radar: important Todoist tasks due in the next 3 days.
+  const [upcoming, setUpcoming] = useState<TodoTask[]>([])
+  useEffect(() => {
+    life.todoist?.upcoming?.().then(setUpcoming).catch(() => {})
+  }, [])
+  const radar = deadlineRadar(upcoming, summary.today)
   const habits = useHabits(props, st?.todayMin ?? 0)
   const [skipped, setSkipped] = useState<string[]>([])
   const [adding, setAdding] = useState('')
@@ -299,6 +305,21 @@ export function DayFlow(props: Props) {
         {todoList && (
           <>
             <h3 className="dl-head">Todoist</h3>
+            {radar.length > 0 && (
+              <div className="radar" aria-label="Deadlines coming up">
+                {radar.slice(0, 3).map((x) => (
+                  <div key={x.task.id} className={`radar-item ${x.daysLeft === 1 ? 'soon' : ''}`}>
+                    <span className="radar-when">⏳ {whenText(x.daysLeft, x.date)}</span>
+                    <span className="radar-title">{x.task.content}</span>
+                    {!st.running && (
+                      <button className="dl-play" aria-label={`Focus 50 minutes on ${x.task.content}`} title="Get ahead: focus 50 min on this" onClick={() => void startFocus(todoSubject(x.task), { kind: 'todoist', ref: x.task.id, title: x.task.content })}>
+                        ▶
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             {todoList.length === 0 && <p className="hint">Nothing due in Todoist today.</p>}
             <ul className="dl">
               {(showAllTodo ? todoList : todoList.slice(0, TODO_SHOWN)).map((t) => (

@@ -266,3 +266,11 @@ html.calm [class*='loading'] {
 .wk-head .hint { display: flex; align-items: center; gap: 8px; }
 .wk-focus { margin: 6px 0 4px; font-size: 14px; }
 @media (max-width: 640px) { .wp-step { gap: 10px; } }
+
+/* Deadline radar */
+.radar { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.radar-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm, 10px); border: 1px solid color-mix(in srgb, var(--orange) 35%, var(--line)); background: color-mix(in srgb, var(--orange) 7%, transparent); }
+.radar-item.soon { border-color: color-mix(in srgb, var(--red) 50%, var(--line)); background: color-mix(in srgb, var(--red) 8%, transparent); }
+.radar-when { font-size: 12px; color: var(--orange); white-space: nowrap; }
+.radar-item.soon .radar-when { color: var(--red); }
+.radar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

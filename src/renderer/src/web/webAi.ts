@@ -122,7 +122,13 @@ export function runTool(s: Services, call: AgentToolCall): ToolExecutionResult {
   }
 }
 
-export function createWebAi(svc: WebServices, ask: AskAi, status: () => Promise<boolean>) {
+/** Todoist, when connected: the coach's new tasks go there (one task list). */
+export interface AiTodoist {
+  on: () => Promise<boolean>
+  quickAdd: (text: string) => Promise<{ content: string; due: string | null }>
+}
+
+export function createWebAi(svc: WebServices, ask: AskAi, status: () => Promise<boolean>, todoist?: AiTodoist) {
   const level = (s: Services) => {
     const all = s.wallet.entries()
     return { lv: levelInfo(totalXp(all)), coins: balance(all) }
@@ -201,9 +207,28 @@ export function createWebAi(svc: WebServices, ask: AskAi, status: () => Promise<
       })
       const r = await ask(prompt)
       const { cleanedText, toolCalls } = parseAgentToolCalls(r.text)
-      const runs = toolCalls.length
-        ? await svc.write((s) => toolCalls.map((c) => runTool(s, c)), 'life-wallet-changed', 'life-discipline-changed', 'life-body-changed')
-        : []
+      // New tasks go to Todoist when it's connected, so there's one task list.
+      const toTodoist = todoist && (await todoist.on().catch(() => false))
+      const pre: ToolExecutionResult[] = []
+      const local = toTodoist ? toolCalls.filter((c) => c.tool !== 'add_task') : toolCalls
+      if (toTodoist) {
+        for (const c of toolCalls.filter((x) => x.tool === 'add_task')) {
+          const title = String(c.args.title || c.args.name || '').trim()
+          if (!title) continue
+          const p = c.args.priority === 1 ? ' p1' : c.args.priority === 2 ? ' p2' : ''
+          const due = c.args.due ? ` ${String(c.args.due)}` : ''
+          try {
+            const t = await todoist!.quickAdd(`${title}${due}${p}`)
+            pre.push({ tool: 'add_task', result: `✓ Added to Todoist: “${t.content || title}”${t.due ? ` (due ${t.due})` : ''}`, success: true })
+          } catch (e: any) {
+            pre.push({ tool: 'add_task', result: `Couldn't add to Todoist: ${e?.message ?? e}`, success: false })
+          }
+        }
+      }
+      const runs = [
+        ...pre,
+        ...(local.length ? await svc.write((s) => local.map((c) => runTool(s, c)), 'life-wallet-changed', 'life-discipline-changed', 'life-body-changed') : [])
+      ]
       if (runs.length) window.dispatchEvent(new CustomEvent('life-tasks-changed'))
       const extra = runs.map((x) => x.result).join('\n')
       return {

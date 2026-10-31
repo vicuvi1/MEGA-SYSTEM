@@ -315,7 +315,7 @@ export function createTursoWebBridge(): Bridge {
         .then((r) => (r.ok ? r.json() : {}))
         .then((j: any) => !!j.configured)
         .catch(() => false)
-  const aiP = svcP.then((svc) => createWebAi(svc, serverAi(currentSession), () => aiOnP))
+  const aiP = svcP.then((svc) => createWebAi(svc, serverAi(currentSession), () => aiOnP, { on: () => todoistOnP, quickAdd: (text) => todoist.quickAdd(text) }))
   const syncNow = async () => {
     const m = await mirrorP
     await m.refresh()
@@ -336,6 +336,7 @@ export function createTursoWebBridge(): Bridge {
     todoist: {
       status: async () => ({ connected: await todoistOnP }),
       today: async () => ((await todoistOnP) ? todoist.today() : []),
+      upcoming: async () => ((await todoistOnP) ? (((await todoistCall('upcoming')).tasks ?? []) as TodoTask[]) : []),
       quickAdd: async (text: string) => todoist.quickAdd(text),
       complete: async (task: TodoTask) => {
         await todoist.close(task.id)

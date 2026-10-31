@@ -2,6 +2,7 @@
 // with the token kept on the server (TODOIST_TOKEN in Vercel).
 //   status            → {connected}
 //   today             → {tasks}          due today or overdue
+//   upcoming          → {tasks}          due or deadline in the next 7 days
 //   close {id}        → {ok}
 //   quick {text}      → {task}           Todoist reads date, time, p1, #project
 //   completed {since} → {items}          completed since an ISO time
@@ -25,6 +26,8 @@ export default async function handler(req, res) {
     switch (body?.op) {
       case 'today':
         return send(res, 200, { connected: true, tasks: await api.today() })
+      case 'upcoming':
+        return send(res, 200, { tasks: await api.upcoming(7) })
       case 'close':
         await api.close(String(body.id))
         return send(res, 200, { ok: true })

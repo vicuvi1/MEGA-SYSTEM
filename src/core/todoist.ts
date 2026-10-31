@@ -14,6 +14,41 @@ export interface TodoTask {
   /** The section it sits in (your areas: University, Cyber, …), when any. */
   section?: string | null
   recurring: boolean
+  /** Todoist's deadline (a date that can't move), when set. */
+  deadline?: string | null
+}
+
+export interface RadarItem {
+  task: TodoTask
+  /** The date that matters: the deadline, else the due date. */
+  date: string
+  daysLeft: number
+}
+
+const IMPORTANT = /univ|lab|exam|examen|curs|course|test|colloq|deadline|essay|referat|proiect|project|cv|interview/i
+const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000)
+
+/**
+ * Deadlines worth a warning: due (or with a deadline) in the next `within`
+ * days, not today's routine. Important means a deadline set in Todoist, P1/P2,
+ * or a study/career word in the task or its area (University, lab, exam…).
+ */
+export function deadlineRadar(tasks: TodoTask[], today: string, within = 3): RadarItem[] {
+  return tasks
+    .filter((t) => !t.recurring)
+    .map((t) => {
+      const date = t.deadline || t.due
+      return date ? { task: t, date, daysLeft: dayDiff(today, date) } : null
+    })
+    .filter((x): x is RadarItem => !!x && x.daysLeft >= 1 && x.daysLeft <= within)
+    .filter((x) => !!x.task.deadline || x.task.priority >= 3 || IMPORTANT.test(`${x.task.content} ${x.task.section ?? ''} ${x.task.project ?? ''}`))
+    .sort((a, b) => a.daysLeft - b.daysLeft || b.task.priority - a.task.priority)
+}
+
+/** "tomorrow", "in 3 days (Tue)". */
+export function whenText(daysLeft: number, date: string): string {
+  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(`${date}T12:00:00Z`).getUTCDay()]
+  return daysLeft === 1 ? `tomorrow (${wd})` : `in ${daysLeft} days (${wd})`
 }
 
 export interface TodoCompleted {

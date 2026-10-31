@@ -36,8 +36,8 @@ describe('Todoist API client', () => {
     const api = createTodoistApi('tok', fetchImpl)
     const tasks = await api.today()
     expect(tasks).toEqual([
-      { id: '1', content: 'Essay', priority: 4, due: '2026-10-31', dueTime: null, project: 'University', section: 'Essays', recurring: false },
-      { id: '2', content: 'Gym', priority: 1, due: '2026-10-30', dueTime: '18:00', project: null, section: null, recurring: true }
+      { id: '1', content: 'Essay', priority: 4, due: '2026-10-31', dueTime: null, project: 'University', section: 'Essays', recurring: false, deadline: null },
+      { id: '2', content: 'Gym', priority: 1, due: '2026-10-30', dueTime: '18:00', project: null, section: null, recurring: true, deadline: null }
     ])
     await api.close('1')
     expect(await api.quickAdd('Call Leo tomorrow 17:00 p1 #University')).toMatchObject({ content: 'Call Leo', dueTime: '17:00', project: 'University' })

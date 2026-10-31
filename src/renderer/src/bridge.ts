@@ -21,6 +21,7 @@ export type Bridge = LifeApi & {
   todoist?: {
     status(): Promise<{ connected: boolean }>
     today(): Promise<TodoTask[]>
+    upcoming?(): Promise<TodoTask[]>
     quickAdd(text: string): Promise<TodoTask>
     complete(task: TodoTask): Promise<{ paid: number }>
     sync(force?: boolean): Promise<number>

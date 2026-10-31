@@ -13,7 +13,8 @@ import { createWebBots, focusKeyboard } from '../renderer/src/web/webBots'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
-import { coachFacts, coachPrompt, coachText, wakeSlipping, weekFocusFact, windDownText, worthSaying } from '@core/coach'
+import { coachFacts, coachPrompt, coachText, deadlineFacts, wakeSlipping, weekFocusFact, windDownText, worthSaying } from '@core/coach'
+import { deadlineRadar } from '@core/todoist'
 import { shouldPlan } from '@core/weekPlan'
 import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
@@ -131,7 +132,9 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
     return { input, report: progressReport(input), weekPlan: svc.weekPlan.active(), savedPlan: svc.weekPlan.saved() }
   })
   const weekFact = weekFocusFact(weekPlan, report)
-  const facts = [...(weekFact ? [weekFact] : []), ...coachFacts(input, report)]
+  // Deadline radar: important Todoist tasks due in the next 3 days (morning and midday).
+  const radar = env.todoistToken && job !== 'evening' && job !== 'night' ? deadlineRadar(await createTodoistApi(env.todoistToken).upcoming(7).catch(() => []), input.today) : []
+  const facts = [...deadlineFacts(radar), ...(weekFact ? [weekFact] : []), ...coachFacts(input, report)].sort((a, b) => b.weight - a.weight)
   /** Gemini says it in its own words; the plain text when there's no key or it fails. */
   const coach = async (when: DailyJob, fallback: string) => {
     if (!env.ai) return fallback

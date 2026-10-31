@@ -51,3 +51,27 @@ describe('wind-down', () => {
     expect(t).toContain('Finish etica &lt;now&gt;')
   })
 })
+
+describe('deadline radar', () => {
+  it('warns 1–3 days ahead about important tasks only', async () => {
+    const { deadlineRadar } = await import('./todoist')
+    const { deadlineFacts } = await import('./coach')
+    const t = (id: string, content: string, due: string | null, extra: object = {}) => ({ id, content, priority: 1, due, dueTime: null, project: null, recurring: false, ...extra })
+    const r = deadlineRadar(
+      [
+        t('1', 'Lab 3 report', '2026-11-01'),
+        t('2', 'buy milk', '2026-11-01'),
+        t('3', 'Etica course', '2026-11-03', { section: '🎓 University' }),
+        t('4', 'sport', '2026-11-01', { recurring: true }),
+        t('5', 'Pay rent', null, { deadline: '2026-11-02' }),
+        t('6', 'Exam', '2026-11-10'),
+        t('7', 'Today thing exam', today)
+      ],
+      today
+    )
+    expect(r.map((x) => x.task.id)).toEqual(['1', '5', '3'])
+    const f = deadlineFacts(r)
+    expect(f[0].text).toBe('“Lab 3 report” is due tomorrow (Sun).')
+    expect(f[1].text).toBe('“Pay rent” is due in 2 days (Mon).')
+  })
+})

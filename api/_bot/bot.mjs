@@ -3934,6 +3934,23 @@ function financeSpending(state) {
 	}));
 }
 // src/core/todoist.ts
+var IMPORTANT = /univ|lab|exam|examen|curs|course|test|colloq|deadline|essay|referat|proiect|project|cv|interview/i;
+var dayDiff = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 864e5);
+/**
+* Deadlines worth a warning: due (or with a deadline) in the next `within`
+* days, not today's routine. Important means a deadline set in Todoist, P1/P2,
+* or a study/career word in the task or its area (University, lab, exam…).
+*/
+function deadlineRadar(tasks, today, within = 3) {
+	return tasks.filter((t) => !t.recurring).map((t) => {
+		const date = t.deadline || t.due;
+		return date ? {
+			task: t,
+			date,
+			daysLeft: dayDiff(today, date)
+		} : null;
+	}).filter((x) => !!x && x.daysLeft >= 1 && x.daysLeft <= within).filter((x) => !!x.task.deadline || x.task.priority >= 3 || IMPORTANT.test(`${x.task.content} ${x.task.section ?? ""} ${x.task.project ?? ""}`)).sort((a, b) => a.daysLeft - b.daysLeft || b.task.priority - a.task.priority);
+}
 /** The point rule that pays for a completed Todoist task. */
 var TODOIST_RULE = "tasks.todoist_done";
 /** Shown as P1…P4 (Todoist's own labels). */
@@ -8621,6 +8638,7 @@ function createTodoistApi(token, fetchImpl = fetch) {
 			dueTime: /T\d{2}:\d{2}/.test(dt) ? dt.slice(11, 16) : null,
 			project: names.get(String(t.project_id)) ?? null,
 			section: t.section_id ? secs.get(String(t.section_id)) ?? null : null,
+			deadline: t.deadline?.date ? String(t.deadline.date).slice(0, 10) : null,
 			recurring: !!due?.is_recurring
 		};
 	};
@@ -8630,6 +8648,18 @@ function createTodoistApi(token, fetchImpl = fetch) {
 			const q = encodeURIComponent("today | overdue");
 			const [list, names, secs] = await Promise.all([
 				either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)),
+				projects(),
+				sections()
+			]);
+			return list.filter((t) => !t.checked && !t.is_completed).map((t) => toTask(t, names, secs));
+		},
+		/** Due in the next `days` days or with a deadline then (for the deadline radar). */
+		async upcoming(days = 7) {
+			const q = encodeURIComponent(`next ${days} days | deadline before: +${days + 1} days`);
+			const plain = encodeURIComponent(`next ${days} days`);
+			const get = (query) => either(() => all(`${V1}/tasks/filter?query=${query}`), () => all(`${V2}/tasks?filter=${query}`));
+			const [list, names, secs] = await Promise.all([
+				get(q).catch(() => get(plain)),
 				projects(),
 				sections()
 			]);
@@ -8802,6 +8832,27 @@ function weekFocusFact(plan, r) {
 		step: plan.note || (open[0] ? `Put one block on “${open[0]}” in your calendar today.` : "One small step on it today.")
 	};
 }
+/** Deadlines in the next 3 days (from Todoist): warned about before the day, not on it. */
+function deadlineFacts(items) {
+	return items.slice(0, 2).map((x, k) => {
+		const wd = [
+			"Sun",
+			"Mon",
+			"Tue",
+			"Wed",
+			"Thu",
+			"Fri",
+			"Sat"
+		][(/* @__PURE__ */ new Date(`${x.date}T12:00:00Z`)).getUTCDay()];
+		const when = x.daysLeft === 1 ? `tomorrow (${wd})` : `in ${x.daysLeft} days (${wd})`;
+		return {
+			id: "deadline",
+			weight: 9.8 - k * .1,
+			text: `“${x.task.content}” is due ${when}.`,
+			step: x.daysLeft === 1 ? `Finish “${x.task.content}” today: block 2 hours this afternoon.` : `Do the first 50 minutes of “${x.task.content}” today, so it isn't a last-night rush.`
+		};
+	});
+}
 // src/server/telegramBot.ts
 var warm = null;
 async function botsFor(env) {
@@ -8924,7 +8975,11 @@ async function runDaily(env, job) {
 		};
 	});
 	const weekFact = weekFocusFact(weekPlan, report);
-	const facts = [...weekFact ? [weekFact] : [], ...coachFacts(input, report)];
+	const facts = [
+		...deadlineFacts(env.todoistToken && job !== "evening" && job !== "night" ? deadlineRadar(await createTodoistApi(env.todoistToken).upcoming(7).catch(() => []), input.today) : []),
+		...weekFact ? [weekFact] : [],
+		...coachFacts(input, report)
+	].sort((a, b) => b.weight - a.weight);
 	/** Gemini says it in its own words; the plain text when there's no key or it fails. */
 	const coach = async (when, fallback) => {
 		if (!env.ai) return fallback;

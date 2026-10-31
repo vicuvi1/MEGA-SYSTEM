@@ -6,7 +6,7 @@ import { addDays } from './dates'
 import type { ProgressInput, ProgressReport } from './progress'
 
 export interface CoachFact {
-  id: 'no-focus' | 'late-wake' | 'no-sport' | 'reset' | 'focus-down' | 'no-plan' | 'good-streak' | 'improving' | 'week-focus'
+  id: 'no-focus' | 'late-wake' | 'no-sport' | 'reset' | 'focus-down' | 'no-plan' | 'good-streak' | 'improving' | 'week-focus' | 'deadline'
   /** Higher first. */
   weight: number
   text: string
@@ -105,4 +105,18 @@ export function weekFocusFact(plan: { focus: string; note: string; big3: { text:
     text: `Your focus this week is ${m.label.toLowerCase()}: ${m.text} in the last 7 days, a good week is ${m.targetText}.${plan.note ? ` Your plan: ${plan.note}.` : ''}`,
     step: plan.note || (open[0] ? `Put one block on “${open[0]}” in your calendar today.` : 'One small step on it today.')
   }
+}
+
+/** Deadlines in the next 3 days (from Todoist): warned about before the day, not on it. */
+export function deadlineFacts(items: { task: { content: string }; date: string; daysLeft: number }[]): CoachFact[] {
+  return items.slice(0, 2).map((x, k) => {
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(`${x.date}T12:00:00Z`).getUTCDay()]
+    const when = x.daysLeft === 1 ? `tomorrow (${wd})` : `in ${x.daysLeft} days (${wd})`
+    return {
+      id: 'deadline' as const,
+      weight: 9.8 - k * 0.1,
+      text: `“${x.task.content}” is due ${when}.`,
+      step: x.daysLeft === 1 ? `Finish “${x.task.content}” today: block 2 hours this afternoon.` : `Do the first 50 minutes of “${x.task.content}” today, so it isn't a last-night rush.`
+    }
+  })
 }

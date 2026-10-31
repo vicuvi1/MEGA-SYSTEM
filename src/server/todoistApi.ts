@@ -75,6 +75,7 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
       dueTime: /T\d{2}:\d{2}/.test(dt) ? dt.slice(11, 16) : null,
       project: names.get(String(t.project_id)) ?? null,
       section: t.section_id ? (secs.get(String(t.section_id)) ?? null) : null,
+      deadline: t.deadline?.date ? String(t.deadline.date).slice(0, 10) : null,
       recurring: !!due?.is_recurring
     }
   }
@@ -84,6 +85,15 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
     async today(): Promise<TodoTask[]> {
       const q = encodeURIComponent('today | overdue')
       const [list, names, secs] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects(), sections()])
+      return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs))
+    },
+    /** Due in the next `days` days or with a deadline then (for the deadline radar). */
+    async upcoming(days = 7): Promise<TodoTask[]> {
+      const q = encodeURIComponent(`next ${days} days | deadline before: +${days + 1} days`)
+      const plain = encodeURIComponent(`next ${days} days`)
+      const get = (query: string) => either(() => all(`${V1}/tasks/filter?query=${query}`), () => all(`${V2}/tasks?filter=${query}`))
+      // Older accounts don't know the deadline filter: then due dates only.
+      const [list, names, secs] = await Promise.all([get(q).catch(() => get(plain)), projects(), sections()])
       return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs))
     },
     /** Due tomorrow, not completed (the first thing for the wind-down message). */
