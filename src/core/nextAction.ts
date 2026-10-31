@@ -55,7 +55,7 @@ export function nowActions(i: NowInput): NowAction[] {
     .filter((t) => (t.due && t.due < i.today) || t.priority >= 4)
     .sort((a, b) => b.priority - a.priority)
   for (const t of urgent.slice(0, 2)) out.push({ kind: 'todo', id: t.id, title: t.content, detail: t.due && t.due < i.today ? 'Late in Todoist. Do it, or move it in Todoist.' : 'Urgent (P1) in Todoist.' })
-  const order = i.hour < 12 ? ['oath', 'workout', 'skincare', 'clean', 'spending'] : i.hour >= 18 ? ['clean', 'spending', 'skincare', 'workout', 'oath'] : ['workout', 'spending', 'skincare', 'clean', 'oath']
+  const order = i.hour < 12 ? ['oath', 'focus', 'workout', 'skincare', 'clean', 'spending'] : i.hour >= 18 ? ['focus', 'clean', 'spending', 'skincare', 'workout', 'oath'] : ['focus', 'workout', 'spending', 'skincare', 'clean', 'oath']
   for (const id of order) {
     const h = i.habits.find((x) => x.id === id && !x.done)
     if (h) out.push({ kind: 'habit', id: h.id, title: h.label, detail: 'A daily habit, not done yet.' })

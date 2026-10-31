@@ -31,3 +31,10 @@ describe('Now: the next thing to do', () => {
     expect(nowActions({ ...base, hour: 15, plan: [{ text: 'Gym', done: true }] })[0].kind).toBe('done')
   })
 })
+
+describe('focus habit', () => {
+  it('is never "all done" while the 50 minutes of focus are not', () => {
+    const a = nowActions({ ...base, hour: 20, habits: [{ id: 'focus', label: '50 minutes of focus', done: false }, { id: 'clean', label: 'Clean day check-in', done: true }] })
+    expect(a[0]).toMatchObject({ kind: 'habit', id: 'focus' })
+  })
+})
