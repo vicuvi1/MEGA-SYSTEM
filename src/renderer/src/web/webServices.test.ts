@@ -64,4 +64,22 @@ describe('web services on Turso', () => {
     expect(count(remote, "SELECT COUNT(*) FROM sleep_logs")).toBe(1)
     expect(count(remote, "SELECT COUNT(*) FROM ledger WHERE rule_id LIKE 'sleep.%' AND kind = 'earn'")).toBeLessThanOrEqual(1)
   })
+
+  it('like the desktop, a bare award of a sleep/money/discipline rule is refused', async () => {
+    fakeTurso()
+    const web = await open()
+    await expect(web.wallet.award('sleep.up_on_time')).rejects.toThrow(/own section/)
+    await expect(web.wallet.award('discipline.clean_day')).rejects.toThrow(/own section/)
+  })
+
+  it('Finance Helper days are paid once each, from the day it was connected', async () => {
+    const remote = fakeTurso()
+    const web = await open()
+    const today = new Date().toISOString().slice(0, 10)
+    expect(await web.connections.syncFinance([today, today, '2020-01-01'])).toBe(1)
+    expect(await web.connections.syncFinance([today])).toBe(0)
+    const again = await open()
+    expect(await again.connections.syncFinance([today])).toBe(0)
+    expect(count(remote, "SELECT COUNT(*) FROM ledger WHERE rule_id = 'money.logged'")).toBe(1)
+  })
 })

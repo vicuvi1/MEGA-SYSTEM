@@ -43,11 +43,12 @@ export function createWebAuth(mirror: Mirror) {
 
   return {
     status: async (): Promise<AuthStatus> => status(),
-    unlock: async (pin: string): Promise<AuthStatus> => {
+    /** `checked`: the server already checked this PIN (this copy may be older). */
+    unlock: async (pin: string, checked = false): Promise<AuthStatus> => {
       const now = Date.now()
-      if (now < blockedUntil) throw new Error(`Too many tries. Wait ${Math.ceil((blockedUntil - now) / 1000)} s`)
+      if (!checked && now < blockedUntil) throw new Error(`Too many tries. Wait ${Math.ceil((blockedUntil - now) / 1000)} s`)
       const s = await stored()
-      if (!(await pinMatches(s, pin))) {
+      if (!checked && !(await pinMatches(s, pin))) {
         if (++failures >= MAX_TRIES) {
           failures = 0
           blockedUntil = now + LOCKOUT_MS
@@ -58,7 +59,7 @@ export function createWebAuth(mirror: Mirror) {
       failures = 0
       locked = false
       // Upgrade an old plain-text PIN so the desktop can read it again.
-      if (s && !s.includes(':')) save(await hashPin(pin)).catch(() => {})
+      if (s && !s.includes(':') && (await pinMatches(s, pin))) save(await hashPin(pin)).catch(() => {})
       return status()
     },
     setPin: async (pin: string, currentPin?: string): Promise<AuthStatus> => {

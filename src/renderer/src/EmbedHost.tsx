@@ -45,23 +45,26 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         }
       }
 
-      // Waky Sleep Companion
+      // Waky checked you in: the Sleep section logs the wake-up and pays
+      // "Up on time" only if it was (once a day, like the desktop).
       if (data.type === 'WAKY_CHECKIN_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'WAKY_CHECKIN_LOGGED')) {
         try {
-          await life.wallet.award('sleep.up_on_time', 'Waky Alarm: Up on time')
+          const time = typeof data.payload?.time === 'string' && /^\d{2}:\d{2}$/.test(data.payload.time) ? data.payload.time : undefined
+          await life.sleep.logWake(time)
           window.dispatchEvent(new CustomEvent('life-wallet-changed'))
         } catch (err) {
-          console.error('[EmbedHost Waky] award error:', err)
+          console.error('[EmbedHost Waky] wake-up error:', err)
         }
       }
 
-      // Finance Helper
+      // Finance Helper saved: pay "Spending logged" for days with records,
+      // through the connection sync (the same refs on PC and web, never twice).
       if (data.type === 'FINANCE_TRANSACTION_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_TRANSACTION_LOGGED')) {
         try {
-          await life.wallet.award('money.logged', 'Finance Helper: Spending logged')
-          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+          const r = await life.connections.sync()
+          if (r.awarded) window.dispatchEvent(new CustomEvent('life-wallet-changed'))
         } catch (err) {
-          console.error('[EmbedHost Finance] award error:', err)
+          console.error('[EmbedHost Finance] sync error:', err)
         }
       }
 
@@ -140,10 +143,11 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
   const ref = useRef<WebviewEl | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
 
-  // Telegram added reps to Sport Track's data: reload it, or it would save its
-  // older copy over them.
+  // Telegram or another device changed Sport Track's (or Finance Helper's)
+  // data: reload it, or it would save its older copy over the change.
   useEffect(() => {
-    if (appKey !== 'sport') return
+    const event = appKey === 'sport' ? 'life-sport-changed' : appKey === 'finance' ? 'life-finance-changed' : null
+    if (!event) return
     const onChange = () => {
       const el = ref.current as any
       try {
@@ -153,8 +157,8 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         /* not loaded yet: it reads the new data when it opens */
       }
     }
-    window.addEventListener('life-sport-changed', onChange)
-    return () => window.removeEventListener('life-sport-changed', onChange)
+    window.addEventListener(event, onChange)
+    return () => window.removeEventListener(event, onChange)
   }, [appKey])
 
   // Bi-directional synchronization for MAN Spartan Discipline app
@@ -243,9 +247,8 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           await life.discipline.setStart(startDay)
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'set_streak', streak } }))
         } else if (action === 'MAN_DIARY') {
-          try {
-            await life.wallet.award('discipline.clean_day', `Warrior Diary: ${payload?.tag || 'Reflection'}`)
-          } catch {}
+          // A diary entry pays nothing: it used to take the clean-day reward,
+          // which then blocked that day's real check-in.
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'diary', ...payload } }))
         } else if (action === 'MAN_INIT') {
           reconcile(payload)

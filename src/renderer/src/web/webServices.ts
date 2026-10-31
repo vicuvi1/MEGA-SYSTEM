@@ -22,6 +22,10 @@ import { Shop } from '../../../main/shop'
 import { SleepService } from '../../../main/sleep'
 import { UnifiedEconomyService } from '../../../main/unifiedEconomy'
 import { Wallet } from '../../../main/wallet'
+import { addDays } from '@core/dates'
+import { LedgerError } from '@core/ledger'
+import { isFlowRule } from '@core/rules'
+import { getSetting, setSetting } from '../../../main/settings'
 import type { BrowserDb } from './browserDb'
 import type { Mirror } from './mirror'
 
@@ -35,6 +39,7 @@ function servicesFor(db: BrowserDb) {
   const body = new Body(d, wallet)
   const shop = new Shop(d, wallet)
   return {
+    db: d,
     wallet,
     shields,
     discipline,
@@ -76,11 +81,11 @@ export function createWebServices(mirror: Mirror) {
     wallet: {
       summary: () => read((s) => s.wallet.summary()),
       history: (limit?: number) => read((s) => s.wallet.history(limit)),
-      // Unlike the desktop, sleep/money/discipline rules are allowed here: on
-      // the web the embedded apps (Waky, Finance Helper, MAN) pay them, and
-      // each is capped at once a day by its rule.
+      // Like the desktop: sleep, money, discipline and study are paid by their
+      // own sections (and the connected apps), never by a bare award.
       award: (ruleId: string, note?: string) =>
         write((s) => {
+          if (isFlowRule(ruleId)) throw new LedgerError('This one is logged from its own section')
           s.wallet.award(ruleId, note)
           return s.wallet.summary()
         }, W),
@@ -97,6 +102,34 @@ export function createWebServices(mirror: Mirror) {
         }, W),
       allocateStats: (stat: 'str' | 'agi' | 'vit' | 'int' | 'sen', points?: number) => write((s) => s.wallet.allocateStats(stat, points), W),
       resetStats: () => write((s) => s.wallet.resetStatAllocation(), W)
+    },
+    connections: {
+      /**
+       * Pays "Spending logged" for each day Finance Helper (on this device) has
+       * a record, like the desktop's connection sync: from the day it was
+       * first connected, the last 31 days at most, each day once (same refs
+       * as the desktop, so the PC and the web never both pay a day).
+       */
+      syncFinance: (recordDays: string[]) =>
+        write((s) => {
+          const db = s.db
+          const today = s.wallet.today()
+          let since = getSetting(db, 'conn_finance_since')
+          if (!since) setSetting(db, 'conn_finance_since', (since = today))
+          const from = since < addDays(today, -31) ? addDays(today, -31) : since
+          const handled = new Set(s.wallet.entries().map((e) => e.ref ?? '').filter(Boolean))
+          let paid = 0
+          for (const d of new Set(recordDays)) {
+            if (d < from || d > today || handled.has(`fin:logged:${d}`)) continue
+            try {
+              s.wallet.awardRule('money.logged', { day: d, ref: `fin:logged:${d}`, note: 'Spending logged (Finance Helper)' })
+              paid++
+            } catch (e) {
+              if (!(e instanceof LedgerError)) throw e
+            }
+          }
+          return paid
+        }, W)
     },
     rules: {
       list: () => read((s) => s.wallet.rules()),

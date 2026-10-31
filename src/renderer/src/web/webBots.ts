@@ -20,6 +20,7 @@ import {
 import { addDays } from '@core/dates'
 import { formatMoney } from '@core/money'
 import { getSetting, setSetting } from '../../../main/settings'
+import { queueFinanceExpense } from './financeInbox'
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
@@ -88,9 +89,11 @@ export interface WebBotsDeps {
   mirror: Mirror
   services: WebServices
   defaults: BotBridgeConfig
+  /** An expense was saved (Finance Helper picks it up from the inbox). */
+  onExpense?: () => void
 }
 
-export function createWebBots({ mirror, services, defaults }: WebBotsDeps) {
+export function createWebBots({ mirror, services, defaults, onExpense }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
   let lastPollAt: string | null = null
@@ -99,14 +102,20 @@ export function createWebBots({ mirror, services, defaults }: WebBotsDeps) {
   let running: Promise<{ processedCount: number; replies: string[] }> | null = null
   let pruned = false
 
+  // Saved settings win, but an empty token or chat never hides the server's one.
+  const merge = (saved: Partial<BotBridgeConfig>): BotBridgeConfig => {
+    const out: any = { ...defaults }
+    for (const [k, v] of Object.entries(saved ?? {})) if (v !== '' && v != null) out[k] = v
+    return out
+  }
   const config = (): Promise<BotBridgeConfig> =>
     mirror
       .read((db) => getSetting(db as any, 'bot_bridge_config'))
-      .then((raw) => ({ ...defaults, ...(raw ? JSON.parse(raw) : {}) }))
+      .then((raw) => merge(raw ? JSON.parse(raw) : {}))
       .catch(() => {
         try {
           const local = store?.getItem('bot_bridge_config')
-          return { ...defaults, ...(local ? JSON.parse(local) : {}) }
+          return merge(local ? JSON.parse(local) : {})
         } catch {
           return defaults
         }
@@ -129,7 +138,7 @@ export function createWebBots({ mirror, services, defaults }: WebBotsDeps) {
       .some((id) => String(id) === chat)
 
   /** One command, on the services. Returns the reply and what changed. */
-  function run(s: Services, text: string): { reply: string; sport?: { name: string; amount: number } } {
+  function run(s: Services, text: string): { reply: string; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string } } {
     const parsed = parseTelegramText(text)
     switch (parsed.type) {
       case 'help':
@@ -203,7 +212,10 @@ export function createWebBots({ mirror, services, defaults }: WebBotsDeps) {
         const note = parsed.expenseNote || ''
         const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : '[Telegram]', new Date(), true)
         const cur = res.state.currency || 'MDL'
-        return { reply: formatExpenseResponse(formatMoney(cents, cur), cat, note || null, formatMoney(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0) }
+        return {
+          reply: formatExpenseResponse(formatMoney(cents, cur), cat, note || null, formatMoney(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
+          expense: { amount: cents, category: res.expense?.category ?? cat, note }
+        }
       }
       case 'balance': {
         const coins = s.wallet.summary().balance
@@ -292,8 +304,16 @@ export function createWebBots({ mirror, services, defaults }: WebBotsDeps) {
           // the message is still marked seen and the reply says why.
           const svc = services.services(db)
           try {
-            const r = db.transaction(() => run(svc, text))()
-            return { skip: false as const, reply: r.reply, ok: true, sport: r.sport }
+            const r = db.transaction(() => {
+              const out = run(svc, text)
+              // Finance Helper gets it too (see financeInbox.ts).
+              if (out.expense) {
+                const now = new Date()
+                queueFinanceExpense(db as any, { id: `tg-life-${key.replace(/[^\w-]/g, '-')}`, ...out.expense, date: svc.wallet.today(now), at: now.getTime() })
+              }
+              return out
+            })()
+            return { skip: false as const, reply: r.reply, ok: true, sport: r.sport, expense: !!r.expense }
           } catch (e) {
             return { skip: false as const, reply: `⚠️ ${esc((e as Error).message)}`, ok: false }
           }
@@ -304,6 +324,7 @@ export function createWebBots({ mirror, services, defaults }: WebBotsDeps) {
           const prog = addRepsToSportTrack(out.sport.name, out.sport.amount)
           if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
         }
+        if (out.ok && 'expense' in out && out.expense) onExpense?.()
         addLog(text, chat, out.ok, out.reply)
         await tg(update.__token, 'sendMessage', { chat_id: chat, text: out.reply, parse_mode: 'HTML' }).catch(() => null)
         return out.reply

@@ -14,22 +14,30 @@ import { TursoHttp } from './web/tursoHttp'
 import { createWebServices, type WebServices } from './web/webServices'
 import { createWebAuth } from './web/webAuth'
 import { createWebBots } from './web/webBots'
+import { createFinanceInbox } from './web/financeInbox'
+import { SPORT_KEY, createSportSync } from './web/sportSync'
+import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
-const DEFAULT_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io'
-const DEFAULT_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA'
+/**
+ * A direct Turso connection, only for development and tests (set turso_url
+ * and turso_token in localStorage). The live site has no keys in its code:
+ * it goes through the server (api/db.mjs) after the PIN login.
+ */
+// Until the server (api/) is set up on Vercel, the site still talks to Turso
+// directly with this key. It moves to the server in the next change.
+const LEGACY_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io'
+const LEGACY_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA'
 
-export function getTursoConfig(): { url: string; token: string } {
-  const envUrl = (import.meta as any).env?.VITE_TURSO_URL
-  const envToken = (import.meta as any).env?.VITE_TURSO_TOKEN
-  const localUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('turso_url') : null
-  const localToken = typeof localStorage !== 'undefined' ? localStorage.getItem('turso_token') : null
-
-  return {
-    url: localUrl || envUrl || DEFAULT_URL,
-    token: localToken || envToken || DEFAULT_TOKEN
+export function getTursoConfig(): { url: string; token: string } | null {
+  try {
+    const url = localStorage.getItem('turso_url')
+    const token = localStorage.getItem('turso_token')
+    if (url && token) return { url, token }
+  } catch {
+    /* private window */
   }
+  return { url: LEGACY_URL, token: LEGACY_TOKEN }
 }
-
 
 const DEFAULT_WEB_BOT_CONFIG: BotBridgeConfig = {
   botToken: '8805787072:AAHzETHOq7VlDPO4ERguzv3pdmf6VH4YfbQ',
@@ -52,7 +60,6 @@ const DEFAULT_WEB_BOT_CONFIG: BotBridgeConfig = {
   coachBotChatId: '',
   financeSyncEnabled: true
 }
-
 
 const store = typeof localStorage !== 'undefined' ? localStorage : null
 const readJson = <T>(key: string): T | null => {
@@ -138,16 +145,57 @@ const SNAPSHOT_TABLES = [
 
 export function createTursoWebBridge(): Bridge {
   const base = createMockApi()
-  const cfg = getTursoConfig()
-  const turso = new TursoHttp(cfg.url, cfg.token)
+  const direct = getTursoConfig()
+  const lockListeners = new Set<() => void>()
+  let unlocked = false
+  const lockNow = () => {
+    unlocked = false
+    lockListeners.forEach((cb) => cb())
+  }
+  // The server said the session is over: ask for the PIN again.
+  const turso = direct
+    ? new TursoHttp(direct.url, direct.token)
+    : new TursoHttp('/api/db', currentSession, () => {
+        clearSession()
+        lockNow()
+      })
+
+  // Nothing is fetched before there's a session (the first PIN on a device).
+  let haveSession: () => void = () => {}
+  const sessionReady = new Promise<void>((resolve) => (haveSession = resolve))
+  if (direct || sessionValid(currentSession())) haveSession()
 
   // Starts loading at once; every call below waits for it.
-  const mirrorP: Promise<Mirror> = initSqlJs({ locateFile: () => sqlWasmUrl }).then(
-    (SQL) => new Mirror(SQL, turso, typeof indexedDB !== 'undefined' ? indexedDbStore() : null)
+  const mirrorP: Promise<Mirror> = Promise.all([initSqlJs({ locateFile: () => sqlWasmUrl }), sessionReady]).then(
+    ([SQL]) => new Mirror(SQL, turso, typeof indexedDB !== 'undefined' ? indexedDbStore() : null)
   )
   const svcP: Promise<WebServices> = mirrorP.then((m) => createWebServices(m))
   const authP = mirrorP.then((m) => createWebAuth(m))
-  const botsP = Promise.all([mirrorP, svcP]).then(([mirror, services]) => createWebBots({ mirror, services, defaults: DEFAULT_WEB_BOT_CONFIG }))
+  // Sport Track's data, copied to Turso and back (it lives in this browser).
+  const sportP = mirrorP.then((m) => {
+    const sync = createSportSync(m)
+    void sync.sync()
+    return sync
+  })
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => e.key === SPORT_KEY && sportP.then((s) => s.soon()))
+    window.addEventListener('life-sport-changed', (e) => !(e as CustomEvent).detail?.fromSync && sportP.then((s) => s.soon()))
+  }
+  // Telegram expenses waiting for Finance Helper on this device.
+  const financeP = mirrorP.then((m) => {
+    const inbox = createFinanceInbox(m)
+    void inbox.apply().catch(() => 0)
+    return inbox
+  })
+  const applyFinance = () => financeP.then((f) => f.apply()).catch(() => 0)
+  const botDefaultsP: Promise<BotBridgeConfig> = direct
+    ? Promise.resolve(DEFAULT_WEB_BOT_CONFIG)
+    : sessionReady
+        .then(() => fetch('/api/config', { headers: { Authorization: `Bearer ${currentSession()}` } }))
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((j: any) => ({ ...DEFAULT_WEB_BOT_CONFIG, ...(j?.bots ?? {}) }))
+        .catch(() => DEFAULT_WEB_BOT_CONFIG)
+  const botsP = Promise.all([mirrorP, svcP, botDefaultsP]).then(([mirror, services, defaults]) => createWebBots({ mirror, services, defaults, onExpense: () => void applyFinance() }))
 
   // Fresh data from Turso when coming back to the tab, and every minute while
   // it's open, so the phone and the PC see each other's changes.
@@ -155,6 +203,7 @@ export function createTursoWebBridge(): Bridge {
     const refresh = () =>
       mirrorP
         .then((m) => m.refresh())
+        .then(() => Promise.all([sportP.then((s) => s.sync()), applyFinance()]))
         .then(() => {
           for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed']) window.dispatchEvent(new CustomEvent(n))
         })
@@ -201,13 +250,36 @@ export function createTursoWebBridge(): Bridge {
     }
   }
 
-  return {
+  const bridge = {
     ...base,
+    onLocked: (cb: () => void) => {
+      lockListeners.add(cb)
+      return () => lockListeners.delete(cb)
+    },
     auth: {
-      status: async () => (await authP).status(),
-      unlock: async (pin: string) => (await authP).unlock(pin),
+      status: async () => ({ pinSet: true, locked: !unlocked }),
+      // The server checks the PIN and opens a session; offline, a device that
+      // still has a session checks it against its own copy.
+      unlock: async (pin: string) => {
+        let checked = false
+        if (!direct) {
+          try {
+            await serverLogin(pin)
+            haveSession()
+            checked = true
+          } catch (e) {
+            if (!(e instanceof NetworkError) || !sessionValid(currentSession())) throw e
+          }
+        }
+        const s = await (await authP).unlock(pin, checked)
+        unlocked = !s.locked
+        return s
+      },
       setPin: async (pin: string, current?: string) => (await authP).setPin(pin, current),
-      lock: async () => (await authP).lock()
+      lock: async () => {
+        unlocked = false
+        return (await authP).lock()
+      }
     },
     wallet: S('wallet') as Bridge['wallet'],
     rules: S('rules') as Bridge['rules'],
@@ -228,6 +300,14 @@ export function createTursoWebBridge(): Bridge {
     },
     connections: {
       ...base.connections,
+      // Pays the days Finance Helper on this device has records for (Waky pays
+      // through the Sleep section when it checks you in).
+      sync: async () => {
+        const finance = readJson<any>('finance-helper.state')
+        const days = Array.isArray(finance?.tx) ? finance.tx.map((t: any) => String(t?.date ?? '')).filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d)) : []
+        const awarded = days.length ? await (await svcP).connections.syncFinance(days) : 0
+        return { awarded, state: await bridge.connections.state() }
+      },
       state: async (): Promise<ConnectionsState> => {
         const baseConns = await base.connections.state()
         const svc = await svcP
@@ -409,6 +489,7 @@ export function createTursoWebBridge(): Bridge {
       pollOnce: async () => (await botsP).pollOnce()
     }
   } as Bridge
+  return bridge
 }
 
 export type { Summary }

@@ -33,22 +33,39 @@ const fromHrana = (v: any): Param => {
 
 export interface Rows { cols: string[]; rows: Param[][] }
 
+/** Turso said the session is over (the web server answers 401). */
+export class UnauthorizedError extends Error {}
+
 export class TursoHttp {
   private url: string
+  private token: () => string
 
-  constructor(url: string, private token: string) {
+  /**
+   * `url` is a Turso database URL, or a path on this site ("/api/db") that
+   * passes the request on with the server's key.
+   */
+  constructor(url: string, token: string | (() => string), private onUnauthorized?: () => void) {
     let base = (url || '').trim()
-    if (base.startsWith('libsql://')) base = 'https://' + base.slice('libsql://'.length)
-    if (!/^https?:\/\//.test(base)) base = 'https://' + base
-    this.url = base.replace(/\/+$/, '') + '/v2/pipeline'
+    if (base.startsWith('/')) {
+      this.url = base
+    } else {
+      if (base.startsWith('libsql://')) base = 'https://' + base.slice('libsql://'.length)
+      if (!/^https?:\/\//.test(base)) base = 'https://' + base
+      this.url = base.replace(/\/+$/, '') + '/v2/pipeline'
+    }
+    this.token = typeof token === 'function' ? token : () => token
   }
 
   private async pipeline(requests: unknown[]): Promise<any[]> {
     const res = await fetch(this.url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${this.token()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ requests: [...requests, { type: 'close' }] })
     })
+    if (res.status === 401 && this.onUnauthorized) {
+      this.onUnauthorized()
+      throw new UnauthorizedError('Locked: enter your PIN again')
+    }
     if (!res.ok) throw new Error(`Turso HTTP ${res.status}: ${(await res.text().catch(() => '')) || res.statusText}`)
     const json = await res.json()
     return json.results ?? []
