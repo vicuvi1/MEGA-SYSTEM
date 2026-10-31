@@ -3753,6 +3753,220 @@ var FocusService = class {
 		})();
 	}
 };
+// src/core/progress.ts
+var WEEKS = 6;
+/** Sum of `value` for days in [from, to]. */
+function sum(rows, from, to, value) {
+	let t = 0;
+	for (const r of rows) if (r.day >= from && r.day <= to) t += value(r);
+	return t;
+}
+/** Days in [from, to] after your streak started with no reset that day. */
+function cleanDays(ev, from, to, today) {
+	const starts = ev.filter((e) => e.kind === "start").map((e) => e.day).sort();
+	if (!starts.length) return 0;
+	const resets = new Set(ev.filter((e) => e.kind === "reset").map((e) => e.day));
+	let n = 0;
+	for (let d = from; d <= to && d <= today; d = addDays$1(d, 1)) if (d >= starts[0] && !resets.has(d)) n++;
+	return n;
+}
+function progressReport(i) {
+	const to = i.today;
+	const win = (w) => ({
+		from: addDays$1(to, -6 - 7 * w),
+		to: addDays$1(to, -7 * w)
+	});
+	const series = (f) => Array.from({ length: WEEKS }, (_, k) => {
+		const w = win(5 - k);
+		return f(w.from, w.to);
+	});
+	const metrics = [
+		{
+			id: "focus",
+			label: "Focus time",
+			higherBetter: true,
+			f: (a, b) => sum(i.focus, a, b, (r) => r.minutes),
+			text: hm
+		},
+		{
+			id: "wake",
+			label: "On-time wake-ups",
+			higherBetter: true,
+			f: (a, b) => sum(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
+			text: (v) => `${v}/7`
+		},
+		{
+			id: "sport",
+			label: "Workouts",
+			higherBetter: true,
+			f: (a, b) => new Set(i.workouts.filter((r) => r.day >= a && r.day <= b).map((r) => r.day)).size,
+			text: (v) => `${v} day${v === 1 ? "" : "s"}`
+		},
+		{
+			id: "clean",
+			label: "Clean days",
+			higherBetter: true,
+			f: (a, b) => cleanDays(i.discipline, a, b, to),
+			text: (v) => `${v}/7`
+		},
+		{
+			id: "todoist",
+			label: "Todoist tasks done",
+			higherBetter: true,
+			f: (a, b) => sum(i.todoist, a, b, () => 1),
+			text: (v) => String(v)
+		},
+		{
+			id: "mustdo",
+			label: "Must-dos done",
+			higherBetter: true,
+			f: (a, b) => sum(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
+			text: (v) => String(v),
+			skip: !i.mustdos
+		},
+		{
+			id: "spend",
+			label: "Spent",
+			higherBetter: false,
+			f: (a, b) => sum(i.spending ?? [], a, b, (r) => r.bani),
+			text: (v) => `${Math.round(v / 100).toLocaleString("en-US")} lei`,
+			skip: !i.spending
+		}
+	].filter((d) => !d.skip).map((d) => {
+		const weeks = series(d.f);
+		const now = weeks[5];
+		const prev = weeks[4];
+		const before = weeks.slice(1, 5);
+		const usual = before.reduce((t, v) => t + v, 0) / before.length;
+		const base = Math.max(usual, prev);
+		const margin = Math.max(d.id === "focus" ? 30 : d.id === "spend" ? 1e4 : 1, base * .1);
+		const diff = now - (usual || prev);
+		const up = diff > margin;
+		const down = diff < -margin;
+		const trend = !up && !down ? "same" : up === d.higherBetter ? "better" : "worse";
+		return {
+			id: d.id,
+			label: d.label,
+			now,
+			prev,
+			usual,
+			text: d.text(now),
+			prevText: d.text(prev),
+			higherBetter: d.higherBetter,
+			trend,
+			weeks
+		};
+	});
+	const better = metrics.filter((m) => m.trend === "better").map((m) => m.id);
+	const worse = metrics.filter((m) => m.trend === "worse").map((m) => m.id);
+	const name = (id) => metrics.find((m) => m.id === id).label.toLowerCase();
+	const verdict = metrics.every((m) => m.now === 0 && m.usual === 0) ? "Not enough logged yet: a week of focus, wake-ups and workouts gives the first comparison." : better.length > worse.length ? `You're improving: ${better.map(name).join(", ")} up on your usual week.${worse.length ? ` Watch ${worse.map(name).join(", ")}.` : ""}` : worse.length > better.length ? `Slipping a bit: ${worse.map(name).join(", ")} below your usual week. Pick one to fix this week.` : better.length ? `Mixed week: ${better.map(name).join(", ")} better, ${worse.map(name).join(", ")} worse.` : "Steady: about the same as your usual week. Push one area a little.";
+	return {
+		from: win(0).from,
+		to,
+		metrics,
+		better,
+		worse,
+		verdict
+	};
+}
+/** The report as a Telegram message (HTML). */
+function progressText(r) {
+	const mark = (m) => m.trend === "better" ? "🟢" : m.trend === "worse" ? "🔴" : "⚪";
+	return `📈 <b>Am I improving?</b> Last 7 days\n\n${r.metrics.map((m) => `${mark(m)} ${m.label}: <b>${m.text}</b> (before: ${m.prevText})`).join("\n")}\n\n${r.verdict}`;
+}
+/** Expenses from Finance Helper's saved state (amounts in bani), for `spending`. */
+function financeSpending(state) {
+	if (!state || !Array.isArray(state.tx)) return null;
+	return state.tx.filter((t) => t && t.type === "expense" && typeof t.date === "string" && !t.deleted).map((t) => ({
+		day: t.date.slice(0, 10),
+		bani: Math.abs(Number(t.base ?? t.amount) || 0)
+	}));
+}
+// src/core/todoist.ts
+/** The point rule that pays for a completed Todoist task. */
+var TODOIST_RULE = "tasks.todoist_done";
+/** Shown as P1…P4 (Todoist's own labels). */
+var pLabel = (priority) => `P${5 - Math.min(4, Math.max(1, priority || 1))}`;
+/** Overdue first, then most urgent, then by time. The bot's /done N uses this order. */
+function sortToday(tasks, today) {
+	return tasks.slice().sort((a, b) => {
+		const ao = a.due && a.due < today ? 0 : 1;
+		const bo = b.due && b.due < today ? 0 : 1;
+		if (ao !== bo) return ao - bo;
+		if (a.priority !== b.priority) return b.priority - a.priority;
+		return String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99"));
+	});
+}
+var esc$3 = (s) => s.replace(/[<>&]/g, (c) => ({
+	"<": "&lt;",
+	">": "&gt;",
+	"&": "&amp;"
+})[c]);
+var P_ICON = {
+	4: "🔴",
+	3: "🟠",
+	2: "🔵",
+	1: "⚪"
+};
+/** The bot's /todo reply. */
+function todayText(tasks, today) {
+	const list = sortToday(tasks, today);
+	if (!list.length) return "✅ <b>Nothing left in Todoist for today.</b>\n\nAdd one: <code>/task call Leo tomorrow 17:00 p1</code>";
+	const lines = list.slice(0, 15).map((t, i) => {
+		const late = t.due && t.due < today ? " <i>(late)</i>" : "";
+		const time = t.dueTime ? ` · ${t.dueTime}` : "";
+		const proj = t.project ? ` · #${esc$3(t.project)}` : "";
+		return `${i + 1}. ${P_ICON[t.priority] ?? "⚪"} <b>${esc$3(t.content)}</b>${time}${proj}${late}`;
+	});
+	return `📋 <b>Todoist today</b> (${list.length})\n\n${lines.join("\n")}${list.length > 15 ? `\n…and ${list.length - 15} more` : ""}\n\n<i>Done one? Send</i> <code>/done 1</code> · <i>add:</i> <code>/task …</code>`;
+}
+// src/main/progress.ts
+var ProgressService = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	input(spending, now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const since = addDays$1(today, -60);
+		const all = (sql, ...args) => {
+			try {
+				return this.db.prepare(sql).all(...args);
+			} catch {
+				return [];
+			}
+		};
+		const plans = all("SELECT day, items FROM day_plans WHERE day >= ?", since);
+		return {
+			today,
+			focus: all("SELECT day, minutes FROM focus_sessions WHERE day >= ?", since),
+			wakes: all("SELECT day, on_time FROM sleep_logs WHERE day >= ?", since).map((r) => ({
+				day: r.day,
+				onTime: !!r.on_time
+			})),
+			workouts: all("SELECT day FROM workouts WHERE day >= ?", since),
+			discipline: all("SELECT kind, day FROM discipline_events WHERE kind IN ('start', 'reset')"),
+			todoist: all("SELECT day FROM ledger WHERE rule_id = ? AND kind = 'earn' AND day >= ? AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)", TODOIST_RULE, since),
+			mustdos: plans.flatMap((p) => {
+				try {
+					return JSON.parse(p.items).map((x) => ({
+						day: p.day,
+						done: !!x.done
+					}));
+				} catch {
+					return [];
+				}
+			}),
+			spending
+		};
+	}
+	report(spending, now = /* @__PURE__ */ new Date()) {
+		return progressReport(this.input(spending, now));
+	}
+};
 // src/core/unifiedEconomy.ts
 var DISCIPLINE_MULTIPLIERS = [
 	{
@@ -5057,6 +5271,7 @@ function servicesFor(db) {
 		schedule: new Schedule(d, wallet),
 		sleep: new SleepService(d, wallet),
 		focus: new FocusService(d, wallet),
+		progress: new ProgressService(d, wallet),
 		economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
 		exporter: new DataExportService(d, body, money)
 	};
@@ -5200,6 +5415,7 @@ syncFinance: (recordDays) => write((s) => {
 			archiveGoal: (id) => write((s) => s.focus.archiveGoal(id)),
 			fun: (minutes, what) => write((s) => s.focus.fun(minutes, what), W)
 		},
+		progress: { report: (spending) => read((s) => s.progress.report(spending)) },
 		sleep: {
 			state: () => read((s) => s.sleep.state()),
 			logWake: (time, quality) => write((s) => s.sleep.logWake(time, quality), W),
@@ -6965,12 +7181,12 @@ function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = D
 		source: "telegram"
 	};
 }
-var esc$3 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
+var esc$2 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;"
 })[c]);
-var fm = (state, c) => esc$3(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
+var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
 var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
@@ -6978,15 +7194,15 @@ function loggedText(state, t, today = null) {
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
 	const work = t.type === "expense" ? workText(state, B(t), t.date) : "";
-	const lines = [`✅ <b>${sign}${esc$3(formatMoney(t.amount, t.currency))}</b> · ${esc$3(t.note || c)}`, `${esc$3(c)} · ${esc$3(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
-	if (work) lines.push(`⏱ ${esc$3(work)} of your work`);
+	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
+	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
 		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
-		lines.push(`${esc$3(c || "This category")} this month: ${fm(state, catMonth)}`);
+		lines.push(`${esc$2(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
-	if (alert) lines.push(`⚠️ ${esc$3(alert.text)}`);
+	if (alert) lines.push(`⚠️ ${esc$2(alert.text)}`);
 	if (today && t.type === "expense" && (state.recurring?.length || state.tx.length > 10)) lines.push(safeLine(state, today, (c) => fm(state, c)));
 	return lines.join("\n");
 }
@@ -7152,44 +7368,6 @@ function moneyButton(db, data, today) {
 		keyboard: moneyKeyboard(state, t),
 		toast: `✓ ${what}`
 	};
-}
-// src/core/todoist.ts
-/** The point rule that pays for a completed Todoist task. */
-var TODOIST_RULE = "tasks.todoist_done";
-/** Shown as P1…P4 (Todoist's own labels). */
-var pLabel = (priority) => `P${5 - Math.min(4, Math.max(1, priority || 1))}`;
-/** Overdue first, then most urgent, then by time. The bot's /done N uses this order. */
-function sortToday(tasks, today) {
-	return tasks.slice().sort((a, b) => {
-		const ao = a.due && a.due < today ? 0 : 1;
-		const bo = b.due && b.due < today ? 0 : 1;
-		if (ao !== bo) return ao - bo;
-		if (a.priority !== b.priority) return b.priority - a.priority;
-		return String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99"));
-	});
-}
-var esc$2 = (s) => s.replace(/[<>&]/g, (c) => ({
-	"<": "&lt;",
-	">": "&gt;",
-	"&": "&amp;"
-})[c]);
-var P_ICON = {
-	4: "🔴",
-	3: "🟠",
-	2: "🔵",
-	1: "⚪"
-};
-/** The bot's /todo reply. */
-function todayText(tasks, today) {
-	const list = sortToday(tasks, today);
-	if (!list.length) return "✅ <b>Nothing left in Todoist for today.</b>\n\nAdd one: <code>/task call Leo tomorrow 17:00 p1</code>";
-	const lines = list.slice(0, 15).map((t, i) => {
-		const late = t.due && t.due < today ? " <i>(late)</i>" : "";
-		const time = t.dueTime ? ` · ${t.dueTime}` : "";
-		const proj = t.project ? ` · #${esc$2(t.project)}` : "";
-		return `${i + 1}. ${P_ICON[t.priority] ?? "⚪"} <b>${esc$2(t.content)}</b>${time}${proj}${late}`;
-	});
-	return `📋 <b>Todoist today</b> (${list.length})\n\n${lines.join("\n")}${list.length > 15 ? `\n…and ${list.length - 15} more` : ""}\n\n<i>Done one? Send</i> <code>/done 1</code> · <i>add:</i> <code>/task …</code>`;
 }
 // src/renderer/src/web/todoistCoins.ts
 function payTodoist(s, done) {
@@ -8234,6 +8412,103 @@ function createTodoistApi(token, fetchImpl = fetch) {
 		}
 	};
 }
+// src/core/coach.ts
+var daysSince = (rows, today) => {
+	const last = rows.map((r) => r.day).filter((d) => d <= today).sort().pop();
+	if (!last) return null;
+	let n = 0;
+	for (let d = last; d < today; d = addDays$1(d, 1)) n++;
+	return n;
+};
+/** What's worth a word today, most important first (empty: say nothing). */
+function coachFacts(i, r) {
+	const out = [];
+	const t = i.today;
+	const focusDays = daysSince(i.focus.filter((x) => x.minutes > 0), t);
+	if (focusDays !== null && focusDays >= 2) out.push({
+		id: "no-focus",
+		weight: 9,
+		text: `No focus session for ${focusDays} days.`,
+		step: "Do one 25-minute focus block before lunch on your main subject."
+	});
+	const last5 = i.wakes.filter((w) => w.day > addDays$1(t, -5) && w.day <= t);
+	const late = last5.filter((w) => !w.onTime).length;
+	if (late >= 3) out.push({
+		id: "late-wake",
+		weight: 7,
+		text: `Woke up late ${late} of the last ${last5.length} days.`,
+		step: "Tonight: phone away 30 minutes before bed, lights out at your bedtime."
+	});
+	const sportDays = daysSince(i.workouts, t);
+	if (sportDays !== null && sportDays >= 4) out.push({
+		id: "no-sport",
+		weight: 6,
+		text: `No workout for ${sportDays} days.`,
+		step: "Just 15 minutes today: push-ups, squats, plank. Small counts."
+	});
+	const lastReset = i.discipline.filter((e) => e.kind === "reset").map((e) => e.day).sort().pop();
+	if (lastReset && lastReset >= addDays$1(t, -2)) out.push({
+		id: "reset",
+		weight: 8,
+		text: "Your clean streak reset recently.",
+		step: "No guilt: check in today and plan the hour when urges usually come."
+	});
+	const focus = r.metrics.find((m) => m.id === "focus");
+	if (focus && focus.trend === "worse" && !out.some((f) => f.id === "no-focus")) out.push({
+		id: "focus-down",
+		weight: 6,
+		text: `Focus time is down: ${focus.text} this week, about ${Math.round(focus.usual / 60)}h usually.`,
+		step: "Book two 50-minute blocks in your calendar for tomorrow."
+	});
+	const planned = new Set((i.mustdos ?? []).map((m) => m.day));
+	const unplanned = [
+		1,
+		2,
+		3
+	].filter((k) => !planned.has(addDays$1(t, -k))).length;
+	if (i.mustdos && unplanned === 3) out.push({
+		id: "no-plan",
+		weight: 4,
+		text: "No must-dos planned for 3 days.",
+		step: "Write 1–3 must-dos now. Two minutes."
+	});
+	if (r.better.length >= 2) out.push({
+		id: "improving",
+		weight: 3,
+		text: r.verdict,
+		step: "Keep the same rhythm tomorrow."
+	});
+	const clean = r.metrics.find((m) => m.id === "clean");
+	if (clean && clean.now === 7) out.push({
+		id: "good-streak",
+		weight: 2,
+		text: "7 clean days out of 7.",
+		step: "Protect it: same routine tonight."
+	});
+	return out.sort((a, b) => b.weight - a.weight);
+}
+/** Only good news? Then the coach stays quiet unless it's Sunday. */
+var worthSaying = (facts) => facts.some((f) => f.weight >= 4);
+/** The message without AI: the top facts and one step. */
+function coachText(facts) {
+	const top = facts.slice(0, 3);
+	return `🧭 <b>Coach</b>\n\n${top.map((f) => `• ${f.text}`).join("\n")}\n\n👉 ${top[0]?.step ?? "Keep going."}`;
+}
+/** What Gemini is asked (the reply is sent as is, so it must be short). */
+function coachPrompt(facts, r, extra) {
+	return [
+		"You are a calm, direct personal coach for Victor, a university student in Moldova working on university, cyber security skills, his career, sport, health and discipline.",
+		`It is ${extra.when}. Write him a Telegram message of at most 3 short sentences, in plain English, no greeting fluff, no hashtags, no markdown.`,
+		"Name what you see (use the facts, with numbers), then give exactly ONE concrete step he can do today, with a time or a duration.",
+		"Kind but honest; never preachy. If things go well, say so in one sentence and keep the step small.",
+		"",
+		"Facts:",
+		...facts.slice(0, 4).map((f) => `- ${f.text} (suggested step: ${f.step})`),
+		`- Week overall: ${r.verdict}`,
+		`- Today's must-dos: ${extra.mustdos.length ? extra.mustdos.join("; ") : "none written yet"}`,
+		extra.todoistToday !== null ? `- Todoist tasks due today or late: ${extra.todoistToday}` : ""
+	].filter(Boolean).join("\n");
+}
 // src/server/telegramBot.ts
 var warm = null;
 async function botsFor(env) {
@@ -8313,12 +8588,14 @@ async function handleTelegramUpdate(env, token, update) {
 }
 /**
 * The daily messages (Vercel runs them on a schedule, api/cron.mjs):
-* morning: the plan question (reply to it with your must-dos);
-* evening: the review with tap-buttons, and on Sundays the weekly report.
+* morning: the plan question, then the coach if something slipped;
+* midday: a nudge only when there's been no focus yet today;
+* evening: the review with tap-buttons, and on Sundays the week and
+* "Am I improving?".
 */
 async function runDaily(env, job) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
-	const { services } = await botsFor(env);
+	const { services, mirror } = await botsFor(env);
 	const send = async (text, reply_markup) => {
 		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
 			method: "POST",
@@ -8335,10 +8612,40 @@ async function runDaily(env, job) {
 	};
 	const todo = await payTodoistDone(env, { since: localMidnight(job === "morning" ? 1 : 0) }).catch(() => null);
 	const st = await services.focus.state();
+	const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null) : null;
+	const { input, report } = await mirror.read((db) => {
+		const svc = services.services(db);
+		const fin = getSetting(db, "app_sync_finance");
+		let spending = null;
+		try {
+			spending = fin ? financeSpending(JSON.parse(fin)?.data) : null;
+		} catch {
+			spending = null;
+		}
+		const input = svc.progress.input(spending);
+		return {
+			input,
+			report: progressReport(input)
+		};
+	});
+	const facts = coachFacts(input, report);
+	/** Gemini says it in its own words; the plain text when there's no key or it fails. */
+	const coach = async (when, fallback) => {
+		if (!env.ai) return fallback;
+		try {
+			const prompt = coachPrompt(facts, report, {
+				mustdos: st.plan.items.map((x) => x.text),
+				todoistToday,
+				when
+			});
+			const text = (await env.ai(prompt)).trim();
+			return text ? `🧭 <b>Coach</b>\n\n${escapeHtml(text).slice(0, 900)}` : fallback;
+		} catch {
+			return fallback;
+		}
+	};
 	const sent = [];
 	if (job === "morning") {
-		let todoistToday = null;
-		if (env.todoistToken) todoistToday = await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null);
 		const planAlready = st.plan.items.length > 0;
 		await send(morningText({
 			focusYesterdayMin: st.week.byDay[5]?.minutes ?? 0,
@@ -8350,15 +8657,33 @@ async function runDaily(env, job) {
 			input_field_placeholder: "Essay intro; gym; call Leo"
 		});
 		sent.push("morning");
+		if (worthSaying(facts)) {
+			await send(await coach("morning", coachText(facts)));
+			sent.push("coach");
+		}
+	} else if (job === "midday") {
+		if (st.todayMin === 0 && !st.running) {
+			const fallback = `🧭 <b>Coach</b>\n\nHalf the day is gone and no focus yet${st.plan.items.length ? `. Your must-do: <b>${escapeHtml(st.plan.items.find((x) => !x.done)?.text ?? st.plan.items[0].text)}</b>` : ""}.\n\n👉 Start one 25-minute block now: <code>/focus 25 ${escapeHtml(st.subjects[0] ?? "study")}</code>`;
+			facts.unshift({
+				id: "no-focus",
+				weight: 10,
+				text: "No focus session yet today (it is midday).",
+				step: "Start one 25-minute block now."
+			});
+			await send(await coach("midday", fallback));
+			sent.push("midday");
+		}
 	} else {
 		const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ""}` : "";
 		await send(eveningText(st.plan, st.todayMin) + todoLine, st.plan.items.length ? planKeyboard(st.plan, true) : void 0);
 		sent.push("evening");
 		if ((/* @__PURE__ */ new Date()).getDay() === 0) {
 			await send(weekText(st.week, st.goals));
+			await send(progressText(report));
 			sent.push("weekly");
 		}
 	}
 	return sent;
 }
+var escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 export { createTodoistApi, handleTelegramUpdate, payTodoistDone, runDaily };

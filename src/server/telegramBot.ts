@@ -13,6 +13,9 @@ import { createWebBots } from '../renderer/src/web/webBots'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
+import { coachFacts, coachPrompt, coachText, worthSaying } from '@core/coach'
+import { financeSpending, progressReport, progressText } from '@core/progress'
+import { getSetting } from '../main/settings'
 import { eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 
 export { createTodoistApi }
@@ -85,14 +88,18 @@ export async function handleTelegramUpdate(env: BotEnv, token: string, update: u
   return reply
 }
 
+export type DailyJob = 'morning' | 'midday' | 'evening'
+
 /**
  * The daily messages (Vercel runs them on a schedule, api/cron.mjs):
- * morning: the plan question (reply to it with your must-dos);
- * evening: the review with tap-buttons, and on Sundays the weekly report.
+ * morning: the plan question, then the coach if something slipped;
+ * midday: a nudge only when there's been no focus yet today;
+ * evening: the review with tap-buttons, and on Sundays the week and
+ * "Am I improving?".
  */
-export async function runDaily(env: BotEnv & { botToken: string; chatId: string }, job: 'morning' | 'evening'): Promise<string[]> {
+export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string> }, job: DailyJob): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
-  const { services } = await botsFor(env)
+  const { services, mirror } = await botsFor(env)
   const send = async (text: string, reply_markup?: unknown) => {
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
       method: 'POST',
@@ -103,27 +110,66 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string 
     if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`)
   }
   // Todoist tasks you completed in Todoist pay here even if no device opened
-  // the app: the morning picks up last evening's, the evening today's.
+  // the app: the morning picks up last evening's, the others today's.
   const todo = await payTodoistDone(env, { since: localMidnight(job === 'morning' ? 1 : 0) }).catch(() => null)
   const st = await services.focus.state()
+  const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null) : null
+  // Same numbers as the Progress page (spending from Finance Helper's synced copy).
+  const { input, report } = await mirror.read((db) => {
+    const svc = services.services(db)
+    const fin = getSetting(db as any, 'app_sync_finance')
+    let spending: ReturnType<typeof financeSpending> = null
+    try {
+      spending = fin ? financeSpending(JSON.parse(fin)?.data) : null
+    } catch {
+      spending = null
+    }
+    const input = svc.progress.input(spending)
+    return { input, report: progressReport(input) }
+  })
+  const facts = coachFacts(input, report)
+  /** Gemini says it in its own words; the plain text when there's no key or it fails. */
+  const coach = async (when: DailyJob, fallback: string) => {
+    if (!env.ai) return fallback
+    try {
+      const prompt = coachPrompt(facts, report, { mustdos: st.plan.items.map((x) => x.text), todoistToday, when })
+      const text = (await env.ai(prompt)).trim()
+      return text ? `🧭 <b>Coach</b>\n\n${escapeHtml(text).slice(0, 900)}` : fallback
+    } catch {
+      return fallback
+    }
+  }
   const sent: string[] = []
   if (job === 'morning') {
-    let todoistToday: number | null = null
-    if (env.todoistToken) todoistToday = await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null)
     const planAlready = st.plan.items.length > 0
     await send(
       morningText({ focusYesterdayMin: st.week.byDay[5]?.minutes ?? 0, goalsBehind: st.goals.filter((g) => g.aheadH < 0), todoistToday, planAlready }),
       planAlready ? undefined : { force_reply: true, input_field_placeholder: 'Essay intro; gym; call Leo' }
     )
     sent.push('morning')
+    if (worthSaying(facts)) {
+      await send(await coach('morning', coachText(facts)))
+      sent.push('coach')
+    }
+  } else if (job === 'midday') {
+    // Only when the day hasn't started: no focus yet and nothing running.
+    if (st.todayMin === 0 && !st.running) {
+      const fallback = `🧭 <b>Coach</b>\n\nHalf the day is gone and no focus yet${st.plan.items.length ? `. Your must-do: <b>${escapeHtml(st.plan.items.find((x) => !x.done)?.text ?? st.plan.items[0].text)}</b>` : ''}.\n\n👉 Start one 25-minute block now: <code>/focus 25 ${escapeHtml(st.subjects[0] ?? 'study')}</code>`
+      facts.unshift({ id: 'no-focus', weight: 10, text: 'No focus session yet today (it is midday).', step: 'Start one 25-minute block now.' })
+      await send(await coach('midday', fallback))
+      sent.push('midday')
+    }
   } else {
     const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ''}` : ''
     await send(eveningText(st.plan, st.todayMin) + todoLine, st.plan.items.length ? planKeyboard(st.plan, true) : undefined)
     sent.push('evening')
     if (new Date().getDay() === 0) {
       await send(weekText(st.week, st.goals))
+      await send(progressText(report))
       sent.push('weekly')
     }
   }
   return sent
 }
+
+const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
