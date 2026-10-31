@@ -23,35 +23,30 @@ import { NetworkError, clearSession, currentSession, serverLogin, sessionValid }
  * and turso_token in localStorage). The live site has no keys in its code:
  * it goes through the server (api/db.mjs) after the PIN login.
  */
-// Until the server (api/) is set up on Vercel, the site still talks to Turso
-// directly with this key. It moves to the server in the next change.
-const LEGACY_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io'
-const LEGACY_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA'
-
 export function getTursoConfig(): { url: string; token: string } | null {
   try {
     const url = localStorage.getItem('turso_url')
     const token = localStorage.getItem('turso_token')
-    if (url && token) return { url, token }
+    return url && token ? { url, token } : null
   } catch {
-    /* private window */
+    return null
   }
-  return { url: LEGACY_URL, token: LEGACY_TOKEN }
 }
 
+// The bot settings to start from; the tokens and chat come from the server.
 const DEFAULT_WEB_BOT_CONFIG: BotBridgeConfig = {
-  botToken: '8805787072:AAHzETHOq7VlDPO4ERguzv3pdmf6VH4YfbQ',
-  chatId: '1900611848',
+  botToken: '',
+  chatId: '',
   enabled: true,
   pollingEnabled: true,
   morningBriefing: true,
   eveningNudge: true,
-  sportBotToken: '8805787072:AAHzETHOq7VlDPO4ERguzv3pdmf6VH4YfbQ',
-  sportBotChatId: '1900611848',
-  financeBotToken: '8958011920:AAGsjdW21oqNViD_3zuYjWzHtf4NhPF8GfM',
-  financeBotChatId: '1900611848',
-  manBotToken: '8957959596:AAFolPEmp7u-7-05CbiPhBAV8jW1xaBlg_w',
-  manBotChatId: '1900611848',
+  sportBotToken: '',
+  sportBotChatId: '',
+  financeBotToken: '',
+  financeBotChatId: '',
+  manBotToken: '',
+  manBotChatId: '',
   wakyBotToken: '',
   wakyBotChatId: '',
   plannerBotToken: '',

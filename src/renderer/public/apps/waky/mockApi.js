@@ -2,8 +2,9 @@
 // Persists directly to localStorage and syncs with Turso Cloud
 (function() {
   const STORAGE_KEY = 'waky_web_data_v2';
-  const TURSO_URL = 'https://life-os-vicuvi1.aws-eu-central-1.turso.io';
-  const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMyNzg3ODIsImlkIjoiMDFhMTg3YmMtZTMwMS03NjMxLTk1ZWItOTZlZWYwZjliYWI5Iiwia2lkIjoiaTR0SmlyVldhQWpaMjBqVGl4amV0djdlX01Takk3VjJoYjJETHdPY0ZlMCIsInJpZCI6IjNjOGYwZjRlLTU4N2ItNDQzNy05ZTJiLWFlNDVhMDI4Mjg5MiJ9.zgJsjcY3LncWY_DHcmQmbPaZBybHd1xff3Cwi3RTpHPfEo2XU_nCUa2VYS0VFmVKKntzCXR9ZV7Vh2geaIdyCA';
+    // Through the Life System web server, with the session from the PIN login
+    // (the Turso key stays on the server).
+    const tursoSession = () => { try { return localStorage.getItem('life_web_session') || ''; } catch { return ''; } };
 
   // Seed with Victor's real PC data from waky.json
   const SEED_DATA = {
@@ -167,9 +168,9 @@
           }
         }
       ];
-      fetch(TURSO_URL + '/v2/pipeline', {
+      fetch('/api/db', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + TURSO_TOKEN, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': 'Bearer ' + tursoSession(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ requests })
       }).catch(() => {});
     } catch {}
