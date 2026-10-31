@@ -402,6 +402,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       // through the inbox either way.
       const tokens = [cfg.megaBotToken, cfg.sportBotToken, cfg.financeBotToken, cfg.manBotToken, cfg.botToken, cfg.wakyBotToken, cfg.plannerBotToken, cfg.coachBotToken]
         .filter((t): t is string => !!t && t.includes(':'))
+        .filter((t) => !(cfg.skipBotIds ?? []).includes(t.split(':')[0]))
         .filter((t, i, all) => all.indexOf(t) === i)
       const replies: string[] = []
       const before = processed
@@ -463,6 +464,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     saveConfig: async (patch: Partial<BotBridgeConfig>): Promise<BotBridgeConfig> => {
       const next: BotBridgeConfig = { ...(await config()), ...patch }
       delete next.serverBots // comes from the server each time, never saved
+      delete next.skipBotIds
       await mirror.write((db) => setSetting(db as any, 'bot_bridge_config', JSON.stringify(next)))
       try {
         store?.setItem('bot_bridge_config', JSON.stringify(next))

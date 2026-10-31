@@ -2,7 +2,7 @@
 // settings at /api/telegram, so they answer 24/7. Safe to call often: a bot
 // already pointed here is left as it is. Production only (a preview must not
 // take the bots away from the live site).
-import { bearer, config, send, serverBots, sessionOk, webhookSecret } from './_lib.mjs'
+import { bearer, config, leftBots, send, serverBots, sessionOk, webhookSecret } from './_lib.mjs'
 
 async function tg(token, method, body) {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
@@ -37,5 +37,17 @@ export default async function handler(req, res) {
       results.push({ bot: b.name, ok: false, error: e.message })
     }
   }
-  send(res, 200, { ok: results.every((r) => r.ok), bots: results })
+  // Bots given back to their own program: let go of them if we held them.
+  for (const b of leftBots()) {
+    try {
+      const info = await tg(b.token, 'getWebhookInfo')
+      if (String(info?.result?.url || '').includes('/api/telegram?bot=')) {
+        const off = await tg(b.token, 'deleteWebhook', { drop_pending_updates: false })
+        results.push({ bot: b.name, released: !!off?.ok })
+      }
+    } catch (e) {
+      results.push({ bot: b.name, released: false, error: e.message })
+    }
+  }
+  send(res, 200, { ok: results.filter((r) => !('released' in r)).every((r) => r.ok), bots: results })
 }

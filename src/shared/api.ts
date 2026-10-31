@@ -307,6 +307,8 @@ export interface BotBridgeConfig {
   megaBotToken?: string
   /** The web server answers the bots 24/7 (Telegram webhooks): the app doesn't poll. */
   serverBots?: boolean
+  /** Bots run by their own program (e.g. Sporty's Python bot): never read by the app. */
+  skipBotIds?: string[]
   enabled: boolean
   pollingEnabled: boolean
   morningBriefing: boolean

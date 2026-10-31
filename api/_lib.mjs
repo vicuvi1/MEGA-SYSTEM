@@ -119,6 +119,8 @@ export function botDefaults(env = process.env) {
   const chat = env.TELEGRAM_CHAT_ID || ''
   const main = env.TELEGRAM_BOT_TOKEN || ''
   return {
+    // Bots run by their own program: the app never reads them.
+    skipBotIds: leftBots(env).map((b) => b.id),
     megaBotToken: env.MEGA_BOT_TOKEN || '',
     botToken: main,
     chatId: chat,
@@ -148,14 +150,23 @@ export function send(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
-/** The bots in the server's settings, one entry per bot (same token twice is one bot). */
+const BOT_VARS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN']
+
+/** Bots run by their own program (e.g. Sporty's Python bot): BOTS_NOT_ON_SERVER=TELEGRAM_BOT_TOKEN,… */
+export function leftBots(env = process.env) {
+  const names = String(env.BOTS_NOT_ON_SERVER || '').split(',').map((s) => s.trim()).filter(Boolean)
+  return names.map((name) => ({ name, token: (env[name] || '').trim() })).filter((b) => b.token.includes(':')).map((b) => ({ ...b, id: b.token.split(':')[0] }))
+}
+
+/** The bots the server answers, one entry per bot (same token twice is one bot). */
 export function serverBots(env = process.env) {
+  const left = new Set(leftBots(env).map((b) => b.id))
   const out = []
-  for (const name of ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN']) {
+  for (const name of BOT_VARS) {
     const token = (env[name] || '').trim()
     if (!token.includes(':')) continue
     const id = token.split(':')[0]
-    if (!out.some((b) => b.id === id)) out.push({ name, id, token })
+    if (!left.has(id) && !out.some((b) => b.id === id)) out.push({ name, id, token })
   }
   return out
 }

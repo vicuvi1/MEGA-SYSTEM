@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { beforeAll, describe, expect, it } from 'vitest'
 import initSqlJs, { type SqlJsStatic, type Database as SqlJsDatabase } from 'sql.js'
 // @ts-expect-error plain JS module without types
-import { config, login, makeSession, sessionOk, pinMatches, botDefaults } from '../../../../api/_lib.mjs'
+import { config, login, makeSession, sessionOk, pinMatches, botDefaults, serverBots } from '../../../../api/_lib.mjs'
 import { handlePipeline } from './fakeTurso'
 import { hashPin } from './webAuth'
 
@@ -62,6 +62,12 @@ describe('web server', () => {
     const [data] = s.split('.')
     expect(sessionOk(cfg, `${data}.forged`)).toBe(false)
     expect(sessionOk(cfg, '')).toBe(false)
+  })
+
+  it('leaves bots run by their own program alone', () => {
+    const env = { MEGA_BOT_TOKEN: '3:c', TELEGRAM_BOT_TOKEN: '1:a', FINANCE_BOT_TOKEN: '2:b', BOTS_NOT_ON_SERVER: 'TELEGRAM_BOT_TOKEN' }
+    expect(serverBots(env).map((b: any) => b.id)).toEqual(['3', '2'])
+    expect(botDefaults(env).skipBotIds).toEqual(['1'])
   })
 
   it('gives the bot tokens from its own settings', () => {
