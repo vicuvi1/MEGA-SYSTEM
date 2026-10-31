@@ -20,9 +20,9 @@ interface Props {
 
 // Sections in groups, in the order they appear.
 const GROUPS: { title: string; ids: PageId[] }[] = [
-  { title: 'Plan', ids: ['today', 'focus', 'tasks', 'schedule'] },
+  { title: 'Plan', ids: ['today', 'focus', 'progress', 'tasks', 'schedule'] },
   { title: 'Life', ids: ['sleep', 'discipline', 'body', 'money'] },
-  { title: 'System RPG', ids: ['shop', 'journey', 'rules'] }
+  { title: 'Rewards', ids: ['shop', 'journey'] }
 ]
 const SHORT: Partial<Record<PageId, string>> = { rules: 'Game Rules', connected: 'Apps', body: 'Sport' }
 

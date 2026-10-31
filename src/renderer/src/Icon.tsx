@@ -1,6 +1,7 @@
 const PATHS = {
   home: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
   check: 'M4 12l5 5L20 6',
+  chart: 'M3 20h18M6 20v-6M11 20V8M16 20v-9M21 4l-5 5-4-3-6 6',
   tasks: 'M9 6h11M9 12h11M9 18h11M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',

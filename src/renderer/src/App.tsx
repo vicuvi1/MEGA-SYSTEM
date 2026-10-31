@@ -42,6 +42,7 @@ const Money = lazyNamed(() => import('./pages/Money'), 'Money')
 const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
 const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
 const Journey = lazyNamed(() => import('./pages/Journey'), 'Journey')
+const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const SystemOracleDrawer = lazyNamed(() => import('./SystemOracleDrawer'), 'SystemOracleDrawer')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
 const SoloSystemModal = lazyNamed(() => import('./SoloSystemModal'), 'SoloSystemModal')
@@ -635,6 +636,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'journey' && summary && <Journey summary={summary} rules={rules} />}
+            {page === 'progress' && <Progress />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'rules' && <Rules rules={rules} onChange={setRules} summary={summary} onGo={setPage} onOracle={() => setOracleOpen(true)} onModal={(type, data) => setSystemModal({ open: true, type, data })} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}

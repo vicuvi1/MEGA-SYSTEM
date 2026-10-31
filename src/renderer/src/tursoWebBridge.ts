@@ -21,6 +21,7 @@ import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
 import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
+import { financeSpending } from '@core/progress'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -326,6 +327,9 @@ export function createTursoWebBridge(): Bridge {
 
   const bridge = {
     ...base,
+    progress: {
+      report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state')))
+    },
     // Your Todoist: today's tasks, complete (+coins), quick add, and coins for
     // what you completed in Todoist itself (checked at most every 5 minutes).
     todoist: {

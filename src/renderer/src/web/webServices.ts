@@ -21,6 +21,7 @@ import { ShieldService } from '../../../main/shields'
 import { Shop } from '../../../main/shop'
 import { SleepService } from '../../../main/sleep'
 import { FocusService } from '../../../main/focus'
+import { ProgressService } from '../../../main/progress'
 import { UnifiedEconomyService } from '../../../main/unifiedEconomy'
 import { Wallet } from '../../../main/wallet'
 import { addDays } from '@core/dates'
@@ -51,6 +52,7 @@ function servicesFor(db: BrowserDb) {
     schedule: new Schedule(d, wallet),
     sleep: new SleepService(d, wallet),
     focus: new FocusService(d, wallet),
+    progress: new ProgressService(d, wallet),
     economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
     exporter: new DataExportService(d, body, money)
   }
@@ -198,6 +200,9 @@ export function createWebServices(mirror: Mirror) {
       saveGoal: (g: { id?: number; title: string; subject: string; deadline: string; hours: number }) => write((s) => s.focus.saveGoal(g)),
       archiveGoal: (id: number) => write((s) => s.focus.archiveGoal(id)),
       fun: (minutes: number, what?: string) => write((s) => s.focus.fun(minutes, what), W)
+    },
+    progress: {
+      report: (spending: { day: string; bani: number }[] | null) => read((s) => s.progress.report(spending))
     },
     sleep: {
       state: () => read((s) => s.sleep.state()),

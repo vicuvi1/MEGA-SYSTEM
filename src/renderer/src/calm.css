@@ -147,3 +147,31 @@ html.calm [class*='loading'] {
 .dl-add { display: flex; gap: 8px; margin: 6px 0 2px; }
 .dl-add input { flex: 1; background: transparent; border: 1px dashed rgba(255, 255, 255, 0.15); }
 .dl-more { margin-top: 6px; font-size: 13px; }
+
+/* Progress: "Am I improving?" */
+.pg { display: flex; flex-direction: column; gap: 14px; }
+.pg-head h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.pg-verdict { font-size: 16px; margin: 4px 0 6px; color: var(--text); }
+.pg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.pg-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.pg-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pg-label { color: var(--muted); font-size: 13px; }
+.pg-trend { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.pg-trend.better { color: var(--green); }
+.pg-trend.worse { color: var(--red); }
+.pg-value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+.pg-before { font-size: 12px; color: var(--muted); }
+.pg-bars { display: flex; align-items: flex-end; gap: 5px; height: 42px; margin-top: 10px; }
+.pg-bars i { flex: 1; border-radius: 3px 3px 0 0; background: rgba(255, 255, 255, 0.12); min-height: 3px; }
+.pg-bars i.now { background: var(--lime); }
+.pg-mini-head { display: flex; justify-content: space-between; align-items: center; }
+.pg-mini-head h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; }
+.pg-mini .pg-verdict { font-size: 14px; }
+.pg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pg-chip { font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pg-chip b { color: var(--text); font-weight: 600; margin-left: 2px; }
+.pg-chip.better { border-color: color-mix(in srgb, var(--green) 50%, transparent); }
+.pg-chip.better::first-letter { color: var(--green); }
+.pg-chip.worse { border-color: color-mix(in srgb, var(--red) 50%, transparent); }
+:root[data-theme='light'] .pg-bars i { background: rgba(0, 0, 0, 0.1); }
+:root[data-theme='light'] .pg-bars i.now { background: var(--lime-ink, var(--lime)); }

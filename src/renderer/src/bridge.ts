@@ -1,5 +1,6 @@
 import type { LifeApi, UpdateStatus } from '@shared/api'
 import type { TodoTask } from '@core/todoist'
+import type { ProgressReport } from '@core/progress'
 import { createTursoWebBridge } from './tursoWebBridge'
 
 export type Bridge = LifeApi & {
@@ -11,6 +12,8 @@ export type Bridge = LifeApi & {
   onUpdate(cb: (s: UpdateStatus) => void): void
   onUiKey(cb: (key: string) => void): () => void
   onFullScreen(cb: (on: boolean) => void): () => void
+  /** "Am I improving?": the last 7 days against your usual week (web). */
+  progress?: { report(): Promise<ProgressReport> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
   todoist?: {
     status(): Promise<{ connected: boolean }>

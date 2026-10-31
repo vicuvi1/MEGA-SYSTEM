@@ -18,21 +18,24 @@ export interface UiPrefs {
   hiddenPages: string[]
   /** Everything bigger or smaller: 90, 100, 110, 125 (%). */
   textSize: number
+  /** Which one-time layout clean-up this device has had (see load). */
+  layoutV?: number
 }
 
-export type TodaySectionId = 'day' | 'greeting' | 'focus' | 'checklist' | 'todoist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
+export type TodaySectionId = 'day' | 'progress' | 'greeting' | 'focus' | 'checklist' | 'todoist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
 
 /** What each Today section is, and whether it shows on a new device. */
 export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
   { id: 'day', label: 'Now & today’s list', hint: 'The one next step, and one list: must-dos, habits and Todoist', on: true },
+  { id: 'progress', label: 'This week', hint: 'Am I improving? One line and a chip per area', on: true },
   { id: 'focus', label: 'Focus timer', hint: 'Start and stop a focus session', on: true },
   { id: 'greeting', label: 'Greeting', hint: 'Your day in one line: blocks, tasks, coins today', on: false },
   { id: 'checklist', label: 'Old quest checklist', hint: 'The same habits as the list, in the game style', on: false },
   { id: 'todoist', label: 'Todoist box', hint: 'Todoist on its own, with an add box (Todoist is also in the list)', on: false },
   { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and hydration with quick +10 buttons', on: true },
-  { id: 'apps', label: 'Your apps', hint: 'Coins, Waky, Finance Helper, MAN and Sport Track at a glance', on: true },
-  { id: 'plan', label: 'Schedule & tasks', hint: "Today's blocks and open tasks", on: true },
-  { id: 'quicklog', label: 'Quick log & recent', hint: 'One tap for anything else, and what you logged', on: true },
+  { id: 'apps', label: 'Your apps', hint: 'Coins, Waky, Finance Helper, MAN and Sport Track at a glance', on: false },
+  { id: 'plan', label: 'Schedule & tasks', hint: "Today's blocks and open tasks", on: false },
+  { id: 'quicklog', label: 'Quick log & recent', hint: 'One tap for anything else, and what you logged', on: false },
   { id: 'pillars', label: '4-pillar day', hint: 'Sleep, discipline, sport, money (also in the checklist)', on: false },
   { id: 'raids', label: 'Dungeon raids', hint: 'Bet coins on a challenge', on: false }
 ]
@@ -59,9 +62,26 @@ export const ACCENTS: Record<AccentColor, string> = {
 const KEY = 'ls.ui'
 const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '', calm: true, today: [], hiddenPages: [], textSize: 100 }
 
+/** Pages most people don't need day to day: hidden once (Settings → Layout brings them back). */
+const QUIET_PAGES = ['schedule', 'journey', 'rules']
+const LAYOUT_V = 2
+
 function load(): UiPrefs {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }
+    const p: UiPrefs = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }
+    // One-time clean-up: Today goes back to the calm defaults (Now, this week,
+    // focus, reps) and rarely used pages leave the menu.
+    if ((p.layoutV ?? 1) < LAYOUT_V) {
+      p.today = []
+      p.hiddenPages = [...new Set([...(p.hiddenPages ?? []), ...QUIET_PAGES])]
+      p.layoutV = LAYOUT_V
+      try {
+        localStorage.setItem(KEY, JSON.stringify(p))
+      } catch {
+        // storage unavailable: it runs again next time, same result
+      }
+    }
+    return p
   } catch {
     return DEFAULTS
   }
