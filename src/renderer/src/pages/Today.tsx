@@ -42,6 +42,13 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     return g
   }, [rules])
 
+  // Undo from Today, like History: a reversing entry, so nothing is lost.
+  const undoneIds = useMemo(() => new Set(summary.recent.filter((e) => e.kind === 'undo').map((e) => e.undoOf)), [summary.recent])
+  async function undo(id: number) {
+    const s = await act(() => life.wallet.undo(id, 'Undone from Today'), 'Undone')
+    if (s) onChange(s)
+  }
+
   async function award(rule: Rule) {
     const s = await act(() => life.wallet.award(rule.id))
     if (!s) return
@@ -120,8 +127,11 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         <section className="panel">
           <header className="panel-head">
             <h2>Quick log</h2>
-            <span className="hint">Tap what you just did. Limits and cooldowns apply.</span>
+            <button className="btn small ghost" onClick={() => onGo('rules')} title="Add your own habits, change coins, limits and cooldowns">
+              <Icon name="edit" size={13} /> Edit habits & coins
+            </button>
           </header>
+          <p className="hint block">Tap what you just did. Limits and cooldowns apply.</p>
           <div className="groups">
             {Object.entries(groups).map(([mod, list]) => {
               const color = MODULES.find((m) => m.id === mod)?.color ?? 'var(--lime)'
@@ -158,6 +168,11 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
                   <span className="what">{describeEntry(e, titles)}</span>
                   <span className="when">{timeAgo(e.ts)}</span>
                   {e.kind !== 'undo' && <Coins n={e.coins} sign />}
+                  {e.kind !== 'undo' && !undoneIds.has(e.id) && (
+                    <button className="icon-btn feed-undo" title="Undo this (the coins go back)" aria-label="Undo" onClick={() => undo(e.id)}>
+                      ↩
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

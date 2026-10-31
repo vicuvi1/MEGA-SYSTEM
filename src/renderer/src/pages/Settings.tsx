@@ -608,6 +608,16 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </h2>
         </header>
         <div className="field">
+          <span>Text size</span>
+          <div className="seg">
+            {[90, 100, 110, 125].map((n) => (
+              <button key={n} type="button" className={(ui.textSize ?? 100) === n ? 'on' : ''} onClick={() => setUi({ textSize: n })}>
+                {n === 100 ? 'Normal' : `${n}%`}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
           <span>Theme</span>
           <div className="seg">
             {(['dark', 'light', 'system'] as const).map((t) => (

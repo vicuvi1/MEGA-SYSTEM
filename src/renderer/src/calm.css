@@ -52,3 +52,7 @@ html.calm [class*='loading'] {
     display: none !important;
   }
 }
+
+/* Today: undo next to a recent entry */
+.feed li .feed-undo { width: 26px; height: 26px; font-size: 13px; margin-left: 6px; opacity: 0.6; }
+.feed li .feed-undo:hover { opacity: 1; }

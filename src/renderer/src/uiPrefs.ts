@@ -16,6 +16,8 @@ export interface UiPrefs {
   today: { id: TodaySectionId; on: boolean }[]
   /** Pages you don't use: hidden from the sidebar and the phone menu. */
   hiddenPages: string[]
+  /** Everything bigger or smaller: 90, 100, 110, 125 (%). */
+  textSize: number
 }
 
 export type TodaySectionId = 'greeting' | 'checklist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
@@ -50,7 +52,7 @@ export const ACCENTS: Record<AccentColor, string> = {
 
 
 const KEY = 'ls.ui'
-const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '', calm: true, today: [], hiddenPages: [] }
+const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '', calm: true, today: [], hiddenPages: [], textSize: 100 }
 
 function load(): UiPrefs {
   try {
@@ -96,6 +98,9 @@ export function applyTheme(): void {
   const t = current.theme === 'system' ? (systemDark?.matches === false ? 'light' : 'dark') : current.theme
   document.documentElement.dataset.theme = t
   document.documentElement.classList.toggle('calm', current.calm !== false)
+  // zoom scales the whole app (sizes are in px, so a root font size would not)
+  const size = [90, 100, 110, 125].includes(Number(current.textSize)) ? Number(current.textSize) : 100
+  document.documentElement.style.setProperty('zoom', size === 100 ? '' : String(size / 100))
 }
 
 systemDark?.addEventListener('change', () => current.theme === 'system' && applyTheme())
