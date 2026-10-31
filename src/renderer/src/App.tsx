@@ -273,16 +273,18 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     const unsub = life.onDisciplineChanged?.(() => {
       life.discipline.state().then((d) => {
         setDiscipline(d)
-        window.dispatchEvent(new CustomEvent('life-discipline-changed', { detail: d }))
+        window.dispatchEvent(new CustomEvent('life-discipline-state', { detail: d }))
       })
     })
     return () => unsub?.()
   }, [])
 
-  // Sync to MAN whenever discipline state changes in the renderer
+  // Sync to MAN whenever discipline state changes in the renderer. Its own
+  // event: 'life-discipline-changed' makes this page reload, which set new
+  // state, which sent the event again: an endless reload loop.
   useEffect(() => {
     if (discipline) {
-      window.dispatchEvent(new CustomEvent('life-discipline-changed', { detail: discipline }))
+      window.dispatchEvent(new CustomEvent('life-discipline-state', { detail: discipline }))
     }
   }, [discipline])
 
@@ -583,13 +585,13 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </button>
             <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
             <UpdateChip status={update} onClick={() => setPage('settings')} />
-            {backup && (
+            {/* On the web the data lives in Turso (with daily cloud snapshots); the desktop backup doesn't apply. */}
+            {backup && !isDemo && (
               <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>
                 <Icon name="cloud" size={15} />
                 <span className="chip-text">{backup.lastError ? 'Backup off' : 'Backed up'}</span>
               </button>
             )}
-            {isDemo && <span className="chip">Demo</span>}
 
           </div>
 

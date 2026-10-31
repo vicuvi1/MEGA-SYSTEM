@@ -4,7 +4,7 @@ import { campaignMap, URGE_SECONDS } from '@core/discipline'
 import type { ConnectionsState, DisciplineState } from '@shared/api'
 
 type ManSuggestion = ConnectionsState['man']['suggestion']
-import { isDemo, life } from '../bridge'
+import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction } from '../ui'
 import { mmss } from './planUi'
@@ -319,7 +319,7 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const now = useTicker(true)
-  const total = (isDemo ? 10 : URGE_SECONDS) * 1000
+  const total = URGE_SECONDS * 1000 // the full time on the web too (it was 10 s there)
   const elapsed = startedAt ? now - Date.parse(startedAt) : 0
   const left = Math.max(0, total - elapsed)
   const phase = BREATH[Math.floor(elapsed / 4000) % 4]

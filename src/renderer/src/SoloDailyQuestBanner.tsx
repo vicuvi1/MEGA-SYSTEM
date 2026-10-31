@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import { findExercise, readSport, updateSport } from './sportTrack'
 import type { BodyState, Summary } from '@shared/api'
 import { life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
@@ -70,27 +71,20 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
   const todayKey = new Date().toISOString().slice(0, 10)
 
   // Live real-time Sport Track state from shared browser storage
-  const [sportState, setSportState] = useState<any>(() => {
-    if (typeof localStorage === 'undefined') return null
-    try {
-      const raw = localStorage.getItem('life_sport_tracker_v1')
-      return raw ? JSON.parse(raw) : null
-    } catch {
-      return null
-    }
-  })
+  // (yesterday's reps don't count: readSport starts a new day like Sport Track does)
+  const [sportState, setSportState] = useState<any>(() => (typeof localStorage === 'undefined' ? null : readSport()))
 
   useEffect(() => {
     const syncSport = () => {
-      try {
-        const raw = localStorage.getItem('life_sport_tracker_v1')
-        if (raw) setSportState(JSON.parse(raw))
-      } catch {}
+      const s = readSport()
+      if (s) setSportState(s)
     }
     window.addEventListener('storage', syncSport)
     window.addEventListener('focus', syncSport)
     window.addEventListener('life-body-changed', syncSport)
+    window.addEventListener('life-sport-changed', syncSport)
     return () => {
+      window.removeEventListener('life-sport-changed', syncSport)
       window.removeEventListener('storage', syncSport)
       window.removeEventListener('focus', syncSport)
       window.removeEventListener('life-body-changed', syncSport)
@@ -106,8 +100,9 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       for (const it of w.items) {
         const key = (it.exerciseId || it.name || '').toLowerCase()
         map[key] = (map[key] || 0) + it.amount
+        // "push-ups" also counts as "pushups" (but "pushups" only once).
         const cleanKey = key.replace(/[^a-z0-9]/g, '')
-        if (cleanKey) map[cleanKey] = (map[cleanKey] || 0) + it.amount
+        if (cleanKey && cleanKey !== key) map[cleanKey] = (map[cleanKey] || 0) + it.amount
       }
     }
     return map
@@ -172,20 +167,11 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         y: rect.top
       })
 
-      if (typeof localStorage !== 'undefined') {
-        try {
-          const raw = localStorage.getItem('life_sport_tracker_v1')
-          if (raw) {
-            const data = JSON.parse(raw)
-            const targetEx = data.exercises?.find((x: any) => x.id?.toLowerCase().includes(objId) || x.name?.toLowerCase().includes(exName.toLowerCase()))
-            if (targetEx) {
-              targetEx.doneToday = (targetEx.doneToday || 0) + amount
-              localStorage.setItem('life_sport_tracker_v1', JSON.stringify(data))
-              setSportState(data)
-            }
-          }
-        } catch {}
-      }
+      const data = updateSport((d) => {
+        const ex = findExercise(d, objId) ?? findExercise(d, exName)
+        if (ex) ex.doneToday = (Number(ex.doneToday) || 0) + amount
+      })
+      if (data) setSportState(data)
 
       await life.body.logWorkout({
         title: `${exName} (+${amount})`,
@@ -205,15 +191,10 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       setWaterMl(nextVal)
       try {
         localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: nextVal }))
-        const raw = localStorage.getItem('life_sport_tracker_v1')
-        if (raw) {
-          const data = JSON.parse(raw)
-          if (data.water) {
-            data.water.currentMl = nextVal
-            localStorage.setItem('life_sport_tracker_v1', JSON.stringify(data))
-            setSportState(data)
-          }
-        }
+        const data = updateSport((d) => {
+          if (d.water) d.water.currentMl = nextVal
+        })
+        if (data) setSportState(data)
       } catch {}
 
       soundCoin()
@@ -239,20 +220,13 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
     })
 
     if (typeof localStorage !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('life_sport_tracker_v1')
-        if (raw) {
-          const data = JSON.parse(raw)
-          data.exercises?.forEach((x: any) => {
-            x.doneToday = Math.max(x.doneToday || 0, x.target || 0)
-          })
-          if (data.water) {
-            data.water.currentMl = Math.max(data.water.currentMl || 0, data.water.targetMl || 2700)
-          }
-          localStorage.setItem('life_sport_tracker_v1', JSON.stringify(data))
-          setSportState(data)
-        }
-      } catch {}
+      const data = updateSport((d) => {
+        d.exercises?.forEach((x: any) => {
+          x.doneToday = Math.max(x.doneToday || 0, x.target || 0)
+        })
+        if (d.water) d.water.currentMl = Math.max(d.water.currentMl || 0, d.water.targetMl || 2700)
+      })
+      if (data) setSportState(data)
     }
 
     const itemsToLog = []

@@ -32,12 +32,12 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
       if (data.type === 'SPORT_WORKOUT_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_WORKOUT_LOGGED')) {
         try {
           const name = data.workout?.name || data.workout?.title || 'Workout completed'
+          // logWorkout pays "Workout done" itself (capped); a second award paid twice.
           await life.body.logWorkout({
             title: name,
             items: [],
             note: 'Sport Track routine'
           })
-          await life.wallet.award('body.workout_done', `Iron Pulse: ${name}`)
           window.dispatchEvent(new CustomEvent('life-body-changed'))
           window.dispatchEvent(new CustomEvent('life-wallet-changed'))
         } catch (err) {
@@ -65,36 +65,8 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         }
       }
 
-      // MAN Spartan Discipline Protocol
-      if (data.type === 'MAN_RESET' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'MAN_RESET')) {
-        try {
-          await life.discipline.reset()
-          window.dispatchEvent(new CustomEvent('life-discipline-changed'))
-          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
-        } catch (err) {
-          console.error('[EmbedHost MAN] reset error:', err)
-        }
-      }
-
-      if (data.type === 'MAN_CHECKIN' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'MAN_CHECKIN')) {
-        try {
-          await life.discipline.checkIn()
-          window.dispatchEvent(new CustomEvent('life-discipline-changed'))
-          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
-        } catch (err) {
-          console.error('[EmbedHost MAN] checkin error:', err)
-        }
-      }
-
-      if (data.type === 'MAN_DIARY' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'MAN_DIARY')) {
-        try {
-          await life.wallet.award('discipline.checkin', 'Warrior Diary Reflection Logged')
-          window.dispatchEvent(new CustomEvent('life-discipline-changed'))
-          window.dispatchEvent(new CustomEvent('life-wallet-changed'))
-        } catch (err) {
-          console.error('[EmbedHost MAN] diary award error:', err)
-        }
-      }
+      // MAN's check-in, reset and diary are handled once, by its frame below
+      // (which checks "already checked in today"); handling them here too paid twice.
     }
 
     window.addEventListener('message', onWindowMessage)
@@ -143,6 +115,21 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
   )
 }
 
+/**
+ * Runs a line of code inside an embedded app: the desktop's <webview> has
+ * executeJavaScript; on the web the app is a same-origin <iframe>.
+ */
+function runIn(el: any, code: string): Promise<any> {
+  try {
+    if (typeof el?.executeJavaScript === 'function') return el.executeJavaScript(code)
+    const win = el?.contentWindow as (Window & { eval(c: string): any }) | null
+    if (win) return Promise.resolve(win.eval(code))
+  } catch (e) {
+    return Promise.reject(e)
+  }
+  return Promise.resolve(null)
+}
+
 type WebviewEl = HTMLElement & { reload(): void; loadURL(url: string): Promise<void> }
 
 /**
@@ -152,6 +139,23 @@ type WebviewEl = HTMLElement & { reload(): void; loadURL(url: string): Promise<v
 function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { appKey: EmbedKind; name: string; url: string; partition: string; visible: boolean; soundEnabled: boolean }) {
   const ref = useRef<WebviewEl | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+
+  // Telegram added reps to Sport Track's data: reload it, or it would save its
+  // older copy over them.
+  useEffect(() => {
+    if (appKey !== 'sport') return
+    const onChange = () => {
+      const el = ref.current as any
+      try {
+        if (typeof el?.reload === 'function') el.reload()
+        else el?.contentWindow?.location.reload()
+      } catch {
+        /* not loaded yet: it reads the new data when it opens */
+      }
+    }
+    window.addEventListener('life-sport-changed', onChange)
+    return () => window.removeEventListener('life-sport-changed', onChange)
+  }, [appKey])
 
   // Bi-directional synchronization for MAN Spartan Discipline app
   useEffect(() => {
@@ -163,10 +167,10 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       try {
         const d = await life.discipline.state()
         if (d.checkedInToday) {
-          el.executeJavaScript?.(`window.syncFromLifeSystemCheckin?.(${JSON.stringify(d.today)}, ${d.current})`).catch(() => {})
+          runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(d.today)}, ${d.current})`).catch(() => {})
         }
         if (d.oathToday) {
-          el.executeJavaScript?.(`window.syncFromLifeSystemOath?.(${JSON.stringify(d.today)})`).catch(() => {})
+          runIn(el, `window.syncFromLifeSystemOath?.(${JSON.stringify(d.today)})`).catch(() => {})
         }
       } catch (err) {
         console.error('[EmbedHost MAN] syncToMan error:', err)
@@ -179,7 +183,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         const today = d.today
         let data = manData
         if (!data) {
-          data = await el.executeJavaScript?.('window.getManCheckinState ? window.getManCheckinState() : null').catch(() => null)
+          data = await runIn(el, 'window.getManCheckinState ? window.getManCheckinState() : null').catch(() => null)
         }
         if (!data) return
 
@@ -194,7 +198,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'checkin', ...data } }))
         } else if (d.checkedInToday && data.lastCheckin !== today) {
           // 2. If Life System is checked in today, but MAN is not
-          await el.executeJavaScript?.(`window.syncFromLifeSystemCheckin?.(${JSON.stringify(today)}, ${d.current})`).catch(() => {})
+          await runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(today)}, ${d.current})`).catch(() => {})
         }
 
         // Oath reconciliation
@@ -202,7 +206,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           await life.discipline.oath()
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'oath' } }))
         } else if (d.oathToday && data.lastOathDate !== today) {
-          await el.executeJavaScript?.(`window.syncFromLifeSystemOath?.(${JSON.stringify(today)})`).catch(() => {})
+          await runIn(el, `window.syncFromLifeSystemOath?.(${JSON.stringify(today)})`).catch(() => {})
         }
       } catch (err) {
         console.error('[EmbedHost MAN] Reconcile error:', err)
@@ -310,7 +314,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       el.addEventListener('dom-ready', onDomReady)
     }
     window.addEventListener('message', onWindowMessage)
-    window.addEventListener('life-discipline-changed', syncToMan)
+    window.addEventListener('life-discipline-state', syncToMan)
 
     if (visible) {
       reconcile()
@@ -324,7 +328,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         el.removeEventListener('dom-ready', onDomReady)
       }
       window.removeEventListener('message', onWindowMessage)
-      window.removeEventListener('life-discipline-changed', syncToMan)
+      window.removeEventListener('life-discipline-state', syncToMan)
     }
   }, [appKey, visible])
 
@@ -337,7 +341,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     }
     if (shouldMute) {
       try {
-        el.executeJavaScript?.(`
+        runIn(el, `
           if (typeof window !== 'undefined') {
             if (window.sound && typeof window.sound.stopBGM === 'function') {
               window.sound.stopBGM();
@@ -391,7 +395,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         }
         if (shouldMute) {
           try {
-            el.executeJavaScript?.(`
+            runIn(el, `
               if (typeof window !== 'undefined') {
                 if (window.sound && typeof window.sound.stopBGM === 'function') {
                   window.sound.stopBGM();
