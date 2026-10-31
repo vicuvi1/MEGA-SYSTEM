@@ -434,6 +434,16 @@ var DEFAULT_RULES = [
 		enabled: true
 	},
 	{
+		id: "tasks.todoist_done",
+		module: "tasks",
+		title: "Todoist task done",
+		coins: 8,
+		xp: 15,
+		dailyCap: 12,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
 		id: "money.under_budget",
 		module: "money",
 		title: "Stayed under budget",
@@ -474,7 +484,8 @@ function isFlowRule(id) {
 		"discipline.",
 		"study.",
 		"sleep.",
-		"money."
+		"money.",
+		"tasks.todoist"
 	].some((p) => id.startsWith(p));
 }
 /** Checks caps and cooldowns and returns the row to insert for this rule. */
@@ -6552,12 +6563,12 @@ function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = D
 		source: "telegram"
 	};
 }
-var esc$1 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
+var esc$2 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;"
 })[c]);
-var fm = (state, c) => esc$1(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
+var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
 var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
@@ -6565,15 +6576,15 @@ function loggedText(state, t, today = null) {
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
 	const work = t.type === "expense" ? workText(state, B(t), t.date) : "";
-	const lines = [`✅ <b>${sign}${esc$1(formatMoney(t.amount, t.currency))}</b> · ${esc$1(t.note || c)}`, `${esc$1(c)} · ${esc$1(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
-	if (work) lines.push(`⏱ ${esc$1(work)} of your work`);
+	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
+	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
 		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
-		lines.push(`${esc$1(c || "This category")} this month: ${fm(state, catMonth)}`);
+		lines.push(`${esc$2(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
-	if (alert) lines.push(`⚠️ ${esc$1(alert.text)}`);
+	if (alert) lines.push(`⚠️ ${esc$2(alert.text)}`);
 	if (today && t.type === "expense" && (state.recurring?.length || state.tx.length > 10)) lines.push(safeLine(state, today, (c) => fm(state, c)));
 	return lines.join("\n");
 }
@@ -6740,6 +6751,64 @@ function moneyButton(db, data, today) {
 		toast: `✓ ${what}`
 	};
 }
+// src/core/todoist.ts
+/** The point rule that pays for a completed Todoist task. */
+var TODOIST_RULE = "tasks.todoist_done";
+/** Shown as P1…P4 (Todoist's own labels). */
+var pLabel = (priority) => `P${5 - Math.min(4, Math.max(1, priority || 1))}`;
+/** Overdue first, then most urgent, then by time. The bot's /done N uses this order. */
+function sortToday(tasks, today) {
+	return tasks.slice().sort((a, b) => {
+		const ao = a.due && a.due < today ? 0 : 1;
+		const bo = b.due && b.due < today ? 0 : 1;
+		if (ao !== bo) return ao - bo;
+		if (a.priority !== b.priority) return b.priority - a.priority;
+		return String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99"));
+	});
+}
+var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
+	"<": "&lt;",
+	">": "&gt;",
+	"&": "&amp;"
+})[c]);
+var P_ICON = {
+	4: "🔴",
+	3: "🟠",
+	2: "🔵",
+	1: "⚪"
+};
+/** The bot's /todo reply. */
+function todayText(tasks, today) {
+	const list = sortToday(tasks, today);
+	if (!list.length) return "✅ <b>Nothing left in Todoist for today.</b>\n\nAdd one: <code>/task call Leo tomorrow 17:00 p1</code>";
+	const lines = list.slice(0, 15).map((t, i) => {
+		const late = t.due && t.due < today ? " <i>(late)</i>" : "";
+		const time = t.dueTime ? ` · ${t.dueTime}` : "";
+		const proj = t.project ? ` · #${esc$1(t.project)}` : "";
+		return `${i + 1}. ${P_ICON[t.priority] ?? "⚪"} <b>${esc$1(t.content)}</b>${time}${proj}${late}`;
+	});
+	return `📋 <b>Todoist today</b> (${list.length})\n\n${lines.join("\n")}${list.length > 15 ? `\n…and ${list.length - 15} more` : ""}\n\n<i>Done one? Send</i> <code>/done 1</code> · <i>add:</i> <code>/task …</code>`;
+}
+// src/renderer/src/web/todoistCoins.ts
+function payTodoist(s, done) {
+	const paid = new Set(s.wallet.entries().map((e) => e.ref ?? "").filter((r) => r.startsWith("todoist:")));
+	let n = 0;
+	for (const t of done) {
+		const ref = `todoist:${t.id}`;
+		if (paid.has(ref)) continue;
+		try {
+			s.wallet.awardRule(TODOIST_RULE, {
+				ref,
+				note: t.content.slice(0, 120)
+			});
+			paid.add(ref);
+			n++;
+		} catch (e) {
+			if (!(e instanceof LedgerError)) throw e;
+		}
+	}
+	return n;
+}
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
 var sportDay = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -6904,7 +6973,7 @@ function financeAccounts(db) {
 		return [];
 	}
 }
-function createWebBots({ mirror, services, defaults, onExpense, server = false }) {
+function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null }) {
 	let polling = false;
 	let timer = null;
 	let lastPollAt = null;
@@ -7191,8 +7260,65 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false }
 		if (data.startsWith("fu|") || data.startsWith("fa|") || data.startsWith("fk|")) onExpense?.();
 		return res.text;
 	}
+	/**
+	* /todo, /task …, /done N with Todoist connected. Todoist is a network call,
+	* so it runs outside the database change: the message is marked seen
+	* first, then Todoist is asked, then the coins are written.
+	*/
+	async function handleTodoist(botId, update, cfg) {
+		const text = String(update.message?.text ?? "").trim();
+		const m = /^\/(todo|tasks|task|add|done)(?:@\w+)?(?:\s+([\s\S]+))?$/i.exec(text);
+		if (!todoist || !m) return void 0;
+		const chat = String(update.message?.chat?.id ?? "");
+		const key = `${botId}:${update.update_id}`;
+		if (!await mirror.write((db) => {
+			if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
+			db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+			return true;
+		})) return null;
+		const cmd = m[1].toLowerCase();
+		const arg = (m[2] ?? "").trim();
+		let reply;
+		let ok = true;
+		if (!allowed(cfg, chat)) {
+			reply = `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`;
+			ok = false;
+		} else try {
+			const today = await services.read((sv) => sv.wallet.today());
+			if (cmd === "task" || cmd === "add") {
+				if (!arg) reply = "➕ What should I add? e.g. <code>/task call Leo tomorrow 17:00 p1 #University</code>";
+				else {
+					const t = await todoist.quickAdd(arg);
+					reply = `➕ <b>Added to Todoist:</b> ${esc(t.content || arg)}${t.due ? `\n📅 ${t.due === today ? "Today" : t.due}${t.dueTime ? " " + t.dueTime : ""}` : ""}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ""}${t.project ? ` · #${esc(t.project)}` : ""}`;
+				}
+			} else if (cmd === "done" && arg) {
+				const list = sortToday(await todoist.today(), today);
+				const n = parseInt(arg, 10);
+				const t = n > 0 ? list[n - 1] : void 0;
+				if (!t) reply = "⚠️ No task with that number. Send <code>/todo</code> to see them.";
+				else {
+					await todoist.close(t.id);
+					const paid = await mirror.write((db) => payTodoist(services.services(db), [t]));
+					reply = `✅ <b>Done in Todoist:</b> ${esc(t.content)}${paid ? "\n🪙 <b>+8 coins</b>" : ""}`;
+				}
+			} else reply = todayText(await todoist.today(), today);
+		} catch (e) {
+			ok = false;
+			reply = `⚠️ Todoist: ${esc(e.message)}`;
+		}
+		processed++;
+		addLog(text, chat, ok, reply);
+		await tg(update.__token, "sendMessage", {
+			chat_id: chat,
+			text: reply,
+			parse_mode: "HTML"
+		}).catch(() => null);
+		return reply;
+	}
 	async function handle(botId, update, cfg) {
 		if (update.callback_query) return handleButton(botId, update, cfg);
+		const viaTodoist = await handleTodoist(botId, update, cfg);
+		if (viaTodoist !== void 0) return viaTodoist;
 		const key = `${botId}:${update.update_id}`;
 		const text = String(update.message?.text ?? "").trim();
 		const chat = String(update.message?.chat?.id ?? "");
@@ -7444,10 +7570,110 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false }
 		}
 	};
 }
+// src/server/todoistApi.ts
+var V1 = "https://api.todoist.com/api/v1";
+var V2 = "https://api.todoist.com/rest/v2";
+var SYNC = "https://api.todoist.com/sync/v9";
+function createTodoistApi(token, fetchImpl = fetch) {
+	const call = async (url, init = {}) => {
+		const res = await fetchImpl(url, {
+			...init,
+			headers: {
+				Authorization: `Bearer ${token}`,
+				...init.body ? { "Content-Type": "application/json" } : {},
+				...init.headers ?? {}
+			},
+			signal: AbortSignal.timeout(1e4)
+		});
+		if (res.status === 401 || res.status === 403) throw new Error("Todoist refused the token: check TODOIST_TOKEN in Vercel");
+		if (!res.ok) {
+			const err = /* @__PURE__ */ new Error(`Todoist ${res.status}`);
+			err.status = res.status;
+			throw err;
+		}
+		if (res.status === 204) return null;
+		const text = await res.text();
+		return text ? JSON.parse(text) : null;
+	};
+	/** v1 first; on "not found / gone" (an account or region still on v2), the older API. */
+	const either = async (v1, v2) => {
+		try {
+			return await v1();
+		} catch (e) {
+			if (e?.status === 404 || e?.status === 410) return v2();
+			throw e;
+		}
+	};
+	const all = async (url) => {
+		const out = [];
+		let cursor = null;
+		for (let page = 0; page < 10; page++) {
+			const sep = url.includes("?") ? "&" : "?";
+			const r = await call(cursor ? `${url}${sep}cursor=${encodeURIComponent(cursor)}` : url);
+			if (Array.isArray(r)) return r;
+			out.push(...r?.results ?? r?.items ?? []);
+			cursor = r?.next_cursor ?? null;
+			if (!cursor) break;
+		}
+		return out;
+	};
+	let projectNames = null;
+	const projects = async () => {
+		if (projectNames) return projectNames;
+		const list = await either(() => all(`${V1}/projects`), () => all(`${V2}/projects`));
+		projectNames = new Map(list.map((p) => [String(p.id), String(p.name)]));
+		return projectNames;
+	};
+	const toTask = (t, names) => {
+		const due = t.due ?? null;
+		const dt = String(due?.datetime ?? due?.date ?? "");
+		return {
+			id: String(t.id),
+			content: String(t.content ?? ""),
+			priority: Number(t.priority) || 1,
+			due: dt ? dt.slice(0, 10) : null,
+			dueTime: /T\d{2}:\d{2}/.test(dt) ? dt.slice(11, 16) : null,
+			project: names.get(String(t.project_id)) ?? null,
+			recurring: !!due?.is_recurring
+		};
+	};
+	return {
+		/** Due today or overdue, not completed. */
+		async today() {
+			const q = encodeURIComponent("today | overdue");
+			const [list, names] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects()]);
+			return list.filter((t) => !t.checked && !t.is_completed).map((t) => toTask(t, names));
+		},
+		async close(id) {
+			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }), () => call(`${V2}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }));
+		},
+		/** Todoist reads the date, time, priority and #project from the text. */
+		async quickAdd(text) {
+			const t = await either(() => call(`${V1}/tasks/quick`, {
+				method: "POST",
+				body: JSON.stringify({ text })
+			}), () => call(`${SYNC}/quick/add`, {
+				method: "POST",
+				body: JSON.stringify({ text })
+			}));
+			return toTask(t ?? {}, await projects());
+		},
+		/** Completed since `since` (ISO), newest first. */
+		async completedSince(since) {
+			const until = (/* @__PURE__ */ new Date()).toISOString();
+			return (await either(() => all(`${V1}/tasks/completed/by_completion_date?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&limit=200`), () => all(`${SYNC}/completed/get_all?since=${encodeURIComponent(since.slice(0, 19))}&limit=200`))).map((t) => ({
+				id: String(t.task_id ?? t.id),
+				content: String(t.content ?? ""),
+				priority: Number(t.priority) || 1,
+				completedAt: String(t.completed_at ?? "")
+			}));
+		}
+	};
+}
 // src/server/telegramBot.ts
 var warm = null;
 async function botsFor(env) {
-	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12);
+	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6);
 	if (warm && warm.key === key) {
 		await warm.mirror.refresh();
 		return warm.bots;
@@ -7465,7 +7691,8 @@ async function botsFor(env) {
 			eveningNudge: true,
 			...env.defaults
 		},
-		server: true
+		server: true,
+		todoist: env.todoistToken ? createTodoistApi(env.todoistToken) : null
 	});
 	warm = {
 		key,
@@ -7479,4 +7706,4 @@ async function handleTelegramUpdate(env, token, update) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	return (await botsFor(env)).handleUpdate(token, update);
 }
-export { handleTelegramUpdate };
+export { createTodoistApi, handleTelegramUpdate };

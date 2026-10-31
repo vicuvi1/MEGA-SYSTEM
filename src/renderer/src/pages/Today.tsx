@@ -11,6 +11,7 @@ import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { soundSuccess } from '../sound'
 import { SoloSystemModal } from '../SoloSystemModal'
 import { DungeonRaidCards } from '../DungeonRaidCards'
+import { TodoistPanel } from '../TodoistPanel'
 import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
 
 type Pop = { id: number; coins: number; xp: number }
@@ -112,6 +113,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       />
         </>
       ),
+    todoist: () => <TodoistPanel today={summary.today} onWallet={() => onChange()} />,
     raids: () => <DungeonRaidCards balance={summary.balance} onAwardCoins={() => onChange()} />,
     plan: () => (
         <>

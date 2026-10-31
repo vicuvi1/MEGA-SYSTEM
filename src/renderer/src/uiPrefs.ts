@@ -20,12 +20,13 @@ export interface UiPrefs {
   textSize: number
 }
 
-export type TodaySectionId = 'greeting' | 'checklist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
+export type TodaySectionId = 'greeting' | 'checklist' | 'todoist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
 
 /** What each Today section is, and whether it shows on a new device. */
 export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
   { id: 'greeting', label: 'Greeting', hint: 'Your day in one line: blocks, tasks, coins today', on: true },
   { id: 'checklist', label: "Today's checklist", hint: 'Oath, clean day, workout, focus, skincare, spending', on: true },
+  { id: 'todoist', label: 'Todoist', hint: 'Your Todoist tasks for today: tick them off for coins, add new ones', on: true },
   { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and hydration with quick +10 buttons', on: true },
   { id: 'apps', label: 'Your apps', hint: 'Coins, Waky, Finance Helper, MAN and Sport Track at a glance', on: true },
   { id: 'plan', label: 'Schedule & tasks', hint: "Today's blocks and open tasks", on: true },

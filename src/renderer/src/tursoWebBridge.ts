@@ -15,6 +15,8 @@ import { createWebServices, type WebServices } from './web/webServices'
 import { createWebAuth } from './web/webAuth'
 import { createWebBots } from './web/webBots'
 import { createFinanceInbox } from './web/financeInbox'
+import { payTodoist } from './web/todoistCoins'
+import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
 import { FINANCE } from './web/financeSync'
@@ -208,7 +210,31 @@ export function createTursoWebBridge(): Bridge {
           return { ...DEFAULT_WEB_BOT_CONFIG, ...(j?.bots ?? {}), serverBots: !!setup?.ok }
         })
         .catch(() => DEFAULT_WEB_BOT_CONFIG)
-  const botsP = Promise.all([mirrorP, svcP, botDefaultsP]).then(([mirror, services, defaults]) => createWebBots({ mirror, services, defaults, onExpense: () => void applyFinance() }))
+  // Todoist through the server (the token stays there).
+  const todoistCall = async (op: string, extra: Record<string, unknown> = {}): Promise<any> => {
+    if (direct) return { connected: false }
+    const r = await fetch('/api/todoist', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op, ...extra })
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || `Todoist ${r.status}`)
+    return j
+  }
+  const todoist = {
+    today: async () => ((await todoistCall('today')).tasks ?? []) as TodoTask[],
+    close: async (id: string) => {
+      await todoistCall('close', { id })
+    },
+    quickAdd: async (text: string) => (await todoistCall('quick', { text })).task as TodoTask
+  }
+  const todoistOnP: Promise<boolean> = sessionReady
+    .then(() => todoistCall('status'))
+    .then((j) => !!j.connected)
+    .catch(() => false)
+  let todoistSyncedAt = 0
+  const botsP = Promise.all([mirrorP, svcP, botDefaultsP, todoistOnP]).then(([mirror, services, defaults, todoOn]) => createWebBots({ mirror, services, defaults, onExpense: () => void applyFinance(), todoist: todoOn ? todoist : null }))
 
   // Fresh data from Turso when coming back to the tab, and every minute while
   // it's open, so the phone and the PC see each other's changes.
@@ -218,6 +244,7 @@ export function createTursoWebBridge(): Bridge {
         .then((m) => m.refresh())
         .then(() => applyFinance())
         .then(() => syncAll())
+        .then(() => bridge.todoist?.sync().catch(() => 0))
         .then(() => {
           for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed']) window.dispatchEvent(new CustomEvent(n))
         })
@@ -293,6 +320,28 @@ export function createTursoWebBridge(): Bridge {
 
   const bridge = {
     ...base,
+    // Your Todoist: today's tasks, complete (+coins), quick add, and coins for
+    // what you completed in Todoist itself (checked at most every 5 minutes).
+    todoist: {
+      status: async () => ({ connected: await todoistOnP }),
+      today: async () => ((await todoistOnP) ? todoist.today() : []),
+      quickAdd: async (text: string) => todoist.quickAdd(text),
+      complete: async (task: TodoTask) => {
+        await todoist.close(task.id)
+        const paid = await (await svcP).write((s) => payTodoist(s, [task]), 'life-wallet-changed')
+        return { paid }
+      },
+      sync: async (force = false) => {
+        if (!(await todoistOnP)) return 0
+        if (!force && Date.now() - todoistSyncedAt < 5 * 60_000) return 0
+        todoistSyncedAt = Date.now()
+        const midnight = new Date()
+        midnight.setHours(0, 0, 0, 0)
+        const items = ((await todoistCall('completed', { since: midnight.toISOString() })).items ?? []) as TodoCompleted[]
+        if (!items.length) return 0
+        return (await svcP).write((s) => payTodoist(s, items), 'life-wallet-changed')
+      }
+    },
     // Things the desktop window does, the browser's way.
     app: {
       toggleFullScreen: async () => {

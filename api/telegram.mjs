@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   try {
     const update = await readBody(req)
     await handleTelegramUpdate(
-      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ },
+      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN },
       bot.token,
       update
     )

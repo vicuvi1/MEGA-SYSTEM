@@ -22,6 +22,8 @@ import { formatMoney } from '@core/money'
 import { getSetting, setSetting } from '../../../main/settings'
 import { queueFinanceExpense } from './financeInbox'
 import { logMoney, moneyButton } from './financeBot'
+import { payTodoist } from './todoistCoins'
+import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
@@ -151,9 +153,18 @@ export interface WebBotsDeps {
   onExpense?: () => void
   /** Running on the server: Sport reps go to Turso, not this browser. */
   server?: boolean
+  /** Your Todoist, when connected: /todo, /task and /done use it. */
+  todoist?: TodoistLike | null
 }
 
-export function createWebBots({ mirror, services, defaults, onExpense, server = false }: WebBotsDeps) {
+/** What the bot needs from Todoist (the server calls it directly, the page through /api/todoist). */
+export interface TodoistLike {
+  today(): Promise<TodoTask[]>
+  close(id: string): Promise<void>
+  quickAdd(text: string): Promise<TodoTask>
+}
+
+export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
   let lastPollAt: string | null = null
@@ -426,8 +437,67 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return res.text
   }
 
+  /**
+   * /todo, /task …, /done N with Todoist connected. Todoist is a network call,
+   * so it runs outside the database change: the message is marked seen
+   * first, then Todoist is asked, then the coins are written.
+   */
+  async function handleTodoist(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null | undefined> {
+    const text = String(update.message?.text ?? '').trim()
+    const m = /^\/(todo|tasks|task|add|done)(?:@\w+)?(?:\s+([\s\S]+))?$/i.exec(text)
+    if (!todoist || !m) return undefined
+    const chat = String(update.message?.chat?.id ?? '')
+    const key = `${botId}:${update.update_id}`
+    const fresh = await mirror.write((db) => {
+      if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return false
+      db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+      return true
+    })
+    if (!fresh) return null
+    const cmd = m[1].toLowerCase()
+    const arg = (m[2] ?? '').trim()
+    let reply: string
+    let ok = true
+    if (!allowed(cfg, chat)) {
+      reply = `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`
+      ok = false
+    } else {
+      try {
+        const today = await services.read((sv) => sv.wallet.today())
+        if (cmd === 'task' || cmd === 'add') {
+          if (!arg) reply = '➕ What should I add? e.g. <code>/task call Leo tomorrow 17:00 p1 #University</code>'
+          else {
+            const t = await todoist.quickAdd(arg)
+            reply = `➕ <b>Added to Todoist:</b> ${esc(t.content || arg)}${t.due ? `\n📅 ${t.due === today ? 'Today' : t.due}${t.dueTime ? ' ' + t.dueTime : ''}` : ''}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ''}${t.project ? ` · #${esc(t.project)}` : ''}`
+          }
+        } else if (cmd === 'done' && arg) {
+          const list = sortToday(await todoist.today(), today)
+          const n = parseInt(arg, 10)
+          const t = n > 0 ? list[n - 1] : undefined
+          if (!t) reply = '⚠️ No task with that number. Send <code>/todo</code> to see them.'
+          else {
+            await todoist.close(t.id)
+            const paid = await mirror.write((db) => payTodoist(services.services(db), [t]))
+            reply = `✅ <b>Done in Todoist:</b> ${esc(t.content)}${paid ? '\n🪙 <b>+8 coins</b>' : ''}`
+          }
+        } else {
+          reply = todayText(await todoist.today(), today)
+        }
+      } catch (e) {
+        ok = false
+        reply = `⚠️ Todoist: ${esc((e as Error).message)}`
+      }
+    }
+    processed++
+    addLog(text, chat, ok, reply)
+    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
+    return reply
+  }
+
   async function handle(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
     if (update.callback_query) return handleButton(botId, update, cfg)
+    const viaTodoist = await handleTodoist(botId, update, cfg)
+    if (viaTodoist !== undefined) return viaTodoist
     const key = `${botId}:${update.update_id}`
     const text = String(update.message?.text ?? '').trim()
     const chat = String(update.message?.chat?.id ?? '')

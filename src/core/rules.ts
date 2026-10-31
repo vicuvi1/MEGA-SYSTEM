@@ -22,6 +22,7 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'discipline.reset', module: 'discipline', title: 'Streak reset', coins: -20, xp: 0, dailyCap: 3, cooldownMin: 0, enabled: true },
   { id: 'body.workout_done', module: 'body', title: 'Workout done', coins: 10, xp: 25, dailyCap: 2, cooldownMin: 60, enabled: true },
   { id: 'face.routine_done', module: 'tasks', title: 'Skincare routine', coins: 5, xp: 10, dailyCap: 2, cooldownMin: 240, enabled: true },
+  { id: 'tasks.todoist_done', module: 'tasks', title: 'Todoist task done', coins: 8, xp: 15, dailyCap: 12, cooldownMin: 0, enabled: true },
   { id: 'money.under_budget', module: 'money', title: 'Stayed under budget', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'money.logged', module: 'money', title: 'Logged spending', coins: 3, xp: 5, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'grand_slam.all_four', module: 'general', title: '4-Pillar Grand Slam (Sovereign Day)', coins: 50, xp: 100, dailyCap: 1, cooldownMin: 0, enabled: true }
@@ -33,7 +34,8 @@ export const DEFAULT_RULES: Rule[] = [
  * the proof behind them can't be skipped.
  */
 export function isFlowRule(id: string): boolean {
-  return ['discipline.', 'study.', 'sleep.', 'money.'].some((p) => id.startsWith(p))
+  // tasks.todoist_done pays only for a real Todoist completion, never a tap.
+  return ['discipline.', 'study.', 'sleep.', 'money.', 'tasks.todoist'].some((p) => id.startsWith(p))
 }
 
 /** Checks caps and cooldowns and returns the row to insert for this rule. */

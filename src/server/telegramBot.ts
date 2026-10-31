@@ -10,18 +10,23 @@ import { Mirror } from '../renderer/src/web/mirror'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
 import { createWebBots } from '../renderer/src/web/webBots'
+import { createTodoistApi } from './todoistApi'
+
+export { createTodoistApi }
 
 export interface BotEnv {
   tursoUrl: string
   tursoToken: string
   defaults: Partial<BotBridgeConfig>
   timeZone?: string
+  /** Your Todoist API token (TODOIST_TOKEN): /todo, /task, /done use it. */
+  todoistToken?: string
 }
 
 let warm: { key: string; bots: ReturnType<typeof createWebBots>; mirror: Mirror } | null = null
 
 async function botsFor(env: BotEnv) {
-  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12)
+  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6)
   if (warm && warm.key === key) {
     await warm.mirror.refresh() // what the devices changed since the last message
     return warm.bots
@@ -32,7 +37,8 @@ async function botsFor(env: BotEnv) {
   await mirror.ready
   const services = createWebServices(mirror)
   const defaults = { enabled: true, pollingEnabled: true, morningBriefing: true, eveningNudge: true, ...env.defaults } as BotBridgeConfig
-  const bots = createWebBots({ mirror, services, defaults, server: true })
+  const todoist = env.todoistToken ? createTodoistApi(env.todoistToken) : null
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist })
   warm = { key, bots, mirror }
   return bots
 }

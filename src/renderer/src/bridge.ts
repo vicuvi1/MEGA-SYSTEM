@@ -1,4 +1,5 @@
 import type { LifeApi, UpdateStatus } from '@shared/api'
+import type { TodoTask } from '@core/todoist'
 import { createTursoWebBridge } from './tursoWebBridge'
 
 export type Bridge = LifeApi & {
@@ -10,6 +11,14 @@ export type Bridge = LifeApi & {
   onUpdate(cb: (s: UpdateStatus) => void): void
   onUiKey(cb: (key: string) => void): () => void
   onFullScreen(cb: (on: boolean) => void): () => void
+  /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
+  todoist?: {
+    status(): Promise<{ connected: boolean }>
+    today(): Promise<TodoTask[]>
+    quickAdd(text: string): Promise<TodoTask>
+    complete(task: TodoTask): Promise<{ paid: number }>
+    sync(force?: boolean): Promise<number>
+  }
 }
 
 declare global {
