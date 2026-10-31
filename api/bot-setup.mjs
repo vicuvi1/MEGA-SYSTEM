@@ -27,11 +27,12 @@ export default async function handler(req, res) {
     const url = `https://${host}/api/telegram?bot=${b.id}`
     try {
       const info = await tg(b.token, 'getWebhookInfo')
-      if (info?.result?.url === url) {
+      const kinds = info?.result?.allowed_updates ?? []
+      if (info?.result?.url === url && kinds.includes('callback_query')) {
         results.push({ bot: b.name, ok: true, already: true })
         continue
       }
-      const set = await tg(b.token, 'setWebhook', { url, secret_token: webhookSecret(cfg, b.id), allowed_updates: ['message'], drop_pending_updates: false })
+      const set = await tg(b.token, 'setWebhook', { url, secret_token: webhookSecret(cfg, b.id), allowed_updates: ['message', 'callback_query'], drop_pending_updates: false })
       results.push({ bot: b.name, ok: !!set?.ok, error: set?.ok ? undefined : set?.description })
     } catch (e) {
       results.push({ bot: b.name, ok: false, error: e.message })

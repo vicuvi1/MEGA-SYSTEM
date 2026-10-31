@@ -21,6 +21,7 @@ import { addDays } from '@core/dates'
 import { formatMoney } from '@core/money'
 import { getSetting, setSetting } from '../../../main/settings'
 import { queueFinanceExpense } from './financeInbox'
+import { logMoney, moneyButton } from './financeBot'
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
@@ -84,6 +85,33 @@ function addRepsInDb(db: any, name: string, amount: number): { done: number; tar
   ex.doneToday = (Number(ex.doneToday) || 0) + amount
   setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
   return { done: ex.doneToday, target: Number(ex.target) || 0 }
+}
+
+/** Which Life System expense a Finance Helper record from Telegram made (for Undo). */
+function linkExpense(db: any, txId: string, expenseId: number): void {
+  let links: Record<string, number> = {}
+  try {
+    links = JSON.parse(getSetting(db, 'tg_expense_links') || '{}')
+  } catch {
+    /* start over */
+  }
+  links[txId] = expenseId
+  const keys = Object.keys(links)
+  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete links[k]
+  setSetting(db, 'tg_expense_links', JSON.stringify(links))
+}
+
+function takeLink(db: any, txId: string): number | null {
+  try {
+    const links = JSON.parse(getSetting(db, 'tg_expense_links') || '{}')
+    const id = links[txId]
+    if (id == null) return null
+    delete links[txId]
+    setSetting(db, 'tg_expense_links', JSON.stringify(links))
+    return Number(id)
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -172,8 +200,30 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   /** One command, on the services. Returns the reply and what changed. */
   let currentDb: any = null
 
-  function run(s: Services, text: string): { reply: string; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' } } {
+  type RunOut = { reply: string; keyboard?: any; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' } }
+
+  /**
+   * A money message, the smart way (financeBot.ts): Finance Helper's parser,
+   * categories and accounts, straight into its synced data, with buttons.
+   * Also in Life System's spending log (expenses), linked for "Undo".
+   */
+  function runMoney(s: Services, text: string, key: string): RunOut | null {
+    if (!currentDb) return null
+    const money = logMoney(currentDb, text, key, s.wallet.today())
+    if (!money) return null
+    const t = money.tx
+    if (t.type !== 'expense') return { reply: money.reply, keyboard: money.keyboard }
+    const res = s.money.addExpense(t.amount, t.category, t.note ? `[Telegram] ${t.note}` : '[Telegram]', new Date(), true)
+    linkExpense(currentDb, t.id, res.expense.id)
+    return { reply: money.reply + (res.awarded ? '\n🪙 <b>+3 coins</b> (first spending logged today)' : ''), keyboard: money.keyboard }
+  }
+
+  function run(s: Services, text: string, key = ''): RunOut {
     const parsed = parseTelegramText(text)
+    if ((parsed.type === 'expense' || parsed.type === 'unknown') && !text.startsWith('/')) {
+      const money = runMoney(s, text, key)
+      if (money) return money
+    }
     switch (parsed.type) {
       case 'help':
         return { reply: formatHelpMessage() }
@@ -333,7 +383,51 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * Handles one message in one Turso transaction (with its "seen" mark). If
    * another device got there first, the copy reloads and we skip it.
    */
+  /** A tap on a button under a logged money record (account, category, undo). */
+  async function handleButton(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
+    const cq = update.callback_query
+    const chat = String(cq?.message?.chat?.id ?? '')
+    const data = String(cq?.data ?? '')
+    const key = `${botId}:cb:${cq?.id}`
+    if (!cq || !/^f[acbku]\|/.test(data)) return null
+    const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
+    if (!allowed(cfg, chat)) {
+      await answer('Not allowed')
+      return null
+    }
+    const res = await mirror.write((db) => {
+      if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null
+      db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+      const svc = services.services(db)
+      return db.transaction(() => {
+        const r = moneyButton(db as any, data, svc.wallet.today())
+        // Undo removes it from Life System's spending log too.
+        const life = r && data.startsWith('fu|') ? takeLink(db, data.split('|')[1]) : null
+        if (life) {
+          try {
+            svc.money.deleteExpense(life)
+          } catch {
+            /* already deleted */
+          }
+        }
+        return r
+      })()
+    })
+    if (!res) return null
+    await answer(res.toast)
+    await tg(update.__token, 'editMessageText', {
+      chat_id: chat,
+      message_id: cq.message.message_id,
+      text: res.text,
+      parse_mode: 'HTML',
+      ...(res.keyboard ? { reply_markup: res.keyboard } : {})
+    }).catch(() => null)
+    if (data.startsWith('fu|') || data.startsWith('fa|') || data.startsWith('fk|')) onExpense?.()
+    return res.text
+  }
+
   async function handle(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
+    if (update.callback_query) return handleButton(botId, update, cfg)
     const key = `${botId}:${update.update_id}`
     const text = String(update.message?.text ?? '').trim()
     const chat = String(update.message?.chat?.id ?? '')
@@ -350,7 +444,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           currentDb = db
           try {
             const r = db.transaction(() => {
-              const out = run(svc, text)
+              const out = run(svc, text, key)
               if (server && out.sport) {
                 const prog = addRepsInDb(db, out.sport.name, out.sport.amount)
                 if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
@@ -363,7 +457,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               }
               return out
             })()
-            return { skip: false as const, reply: r.reply, ok: true, sport: r.sport, expense: !!r.expense }
+            return { skip: false as const, reply: r.reply, keyboard: r.keyboard, ok: true, sport: r.sport, expense: !!r.expense }
           } catch (e) {
             currentDb = null
             return { skip: false as const, reply: `⚠️ ${esc((e as Error).message)}`, ok: false }
@@ -377,7 +471,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
         if (out.ok && 'expense' in out && out.expense) onExpense?.()
         addLog(text, chat, out.ok, out.reply)
-        await tg(update.__token, 'sendMessage', { chat_id: chat, text: out.reply, parse_mode: 'HTML' }).catch(() => null)
+        const keyboard = 'keyboard' in out ? out.keyboard : undefined
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text: out.reply, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
         return out.reply
       } catch (e) {
         if (e instanceof MirrorError && attempt === 0) continue // reloaded: try once more
