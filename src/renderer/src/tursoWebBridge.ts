@@ -226,13 +226,19 @@ export function createTursoWebBridge(): Bridge {
     setInterval(() => document.visibilityState === 'visible' && refresh(), 60_000)
   }
 
-  /** `ns.method(...)` on the services once they're ready. */
-  const S = <K extends keyof WebServices>(ns: K) =>
+  /**
+   * `ns.method(...)` on the services once they're ready; `own` replaces some
+   * methods. (A Proxy has no keys of its own, so spreading it gives an empty
+   * object: that lost every discipline and body action but `state`.)
+   */
+  const S = <K extends keyof WebServices>(ns: K, own: Record<string, (...a: any[]) => any> = {}) =>
     new Proxy({} as WebServices[K], {
-      get: (_t, method: string) => async (...args: unknown[]) => {
-        const svc = (await svcP)[ns] as any
-        return svc[method](...args)
-      }
+      get: (_t, method: string) =>
+        own[method] ??
+        (async (...args: unknown[]) => {
+          const svc = (await svcP)[ns] as any
+          return svc[method](...args)
+        })
     })
 
   const ensureSnapshotsTable = () =>
@@ -264,8 +270,110 @@ export function createTursoWebBridge(): Bridge {
     }
   }
 
+  const ERRORS = 'life_error_log'
+  const readErrors = (): any[] => readJson<any[]>(ERRORS) ?? []
+  const prefs = () => ({ openAtLogin: false, canAutoStart: false, keepInTray: false, matchAppThemes: store?.getItem('life_match_themes') !== '0' })
+  const upToDate = () => ({ current: 'web', state: 'up-to-date' as const, latest: null, progress: 0, error: null, checkedAt: new Date().toISOString() })
+  const snapshotDays = async (): Promise<string[]> => ((await bridge.data.cloudSnapshots?.()) ?? []).map((x: any) => x.day)
+  const backupStatus = async () => {
+    const days = await snapshotDays()
+    return { dir: 'Turso cloud (daily snapshot, 30 kept)', driveAvailable: false, passphraseSet: true, last: days[0] ? { name: days[0], at: days[0] } : null, pending: 0, count: days.length, lastError: null }
+  }
+  const noAi = async (): Promise<never> => {
+    throw new Error('AI is not set up on the website yet.')
+  }
+  const syncNow = async () => {
+    const m = await mirrorP
+    await m.refresh()
+    await applyFinance()
+    await syncAll()
+    for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed']) window.dispatchEvent(new CustomEvent(n))
+    return m
+  }
+
   const bridge = {
     ...base,
+    // Things the desktop window does, the browser's way.
+    app: {
+      toggleFullScreen: async () => {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen().catch(() => {})
+          return false
+        }
+        await document.documentElement.requestFullscreen?.().catch(() => {})
+        return !!document.fullscreenElement
+      },
+      reportError: async (message: string, detail?: string) => {
+        const list = [{ at: new Date().toISOString(), level: 'error', source: 'web', message: String(message).slice(0, 300), detail: detail?.slice(0, 2000) }, ...readErrors()].slice(0, 50)
+        store?.setItem(ERRORS, JSON.stringify(list))
+      },
+      recentErrors: async () => readErrors(),
+      openLogs: async () => '',
+      prefs: async () => prefs(),
+      setPrefs: async (p: any) => {
+        if (typeof p?.matchAppThemes === 'boolean') store?.setItem('life_match_themes', p.matchAppThemes ? '1' : '0')
+        return prefs()
+      }
+    },
+    // The website updates itself on every push; "update" just reloads.
+    updates: {
+      status: async () => upToDate(),
+      check: async () => upToDate(),
+      run: async () => {
+        window.location.reload()
+        return upToDate()
+      }
+    },
+    hud: { hide: async () => {}, toggle: async () => {}, show: async () => {} },
+    // Turso is the sync on the web: "Sync" fetches what other devices changed now.
+    sync: {
+      config: async () => ({ syncUrl: 'Turso (automatic)', syncSecret: '', autoSyncOnStartup: true, syncIntervalMinutes: 1, lastSyncedAt: (await mirrorP).syncedAt, lastSyncedCount: 0 }),
+      saveConfig: async () => bridge.sync.config(),
+      test: async () => {
+        const t = Date.now()
+        await syncNow()
+        return { success: true, latencyMs: Date.now() - t, message: 'Connected to your Turso cloud database', count: 0 }
+      },
+      pull: async () => {
+        await syncNow()
+        return { eventsProcessed: 0, restoredDays: [], restoredStreak: 0, previousStreak: 0, errors: [] }
+      }
+    },
+    // Backups on the web are the daily cloud snapshots in Turso.
+    backup: {
+      status: backupStatus,
+      chooseDir: backupStatus,
+      setPassphrase: backupStatus,
+      runNow: async () => {
+        await bridge.data.saveDailySnapshot?.()
+        return backupStatus()
+      },
+      list: async () => (await snapshotDays()).reverse(),
+      verifyLatest: async () => {
+        const days = await snapshotDays()
+        return { ok: days.length > 0, name: days[0] ?? null, detail: days.length ? `Cloud snapshot of ${days[0]}` : 'No snapshot yet' }
+      },
+      restore: async (name: string) => {
+        if (!(await bridge.data.restoreCloudSnapshot?.(name))) throw new Error('That snapshot could not be restored')
+      }
+    },
+    calendar: {
+      config: async () => ({ feedUrl: '', enabled: false, autoSyncIntervalMin: 0, lastSyncAt: null, lastError: 'Google Calendar works in the desktop app', cachedEventsCount: 0 }),
+      saveConfig: async () => bridge.calendar.config(),
+      sync: async () => ({ events: [], count: 0 }),
+      events: async () => [],
+      clear: async () => {}
+    },
+    ai: {
+      config: async () => ({ ...(await base.ai.config()), openRouterKey: '', geminiKey: '' }),
+      saveConfig: noAi,
+      test: async () => ({ ok: false, message: 'AI is not set up on the website yet.', model: '' }),
+      generateRewards: noAi,
+      performanceReport: noAi,
+      askCoach: noAi,
+      decomposeTask: noAi,
+      inspectProduct: noAi
+    },
     onLocked: (cb: () => void) => {
       lockListeners.add(cb)
       return () => lockListeners.delete(cb)
@@ -304,14 +412,8 @@ export function createTursoWebBridge(): Bridge {
     money: S('money') as Bridge['money'],
     shields: S('shields') as Bridge['shields'],
     economy: S('economy') as Bridge['economy'],
-    discipline: {
-      ...(S('discipline') as Bridge['discipline']),
-      state: async () => withMan(await (await svcP).discipline.state())
-    },
-    body: {
-      ...(S('body') as Bridge['body']),
-      state: async () => withSportTrack(await (await svcP).body.state())
-    },
+    discipline: S('discipline', { state: async () => withMan(await (await svcP).discipline.state()) }) as Bridge['discipline'],
+    body: S('body', { state: async () => withSportTrack(await (await svcP).body.state()) }) as Bridge['body'],
     connections: {
       ...base.connections,
       // Pays the days Finance Helper on this device has records for (Waky pays

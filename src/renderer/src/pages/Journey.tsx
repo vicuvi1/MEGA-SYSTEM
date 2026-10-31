@@ -3,7 +3,7 @@ import { addDays } from '@core/dates'
 import { effective } from '@core/ledger'
 import { RANKS, type HunterRankDef } from '@core/levels'
 import type { LedgerEntry, Rule, Summary, AIPerformanceReport } from '@shared/api'
-import { life } from '../bridge'
+import { features, life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES } from '../modules'
 import { Coins, describeEntry, useToast } from '../ui'
@@ -209,6 +209,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          {features.ai && (
           <button
             className="btn small ai-sparkle-btn"
             onClick={generateReport}
@@ -216,6 +217,7 @@ export function Journey({ summary, rules }: { summary: Summary; rules: Rule[] })
           >
             <Icon name="spark" size={14} /> {loadingReport ? 'Oracle Synthesizing...' : '✨ Generate AI Tactical Evaluation'}
           </button>
+          )}
           <button className="btn small ghost" onClick={copyRecap}>
             📋 Copy Status Card
           </button>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { CalendarEvent, ScheduleState } from '@shared/api'
-import { life } from './bridge'
+import { features, life } from './bridge'
 import { Icon } from './Icon'
 import { useAction, useToast } from './ui'
 import { KIND } from './pages/Schedule'
@@ -337,6 +337,7 @@ export function DualTimeline({ schedule, onSchedule, onGo }: Props) {
           </button>
 
           {/* Sync Button */}
+          {features.calendar && (
           <button
             className="timeline-toggle-btn"
             onClick={handleManualSync}
@@ -345,6 +346,7 @@ export function DualTimeline({ schedule, onSchedule, onGo }: Props) {
           >
             {syncing ? 'Syncing...' : '🔄 Sync Cal'}
           </button>
+          )}
         </div>
       </div>
 

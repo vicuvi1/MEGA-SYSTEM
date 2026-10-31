@@ -14,7 +14,8 @@ import { POPULAR_MODELS, DEFAULT_AI_CONFIG } from '@core/ai'
 import { DEFAULT_CALENDAR_CONFIG } from '@shared/api'
 import { UpdatePanel } from '../updates'
 import { useUiPrefs } from '../uiPrefs'
-import { life } from '../bridge'
+import { features, life } from '../bridge'
+import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
 import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundSystemOracle, soundWarning } from '../sound'
@@ -545,8 +546,9 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       else if (data.streakDays != null) {
         const streak = Number(data.streakDays) || 1
         if (!window.confirm(`Import MAN Spartan streak from "${file.name}" (Streak: Day ${streak})?`)) return
-        const now = new Date().toISOString().slice(0, 10)
-        await life.discipline.setStart(now)
+        // MAN's Day N started N-1 days ago (setting today wiped the streak).
+        const d = await life.discipline.state()
+        await life.discipline.setStart(addDays(d.today, -streak + 1))
         importedType = `MAN Spartan Discipline (Day ${streak})`
       }
       // 4. Full Life System Unified Backup
@@ -596,7 +598,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
 
   return (
     <div className="settings">
-      <UpdatePanel status={update} onStatus={onUpdate} />
+      {features.updates && <UpdatePanel status={update} onStatus={onUpdate} />}
 
       <section className="panel">
         <header className="panel-head">
@@ -752,6 +754,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </form>
       </section>
 
+      {features.ai && (
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -870,7 +873,9 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </button>
         </div>
       </section>
+      )}
 
+      {features.calendar && (
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -947,8 +952,10 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </button>
         </div>
       </section>
+      )}
 
       
+      {features.cloudflareSync && (
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -1085,6 +1092,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           )}
         </div>
       </section>
+      )}
 
       <section className="panel">
         <header className="panel-head">
@@ -1394,9 +1402,11 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </ul>
         )}
         <div className="row">
-          <button className="btn" onClick={() => life.app.openLogs()}>
-            Open log folder
-          </button>
+          {features.logFolder && (
+            <button className="btn" onClick={() => life.app.openLogs()}>
+              Open log folder
+            </button>
+          )}
           <button className="btn ghost" onClick={() => life.app.recentErrors().then(setLogs)}>
             Refresh
           </button>

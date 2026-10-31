@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { life } from './bridge'
+import { features, life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
 import { soundCoin, soundSuccess, soundTick, soundMechanicalClick } from './sound'
 import { useToast } from './ui'
@@ -225,6 +225,10 @@ export function QuickCommandBar({ open, onClose, onRefreshWallet }: Props) {
       }
 
       // 6. Natural AI Oracle Tool Execution: Fallback to System Oracle
+      if (!features.ai) {
+        toast(`Not sure what "${text.slice(0, 40)}" means. Try: "45 lunch", "50 pushups", "task Read 10 pages", "check in".`, 'info')
+        return
+      }
       const res = await life.ai.askCoach(text)
       if (res.toolExecutions && res.toolExecutions.length > 0) {
         const executed = res.toolExecutions.map((e) => e.result).join(' · ')

@@ -20,4 +20,13 @@ declare global {
 
 /** Real IPC bridge inside Electron; live Turso Cloud client when opened in web/mobile browser. */
 export const isDemo = !window.life
+
+/** What works where: the website has no AI key, Google Calendar, Cloudflare sync, log folder or installer updates. */
+export const features = {
+  ai: !!window.life,
+  calendar: !!window.life,
+  cloudflareSync: !!window.life,
+  logFolder: !!window.life,
+  updates: !!window.life
+}
 export const life: Bridge = window.life ?? createTursoWebBridge()

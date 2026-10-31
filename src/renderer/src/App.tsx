@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
-import { isDemo, life } from './bridge'
+import { features, isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { Coins, ToastProvider, useToast } from './ui'
@@ -127,7 +127,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         soundFanfare()
         onWallet()
       } else {
-        toast('Mobile Cloud Sync: Up to date! (0 pending)', 'good')
+        toast(features.cloudflareSync ? 'Mobile Cloud Sync: Up to date! (0 pending)' : 'Synced: everything is up to date', 'good')
+        onWallet()
         soundCoin()
       }
     } catch (e: any) {
@@ -349,7 +350,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         soundTick()
         setQuickCommandOpen((o) => !o)
       }
-      if (key === 'oracle') {
+      if (key === 'oracle' && features.ai) {
         soundSystemOracle()
         setOracleOpen((o) => !o)
       }
@@ -404,7 +405,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       go('schedule')
     }),
     actions: [
-      { id: 'a:oracle', label: 'Summon Solo Leveling System Oracle', hint: 'Ctrl+Shift+A', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setOracleOpen(true) },
+      ...(features.ai ? [{ id: 'a:oracle', label: 'Summon Solo Leveling System Oracle', hint: 'Ctrl+Shift+A', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setOracleOpen(true) } as const] : []),
       { id: 'a:sidebar', label: 'Collapse or expand the sidebar', hint: 'Ctrl+B', group: 'Actions', icon: 'list', run: toggleSidebar },
       { id: 'a:full', label: 'Full screen', hint: 'F11', group: 'Actions', icon: 'spark', run: () => life.app.toggleFullScreen() },
       { id: 'a:urge', label: 'Urge crusher', hint: 'Ctrl+Alt+U', group: 'Actions', icon: 'bolt', color: '#FF8A3D', run: () => {
@@ -414,9 +415,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         setUrgeOpen(true)
       } },
       { id: 'a:backup', label: 'Back up now', group: 'Actions', icon: 'cloud', run: () => act(() => life.backup.runNow(), 'Backup written').then((b) => b && setBackup(b)) },
-      { id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) },
+      ...(features.updates ? [{ id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) } as const] : []),
       { id: 'a:sync', label: 'Check connected apps now', group: 'Actions', icon: 'link', run: () => act(() => life.connections.sync()).then((r) => r && onWallet()) },
-      { id: 'a:mobile-sync', label: 'Sync Mobile Telegram Logs (Heal Streaks)', hint: 'Cloudflare 24/7', group: 'Actions', icon: 'cloud', color: '#00d2ff', run: triggerMobileSync },
+      { id: 'a:mobile-sync', label: features.cloudflareSync ? 'Sync Mobile Telegram Logs (Heal Streaks)' : 'Sync now (get what other devices changed)', hint: features.cloudflareSync ? 'Cloudflare 24/7' : 'Turso', group: 'Actions', icon: 'cloud', color: '#00d2ff', run: triggerMobileSync },
       { id: 'a:system-quest', label: 'Summon Quest Complete Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#00d2ff', run: () => setSystemModal({ open: true, type: 'quest-complete', data: { coins: 50, xp: 100 } }) },
       { id: 'a:system-level', label: 'Summon Level Advancement Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#c8f135', run: () => setSystemModal({ open: true, type: 'level-up', data: { level: summary?.level.level ?? 1, prevLevel: Math.max(1, (summary?.level.level ?? 2) - 1), statPoints: 3, onAction: () => setPage('journey') } }) },
       { id: 'a:system-warning', label: 'Summon Penalty Warning Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'shield', color: '#f43f5e', run: () => setSystemModal({ open: true, type: 'penalty-warning', data: { onAction: () => { setView((v) => ({ ...v, discipline: 'system' })); setPage('discipline'); setRevealed(true); setUrgeOpen(true); } } }) },
@@ -523,7 +524,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <Icon name="expand" size={15} />
             </button>
           )}
-          <button
+          {features.ai && <button
             className="system-oracle-header-btn"
             onClick={() => setOracleOpen(true)}
             title="Summon Solo Leveling System Oracle (Ctrl+Shift+A)"
@@ -531,7 +532,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <span className="oracle-dot" />
             <span className="oracle-text">SYSTEM ORACLE</span>
             <kbd>Ctrl+Shift+A</kbd>
-          </button>
+          </button>}
           <button
             className="game-rules-header-btn"
             onClick={() => setPage('rules')}
@@ -545,7 +546,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             className={`mobile-sync-header-btn ${isSyncingMobile ? 'syncing' : ''}`}
             onClick={triggerMobileSync}
             disabled={isSyncingMobile}
-            title="Sync Telegram mobile logs, heal streaks & credit XP/coins"
+            title={features.cloudflareSync ? 'Sync Telegram mobile logs, heal streaks & credit XP/coins' : 'Get what your other devices and the bots changed, right now'}
           >
             <span
               style={{
@@ -555,7 +556,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             >
               {isSyncingMobile ? '🔄' : '⚡'}
             </span>
-            <span>{isSyncingMobile ? 'SYNCING...' : 'SYNC MOBILE'}</span>
+            <span>{isSyncingMobile ? 'SYNCING...' : features.cloudflareSync ? 'SYNC MOBILE' : 'SYNC NOW'}</span>
           </button>
 
           <div className="top-actions">

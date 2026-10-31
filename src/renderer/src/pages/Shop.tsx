@@ -24,7 +24,7 @@ import {
   EconomyPreset,
   Rule
 } from '@shared/api'
-import { life } from '../bridge'
+import { features, life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction, useToast } from '../ui'
 import { soundFanfare, soundSpend, soundTick } from '../sound'
@@ -783,6 +783,7 @@ export function Shop({ state, onState, onWallet }: Props) {
             </button>
           )}
 
+          {features.ai && (
           <button
             className="btn small ai-sparkle-btn"
             onClick={() => {
@@ -793,6 +794,7 @@ export function Shop({ state, onState, onWallet }: Props) {
           >
             <Icon name="spark" size={14} /> ✨ AI Rewards
           </button>
+          )}
         </div>
       </div>
 
@@ -1482,6 +1484,7 @@ export function Shop({ state, onState, onWallet }: Props) {
           <div className="sheet-card">
             <h3>{editingGoal.id ? 'Edit Wishlist Goal' : 'New Wishlist Mega Goal'}</h3>
 
+            {features.ai && (
             <div className="ai-inspector-box">
               <div className="ai-inspector-header">
                 <span className="ai-sparkle-tag">✨ AI Smart Inspector</span>
@@ -1505,6 +1508,7 @@ export function Shop({ state, onState, onWallet }: Props) {
                 </button>
               </div>
             </div>
+            )}
 
             <label>
               Goal Name

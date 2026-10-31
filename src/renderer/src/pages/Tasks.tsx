@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { TASK_MAX_COINS, TASK_MAX_XP } from '@core/plan'
 import type { Category, Repeat, TaskInput, TasksState, TaskView, TaskDecompositionResult } from '@shared/api'
-import { life } from '../bridge'
+import { features, life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction, useToast } from '../ui'
 import { soundSuccess, soundTick, soundSystemOracle, soundMechanicalClick, soundCoin } from '../sound'
@@ -830,6 +830,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
             </button>
 
             {/* AI DECOMPOSE BUTTON */}
+            {features.ai && (
             <button
               className="todoist-action-btn"
               style={{ color: '#00d2ff', borderColor: 'rgba(0, 210, 255, 0.3)' }}
@@ -841,6 +842,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
             >
               <span style={{ fontSize: 14 }}>✨</span> AI Decompose
             </button>
+            )}
           </div>
         </header>
 
@@ -905,6 +907,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
               <button className="todoist-starter-chip" onClick={() => handleAddStarterQuest('p1')}>
                 + Urgent P1 Objective
               </button>
+              {features.ai && (
               <button
                 className="todoist-starter-chip"
                 style={{ borderColor: '#00d2ff', color: '#00d2ff' }}
@@ -912,6 +915,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
               >
                 ✨ AI Decompose Quest
               </button>
+              )}
             </div>
           </div>
         )}
@@ -1070,6 +1074,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
                                 </button>
                               </>
                             )}
+                            {features.ai && (
                             <button
                               className="card-action-mini-btn"
                               title="Decompose with AI"
@@ -1080,6 +1085,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
                             >
                               ✨ AI
                             </button>
+                            )}
                             <button
                               className="card-action-mini-btn"
                               title="Edit Quest"
@@ -1229,6 +1235,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
                               </span>
                             )}
                             <span className="todoist-reward-badge">+{t.coins} 🪙</span>
+                            {features.ai && (
                             <button
                               className="card-action-mini-btn"
                               title="AI Decompose"
@@ -1239,6 +1246,7 @@ export function Tasks({ state, onState, onWallet }: Props) {
                             >
                               ✨ AI
                             </button>
+                            )}
                             <button
                               className="card-action-mini-btn"
                               title="Edit Quest"
@@ -1361,10 +1369,10 @@ export function Tasks({ state, onState, onWallet }: Props) {
             setEditingTask(contextMenu.task)
             setContextMenu(null)
           }}
-          onDecompose={() => {
+          onDecompose={features.ai ? () => {
             startDecomposition(contextMenu.task)
             setContextMenu(null)
-          }}
+          } : undefined}
           onDuplicate={() => {
             handleDuplicateTask(contextMenu.task)
             setContextMenu(null)
@@ -1597,7 +1605,7 @@ function TaskContextMenu({
   onDelete: () => void
   onToggle: () => void
   onEdit: () => void
-  onDecompose: () => void
+  onDecompose?: () => void
   onDuplicate: () => void
   onSetPriority: (p: 1 | 2 | 3) => void
   onMoveStatus: (status: 'backlog' | 'todo' | 'inprogress' | 'done') => void
@@ -1652,10 +1660,12 @@ function TaskContextMenu({
         <span>{task.done ? 'Mark Incomplete' : 'Mark as Complete (+Coins)'}</span>
       </button>
 
-      <button className="cm-item" onClick={onDecompose}>
-        <Icon name="spark" size={14} />
-        <span>AI Subtask Decomposition</span>
-      </button>
+      {onDecompose && (
+        <button className="cm-item" onClick={onDecompose}>
+          <Icon name="spark" size={14} />
+          <span>AI Subtask Decomposition</span>
+        </button>
+      )}
 
       <button className="cm-item" onClick={onDuplicate}>
         <Icon name="tasks" size={14} />
