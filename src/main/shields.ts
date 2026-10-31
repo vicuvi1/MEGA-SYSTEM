@@ -1,7 +1,7 @@
 import { dayKey } from '@core/dates'
 import { planBuyShield } from '@core/shields'
 import type { DB } from './db'
-import { getSetting, setSetting } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 
 export class ShieldService {

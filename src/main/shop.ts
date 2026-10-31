@@ -4,7 +4,8 @@ import { balance, effective, LedgerError, totalXp } from '@core/ledger'
 import { levelInfo } from '@core/levels'
 import { chestRef, planRedeem, rollChest, unopenedChests, validateReward, type Reward, type Tier } from '@core/shop'
 import type { RewardInput, ShopState } from '@shared/api'
-import { getSetting, setSetting, type DB } from './db'
+import type { DB } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 
 interface RewardRow {

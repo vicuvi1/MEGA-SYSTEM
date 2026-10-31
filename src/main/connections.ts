@@ -8,7 +8,8 @@ import { addDays, daysBetween } from '@core/dates'
 import { LedgerError } from '@core/ledger'
 import { bestDayStreak, dayStreak } from '@core/streaks'
 import type { ConnectionKind, ConnectionsState } from '@shared/api'
-import { getSetting, setSetting, type DB } from './db'
+import type { DB } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 
 export interface Candidates {

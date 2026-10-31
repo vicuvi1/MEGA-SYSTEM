@@ -1,6 +1,6 @@
 import { computeDailyExpenseSummary, validateExpense, type DailyExpenseSummary, type Expense } from '@core/money'
 import type { DB } from './db'
-import { getSetting, setSetting } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 import type { FinanceHost } from './apps/finance'
 

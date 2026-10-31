@@ -5,7 +5,8 @@ import {
 } from '@core/discipline'
 import { effective, LedgerError } from '@core/ledger'
 import type { DisciplineState } from '@shared/api'
-import { getSetting, setSetting, type DB } from './db'
+import type { DB } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 
 export class Discipline {

@@ -1,6 +1,6 @@
 import { computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, type SleepLog, type SleepSummary } from '@core/sleep'
 import type { DB } from './db'
-import { getSetting, setSetting } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 
 interface SleepLogRow {

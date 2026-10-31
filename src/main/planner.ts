@@ -5,7 +5,7 @@ import {
 } from '@core/plan'
 import type { BlockInput, BlockView, Category, ScheduleState, TaskInput, TasksState, TaskView } from '@shared/api'
 import type { DB } from './db'
-import { getSetting, setSetting } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 import type { ShieldService } from './shields'
 

@@ -1,6 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import type { AuthStatus } from '@shared/api'
-import { getSetting, setSetting, type DB } from './db'
+import type { DB } from './db'
+import { getSetting, setSetting } from './settings'
 
 const MAX_TRIES = 5
 const LOCKOUT_MS = 30_000
