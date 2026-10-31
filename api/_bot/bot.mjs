@@ -820,7 +820,7 @@ var BrowserDb = class {
 		const changes = this.raw.getRowsModified();
 		const after = this.scalar("SELECT last_insert_rowid()");
 		if (isWrite(change.sql)) {
-			const inserted = changes > 0 && after !== before && /^\s*INSERT/i.test(change.sql);
+			const inserted = changes > 0 && /^\s*INSERT/i.test(change.sql) && (after !== before || !/\bON\s+CONFLICT\b/i.test(change.sql));
 			this.changes.push(inserted ? this.withExplicitId(change, after) : change);
 		}
 		return {
@@ -896,6 +896,13 @@ var Mirror = class {
 	queue = Promise.resolve();
 	listeners = /* @__PURE__ */ new Set();
 	refreshing = null;
+	/**
+	* A marker every change sets in Turso (settings.data_version): a refresh
+	* reads it first and downloads everything only when it moved, instead of
+	* the whole database every minute.
+	*/
+	version = null;
+	rebuiltAt = 0;
 	/** When the copy last matched Turso (null: only the cached copy so far). */
 	syncedAt = null;
 	lastError = null;
@@ -955,8 +962,15 @@ var Mirror = class {
 			const result = db.transaction(() => fn(db))();
 			const changes = db.takeChanges();
 			if (!changes.length) return result;
+			const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+			const mark = {
+				sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+				args: [version]
+			};
 			try {
-				await this.turso.writeAtomic(changes);
+				await this.turso.writeAtomic([...changes, mark]);
+				db.raw.run(mark.sql, mark.args);
+				this.version = version;
 				this.lastError = null;
 			} catch (e) {
 				this.lastError = e.message;
@@ -972,7 +986,19 @@ var Mirror = class {
 	/** Reloads the copy from Turso (e.g. after the phone or a bot changed something). */
 	refresh() {
 		if (this.refreshing) return this.refreshing;
-		this.refreshing = this.lock(() => this.rebuild()).then(() => this.emit()).finally(() => {
+		this.refreshing = this.lock(async () => {
+			if (this.version && Date.now() - this.rebuiltAt < 9e5) {
+				const [r] = await this.turso.readMany([{
+					sql: "SELECT value FROM settings WHERE key = 'data_version'",
+					args: []
+				}]);
+				if (!(r instanceof Error) && String(r.rows[0]?.[0] ?? "") === this.version) {
+					this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+					return;
+				}
+			}
+			await this.rebuild();
+		}).then(() => this.emit()).finally(() => {
 			this.refreshing = null;
 		});
 		return this.refreshing;
@@ -1061,8 +1087,27 @@ var Mirror = class {
 		const old = this.db;
 		this.db = local;
 		this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+		this.rebuiltAt = Date.now();
+		try {
+			const row = this.db?.raw.exec("SELECT value FROM settings WHERE key = 'data_version'")[0]?.values[0]?.[0];
+			this.version = row == null ? null : String(row);
+		} catch {
+			this.version = null;
+		}
 		old?.raw.close();
 		await this.seedDefaults();
+		if (!this.version) {
+			const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+			const mark = {
+				sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+				args: [version]
+			};
+			try {
+				await this.turso.writeAtomic([mark]);
+				local.raw.run(mark.sql, mark.args);
+				this.version = version;
+			} catch {}
+		}
 		this.persist();
 	}
 	async seedDefaults() {

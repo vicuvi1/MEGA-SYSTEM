@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { features, isDemo, life } from './bridge'
@@ -7,25 +7,8 @@ import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { Coins, ToastProvider, useToast } from './ui'
 import { LockScreen } from './pages/LockScreen'
 import { Today } from './pages/Today'
-import { History } from './pages/History'
-import { Rules } from './pages/Rules'
-import { Settings } from './pages/Settings'
 import { Soon } from './pages/Soon'
-import { Shop } from './pages/Shop'
-import { Tasks } from './pages/Tasks'
-import { Schedule } from './pages/Schedule'
-import { Discipline } from './pages/Discipline'
-import { Body } from './pages/Body'
-import { Sleep } from './pages/Sleep'
-import { Money } from './pages/Money'
-import { Connected } from './pages/Connected'
-import { BotCenter } from './pages/BotCenter'
-import { Journey } from './pages/Journey'
-import { SystemOracleDrawer } from './SystemOracleDrawer'
-import { QuickCommandBar } from './QuickCommandBar'
 import { RpgFloatingPopups } from './RpgFloatingPopups'
-import { SoloSystemModal } from './SoloSystemModal'
-import { SoloPlayerModal } from './SoloPlayerModal'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
@@ -40,6 +23,29 @@ import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { soundTick, stopAllSounds, soundSystemOracle, soundFanfare, soundCoin, soundWarning } from './sound'
 import './gameCards.css'
+
+// Pages and pop-ups load when first opened (Today and the lock screen come at once).
+function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) {
+  return lazy(() => load().then((m) => ({ default: m[name] })))
+}
+const History = lazyNamed(() => import('./pages/History'), 'History')
+const Rules = lazyNamed(() => import('./pages/Rules'), 'Rules')
+const Settings = lazyNamed(() => import('./pages/Settings'), 'Settings')
+const Shop = lazyNamed(() => import('./pages/Shop'), 'Shop')
+const Tasks = lazyNamed(() => import('./pages/Tasks'), 'Tasks')
+const Schedule = lazyNamed(() => import('./pages/Schedule'), 'Schedule')
+const Discipline = lazyNamed(() => import('./pages/Discipline'), 'Discipline')
+const Body = lazyNamed(() => import('./pages/Body'), 'Body')
+const Sleep = lazyNamed(() => import('./pages/Sleep'), 'Sleep')
+const Money = lazyNamed(() => import('./pages/Money'), 'Money')
+const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
+const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
+const Journey = lazyNamed(() => import('./pages/Journey'), 'Journey')
+const SystemOracleDrawer = lazyNamed(() => import('./SystemOracleDrawer'), 'SystemOracleDrawer')
+const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
+const SoloSystemModal = lazyNamed(() => import('./SoloSystemModal'), 'SoloSystemModal')
+const SoloPlayerModal = lazyNamed(() => import('./SoloPlayerModal'), 'SoloPlayerModal')
+
 
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
@@ -670,6 +676,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <AnimatePresence initial={false}>
           {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.08 }}>
             <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
+            <Suspense fallback={<div className="empty">Loading…</div>}>
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
             )}
@@ -689,31 +696,18 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'rules' && <Rules rules={rules} onChange={setRules} summary={summary} onGo={setPage} onOracle={() => setOracleOpen(true)} onModal={(type, data) => setSystemModal({ open: true, type, data })} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}
             {current.phase > 0 && <Soon module={current} />}
+            </Suspense>
             </ErrorBoundary>
           </motion.main>}
         </AnimatePresence>
-        <SystemOracleDrawer
-          open={oracleOpen}
-          onClose={() => setOracleOpen(false)}
-          summary={summary}
-        />
-        <SoloSystemModal
-          open={systemModal.open}
-          onClose={() => setSystemModal((s) => ({ ...s, open: false }))}
-          type={systemModal.type}
-          data={systemModal.data}
-        />
-        <SoloPlayerModal
-          open={playerModalOpen}
-          onClose={() => setPlayerModalOpen(false)}
-          summary={summary}
-          onGo={go}
-        />
-        <QuickCommandBar
-          open={quickCommandOpen}
-          onClose={() => setQuickCommandOpen(false)}
-          onRefreshWallet={onWallet}
-        />
+        <Suspense fallback={null}>
+          {oracleOpen && <SystemOracleDrawer open onClose={() => setOracleOpen(false)} summary={summary} />}
+          {systemModal.open && (
+            <SoloSystemModal open onClose={() => setSystemModal((s) => ({ ...s, open: false }))} type={systemModal.type} data={systemModal.data} />
+          )}
+          {playerModalOpen && <SoloPlayerModal open onClose={() => setPlayerModalOpen(false)} summary={summary} onGo={go} />}
+          {quickCommandOpen && <QuickCommandBar open onClose={() => setQuickCommandOpen(false)} onRefreshWallet={onWallet} />}
+        </Suspense>
         <MobileBottomBar page={page} onGo={go} onQuickCommand={() => setQuickCommandOpen(true)} />
         <RpgFloatingPopups />
       </div>

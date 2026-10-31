@@ -64,6 +64,13 @@ export class Mirror {
   private queue: Promise<unknown> = Promise.resolve()
   private listeners = new Set<() => void>()
   private refreshing: Promise<void> | null = null
+  /**
+   * A marker every change sets in Turso (settings.data_version): a refresh
+   * reads it first and downloads everything only when it moved, instead of
+   * the whole database every minute.
+   */
+  private version: string | null = null
+  private rebuiltAt = 0
   /** When the copy last matched Turso (null: only the cached copy so far). */
   syncedAt: string | null = null
   lastError: string | null = null
@@ -133,8 +140,12 @@ export class Mirror {
       const result = db.transaction(() => fn(db))()
       const changes = db.takeChanges()
       if (!changes.length) return result
+      const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      const mark = { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [version] }
       try {
-        await this.turso.writeAtomic(changes)
+        await this.turso.writeAtomic([...changes, mark])
+        db.raw.run(mark.sql, mark.args)
+        this.version = version
         this.lastError = null
       } catch (e) {
         this.lastError = (e as Error).message
@@ -156,7 +167,17 @@ export class Mirror {
   /** Reloads the copy from Turso (e.g. after the phone or a bot changed something). */
   refresh(): Promise<void> {
     if (this.refreshing) return this.refreshing
-    this.refreshing = this.lock(() => this.rebuild())
+    this.refreshing = this.lock(async () => {
+      // Nothing changed since our copy (and it's not old): skip the download.
+      if (this.version && Date.now() - this.rebuiltAt < 15 * 60_000) {
+        const [r] = await this.turso.readMany([{ sql: "SELECT value FROM settings WHERE key = 'data_version'", args: [] }])
+        if (!(r instanceof Error) && String(r.rows[0]?.[0] ?? '') === this.version) {
+          this.syncedAt = new Date().toISOString()
+          return
+        }
+      }
+      await this.rebuild()
+    })
       .then(() => this.emit())
       .finally(() => {
         this.refreshing = null
@@ -248,10 +269,29 @@ export class Mirror {
     const old = this.db
     this.db = local
     this.syncedAt = new Date().toISOString()
+    this.rebuiltAt = Date.now()
+    try {
+      const row = this.db?.raw.exec("SELECT value FROM settings WHERE key = 'data_version'")[0]?.values[0]?.[0]
+      this.version = row == null ? null : String(row)
+    } catch {
+      this.version = null
+    }
     old?.raw.close()
 
     // Defaults the services expect (point rules, exercises), like the desktop seeds them.
     await this.seedDefaults()
+    if (!this.version) {
+      // First copy of a database without the marker yet: set it.
+      const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      const mark = { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [version] }
+      try {
+        await this.turso.writeAtomic([mark])
+        local.raw.run(mark.sql, mark.args)
+        this.version = version
+      } catch {
+        /* next refresh downloads again */
+      }
+    }
     this.persist()
   }
 

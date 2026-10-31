@@ -115,4 +115,26 @@ describe('Mirror', () => {
     await expect(mirror.write((db) => new Wallet(db as any).award('sleep.up_on_time'))).rejects.toThrow()
     expect(count(remote, "SELECT COUNT(*) FROM ledger WHERE rule_id = 'sleep.up_on_time'")).toBe(1)
   })
+
+  it('a refresh with nothing new is one tiny read; a change from another device still arrives', async () => {
+    const remote = fakeTurso()
+    const a = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await a.ready
+    const b = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await b.ready
+    const calls = vi.fn()
+    const realFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async (url: string, init: any) => {
+      calls(JSON.parse(init.body).requests.length)
+      return (realFetch as any)(url, init)
+    })
+    await b.refresh()
+    expect(calls).toHaveBeenCalledTimes(1) // just the version check
+    await a.write((db) => new Wallet(db as any).award('body.workout_done'))
+    calls.mockClear()
+    await b.refresh()
+    expect(calls.mock.calls.length).toBeGreaterThan(1) // it downloaded again
+    const balance = await b.read((db) => new Wallet(db as any).summary().balance)
+    expect(balance).toBe(count(remote, 'SELECT COALESCE(SUM(coins), 0) FROM ledger'))
+  })
 })

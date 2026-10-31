@@ -10,6 +10,8 @@ export interface UiPrefs {
   sound: boolean
   volume: number
   name: string
+  /** Lighter: looping effects play once, no glass blur, no scanlines (Settings → Appearance). */
+  calm: boolean
 }
 
 export const ACCENTS: Record<AccentColor, string> = {
@@ -22,7 +24,7 @@ export const ACCENTS: Record<AccentColor, string> = {
 
 
 const KEY = 'ls.ui'
-const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '' }
+const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '', calm: true }
 
 function load(): UiPrefs {
   try {
@@ -67,6 +69,7 @@ const systemDark = typeof matchMedia === 'function' ? matchMedia('(prefers-color
 export function applyTheme(): void {
   const t = current.theme === 'system' ? (systemDark?.matches === false ? 'light' : 'dark') : current.theme
   document.documentElement.dataset.theme = t
+  document.documentElement.classList.toggle('calm', current.calm !== false)
 }
 
 systemDark?.addEventListener('change', () => current.theme === 'system' && applyTheme())

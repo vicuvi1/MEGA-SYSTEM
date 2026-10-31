@@ -622,6 +622,13 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 10, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
           <label className="check toggle-row" style={{ margin: 0 }}>
+            <input type="checkbox" checked={ui.calm !== false} onChange={(e) => setUi({ calm: e.target.checked })} />
+            <span>
+              Calm mode
+              <small>Lighter and faster: effects play once instead of looping, no glass blur. Turn off for the full Solo Leveling effects.</small>
+            </span>
+          </label>
+          <label className="check toggle-row" style={{ margin: 0 }}>
             <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ sound: e.target.checked })} />
             <span>
               Cyberpunk & Solo Leveling Audio Effects

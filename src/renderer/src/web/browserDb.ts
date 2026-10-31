@@ -127,7 +127,10 @@ export class BrowserDb {
     const changes = this.raw.getRowsModified()
     const after = this.scalar('SELECT last_insert_rowid()')
     if (isWrite(change.sql)) {
-      const inserted = changes > 0 && after !== before && /^\s*INSERT/i.test(change.sql)
+      // SQLite sets last_insert_rowid on every successful INSERT, even when the
+      // number equals the previous one (another table's row); only an upsert
+      // that updated instead leaves it untouched.
+      const inserted = changes > 0 && /^\s*INSERT/i.test(change.sql) && (after !== before || !/\bON\s+CONFLICT\b/i.test(change.sql))
       this.changes.push(inserted ? this.withExplicitId(change, after) : change)
     }
     return { changes, lastInsertRowid: after }

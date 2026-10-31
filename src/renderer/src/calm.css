@@ -1,0 +1,23 @@
+/* Calm mode (on by default, Settings → Appearance): the app stays still and
+   light. Looping decorations play once, glass blur and scanlines are off;
+   they kept a phone busy repainting while nothing happened. */
+html.calm *,
+html.calm *::before,
+html.calm *::after {
+  animation-iteration-count: 1 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html.calm .solo-scanline,
+html.calm .solo-pulse-beacon,
+html.calm .greeting-pulse-beacon {
+  display: none !important;
+}
+
+/* Spinners still spin: they show something is happening. */
+html.calm .spin,
+html.calm [class*='spinner'],
+html.calm [class*='loading'] {
+  animation-iteration-count: infinite !important;
+}
