@@ -125,6 +125,13 @@ describe('focus, plans and goals (saved in Turso)', () => {
     expect(stopped).toMatch(/Finished “Gym”\?/)
     const kb = sent.filter((m) => m.method === 'editMessageText').pop()!.body.reply_markup
     expect(kb.inline_keyboard[0][0]).toMatchObject({ text: '✅ Yes, tick it', callback_data: `pp|${day}|1` })
+    // The sleep coach asks how you slept under the wake-up; a tap saves it.
+    expect(await say('/wake')).toMatch(/How did you sleep\?/)
+    const wakeKb = sent.filter((m) => m.method === 'sendMessage').pop()!.body.reply_markup
+    expect(wakeKb.inline_keyboard[0]).toHaveLength(5)
+    const rated = await bots.handleUpdate('1:x', { update_id: ++id, callback_query: { id: 'sq1', data: `sq|${day}|2`, message: { chat: { id: 42 }, message_id: 11, text: 'Wake-up logged: 07:00\n\n😴 How did you sleep?' } } })
+    expect(rated).toMatch(/Sleep: <b>2\/5<\/b>\. Rough night/)
+    expect(await mirror.read((db) => (db as any).prepare('SELECT quality FROM sleep_logs WHERE day = ?').get(day))).toMatchObject({ quality: 2 })
   })
 
   it('a session for a Todoist task remembers it until it stops', async () => {

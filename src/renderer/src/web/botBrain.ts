@@ -157,8 +157,9 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     `Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`).join('; ')}.`,
     wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ''}. Big 3: ${wp.big3.map((b) => `${b.done ? '[done]' : '[open]'} ${b.text}`).join('; ')}.` : 'No week plan yet.',
     `Sleep: bedtime target ${sl.bedtimeTarget()}, wake target weekday ${sl.weekdayTarget()} / weekend ${sl.weekendTarget()}. Last wake-ups: ${wakes.map((w) => `${w.day.slice(5)} ${w.onTime ? 'on time' : 'late'}`).join(', ') || 'none logged'}.`,
+    wakePattern(input.wakes) ?? '',
     `Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
-    `Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ''}.`,
+    `Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ''}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join('; ') || 'none'}.`,
     moneyContext(extra.finance, today)
   ]
   if (extra.todoToday) {
@@ -169,7 +170,7 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     const r = deadlineRadar(extra.upcoming, today)
     if (r.length) lines.push(`Deadlines soon: ${r.map((x) => `${x.task.content} ${whenText(x.daysLeft, x.date)}`).join('; ')}.`)
   }
-  return lines.join('\n')
+  return lines.filter(Boolean).join('\n')
 }
 
 const PERSONA: Record<Persona, string> = {
@@ -272,4 +273,46 @@ export function readAction(line: string): BrainAction | null {
   const [title, subject, deadline, hours] = arg.split('|').map((x) => x.trim())
   if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(deadline ?? '') || !(Number(hours) > 0)) return null
   return { kind: 'goal', title, subject: subject || title, deadline, hours: Math.min(500, Number(hours)) }
+}
+
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`
+
+/**
+ * The money coach's line under an expense: how often this week, the month
+ * against the limit and what's left per day. Null when there's nothing useful.
+ */
+export function moneyInsight(state: any, tx: { category?: string | null; amount: number; type?: string }, today: string): string | null {
+  if (!state || !Array.isArray(state.tx) || tx.type === 'income') return null
+  const cats = new Map<string, string>((state.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
+  const amt = (t: any) => Math.abs(Number(t.base ?? t.amount) || 0)
+  const exp = (state.tx as any[]).filter((t) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string')
+  const weekFrom = addDays(today, -6)
+  const same = exp.filter((t) => t.date >= weekFrom && t.date <= today && String(t.category) === String(tx.category))
+  const name = cats.get(String(tx.category)) ?? 'this'
+  const parts: string[] = []
+  if (same.length >= 2) parts.push(`${ordinal(same.length)} ${name} this week (${lei(same.reduce((s, t) => s + amt(t), 0))})`)
+  const month = today.slice(0, 7)
+  const monthTotal = exp.filter((t) => t.date.startsWith(month)).reduce((s, t) => s + amt(t), 0)
+  const limit = state.settings?.limit
+  if (limit?.on && Number(limit.amount) > 0) {
+    const daysInMonth = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()
+    const daysLeft = daysInMonth - Number(today.slice(8)) + 1
+    const left = Math.max(0, Number(limit.amount) - monthTotal)
+    const pct = Math.round((monthTotal / Number(limit.amount)) * 100)
+    parts.push(pct >= 100 ? `over the monthly limit by ${lei(monthTotal - Number(limit.amount))}` : `${pct}% of the monthly limit, ${lei(left / daysLeft)}/day left for ${daysLeft} days`)
+  } else parts.push(`this month ${lei(monthTotal)}`)
+  return parts.length ? `📊 ${parts.join(' · ')}` : null
+}
+
+/** Which weekdays your wake-ups go wrong (last 8 weeks), for the sleep coach. */
+export function wakePattern(wakes: { day: string; onTime: boolean }[]): string | null {
+  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const by = names.map(() => ({ late: 0, n: 0 }))
+  for (const w of wakes) {
+    const d = new Date(`${w.day}T12:00:00Z`).getUTCDay()
+    by[d].n++
+    if (!w.onTime) by[d].late++
+  }
+  const bad = by.map((x, i) => ({ ...x, d: names[i] })).filter((x) => x.n >= 2 && x.late / x.n >= 0.5)
+  return bad.length ? `Late most often on: ${bad.map((x) => `${x.d} (${x.late}/${x.n})`).join(', ')}.` : null
 }

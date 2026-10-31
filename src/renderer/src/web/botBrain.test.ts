@@ -50,3 +50,26 @@ describe('the coach brain (pure parts)', () => {
     expect(t).toContain('Food 120 lei, Taxi 30 lei')
   })
 })
+
+describe('specialist coaches', () => {
+  it('money coach: how often this week, and the month against the limit', async () => {
+    const { moneyInsight } = await import('./botBrain')
+    const state = {
+      settings: { categories: [{ id: 'c', name: 'Coffee' }], limit: { on: true, amount: 600000 } },
+      tx: [
+        { type: 'expense', date: '2026-10-28', amount: 3500, category: 'c' },
+        { type: 'expense', date: '2026-10-30', amount: 3500, category: 'c' },
+        { type: 'expense', date: '2026-10-31', amount: 3500, category: 'c' }
+      ]
+    }
+    expect(moneyInsight(state, { category: 'c', amount: 3500 }, '2026-10-31')).toBe('📊 3rd Coffee this week (105 lei) · 2% of the monthly limit, 5,895 lei/day left for 1 days')
+    expect(moneyInsight(state, { category: 'c', amount: 1, type: 'income' }, '2026-10-31')).toBeNull()
+  })
+
+  it('sleep coach: the weekdays that go wrong', async () => {
+    const { wakePattern } = await import('./botBrain')
+    const w = (day: string, onTime: boolean) => ({ day, onTime })
+    expect(wakePattern([w('2026-10-26', false), w('2026-10-19', false), w('2026-10-12', true), w('2026-10-27', true), w('2026-10-20', true)])).toBe('Late most often on: Mon (2/3).')
+    expect(wakePattern([w('2026-10-27', true)])).toBeNull()
+  })
+})

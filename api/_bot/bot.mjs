@@ -3349,6 +3349,18 @@ var SleepService = class {
 		const today = this.wallet.today(now);
 		return computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget());
 	}
+	/** How you slept (1–5) for a morning already logged (the bot's check-in buttons). */
+	setQuality(day, quality) {
+		const q = Math.round(quality);
+		if (!(q >= 1 && q <= 5)) throw new LedgerError("Sleep quality is 1 to 5");
+		const row = this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day);
+		if (!row) throw new LedgerError("Log the wake-up first");
+		this.db.prepare("UPDATE sleep_logs SET quality = ? WHERE day = ?").run(q, day);
+		return toLog({
+			...row,
+			quality: q
+		});
+	}
 	logWake(time, quality, now = /* @__PURE__ */ new Date()) {
 		const today = this.wallet.today(now);
 		const hh = String(now.getHours()).padStart(2, "0");
@@ -7784,8 +7796,9 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		`Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`).join("; ")}.`,
 		wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ""}. Big 3: ${wp.big3.map((b) => `${b.done ? "[done]" : "[open]"} ${b.text}`).join("; ")}.` : "No week plan yet.",
 		`Sleep: bedtime target ${sl.bedtimeTarget()}, wake target weekday ${sl.weekdayTarget()} / weekend ${sl.weekendTarget()}. Last wake-ups: ${wakes.map((w) => `${w.day.slice(5)} ${w.onTime ? "on time" : "late"}`).join(", ") || "none logged"}.`,
+		wakePattern(input.wakes) ?? "",
 		`Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
-		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}.`,
+		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join("; ") || "none"}.`,
 		moneyContext(extra.finance, today)
 	];
 	if (extra.todoToday) {
@@ -7796,7 +7809,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		const r = deadlineRadar(extra.upcoming, today);
 		if (r.length) lines.push(`Deadlines soon: ${r.map((x) => `${x.task.content} ${whenText(x.daysLeft, x.date)}`).join("; ")}.`);
 	}
-	return lines.join("\n");
+	return lines.filter(Boolean).join("\n");
 }
 var PERSONA = {
 	mega: "You are MEGA, Victor's head coach for his whole life: study (university), cyber security skills, career, sport and training, sleep, discipline and money. You also coach his training: suggest concrete workouts (sets and reps, progressing a little each week), keep his streak alive.",
@@ -7904,6 +7917,58 @@ function readAction(line) {
 		deadline,
 		hours: Math.min(500, Number(hours))
 	};
+}
+var ordinal = (n) => `${n}${n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th"}`;
+/**
+* The money coach's line under an expense: how often this week, the month
+* against the limit and what's left per day. Null when there's nothing useful.
+*/
+function moneyInsight(state, tx, today) {
+	if (!state || !Array.isArray(state.tx) || tx.type === "income") return null;
+	const cats = new Map((state.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
+	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
+	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+	const weekFrom = addDays$1(today, -6);
+	const same = exp.filter((t) => t.date >= weekFrom && t.date <= today && String(t.category) === String(tx.category));
+	const name = cats.get(String(tx.category)) ?? "this";
+	const parts = [];
+	if (same.length >= 2) parts.push(`${ordinal(same.length)} ${name} this week (${lei(same.reduce((s, t) => s + amt(t), 0))})`);
+	const month = today.slice(0, 7);
+	const monthTotal = exp.filter((t) => t.date.startsWith(month)).reduce((s, t) => s + amt(t), 0);
+	const limit = state.settings?.limit;
+	if (limit?.on && Number(limit.amount) > 0) {
+		const daysLeft = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate() - Number(today.slice(8)) + 1;
+		const left = Math.max(0, Number(limit.amount) - monthTotal);
+		const pct = Math.round(monthTotal / Number(limit.amount) * 100);
+		parts.push(pct >= 100 ? `over the monthly limit by ${lei(monthTotal - Number(limit.amount))}` : `${pct}% of the monthly limit, ${lei(left / daysLeft)}/day left for ${daysLeft} days`);
+	} else parts.push(`this month ${lei(monthTotal)}`);
+	return parts.length ? `📊 ${parts.join(" · ")}` : null;
+}
+/** Which weekdays your wake-ups go wrong (last 8 weeks), for the sleep coach. */
+function wakePattern(wakes) {
+	const names = [
+		"Sun",
+		"Mon",
+		"Tue",
+		"Wed",
+		"Thu",
+		"Fri",
+		"Sat"
+	];
+	const by = names.map(() => ({
+		late: 0,
+		n: 0
+	}));
+	for (const w of wakes) {
+		const d = (/* @__PURE__ */ new Date(`${w.day}T12:00:00Z`)).getUTCDay();
+		by[d].n++;
+		if (!w.onTime) by[d].late++;
+	}
+	const bad = by.map((x, i) => ({
+		...x,
+		d: names[i]
+	})).filter((x) => x.n >= 2 && x.late / x.n >= .5);
+	return bad.length ? `Late most often on: ${bad.map((x) => `${x.d} (${x.late}/${x.n})`).join(", ")}.` : null;
 }
 // src/renderer/src/web/webBots.ts
 var esc = (s) => s.replace(/[<>&]/g, (c) => ({
@@ -8052,6 +8117,29 @@ function financeAccounts(db) {
 		return [];
 	}
 }
+/** 1–5 under the wake-up message: how you slept. */
+var sleepKeyboard = (day) => ({ inline_keyboard: [[
+	1,
+	2,
+	3,
+	4,
+	5
+].map((n) => ({
+	text: [
+		"😫",
+		"😕",
+		"😐",
+		"🙂",
+		"😄"
+	][n - 1] + " " + n,
+	callback_data: `sq|${day}|${n}`
+}))] });
+/** The sleep coach's word after a rating. */
+function sleepTip(n, bed) {
+	if (n <= 2) return `Rough night. Today: no caffeine after 15:00, and tonight lights out at <b>${bed}</b>. I'll remind you.`;
+	if (n === 3) return `Okay night. Same bedtime tonight (${bed}) keeps it improving.`;
+	return "Great. Keep the same rhythm tonight.";
+}
 /** Under "Focus started": one tap stops and logs it. */
 var STOP_KEYBOARD = { inline_keyboard: [[{
 	text: "⏹ Stop & log",
@@ -8154,8 +8242,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		};
 		const res = s.money.addExpense(t.amount, t.category, t.note ? `[Telegram] ${t.note}` : "[Telegram]", /* @__PURE__ */ new Date(), true);
 		linkExpense(currentDb, t.id, res.expense.id);
+		const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.today());
 		return {
-			reply: money.reply + (res.awarded ? "\n🪙 <b>+3 coins</b> (first spending logged today)" : ""),
+			reply: money.reply + (insight ? `\n${esc(insight)}` : "") + (res.awarded ? "\n🪙 <b>+3 coins</b> (first spending logged today)" : ""),
 			keyboard: money.keyboard
 		};
 	}
@@ -8358,7 +8447,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					return { reply: `🌅 <b>Wake-up ${back ? "for yesterday " : ""}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? "🎯 On time! <b>+10 coins</b>" : res.log.onTime ? back ? "On time · no coins for past days." : "On time." : "Saved to your sleep history."}` };
 				}
 				const res = s.sleep.logWake((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
-				return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? "🎯 On time! <b>+10 coins</b>" : res.log.onTime ? "On time." : "Saved to your sleep history."}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>` };
+				return {
+					reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? "🎯 On time! <b>+10 coins</b>" : res.log.onTime ? "On time." : "Saved to your sleep history."}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>\n\n😴 <b>How did you sleep?</b>`,
+					keyboard: sleepKeyboard(res.log.day)
+				};
 			}
 			case "bed": {
 				const res = s.sleep.logBed((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
@@ -8408,7 +8500,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuox]|p[pr]|td)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuox]|p[pr]|td|sq)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -8447,6 +8539,29 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				await answer(`Todoist: ${e.message}`.slice(0, 190));
 				return null;
 			}
+		}
+		if (data.startsWith("sq|")) {
+			const [, day, n] = data.split("|");
+			const res = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				try {
+					const svc = services.services(db);
+					svc.sleep.setQuality(day, Number(n));
+					return { tip: sleepTip(Number(n), svc.sleep.bedtimeTarget()) };
+				} catch (e) {
+					return {
+						tip: "",
+						error: e.message
+					};
+				}
+			});
+			if (!res) return null;
+			await answer(res.error ?? `Sleep ${n}/5 noted`);
+			if (res.error) return null;
+			const text = `${esc(String(cq.message?.text ?? "").replace(/\n*😴 How did you sleep\?\s*$/, ""))}\n\n😴 Sleep: <b>${n}/5</b>. ${res.tip}`;
+			await edit(text);
+			return text;
 		}
 		if (data.startsWith("fo|") || data.startsWith("fx|")) {
 			const res = await mirror.write((db) => {
@@ -9388,8 +9503,8 @@ async function handleTelegramUpdate(env, token, update) {
 async function runDaily(env, job) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { services, mirror } = await botsFor(env);
-	const send = async (text, reply_markup) => {
-		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
+	const send = async (text, reply_markup, token = env.botToken) => {
+		const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
@@ -9496,7 +9611,7 @@ async function runDaily(env, job) {
 				late: slip.late,
 				of: slip.of,
 				first
-			}));
+			}), void 0, env.sleepBotToken || env.botToken);
 			sent.push("night");
 		}
 	} else {

@@ -29,7 +29,7 @@ import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } fr
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
-import { brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
 const LOGS_KEY = 'life_bot_logs'
@@ -194,6 +194,16 @@ export interface TodoistLike {
   quickAdd(text: string): Promise<TodoTask>
 }
 
+/** 1–5 under the wake-up message: how you slept. */
+const sleepKeyboard = (day: string) => ({ inline_keyboard: [[1, 2, 3, 4, 5].map((n) => ({ text: ['😫', '😕', '😐', '🙂', '😄'][n - 1] + ' ' + n, callback_data: `sq|${day}|${n}` }))] })
+
+/** The sleep coach's word after a rating. */
+function sleepTip(n: number, bed: string): string {
+  if (n <= 2) return `Rough night. Today: no caffeine after 15:00, and tonight lights out at <b>${bed}</b>. I'll remind you.`
+  if (n === 3) return `Okay night. Same bedtime tonight (${bed}) keeps it improving.`
+  return 'Great. Keep the same rhythm tonight.'
+}
+
 /** Under "Focus started": one tap stops and logs it. */
 const STOP_KEYBOARD = { inline_keyboard: [[{ text: '⏹ Stop & log', callback_data: 'fx|' }]] }
 
@@ -283,7 +293,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (t.type !== 'expense') return { reply: money.reply, keyboard: money.keyboard }
     const res = s.money.addExpense(t.amount, t.category, t.note ? `[Telegram] ${t.note}` : '[Telegram]', new Date(), true)
     linkExpense(currentDb, t.id, res.expense.id)
-    return { reply: money.reply + (res.awarded ? '\n🪙 <b>+3 coins</b> (first spending logged today)' : ''), keyboard: money.keyboard }
+    // The money coach's context: how often this week, the month against the limit.
+    const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.today())
+    return { reply: money.reply + (insight ? `\n${esc(insight)}` : '') + (res.awarded ? '\n🪙 <b>+3 coins</b> (first spending logged today)' : ''), keyboard: money.keyboard }
   }
 
   /** /focus, /stop, /plan, /fun, /week, /deadlines (focus.ts). */
@@ -457,7 +469,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           return { reply: `🌅 <b>Wake-up ${back ? 'for yesterday ' : ''}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? (back ? 'On time · no coins for past days.' : 'On time.') : 'Saved to your sleep history.'}` }
         }
         const res = s.sleep.logWake(new Date().toTimeString().slice(0, 5)) // local time (the server runs in your time zone)
-        return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>` }
+        return {
+          reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>\n\n😴 <b>How did you sleep?</b>`,
+          keyboard: sleepKeyboard(res.log.day)
+        }
       }
       case 'bed': {
         const res = s.sleep.logBed(new Date().toTimeString().slice(0, 5))
@@ -517,7 +532,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuox]|p[pr]|td)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuox]|p[pr]|td|sq)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -548,6 +563,28 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         await answer(`Todoist: ${(e as Error).message}`.slice(0, 190))
         return null
       }
+    }
+    // How you slept (1–5), under the wake-up message.
+    if (data.startsWith('sq|')) {
+      const [, day, n] = data.split('|')
+      const res = await mirror.write((db) => {
+        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null
+        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+        try {
+          const svc = services.services(db)
+          svc.sleep.setQuality(day, Number(n))
+          return { tip: sleepTip(Number(n), svc.sleep.bedtimeTarget()) }
+        } catch (e) {
+          return { tip: '', error: (e as Error).message }
+        }
+      })
+      if (!res) return null
+      await answer(res.error ?? `Sleep ${n}/5 noted`)
+      if (res.error) return null
+      // Telegram gives the message back as plain text: escape it, then add ours.
+      const text = `${esc(String(cq.message?.text ?? '').replace(/\n*😴 How did you sleep\?\s*$/, ''))}\n\n😴 Sleep: <b>${n}/5</b>. ${res.tip}`
+      await edit(text)
+      return text
     }
     // ▶ start a 50-minute session on a subject / ⏹ stop the running one.
     if (data.startsWith('fo|') || data.startsWith('fx|')) {

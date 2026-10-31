@@ -65,6 +65,16 @@ export class SleepService {
     return computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget())
   }
 
+  /** How you slept (1–5) for a morning already logged (the bot's check-in buttons). */
+  setQuality(day: string, quality: number): SleepLog {
+    const q = Math.round(quality)
+    if (!(q >= 1 && q <= 5)) throw new LedgerError('Sleep quality is 1 to 5')
+    const row = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow | undefined
+    if (!row) throw new LedgerError('Log the wake-up first')
+    this.db.prepare('UPDATE sleep_logs SET quality = ? WHERE day = ?').run(q, day)
+    return toLog({ ...row, quality: q })
+  }
+
   logWake(
     time?: string,
     quality?: number,

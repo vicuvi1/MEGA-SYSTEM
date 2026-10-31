@@ -103,11 +103,11 @@ export type DailyJob = 'morning' | 'midday' | 'evening' | 'night'
  * evening: the review with tap-buttons, and on Sundays the week and
  * "Am I improving?".
  */
-export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string>; appUrl?: string }, job: DailyJob): Promise<string[]> {
+export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string>; appUrl?: string; sleepBotToken?: string }, job: DailyJob): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { services, mirror } = await botsFor(env)
-  const send = async (text: string, reply_markup?: unknown) => {
-    const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
+  const send = async (text: string, reply_markup?: unknown, token = env.botToken) => {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: env.chatId, text, parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) })
@@ -187,7 +187,8 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
         first = tom.sort((a, b) => b.priority - a.priority || String(a.dueTime ?? '99').localeCompare(String(b.dueTime ?? '99')))[0]?.content ?? null
       }
       first ??= st.plan.items.find((x) => !x.done)?.text ?? null
-      await send(windDownText({ bedTarget: bed, wakeTarget: wake, late: slip.late, of: slip.of, first }))
+      // From Waky, the sleep coach, when it's on the server.
+      await send(windDownText({ bedTarget: bed, wakeTarget: wake, late: slip.late, of: slip.of, first }), undefined, env.sleepBotToken || env.botToken)
       sent.push('night')
     }
   } else {
