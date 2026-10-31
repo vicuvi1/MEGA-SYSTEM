@@ -37,3 +37,17 @@ describe('coach', () => {
     expect(facts.map((f) => f.id)).toContain('good-streak')
   })
 })
+
+describe('wind-down', () => {
+  it('only when wake-ups slip, with bedtime, wake time and the first thing', async () => {
+    const { wakeSlipping, windDownText } = await import('./coach')
+    const w = (k: number, onTime: boolean) => ({ day: addDays(today, -k), onTime })
+    expect(wakeSlipping([w(0, true), w(1, false), w(2, true)], today)).toBeNull()
+    const s = wakeSlipping([w(0, false), w(1, false), w(2, true), w(3, true)], today)
+    expect(s).toEqual({ late: 2, of: 4 })
+    const t = windDownText({ bedTarget: '23:00', wakeTarget: '07:00', late: 2, of: 4, first: 'Finish etica <now>' })
+    expect(t).toContain('bedtime 23:00')
+    expect(t).toContain('up at <b>07:00</b>')
+    expect(t).toContain('Finish etica &lt;now&gt;')
+  })
+})

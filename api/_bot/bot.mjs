@@ -8554,6 +8554,16 @@ function createTodoistApi(token, fetchImpl = fetch) {
 			]);
 			return list.filter((t) => !t.checked && !t.is_completed).map((t) => toTask(t, names, secs));
 		},
+		/** Due tomorrow, not completed (the first thing for the wind-down message). */
+		async tomorrow() {
+			const q = encodeURIComponent("tomorrow");
+			const [list, names, secs] = await Promise.all([
+				either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)),
+				projects(),
+				sections()
+			]);
+			return list.filter((t) => !t.checked && !t.is_completed).map((t) => toTask(t, names, secs));
+		},
 		async close(id) {
 			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }), () => call(`${V2}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }));
 		},
@@ -8676,6 +8686,27 @@ function coachPrompt(facts, r, extra) {
 		`- Today's must-dos: ${extra.mustdos.length ? extra.mustdos.join("; ") : "none written yet"}`,
 		extra.todoistToday !== null ? `- Todoist tasks due today or late: ${extra.todoistToday}` : ""
 	].filter(Boolean).join("\n");
+}
+/** Wake-ups are slipping: late on at least 2 of the last 5 logged mornings. */
+function wakeSlipping(wakes, today) {
+	const last = wakes.filter((w) => w.day <= today).sort((a, b) => a.day < b.day ? 1 : -1).slice(0, 5);
+	const late = last.filter((w) => !w.onTime).length;
+	return late >= 2 ? {
+		late,
+		of: last.length
+	} : null;
+}
+/** The bedtime message: when to put the phone away, when you get up, the first thing tomorrow. */
+function windDownText(o) {
+	const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	return [
+		`🌙 <b>Wind-down</b> · bedtime ${o.bedTarget}`,
+		"",
+		`You woke up late ${o.late} of the last ${o.of} mornings. Tomorrow starts tonight:`,
+		"📵 Phone away now (charge it outside the bed).",
+		`💡 Lights out at <b>${o.bedTarget}</b>, up at <b>${o.wakeTarget}</b>.`,
+		o.first ? `🎯 First thing tomorrow: <b>${esc(o.first)}</b>` : "🎯 Decide your first thing for tomorrow, then sleep on it."
+	].join("\n");
 }
 // src/server/telegramBot.ts
 var warm = null;
@@ -8845,6 +8876,28 @@ async function runDaily(env, job) {
 			});
 			await send(await coach("midday", fallback), focusButtons());
 			sent.push("midday");
+		}
+	} else if (job === "night") {
+		const slip = wakeSlipping(input.wakes, input.today);
+		if (slip) {
+			const { bed, wake } = await mirror.read((db) => {
+				const sl = services.services(db).sleep;
+				return {
+					bed: sl.bedtimeTarget(),
+					wake: targetForDay(addDays$1(input.today, 1), sl.weekdayTarget(), sl.weekendTarget())
+				};
+			});
+			let first = null;
+			if (env.todoistToken) first = (await createTodoistApi(env.todoistToken).tomorrow().catch(() => [])).sort((a, b) => b.priority - a.priority || String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99")))[0]?.content ?? null;
+			first ??= st.plan.items.find((x) => !x.done)?.text ?? null;
+			await send(windDownText({
+				bedTarget: bed,
+				wakeTarget: wake,
+				late: slip.late,
+				of: slip.of,
+				first
+			}));
+			sent.push("night");
 		}
 	} else {
 		const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ""}` : "";

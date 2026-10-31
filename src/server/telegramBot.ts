@@ -13,7 +13,9 @@ import { createWebBots, focusKeyboard } from '../renderer/src/web/webBots'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
-import { coachFacts, coachPrompt, coachText, worthSaying } from '@core/coach'
+import { coachFacts, coachPrompt, coachText, wakeSlipping, windDownText, worthSaying } from '@core/coach'
+import { targetForDay } from '@core/sleep'
+import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting } from '../main/settings'
 import { eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
@@ -88,7 +90,7 @@ export async function handleTelegramUpdate(env: BotEnv, token: string, update: u
   return reply
 }
 
-export type DailyJob = 'morning' | 'midday' | 'evening'
+export type DailyJob = 'morning' | 'midday' | 'evening' | 'night'
 
 /**
  * The daily messages (Vercel runs them on a schedule, api/cron.mjs):
@@ -163,6 +165,23 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       facts.unshift({ id: 'no-focus', weight: 10, text: 'No focus session yet today (it is midday).', step: 'Start one 25-minute block now.' })
       await send(await coach('midday', fallback), focusButtons())
       sent.push('midday')
+    }
+  } else if (job === 'night') {
+    // Only when wake-ups are slipping: one message 45 minutes before bedtime.
+    const slip = wakeSlipping(input.wakes, input.today)
+    if (slip) {
+      const { bed, wake } = await mirror.read((db) => {
+        const sl = services.services(db).sleep
+        return { bed: sl.bedtimeTarget(), wake: targetForDay(addDays(input.today, 1), sl.weekdayTarget(), sl.weekendTarget()) }
+      })
+      let first: string | null = null
+      if (env.todoistToken) {
+        const tom = await createTodoistApi(env.todoistToken).tomorrow().catch(() => [])
+        first = tom.sort((a, b) => b.priority - a.priority || String(a.dueTime ?? '99').localeCompare(String(b.dueTime ?? '99')))[0]?.content ?? null
+      }
+      first ??= st.plan.items.find((x) => !x.done)?.text ?? null
+      await send(windDownText({ bedTarget: bed, wakeTarget: wake, late: slip.late, of: slip.of, first }))
+      sent.push('night')
     }
   } else {
     const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ''}` : ''

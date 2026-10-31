@@ -1,7 +1,8 @@
-// GET /api/cron?job=morning|midday|evening: the daily bot messages (Vercel runs
+// GET /api/cron?job=morning|midday|evening|night: the daily bot messages (Vercel runs
 // them on the schedule in vercel.json and signs them with CRON_SECRET).
 // Morning: your plan question and the coach if something slipped. Midday: a
 // nudge when there's been no focus yet. Evening: the review, Sundays the week.
+// Night: the wind-down before bedtime, only while wake-ups are slipping.
 import { botDefaults, config, send, serverBots } from './_lib.mjs'
 import { runDaily } from './_bot/bot.mjs'
 import { askGemini } from './ai.mjs'
@@ -10,7 +11,7 @@ export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET || ''
   if (!secret || req.headers.authorization !== `Bearer ${secret}`) return send(res, 401, { error: 'Not allowed' })
   const job = new URL(req.url, 'http://x').searchParams.get('job')
-  if (!['morning', 'midday', 'evening'].includes(job)) return send(res, 400, { error: 'job=morning|midday|evening' })
+  if (!['morning', 'midday', 'evening', 'night'].includes(job)) return send(res, 400, { error: 'job=morning|midday|evening|night' })
   const cfg = config()
   const bot = serverBots().find((b) => b.name === 'MEGA_BOT_TOKEN') ?? serverBots()[0]
   const chatId = process.env.TELEGRAM_CHAT_ID || ''

@@ -27,6 +27,10 @@
     {
       "path": "/api/cron?job=evening",
       "schedule": "30 19 * * *"
+    },
+    {
+      "path": "/api/cron?job=night",
+      "schedule": "15 20 * * *"
     }
   ]
 }

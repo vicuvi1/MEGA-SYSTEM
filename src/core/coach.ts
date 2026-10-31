@@ -56,7 +56,7 @@ export function coachText(facts: CoachFact[]): string {
 }
 
 /** What Gemini is asked (the reply is sent as is, so it must be short). */
-export function coachPrompt(facts: CoachFact[], r: ProgressReport, extra: { mustdos: string[]; todoistToday: number | null; when: 'morning' | 'midday' | 'evening' }): string {
+export function coachPrompt(facts: CoachFact[], r: ProgressReport, extra: { mustdos: string[]; todoistToday: number | null; when: 'morning' | 'midday' | 'evening' | 'night' }): string {
   return [
     'You are a calm, direct personal coach for Victor, a university student in Moldova working on university, cyber security skills, his career, sport, health and discipline.',
     `It is ${extra.when}. Write him a Telegram message of at most 3 short sentences, in plain English, no greeting fluff, no hashtags, no markdown.`,
@@ -71,4 +71,24 @@ export function coachPrompt(facts: CoachFact[], r: ProgressReport, extra: { must
   ]
     .filter(Boolean)
     .join('\n')
+}
+
+/** Wake-ups are slipping: late on at least 2 of the last 5 logged mornings. */
+export function wakeSlipping(wakes: { day: string; onTime: boolean }[], today: string): { late: number; of: number } | null {
+  const last = wakes.filter((w) => w.day <= today).sort((a, b) => (a.day < b.day ? 1 : -1)).slice(0, 5)
+  const late = last.filter((w) => !w.onTime).length
+  return late >= 2 ? { late, of: last.length } : null
+}
+
+/** The bedtime message: when to put the phone away, when you get up, the first thing tomorrow. */
+export function windDownText(o: { bedTarget: string; wakeTarget: string; late: number; of: number; first: string | null }): string {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return [
+    `🌙 <b>Wind-down</b> · bedtime ${o.bedTarget}`,
+    '',
+    `You woke up late ${o.late} of the last ${o.of} mornings. Tomorrow starts tonight:`,
+    '📵 Phone away now (charge it outside the bed).',
+    `💡 Lights out at <b>${o.bedTarget}</b>, up at <b>${o.wakeTarget}</b>.`,
+    o.first ? `🎯 First thing tomorrow: <b>${esc(o.first)}</b>` : '🎯 Decide your first thing for tomorrow, then sleep on it.'
+  ].join('\n')
 }

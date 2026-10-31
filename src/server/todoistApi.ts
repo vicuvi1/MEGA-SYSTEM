@@ -86,6 +86,12 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
       const [list, names, secs] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects(), sections()])
       return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs))
     },
+    /** Due tomorrow, not completed (the first thing for the wind-down message). */
+    async tomorrow(): Promise<TodoTask[]> {
+      const q = encodeURIComponent('tomorrow')
+      const [list, names, secs] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects(), sections()])
+      return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs))
+    },
     async close(id: string): Promise<void> {
       await either(
         () => call(`${V1}/tasks/${encodeURIComponent(id)}/close`, { method: 'POST' }),
