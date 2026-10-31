@@ -1,58 +1,57 @@
-const CACHE_NAME = 'life-system-pwa-v2'
-const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/icon.png'
-]
+// Offline support for the web app. The page itself (HTML) always comes from
+// the network first, so a new version shows on the next load; the cached copy
+// is only for when you're offline. Built files (/assets/…, names change with
+// every version) come from the cache. The server (/api/…) and other sites
+// are never cached.
+const CACHE_NAME = 'life-system-pwa-v3'
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())
-  )
-})
+self.addEventListener('install', () => self.skipWaiting())
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   )
 })
 
 self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url)
-  // Never cache external API endpoints or real-time database queries
-  if (
-    url.hostname.includes('turso.io') ||
-    url.hostname.includes('googleapis.com') ||
-    url.hostname.includes('openrouter.ai') ||
-    url.hostname.includes('telegram.org') ||
-    url.hostname.includes('er-api.com') ||
-    url.hostname.includes('binance.com') ||
-    e.request.method !== 'GET'
-  ) {
+  const req = e.request
+  const url = new URL(req.url)
+  if (req.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return
+
+  // The page: newest from the network; the saved copy only when offline.
+  if (req.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(CACHE_NAME).then((c) => c.put('/', copy))
+          }
+          return res
+        })
+        .catch(() => caches.match('/').then((r) => r || Response.error()))
+    )
     return
   }
 
-  e.respondWith(
-    caches.match(e.request).then((cached) => {
-      if (cached) {
-        // Stale-while-revalidate for local assets
-        fetch(e.request).then((networkRes) => {
-          if (networkRes.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkRes))
-          }
-        }).catch(() => {})
-        return cached
-      }
-      return fetch(e.request).then((res) => {
-        if (res.status === 200 && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.png') || url.pathname.endsWith('.html'))) {
-          const resClone = res.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, resClone))
-        }
-        return res
-      })
-    })
-  )
+  // Built files never change under the same name: cache first.
+  if (url.pathname.startsWith('/assets/') || /\.(png|svg|woff2?|webmanifest)$/.test(url.pathname)) {
+    e.respondWith(
+      caches.match(req).then(
+        (hit) =>
+          hit ||
+          fetch(req).then((res) => {
+            if (res.ok) {
+              const copy = res.clone()
+              caches.open(CACHE_NAME).then((c) => c.put(req, copy))
+            }
+            return res
+          })
+      )
+    )
+  }
+  // Everything else (the embedded apps' files): straight from the network.
 })

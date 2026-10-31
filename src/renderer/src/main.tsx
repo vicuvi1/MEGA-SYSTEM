@@ -31,6 +31,18 @@ createRoot(document.getElementById('root')!).render(
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    // Always check for a newer offline helper; when one takes over (a new
+    // version was published), reload once so you see the new version.
+    const hadController = !!navigator.serviceWorker.controller
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController && !sessionStorage.getItem('sw-reloaded')) {
+        sessionStorage.setItem('sw-reloaded', '1')
+        window.location.reload()
+      }
+    })
+    navigator.serviceWorker
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((reg) => reg.update())
+      .catch(() => {})
   })
 }
