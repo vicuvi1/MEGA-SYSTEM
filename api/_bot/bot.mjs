@@ -3587,15 +3587,21 @@ var FocusService = class {
 		};
 	}
 	/** Starts the timer (one at a time; it keeps running across devices). */
-	start(subject, planned = 50, now = /* @__PURE__ */ new Date()) {
+	start(subject, planned = 50, now = /* @__PURE__ */ new Date(), task = null) {
 		const name = String(subject || "").trim().slice(0, 40);
 		if (!name) throw new LedgerError("What are you focusing on? e.g. Math");
 		if (this.running()) throw new LedgerError("A focus session is already running: stop it first");
 		const minutes = Math.min(180, Math.max(5, Math.round(planned) || 50));
+		const t = task && (task.kind === "mustdo" || task.kind === "todoist") ? {
+			kind: task.kind,
+			ref: String(task.ref).slice(0, 200),
+			title: String(task.title).slice(0, 200)
+		} : null;
 		setSetting(this.db, RUNNING, JSON.stringify({
 			subject: name,
 			startedAt: now.toISOString(),
-			planned: minutes
+			planned: minutes,
+			task: t
 		}));
 		return this.state(now);
 	}
@@ -3606,7 +3612,10 @@ var FocusService = class {
 		const minutes = sessionMinutes(run.startedAt, run.planned, now);
 		return this.db.transaction(() => {
 			setSetting(this.db, RUNNING, "null");
-			return this.log(run.subject, minutes, now, run.startedAt);
+			return {
+				...this.log(run.subject, minutes, now, run.startedAt),
+				task: run.task ?? null
+			};
 		})();
 	}
 	/** Drops the running timer without logging it. */
@@ -3780,41 +3789,58 @@ function progressReport(i) {
 		const w = win(5 - k);
 		return f(w.from, w.to);
 	});
+	const lei = (v) => `${Math.round(v / 100).toLocaleString("en-US")} lei`;
+	const tick = (v) => v ? "✓" : "·";
 	const metrics = [
 		{
 			id: "focus",
 			label: "Focus time",
 			higherBetter: true,
 			f: (a, b) => sum(i.focus, a, b, (r) => r.minutes),
-			text: hm
+			text: hm,
+			day: (v) => v ? hm(v) : "·",
+			target: 600,
+			unit: 30
 		},
 		{
 			id: "wake",
 			label: "On-time wake-ups",
 			higherBetter: true,
 			f: (a, b) => sum(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
-			text: (v) => `${v}/7`
+			text: (v) => `${v}/7`,
+			day: tick,
+			target: 7,
+			unit: 1
 		},
 		{
 			id: "sport",
 			label: "Workouts",
 			higherBetter: true,
 			f: (a, b) => new Set(i.workouts.filter((r) => r.day >= a && r.day <= b).map((r) => r.day)).size,
-			text: (v) => `${v} day${v === 1 ? "" : "s"}`
+			text: (v) => `${v} day${v === 1 ? "" : "s"}`,
+			day: tick,
+			target: 4,
+			unit: 1
 		},
 		{
 			id: "clean",
 			label: "Clean days",
 			higherBetter: true,
 			f: (a, b) => cleanDays(i.discipline, a, b, to),
-			text: (v) => `${v}/7`
+			text: (v) => `${v}/7`,
+			day: tick,
+			target: 7,
+			unit: 1
 		},
 		{
 			id: "todoist",
 			label: "Todoist tasks done",
 			higherBetter: true,
 			f: (a, b) => sum(i.todoist, a, b, () => 1),
-			text: (v) => String(v)
+			text: (v) => String(v),
+			day: (v) => v ? String(v) : "·",
+			target: 15,
+			unit: 1
 		},
 		{
 			id: "mustdo",
@@ -3822,6 +3848,9 @@ function progressReport(i) {
 			higherBetter: true,
 			f: (a, b) => sum(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
 			text: (v) => String(v),
+			day: (v) => v ? String(v) : "·",
+			target: 10,
+			unit: 1,
 			skip: !i.mustdos
 		},
 		{
@@ -3829,7 +3858,10 @@ function progressReport(i) {
 			label: "Spent",
 			higherBetter: false,
 			f: (a, b) => sum(i.spending ?? [], a, b, (r) => r.bani),
-			text: (v) => `${Math.round(v / 100).toLocaleString("en-US")} lei`,
+			text: lei,
+			day: (v) => v ? String(Math.round(v / 100)) : "·",
+			target: null,
+			unit: 1e4,
 			skip: !i.spending
 		}
 	].filter((d) => !d.skip).map((d) => {
@@ -3838,12 +3870,19 @@ function progressReport(i) {
 		const prev = weeks[4];
 		const before = weeks.slice(1, 5);
 		const usual = before.reduce((t, v) => t + v, 0) / before.length;
-		const base = Math.max(usual, prev);
-		const margin = Math.max(d.id === "focus" ? 30 : d.id === "spend" ? 1e4 : 1, base * .1);
-		const diff = now - (usual || prev);
+		const margin = Math.max(d.unit, prev * .1);
+		const diff = now - prev;
 		const up = diff > margin;
 		const down = diff < -margin;
 		const trend = !up && !down ? "same" : up === d.higherBetter ? "better" : "worse";
+		const days = Array.from({ length: 7 }, (_, k) => {
+			const day = addDays$1(to, k - 6);
+			return {
+				day,
+				value: d.f(day, day)
+			};
+		});
+		const deltaText = diff === 0 ? "same as last week" : `${diff > 0 ? "+" : "−"}${d.text(Math.abs(diff)).replace(/\/7$/, "")} vs last week`;
 		return {
 			id: d.id,
 			label: d.label,
@@ -3854,20 +3893,31 @@ function progressReport(i) {
 			prevText: d.text(prev),
 			higherBetter: d.higherBetter,
 			trend,
-			weeks
+			weeks,
+			days,
+			target: d.target,
+			targetText: d.target === null ? null : d.text(d.target),
+			deltaText,
+			dayText: d.day,
+			fmt: d.text,
+			daily: d.day === tick
 		};
 	});
 	const better = metrics.filter((m) => m.trend === "better").map((m) => m.id);
 	const worse = metrics.filter((m) => m.trend === "worse").map((m) => m.id);
 	const name = (id) => metrics.find((m) => m.id === id).label.toLowerCase();
-	const verdict = metrics.every((m) => m.now === 0 && m.usual === 0) ? "Not enough logged yet: a week of focus, wake-ups and workouts gives the first comparison." : better.length > worse.length ? `You're improving: ${better.map(name).join(", ")} up on your usual week.${worse.length ? ` Watch ${worse.map(name).join(", ")}.` : ""}` : worse.length > better.length ? `Slipping a bit: ${worse.map(name).join(", ")} below your usual week. Pick one to fix this week.` : better.length ? `Mixed week: ${better.map(name).join(", ")} better, ${worse.map(name).join(", ")} worse.` : "Steady: about the same as your usual week. Push one area a little.";
+	const verdict = metrics.every((m) => m.now === 0 && m.usual === 0) ? "Not enough logged yet: a week of focus, wake-ups and workouts gives the first comparison." : better.length > worse.length ? `You're improving: ${better.map(name).join(", ")} up on last week.${worse.length ? ` Watch ${worse.map(name).join(", ")}.` : ""}` : worse.length > better.length ? `Slipping a bit: ${worse.map(name).join(", ")} below last week. Pick one to fix this week.` : better.length ? `Mixed week: ${better.map(name).join(", ")} better, ${worse.map(name).join(", ")} worse.` : "Steady: about the same as last week. Push one area a little.";
+	const scored = metrics.filter((m) => m.target);
+	const scoreOf = (pick) => scored.length ? Math.round(scored.reduce((t, m) => t + Math.min(1, pick(m) / m.target), 0) / scored.length * 100) : 0;
 	return {
 		from: win(0).from,
 		to,
 		metrics,
 		better,
 		worse,
-		verdict
+		verdict,
+		score: scoreOf((m) => m.now),
+		prevScore: scoreOf((m) => m.prev)
 	};
 }
 /** The report as a Telegram message (HTML). */
@@ -5404,7 +5454,7 @@ syncFinance: (recordDays) => write((s) => {
 		},
 		focus: {
 			state: () => read((s) => s.focus.state()),
-			start: (subject, planned) => write((s) => s.focus.start(subject, planned)),
+			start: (subject, planned, task) => write((s) => s.focus.start(subject, planned, /* @__PURE__ */ new Date(), task ?? null)),
 			stop: () => write((s) => s.focus.stop(), W),
 			cancel: () => write((s) => s.focus.cancel()),
 			add: (subject, minutes, day) => write((s) => s.focus.add(subject, minutes, day), W),
@@ -7616,6 +7666,45 @@ function financeAccounts(db) {
 		return [];
 	}
 }
+/** Under "Focus started": one tap stops and logs it. */
+var STOP_KEYBOARD = { inline_keyboard: [[{
+	text: "⏹ Stop & log",
+	callback_data: "fx|"
+}]] };
+/** "▶ 50 min: …" buttons that start a focus session (subject kept short for Telegram's 64 bytes). */
+function focusKeyboard(subjects) {
+	const rows = subjects.filter(Boolean).slice(0, 3).map((t) => {
+		const short = t.split(/\s+/).slice(0, 4).join(" ").slice(0, 28);
+		return [{
+			text: `▶ 50 min: ${short}`,
+			callback_data: `fo|${short}`
+		}];
+	});
+	return rows.length ? { inline_keyboard: rows } : void 0;
+}
+/** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
+function stoppedReply(r, plan) {
+	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ""}\nToday: ${hm(r.state.todayMin)}`;
+	const t = r.task;
+	if (t?.kind === "mustdo") {
+		const i = plan.items.findIndex((p) => !p.done && p.text === t.ref);
+		if (i >= 0) return {
+			reply: `${head}\n\nFinished “${esc(t.title)}”?`,
+			keyboard: { inline_keyboard: [[{
+				text: "✅ Yes, tick it",
+				callback_data: `pp|${plan.day}|${i}`
+			}]] }
+		};
+	}
+	if (t?.kind === "todoist") return {
+		reply: `${head}\n\nFinished “${esc(t.title)}”?`,
+		keyboard: { inline_keyboard: [[{
+			text: "✅ Yes, done in Todoist",
+			callback_data: `td|${t.ref}`.slice(0, 64)
+		}]] }
+	};
+	return { reply: head };
+}
 function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null }) {
 	let polling = false;
 	let timer = null;
@@ -7703,12 +7792,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
 			const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
 			f.start(subject, minutes);
-			return { reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Send <code>/stop</code> when you finish.` };
+			return {
+				reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Tap Stop (or send <code>/stop</code>) when you finish.`,
+				keyboard: STOP_KEYBOARD
+			};
 		}
-		if (cmd === "stop") {
-			const r = f.stop();
-			return { reply: `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ""}\nToday: ${hm(r.state.todayMin)}` };
-		}
+		if (cmd === "stop") return stoppedReply(f.stop(), f.plan(s.wallet.today()));
 		if (cmd === "plan") {
 			if (arg) f.setPlan(parsePlan(arg));
 			const plan = f.plan(s.wallet.today());
@@ -7930,7 +8019,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbku]|p[pr])\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuox]|p[pr]|td)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -7938,6 +8027,85 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (!allowed(cfg, chat)) {
 			await answer("Not allowed");
 			return null;
+		}
+		const edit = (text, keyboard) => tg(update.__token, "editMessageText", {
+			chat_id: chat,
+			message_id: cq.message.message_id,
+			text,
+			parse_mode: "HTML",
+			...keyboard ? { reply_markup: keyboard } : {}
+		}).catch(() => null);
+		if (data.startsWith("td|")) {
+			if (!await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				return true;
+			})) return null;
+			const id = data.slice(3);
+			const title = /“([^”]*)”/.exec(String(cq.message?.text ?? ""))?.[1] ?? "Todoist task";
+			try {
+				if (!todoist) throw new Error("Todoist is not connected");
+				await todoist.close(id);
+				const paid = await mirror.write((db) => payTodoist(services.services(db), [{
+					id,
+					content: title
+				}]));
+				await answer(paid ? "+8 coins" : "Done");
+				const text = `${String(cq.message?.text ?? "").split("\n\nFinished")[0]}\n\n✅ <b>Done in Todoist:</b> ${esc(title)}${paid ? " · 🪙 +8" : ""}`;
+				await edit(text);
+				return text;
+			} catch (e) {
+				await answer(`Todoist: ${e.message}`.slice(0, 190));
+				return null;
+			}
+		}
+		if (data.startsWith("fo|") || data.startsWith("fx|")) {
+			const res = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				const f = services.services(db).focus;
+				try {
+					if (data.startsWith("fo|")) {
+						const subject = data.slice(3) || "Focus";
+						const item = f.plan(services.services(db).wallet.today()).items.find((p) => !p.done && p.text.startsWith(subject));
+						f.start(subject, 50, /* @__PURE__ */ new Date(), item ? {
+							kind: "mustdo",
+							ref: item.text,
+							title: item.text
+						} : null);
+						return {
+							text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · 50 min.\nPhone away. Tap Stop when you finish.`,
+							keyboard: STOP_KEYBOARD,
+							toast: "Focus started"
+						};
+					}
+					const r = f.stop();
+					const out = stoppedReply(r, f.plan(services.services(db).wallet.today()));
+					return {
+						text: out.reply,
+						keyboard: out.keyboard,
+						toast: r.coins ? `+${r.coins} coins` : "Logged"
+					};
+				} catch (e) {
+					return {
+						text: "",
+						keyboard: void 0,
+						toast: e.message.slice(0, 190)
+					};
+				}
+			});
+			if (!res) return null;
+			await answer(res.toast);
+			if (!res.text) return null;
+			if (data.startsWith("fo|")) await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: res.text,
+				parse_mode: "HTML",
+				reply_markup: res.keyboard
+			}).catch(() => null);
+			else await edit(res.text, res.keyboard);
+			if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-focus-changed"));
+			return res.text;
 		}
 		const res = await mirror.write((db) => {
 			if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
@@ -8644,6 +8812,11 @@ async function runDaily(env, job) {
 			return fallback;
 		}
 	};
+	/** ▶ buttons under the coach: your open must-dos, else your usual subjects. */
+	const focusButtons = () => {
+		const open = st.plan.items.filter((x) => !x.done).map((x) => x.text);
+		return focusKeyboard(open.length ? open : st.subjects.slice(0, 2));
+	};
 	const sent = [];
 	if (job === "morning") {
 		const planAlready = st.plan.items.length > 0;
@@ -8658,7 +8831,7 @@ async function runDaily(env, job) {
 		});
 		sent.push("morning");
 		if (worthSaying(facts)) {
-			await send(await coach("morning", coachText(facts)));
+			await send(await coach("morning", coachText(facts)), focusButtons());
 			sent.push("coach");
 		}
 	} else if (job === "midday") {
@@ -8670,7 +8843,7 @@ async function runDaily(env, job) {
 				text: "No focus session yet today (it is midday).",
 				step: "Start one 25-minute block now."
 			});
-			await send(await coach("midday", fallback));
+			await send(await coach("midday", fallback), focusButtons());
 			sent.push("midday");
 		}
 	} else {

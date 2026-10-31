@@ -236,3 +236,10 @@ html.calm [class*='loading'] {
 .fun-next .bar i { display: block; height: 100%; background: var(--gold); border-radius: 4px; }
 .fun-shop { margin-top: 4px; }
 :root[data-theme='light'] .fun-next .bar { background: rgba(0, 0, 0, 0.08); }
+
+/* One-tap focus on a task */
+.dl-play { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--lime) 40%, transparent); background: transparent; color: var(--lime); font-size: 11px; cursor: pointer; display: grid; place-items: center; opacity: 0.55; transition: opacity 0.15s, background 0.15s, transform 0.15s; }
+.dl li:hover .dl-play, .dl-play:focus-visible { opacity: 1; }
+.dl-play:hover { background: color-mix(in srgb, var(--lime) 15%, transparent); transform: scale(1.08); }
+@media (hover: none) { .dl-play { opacity: 1; } }
+.now-card.ended { border-color: color-mix(in srgb, var(--green) 45%, transparent); }

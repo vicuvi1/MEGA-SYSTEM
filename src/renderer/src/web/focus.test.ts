@@ -117,5 +117,21 @@ describe('focus, plans and goals (saved in Turso)', () => {
     expect(await say('/fun 10 youtube')).toMatch(/−10 coins/)
     expect(await say('/week')).toMatch(/Your week[\s\S]*Must-dos: <b>1\/2/)
     expect(sent.some((m) => m.method === 'answerCallbackQuery' && /\+10 coins/.test(m.body.text))).toBe(true)
+    // ▶ under the coach starts a session on the must-do; ⏹ stops it and offers to tick it.
+    const cb = (data: string) => bots.handleUpdate('1:x', { update_id: ++id, callback_query: { id: `c${id}`, data, message: { chat: { id: 42 }, message_id: 9, text: 'coach' } } })
+    expect(await cb('fo|Gym')).toMatch(/Focus started:<\/b> Gym · 50 min/)
+    expect((await w.focus.state()).running).toMatchObject({ subject: 'Gym', task: { kind: 'mustdo', ref: 'Gym' } })
+    const stopped = await cb('fx|')
+    expect(stopped).toMatch(/Finished “Gym”\?/)
+    const kb = sent.filter((m) => m.method === 'editMessageText').pop()!.body.reply_markup
+    expect(kb.inline_keyboard[0][0]).toMatchObject({ text: '✅ Yes, tick it', callback_data: `pp|${day}|1` })
+  })
+
+  it('a session for a Todoist task remembers it until it stops', async () => {
+    const { mirror, w } = await web()
+    await mirror.write((db) => w.services(db).focus.start('University', 50, new Date(), { kind: 'todoist', ref: '777', title: 'Finish etica' }))
+    const r = await mirror.write((db) => w.services(db).focus.stop())
+    expect(r.task).toEqual({ kind: 'todoist', ref: '777', title: 'Finish etica' })
+    expect((await w.focus.state()).running).toBeNull()
   })
 })

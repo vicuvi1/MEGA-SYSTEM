@@ -114,7 +114,7 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
   },
   focus: {
     state: () => call('focus:state'),
-    start: (subject, planned) => call('focus:start', subject, planned),
+    start: (subject, planned, task) => call('focus:start', subject, planned, task),
     stop: () => call('focus:stop'),
     cancel: () => call('focus:cancel'),
     add: (subject, minutes, day) => call('focus:add', subject, minutes, day),

@@ -63,9 +63,9 @@ export { calculateEffortEquivalence }
 export type { BodyMetric, BodyMetricInput, BodySummary, Exercise, Workout, WorkoutExerciseItem, WorkoutInput }
 export type BodyState = BodySummary
 export type { SleepLog, SleepSummary, Expense, ExpenseCategory, DailyExpenseSummary }
-export type { FocusState, RunningFocus } from '../main/focus'
+export type { FocusState, RunningFocus, FocusTask } from '../main/focus'
 export type { DayPlan, FocusSession, GoalProgress, WeekReport } from '@core/focus'
-import type { FocusState } from '../main/focus'
+import type { FocusState, FocusTask } from '../main/focus'
 import type { DayPlan, FocusSession } from '@core/focus'
 
 export interface NativeMoneySummary {
@@ -464,8 +464,8 @@ export interface LifeApi {
   }
   focus: {
     state(): Promise<FocusState>
-    start(subject: string, planned?: number): Promise<FocusState>
-    stop(): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    start(subject: string, planned?: number, task?: FocusTask | null): Promise<FocusState>
+    stop(): Promise<{ session: FocusSession; coins: number; state: FocusState; task?: FocusTask | null }>
     cancel(): Promise<FocusState>
     add(subject: string, minutes: number, day?: string): Promise<{ session: FocusSession; coins: number; state: FocusState }>
     setPlan(items: string[]): Promise<DayPlan>

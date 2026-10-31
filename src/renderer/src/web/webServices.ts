@@ -20,7 +20,7 @@ import { Schedule, Tasks } from '../../../main/planner'
 import { ShieldService } from '../../../main/shields'
 import { Shop } from '../../../main/shop'
 import { SleepService } from '../../../main/sleep'
-import { FocusService } from '../../../main/focus'
+import { FocusService, type FocusTask } from '../../../main/focus'
 import { ProgressService } from '../../../main/progress'
 import { UnifiedEconomyService } from '../../../main/unifiedEconomy'
 import { Wallet } from '../../../main/wallet'
@@ -190,7 +190,7 @@ export function createWebServices(mirror: Mirror) {
     },
     focus: {
       state: () => read((s) => s.focus.state()),
-      start: (subject: string, planned?: number) => write((s) => s.focus.start(subject, planned)),
+      start: (subject: string, planned?: number, task?: FocusTask | null) => write((s) => s.focus.start(subject, planned, new Date(), task ?? null)),
       stop: () => write((s) => s.focus.stop(), W),
       cancel: () => write((s) => s.focus.cancel()),
       add: (subject: string, minutes: number, day?: string) => write((s) => s.focus.add(subject, minutes, day), W),

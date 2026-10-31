@@ -17,7 +17,7 @@ import { Schedule, Tasks } from './planner'
 import { Discipline } from './discipline'
 import { Body } from './body'
 import { SleepService } from './sleep'
-import { FocusService } from './focus'
+import { FocusService, type FocusTask } from './focus'
 import { MoneyService } from './money'
 import { ShieldService } from './shields'
 import { UnifiedEconomyService } from './unifiedEconomy'
@@ -347,7 +347,7 @@ const focusChanged = <T,>(r: T): T => {
   return r
 }
 handle('focus:state', () => focusService.state())
-handle('focus:start', (subject: string, planned?: number) => focusService.start(subject, planned))
+handle('focus:start', (subject: string, planned?: number, task?: FocusTask | null) => focusService.start(subject, planned, new Date(), task ?? null))
 handle('focus:stop', () => focusChanged(focusService.stop()))
 handle('focus:cancel', () => focusService.cancel())
 handle('focus:add', (subject: string, minutes: number, day?: string) => focusChanged(focusService.add(subject, minutes, day)))

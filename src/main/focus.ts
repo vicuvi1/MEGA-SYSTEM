@@ -20,10 +20,19 @@ import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 
+/** What a session is for, so its end can tick it off (a must-do or a Todoist task). */
+export interface FocusTask {
+  kind: 'mustdo' | 'todoist'
+  /** Todoist task id; for a must-do, its text. */
+  ref: string
+  title: string
+}
+
 export interface RunningFocus {
   subject: string
   startedAt: string
   planned: number
+  task?: FocusTask | null
 }
 
 export interface FocusState {
@@ -117,23 +126,24 @@ export class FocusService {
   }
 
   /** Starts the timer (one at a time; it keeps running across devices). */
-  start(subject: string, planned = 50, now = new Date()): FocusState {
+  start(subject: string, planned = 50, now = new Date(), task: FocusTask | null = null): FocusState {
     const name = String(subject || '').trim().slice(0, 40)
     if (!name) throw new LedgerError('What are you focusing on? e.g. Math')
     if (this.running()) throw new LedgerError('A focus session is already running: stop it first')
     const minutes = Math.min(180, Math.max(5, Math.round(planned) || 50))
-    setSetting(this.db, RUNNING, JSON.stringify({ subject: name, startedAt: now.toISOString(), planned: minutes }))
+    const t = task && (task.kind === 'mustdo' || task.kind === 'todoist') ? { kind: task.kind, ref: String(task.ref).slice(0, 200), title: String(task.title).slice(0, 200) } : null
+    setSetting(this.db, RUNNING, JSON.stringify({ subject: name, startedAt: now.toISOString(), planned: minutes, task: t }))
     return this.state(now)
   }
 
   /** Stops the timer and logs the minutes; coins for them (up to the daily limit). */
-  stop(now = new Date()): { session: FocusSession; coins: number; state: FocusState } {
+  stop(now = new Date()): { session: FocusSession; coins: number; state: FocusState; task: FocusTask | null } {
     const run = this.running()
     if (!run) throw new LedgerError('No focus session is running')
     const minutes = sessionMinutes(run.startedAt, run.planned, now)
     return this.db.transaction(() => {
       setSetting(this.db, RUNNING, 'null')
-      return this.log(run.subject, minutes, now, run.startedAt)
+      return { ...this.log(run.subject, minutes, now, run.startedAt), task: run.task ?? null }
     })()
   }
 

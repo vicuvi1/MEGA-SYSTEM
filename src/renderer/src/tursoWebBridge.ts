@@ -471,6 +471,8 @@ export function createTursoWebBridge(): Bridge {
       get: (_t, method: string) => async (...args: unknown[]) => {
         const r = await ((await svcP).focus as any)[method](...args)
         if (method !== 'state') window.dispatchEvent(new CustomEvent('life-focus-changed'))
+        // A session for a must-do or a Todoist task: Today asks whether it's done.
+        if (method === 'stop' && r?.task) window.dispatchEvent(new CustomEvent('life-focus-ended', { detail: { task: r.task, minutes: r.session?.minutes ?? 0 } }))
         return r
       }
     }),

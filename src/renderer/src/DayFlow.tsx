@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
 import { pLabel, sortToday, type TodoTask } from '@core/todoist'
-import type { BodyState, ConnectionsState, DisciplineState, Summary } from '@shared/api'
+import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
 import type { PageId } from './modules'
@@ -27,6 +27,14 @@ interface Habit {
   hint: string
   done: boolean
   run: () => void | Promise<void>
+}
+
+/** A short subject for the focus stats: the first words of a must-do. */
+const subjectOf = (text: string) => text.split(/\s+/).slice(0, 3).join(' ').slice(0, 40)
+/** A Todoist task's area (its section or project, without the emoji), else its first words. */
+const todoSubject = (t: TodoTask) => {
+  const area = (t.section || (t.project !== 'Inbox' ? t.project : '') || '').replace(/[^\p{L}\p{N}&\s-]/gu, '').trim()
+  return area || subjectOf(t.content)
 }
 
 /** Today's Todoist list shows this many first (late and P1 on top). */
@@ -109,8 +117,26 @@ export function DayFlow(props: Props) {
     if (r?.paid) soundCoin()
     refresh()
   }
-  const startFocus = async (subject: string) => {
-    if (await act(() => life.focus.start(subject, 50), `Focus started: ${subject}`)) loadFocus()
+  const startFocus = async (subject: string, task: FocusTask | null = null) => {
+    if (await act(() => life.focus.start(subject, 50, task), `Focus started: ${task?.title ?? subject}`)) loadFocus()
+  }
+  // A session for a must-do or a Todoist task ended: ask whether it's done.
+  const [ended, setEnded] = useState<{ task: FocusTask; minutes: number } | null>(null)
+  useEffect(() => {
+    const on = (e: Event) => setEnded((e as CustomEvent).detail)
+    window.addEventListener('life-focus-ended', on)
+    return () => window.removeEventListener('life-focus-ended', on)
+  }, [])
+  const finishEnded = async () => {
+    if (!ended || !st) return
+    const { task } = ended
+    setEnded(null)
+    if (task.kind === 'mustdo') {
+      const i = st.plan.items.findIndex((p) => !p.done && p.text === task.ref)
+      if (i >= 0) await tickMustDo(i)
+    } else if (life.todoist) {
+      await doneTodo({ id: task.ref, content: task.title, priority: 1, due: null, dueTime: null, project: null, recurring: false })
+    }
   }
   const addMustDo = async () => {
     const text = adding.trim()
@@ -145,6 +171,7 @@ export function DayFlow(props: Props) {
       case 'review':
         return onGo('focus')
       case 'mustdo':
+        return startFocus(a.subject, { kind: 'mustdo', ref: a.title, title: a.title })
       case 'focus-goal':
         return startFocus(a.subject)
       case 'todo': {
@@ -178,7 +205,21 @@ export function DayFlow(props: Props) {
 
   return (
     <>
-      {now && (
+      {ended && (
+        <section className="now-card ended" aria-label="Session finished">
+          <span className="now-label">Session done · {ended.minutes} min</span>
+          <h2>Finished “{ended.task.title}”?</h2>
+          <div className="row">
+            <button className="btn primary" onClick={() => void finishEnded()}>
+              <Icon name="check" size={13} /> Yes, tick it{ended.task.kind === 'todoist' ? ' in Todoist' : ''}
+            </button>
+            <button className="btn ghost" onClick={() => setEnded(null)}>
+              Not yet
+            </button>
+          </div>
+        </section>
+      )}
+      {now && !ended && (
         <section className="now-card" aria-label="What to do now">
           <span className="now-label">Now</span>
           <h2>{now.title}</h2>
@@ -217,6 +258,11 @@ export function DayFlow(props: Props) {
                 {p.done ? '✓' : ''}
               </button>
               <span className="dl-text">{p.text}</span>
+              {!p.done && !st.running && (
+                <button className="dl-play" aria-label={`Focus 50 minutes on ${p.text}`} title="Focus 50 min on this" onClick={() => void startFocus(subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text })}>
+                  ▶
+                </button>
+              )}
               <span className="dl-hint">+10</span>
             </li>
           ))}
@@ -259,6 +305,11 @@ export function DayFlow(props: Props) {
                     {t.content}
                     {t.due && t.due < today && <em className="dl-late"> late</em>}
                   </span>
+                  {!st.running && (
+                    <button className="dl-play" aria-label={`Focus 50 minutes on ${t.content}`} title="Focus 50 min on this" onClick={() => void startFocus(todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content })}>
+                      ▶
+                    </button>
+                  )}
                   <span className="dl-hint">
                     {t.section ? `${t.section} · ` : t.project && t.project !== 'Inbox' ? `${t.project} · ` : ''}
                     {t.dueTime ?? ''}

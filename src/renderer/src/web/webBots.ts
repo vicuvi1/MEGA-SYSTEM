@@ -3,7 +3,7 @@
 // recorded in bot_seen_updates in the same Turso transaction as what it
 // logged, so the phone and the PC never log one message twice, and a message
 // is never marked done without its record (or the other way round).
-import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
+import type { BotBridgeConfig, BotLogEntry, FocusTask } from '@shared/api'
 import {
   formatBalanceResponse,
   formatCleanCheckinResponse,
@@ -24,7 +24,7 @@ import { queueFinanceExpense } from './financeInbox'
 import { logMoney, moneyButton } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
-import { REASONS, hm, parsePlan } from '@core/focus'
+import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
@@ -166,6 +166,33 @@ export interface TodoistLike {
   quickAdd(text: string): Promise<TodoTask>
 }
 
+/** Under "Focus started": one tap stops and logs it. */
+const STOP_KEYBOARD = { inline_keyboard: [[{ text: '⏹ Stop & log', callback_data: 'fx|' }]] }
+
+/** "▶ 50 min: …" buttons that start a focus session (subject kept short for Telegram's 64 bytes). */
+export function focusKeyboard(subjects: string[]): any {
+  const rows = subjects
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((t) => {
+      const short = t.split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
+      return [{ text: `▶ 50 min: ${short}`, callback_data: `fo|${short}` }]
+    })
+  return rows.length ? { inline_keyboard: rows } : undefined
+}
+
+/** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
+function stoppedReply(r: { session: { minutes: number; subject: string }; coins: number; state: { todayMin: number }; task?: FocusTask | null }, plan: DayPlan): { reply: string; keyboard?: any } {
+  const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ''}\nToday: ${hm(r.state.todayMin)}`
+  const t = r.task
+  if (t?.kind === 'mustdo') {
+    const i = plan.items.findIndex((p) => !p.done && p.text === t.ref)
+    if (i >= 0) return { reply: `${head}\n\nFinished “${esc(t.title)}”?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, tick it', callback_data: `pp|${plan.day}|${i}` }]] } }
+  }
+  if (t?.kind === 'todoist') return { reply: `${head}\n\nFinished “${esc(t.title)}”?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, done in Todoist', callback_data: `td|${t.ref}`.slice(0, 64) }]] } }
+  return { reply: head }
+}
+
 export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
@@ -250,11 +277,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50)
       const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, '').trim() || st.subjects[0] || 'Focus'
       f.start(subject, minutes)
-      return { reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Send <code>/stop</code> when you finish.` }
+      return { reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Tap Stop (or send <code>/stop</code>) when you finish.`, keyboard: STOP_KEYBOARD }
     }
     if (cmd === 'stop') {
       const r = f.stop()
-      return { reply: `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ''}\nToday: ${hm(r.state.todayMin)}` }
+      return stoppedReply(r, f.plan(s.wallet.today()))
     }
     if (cmd === 'plan') {
       if (arg) f.setPlan(parsePlan(arg))
@@ -462,11 +489,67 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbku]|p[pr])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuox]|p[pr]|td)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
       return null
+    }
+    const edit = (text: string, keyboard?: any) =>
+      tg(update.__token, 'editMessageText', { chat_id: chat, message_id: cq.message.message_id, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+    // A Todoist task finished after a focus session: Todoist is a network
+    // call, so the tap is marked seen first, then Todoist, then the coins.
+    if (data.startsWith('td|')) {
+      const fresh = await mirror.write((db) => {
+        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return false
+        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+        return true
+      })
+      if (!fresh) return null
+      const id = data.slice(3)
+      const title = /“([^”]*)”/.exec(String(cq.message?.text ?? ''))?.[1] ?? 'Todoist task'
+      try {
+        if (!todoist) throw new Error('Todoist is not connected')
+        await todoist.close(id)
+        const paid = await mirror.write((db) => payTodoist(services.services(db), [{ id, content: title }]))
+        await answer(paid ? '+8 coins' : 'Done')
+        const text = `${String(cq.message?.text ?? '').split('\n\nFinished')[0]}\n\n✅ <b>Done in Todoist:</b> ${esc(title)}${paid ? ' · 🪙 +8' : ''}`
+        await edit(text)
+        return text
+      } catch (e) {
+        await answer(`Todoist: ${(e as Error).message}`.slice(0, 190))
+        return null
+      }
+    }
+    // ▶ start a 50-minute session on a subject / ⏹ stop the running one.
+    if (data.startsWith('fo|') || data.startsWith('fx|')) {
+      const res = await mirror.write((db) => {
+        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null
+        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+        const f = services.services(db).focus
+        try {
+          if (data.startsWith('fo|')) {
+            const subject = data.slice(3) || 'Focus'
+            const plan = f.plan(services.services(db).wallet.today())
+            const item = plan.items.find((p) => !p.done && p.text.startsWith(subject))
+            f.start(subject, 50, new Date(), item ? { kind: 'mustdo', ref: item.text, title: item.text } : null)
+            return { text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · 50 min.\nPhone away. Tap Stop when you finish.`, keyboard: STOP_KEYBOARD, toast: 'Focus started' }
+          }
+          const r = f.stop()
+          const out = stoppedReply(r, f.plan(services.services(db).wallet.today()))
+          return { text: out.reply, keyboard: out.keyboard, toast: r.coins ? `+${r.coins} coins` : 'Logged' }
+        } catch (e) {
+          return { text: '', keyboard: undefined, toast: (e as Error).message.slice(0, 190) }
+        }
+      })
+      if (!res) return null
+      await answer(res.toast)
+      if (!res.text) return null
+      // A start sends a new message (the coach's stays); a stop edits the timer message.
+      if (data.startsWith('fo|')) await tg(update.__token, 'sendMessage', { chat_id: chat, text: res.text, parse_mode: 'HTML', reply_markup: res.keyboard }).catch(() => null)
+      else await edit(res.text, res.keyboard)
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-focus-changed'))
+      return res.text
     }
     const res = await mirror.write((db) => {
       if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null

@@ -9,7 +9,7 @@ import type { BotBridgeConfig } from '@shared/api'
 import { Mirror } from '../renderer/src/web/mirror'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
-import { createWebBots } from '../renderer/src/web/webBots'
+import { createWebBots, focusKeyboard } from '../renderer/src/web/webBots'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
@@ -139,6 +139,11 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       return fallback
     }
   }
+  /** ▶ buttons under the coach: your open must-dos, else your usual subjects. */
+  const focusButtons = () => {
+    const open = st.plan.items.filter((x) => !x.done).map((x) => x.text)
+    return focusKeyboard(open.length ? open : st.subjects.slice(0, 2))
+  }
   const sent: string[] = []
   if (job === 'morning') {
     const planAlready = st.plan.items.length > 0
@@ -148,7 +153,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
     )
     sent.push('morning')
     if (worthSaying(facts)) {
-      await send(await coach('morning', coachText(facts)))
+      await send(await coach('morning', coachText(facts)), focusButtons())
       sent.push('coach')
     }
   } else if (job === 'midday') {
@@ -156,7 +161,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
     if (st.todayMin === 0 && !st.running) {
       const fallback = `🧭 <b>Coach</b>\n\nHalf the day is gone and no focus yet${st.plan.items.length ? `. Your must-do: <b>${escapeHtml(st.plan.items.find((x) => !x.done)?.text ?? st.plan.items[0].text)}</b>` : ''}.\n\n👉 Start one 25-minute block now: <code>/focus 25 ${escapeHtml(st.subjects[0] ?? 'study')}</code>`
       facts.unshift({ id: 'no-focus', weight: 10, text: 'No focus session yet today (it is midday).', step: 'Start one 25-minute block now.' })
-      await send(await coach('midday', fallback))
+      await send(await coach('midday', fallback), focusButtons())
       sent.push('midday')
     }
   } else {
