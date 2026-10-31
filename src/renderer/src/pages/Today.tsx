@@ -16,6 +16,7 @@ import { FocusToday } from './Focus'
 import { DayFlow } from '../DayFlow'
 import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
 import { ProgressCard } from './Progress'
+import { FunCard } from '../FunCard'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -121,6 +122,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     ),
     focus: () => <FocusToday onWallet={() => onChange()} timerOnly />,
     progress: () => <ProgressCard onOpen={() => onGo('progress')} />,
+    fun: () => <FunCard onWallet={() => onChange()} onOpenShop={onOpenShop} />,
     todoist: () => <TodoistPanel today={summary.today} onWallet={() => onChange()} />,
     raids: () => <DungeonRaidCards balance={summary.balance} onAwardCoins={() => onChange()} />,
     plan: () => (

@@ -22,13 +22,14 @@ export interface UiPrefs {
   layoutV?: number
 }
 
-export type TodaySectionId = 'day' | 'progress' | 'greeting' | 'focus' | 'checklist' | 'todoist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
+export type TodaySectionId = 'day' | 'progress' | 'fun' | 'greeting' | 'focus' | 'checklist' | 'todoist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
 
 /** What each Today section is, and whether it shows on a new device. */
 export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
   { id: 'day', label: 'Now & today’s list', hint: 'The one next step, and one list: must-dos, habits and Todoist', on: true },
   { id: 'progress', label: 'This week', hint: 'Am I improving? One line and a chip per area', on: true },
   { id: 'focus', label: 'Focus timer', hint: 'Start and stop a focus session', on: true },
+  { id: 'fun', label: 'Treat yourself', hint: 'What your coins buy now: fun time and your rewards', on: true },
   { id: 'greeting', label: 'Greeting', hint: 'Your day in one line: blocks, tasks, coins today', on: false },
   { id: 'checklist', label: 'Old quest checklist', hint: 'The same habits as the list, in the game style', on: false },
   { id: 'todoist', label: 'Todoist box', hint: 'Todoist on its own, with an add box (Todoist is also in the list)', on: false },
@@ -64,7 +65,7 @@ const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 
 
 /** Pages most people don't need day to day: hidden once (Settings → Layout brings them back). */
 const QUIET_PAGES = ['schedule', 'journey', 'rules']
-const LAYOUT_V = 2
+const LAYOUT_V = 3
 
 function load(): UiPrefs {
   try {

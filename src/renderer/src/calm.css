@@ -175,3 +175,19 @@ html.calm [class*='loading'] {
 .pg-chip.worse { border-color: color-mix(in srgb, var(--red) 50%, transparent); }
 :root[data-theme='light'] .pg-bars i { background: rgba(0, 0, 0, 0.1); }
 :root[data-theme='light'] .pg-bars i.now { background: var(--lime-ink, var(--lime)); }
+
+/* Treat yourself */
+.fun-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.fun-head h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; }
+.fun-bal { font-size: 15px; color: var(--gold); }
+.fun-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.fun-label { font-size: 12px; color: var(--muted); }
+.fun-time { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fun-time select { min-width: 130px; }
+.fun-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fun-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.fun-title { font-weight: 500; }
+.fun-next .bar { height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin: 6px 0 4px; }
+.fun-next .bar i { display: block; height: 100%; background: var(--gold); border-radius: 4px; }
+.fun-shop { margin-top: 4px; }
+:root[data-theme='light'] .fun-next .bar { background: rgba(0, 0, 0, 0.08); }
