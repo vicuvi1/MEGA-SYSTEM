@@ -21,3 +21,34 @@ html.calm [class*='spinner'],
 html.calm [class*='loading'] {
   animation-iteration-count: infinite !important;
 }
+
+/* Settings → Today screen & pages */
+.layout-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.layout-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); }
+.layout-list li.off { opacity: 0.55; }
+.layout-list .check { margin: 0; flex: 1; min-width: 0; }
+.layout-move { display: flex; gap: 4px; flex-shrink: 0; }
+.layout-move .icon-btn { width: 30px; height: 30px; font-size: 11px; }
+.layout-sub { font-size: 13px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+.layout-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; }
+.layout-pages .check { margin: 0; }
+
+/* Phone: the "More" menu above the bottom bar */
+.mobile-more { position: fixed; inset: 0; z-index: 99; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-end; padding: 0 10px calc(72px + env(safe-area-inset-bottom, 0px)); }
+.mobile-more-card { width: 100%; background: var(--panel, #12151c); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.mobile-more-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid transparent; color: var(--text, #e8eaf0); font-size: 12px; }
+.mobile-more-item svg { color: var(--c, var(--lime)); }
+.mobile-more-item.active { border-color: var(--c, var(--lime)); }
+
+/* Settings list: the hint goes under its label */
+.layout-list .check small { display: block; font-weight: 400; }
+
+/* Phone header: no keyboard hints, no buttons that live in "More" */
+@media (max-width: 768px) {
+  .search-btn kbd,
+  .quick-omnibar-btn kbd,
+  .search-btn .chip-text,
+  .game-rules-header-btn {
+    display: none !important;
+  }
+}

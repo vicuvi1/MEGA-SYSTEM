@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
 import type { BodyState, CalendarEvent, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
-import { useUiPrefs } from '../uiPrefs'
+import { todayLayout, useUiPrefs, type TodaySectionId } from '../uiPrefs'
 import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { soundSuccess } from '../sound'
@@ -52,11 +52,12 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     onChange(s)
   }
 
-  return (
-    <div className="today">
-      <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />
-
-      {/* Sleek 5-Card Metric Strip: Today Coins/Goal, Waky Sleep, Finance Spend, MAN Discipline, Sport Track */}
+  const [ui] = useUiPrefs()
+  // Your sections, in your order (Settings → Today screen).
+  const sections: Record<TodaySectionId, () => ReactNode> = {
+    greeting: () => <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />,
+    apps: () => (
+        <>
       <StatsStrip5
         summary={summary}
         shop={shop}
@@ -67,8 +68,10 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         onOpenApp={onOpenApp}
         onOpenShop={onOpenShop}
       />
-
-      {/* Solo Leveling Physical Daily Quest Hologram Banner */}
+        </>
+      ),
+    pillars: () => (
+        <>
       <DailyGrandSlamCard
         summary={summary}
         discipline={discipline}
@@ -77,15 +80,20 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         onGo={onGo}
         onChange={onChange}
       />
-
+        </>
+      ),
+    reps: () => (
+        <>
       <SoloDailyQuestBanner
         body={body ?? null}
         summary={summary}
         onRefresh={() => onChange()}
         onGo={onGo}
       />
-
-      {/* Unified Daily Quest Command Hub (Replaces duplicate Quests + Rituals) */}
+        </>
+      ),
+    checklist: () => (
+        <>
       <UnifiedQuestHub
         summary={summary}
         discipline={discipline}
@@ -95,17 +103,19 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         onGo={onGo}
         onOpenApp={onOpenApp}
       />
-
-      {/* High-Stakes Dimensional Dungeon Raid Cards */}
-      <DungeonRaidCards balance={summary.balance} onAwardCoins={() => onChange()} />
-
-      {/* Schedule & Tasks Immediately Visible Without Scrolling */}
+        </>
+      ),
+    raids: () => <DungeonRaidCards balance={summary.balance} onAwardCoins={() => onChange()} />,
+    plan: () => (
+        <>
       <div className="cols even">
         <TodaySchedule schedule={schedule} onSchedule={onSchedule} onGo={onGo} />
         <TodayTasks tasks={tasks} onTasks={onTasks} onWallet={() => onChange()} onGo={onGo} />
       </div>
-
-      {/* Quick Action Logs & Recent Activity */}
+        </>
+      ),
+    quicklog: () => (
+        <>
       <div className="cols">
         <section className="panel">
           <header className="panel-head">
@@ -154,6 +164,17 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
           )}
         </section>
       </div>
+        </>
+      )
+  }
+
+  return (
+    <div className="today">
+      {todayLayout(ui)
+        .filter((x) => x.on)
+        .map((x) => (
+          <Fragment key={x.id}>{sections[x.id]()}</Fragment>
+        ))}
     </div>
   )
 }

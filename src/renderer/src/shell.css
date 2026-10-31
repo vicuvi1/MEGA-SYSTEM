@@ -163,6 +163,8 @@
     -webkit-backdrop-filter: blur(20px);
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
+    /* a generic nav rule elsewhere turned this into a column: only "Today" showed */
+    flex-direction: row !important;
     justify-content: space-between;
     align-items: center;
     z-index: 100;

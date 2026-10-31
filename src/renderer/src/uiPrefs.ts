@@ -12,6 +12,32 @@ export interface UiPrefs {
   name: string
   /** Lighter: looping effects play once, no glass blur, no scanlines (Settings → Appearance). */
   calm: boolean
+  /** Today's sections, in your order; `on: false` hides one (Settings → Today screen). */
+  today: { id: TodaySectionId; on: boolean }[]
+  /** Pages you don't use: hidden from the sidebar and the phone menu. */
+  hiddenPages: string[]
+}
+
+export type TodaySectionId = 'greeting' | 'checklist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
+
+/** What each Today section is, and whether it shows on a new device. */
+export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
+  { id: 'greeting', label: 'Greeting', hint: 'Your day in one line: blocks, tasks, coins today', on: true },
+  { id: 'checklist', label: "Today's checklist", hint: 'Oath, clean day, workout, focus, skincare, spending', on: true },
+  { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and hydration with quick +10 buttons', on: true },
+  { id: 'apps', label: 'Your apps', hint: 'Coins, Waky, Finance Helper, MAN and Sport Track at a glance', on: true },
+  { id: 'plan', label: 'Schedule & tasks', hint: "Today's blocks and open tasks", on: true },
+  { id: 'quicklog', label: 'Quick log & recent', hint: 'One tap for anything else, and what you logged', on: true },
+  { id: 'pillars', label: '4-pillar day', hint: 'Sleep, discipline, sport, money (also in the checklist)', on: false },
+  { id: 'raids', label: 'Dungeon raids', hint: 'Bet coins on a challenge', on: false }
+]
+
+/** Your Today layout with any section added later appended (in its default state). */
+export function todayLayout(p: UiPrefs): { id: TodaySectionId; on: boolean }[] {
+  const known = new Set(TODAY_SECTIONS.map((x) => x.id))
+  const mine = (Array.isArray(p.today) ? p.today : []).filter((x) => known.has(x.id))
+  const have = new Set(mine.map((x) => x.id))
+  return [...mine, ...TODAY_SECTIONS.filter((x) => !have.has(x.id)).map((x) => ({ id: x.id, on: x.on }))]
 }
 
 export const ACCENTS: Record<AccentColor, string> = {
@@ -24,7 +50,7 @@ export const ACCENTS: Record<AccentColor, string> = {
 
 
 const KEY = 'ls.ui'
-const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '', calm: true }
+const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 80, name: '', calm: true, today: [], hiddenPages: [] }
 
 function load(): UiPrefs {
   try {

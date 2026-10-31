@@ -13,6 +13,7 @@ import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, BotB
 import { POPULAR_MODELS, DEFAULT_AI_CONFIG } from '@core/ai'
 import { DEFAULT_CALENDAR_CONFIG } from '@shared/api'
 import { UpdatePanel } from '../updates'
+import { LayoutEditor } from '../LayoutEditor'
 import { useUiPrefs } from '../uiPrefs'
 import { features, life } from '../bridge'
 import { addDays } from '@core/dates'
@@ -674,6 +675,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </div>
         <p className="hint block">Size: Ctrl + and Ctrl − make everything bigger or smaller, Ctrl 0 resets. The apps inside keep their own dark look in the light theme.</p>
       </section>
+      <LayoutEditor />
 
       <section className="panel">
         <header className="panel-head">

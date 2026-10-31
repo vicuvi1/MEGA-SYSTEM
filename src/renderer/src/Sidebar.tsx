@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { LevelInfo } from '@shared/api'
 import { Icon, Logo } from './Icon'
 import { MODULES, SYSTEM_PAGES, type ModuleDef, type PageId } from './modules'
+import { useUiPrefs } from './uiPrefs'
 
 export type Badge = { n?: number; dot?: 'lime' | 'warn' }
 
@@ -31,6 +32,8 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, bala
   const [tip, setTip] = useState<{ label: string; y: number } | null>(null)
   const open = !collapsed || peek
   const byId = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<PageId, ModuleDef>
+  const [ui] = useUiPrefs()
+  const hiddenPages = new Set(ui.hiddenPages ?? [])
   let index = 0
 
   const showTip = (label: string, el: HTMLElement) => {
@@ -78,7 +81,7 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, bala
           {GROUPS.map((g) => (
             <div key={g.title} className="sb-group">
               <div className="sb-group-title sb-label">{g.title}</div>
-              {g.ids.map((id) => {
+              {g.ids.filter((id) => !hiddenPages.has(id)).map((id) => {
                 const m = byId[id]
                 const n = ++index
                 const on = page === id
@@ -117,7 +120,7 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, bala
 
         <div className="sb-foot">
           <div className="sb-tools" role="group" aria-label="System">
-            {SYSTEM_PAGES.map((m) => {
+            {SYSTEM_PAGES.filter((m) => m.id === 'settings' || !hiddenPages.has(m.id)).map((m) => {
               const on = page === m.id
               const b = badges[m.id]
               return (
