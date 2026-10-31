@@ -15,6 +15,7 @@ async function check(token) {
     const h = hook?.result ?? {}
     return {
       bot: me?.result?.username ? '@' + me.result.username : null,
+      name: me?.result?.first_name ?? null,
       ok: !!me?.ok,
       error: me?.ok ? null : me?.description ?? 'no answer',
       webhook: h.url ? new URL(h.url).host : null,
