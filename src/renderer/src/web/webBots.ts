@@ -138,7 +138,7 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
       .some((id) => String(id) === chat)
 
   /** One command, on the services. Returns the reply and what changed. */
-  function run(s: Services, text: string): { reply: string; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string } } {
+  function run(s: Services, text: string): { reply: string; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' } } {
     const parsed = parseTelegramText(text)
     switch (parsed.type) {
       case 'help':
@@ -210,6 +210,14 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
         if (!(cents > 0)) return { reply: '⚠️ How much? e.g. <code>/expense 45 food lunch</code>' }
         const cat = parsed.expenseCategory || 'other'
         const note = parsed.expenseNote || ''
+        // "+500 salary": money in. It goes to Finance Helper only (Life
+        // System's spending log has no income), never as an expense.
+        if (cat === 'income') {
+          return {
+            reply: `💰 <b>Income noted:</b> ${formatMoney(cents, 'MDL')}${note ? ` · ${esc(note)}` : ''}\n\nAdded to Finance Helper.`,
+            expense: { amount: cents, category: 'income', note, type: 'income' as const }
+          }
+        }
         const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : '[Telegram]', new Date(), true)
         const cur = res.state.currency || 'MDL'
         return {
@@ -340,7 +348,10 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
     if (running) return running
     running = (async () => {
       const cfg = await config()
-      const tokens = [cfg.sportBotToken, cfg.financeBotToken, cfg.manBotToken, cfg.botToken, cfg.wakyBotToken, cfg.plannerBotToken, cfg.coachBotToken]
+      // The Finance bot belongs to Finance Helper, which reads it itself (on
+      // the PC, or its always-on server). Reading it here took its messages
+      // away and answered them as Life System commands.
+      const tokens = [cfg.sportBotToken, cfg.manBotToken, cfg.botToken, cfg.wakyBotToken, cfg.plannerBotToken, cfg.coachBotToken]
         .filter((t): t is string => !!t && t.includes(':'))
         .filter((t, i, all) => all.indexOf(t) === i)
       const replies: string[] = []

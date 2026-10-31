@@ -127,6 +127,12 @@ export class TelegramBotHub {
 
   setFinanceHost(fh: FinanceHost): void {
     this.financeHost = fh
+    // Polling started before Finance Helper was ready: restart it without
+    // the Finance bot, which Finance Helper reads from now on.
+    if (this.isPolling) {
+      this.stopPolling()
+      this.startPolling()
+    }
   }
 
   setWalletCallback(cb: () => void): void {
@@ -748,7 +754,9 @@ export class TelegramBotHub {
     const tokens: string[] = []
     for (const tok of [
       cfg.botToken,
-      cfg.financeBotToken,
+      // Finance Helper reads its own bot (syncTelegram hands it the token);
+      // reading it here too split its messages between the two.
+      this.financeHost ? '' : cfg.financeBotToken,
       cfg.sportBotToken,
       cfg.manBotToken,
       cfg.wakyBotToken,

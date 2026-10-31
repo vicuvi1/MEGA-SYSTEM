@@ -10,6 +10,8 @@ const finance = () => ({
       { id: 'wallet', name: 'Wallet' }
     ],
     categories: [
+      { id: 'work', type: 'income', name: 'Work' },
+      { id: 'other-in', type: 'income', name: 'Other income' },
       { id: 'food', type: 'expense', name: 'Food' },
       { id: 'transport', type: 'expense', name: 'Transport' },
       { id: 'other', type: 'expense', name: 'Other' }
@@ -35,5 +37,10 @@ describe('Telegram expenses into Finance Helper', () => {
   it("doesn't bring back one you deleted, and skips a locked or missing Finance", () => {
     expect(applyInbox(finance(), [entry('tg-life-old')]).added).toBe(0)
     expect(applyInbox(null, [entry('x')]).added).toBe(0)
+  })
+
+  it('"+500 salary" lands as income (Work), not as an expense', () => {
+    const { state } = applyInbox(finance(), [{ ...entry('tg-life-3', 'income'), note: 'salary', type: 'income' }])
+    expect(state.tx[1]).toMatchObject({ type: 'income', category: 'work', amount: 4500 })
   })
 })

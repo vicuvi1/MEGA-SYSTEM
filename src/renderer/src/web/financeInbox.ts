@@ -17,6 +17,7 @@ export interface InboxEntry {
   note: string
   date: string // YYYY-MM-DD
   at: number
+  type?: 'expense' | 'income' // expense when missing
 }
 
 type DbLike = Parameters<typeof getSetting>[0]
@@ -58,6 +59,16 @@ function financeCategory(state: any, cat: string): string {
   return cats.find((c) => c.id === 'other')?.id ?? cats[cats.length - 1]?.id ?? 'other'
 }
 
+function financeIncomeCategory(state: any, note: string): string {
+  const cats: any[] = (state.settings?.categories ?? []).filter((c: any) => c.type === 'income' && !c.archived)
+  const want = /\b(salary|salariu|зарплата|work|job|freelance|bonus)\b/i.test(note) ? ['work', 'other-in'] : ['other-in']
+  for (const id of want) {
+    const hit = cats.find((c) => c.id === id)
+    if (hit) return hit.id
+  }
+  return cats[cats.length - 1]?.id ?? 'other-in'
+}
+
 /** The account you last paid from in your main currency (else the first one in it). */
 function financeAccount(state: any): { id: string; currency: string } | null {
   const base = state.settings?.currency || 'MDL'
@@ -86,13 +97,13 @@ export function applyInbox(state: any, inbox: InboxEntry[], now = Date.now()): {
     id: e.id,
     createdAt: e.at,
     updatedAt: now,
-    type: 'expense',
+    type: e.type === 'income' ? 'income' : 'expense',
     amount: e.amount,
     currency: acc.currency,
     rate: 1,
     base: e.amount,
     date: e.date,
-    category: financeCategory(state, e.category),
+    category: e.type === 'income' ? financeIncomeCategory(state, e.note) : financeCategory(state, e.category),
     account: acc.id,
     note: e.note,
     source: 'telegram'
