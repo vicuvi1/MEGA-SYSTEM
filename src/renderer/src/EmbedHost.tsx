@@ -167,11 +167,17 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     const el = ref.current as any
     if (!el) return
 
+    // MAN counts check-ins: the start day is Day 1 (a reset day is Day 0).
+    // Life System counts whole days since the start, one less until the
+    // first reset. Sending Life's number set MAN back a day ("Day 2" became
+    // "Day 1" again).
+    const manDay = (d: { current: number; resets: number }) => d.current + (d.resets === 0 ? 1 : 0)
+
     const syncToMan = async () => {
       try {
         const d = await life.discipline.state()
         if (d.checkedInToday) {
-          runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(d.today)}, ${d.current})`).catch(() => {})
+          runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(d.today)}, ${manDay(d)})`).catch(() => {})
         }
         if (d.oathToday) {
           runIn(el, `window.syncFromLifeSystemOath?.(${JSON.stringify(d.today)})`).catch(() => {})
@@ -202,7 +208,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'checkin', ...data } }))
         } else if (d.checkedInToday && data.lastCheckin !== today) {
           // 2. If Life System is checked in today, but MAN is not
-          await runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(today)}, ${d.current})`).catch(() => {})
+          await runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(today)}, ${manDay(d)})`).catch(() => {})
         }
 
         // Oath reconciliation

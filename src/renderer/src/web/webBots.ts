@@ -161,7 +161,9 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
       }
       case 'checkin': {
         s.discipline.checkIn()
-        return { reply: formatCleanCheckinResponse(s.discipline.state().current, 20) }
+        // The same day number MAN shows (its start day is Day 1).
+        const st = s.discipline.state()
+        return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), 20) }
       }
       case 'oath':
         s.discipline.oath()
@@ -348,10 +350,10 @@ export function createWebBots({ mirror, services, defaults, onExpense }: WebBots
     if (running) return running
     running = (async () => {
       const cfg = await config()
-      // The Finance bot belongs to Finance Helper, which reads it itself (on
-      // the PC, or its always-on server). Reading it here took its messages
-      // away and answered them as Life System commands.
-      const tokens = [cfg.megaBotToken, cfg.sportBotToken, cfg.manBotToken, cfg.botToken, cfg.wakyBotToken, cfg.plannerBotToken, cfg.coachBotToken]
+      // The Finance bot too: Finance Helper only reads it while it runs on
+      // the PC, and its money messages ("45 lunch") reach Finance Helper
+      // through the inbox either way.
+      const tokens = [cfg.megaBotToken, cfg.sportBotToken, cfg.financeBotToken, cfg.manBotToken, cfg.botToken, cfg.wakyBotToken, cfg.plannerBotToken, cfg.coachBotToken]
         .filter((t): t is string => !!t && t.includes(':'))
         .filter((t, i, all) => all.indexOf(t) === i)
       const replies: string[] = []
