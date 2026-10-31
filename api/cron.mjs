@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET || ''
   if (!secret || req.headers.authorization !== `Bearer ${secret}`) return send(res, 401, { error: 'Not allowed' })
   const job = new URL(req.url, 'http://x').searchParams.get('job')
-  if (!['morning', 'midday', 'evening', 'night'].includes(job)) return send(res, 400, { error: 'job=morning|midday|evening|night' })
+  if (!['morning', 'reask', 'midday', 'evening', 'night'].includes(job)) return send(res, 400, { error: 'job=morning|reask|midday|evening|night' })
   const cfg = config()
   const bot = serverBots().find((b) => b.name === 'MEGA_BOT_TOKEN') ?? serverBots()[0]
   const chatId = process.env.TELEGRAM_CHAT_ID || ''

@@ -56,7 +56,7 @@ export function coachText(facts: CoachFact[]): string {
 }
 
 /** What Gemini is asked (the reply is sent as is, so it must be short). */
-export function coachPrompt(facts: CoachFact[], r: ProgressReport, extra: { mustdos: string[]; todoistToday: number | null; when: 'morning' | 'midday' | 'evening' | 'night' }): string {
+export function coachPrompt(facts: CoachFact[], r: ProgressReport, extra: { mustdos: string[]; todoistToday: number | null; when: 'morning' | 'reask' | 'midday' | 'evening' | 'night' }): string {
   return [
     'You are a calm, direct personal coach for Victor, a university student in Moldova working on university, cyber security skills, his career, sport, health and discipline.',
     `It is ${extra.when}. Write him a Telegram message of at most 3 short sentences, in plain English, no greeting fluff, no hashtags, no markdown.`,

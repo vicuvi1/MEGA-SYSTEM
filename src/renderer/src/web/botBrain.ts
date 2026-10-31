@@ -97,6 +97,16 @@ export function financeStateFrom(db: any, store: Storage | null): any {
   }
 }
 
+export const RATINGS = 'focus_ratings'
+/** The last focus session ratings (1–5): how focus feels, not just minutes. */
+export function focusRatings(db: any): { day: string; rating: number; minutes: number }[] {
+  try {
+    return JSON.parse(getSetting(db, RATINGS) || '[]')
+  } catch {
+    return []
+  }
+}
+
 const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
 
 /** The money picture: this month, this week, today, by category, against the limit. */
@@ -158,6 +168,13 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ''}. Big 3: ${wp.big3.map((b) => `${b.done ? '[done]' : '[open]'} ${b.text}`).join('; ')}.` : 'No week plan yet.',
     `Sleep: bedtime target ${sl.bedtimeTarget()}, wake target weekday ${sl.weekdayTarget()} / weekend ${sl.weekendTarget()}. Last wake-ups: ${wakes.map((w) => `${w.day.slice(5)} ${w.onTime ? 'on time' : 'late'}`).join(', ') || 'none logged'}.`,
     wakePattern(input.wakes) ?? '',
+    (() => {
+      const r = focusRatings(db).filter((x) => x.day > addDays(today, -7))
+      if (!r.length) return ''
+      const avg = r.reduce((t, x) => t + x.rating, 0) / r.length
+      const reasons = f.week.topReasons.map((x) => x.reason).join(', ')
+      return `Focus sessions felt ${avg.toFixed(1)}/5 on average this week (${r.length} rated)${reasons ? `; what got in the way: ${reasons}` : ''}.`
+    })(),
     `Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
     `Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ''}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join('; ') || 'none'}.`,
     moneyContext(extra.finance, today)

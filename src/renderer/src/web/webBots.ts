@@ -29,7 +29,7 @@ import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } fr
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
-import { brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
 const LOGS_KEY = 'life_bot_logs'
@@ -222,14 +222,18 @@ export function focusKeyboard(subjects: string[]): any {
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r: { session: { minutes: number; subject: string }; coins: number; state: { todayMin: number }; task?: FocusTask | null }, plan: DayPlan): { reply: string; keyboard?: any } {
   const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ''}\nToday: ${hm(r.state.todayMin)}`
+  // How did it go? (1–5): a low one asks what got in the way.
+  const rate = [1, 2, 3, 4, 5].map((n) => ({ text: ['😣', '😕', '😐', '🙂', '🔥'][n - 1], callback_data: `fq|${plan.day}|${n}|${r.session.minutes}` }))
   const t = r.task
   if (t?.kind === 'mustdo') {
     const i = plan.items.findIndex((p) => !p.done && p.text === t.ref)
-    if (i >= 0) return { reply: `${head}\n\nFinished “${esc(t.title)}”?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, tick it', callback_data: `pp|${plan.day}|${i}` }]] } }
+    if (i >= 0) return { reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, tick it', callback_data: `pp|${plan.day}|${i}` }], rate] } }
   }
-  if (t?.kind === 'todoist') return { reply: `${head}\n\nFinished “${esc(t.title)}”?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, done in Todoist', callback_data: `td|${t.ref}`.slice(0, 64) }]] } }
-  return { reply: head }
+  if (t?.kind === 'todoist') return { reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, done in Todoist', callback_data: `td|${t.ref}`.slice(0, 64) }], rate] } }
+  return { reply: `${head}\n\nHow did it go?`, keyboard: { inline_keyboard: [rate] } }
 }
+
+
 
 export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null }: WebBotsDeps) {
   let polling = false
@@ -532,7 +536,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuox]|p[pr]|td|sq)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -563,6 +567,25 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         await answer(`Todoist: ${(e as Error).message}`.slice(0, 190))
         return null
       }
+    }
+    // How a focus session went (1–5); a low one asks what got in the way.
+    if (data.startsWith('fq|')) {
+      const [, day, n, minutes] = data.split('|')
+      const fresh = await mirror.write((db) => {
+        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return false
+        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+        setSetting(db as any, RATINGS, JSON.stringify([...focusRatings(db), { day, rating: Number(n), minutes: Number(minutes) || 0 }].slice(-60)))
+        return true
+      })
+      if (!fresh) return null
+      const r = Number(n)
+      await answer(`${n}/5 noted`)
+      const base = esc(String(cq.message?.text ?? '').replace(/\n*(And )?[Hh]ow did it go\?\s*$/, ''))
+      const low = r <= 2
+      const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? 'Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes.' : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`
+      const keyboard = low ? { inline_keyboard: [REASONS.slice(0, 3), REASONS.slice(3)].map((row, k) => row.map((x, i) => ({ text: x, callback_data: `pr|${day}|${k * 3 + i}` }))) } : undefined
+      await edit(text, keyboard)
+      return text
     }
     // How you slept (1–5), under the wake-up message.
     if (data.startsWith('sq|')) {
@@ -635,6 +658,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             toast = 'Noted'
           }
           const plan = svc.focus.plan(day)
+          // From a session rating ("What got in the way?"): keep that message, note the reason.
+          if (kind === 'pr' && String(cq.message?.text ?? '').includes('What got in the way?')) {
+            const reason = REASONS[Number(n)]
+            return { text: `${esc(String(cq.message?.text ?? '').replace(/What got in the way\?[\s\S]*$/, ''))}Noted: <b>${esc(reason)}</b>. The coach will help you fix that first next time.`, keyboard: undefined, toast }
+          }
           const evening = String(cq.message?.text ?? '').includes('Evening review')
           const focusMin = svc.focus.state().todayMin
           return { text: evening ? eveningText(plan, focusMin) : planText(plan), keyboard: planKeyboard(plan, evening), toast }
@@ -848,12 +876,33 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return reply
   }
 
+  /** One line that turns your evening note into a lesson for tomorrow (and the coach's memory). */
+  async function lessonOfDay(token: string, chat: string, botId: string, cfg: BotBridgeConfig, note: string): Promise<void> {
+    const ctx = await mirror.read((db) => {
+      const f = services.services(db).focus.state()
+      return `Focus today ${hm(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? '[done]' : '[open]'} ${x.text}`).join('; ') || 'none'}. Got in the way: ${f.plan.reasons.join(', ') || 'nothing marked'}.`
+    })
+    const out = parseBrain(
+      await ai!(
+        `You are Victor's coach. Here is his day and his evening note. Write ONE short lesson for tomorrow (max 25 words, concrete, kind, in the language of his note) as "reply", and the same lesson as one item in "remember" starting with "Lesson ${new Date().toISOString().slice(5, 10)}:". Answer only JSON {"reply": string, "actions": [], "remember": string[]}.
+
+Day: ${ctx}
+His note: ${note}`,
+        { json: true }
+      )
+    )
+    if (!out.reply) return
+    await mirror.write((db) => saveMemory(db, updateMemory(loadMemory(db), { facts: out.remember.slice(0, 1), turns: [{ role: 'me', bot: personaFor(botId, cfg), text: `[evening] ${note}`, at: new Date().toISOString() }, { role: 'coach', bot: personaFor(botId, cfg), text: `Lesson: ${out.reply}`, at: new Date().toISOString() }] })))
+    await tg(token, 'sendMessage', { chat_id: chat, text: `💡 <b>Lesson for tomorrow:</b> ${esc(out.reply)}`, parse_mode: 'HTML' })
+  }
+
   async function handle(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
     if (update.callback_query) return handleButton(botId, update, cfg)
     const viaTodoist = await handleTodoist(botId, update, cfg)
     if (viaTodoist !== undefined) return viaTodoist
     const key = `${botId}:${update.update_id}`
     let text = String(update.message?.text ?? update.message?.caption ?? '').trim()
+    const said = text
     const chat = String(update.message?.chat?.id ?? '')
     // A reply to the morning question is today's plan.
     const asked = String(update.message?.reply_to_message?.text ?? '')
@@ -911,6 +960,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         addLog(text, chat, out.ok, out.reply)
         const keyboard = 'keyboard' in out ? out.keyboard : undefined
         await tg(update.__token, 'sendMessage', { chat_id: chat, text: out.reply, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+        // Your evening reply becomes a lesson the coach remembers.
+        if (ai && out.ok && prompted && /Evening review/.test(asked)) await lessonOfDay(update.__token, chat, botId, cfg, said).catch(() => null)
         return out.reply
       } catch (e) {
         if (e instanceof MirrorError && attempt === 0) continue // reloaded: try once more

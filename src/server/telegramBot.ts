@@ -20,7 +20,7 @@ import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting } from '../main/settings'
-import { eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
+import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 
 export { createTodoistApi }
 
@@ -94,7 +94,7 @@ export async function handleTelegramUpdate(env: BotEnv, token: string, update: u
   return reply
 }
 
-export type DailyJob = 'morning' | 'midday' | 'evening' | 'night'
+export type DailyJob = 'morning' | 'reask' | 'midday' | 'evening' | 'night'
 
 /**
  * The daily messages (Vercel runs them on a schedule, api/cron.mjs):
@@ -164,6 +164,12 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
     if (worthSaying(facts)) {
       await send(await coach('morning', coachText(facts)), focusButtons())
       sent.push('coach')
+    }
+  } else if (job === 'reask') {
+    // 10:00 and still no plan: ask again, simpler (a reply is the plan, like the morning one).
+    if (!st.plan.items.length) {
+      await send(`🧭 Still no plan for today. Just one thing is enough.\n\n<b>${PLAN_ASK}</b>\nReply to this message.`, { force_reply: true, input_field_placeholder: 'One thing that makes today good' })
+      sent.push('reask')
     }
   } else if (job === 'midday') {
     // Only when the day hasn't started: no focus yet and nothing running.

@@ -7743,6 +7743,14 @@ function financeStateFrom(db, store) {
 		return null;
 	}
 }
+/** The last focus session ratings (1–5): how focus feels, not just minutes. */
+function focusRatings(db) {
+	try {
+		return JSON.parse(getSetting(db, "focus_ratings") || "[]");
+	} catch {
+		return [];
+	}
+}
 var lei = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
 /** The money picture: this month, this week, today, by category, against the limit. */
 function moneyContext(state, today) {
@@ -7797,6 +7805,13 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ""}. Big 3: ${wp.big3.map((b) => `${b.done ? "[done]" : "[open]"} ${b.text}`).join("; ")}.` : "No week plan yet.",
 		`Sleep: bedtime target ${sl.bedtimeTarget()}, wake target weekday ${sl.weekdayTarget()} / weekend ${sl.weekendTarget()}. Last wake-ups: ${wakes.map((w) => `${w.day.slice(5)} ${w.onTime ? "on time" : "late"}`).join(", ") || "none logged"}.`,
 		wakePattern(input.wakes) ?? "",
+		(() => {
+			const r = focusRatings(db).filter((x) => x.day > addDays$1(today, -7));
+			if (!r.length) return "";
+			const avg = r.reduce((t, x) => t + x.rating, 0) / r.length;
+			const reasons = f.week.topReasons.map((x) => x.reason).join(", ");
+			return `Focus sessions felt ${avg.toFixed(1)}/5 on average this week (${r.length} rated)${reasons ? `; what got in the way: ${reasons}` : ""}.`;
+		})(),
 		`Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
 		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join("; ") || "none"}.`,
 		moneyContext(extra.finance, today)
@@ -8159,25 +8174,44 @@ function focusKeyboard(subjects) {
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r, plan) {
 	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ""}\nToday: ${hm(r.state.todayMin)}`;
+	const rate = [
+		1,
+		2,
+		3,
+		4,
+		5
+	].map((n) => ({
+		text: [
+			"😣",
+			"😕",
+			"😐",
+			"🙂",
+			"🔥"
+		][n - 1],
+		callback_data: `fq|${plan.day}|${n}|${r.session.minutes}`
+	}));
 	const t = r.task;
 	if (t?.kind === "mustdo") {
 		const i = plan.items.findIndex((p) => !p.done && p.text === t.ref);
 		if (i >= 0) return {
-			reply: `${head}\n\nFinished “${esc(t.title)}”?`,
+			reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`,
 			keyboard: { inline_keyboard: [[{
 				text: "✅ Yes, tick it",
 				callback_data: `pp|${plan.day}|${i}`
-			}]] }
+			}], rate] }
 		};
 	}
 	if (t?.kind === "todoist") return {
-		reply: `${head}\n\nFinished “${esc(t.title)}”?`,
+		reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`,
 		keyboard: { inline_keyboard: [[{
 			text: "✅ Yes, done in Todoist",
 			callback_data: `td|${t.ref}`.slice(0, 64)
-		}]] }
+		}], rate] }
 	};
-	return { reply: head };
+	return {
+		reply: `${head}\n\nHow did it go?`,
+		keyboard: { inline_keyboard: [rate] }
+	};
 }
 function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null }) {
 	let polling = false;
@@ -8500,7 +8534,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuox]|p[pr]|td|sq)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -8539,6 +8573,29 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				await answer(`Todoist: ${e.message}`.slice(0, 190));
 				return null;
 			}
+		}
+		if (data.startsWith("fq|")) {
+			const [, day, n, minutes] = data.split("|");
+			if (!await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				setSetting(db, "focus_ratings", JSON.stringify([...focusRatings(db), {
+					day,
+					rating: Number(n),
+					minutes: Number(minutes) || 0
+				}].slice(-60)));
+				return true;
+			})) return null;
+			const r = Number(n);
+			await answer(`${n}/5 noted`);
+			const base = esc(String(cq.message?.text ?? "").replace(/\n*(And )?[Hh]ow did it go\?\s*$/, ""));
+			const low = r <= 2;
+			const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? "Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes." : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`;
+			await edit(text, low ? { inline_keyboard: [REASONS.slice(0, 3), REASONS.slice(3)].map((row, k) => row.map((x, i) => ({
+				text: x,
+				callback_data: `pr|${day}|${k * 3 + i}`
+			}))) } : void 0);
+			return text;
 		}
 		if (data.startsWith("sq|")) {
 			const [, day, n] = data.split("|");
@@ -8629,6 +8686,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						toast = "Noted";
 					}
 					const plan = svc.focus.plan(day);
+					if (kind === "pr" && String(cq.message?.text ?? "").includes("What got in the way?")) {
+						const reason = REASONS[Number(n)];
+						return {
+							text: `${esc(String(cq.message?.text ?? "").replace(/What got in the way\?[\s\S]*$/, ""))}Noted: <b>${esc(reason)}</b>. The coach will help you fix that first next time.`,
+							keyboard: void 0,
+							toast
+						};
+					}
 					const evening = String(cq.message?.text ?? "").includes("Evening review");
 					const focusMin = svc.focus.state().todayMin;
 					return {
@@ -8859,12 +8924,44 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}).catch(() => null);
 		return reply;
 	}
+	/** One line that turns your evening note into a lesson for tomorrow (and the coach's memory). */
+	async function lessonOfDay(token, chat, botId, cfg, note) {
+		const ctx = await mirror.read((db) => {
+			const f = services.services(db).focus.state();
+			return `Focus today ${hm(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
+		});
+		const out = parseBrain(await ai(`You are Victor's coach. Here is his day and his evening note. Write ONE short lesson for tomorrow (max 25 words, concrete, kind, in the language of his note) as "reply", and the same lesson as one item in "remember" starting with "Lesson ${(/* @__PURE__ */ new Date()).toISOString().slice(5, 10)}:". Answer only JSON {"reply": string, "actions": [], "remember": string[]}.
+
+Day: ${ctx}
+His note: ${note}`, { json: true }));
+		if (!out.reply) return;
+		await mirror.write((db) => saveMemory(db, updateMemory(loadMemory(db), {
+			facts: out.remember.slice(0, 1),
+			turns: [{
+				role: "me",
+				bot: personaFor(botId, cfg),
+				text: `[evening] ${note}`,
+				at: (/* @__PURE__ */ new Date()).toISOString()
+			}, {
+				role: "coach",
+				bot: personaFor(botId, cfg),
+				text: `Lesson: ${out.reply}`,
+				at: (/* @__PURE__ */ new Date()).toISOString()
+			}]
+		})));
+		await tg(token, "sendMessage", {
+			chat_id: chat,
+			text: `💡 <b>Lesson for tomorrow:</b> ${esc(out.reply)}`,
+			parse_mode: "HTML"
+		});
+	}
 	async function handle(botId, update, cfg) {
 		if (update.callback_query) return handleButton(botId, update, cfg);
 		const viaTodoist = await handleTodoist(botId, update, cfg);
 		if (viaTodoist !== void 0) return viaTodoist;
 		const key = `${botId}:${update.update_id}`;
 		let text = String(update.message?.text ?? update.message?.caption ?? "").trim();
+		const said = text;
 		const chat = String(update.message?.chat?.id ?? "");
 		const asked = String(update.message?.reply_to_message?.text ?? "");
 		const prompted = !!text && !text.startsWith("/") && (asked.includes("What are your 1–3 must-dos today?") || /Evening review|One thing to change next week/.test(asked));
@@ -8943,6 +9040,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				parse_mode: "HTML",
 				...keyboard ? { reply_markup: keyboard } : {}
 			}).catch(() => null);
+			if (ai && out.ok && prompted && /Evening review/.test(asked)) await lessonOfDay(update.__token, chat, botId, cfg, said).catch(() => null);
 			return out.reply;
 		} catch (e) {
 			if (e instanceof MirrorError && attempt === 0) continue;
@@ -9579,6 +9677,14 @@ async function runDaily(env, job) {
 		if (worthSaying(facts)) {
 			await send(await coach("morning", coachText(facts)), focusButtons());
 			sent.push("coach");
+		}
+	} else if (job === "reask") {
+		if (!st.plan.items.length) {
+			await send(`🧭 Still no plan for today. Just one thing is enough.\n\n<b>${PLAN_ASK}</b>\nReply to this message.`, {
+				force_reply: true,
+				input_field_placeholder: "One thing that makes today good"
+			});
+			sent.push("reask");
 		}
 	} else if (job === "midday") {
 		if (st.todayMin === 0 && !st.running) {

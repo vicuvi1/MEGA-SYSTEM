@@ -21,6 +21,10 @@
       "schedule": "30 5 * * *"
     },
     {
+      "path": "/api/cron?job=reask",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/cron?job=midday",
       "schedule": "30 10 * * *"
     },
