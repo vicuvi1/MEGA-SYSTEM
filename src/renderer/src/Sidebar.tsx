@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { LevelInfo } from '@shared/api'
 import { Icon, Logo } from './Icon'
 import { MODULES, SYSTEM_PAGES, type ModuleDef, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
@@ -13,20 +12,18 @@ interface Props {
   collapsed: boolean
   onToggle: () => void
   badges: Partial<Record<PageId, Badge>>
-  level: LevelInfo | null
   balance: number
   name: string
 }
 
 // Sections in groups, in the order they appear.
 const GROUPS: { title: string; ids: PageId[] }[] = [
-  { title: 'Plan', ids: ['today', 'focus', 'progress', 'tasks', 'schedule'] },
-  { title: 'Life', ids: ['sleep', 'discipline', 'body', 'money'] },
-  { title: 'Rewards', ids: ['shop', 'journey'] }
+  { title: 'Plan', ids: ['today', 'focus', 'tasks', 'progress', 'shop'] },
+  { title: 'Life', ids: ['sleep', 'body', 'money', 'discipline'] }
 ]
 const SHORT: Partial<Record<PageId, string>> = { rules: 'Game Rules', connected: 'Apps', body: 'Sport' }
 
-export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, balance, name }: Props) {
+export function Sidebar({ page, onPage, collapsed, onToggle, badges, balance, name }: Props) {
   const [peek, setPeek] = useState(false)
   const timer = useRef<number | undefined>(undefined)
   const [tip, setTip] = useState<{ label: string; y: number } | null>(null)
@@ -120,7 +117,7 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, bala
 
         <div className="sb-foot">
           <div className="sb-tools" role="group" aria-label="System">
-            {SYSTEM_PAGES.filter((m) => m.id === 'settings' || !hiddenPages.has(m.id)).map((m) => {
+            {SYSTEM_PAGES.filter((m) => m.id === 'settings').map((m) => {
               const on = page === m.id
               const b = badges[m.id]
               return (
@@ -141,21 +138,16 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, level, bala
             })}
           </div>
 
-          {level && (
-            <button className="sb-me" onClick={() => go('today')} onMouseEnter={(e) => showTip(`Level ${level.level} · ${level.rank}`, e.currentTarget)} onMouseLeave={() => setTip(null)}>
-              <span className="sb-ring" style={{ ['--p' as string]: `${Math.round(level.progress * 100)}` }}>
-                <span>{level.level}</span>
-              </span>
-              <span className="sb-label sb-me-text">
-                <b>{name || 'You'}</b>
-                <small>{level.rank}</small>
-              </span>
-              <span className="sb-label sb-me-coins">
-                <i className="coin-dot" />
-                {balance.toLocaleString()}
-              </span>
-            </button>
-          )}
+          <button className="sb-me" onClick={() => go('shop')} onMouseEnter={(e) => showTip(`${balance.toLocaleString()} points`, e.currentTarget)} onMouseLeave={() => setTip(null)}>
+            <span className="sb-label sb-me-text">
+              <b>{name || 'You'}</b>
+              <small>{balance.toLocaleString()} points to spend</small>
+            </span>
+            <span className="sb-label sb-me-coins">
+              <i className="coin-dot" />
+              {balance.toLocaleString()}
+            </span>
+          </button>
         </div>
 
         <button className="sb-toggle" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'} title={collapsed ? 'Expand (Ctrl+B)' : 'Collapse (Ctrl+B)'}>

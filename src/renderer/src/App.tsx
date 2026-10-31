@@ -8,7 +8,6 @@ import { Coins, ToastProvider, useToast } from './ui'
 import { LockScreen } from './pages/LockScreen'
 import { Today } from './pages/Today'
 import { Soon } from './pages/Soon'
-import { RpgFloatingPopups } from './RpgFloatingPopups'
 import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
@@ -18,7 +17,6 @@ import { MobileBottomBar } from './MobileBottomBar'
 import { PwaInstallBanner } from './PwaInstallBanner'
 import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
-import { tierUnlocked } from '@core/shop'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { soundTick, stopAllSounds, soundSystemOracle, soundFanfare, soundCoin, soundWarning } from './sound'
@@ -30,23 +28,18 @@ function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(l
 }
 const History = lazyNamed(() => import('./pages/History'), 'History')
 const Focus = lazyNamed(() => import('./pages/Focus'), 'Focus')
-const Rules = lazyNamed(() => import('./pages/Rules'), 'Rules')
 const Settings = lazyNamed(() => import('./pages/Settings'), 'Settings')
-const Shop = lazyNamed(() => import('./pages/Shop'), 'Shop')
+const Rewards = lazyNamed(() => import('./pages/Rewards'), 'Rewards')
 const Tasks = lazyNamed(() => import('./pages/Tasks'), 'Tasks')
-const Schedule = lazyNamed(() => import('./pages/Schedule'), 'Schedule')
 const Discipline = lazyNamed(() => import('./pages/Discipline'), 'Discipline')
 const Body = lazyNamed(() => import('./pages/Body'), 'Body')
 const Sleep = lazyNamed(() => import('./pages/Sleep'), 'Sleep')
 const Money = lazyNamed(() => import('./pages/Money'), 'Money')
 const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
 const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
-const Journey = lazyNamed(() => import('./pages/Journey'), 'Journey')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const SystemOracleDrawer = lazyNamed(() => import('./SystemOracleDrawer'), 'SystemOracleDrawer')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
-const SoloSystemModal = lazyNamed(() => import('./SoloSystemModal'), 'SoloSystemModal')
-const SoloPlayerModal = lazyNamed(() => import('./SoloPlayerModal'), 'SoloPlayerModal')
 
 
 // Sections that hold one of the apps living inside Life System.
@@ -109,8 +102,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [rules, setRules] = useState<Rule[]>([])
   const [oracleOpen, setOracleOpen] = useState(false)
   const [quickCommandOpen, setQuickCommandOpen] = useState(false)
-  const [systemModal, setSystemModal] = useState<{ open: boolean; type: 'quest-complete' | 'level-up' | 'penalty-warning'; data?: any }>({ open: false, type: 'quest-complete' })
-  const [playerModalOpen, setPlayerModalOpen] = useState(false)
   const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [shop, setShop] = useState<ShopState | null>(null)
   const [tasks, setTasks] = useState<TasksState | null>(null)
@@ -331,8 +322,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     setTimeout(() => setPops((p) => p.filter((x) => x.id !== pop.id)), 2600)
   }, [summary, rules])
 
-  const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page)!
-  const lv = summary?.level
+  // A page that no longer exists (Schedule, Journey, Game Rules) opens Today.
+  const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page) ?? MODULES[0]
+  useEffect(() => {
+    if (![...MODULES, ...SYSTEM_PAGES].some((m) => m.id === page)) setPage('today')
+  }, [page])
   const embed = EMBED_OF[page]
   // Stealth hides MAN too until the section is revealed.
   const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
@@ -423,7 +417,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       go('schedule')
     }),
     actions: [
-      ...(features.ai ? [{ id: 'a:oracle', label: 'Summon Solo Leveling System Oracle', hint: 'Ctrl+Shift+A', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setOracleOpen(true) } as const] : []),
+      ...(features.ai ? [{ id: 'a:oracle', label: 'Ask the coach', hint: 'Ctrl+J', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setOracleOpen(true) } as const] : []),
       { id: 'a:sidebar', label: 'Collapse or expand the sidebar', hint: 'Ctrl+B', group: 'Actions', icon: 'list', run: toggleSidebar },
       { id: 'a:full', label: 'Full screen', hint: 'F11', group: 'Actions', icon: 'spark', run: () => life.app.toggleFullScreen() },
       { id: 'a:urge', label: 'Urge crusher', hint: 'Ctrl+Alt+U', group: 'Actions', icon: 'bolt', color: '#FF8A3D', run: () => {
@@ -436,9 +430,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       ...(features.updates ? [{ id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) } as const] : []),
       { id: 'a:sync', label: 'Check connected apps now', group: 'Actions', icon: 'link', run: () => act(() => life.connections.sync()).then((r) => r && onWallet()) },
       { id: 'a:mobile-sync', label: features.cloudflareSync ? 'Sync Mobile Telegram Logs (Heal Streaks)' : 'Sync now (get what other devices changed)', hint: features.cloudflareSync ? 'Cloudflare 24/7' : 'Turso', group: 'Actions', icon: 'cloud', color: '#00d2ff', run: triggerMobileSync },
-      { id: 'a:system-quest', label: 'Summon Quest Complete Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#00d2ff', run: () => setSystemModal({ open: true, type: 'quest-complete', data: { coins: 50, xp: 100 } }) },
-      { id: 'a:system-level', label: 'Summon Level Advancement Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'spark', color: '#c8f135', run: () => setSystemModal({ open: true, type: 'level-up', data: { level: summary?.level.level ?? 1, prevLevel: Math.max(1, (summary?.level.level ?? 2) - 1), statPoints: 3, onAction: () => setPage('journey') } }) },
-      { id: 'a:system-warning', label: 'Summon Penalty Warning Hologram', hint: 'Solo Leveling', group: 'Actions', icon: 'shield', color: '#f43f5e', run: () => setSystemModal({ open: true, type: 'penalty-warning', data: { onAction: () => { setView((v) => ({ ...v, discipline: 'system' })); setPage('discipline'); setRevealed(true); setUrgeOpen(true); } } }) },
 
     ]
   })
@@ -449,11 +440,10 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const tasksLeft = tasks?.tasks.filter((t) => !t.done).length ?? 0
   const overdue = tasks?.tasks.filter((t) => t.overdue).length ?? 0
   const checkInDue = !!discipline?.setup && !discipline.checkedInToday && !discipline.resetToday && !discipline.stealth
-  const shopReady = !!shop && (shop.chests.length > 0 || shop.rewards.some((r) => r.price <= shop.balance && tierUnlocked(r.tier, shop.level)))
+  const shopReady = !!shop && shop.rewards.some((r) => !r.archived && r.price <= shop.balance)
   const updateReady = !!update && ['available', 'ready'].includes(update.state)
   const badges: Partial<Record<PageId, { n?: number; dot?: 'lime' | 'warn' }>> = {
     tasks: tasksLeft ? { n: tasksLeft, dot: overdue ? 'warn' : undefined } : undefined,
-    schedule: blocksLeft ? { n: blocksLeft } : undefined,
     discipline: checkInDue ? { dot: 'lime' } : undefined,
     shop: shopReady ? { dot: 'lime' } : undefined,
     settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
@@ -494,7 +484,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         collapsed={collapsed}
         onToggle={toggleSidebar}
         badges={badges}
-        level={lv ?? null}
         balance={summary?.balance ?? 0}
         name={ui.name}
       />
@@ -542,7 +531,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <span>Log</span>
           </button>
           {features.ai && (
-            <button className="tb-icon" aria-label="System Oracle" title="System Oracle (Ctrl+Shift+A)" onClick={() => setOracleOpen(true)}>
+            <button className="tb-icon" aria-label="Ask the coach" title="Ask the coach (Ctrl+J)" onClick={() => setOracleOpen(true)}>
               <Icon name="spark" size={17} />
             </button>
           )}
@@ -572,19 +561,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <Icon name="gear" size={16} />
           </button>
 
-          {/* You: level ring + coins. Tap for rank, XP and stats. */}
-          {lv && summary && (
-            <button
-              className="tb-me"
-              onClick={() => {
-                soundSystemOracle()
-                setPlayerModalOpen(true)
-              }}
-              title={`Level ${lv.level} · ${lv.rank} · ${lv.xpIntoLevel}/${lv.xpForNext} XP`}
-            >
-              <span className="tb-ring" style={{ ['--p' as string]: `${Math.round((lv.xpIntoLevel / Math.max(1, lv.xpForNext)) * 100)}` }}>
-                <b>{lv.level}</b>
-              </span>
+          {/* Your points: tap to spend them (Shop). */}
+          {summary && (
+            <button className="tb-me" onClick={() => setPage('shop')} title="Your points: spend them on fun time and rewards">
               <span className="tb-coins">
                 <Coins n={summary.balance} />
               </span>
@@ -633,13 +612,10 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'bots' && <BotCenter />}
             {page === 'focus' && <Focus onWallet={onWallet} />}
             {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
-            {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
-            {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
-            {page === 'journey' && summary && <Journey summary={summary} rules={rules} />}
+            {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'progress' && <Progress onGo={setPage} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
-            {page === 'rules' && <Rules rules={rules} onChange={setRules} summary={summary} onGo={setPage} onOracle={() => setOracleOpen(true)} onModal={(type, data) => setSystemModal({ open: true, type, data })} />}
-            {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}
+            {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
             {current.phase > 0 && <Soon module={current} />}
             </Suspense>
             </ErrorBoundary>
@@ -647,14 +623,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         </AnimatePresence>
         <Suspense fallback={null}>
           {oracleOpen && <SystemOracleDrawer open onClose={() => setOracleOpen(false)} summary={summary} />}
-          {systemModal.open && (
-            <SoloSystemModal open onClose={() => setSystemModal((s) => ({ ...s, open: false }))} type={systemModal.type} data={systemModal.data} />
-          )}
-          {playerModalOpen && <SoloPlayerModal open onClose={() => setPlayerModalOpen(false)} summary={summary} onGo={go} />}
           {quickCommandOpen && <QuickCommandBar open onClose={() => setQuickCommandOpen(false)} onRefreshWallet={onWallet} />}
         </Suspense>
         <MobileBottomBar page={page} onGo={go} onQuickCommand={() => setQuickCommandOpen(true)} />
-        <RpgFloatingPopups />
       </div>
     </div>
   )

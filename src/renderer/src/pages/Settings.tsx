@@ -63,9 +63,11 @@ interface Props {
   onRestored: () => void
   update: UpdateStatus | null
   onUpdate: (s: UpdateStatus) => void
+  /** Opens the pages that live under Settings (bots, connected apps, point history). */
+  onGo?: (p: 'bots' | 'connected' | 'history') => void
 }
 
-export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, onUpdate }: Props) {
+export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, onUpdate, onGo }: Props) {
   const act = useAction()
 
   const [pass, setPass] = useState('')
@@ -233,8 +235,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       chatField: 'sportBotChatId' as const,
       icon: '🏃',
       name: 'Body, Sport & Athlete Bot',
-      badge: 'Hunter Power',
-      desc: 'Athletic counter & metrics: logs /sport run 5km, /pushups 50, /bench 80kg, body composition (/weight 74.5, /waist 82), and Hunter PR records.'
+      badge: 'Training',
+      desc: 'Athletic counter & metrics: logs /sport run 5km, /pushups 50, /bench 80kg, body composition (/weight 74.5, /waist 82), and personal records.'
     },
     {
       key: 'man',
@@ -269,8 +271,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       chatField: 'coachBotChatId' as const,
       icon: '🤖',
       name: 'AI System Tactical Coach Bot',
-      badge: 'Solo Leveling AI',
-      desc: 'Tactical mentor: Hunter strategic advice, habit debriefs, and real-time motivational coaching directly in Telegram.'
+      badge: 'AI coach',
+      desc: 'Your coach in Telegram: advice from your real data, check-ins and follow-ups.'
     }
   ]
 
@@ -601,6 +603,39 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
     <div className="settings">
       {features.updates && <UpdatePanel status={update} onStatus={onUpdate} />}
 
+      {onGo && (
+        <section className="panel">
+          <header className="panel-head">
+            <h2>
+              <Icon name="link" /> Bots & connections
+            </h2>
+          </header>
+          <div className="set-links">
+            <button className="set-link" onClick={() => onGo('bots')}>
+              <Icon name="bot" size={18} />
+              <span>
+                <b>Telegram bots</b>
+                <small>Mega, Finance and Waky: status, tests, settings</small>
+              </span>
+            </button>
+            <button className="set-link" onClick={() => onGo('connected')}>
+              <Icon name="link" size={18} />
+              <span>
+                <b>Connected apps</b>
+                <small>Waky, Finance Helper, Sport Track, MAN</small>
+              </span>
+            </button>
+            <button className="set-link" onClick={() => onGo('history')}>
+              <Icon name="list" size={18} />
+              <span>
+                <b>Point history</b>
+                <small>Every point in and out, with undo</small>
+              </span>
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -636,13 +671,13 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
             <input type="checkbox" checked={ui.calm !== false} onChange={(e) => setUi({ calm: e.target.checked })} />
             <span>
               Calm mode
-              <small>Lighter and faster: effects play once instead of looping, no glass blur. Turn off for the full Solo Leveling effects.</small>
+              <small>Lighter and faster: effects play once instead of looping, no glass blur. Turn off for the full effects.</small>
             </span>
           </label>
           <label className="check toggle-row" style={{ margin: 0 }}>
             <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ sound: e.target.checked })} />
             <span>
-              Cyberpunk & Solo Leveling Audio Effects
+              Sound effects
               <small>Rich, low-latency synthesized audio for rituals, tasks, coins, and system warnings.</small>
             </span>
           </label>
@@ -665,7 +700,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                 <button type="button" className="btn small ghost" onClick={() => soundSystemOracle()}>
-                  ⚔️ System Oracle
+                  Coach chime
                 </button>
                 <button type="button" className="btn small ghost" onClick={() => soundCoin()}>
                   💰 Gold Clink
@@ -777,14 +812,14 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       <section className="panel">
         <header className="panel-head">
           <h2>
-            <Icon name="spark" /> AI Intelligence & Multi-Model Oracle
+            <Icon name="spark" /> AI coach
           </h2>
           <span className={`chip ${aiCfg.enabled && (aiCfg.geminiKey || aiCfg.openRouterKey) ? 'ok' : 'muted'}`}>
-            {aiCfg.enabled && (aiCfg.geminiKey || aiCfg.openRouterKey) ? 'Oracle Active' : 'Not Configured'}
+            {aiCfg.enabled && (aiCfg.geminiKey || aiCfg.openRouterKey) ? 'On' : 'Not set up'}
           </span>
         </header>
         <p className="hint block">
-          Connect Google Gemini (official free API keys) or OpenRouter (DeepSeek V3/R1, Claude, GPT) to unlock AI dream reward generation, Solo Leveling performance reports, and tactical coaching.
+          Connect Google Gemini (official free API keys) or OpenRouter (DeepSeek V3/R1, Claude, GPT) for the AI coach, reward ideas and weekly reports.
         </p>
 
         <div className="field">
@@ -867,7 +902,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           />
           <span>
             Enable AI Systems
-            <small>Allows the Shop to summon dream reward ideas and Journey to compile Solo Leveling tactical reports.</small>
+            <small>Lets Rewards suggest reward ideas and the coach write weekly reports.</small>
           </span>
         </label>
 
@@ -906,7 +941,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </header>
 
         <p className="hint block">
-          Connect your Google Calendar so the <b>Solo Leveling AI Oracle</b> and Hunter Coach can view your schedule, upcoming commitments, and daily agenda.
+          Connect your Google Calendar so the <b>coach</b> can see your schedule, upcoming commitments, and daily agenda.
         </p>
 
         <div className="field">
@@ -930,7 +965,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           />
           <span>
             Enable Calendar Synchronization & AI Visibility
-            <small>AI Oracle includes your daily agenda in strategic performance reports & coach chat.</small>
+            <small>The coach includes your agenda in its advice.</small>
           </span>
         </label>
 

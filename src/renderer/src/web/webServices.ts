@@ -23,6 +23,7 @@ import { SleepService } from '../../../main/sleep'
 import { FocusService, type FocusTask } from '../../../main/focus'
 import { ProgressService } from '../../../main/progress'
 import { WeekPlanService } from '../../../main/weekPlan'
+import { applyPointsV2 } from '../../../main/points'
 import type { WeekPlan } from '@core/weekPlan'
 import { UnifiedEconomyService } from '../../../main/unifiedEconomy'
 import { Wallet } from '../../../main/wallet'
@@ -69,6 +70,8 @@ const notify = (...names: string[]) => {
 
 /** The LifeApi namespaces the services cover, like src/main/index.ts maps them. */
 export function createWebServices(mirror: Mirror) {
+  // Points without the game (main/points.ts): once per database, in the background.
+  void mirror.write((db) => applyPointsV2(db as any)).catch(() => {})
   // The copy is replaced on every refresh, so services are built per call
   // (they hold no state of their own beyond the database).
   const read = <T>(fn: (s: Services) => T) => mirror.read((db) => fn(servicesFor(db)))

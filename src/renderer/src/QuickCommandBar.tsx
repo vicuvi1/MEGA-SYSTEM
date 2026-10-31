@@ -224,7 +224,7 @@ export function QuickCommandBar({ open, onClose, onRefreshWallet }: Props) {
         return
       }
 
-      // 6. Natural AI Oracle Tool Execution: Fallback to System Oracle
+      // 6. Anything else: the AI coach
       if (!features.ai) {
         toast(`Not sure what "${text.slice(0, 40)}" means. Try: "45 lunch", "50 pushups", "task Read 10 pages", "check in".`, 'info')
         return
@@ -240,7 +240,7 @@ export function QuickCommandBar({ open, onClose, onRefreshWallet }: Props) {
         toast(`⚡ Agent: ${executed}`, 'good')
         onRefreshWallet()
       } else {
-        toast(`💬 Oracle: ${res.reply.slice(0, 75)}...`, 'info')
+        toast(`💬 Coach: ${res.reply.slice(0, 75)}...`, 'info')
       }
       onClose()
     } catch (err: any) {

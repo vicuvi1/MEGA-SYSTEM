@@ -47,7 +47,7 @@ describe('shop service', () => {
     expect(s.balance).toBe(100)
     expect(s.monthSpent).toBe(30)
     expect(s.recent[0]).toMatchObject({ title: 'Face cream', undone: false })
-    expect(() => shop.redeem(cream().id, now)).toThrow('200 more coins')
+    expect(() => shop.redeem(cream().id, now)).toThrow('200 more points')
 
     wallet.undo(ledgerId, 'bought by mistake', now)
     s = shop.state(now)
@@ -66,10 +66,10 @@ describe('shop service', () => {
     expect(() => shop.setBudget(-1)).toThrow()
   })
 
-  it('locks higher tiers until the level is reached', () => {
+  it('has no level locks: any reward you can afford is yours', () => {
     grant(5000)
     const shaver = shop.state(now).rewards.find((r) => r.tier === 'silver')!
-    expect(() => shop.redeem(shaver.id, now)).toThrow('level 5')
+    expect(() => shop.redeem(shaver.id, now)).not.toThrow()
   })
 
   it('adds, edits, pins and archives rewards', () => {

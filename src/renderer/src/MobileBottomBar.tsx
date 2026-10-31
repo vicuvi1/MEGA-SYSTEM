@@ -35,7 +35,7 @@ export function MobileBottomBar({ page, onGo, onQuickCommand }: Props) {
     onGo(p)
   }
   const main = MAIN.filter((m) => m.id === 'today' || !hidden.has(m.id))
-  const rest = [...MODULES, ...SYSTEM_PAGES].filter(
+  const rest = [...MODULES, ...SYSTEM_PAGES.filter((m) => m.id === 'settings')].filter(
     (m, i, all) => m.phase === 0 && !main.some((x) => x.id === m.id) && (m.id === 'settings' || !hidden.has(m.id)) && all.findIndex((x) => x.id === m.id) === i
   )
   const inMore = rest.some((m) => m.id === page)

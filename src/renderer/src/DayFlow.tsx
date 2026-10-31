@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
 import { deadlineRadar, pLabel, sortToday, whenText, type TodoTask } from '@core/todoist'
-import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Summary } from '@shared/api'
+import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
 import type { PageId } from './modules'
@@ -21,6 +21,8 @@ interface Props {
   onChange: (s?: Summary) => void
   onGo: (p: PageId) => void
   onOpenApp: (p: PageId) => void
+  /** The point rules, so each habit shows what it really pays. */
+  rules?: Rule[]
 }
 
 interface Habit {
@@ -54,9 +56,10 @@ function useTodoist() {
   return [tasks, load, setTasks] as const
 }
 
-function useHabits({ summary, discipline, connections, body, onChange, onGo, onOpenApp }: Props, focusMin: number): Habit[] {
+function useHabits({ summary, discipline, connections, body, onChange, onGo, onOpenApp, rules }: Props, focusMin: number): Habit[] {
   const act = useAction()
   const r = summary.todayRules ?? []
+  const pts = (id: string, fallback: number) => `+${rules?.find((x) => x.id === id)?.coins ?? fallback}`
   const done = async (p: Promise<unknown> | undefined) => {
     if (await p) {
       soundSuccess()
@@ -64,12 +67,12 @@ function useHabits({ summary, discipline, connections, body, onChange, onGo, onO
     }
   }
   return [
-    { id: 'oath', label: 'Morning oath', hint: '+3', done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
-    { id: 'clean', label: 'Clean day check-in', hint: discipline?.setup ? `day ${discipline.current} · +20` : '+20', done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
-    { id: 'workout', label: 'Workout', hint: '+10', done: !!(body?.workoutDoneToday || r.includes('body.workout_done')), run: () => onGo('body') },
-    { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far` : 'coins per minute', done: focusMin >= 50 || r.includes('study.block_done'), run: () => onGo('focus') },
-    { id: 'skincare', label: 'Skincare', hint: '+5', done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
-    { id: 'spending', label: "Log today's spending", hint: '+3', done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: () => onOpenApp('money') }
+    { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
+    { id: 'clean', label: 'Clean day check-in', hint: discipline?.setup ? `day ${discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
+    { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), done: !!(body?.workoutDoneToday || r.includes('body.workout_done')), run: () => onGo('body') },
+    { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far` : 'points per session', done: focusMin >= 50 || r.includes('study.block_done'), run: () => onGo('focus') },
+    { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
+    { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: () => onOpenApp('money') }
   ]
 }
 

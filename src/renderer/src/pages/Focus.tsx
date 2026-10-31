@@ -104,7 +104,7 @@ export function FocusTimer({ st, onState, onWallet }: { st: FocusState; onState:
           <Icon name="clock" size={14} /> Start focus
         </button>
       </div>
-      <p className="hint">1 coin per 5 minutes, +5 for a full 50. Telegram: <code>/focus 50 math</code>, <code>/stop</code>.</p>
+      <p className="hint">1 point per 5 minutes, +5 for a full 50. Telegram: <code>/focus 50 math</code>, <code>/stop</code>.</p>
     </div>
   )
 }
@@ -179,7 +179,7 @@ export function DayPlanCard({ st, onState, onWallet, review = true }: { st: Focu
           </ul>
           <div className="row">
             <span className="hint">
-              {done}/{plan.items.length} done · +10 coins each
+              {done}/{plan.items.length} done · +10 points each
             </span>
             <span className="spacer" />
             <button className="btn small ghost" onClick={() => setEditing(true)}>
@@ -257,7 +257,7 @@ export function Focus({ onWallet }: { onWallet: () => void }) {
             <Icon name="clock" /> Focus
           </h2>
           <span className="hint">
-            Today {hm(st.todayMin)} · {st.focusCoinsToday} coins
+            Today {hm(st.todayMin)} · {st.focusCoinsToday} points
           </span>
         </header>
         <FocusTimer st={st} onState={setSt} onWallet={onWallet} />
@@ -370,7 +370,7 @@ export function Focus({ onWallet }: { onWallet: () => void }) {
             </h2>
             <span className="hint">today {hm(st.funToday)}</span>
           </header>
-          <p className="hint block">Games, YouTube, scrolling: log it and it costs 1 coin a minute. Focus earns the coins first. Telegram: <code>/fun 30</code>.</p>
+          <p className="hint block">Games, YouTube, scrolling: log it and it costs 1 point a minute. Focus earns the points first. Telegram: <code>/fun 30</code>.</p>
           <div className="row">
             <input value={funWhat} onChange={(e) => setFunWhat(e.target.value)} placeholder="What" maxLength={40} />
             <div className="seg">
@@ -380,7 +380,7 @@ export function Focus({ onWallet }: { onWallet: () => void }) {
                 </button>
               ))}
             </div>
-            <button className="btn" onClick={async () => { const r = await act(() => life.focus.fun(funMin, funWhat), `Enjoy! −${funMin} coins`); if (r) { onWallet(); load() } }}>
+            <button className="btn" onClick={async () => { const r = await act(() => life.focus.fun(funMin, funWhat), `Enjoy! −${funMin} points`); if (r) { onWallet(); load() } }}>
               Spend {funMin} 🪙
             </button>
           </div>

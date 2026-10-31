@@ -85,7 +85,7 @@ describe('TelegramBotHub service', () => {
 
   it('processes /sport command (e.g. running) and logs to body', async () => {
     const res = await hub.handleIncomingCommand('/sport run 5km', '87654321')
-    expect(res).toContain('HUNTER ATHLETIC LOG')
+    expect(res).toContain('Workout logged')
     expect(res).toContain('Running (5 km)')
     expect(body.state().recentWorkouts.length).toBe(1)
     expect(wallet.summary().balance).toBe(10) // +10 first workout coins
@@ -109,7 +109,7 @@ describe('TelegramBotHub service', () => {
     expect(prRes).toContain('bench')
 
     const statusRes = await hub.handleIncomingCommand('/sport status', '12345678')
-    expect(statusRes).toContain('HUNTER ATHLETIC STATUS')
+    expect(statusRes).toContain('Training')
   })
 
   it('processes /expense command and tracks spending', async () => {

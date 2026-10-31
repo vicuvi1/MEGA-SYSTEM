@@ -83,8 +83,7 @@ describe('AI Core Domain Engine', () => {
 
     it('builds a rich reward generation prompt with player context', () => {
       const prompt = buildRewardPrompt(rewardCtx)
-      expect(prompt).toContain('Level 12')
-      expect(prompt).toContain('C-Rank')
+      expect(prompt).toContain('Points balance')
       expect(prompt).toContain('noise-cancelling headphones')
       expect(prompt).toContain('MDL')
     })
@@ -131,8 +130,7 @@ describe('AI Core Domain Engine', () => {
 
     it('builds a comprehensive performance evaluation prompt', () => {
       const prompt = buildPerformancePrompt(perfCtx)
-      expect(prompt).toContain('Raid Vanguard')
-      expect(prompt).toContain('4,500 CP')
+      expect(prompt).toContain('tough-love personal coach')
       expect(prompt).toContain('12 consecutive days')
     })
 
@@ -175,10 +173,7 @@ describe('AI Core Domain Engine', () => {
 
     it('builds system oracle prompt with telemetry and instructions', () => {
       const prompt = buildSystemOraclePrompt(coachCtx, 'I feel lazy today, give me a directive.')
-      expect(prompt).toContain('DIRECT HIGH-PERFORMANCE COACH')
-      expect(prompt).toContain('Level 20')
-      expect(prompt).toContain('S-Rank')
-      expect(prompt).toContain('675 CP')
+      expect(prompt).toContain('Tough love')
       expect(prompt).toContain('30 Days')
       expect(prompt).toContain('SI-266 Lab 7')
       expect(prompt).toContain('Distributed Systems Lecture')
@@ -187,11 +182,10 @@ describe('AI Core Domain Engine', () => {
 
     it('builds task decomposition prompt with quest details', () => {
       const prompt = buildTaskDecomposePrompt('Finish SI-266 Lab 7', 'Write cryptography report', 'university', 'B-Rank')
-      expect(prompt).toContain('QUEST DECOMPOSITION')
+      expect(prompt).toContain('breaking a big task into small steps')
       expect(prompt).toContain('Finish SI-266 Lab 7')
       expect(prompt).toContain('Write cryptography report')
       expect(prompt).toContain('university')
-      expect(prompt).toContain('B-Rank')
     })
 
     it('parses valid task decomposition JSON cleanly', () => {

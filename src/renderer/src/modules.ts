@@ -19,23 +19,19 @@ export const MODULES: ModuleDef[] = [
   { id: 'today', label: 'Today', icon: 'home', color: 'var(--lime)', phase: 0, blurb: 'Your day at a glance' },
   { id: 'focus', label: 'Focus', icon: 'clock', color: 'var(--lime)', phase: 0, blurb: 'Focus timer, today\'s must-dos, goals and your week' },
   { id: 'progress', label: 'Progress', icon: 'chart', color: 'var(--lime)', phase: 0, blurb: 'Am I improving? Your last 7 days against your usual week' },
-  { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'To-dos by category: Body, Face, Finance, University, Life' },
-  { id: 'schedule', label: 'Schedule', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Day timeline with study blocks that pay out or cost coins' },
+  { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'Your to-dos' },
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },
   { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 0, blurb: 'Private streak, urge crusher and honest resets' },
-  { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Hunter athletics, workout sessions & body metrics' },
-  { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Daily spending from Finance Helper, turned into coins' },
-  { id: 'shop', label: 'Shop', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend coins on real rewards, inside a real-money budget' },
-  { id: 'journey', label: 'Journey', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'Your weekly review and ranks' },
-  { id: 'rules', label: 'Game Rules', icon: 'sliders', color: '#00D2FF', phase: 0, blurb: 'Solo Leveling system codex and real-life growth rules' }
+  { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Workouts and body metrics' },
+  { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Your money, from Finance Helper' },
+  { id: 'shop', label: 'Rewards', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend your points: guilt-free fun time and real rewards' },
 ]
 
 export const SYSTEM_PAGES: ModuleDef[] = [
-  { id: 'history', label: 'History', icon: 'list', color: 'var(--muted)', phase: 0, blurb: 'Every coin in and out' },
-  { id: 'rules', label: 'Game Rules', icon: 'sliders', color: '#00D2FF', phase: 0, blurb: 'Solo Leveling system codex and real-life growth rules' },
+  { id: 'history', label: 'History', icon: 'list', color: 'var(--muted)', phase: 0, blurb: 'Every point in and out' },
   { id: 'connected', label: 'Connected apps', icon: 'link', color: 'var(--muted)', phase: 0, blurb: 'Waky, Finance Helper and MAN' },
-  { id: 'bots', label: 'Bot Center', icon: 'bot', color: '#00D2FF', phase: 0, blurb: 'Unified Telegram bot command center' },
-  { id: 'settings', label: 'Settings', icon: 'gear', color: 'var(--muted)', phase: 0, blurb: 'PIN and backups' }
+  { id: 'bots', label: 'Telegram bots', icon: 'bot', color: '#00D2FF', phase: 0, blurb: 'Your Telegram bots: Mega, Finance and Waky' },
+  { id: 'settings', label: 'Settings', icon: 'gear', color: 'var(--muted)', phase: 0, blurb: 'PIN, bots, connections, backups and look' }
 ]
 
 export const MODULE_LABEL: Record<string, string> = {

@@ -4,6 +4,7 @@ import { activePlan, cleanPlan, type WeekPlan } from '@core/weekPlan'
 import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
+import { BIG3_POINTS, payOnce } from './points'
 
 const KEY = 'week_plan'
 
@@ -37,6 +38,8 @@ export class WeekPlanService {
     if (!plan || !plan.big3[i]) throw new LedgerError('No such task in this week’s plan')
     plan.big3[i].done = !plan.big3[i].done
     setSetting(this.db, KEY, JSON.stringify(plan))
+    // A big task done pays once (unticking keeps it: no flip-flop farming).
+    if (plan.big3[i].done) payOnce(this.wallet, `week:${plan.week}:big${i}`, BIG3_POINTS, `Week goal done: ${plan.big3[i].text}`, now)
     return plan
   }
 }

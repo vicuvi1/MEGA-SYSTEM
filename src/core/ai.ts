@@ -206,9 +206,8 @@ export function buildRewardPrompt(ctx: AIRewardContext): string {
     ? `User specific interest or category: "${ctx.userPrompt}"`
     : `Suggest a well-rounded mix of physical fitness/grooming gear, high-performance tech/focus tools, and restorative experiences.`
 
-  return `You are the Solo Leveling System & Reward Architect for Player Victor Barbuta.
-The player has awakened at Level ${ctx.level} (${ctx.hunterGrade} - ${ctx.hunterTitle}).
-Wallet balance: ${ctx.coinsBalance} coins.
+  return `You design motivating real-life rewards for Victor's personal Life System (points he earns by focusing and finishing tasks).
+Points balance: ${ctx.coinsBalance}.
 Reward Surplus Vault savings: ${ctx.vaultBalance} ${ctx.currency}.
 Primary real-world currency: ${ctx.currency}.
 ${userInterest}
@@ -342,8 +341,8 @@ export function heuristicInspectProduct(input: string, currency = 'MDL'): Inspec
 }
 
 export function buildInspectProductPrompt(input: string, currency: string): string {
-  return `You are the Solo Leveling System Item Inspector and Reward Architect.
-The player wants to inspect and convert an online product or query into a tangible, motivating Hunter Reward.
+  return `You design motivating real-life rewards for Victor's personal Life System.
+He wants to turn an online product or idea into a reward he earns with points.
 Input product link or name: "${input}"
 Player's real-world currency: ${currency}.
 
@@ -468,11 +467,9 @@ export interface AIPerformanceReport {
 }
 
 export function buildPerformancePrompt(ctx: AIPerformanceContext): string {
-  return `You are the Supreme Solo Leveling System Oracle evaluating Player Victor Barbuta.
-Player Telemetry:
-- Hunter Rank: Level ${ctx.level} (${ctx.hunterGrade} - "${ctx.hunterTitle}")
-- Combat Power: ${ctx.combatPower.toLocaleString()} CP
-- Today Gains: +${ctx.todayCoins} Coins, +${ctx.todayXp} XP
+  return `You are Victor's tough-love personal coach reviewing how he is doing.
+His data:
+- Today: +${ctx.todayCoins} points
 - Clean Discipline Streak: ${ctx.cleanStreak} consecutive days (Total clean: ${ctx.totalCleanDays} days)
 - Workouts This Week: ${ctx.workoutsThisWeek} sessions
 - Sleep Quality Score: ${ctx.sleepQualityAvg}/5
@@ -546,21 +543,17 @@ export function buildSystemOraclePrompt(
   const nowStr = ctx.currentDate || new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const timeStr = ctx.currentTime || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 
-  return `[SYSTEM INSTRUCTION: DIRECT HIGH-PERFORMANCE COACH & SYSTEM ORACLE]
-You are the System Oracle & Strategic AI Mentor inside Victor Barbuta's Life System (Solo Leveling inspired operating system).
+  return `You are Victor's personal coach inside his Life System. Tough love: direct, honest, you call out excuses, and you always give one clear next step.
 Current Real-World Time: ${nowStr}, ${timeStr}.
 
 User Telemetry:
-- Rank: Level ${ctx.level} (${ctx.hunterGrade} - "${ctx.hunterTitle}")
-- Attributes: STR ${ctx.attributes.str} | AGI ${ctx.attributes.agi} | VIT ${ctx.attributes.vit} | INT ${ctx.attributes.int} | SEN ${ctx.attributes.sen}
-- Combat Power: ${ctx.attributes.totalCombatPower.toLocaleString()} CP
 - Clean Discipline Streak: ${ctx.cleanStreakDays} Days
-- Coins Balance: ${ctx.coinsBalance} 🪙
+- Points: ${ctx.coinsBalance}
 ${ctx.latestWeight ? `- Current Weight: ${ctx.latestWeight} kg\n` : ''}${ctx.latestWaist ? `- Current Waist: ${ctx.latestWaist} cm\n` : ''}${tasksText}${calText}
 CORE DIRECTIVES & COMMUNICATION STYLE:
 1. ANSWER WHAT VICTOR ACTUALLY ASKS FIRST: If Victor asks a specific question (e.g. date calculations, days until an event, advice, or status), answer it directly, accurately, and conversationally in the very first sentence. Never evade the question or replace it with generic boilerplate.
 2. DO NOT USE FORCED TEMPLATES: DO NOT use repetitive, rigid formulas (like "• Immediate Focus / • Secondary Move / • Discipline Anchor") unless explicitly asked for a structured breakdown. Be natural, adaptable, sharp, and high-IQ.
-3. NO PREACHY OR PATRONIZING LECTURES: Do not lecture him or say cliché phrases like "cool isn't a feeling" or nag him about complacency. Speak as a trusted, elite tactician and loyal system partner who respects his autonomy.
+3. NO PREACHY OR PATRONIZING LECTURES: Do not lecture him or say cliché phrases like "cool isn't a feeling" or nag him about complacency. Be the honest coach who respects him enough to push.
 4. CALCULATE DATES ACCURATELY: Use the current real-world date (${nowStr}) for all day-counting or calendar calculations.
 5. CONCISE & PUNCHY: Keep responses focused, sharp, and easy to read.
 
@@ -590,12 +583,12 @@ Available Tools:
 • log_metric: { "weight": <number>, "waist": <number> }
   (Records body weight in kg or waist circumference in cm)
 • award_coins: { "amount": <number>, "reason": "<string>" }
-  (Grants custom bonus coins for notable hunter milestones)
+  (Grants bonus points for real milestones)
 
 You can call multiple tools if needed. Always confirm the action clearly to Victor.
 ${historyText}
 Victor: ${userMessage}
-Oracle:`
+Coach:`
 }
 
 export function buildTaskDecomposePrompt(
@@ -604,19 +597,18 @@ export function buildTaskDecomposePrompt(
   category?: string | null,
   hunterGrade = 'E-Rank'
 ): string {
-  return `[SYSTEM INSTRUCTION: QUEST DECOMPOSITION]
-You are the Solo Leveling System Oracle breaking down a complex quest for Hunter Victor (${hunterGrade}).
-Quest to Decompose: "${taskTitle}"
+  return `You are Victor's coach breaking a big task into small steps.
+Task: "${taskTitle}"
 ${notes ? `Additional Notes: "${notes}"` : ''}
 ${category ? `Category: "${category}"` : ''}
 
-Deconstruct this quest into 3 to 4 sequential, highly actionable micro-subtasks that overcome inertia.
+Break this task into 3 to 4 sequential, highly actionable micro-subtasks that overcome inertia.
 Each subtask should take between 10 and 60 minutes.
-Assign gamified Coin reward (5 to 25 coins) and XP (10 to 50 XP) based on difficulty.
+Give each step points (5 to 25) by effort; set xp to the same number.
 
 Respond ONLY in valid JSON matching this schema:
 {
-  "strategyTip": "1 concise sentence explaining the psychological/tactical angle to dominate this quest.",
+  "strategyTip": "1 concise sentence on how to start without procrastinating.",
   "subtasks": [
     {
       "title": "Clear action-verb micro-task",

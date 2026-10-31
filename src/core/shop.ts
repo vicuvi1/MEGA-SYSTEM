@@ -95,8 +95,9 @@ export interface RedeemCheck {
 export function redeemBlocker(c: RedeemCheck): string | null {
   const { reward, balance, level, monthSpent, budget } = c
   if (reward.archived) return 'This reward is archived'
-  if (!tierUnlocked(reward.tier, level)) return `${TIERS[reward.tier].label} rewards unlock at level ${TIERS[reward.tier].minLevel}`
-  if (balance < reward.price) return `You need ${reward.price - balance} more coins`
+  // No levels any more: every reward is open; points and the money budget decide.
+  void level
+  if (balance < reward.price) return `You need ${reward.price - balance} more points`
   if (budget > 0 && monthSpent + reward.realCost > budget) {
     return `Over this month's reward budget (${budget - monthSpent} left)`
   }

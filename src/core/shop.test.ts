@@ -18,12 +18,12 @@ describe('shop', () => {
   })
 
   it('explains why a redeem is blocked', () => {
-    expect(redeemBlocker({ ...base, balance: 120 })).toBe('You need 180 more coins')
-    expect(redeemBlocker({ ...base, reward: { ...cream, tier: 'gold' } })).toMatch(/unlock at level 10/)
+    expect(redeemBlocker({ ...base, balance: 120 })).toBe('You need 180 more points')
+    expect(redeemBlocker({ ...base, reward: { ...cream, tier: 'gold' } })).toBeNull() // no level locks any more
     expect(redeemBlocker({ ...base, budget: 50, monthSpent: 30 })).toMatch(/budget \(20 left\)/)
     expect(redeemBlocker({ ...base, budget: 70, monthSpent: 30 })).toBeNull()
     expect(redeemBlocker({ ...base, reward: { ...cream, archived: true } })).toMatch(/archived/)
-    expect(() => planRedeem({ ...base, balance: 0 })).toThrow('more coins')
+    expect(() => planRedeem({ ...base, balance: 0 })).toThrow('more points')
   })
 
   it('validates rewards', () => {

@@ -123,7 +123,7 @@ describe('AIService Backend', () => {
     const mockFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const body = JSON.parse(String((init as any)?.body))
       const promptText = body.contents?.[0]?.parts?.[0]?.text
-      expect(promptText).toContain('DIRECT HIGH-PERFORMANCE COACH')
+      expect(promptText).toContain('Tough love')
       expect(promptText).toContain('What is my next objective?')
       return new Response(
         JSON.stringify({

@@ -20,6 +20,7 @@ import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting } from '../main/settings'
+import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 
 export { createTodoistApi }
@@ -198,8 +199,15 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       sent.push('night')
     }
   } else {
+    // Reaching the week's chosen focus pays a bonus once.
+    let weekLine = ''
+    const wm = weekPlan ? report.metrics.find((m) => m.id === weekPlan.focus) : null
+    if (weekPlan && wm?.target && wm.now >= wm.target) {
+      const paid = await mirror.write((db) => payOnce(services.services(db).wallet, `weekfocus:${weekPlan.week}`, WEEK_FOCUS_POINTS, `Week focus reached: ${wm.label}`))
+      if (paid) weekLine = `\n\n🏆 Week focus reached: <b>${wm.label}</b> (${wm.text}). +${WEEK_FOCUS_POINTS} points.`
+    }
     const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ''}` : ''
-    await send(eveningText(st.plan, st.todayMin) + todoLine, st.plan.items.length ? planKeyboard(st.plan, true) : undefined)
+    await send(eveningText(st.plan, st.todayMin) + todoLine + weekLine, st.plan.items.length ? planKeyboard(st.plan, true) : undefined)
     sent.push('evening')
     if (new Date().getDay() === 0) {
       await send(weekText(st.week, st.goals))

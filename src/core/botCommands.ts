@@ -411,7 +411,7 @@ export function formatHelpMessage(): string {
     `One bot for everything: Sport, Money (Finance Helper), Discipline (MAN), Sleep (Waky), Tasks and your wallet.`,
     ``,
     `📊 <b>Dashboard & Status</b>`,
-    `• <code>/today</code> — View balance, level, streak & rituals`,
+    `• <code>/today</code> — Your day: points, streaks and what's left`,
     `• <code>/vault</code> — Real-money Reward Vault surplus, coin valuation & multiplier`,
     `• <code>/goals</code> — Wishlist Mega Goals & savings progress`,
     `• <code>/tasks</code> — View open tasks for today`,
@@ -426,7 +426,7 @@ export function formatHelpMessage(): string {
     `• <code>/bench &lt;kg&gt;</code> — e.g. <code>/bench 80kg</code>`,
     `• <code>/weight &lt;kg&gt;</code> — e.g. <code>/weight 74.5</code> (+5 🪙)`,
     `• <code>/waist &lt;cm&gt;</code> — e.g. <code>/waist 82</code> (+5 🪙)`,
-    `• <code>/sport status</code> — View Hunter athletic stats & PRs`,
+    `• <code>/sport status</code> — Your training stats & records`,
     ``,
     `💪 <b>Quick Body Exercises</b>`,
     `• <code>/pushups &lt;reps&gt;</code> — Quick log push-ups`,
@@ -466,7 +466,6 @@ export function formatTodayStatus(data: {
     `👑 <b>Life System Status</b>`,
     ``,
     `🪙 <b>Balance:</b> ${data.balance} coins`,
-    `⭐ <b>Level:</b> ${data.level} (${data.rank}) · ${data.totalXp} XP`,
     `🔥 <b>Clean Streak:</b> ${data.cleanStreak} days`,
     `💪 <b>Workout Streak:</b> ${data.workoutStreak} days`,
     `⚡ <b>Daily Rituals:</b> ${data.ritualsDone}/${data.totalRituals} completed today`,
@@ -483,7 +482,7 @@ export function formatWorkoutResponse(exName: string, amount: number, streak: nu
     `💪 <b>Workout Recorded!</b>`,
     ``,
     `• <b>Exercise:</b> ${amount} ${exName}`,
-    `• <b>Reward:</b> +${coins} coins · +25 XP`,
+    `• <b>Reward:</b> +${coins} points`,
     `• <b>Workout Streak:</b> ${streak} days in a row!`,
     ``,
     `<i>The iron never lies. Keep pushing forward!</i>`
@@ -499,11 +498,11 @@ export function formatSportResponse(
   xp: number
 ): string {
   return [
-    `⚔️ <b>HUNTER ATHLETIC LOG: RECORDED</b> ⚔️`,
+    `🏃 <b>Workout logged</b>`,
     ``,
     `• <b>Sport / Activity:</b> ${activity} (${amount} ${unit})`,
     `• <b>Attribute Gains:</b> +2 STR · +2 VIT · +1 AGI`,
-    `• <b>Hunter Rewards:</b> +${coins} 🪙 Coins · +${xp} XP`,
+    `• <b>Points:</b> +${coins}`,
     `• <b>Continuous Streak:</b> ${streak} days active!`,
     ``,
     `<i>"Your physical combat power ascends. The System acknowledges your relentless dedication!"</i>`
@@ -521,7 +520,7 @@ export function formatMetricResponse(
     `⚖️ <b>BODY COMPOSITION LOGGED</b> ⚖️`,
     ``,
     `• <b>${type === 'weight' ? 'Body Weight' : 'Waist Circumference'}:</b> ${val} ${unit}`,
-    `• <b>Reward:</b> +${coins} 🪙 Coins · +${xp} XP`,
+    `• <b>Points:</b> +${coins}`,
     `• <b>Ledger:</b> Saved to physical metrics archive.`,
     ``,
     `<i>"Consistency in tracking breeds absolute control over physical form."</i>`
@@ -536,7 +535,7 @@ export function formatSportStatusResponse(data: {
   latestWaist?: number | null
 }): string {
   return [
-    `⚡ <b>HUNTER ATHLETIC STATUS & POWER</b> ⚡`,
+    `🏋️ <b>Training</b>`,
     ``,
     `🔥 <b>Workout Streak:</b> ${data.streak} Days Continuous`,
     `🏋️ <b>Sessions Logged:</b> ${data.totalWorkouts} total (${data.thisWeek} this week)`,
@@ -624,7 +623,7 @@ export function formatCleanCheckinResponse(streak: number, coins: number): strin
     `🛡️ <b>Clean Day Affirmed!</b>`,
     ``,
     `• <b>Current Streak:</b> ${streak} days clean!`,
-    `• <b>Reward:</b> +${coins} coins · +40 XP`,
+    `• <b>Reward:</b> +${coins} points`,
     ``,
     `<i>"Stand fast, keep the standard, give today everything."</i>`
   ].join('\n')

@@ -95,7 +95,7 @@ export function Connected({ state, onState, onWallet }: { state: ConnectionsStat
       <ConnectCard kind="waky" title="Waky" icon="moon" color="#6EE7D8" {...state.waky} what="Wake-ups on time pay +10 and bedtimes on time +5, straight from Waky's check-ins." onState={onState} onWallet={onWallet} />
       <ConnectCard kind="finance" title="Finance Helper" icon="coin" color="#F5C84B" {...state.finance} what="Each day you log spending pays +3, and staying under your daily budget pays +5 once the day is over." onState={onState} onWallet={onWallet} />
       <ConnectCard kind="man" title="MAN (old discipline app)" icon="shield" color="#FF8A3D" {...state.man} what="Used once, to bring your current streak into Discipline. Nothing is paid from it." onState={onState} onWallet={onWallet} />
-      <ConnectCard kind={'sport' as any} title="Sport Track (Iron Pulse)" icon="bolt" color="#00F2FE" found={true} path="apps/sport/index.html (Embedded Partition)" error={null} connectedSince="Active & Synced" what="Hunter athletics, progressive overload & workout session tracker. Workouts logged pay +10 coins and +25 XP." onState={onState} onWallet={onWallet} />
+      <ConnectCard kind={'sport' as any} title="Sport Track" icon="bolt" color="#00F2FE" found={true} path="apps/sport/index.html (Embedded Partition)" error={null} connectedSince="Active & Synced" what="Workout sessions and progress. A logged workout pays a few points." onState={onState} onWallet={onWallet} />
     </div>
   )
 }

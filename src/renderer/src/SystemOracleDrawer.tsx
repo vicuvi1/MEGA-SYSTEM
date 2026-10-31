@@ -42,7 +42,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
       {
         id: 'init-1',
         role: 'assistant',
-        content: `**System Coach Ready.**\nHey Victor. I am tracking your schedule, tasks, and streaks in real-time.\n\nWhat are we focusing on right now?`,
+        content: `**Coach ready.**\nHey Victor. I am tracking your schedule, tasks, and streaks in real-time.\n\nWhat are we focusing on right now?`,
         modelUsed: 'COACH',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
@@ -111,15 +111,15 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
       if (res.toolExecutions && res.toolExecutions.length > 0) {
         soundSystemOracle()
         const count = res.toolExecutions.length
-        toast(`⚡ System Oracle executed ${count} action${count > 1 ? 's' : ''}!`, 'good')
+        toast(`The coach did ${count} thing${count > 1 ? 's' : ''}`, 'good')
         window.dispatchEvent(new CustomEvent('life:refresh'))
       }
     } catch (err: any) {
-      toast(err?.message || 'System Oracle unreachable. Check API keys in Settings.', 'bad')
+      toast(err?.message || 'The coach is unreachable right now.', 'bad')
       const errorMsg: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `**[SYSTEM ALERT]** Connection to AI provider failed: ${err?.message || 'Check keys in Settings.'}`,
+        content: `The coach couldn't answer: ${err?.message || 'try again in a minute.'}`,
         modelUsed: 'OFFLINE',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
@@ -146,7 +146,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
         await life.body.deleteWorkout(exec.data.workoutId)
         toast('↩️ Workout undone & coins refunded!', 'good')
       } else if (exec.data?.ledgerId) {
-        await life.wallet.undo(exec.data.ledgerId, 'Undone from Oracle chat')
+        await life.wallet.undo(exec.data.ledgerId, 'Undone from the coach chat')
         toast('↩️ Action undone!', 'good')
       } else {
         toast('Action reverted!', 'good')
@@ -163,8 +163,8 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
       {
         id: `init-${Date.now()}`,
         role: 'assistant',
-        content: `**[SYSTEM REBOOT]**\nCommand log cleared. Standing by for directives, Hunter Victor.`,
-        modelUsed: 'SYSTEM CORE',
+        content: `Chat cleared. What are we working on?`,
+        modelUsed: 'Coach',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
     ])
@@ -187,14 +187,14 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-            aria-label="Solo Leveling System Oracle"
+            aria-label="Coach"
           >
             {/* Header */}
             <div className="system-oracle-header">
               <div className="system-oracle-title-row">
                 <div className="system-oracle-badge">
                   <span className="system-oracle-pulse" />
-                  <span>[SYSTEM NOTICE: HUNTER ORACLE]</span>
+                  <span>Coach</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <button
@@ -242,7 +242,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
               </button>
               <button
                 className="system-quick-btn"
-                onClick={() => handleSend('Analyze my schedule, tasks, and hunter rank. What is my single highest-ROI quest today?')}
+                onClick={() => handleSend('Look at my day, tasks and goals. What is the single most important thing to do today?')}
               >
                 🎯 Today's Critical Quest
               </button>
@@ -277,7 +277,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
               {messages.map((m) => (
                 <div key={m.id} className={`system-msg ${m.role}`}>
                   <div className="system-msg-sender">
-                    <span>{m.role === 'user' ? 'Hunter Victor' : '✦ System Oracle'}</span>
+                    <span>{m.role === 'user' ? 'You' : '✦ Coach'}</span>
                     {m.modelUsed && <span className="system-model-tag">{m.modelUsed}</span>}
                     <span style={{ fontSize: '10px', color: '#64748b' }}>{m.timestamp}</span>
                   </div>
@@ -315,7 +315,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
                     <span />
                     <span />
                   </div>
-                  <span>System Oracle formulating tactical directive…</span>
+                  <span>Coach is thinking…</span>
                 </div>
               )}
               <div ref={streamEndRef} />
@@ -327,7 +327,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
                 <button
                   type="button"
                   className="oracle-quick-chip"
-                  onClick={() => handleSend('Generate my Solo Leveling Morning Tactical Briefing for today. Audit my Sleep, Spartan Discipline, Iron Pulse workout, and daily budget.')}
+                  onClick={() => handleSend('Give me my morning briefing: sleep, discipline, training, money and the plan for today.')}
                 >
                   🌅 Morning Briefing
                 </button>
@@ -341,7 +341,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
                 <button
                   type="button"
                   className="oracle-quick-chip"
-                  onClick={() => handleSend('Deliver a powerful King Leonidas / Shadow Monarch mindset transmission to crush procrastination.')}
+                  onClick={() => handleSend('I am procrastinating. Push me, honestly, and give me one step to start now.')}
                 >
                   ⚔️ Spartan War Cry
                 </button>
@@ -358,7 +358,7 @@ export function SystemOracleDrawer({ open, onClose, summary }: Props) {
                 <textarea
                   ref={inputRef}
                   className="system-oracle-textarea"
-                  placeholder="Ask the System Oracle for tactical directives..."
+                  placeholder="Ask your coach…"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}

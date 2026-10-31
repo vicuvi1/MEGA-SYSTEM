@@ -73,7 +73,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
       </header>
 
       <div className="fun-row">
-        <span className="fun-label">Guilt-free fun · 1 coin a minute</span>
+        <span className="fun-label">Guilt-free fun · 1 point a minute</span>
         <div className="fun-time">
           <select value={what} onChange={(e) => setWhat(e.target.value)} aria-label="What kind of fun">
             {['Gaming', 'YouTube', 'Series', 'Social media', 'Free time'].map((x) => (
@@ -81,7 +81,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
             ))}
           </select>
           {FUN.map((m) => (
-            <button key={m} className="btn small" disabled={bal < m} onClick={() => void fun(m)} title={bal < m ? `You need ${m - bal} more coins` : `Spend ${m} coins`}>
+            <button key={m} className="btn small" disabled={bal < m} onClick={() => void fun(m)} title={bal < m ? `You need ${m - bal} more points` : `Spend ${m} points`}>
               {m} min
             </button>
           ))}
@@ -109,11 +109,11 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
           <span className="fun-label">Next goal</span>
           <div className="fun-next">
             <span className="fun-title">{next.title}</span>
-            <div className="bar" role="img" aria-label={`${bal} of ${next.price} coins`}>
+            <div className="bar" role="img" aria-label={`${bal} of ${next.price} points`}>
               <i style={{ width: `${Math.min(100, (bal / next.price) * 100)}%` }} />
             </div>
             <span className="hint">
-              {next.price - bal} coins to go · about {Math.ceil((next.price - bal) / COINS_PER_SESSION)} focus sessions
+              {next.price - bal} points to go · about {Math.ceil((next.price - bal) / COINS_PER_SESSION)} focus sessions
             </span>
           </div>
         </div>
@@ -121,7 +121,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
 
       {!live.length && <p className="hint">Add rewards you really want in the Shop (a game, headphones, a dinner out), with a coin price.</p>}
       <button className="btn small ghost fun-shop" onClick={onOpenShop}>
-        Edit rewards in the Shop
+        Edit rewards
       </button>
     </section>
   )

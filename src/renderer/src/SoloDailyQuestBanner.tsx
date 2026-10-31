@@ -262,16 +262,10 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       <div className="solo-quest-top-row">
         <div className="solo-quest-tag-badge">
           <span className="solo-pulse-beacon" />
-          <span>
-            {allCompleted
-              ? '✨ [ DAILY QUEST CLEARED: ALL OBJECTIVES ACCOMPLISHED ]'
-              : '[ DAILY QUEST: PREPARING TO BECOME STRONGER ]'}
-          </span>
+          <span>{allCompleted ? 'Reps & water: all done today ✓' : 'Reps & water today'}</span>
         </div>
 
-        <div className="solo-quest-countdown" title="Time until midnight penalty check">
-          <span>⏱️</span>
-          <QuestCountdownTimer isAllCompleted={allCompleted} onUrgent={setIsUrgent} />
+        <div className="solo-quest-countdown" hidden>
         </div>
       </div>
 
@@ -358,14 +352,12 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       {/* Footer warning & Full completion action */}
       <div className="solo-quest-footer">
         <span className="solo-quest-warning-text">
-          {allCompleted
-            ? '★ Reward: Physical recovery granted. Strength, Agility and Vitality stats boosted.'
-            : 'Failure to complete daily directives before midnight triggers System Penalty Zone.'}
+          {allCompleted ? 'Done for today. Rest well.' : 'Tap + after each set. Counts reset at midnight.'}
         </span>
 
         {!allCompleted && (
           <button className="solo-quest-action-all" onClick={handleCompleteAll}>
-            <span>⚡ Complete All Objectives</span>
+            <span>Mark all done</span>
           </button>
         )}
       </div>

@@ -129,9 +129,9 @@ describe('botCommands core parser', () => {
     expect(status).toContain('All daily rituals complete')
 
     const sportRes = formatSportResponse('Running', 5, 'km', 4, 15, 35)
-    expect(sportRes).toContain('HUNTER ATHLETIC LOG')
+    expect(sportRes).toContain('Workout logged')
     expect(sportRes).toContain('Running (5 km)')
-    expect(sportRes).toContain('+15 🪙 Coins')
+    expect(sportRes).toContain('+15')
 
     const metricRes = formatMetricResponse('weight', 74.5, 'kg', 5, 15)
     expect(metricRes).toContain('BODY COMPOSITION LOGGED')
@@ -144,12 +144,12 @@ describe('botCommands core parser', () => {
       latestWeight: 75,
       latestWaist: 82
     })
-    expect(sportStatus).toContain('HUNTER ATHLETIC STATUS')
+    expect(sportStatus).toContain('Training')
     expect(sportStatus).toContain('75 kg')
 
     const workout = formatWorkoutResponse('pushups', 50, 5, 10)
     expect(workout).toContain('50 pushups')
-    expect(workout).toContain('+10 coins')
+    expect(workout).toContain('+10 points')
 
     const urge = formatUrgeResponse()
     expect(urge).toContain('URGE CRUSHER')

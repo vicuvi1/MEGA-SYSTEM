@@ -22,7 +22,7 @@ export interface UiPrefs {
   layoutV?: number
 }
 
-export type TodaySectionId = 'day' | 'progress' | 'fun' | 'greeting' | 'focus' | 'checklist' | 'todoist' | 'reps' | 'apps' | 'plan' | 'quicklog' | 'pillars' | 'raids'
+export type TodaySectionId = 'day' | 'progress' | 'fun' | 'focus' | 'todoist' | 'reps' | 'apps' | 'quicklog'
 
 /** What each Today section is, and whether it shows on a new device. */
 export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
@@ -30,15 +30,10 @@ export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; 
   { id: 'progress', label: 'This week', hint: 'Am I improving? One line and a chip per area', on: true },
   { id: 'focus', label: 'Focus timer', hint: 'Start and stop a focus session', on: true },
   { id: 'fun', label: 'Treat yourself', hint: 'What your coins buy now: fun time and your rewards', on: true },
-  { id: 'greeting', label: 'Greeting', hint: 'Your day in one line: blocks, tasks, coins today', on: false },
-  { id: 'checklist', label: 'Old quest checklist', hint: 'The same habits as the list, in the game style', on: false },
   { id: 'todoist', label: 'Todoist box', hint: 'Todoist on its own, with an add box (Todoist is also in the list)', on: false },
-  { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and hydration with quick +10 buttons', on: true },
+  { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and water with quick + buttons', on: true },
   { id: 'apps', label: 'Your apps', hint: 'Coins, Waky, Finance Helper, MAN and Sport Track at a glance', on: false },
-  { id: 'plan', label: 'Schedule & tasks', hint: "Today's blocks and open tasks", on: false },
   { id: 'quicklog', label: 'Quick log & recent', hint: 'One tap for anything else, and what you logged', on: false },
-  { id: 'pillars', label: '4-pillar day', hint: 'Sleep, discipline, sport, money (also in the checklist)', on: false },
-  { id: 'raids', label: 'Dungeon raids', hint: 'Bet coins on a challenge', on: false }
 ]
 
 /** Your Today layout with any section added later appended (in its default state). */

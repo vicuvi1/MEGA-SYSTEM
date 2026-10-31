@@ -9,8 +9,6 @@ import { todayLayout, useUiPrefs, type TodaySectionId } from '../uiPrefs'
 import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { soundSuccess } from '../sound'
-import { SoloSystemModal } from '../SoloSystemModal'
-import { DungeonRaidCards } from '../DungeonRaidCards'
 import { TodoistPanel } from '../TodoistPanel'
 import { FocusToday } from './Focus'
 import { DayFlow } from '../DayFlow'
@@ -67,7 +65,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   const [ui] = useUiPrefs()
   // Your sections, in your order (Settings → Today screen).
   const sections: Record<TodaySectionId, () => ReactNode> = {
-    greeting: () => <Greeting summary={summary} shop={shop} tasks={tasks} schedule={schedule} />,
     apps: () => (
         <>
       <StatsStrip5
@@ -82,18 +79,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       />
         </>
       ),
-    pillars: () => (
-        <>
-      <DailyGrandSlamCard
-        summary={summary}
-        discipline={discipline}
-        connections={connections}
-        body={body ?? null}
-        onGo={onGo}
-        onChange={onChange}
-      />
-        </>
-      ),
     reps: () => (
         <>
       <SoloDailyQuestBanner
@@ -104,35 +89,13 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       />
         </>
       ),
-    checklist: () => (
-        <>
-      <UnifiedQuestHub
-        summary={summary}
-        discipline={discipline}
-        connections={connections}
-        body={body ?? null}
-        onChange={onChange}
-        onGo={onGo}
-        onOpenApp={onOpenApp}
-      />
-        </>
-      ),
     day: () => (
-      <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} />
+      <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} />
     ),
     focus: () => <FocusToday onWallet={() => onChange()} timerOnly />,
     progress: () => <ProgressCard onOpen={() => onGo('progress')} />,
     fun: () => <FunCard onWallet={() => onChange()} onOpenShop={onOpenShop} />,
     todoist: () => <TodoistPanel today={summary.today} onWallet={() => onChange()} />,
-    raids: () => <DungeonRaidCards balance={summary.balance} onAwardCoins={() => onChange()} />,
-    plan: () => (
-        <>
-      <div className="cols even">
-        <TodaySchedule schedule={schedule} onSchedule={onSchedule} onGo={onGo} />
-        <TodayTasks tasks={tasks} onTasks={onTasks} onWallet={() => onChange()} onGo={onGo} />
-      </div>
-        </>
-      ),
     quicklog: () => (
         <>
       <div className="cols">
@@ -206,72 +169,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   )
 }
 
-function Greeting({ summary, shop, tasks, schedule }: { summary: Summary; shop: ShopState | null; tasks: TasksState | null; schedule: ScheduleState | null }) {
-  const [ui] = useUiPrefs()
-  const h = new Date().getHours()
-  const hello = h < 5 ? 'Night Watch' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Evening Command'
-  const blocksLeft = schedule && schedule.day === schedule.today ? schedule.blocks.filter((b) => b.status === 'pending' || b.status === 'running').length : 0
-  const tasksLeft = tasks?.tasks.filter((t) => !t.done).length ?? 0
-  const goal = shop?.rewards.find((r) => r.pinned)
-  const ANTI_LAZINESS_QUOTES = [
-    '⚡ ARISE · The system grants zero rewards to the hesitant. Strike now.',
-    '⚔️ DISCIPLINE PROTOCOL ACTIVE · Every rep, focus block, and clean hour fuels S-Rank power.',
-    '🛡️ ZERO DOPAMINE SLIPS · Sloth is the only dungeon boss you must execute today.',
-    '👑 MONARCH AWAKENING · The weak make excuses; the strong conquer the slate.',
-    '🔥 CONQUER THE SLATE · One focused action right now destroys hours of procrastination.',
-    '💎 IRON STANDARD · What you do today echoes into your stats forever.'
-  ]
-  const quote = ANTI_LAZINESS_QUOTES[new Date().getDate() % ANTI_LAZINESS_QUOTES.length]
-  const pct = goal ? Math.min(100, Math.round((summary.balance / goal.price) * 100)) : 0
-
-  return (
-    <header className="greeting-cockpit">
-      <div className="greeting-top">
-        <div className="greeting-title-wrap">
-          <span className="greeting-pulse-beacon" />
-          <h2>
-            {hello}
-            {ui.name ? `, ${ui.name}` : ''}
-          </h2>
-          <span className="greeting-status-tag">SYSTEM ACTIVE · S-RANK</span>
-        </div>
-        <span
-          className="greeting-life-badge"
-          title="LIFE · Every real-life action fuels real human growth"
-        >
-          <span>🌱</span> LIFE · REAL GROWTH
-        </span>
-      </div>
-
-      <div className="greeting-quote-row">
-        <span className="greeting-quote-text">{quote}</span>
-      </div>
-
-      <div className="greeting-telemetry-row">
-        <div className="telemetry-pill">
-          <span className="telemetry-dot cyan" />
-          <span><b>{blocksLeft}</b> Block{blocksLeft === 1 ? '' : 's'} Left</span>
-        </div>
-        <div className="telemetry-pill">
-          <span className="telemetry-dot lime" />
-          <span><b>{tasksLeft}</b> Open Task{tasksLeft === 1 ? '' : 's'}</span>
-        </div>
-        {goal && (
-          <div className="telemetry-pill" title={goal.price - summary.balance > 0 ? `${goal.price - summary.balance} coins to go` : 'Ready to redeem!'}>
-            <span className="telemetry-dot gold" />
-            <span>🎯 <b>{goal.title}</b> ({pct}%)</span>
-          </div>
-        )}
-        <div className="telemetry-pill">
-          <span className="telemetry-dot purple" />
-          <span>🔥 <b>+{summary.todayCoins}</b> 🪙 Harvested</span>
-        </div>
-      </div>
-    </header>
-  )
-}
-
-/** Sleek 5-Card Metric Strip combining Today Coins/Goal, Waky Sleep, Finance Spend, MAN Discipline, Sport Track */
 function StatsStrip5({
   summary,
   shop,
@@ -316,7 +213,7 @@ function StatsStrip5({
           <Coins n={summary.todayCoins} sign />
         </div>
         <div className="metric-strip-sub">
-          +{summary.todayXp} XP today
+          earned today
         </div>
         {target ? (
           <div className="metric-strip-progress" title={`${left > 0 ? `${left} coins to ${target.title}` : 'Ready to redeem!'}`}>
@@ -344,7 +241,7 @@ function StatsStrip5({
                 exit={{ opacity: 0, y: -40 }}
                 transition={{ duration: 0.6 }}
               >
-                {p.coins >= 0 ? '+' : ''}{p.coins} · +{p.xp} XP
+                {p.coins >= 0 ? '+' : ''}{p.coins}
               </motion.span>
             ))}
           </AnimatePresence>
@@ -417,17 +314,17 @@ function StatsStrip5({
           {hidden
             ? 'Stealth mode active'
             : discipline?.setup
-            ? (discipline.checkedInToday ? `${discipline.rank} · checked in` : `${discipline.rank} · check in due`)
-            : 'Spartan Citadel'}
+            ? (discipline.checkedInToday ? `Day ${discipline.current} · checked in` : `Day ${discipline.current} · check in due`)
+            : 'Not set up'}
         </div>
       </div>
 
-      {/* 5. Hunter Athletics & Workout (Sport Track) */}
+      {/* 5. Workout (Sport Track) */}
       <div
         className="metric-strip-card clickable"
         style={{ ['--accent' as string]: '#00F2FE' }}
         onClick={() => onOpenApp('body')}
-        title="Sport Track: Hunter Athletics & Progressive Overload (Click to open)"
+        title="Sport Track (click to open)"
       >
         <div className="metric-strip-head">
           <span className="metric-strip-label">
@@ -440,7 +337,7 @@ function StatsStrip5({
         </div>
         <div className="metric-strip-sub">
           {body?.workoutDoneToday
-            ? '+10 🪙 & +25 XP awarded'
+            ? 'Done today'
             : `${body?.workoutsThisWeek ?? 0} workouts this week · Ready to train`}
         </div>
       </div>
@@ -449,227 +346,6 @@ function StatsStrip5({
 }
 
 /** Unified Daily Quest Command Hub merging Quests + Daily Rituals without duplicate boxes */
-function UnifiedQuestHub({
-  summary,
-  discipline,
-  connections,
-  body,
-  onChange,
-  onGo,
-  onOpenApp
-}: {
-  summary: Summary
-  discipline: DisciplineState | null
-  connections: ConnectionsState | null
-  body: BodyState | null
-  onChange: (s?: Summary) => void
-  onGo: (p: PageId) => void
-  onOpenApp: (p: PageId) => void
-}) {
-  const act = useAction()
-  const [q, setQ] = useState<QuestState | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
-
-  useEffect(() => {
-    life.wallet.quests().then(setQ).catch(() => {})
-  }, [summary])
-
-  const directives = [
-    {
-      id: 'oath',
-      label: 'Morning Spartan Oath',
-      detail: 'Affirm your iron standard',
-      coins: 3,
-      xp: 5,
-      color: '#FF8A3D',
-      icon: 'shield' as const,
-      done: Boolean(discipline?.oathToday || summary.todayRules?.includes('discipline.oath')),
-      actionLabel: 'Take Oath',
-      action: async () => {
-        const d = await act(() => life.discipline.oath(), 'Morning oath sworn!')
-        if (d) {
-          soundSuccess()
-          onChange()
-        }
-      }
-    },
-    {
-      id: 'clean',
-      label: 'Clean Day Check-in',
-      detail: discipline?.setup ? `Day ${discipline.current} clean` : 'Zero dopamine slip',
-      coins: 20,
-      xp: 40,
-      color: '#FF8A3D',
-      icon: 'shield' as const,
-      done: Boolean(discipline?.checkedInToday || summary.todayRules?.includes('discipline.clean_day')),
-      actionLabel: 'Check In',
-      action: async () => {
-        const d = await act(() => life.discipline.checkIn(), 'Checked in clean!')
-        if (d) {
-          soundSuccess()
-          onChange()
-        }
-      }
-    },
-    {
-      id: 'workout',
-      label: 'Physical Training',
-      detail: body?.workoutDoneToday ? 'Workout logged today' : 'Heavy compound workout',
-      coins: 10,
-      xp: 25,
-      color: '#FF6B8B',
-      icon: 'bolt' as const,
-      done: Boolean(body?.workoutDoneToday || summary.todayRules?.includes('body.workout_done')),
-      actionLabel: 'Log Body',
-      action: () => onGo('body')
-    },
-    {
-      id: 'study',
-      label: 'Deep Focus Session',
-      detail: 'Finish planned study block',
-      coins: 20,
-      xp: 30,
-      color: '#38BDF8',
-      icon: 'spark' as const,
-      done: Boolean(summary.todayRules?.includes('study.block_done')),
-      actionLabel: 'Schedule',
-      action: () => onGo('schedule')
-    },
-    {
-      id: 'skincare',
-      label: 'Skincare Routine',
-      detail: 'Facial hygiene & defense',
-      coins: 5,
-      xp: 10,
-      color: '#7CC4FF',
-      icon: 'spark' as const,
-      done: Boolean(summary.todayRules?.includes('face.routine_done')),
-      actionLabel: 'Done',
-      action: async () => {
-        const s = await act(() => life.wallet.award('face.routine_done'), 'Skincare routine complete')
-        if (s) {
-          soundSuccess()
-          onChange(s)
-        }
-      }
-    },
-    {
-      id: 'spending',
-      label: 'Spending Log',
-      detail: connections?.finance.today?.logged ? 'Daily spending recorded' : 'Track expenses in Finance',
-      coins: 3,
-      xp: 5,
-      color: '#F5C84B',
-      icon: 'coin' as const,
-      done: Boolean(connections?.finance.today?.logged || summary.todayRules?.includes('money.logged')),
-      actionLabel: 'Log Expense',
-      action: () => onOpenApp('money')
-    }
-  ]
-
-  const doneCount = directives.filter((d) => d.done).length
-  const pct = Math.round((doneCount / directives.length) * 100)
-  const canClaimBonus = Boolean(q && q.allDone && !q.claimed)
-
-  return (
-    <section className={`panel unified-quest-hub solo-hud-frame ${canClaimBonus ? 'all' : ''}`} aria-label="Daily Directives">
-      <div className="solo-corner-bottom-left" />
-      <div className="solo-corner-bottom-right" />
-      <div className="solo-scanline" />
-
-      <header className="quest-hub-head">
-        <div className="quest-hub-title-group">
-          <div className="quest-hub-icon-shield">⚡</div>
-          <div>
-            <h2 className="quest-hub-title">[ DAILY QUEST COMMAND HUB: ACTIVE DIRECTIVES ]</h2>
-            <span className="quest-hub-sub">
-              {q?.claimed
-                ? '✨ System Quests Claimed · All daily objectives accomplished. Reality is the dungeon.'
-                : `${doneCount} of ${directives.length} Cleared (${pct}%) · Directives Payout: +${directives.reduce((s, d) => s + (d.done ? d.coins : 0), 0)} Coins`}
-            </span>
-          </div>
-        </div>
-
-        {canClaimBonus && (
-          <motion.button
-            className="btn solo-quest-claim-btn"
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setModalOpen(true)}
-          >
-            ✦ CLAIM SYSTEM REWARDS (+{q!.bonus.coins} COINS, +{q!.bonus.xp} XP)
-          </motion.button>
-        )}
-
-        {q?.claimed && (
-          <button
-            className="btn small ghost"
-            style={{ borderColor: 'rgba(0, 210, 255, 0.3)', color: '#00d2ff', fontSize: 11 }}
-            onClick={() => setModalOpen(true)}
-            title="View Completed Daily Quest System Hologram"
-          >
-            View Quest Hologram
-          </button>
-        )}
-      </header>
-
-      <div className="quest-hub-overall-bar">
-        <motion.i initial={false} animate={{ width: `${pct}%` }} transition={{ duration: 0.3 }} />
-      </div>
-
-      <div className="quest-hub-grid">
-        {directives.map((d) => (
-          <div key={d.id} className={`quest-directive-card ${d.done ? 'done' : ''}`} style={{ ['--c' as string]: d.color }}>
-            <div className="quest-directive-left">
-              <span className="quest-directive-icon">
-                <Icon name={d.done ? 'check' : d.icon} size={14} />
-              </span>
-              <div className="quest-directive-info">
-                <b>{d.label}</b>
-                <small>
-                  <span>{d.detail}</span>
-                  <span className="quest-directive-reward">+{d.coins}🪙</span>
-                </small>
-              </div>
-            </div>
-            {d.done ? (
-              <span className="quest-directive-badge">
-                <Icon name="check" size={11} /> Clear
-              </span>
-            ) : (
-              <motion.button
-                className="btn small primary quest-directive-btn"
-                whileTap={{ scale: 0.94 }}
-                onClick={d.action}
-              >
-                {d.actionLabel}
-              </motion.button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {q && (
-        <SoloSystemModal
-          open={modalOpen}
-          onClose={() => setModalOpen(false)}
-          type="quest-complete"
-          data={{
-            coins: q.bonus.coins,
-            xp: q.bonus.xp,
-            objectives: directives.map((d) => ({ label: d.label, done: d.done })),
-            onAction: async () => {
-              if (!q.claimed) {
-                const s = await act(() => life.wallet.claimQuests(), 'Daily Quest Rewards Accepted!')
-                if (s) onChange(s)
-              }
-            }
-          }}
-        />
-      )}
-    </section>
-  )
-}
-
 function TodaySchedule({ schedule, onSchedule, onGo }: { schedule: ScheduleState | null; onSchedule: (s: ScheduleState) => void; onGo: (p: PageId) => void }) {
   const [todayCal, setTodayCal] = useState<CalendarEvent[]>([])
 
@@ -801,86 +477,3 @@ function TodayTasks({ tasks, onTasks, onWallet, onGo }: { tasks: TasksState | nu
   )
 }
 
-
-function DailyGrandSlamCard({
-  summary,
-  discipline,
-  connections,
-  body,
-  onGo,
-  onChange
-}: {
-  summary: Summary
-  discipline: DisciplineState | null
-  connections: ConnectionsState | null
-  body: BodyState | null
-  onGo: (p: PageId) => void
-  onChange: (s?: Summary) => void
-}) {
-  const act = useAction()
-  const todayRules = summary.todayRules || []
-  const sleepDone = Boolean(todayRules.some((r) => r.startsWith('sleep.')) || connections?.waky?.today?.onTime)
-  const discDone = Boolean(discipline?.checkedInToday || todayRules.some((r) => r.startsWith('discipline.')))
-  const sportDone = Boolean(body?.workoutDoneToday || todayRules.some((r) => r.startsWith('body.')))
-  const moneyDone = Boolean(connections?.finance?.today?.logged || todayRules.some((r) => r.startsWith('money.')))
-
-  const pillars = [
-    { id: 'sleep', name: 'Sleep', icon: '🌙', done: sleepDone, page: 'sleep' as PageId },
-    { id: 'discipline', name: 'Discipline', icon: '🛡️', done: discDone, page: 'discipline' as PageId },
-    { id: 'sport', name: 'Sport', icon: '⚔️', done: sportDone, page: 'body' as PageId },
-    { id: 'money', name: 'Money', icon: '💰', done: moneyDone, page: 'money' as PageId }
-  ]
-
-  const count = pillars.filter((p) => p.done).length
-  const allDone = count === 4
-  const claimed = todayRules.includes('grand_slam.all_four')
-
-  const handleClaim = async () => {
-    const s = await act(() => life.wallet.award('grand_slam.all_four', 'Daily 4-Pillar Grand Slam (Sovereign Day)'))
-    if (s) {
-      soundSuccess()
-      onChange(s)
-    }
-  }
-
-  return (
-    <section className={`grand-slam-card ${claimed || allDone ? 'completed' : ''}`}>
-      <div className="grand-slam-header">
-        <div className="grand-slam-title-group">
-          <span className="grand-slam-crest">{claimed ? '👑' : allDone ? '🌟' : '🏛️'}</span>
-          <div className="grand-slam-title">
-            <span>4-Pillar Sovereign Day</span>
-            <span className={`grand-slam-badge ${claimed ? 'achieved' : allDone ? 'achieved' : 'pending'}`}>
-              {claimed ? 'CLAIMED (+50 🪙)' : `${count} / 4 CONQUERED`}
-            </span>
-          </div>
-        </div>
-
-        {allDone && !claimed && (
-          <button className="grand-slam-claim-btn" onClick={handleClaim}>
-            ⚡ CLAIM GRAND SLAM (+50 🪙 / +100 XP)
-          </button>
-        )}
-      </div>
-
-      <div className="grand-slam-pillars">
-        {pillars.map((p) => (
-          <div
-            key={p.id}
-            className={`grand-slam-pillar ${p.done ? 'done' : ''}`}
-            onClick={() => onGo(p.page)}
-            role="button"
-            tabIndex={0}
-            title={`Click to open ${p.name}`}
-          >
-            <span className="grand-slam-pillar-icon">{p.icon}</span>
-            <div className="grand-slam-pillar-info">
-              <span className="grand-slam-pillar-name">{p.name}</span>
-              <span className="grand-slam-pillar-status">{p.done ? '✓ Complete' : 'Pending tap'}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}

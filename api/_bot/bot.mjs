@@ -3049,15 +3049,11 @@ var TIERS = {
 function isTier(t) {
 	return t in TIERS;
 }
-function tierUnlocked(tier, level) {
-	return level >= TIERS[tier].minLevel;
-}
 /** Why a reward can't be bought right now, or null if it can. */
 function redeemBlocker(c) {
 	const { reward, balance, level, monthSpent, budget } = c;
 	if (reward.archived) return "This reward is archived";
-	if (!tierUnlocked(reward.tier, level)) return `${TIERS[reward.tier].label} rewards unlock at level ${TIERS[reward.tier].minLevel}`;
-	if (balance < reward.price) return `You need ${reward.price - balance} more coins`;
+	if (balance < reward.price) return `You need ${reward.price - balance} more points`;
 	if (budget > 0 && monthSpent + reward.realCost > budget) return `Over this month's reward budget (${budget - monthSpent} left)`;
 	return null;
 }
@@ -4098,6 +4094,46 @@ function cleanPlan(p, today, now = /* @__PURE__ */ new Date()) {
 		savedAt: now.toISOString()
 	};
 }
+// src/main/points.ts
+/** rule id → [old default, new value]. */
+var HABIT_POINTS = {
+	"sleep.up_on_time": [10, 3],
+	"sleep.bed_on_time": [5, 2],
+	"discipline.clean_day": [20, 3],
+	"discipline.urge_resisted": [10, 2],
+	"discipline.oath": [3, 1],
+	"discipline.reset": [-20, -5],
+	"body.workout_done": [10, 3],
+	"face.routine_done": [5, 2],
+	"money.under_budget": [5, 2],
+	"money.logged": [3, 1],
+	"grand_slam.all_four": [50, 5]
+};
+var FLAG = "points_v2";
+/** Runs once per database; true when it changed something. */
+function applyPointsV2(db) {
+	if (getSetting(db, FLAG)) return false;
+	const upd = db.prepare("UPDATE rules SET coins = ? WHERE id = ? AND coins = ?");
+	let n = 0;
+	for (const [id, [from, to]] of Object.entries(HABIT_POINTS)) n += Number(upd.run(to, id, from).changes ?? 0);
+	setSetting(db, FLAG, (/* @__PURE__ */ new Date()).toISOString());
+	return n > 0;
+}
+/** Pays a one-time bonus (ref keeps it once); false when it was already paid. */
+function payOnce(wallet, ref, coins, note, now = /* @__PURE__ */ new Date()) {
+	if (wallet.entries().some((e) => e.ref === ref && e.kind !== "undo")) return false;
+	wallet.append({
+		ts: now.toISOString(),
+		day: wallet.today(now),
+		module: "goals",
+		kind: "earn",
+		coins,
+		xp: 0,
+		ref,
+		note
+	});
+	return true;
+}
 // src/main/weekPlan.ts
 var KEY$1 = "week_plan";
 var WeekPlanService = class {
@@ -4131,6 +4167,7 @@ var WeekPlanService = class {
 		if (!plan || !plan.big3[i]) throw new LedgerError("No such task in this week’s plan");
 		plan.big3[i].done = !plan.big3[i].done;
 		setSetting(this.db, KEY$1, JSON.stringify(plan));
+		if (plan.big3[i].done) payOnce(this.wallet, `week:${plan.week}:big${i}`, 25, `Week goal done: ${plan.big3[i].text}`, now);
 		return plan;
 	}
 };
@@ -5450,6 +5487,7 @@ var notify = (...names) => {
 };
 /** The LifeApi namespaces the services cover, like src/main/index.ts maps them. */
 function createWebServices(mirror) {
+	mirror.write((db) => applyPointsV2(db)).catch(() => {});
 	const read = (fn) => mirror.read((db) => fn(servicesFor(db)));
 	const write = (fn, ...events) => mirror.write((db) => fn(servicesFor(db))).then((r) => {
 		notify(...events);
@@ -6028,7 +6066,7 @@ function formatHelpMessage() {
 		`One bot for everything: Sport, Money (Finance Helper), Discipline (MAN), Sleep (Waky), Tasks and your wallet.`,
 		``,
 		`📊 <b>Dashboard & Status</b>`,
-		`• <code>/today</code> — View balance, level, streak & rituals`,
+		`• <code>/today</code> — Your day: points, streaks and what's left`,
 		`• <code>/vault</code> — Real-money Reward Vault surplus, coin valuation & multiplier`,
 		`• <code>/goals</code> — Wishlist Mega Goals & savings progress`,
 		`• <code>/tasks</code> — View open tasks for today`,
@@ -6043,7 +6081,7 @@ function formatHelpMessage() {
 		`• <code>/bench &lt;kg&gt;</code> — e.g. <code>/bench 80kg</code>`,
 		`• <code>/weight &lt;kg&gt;</code> — e.g. <code>/weight 74.5</code> (+5 🪙)`,
 		`• <code>/waist &lt;cm&gt;</code> — e.g. <code>/waist 82</code> (+5 🪙)`,
-		`• <code>/sport status</code> — View Hunter athletic stats & PRs`,
+		`• <code>/sport status</code> — Your training stats & records`,
 		``,
 		`💪 <b>Quick Body Exercises</b>`,
 		`• <code>/pushups &lt;reps&gt;</code> — Quick log push-ups`,
@@ -6072,7 +6110,6 @@ function formatTodayStatus(data) {
 		`👑 <b>Life System Status</b>`,
 		``,
 		`🪙 <b>Balance:</b> ${data.balance} coins`,
-		`⭐ <b>Level:</b> ${data.level} (${data.rank}) · ${data.totalXp} XP`,
 		`🔥 <b>Clean Streak:</b> ${data.cleanStreak} days`,
 		`💪 <b>Workout Streak:</b> ${data.workoutStreak} days`,
 		`⚡ <b>Daily Rituals:</b> ${data.ritualsDone}/${data.totalRituals} completed today`,
@@ -6086,7 +6123,7 @@ function formatWorkoutResponse(exName, amount, streak, coins) {
 		`💪 <b>Workout Recorded!</b>`,
 		``,
 		`• <b>Exercise:</b> ${amount} ${exName}`,
-		`• <b>Reward:</b> +${coins} coins · +25 XP`,
+		`• <b>Reward:</b> +${coins} points`,
 		`• <b>Workout Streak:</b> ${streak} days in a row!`,
 		``,
 		`<i>The iron never lies. Keep pushing forward!</i>`
@@ -6094,11 +6131,11 @@ function formatWorkoutResponse(exName, amount, streak, coins) {
 }
 function formatSportResponse(activity, amount, unit, streak, coins, xp) {
 	return [
-		`⚔️ <b>HUNTER ATHLETIC LOG: RECORDED</b> ⚔️`,
+		`🏃 <b>Workout logged</b>`,
 		``,
 		`• <b>Sport / Activity:</b> ${activity} (${amount} ${unit})`,
 		`• <b>Attribute Gains:</b> +2 STR · +2 VIT · +1 AGI`,
-		`• <b>Hunter Rewards:</b> +${coins} 🪙 Coins · +${xp} XP`,
+		`• <b>Points:</b> +${coins}`,
 		`• <b>Continuous Streak:</b> ${streak} days active!`,
 		``,
 		`<i>"Your physical combat power ascends. The System acknowledges your relentless dedication!"</i>`
@@ -6109,7 +6146,7 @@ function formatMetricResponse(type, val, unit, coins, xp) {
 		`⚖️ <b>BODY COMPOSITION LOGGED</b> ⚖️`,
 		``,
 		`• <b>${type === "weight" ? "Body Weight" : "Waist Circumference"}:</b> ${val} ${unit}`,
-		`• <b>Reward:</b> +${coins} 🪙 Coins · +${xp} XP`,
+		`• <b>Points:</b> +${coins}`,
 		`• <b>Ledger:</b> Saved to physical metrics archive.`,
 		``,
 		`<i>"Consistency in tracking breeds absolute control over physical form."</i>`
@@ -6117,7 +6154,7 @@ function formatMetricResponse(type, val, unit, coins, xp) {
 }
 function formatSportStatusResponse(data) {
 	return [
-		`⚡ <b>HUNTER ATHLETIC STATUS & POWER</b> ⚡`,
+		`🏋️ <b>Training</b>`,
 		``,
 		`🔥 <b>Workout Streak:</b> ${data.streak} Days Continuous`,
 		`🏋️ <b>Sessions Logged:</b> ${data.totalWorkouts} total (${data.thisWeek} this week)`,
@@ -6156,7 +6193,7 @@ function formatCleanCheckinResponse(streak, coins) {
 		`🛡️ <b>Clean Day Affirmed!</b>`,
 		``,
 		`• <b>Current Streak:</b> ${streak} days clean!`,
-		`• <b>Reward:</b> +${coins} coins · +40 XP`,
+		`• <b>Reward:</b> +${coins} points`,
 		``,
 		`<i>"Stand fast, keep the standard, give today everything."</i>`
 	].join("\n");
@@ -9721,8 +9758,13 @@ async function runDaily(env, job) {
 			sent.push("night");
 		}
 	} else {
+		let weekLine = "";
+		const wm = weekPlan ? report.metrics.find((m) => m.id === weekPlan.focus) : null;
+		if (weekPlan && wm?.target && wm.now >= wm.target) {
+			if (await mirror.write((db) => payOnce(services.services(db).wallet, `weekfocus:${weekPlan.week}`, 50, `Week focus reached: ${wm.label}`))) weekLine = `\n\n🏆 Week focus reached: <b>${wm.label}</b> (${wm.text}). +50 points.`;
+		}
 		const todoLine = todo && todo.done ? `\n\n✅ Todoist: ${todo.done} done today${todo.paid ? ` · +${todo.paid * TODOIST_COINS} 🪙 just now` : ""}` : "";
-		await send(eveningText(st.plan, st.todayMin) + todoLine, st.plan.items.length ? planKeyboard(st.plan, true) : void 0);
+		await send(eveningText(st.plan, st.todayMin) + todoLine + weekLine, st.plan.items.length ? planKeyboard(st.plan, true) : void 0);
 		sent.push("evening");
 		if ((/* @__PURE__ */ new Date()).getDay() === 0) {
 			await send(weekText(st.week, st.goals));
