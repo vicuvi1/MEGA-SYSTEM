@@ -32,7 +32,9 @@ export const isDemo = !window.life
 
 /** What works where: the website has no AI key, Google Calendar, Cloudflare sync, log folder or installer updates. */
 export const features = {
-  ai: !!window.life,
+  ai: true,
+  /** AI keys are typed in only on the desktop; the website's key is in Vercel. */
+  aiSettings: !!window.life,
   calendar: !!window.life,
   cloudflareSync: !!window.life,
   logFolder: !!window.life,

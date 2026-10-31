@@ -773,7 +773,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </form>
       </section>
 
-      {features.ai && (
+      {features.aiSettings && (
       <section className="panel">
         <header className="panel-head">
           <h2>

@@ -20,6 +20,7 @@ import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
 import { FINANCE } from './web/financeSync'
+import { createWebAi, serverAi } from './web/webAi'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -306,9 +307,14 @@ export function createTursoWebBridge(): Bridge {
     const days = await snapshotDays()
     return { dir: 'Turso cloud (daily snapshot, 30 kept)', driveAvailable: false, passphraseSet: true, last: days[0] ? { name: days[0], at: days[0] } : null, pending: 0, count: days.length, lastError: null }
   }
-  const noAi = async (): Promise<never> => {
-    throw new Error('AI is not set up on the website yet.')
-  }
+  const aiOnP: Promise<boolean> = direct
+    ? Promise.resolve(false)
+    : sessionReady
+        .then(() => fetch('/api/ai', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: '{"op":"status"}' }))
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((j: any) => !!j.configured)
+        .catch(() => false)
+  const aiP = svcP.then((svc) => createWebAi(svc, serverAi(currentSession), () => aiOnP))
   const syncNow = async () => {
     const m = await mirrorP
     await m.refresh()
@@ -413,16 +419,13 @@ export function createTursoWebBridge(): Bridge {
       events: async () => [],
       clear: async () => {}
     },
-    ai: {
-      config: async () => ({ ...(await base.ai.config()), openRouterKey: '', geminiKey: '' }),
-      saveConfig: noAi,
-      test: async () => ({ ok: false, message: 'AI is not set up on the website yet.', model: '' }),
-      generateRewards: noAi,
-      performanceReport: noAi,
-      askCoach: noAi,
-      decomposeTask: noAi,
-      inspectProduct: noAi
-    },
+    // Google Gemini through the server (the key stays in Vercel).
+    ai: new Proxy({} as Bridge['ai'], {
+      get: (_t, method: string) => async (...args: unknown[]) => {
+        const ai = await aiP
+        return (ai as any)[method](...args)
+      }
+    }),
     onLocked: (cb: () => void) => {
       lockListeners.add(cb)
       return () => lockListeners.delete(cb)
