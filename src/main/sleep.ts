@@ -1,4 +1,6 @@
 import { computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, type SleepLog, type SleepSummary } from '@core/sleep'
+import { daysBetween } from '@core/dates'
+import { LedgerError } from '@core/ledger'
 import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
@@ -105,6 +107,36 @@ export class SleepService {
       state: this.state(now),
       awarded
     }
+  }
+
+  /**
+   * The real wake-up time for a day you forgot to log (or logged late).
+   * Today: like logging it then (pays "up on time" if it was, once a day).
+   * An earlier day (up to 14 back): the record is corrected, so the streak
+   * and stats are right, but no coins are paid for the past.
+   */
+  setWake(day: string, time: string, now = new Date()): { log: SleepLog; state: SleepSummary; awarded: boolean } {
+    const today = this.wallet.today(now)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new LedgerError('Pick a day')
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(time).trim())
+    if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) throw new LedgerError('Use a time like 06:45')
+    const wakeTime = `${m[1].padStart(2, '0')}:${m[2]}`
+    if (day > today) throw new LedgerError('That day has not come yet')
+    if (daysBetween(day, today) > 14) throw new LedgerError('Only the last 14 days can be changed')
+    if (day === today) return this.logWake(wakeTime, undefined, now)
+
+    const target = targetForDay(day, this.weekdayTarget(), this.weekendTarget())
+    const onTime = isWakeOnTime(wakeTime, target)
+    const existing = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow | undefined
+    if (existing) {
+      this.db.prepare('UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ? WHERE day = ?').run(wakeTime, target, onTime ? 1 : 0, day)
+    } else {
+      this.db
+        .prepare('INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)')
+        .run(day, wakeTime, target, onTime ? 1 : 0, now.toISOString())
+    }
+    const updated = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow
+    return { log: toLog(updated), state: this.state(now), awarded: false }
   }
 
   logBed(

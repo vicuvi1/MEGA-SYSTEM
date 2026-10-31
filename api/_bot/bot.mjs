@@ -3342,6 +3342,31 @@ var SleepService = class {
 			awarded
 		};
 	}
+	/**
+	* The real wake-up time for a day you forgot to log (or logged late).
+	* Today: like logging it then (pays "up on time" if it was, once a day).
+	* An earlier day (up to 14 back): the record is corrected, so the streak
+	* and stats are right, but no coins are paid for the past.
+	*/
+	setWake(day, time, now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new LedgerError("Pick a day");
+		const m = /^(\d{1,2}):(\d{2})$/.exec(String(time).trim());
+		if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) throw new LedgerError("Use a time like 06:45");
+		const wakeTime = `${m[1].padStart(2, "0")}:${m[2]}`;
+		if (day > today) throw new LedgerError("That day has not come yet");
+		if (daysBetween$1(day, today) > 14) throw new LedgerError("Only the last 14 days can be changed");
+		if (day === today) return this.logWake(wakeTime, void 0, now);
+		const target = targetForDay(day, this.weekdayTarget(), this.weekendTarget());
+		const onTime = isWakeOnTime(wakeTime, target);
+		if (this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day)) this.db.prepare("UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ? WHERE day = ?").run(wakeTime, target, onTime ? 1 : 0, day);
+		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)").run(day, wakeTime, target, onTime ? 1 : 0, now.toISOString());
+		return {
+			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day)),
+			state: this.state(now),
+			awarded: false
+		};
+	}
 	logBed(time, now = /* @__PURE__ */ new Date()) {
 		const today = this.wallet.today(now);
 		const hh = String(now.getHours()).padStart(2, "0");
@@ -4803,6 +4828,7 @@ syncFinance: (recordDays) => write((s) => {
 			state: () => read((s) => s.sleep.state()),
 			logWake: (time, quality) => write((s) => s.sleep.logWake(time, quality), W),
 			logBed: (time) => write((s) => s.sleep.logBed(time), W),
+			setWake: (day, time) => write((s) => s.sleep.setWake(day, time), W),
 			setTargets: (weekday, weekend, bedtime) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime))
 		},
 		money: {
@@ -7178,8 +7204,16 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}) };
 			}
 			case "wake": {
+				const time = parsed.args.find((a) => /^\d{1,2}[:.]\d{2}$/.test(a))?.replace(".", ":");
+				const back = parsed.args.some((a) => /^(yesterday|ieri|вчера)$/i.test(a)) ? 1 : 0;
+				if (time || back) {
+					if (!time) return { reply: "⏰ What time? e.g. <code>/wake yesterday 06:30</code>" };
+					const day = addDays$1(s.wallet.today(), -back);
+					const res = s.sleep.setWake(day, time);
+					return { reply: `🌅 <b>Wake-up ${back ? "for yesterday " : ""}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? "🎯 On time! <b>+10 coins</b>" : res.log.onTime ? back ? "On time · no coins for past days." : "On time." : "Saved to your sleep history."}` };
+				}
 				const res = s.sleep.logWake((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
-				return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? "🎯 On time! <b>+10 coins</b>" : res.log.onTime ? "On time." : "Saved to your sleep history."}` };
+				return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? "🎯 On time! <b>+10 coins</b>" : res.log.onTime ? "On time." : "Saved to your sleep history."}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>` };
 			}
 			case "bed": {
 				const res = s.sleep.logBed((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));

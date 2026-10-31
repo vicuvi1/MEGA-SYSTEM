@@ -462,6 +462,8 @@ export interface LifeApi {
     state(): Promise<SleepSummary>
     logWake(time?: string, quality?: number): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
     logBed(time?: string): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
+    /** The real wake-up time for today or one of the last 14 days (coins only for today). */
+    setWake(day: string, time: string): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
     setTargets(weekday: string, weekend: string, bedtime?: string): Promise<SleepSummary>
   }
   money: {

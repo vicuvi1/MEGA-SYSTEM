@@ -345,6 +345,11 @@ handle('sleep:logWake', (time?: string, quality?: number) => {
   win?.webContents.send('wallet:changed')
   return res
 })
+handle('sleep:setWake', (day: string, time: string) => {
+  const res = sleepService.setWake(day, time)
+  win?.webContents.send('wallet:changed')
+  return res
+})
 handle('sleep:logBed', (time?: string) => {
   const res = sleepService.logBed(time)
   win?.webContents.send('wallet:changed')

@@ -6,6 +6,7 @@ import { Icon } from '../Icon'
 import { soundCoin, soundSuccess } from '../sound'
 import { useAction } from '../ui'
 import { ConnectCard } from './Connected'
+import { addDays } from '@core/dates'
 
 const hm = (min: number | null) => (min == null ? '–' : `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`)
 const toMin = (t: string) => {
@@ -13,7 +14,7 @@ const toMin = (t: string) => {
   return (h || 0) * 60 + (m || 0)
 }
 
-export function Sleep({ state, onState, onWallet }: { state: ConnectionsState; onState: (s: ConnectionsState) => void; onWallet: () => void }) {
+export function Sleep({ state, onState, onWallet, openEditor = 0 }: { state: ConnectionsState; onState: (s: ConnectionsState) => void; onWallet: () => void; openEditor?: number }) {
   const w = state.waky
   const hasWaky = w.found && Boolean(w.connectedSince)
   const [mode, setMode] = useState<'waky' | 'native'>(() => (hasWaky ? 'waky' : 'native'))
@@ -26,6 +27,7 @@ export function Sleep({ state, onState, onWallet }: { state: ConnectionsState; o
             Switch to Standalone Sleep Tracker
           </button>
         </div>
+        <WakeEditor state={state} onState={onState} onWallet={onWallet} openSignal={openEditor} />
         <WakySleepView w={w} />
       </div>
     )
@@ -40,6 +42,7 @@ export function Sleep({ state, onState, onWallet }: { state: ConnectionsState; o
           </button>
         </div>
       )}
+      <WakeEditor state={state} onState={onState} onWallet={onWallet} openSignal={openEditor} />
       <NativeSleepView onWallet={onWallet} />
       {!hasWaky && (
         <section className="panel" style={{ marginTop: '20px' }}>
@@ -62,6 +65,89 @@ export function Sleep({ state, onState, onWallet }: { state: ConnectionsState; o
         </section>
       )}
     </div>
+  )
+}
+
+/**
+ * Forgot to log when you got up, or logged it late? Set the real time for
+ * today or one of the last 14 days. Today's on-time wake-up still pays its
+ * coins (once); past days are corrected for the streak and stats only.
+ */
+function WakeEditor({ state, onState, onWallet, openSignal = 0 }: { state: ConnectionsState; onState: (s: ConnectionsState) => void; onWallet: () => void; openSignal?: number }) {
+  const act = useAction()
+  const today = state.today
+  const days = Array.from({ length: 8 }, (_, i) => addDays(today, -i))
+  const [day, setDay] = useState(today)
+  const known = (d: string) => state.waky.mornings.find((m) => m.day === d)?.time ?? (d === today ? state.waky.today?.time : undefined)
+  const [time, setTime] = useState(() => known(today) ?? '')
+  const [open, setOpen] = useState(openSignal > 0)
+  useEffect(() => {
+    if (openSignal > 0) setOpen(true)
+  }, [openSignal])
+  const label = (d: string, i: number) =>
+    i === 0 ? 'Today' : i === 1 ? 'Yesterday' : new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+
+  async function save() {
+    const res = await act(
+      () => life.sleep.setWake(day, time),
+      day === today ? 'Wake-up saved' : 'Saved (past days count for your streak, without coins)'
+    )
+    if (!res) return
+    if (res.awarded) {
+      soundCoin()
+      onWallet()
+    } else soundSuccess()
+    life.connections.state().then(onState).catch(() => {})
+    setOpen(false)
+  }
+
+  if (!open) {
+    return (
+      <div className="row end-row">
+        <button className="btn small" onClick={() => setOpen(true)}>
+          <Icon name="edit" size={13} /> Fix a wake-up time
+        </button>
+      </div>
+    )
+  }
+  return (
+    <section className="panel wake-editor">
+      <header className="panel-head">
+        <h2>
+          <Icon name="edit" /> Fix a wake-up time
+        </h2>
+        <button className="btn small ghost" onClick={() => setOpen(false)}>
+          Close
+        </button>
+      </header>
+      <p className="hint block">Forgot to log it, or logged it late? Set when you really got up. Telegram works too: <code>/wake 06:40</code> or <code>/wake yesterday 06:30</code>.</p>
+      <div className="row wake-editor-row">
+        <label className="field">
+          <span>Day</span>
+          <select
+            value={day}
+            onChange={(e) => {
+              setDay(e.target.value)
+              setTime(known(e.target.value) ?? '')
+            }}
+          >
+            {days.map((d, i) => (
+              <option key={d} value={d}>
+                {label(d, i)}
+                {known(d) ? ` · now ${known(d)}` : ' · not logged'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Woke up at</span>
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        </label>
+        <button className="btn primary" disabled={!time} onClick={() => void save()}>
+          Save
+        </button>
+      </div>
+    </section>
   )
 }
 

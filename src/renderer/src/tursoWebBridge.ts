@@ -457,7 +457,21 @@ export function createTursoWebBridge(): Bridge {
     shop: S('shop') as Bridge['shop'],
     tasks: S('tasks') as Bridge['tasks'],
     schedule: S('schedule') as Bridge['schedule'],
-    sleep: S('sleep') as Bridge['sleep'],
+    sleep: S('sleep', {
+      // A corrected wake-up also goes into Waky's own copy of that morning, so
+      // both show the same (Waky's data then syncs to your other devices).
+      setWake: async (day: string, time: string) => {
+        const res = await (await svcP).sleep.setWake(day, time)
+        const waky = readJson<any>('waky_web_data_v2')
+        if (waky && typeof waky === 'object') {
+          waky.days = waky.days || {}
+          waky.days[day] = { reps: 0, mode: 'edited', sent: true, ...(waky.days[day] || {}), time: res.log.wakeTime, target: waky.days[day]?.target || waky.settings?.weekday || res.log.wakeTarget }
+          store?.setItem('waky_web_data_v2', JSON.stringify(waky))
+          window.dispatchEvent(new CustomEvent('life-waky-changed'))
+        }
+        return res
+      }
+    }) as Bridge['sleep'],
     money: S('money') as Bridge['money'],
     shields: S('shields') as Bridge['shields'],
     economy: S('economy') as Bridge['economy'],

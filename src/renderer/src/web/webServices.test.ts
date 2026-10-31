@@ -82,4 +82,20 @@ describe('web services on Turso', () => {
     expect(await again.connections.syncFinance([today])).toBe(0)
     expect(count(remote, "SELECT COUNT(*) FROM ledger WHERE rule_id = 'money.logged'")).toBe(1)
   })
+
+  it('fixing a wake-up: today pays if on time (once), a past day is corrected without coins', async () => {
+    const remote = fakeTurso()
+    const web = await open()
+    const today = await web.read((s) => s.wallet.today())
+    const yesterday = new Date(Date.parse(today + 'T12:00:00Z') - 86400_000).toISOString().slice(0, 10)
+    const r1 = await web.sleep.setWake(today, '05:30')
+    expect(r1).toMatchObject({ awarded: true, log: { wakeTime: '05:30', onTime: true } })
+    expect((await web.sleep.setWake(today, '05:20')).awarded).toBe(false) // already paid today
+    const r2 = await web.sleep.setWake(yesterday, '6:05')
+    expect(r2).toMatchObject({ awarded: false, log: { day: yesterday, wakeTime: '06:05' } })
+    await expect(web.sleep.setWake('2020-01-01', '06:00')).rejects.toThrow(/14 days/)
+    await expect(web.sleep.setWake(today, '25:00')).rejects.toThrow(/06:45/)
+    expect(count(remote, "SELECT COUNT(*) FROM sleep_logs")).toBe(2)
+    expect(count(remote, "SELECT COUNT(*) FROM ledger WHERE rule_id = 'sleep.up_on_time'")).toBe(1)
+  })
 })

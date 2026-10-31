@@ -118,6 +118,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const act = useAction()
   const toast = useToast()
   const [isSyncingMobile, setIsSyncingMobile] = useState(false)
+  const [wakeEdit, setWakeEdit] = useState(0) // "Fix wake-up" taps: opens the editor on Sleep
 
   const triggerMobileSync = async () => {
     if (isSyncingMobile) return
@@ -506,6 +507,18 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               </button>
             </div>
           )}
+          {page === 'sleep' && (
+            <button
+              className="btn small"
+              title="Forgot to log when you got up? Set the real time"
+              onClick={() => {
+                setWakeEdit((n) => n + 1)
+                setView((v) => ({ ...v, sleep: 'system' }))
+              }}
+            >
+              <Icon name="edit" size={13} /> Fix wake-up
+            </button>
+          )}
           <span className="spacer" />
           <button
             className="search-btn quick-omnibar-btn"
@@ -684,7 +697,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'discipline' && discipline && (
               <Discipline state={discipline} man={connections?.man.suggestion ?? null} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
             )}
-            {page === 'sleep' && connections && <Sleep state={connections} onState={setConnections} onWallet={onWallet} />}
+            {page === 'sleep' && connections && <Sleep state={connections} onState={setConnections} onWallet={onWallet} openEditor={wakeEdit} />}
             {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'bots' && <BotCenter />}

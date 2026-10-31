@@ -339,8 +339,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
       }
       case 'wake': {
+        // "/wake" now, "/wake 06:40" (forgot to log it), "/wake yesterday 06:30".
+        const time = parsed.args.find((a) => /^\d{1,2}[:.]\d{2}$/.test(a))?.replace('.', ':')
+        const back = parsed.args.some((a) => /^(yesterday|ieri|вчера)$/i.test(a)) ? 1 : 0
+        if (time || back) {
+          if (!time) return { reply: '⏰ What time? e.g. <code>/wake yesterday 06:30</code>' }
+          const day = addDays(s.wallet.today(), -back)
+          const res = s.sleep.setWake(day, time)
+          return { reply: `🌅 <b>Wake-up ${back ? 'for yesterday ' : ''}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? (back ? 'On time · no coins for past days.' : 'On time.') : 'Saved to your sleep history.'}` }
+        }
         const res = s.sleep.logWake(new Date().toTimeString().slice(0, 5)) // local time (the server runs in your time zone)
-        return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}` }
+        return { reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>` }
       }
       case 'bed': {
         const res = s.sleep.logBed(new Date().toTimeString().slice(0, 5))

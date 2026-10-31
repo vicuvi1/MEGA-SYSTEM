@@ -67,3 +67,7 @@ html.calm [class*='loading'] {
 .todoist-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .todoist-text small { color: var(--muted); font-size: 12px; }
 .todoist-late { color: #ff5c5c; font-weight: 600; }
+
+/* Sleep → Fix a wake-up time */
+.wake-editor-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.wake-editor-row .field { margin: 0; min-width: 160px; }

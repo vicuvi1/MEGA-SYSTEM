@@ -212,6 +212,7 @@ export function createMockApi(): Bridge {
         state: { today: dayKey(new Date()), weekdayTarget: '07:00', weekendTarget: '08:30', todayLog: null, streak: 4, bestStreak: 14, onTimeRate: 0.92, avgSleepMin: 450, recentLogs: [] },
         awarded: true
       }),
+      setWake: async (day: string, time: string) => ({ log: { day, wakeTime: time, wakeTarget: '06:30', onTime: true, bedTime: null, bedTarget: null, bedOnTime: null, quality: null }, state: await (async () => ({ today: day, weekdayTarget: '06:30', weekendTarget: '06:30', todayLog: null, streak: 0, bestStreak: 0, onTimeRate: 0, avgSleepMin: 0, recentLogs: [] }))(), awarded: false }) as any,
       logBed: async (time = '23:00') => ({
         log: { id: 1, day: dayKey(new Date()), wakeTime: '07:00', wakeTarget: '07:00', onTime: true, bedTime: time, bedTarget: '23:00', bedOnTime: true, quality: 5, createdAt: '' },
         state: { today: dayKey(new Date()), weekdayTarget: '07:00', weekendTarget: '08:30', todayLog: null, streak: 4, bestStreak: 14, onTimeRate: 0.92, avgSleepMin: 450, recentLogs: [] },

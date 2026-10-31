@@ -116,6 +116,7 @@ const api: LifeApi & { onLocked(cb: () => void): void; onUrge(cb: () => void): v
     state: () => call('sleep:state'),
     logWake: (time, quality) => call('sleep:logWake', time, quality),
     logBed: (time) => call('sleep:logBed', time),
+    setWake: (day, time) => call('sleep:setWake', day, time),
     setTargets: (weekday, weekend, bedtime) => call('sleep:setTargets', weekday, weekend, bedtime)
   },
   money: {

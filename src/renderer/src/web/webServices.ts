@@ -188,6 +188,7 @@ export function createWebServices(mirror: Mirror) {
       state: () => read((s) => s.sleep.state()),
       logWake: (time?: string, quality?: number) => write((s) => s.sleep.logWake(time, quality), W),
       logBed: (time?: string) => write((s) => s.sleep.logBed(time), W),
+      setWake: (day: string, time: string) => write((s) => s.sleep.setWake(day, time), W),
       setTargets: (weekday: string, weekend: string, bedtime?: string) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime))
     },
     money: {
