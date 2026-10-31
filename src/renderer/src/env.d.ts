@@ -10,3 +10,9 @@ declare namespace JSX {
     }
   }
 }
+
+// Vite asset URLs (e.g. the sql.js WebAssembly file).
+declare module '*?url' {
+  const url: string
+  export default url
+}
