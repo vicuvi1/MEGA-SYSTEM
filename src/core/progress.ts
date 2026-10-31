@@ -39,6 +39,19 @@ export interface Metric {
   trend: 'better' | 'worse' | 'same'
   /** One week per bar, oldest first (the last is the running 7 days). */
   weeks: number[]
+  /** The last 7 days one by one, oldest first. */
+  days: { day: string; value: number }[]
+  /** A good week (null: no target, e.g. spending). */
+  target: number | null
+  targetText: string | null
+  /** now − prev, shown as "+2 vs last week". */
+  deltaText: string
+  /** How a single day's value reads ("50m", "✓"). */
+  dayText: (v: number) => string
+  /** How any week total reads (for counting up on screen). */
+  fmt: (v: number) => string
+  /** Yes/no per day (wake-up, workout, clean day) rather than an amount. */
+  daily: boolean
 }
 
 export interface ProgressReport {
@@ -49,6 +62,9 @@ export interface ProgressReport {
   worse: MetricId[]
   /** One honest line. */
   verdict: string
+  /** 0–100: how close the last 7 days came to a good week in every area with a target. */
+  score: number
+  prevScore: number
 }
 
 const WEEKS = 6
@@ -79,14 +95,16 @@ export function progressReport(i: ProgressInput): ProgressReport {
       const w = win(WEEKS - 1 - k)
       return f(w.from, w.to)
     })
-  const defs: { id: MetricId; label: string; higherBetter: boolean; f: (a: string, b: string) => number; text: (v: number) => string; skip?: boolean }[] = [
-    { id: 'focus', label: 'Focus time', higherBetter: true, f: (a, b) => sum(i.focus, a, b, (r) => r.minutes), text: hm },
-    { id: 'wake', label: 'On-time wake-ups', higherBetter: true, f: (a, b) => sum(i.wakes, a, b, (r) => (r.onTime ? 1 : 0)), text: (v) => `${v}/7` },
-    { id: 'sport', label: 'Workouts', higherBetter: true, f: (a, b) => new Set(i.workouts.filter((r) => r.day >= a && r.day <= b).map((r) => r.day)).size, text: (v) => `${v} day${v === 1 ? '' : 's'}` },
-    { id: 'clean', label: 'Clean days', higherBetter: true, f: (a, b) => cleanDays(i.discipline, a, b, to), text: (v) => `${v}/7` },
-    { id: 'todoist', label: 'Todoist tasks done', higherBetter: true, f: (a, b) => sum(i.todoist, a, b, () => 1), text: (v) => String(v) },
-    { id: 'mustdo', label: 'Must-dos done', higherBetter: true, f: (a, b) => sum(i.mustdos ?? [], a, b, (r) => (r.done ? 1 : 0)), text: (v) => String(v), skip: !i.mustdos },
-    { id: 'spend', label: 'Spent', higherBetter: false, f: (a, b) => sum(i.spending ?? [], a, b, (r) => r.bani), text: (v) => `${Math.round(v / 100).toLocaleString('en-US')} lei`, skip: !i.spending }
+  const lei = (v: number) => `${Math.round(v / 100).toLocaleString('en-US')} lei`
+  const tick = (v: number) => (v ? '✓' : '·')
+  const defs: { id: MetricId; label: string; higherBetter: boolean; f: (a: string, b: string) => number; text: (v: number) => string; day: (v: number) => string; target: number | null; unit: number; skip?: boolean }[] = [
+    { id: 'focus', label: 'Focus time', higherBetter: true, f: (a, b) => sum(i.focus, a, b, (r) => r.minutes), text: hm, day: (v) => (v ? hm(v) : '·'), target: 600, unit: 30 },
+    { id: 'wake', label: 'On-time wake-ups', higherBetter: true, f: (a, b) => sum(i.wakes, a, b, (r) => (r.onTime ? 1 : 0)), text: (v) => `${v}/7`, day: tick, target: 7, unit: 1 },
+    { id: 'sport', label: 'Workouts', higherBetter: true, f: (a, b) => new Set(i.workouts.filter((r) => r.day >= a && r.day <= b).map((r) => r.day)).size, text: (v) => `${v} day${v === 1 ? '' : 's'}`, day: tick, target: 4, unit: 1 },
+    { id: 'clean', label: 'Clean days', higherBetter: true, f: (a, b) => cleanDays(i.discipline, a, b, to), text: (v) => `${v}/7`, day: tick, target: 7, unit: 1 },
+    { id: 'todoist', label: 'Todoist tasks done', higherBetter: true, f: (a, b) => sum(i.todoist, a, b, () => 1), text: (v) => String(v), day: (v) => (v ? String(v) : '·'), target: 15, unit: 1 },
+    { id: 'mustdo', label: 'Must-dos done', higherBetter: true, f: (a, b) => sum(i.mustdos ?? [], a, b, (r) => (r.done ? 1 : 0)), text: (v) => String(v), day: (v) => (v ? String(v) : '·'), target: 10, unit: 1, skip: !i.mustdos },
+    { id: 'spend', label: 'Spent', higherBetter: false, f: (a, b) => sum(i.spending ?? [], a, b, (r) => r.bani), text: lei, day: (v) => (v ? String(Math.round(v / 100)) : '·'), target: null, unit: 10_000, skip: !i.spending }
   ]
   const metrics: Metric[] = defs
     .filter((d) => !d.skip)
@@ -96,14 +114,19 @@ export function progressReport(i: ProgressInput): ProgressReport {
       const prev = weeks[WEEKS - 2]
       const before = weeks.slice(WEEKS - 5, WEEKS - 1)
       const usual = before.reduce((t, v) => t + v, 0) / before.length
-      // "Same" within 10% (or one unit) of the usual week: small wobbles aren't news.
-      const base = Math.max(usual, prev)
-      const margin = Math.max(d.id === 'focus' ? 30 : d.id === 'spend' ? 10_000 : 1, base * 0.1)
-      const diff = now - (usual || prev)
+      // Against last week (what "before" shows); within 10% (or one unit) is
+      // "same": small wobbles aren't news.
+      const margin = Math.max(d.unit, prev * 0.1)
+      const diff = now - prev
       const up = diff > margin
       const down = diff < -margin
       const trend: Metric['trend'] = !up && !down ? 'same' : up === d.higherBetter ? 'better' : 'worse'
-      return { id: d.id, label: d.label, now, prev, usual, text: d.text(now), prevText: d.text(prev), higherBetter: d.higherBetter, trend, weeks }
+      const days = Array.from({ length: 7 }, (_, k) => {
+        const day = addDays(to, k - 6)
+        return { day, value: d.f(day, day) }
+      })
+      const deltaText = diff === 0 ? 'same as last week' : `${diff > 0 ? '+' : '−'}${d.text(Math.abs(diff)).replace(/\/7$/, '')} vs last week`
+      return { id: d.id, label: d.label, now, prev, usual, text: d.text(now), prevText: d.text(prev), higherBetter: d.higherBetter, trend, weeks, days, target: d.target, targetText: d.target === null ? null : d.text(d.target), deltaText, dayText: d.day, fmt: d.text, daily: d.day === tick }
     })
   const better = metrics.filter((m) => m.trend === 'better').map((m) => m.id)
   const worse = metrics.filter((m) => m.trend === 'worse').map((m) => m.id)
@@ -112,13 +135,15 @@ export function progressReport(i: ProgressInput): ProgressReport {
   const verdict = nothing
     ? 'Not enough logged yet: a week of focus, wake-ups and workouts gives the first comparison.'
     : better.length > worse.length
-      ? `You're improving: ${better.map(name).join(', ')} up on your usual week.${worse.length ? ` Watch ${worse.map(name).join(', ')}.` : ''}`
+      ? `You're improving: ${better.map(name).join(', ')} up on last week.${worse.length ? ` Watch ${worse.map(name).join(', ')}.` : ''}`
       : worse.length > better.length
-        ? `Slipping a bit: ${worse.map(name).join(', ')} below your usual week. Pick one to fix this week.`
+        ? `Slipping a bit: ${worse.map(name).join(', ')} below last week. Pick one to fix this week.`
         : better.length
           ? `Mixed week: ${better.map(name).join(', ')} better, ${worse.map(name).join(', ')} worse.`
-          : 'Steady: about the same as your usual week. Push one area a little.'
-  return { from: win(0).from, to, metrics, better, worse, verdict }
+          : 'Steady: about the same as last week. Push one area a little.'
+  const scored = metrics.filter((m) => m.target)
+  const scoreOf = (pick: (m: Metric) => number) => (scored.length ? Math.round((scored.reduce((t, m) => t + Math.min(1, pick(m) / m.target!), 0) / scored.length) * 100) : 0)
+  return { from: win(0).from, to, metrics, better, worse, verdict, score: scoreOf((m) => m.now), prevScore: scoreOf((m) => m.prev) }
 }
 
 /** The report as a Telegram message (HTML). */

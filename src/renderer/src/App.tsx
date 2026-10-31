@@ -636,7 +636,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'schedule' && schedule && <Schedule state={schedule} rules={rules} onState={setSchedule} onWallet={onWallet} />}
             {page === 'shop' && shop && <Shop state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'journey' && summary && <Journey summary={summary} rules={rules} />}
-            {page === 'progress' && <Progress />}
+            {page === 'progress' && <Progress onGo={setPage} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'rules' && <Rules rules={rules} onChange={setRules} summary={summary} onGo={setPage} onOracle={() => setOracleOpen(true)} onModal={(type, data) => setSystemModal({ open: true, type, data })} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} />}
