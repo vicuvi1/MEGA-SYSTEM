@@ -4,7 +4,7 @@
   "framework": "vite",
   "functions": {
     "api/telegram.mjs": {
-      "maxDuration": 30,
+      "maxDuration": 60,
       "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
     },
     "api/cron.mjs": {

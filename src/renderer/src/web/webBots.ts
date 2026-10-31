@@ -29,6 +29,7 @@ import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } fr
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
+import { brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
 const LOGS_KEY = 'life_bot_logs'
@@ -49,6 +50,28 @@ async function tg(token: string, method: string, body?: unknown): Promise<any> {
     return json
   } finally {
     clearTimeout(t)
+  }
+}
+
+/**
+ * A voice note or photo from Telegram, as base64 for Gemini (up to 15 MB;
+ * Telegram voice notes are OGG/Opus, photos JPEG).
+ */
+async function downloadFile(token: string, fileId: string, kind: 'voice' | 'photo'): Promise<{ kind: 'voice' | 'photo'; mime: string; data: string } | null> {
+  try {
+    const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`)
+    const path = info?.result?.file_path
+    if (!info?.ok || !path || (info.result.file_size ?? 0) > 15_000_000) return null
+    const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`)
+    if (!res.ok) return null
+    const buf = new Uint8Array(await res.arrayBuffer())
+    let bin = ''
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000))
+    const ext = String(path).split('.').pop()?.toLowerCase()
+    const mime = kind === 'photo' ? (ext === 'png' ? 'image/png' : 'image/jpeg') : ext === 'mp3' ? 'audio/mpeg' : ext === 'm4a' ? 'audio/mp4' : 'audio/ogg'
+    return { kind, mime, data: btoa(bin) }
+  } catch {
+    return null
   }
 }
 
@@ -157,11 +180,16 @@ export interface WebBotsDeps {
   server?: boolean
   /** Your Todoist, when connected: /todo, /task and /done use it. */
   todoist?: TodoistLike | null
+  /** Gemini, when set up: free text, voice and photos go to the coach's brain (botBrain.ts). */
+  ai?: AskModel | null
 }
+
+export type AskModel = (prompt: string, opts?: { json?: boolean; media?: { mime: string; data: string }[] }) => Promise<string>
 
 /** What the bot needs from Todoist (the server calls it directly, the page through /api/todoist). */
 export interface TodoistLike {
   today(): Promise<TodoTask[]>
+  upcoming?(days?: number): Promise<TodoTask[]>
   close(id: string): Promise<void>
   quickAdd(text: string): Promise<TodoTask>
 }
@@ -193,7 +221,7 @@ function stoppedReply(r: { session: { minutes: number; subject: string }; coins:
   return { reply: head }
 }
 
-export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null }: WebBotsDeps) {
+export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
   let lastPollAt: string | null = null
@@ -240,7 +268,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   /** One command, on the services. Returns the reply and what changed. */
   let currentDb: any = null
 
-  type RunOut = { reply: string; keyboard?: any; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' } }
+  type RunOut = { reply: string; keyboard?: any; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' }; unknown?: boolean }
 
   /**
    * A money message, the smart way (financeBot.ts): Finance Helper's parser,
@@ -475,7 +503,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       case 'crush':
         return { reply: formatUrgeResponse() }
       default:
-        return { reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.` }
+        return { reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.`, unknown: true }
     }
   }
 
@@ -659,18 +687,163 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return reply
   }
 
+  /**
+   * One text through the app's own rules, inside the open transaction: the
+   * reply, plus the side effects (Sport Track reps on the server, Finance
+   * Helper's inbox for money).
+   */
+  function applyText(db: any, svc: Services, text: string, key: string): RunOut {
+    currentDb = db
+    return db.transaction(() => {
+      const out = run(svc, text, key)
+      if (server && out.sport) {
+        const prog = addRepsInDb(db, out.sport.name, out.sport.amount)
+        if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
+        out.sport = undefined
+      }
+      // Finance Helper gets it too (see financeInbox.ts).
+      if (out.expense) {
+        const now = new Date()
+        queueFinanceExpense(db as any, { id: `tg-life-${key.replace(/[^\w-]/g, '-')}`, ...out.expense, date: svc.wallet.today(now), at: now.getTime() })
+      }
+      return out
+    })()
+  }
+
+  /** Marks a message seen; false when another device or a retry already had it. */
+  const markSeen = (key: string) =>
+    mirror.write((db) => {
+      if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return false
+      db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+      return true
+    })
+
+  const plain = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+
+  /**
+   * The coach's brain (botBrain.ts): free text, a voice note or a photo, with
+   * your data and the coach's memory. It answers and acts (logs, must-dos,
+   * focus, Todoist, goals); each action goes through the app's own rules.
+   */
+  async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
+    const chat = String(update.message?.chat?.id ?? '')
+    const persona = personaFor(botId, cfg)
+    void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
+    const [todoToday, upcoming] = todoist
+      ? await Promise.all([todoist.today().catch(() => null), todoist.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)])
+      : [null, null]
+    const { context, memory } = await mirror.read((db) => ({
+      context: lifeContext(services.services(db), db, { finance: financeStateFrom(db, store), todoToday, upcoming }),
+      memory: loadMemory(db)
+    }))
+    let out: BrainOut
+    try {
+      out = parseBrain(await ai!(brainPrompt(persona, context, memory, text, media?.kind), { json: true, media: media ? [{ mime: media.mime, data: media.data }] : undefined }))
+    } catch (e) {
+      const reply = `⚠️ The coach couldn't think right now (${esc((e as Error).message).slice(0, 120)}). Try again in a minute, or use a command like <code>/today</code>.`
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
+      return reply
+    }
+    const done: string[] = []
+    let keyboard: any
+    let expense = false
+    const acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
+    if (typeof process !== 'undefined' && process.env?.BOT_DEBUG) console.log('brain actions:', out.actions, '→', acts)
+    for (const [i, a] of acts.entries()) {
+      try {
+        if (a.kind === 'task') {
+          if (!todoist) continue
+          const t = await todoist.quickAdd(a.text)
+          done.push(`➕ Todoist: ${t.content || a.text}${t.due ? ` (${t.due})` : ''}`)
+          continue
+        }
+        const line = await mirror.write((db) => {
+          const svc = services.services(db)
+          if (a.kind === 'log') {
+            const r = applyText(db, svc, a.text, `${key}:a${i}`)
+            if (r.unknown) return null
+            if (r.keyboard) keyboard = r.keyboard
+            if (r.expense) expense = true
+            return `✅ Logged: ${a.text}`
+          }
+          if (a.kind === 'mustdo') {
+            const p = svc.focus.plan(svc.wallet.today())
+            if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null
+            svc.focus.setPlan([...p.items.map((x) => x.text), a.text])
+            return `📝 Must-do added: ${a.text}`
+          }
+          if (a.kind === 'focus') {
+            svc.focus.start(a.subject, a.minutes)
+            keyboard = STOP_KEYBOARD
+            return `⏱ Focus started: ${a.subject} · ${a.minutes} min`
+          }
+          if (a.kind === 'fun') {
+            const r = svc.focus.fun(a.minutes, a.what)
+            return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} coins (left ${r.balance})`
+          }
+          svc.focus.saveGoal({ title: a.title, subject: a.subject, deadline: a.deadline, hours: a.hours })
+          return `🎯 Goal: ${a.title} · ${a.hours}h by ${a.deadline}`
+        })
+        if (line) done.push(line)
+      } catch (e) {
+        done.push(`⚠️ ${(e as Error).message}`)
+      }
+    }
+    if (expense) onExpense?.()
+    const reply = [esc(out.reply || 'Got it.'), done.length ? `\n${done.map(esc).join('\n')}` : ''].join('\n').trim()
+    await mirror
+      .write((db) =>
+        saveMemory(
+          db,
+          updateMemory(loadMemory(db), {
+            facts: out.remember,
+            turns: [
+              { role: 'me', bot: persona, text: media ? `[${media.kind}] ${text}`.trim() : text, at: new Date().toISOString() },
+              { role: 'coach', bot: persona, text: [out.reply, ...(done.length ? done : ['(nothing saved)'])].join(' | '), at: new Date().toISOString() }
+            ]
+          })
+        )
+      )
+      .catch(() => null)
+    processed++
+    addLog(text || `[${media?.kind}]`, chat, true, reply)
+    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+    return reply
+  }
+
   async function handle(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
     if (update.callback_query) return handleButton(botId, update, cfg)
     const viaTodoist = await handleTodoist(botId, update, cfg)
     if (viaTodoist !== undefined) return viaTodoist
     const key = `${botId}:${update.update_id}`
-    let text = String(update.message?.text ?? '').trim()
+    let text = String(update.message?.text ?? update.message?.caption ?? '').trim()
+    const chat = String(update.message?.chat?.id ?? '')
     // A reply to the morning question is today's plan.
     const asked = String(update.message?.reply_to_message?.text ?? '')
+    const prompted = !!text && !text.startsWith('/') && (asked.includes(PLAN_ASK) || /Evening review|One thing to change next week/.test(asked))
     if (text && !text.startsWith('/') && asked.includes(PLAN_ASK)) text = `/plan ${text}`
     // A reply to the evening review or the weekly report is your note for the day.
     else if (text && !text.startsWith('/') && /Evening review|One thing to change next week/.test(asked)) text = `/review ${asked.includes('next week') ? 'Next week: ' : ''}${text}`
-    const chat = String(update.message?.chat?.id ?? '')
+    // Free text (not a quick log), a voice note or a photo: the coach's brain.
+    const media = update.message?.voice ?? update.message?.audio ?? (update.message?.photo ? update.message.photo[update.message.photo.length - 1] : null)
+    if (ai && chat && (media || (text && !prompted && !isSimpleLog(text)))) {
+      if (!(await markSeen(key))) return null
+      if (!allowed(cfg, chat)) {
+        const reply = `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
+        return reply
+      }
+      let file: { kind: 'voice' | 'photo'; mime: string; data: string } | undefined
+      if (media) {
+        file = (await downloadFile(update.__token, media.file_id, update.message?.photo ? 'photo' : 'voice')) ?? undefined
+        if (!file) {
+          const reply = '⚠️ I couldn\'t open that file. Try again, or type it.'
+          await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply }).catch(() => null)
+          return reply
+        }
+      }
+      return handleBrain(botId, update, cfg, text, key, file)
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = await mirror.write((db) => {
@@ -681,29 +854,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           // A command can fail its own rule (already checked in, daily cap…):
           // the message is still marked seen and the reply says why.
           const svc = services.services(db)
-          currentDb = db
           try {
-            const r = db.transaction(() => {
-              const out = run(svc, text, key)
-              if (server && out.sport) {
-                const prog = addRepsInDb(db, out.sport.name, out.sport.amount)
-                if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
-                out.sport = undefined
-              }
-              // Finance Helper gets it too (see financeInbox.ts).
-              if (out.expense) {
-                const now = new Date()
-                queueFinanceExpense(db as any, { id: `tg-life-${key.replace(/[^\w-]/g, '-')}`, ...out.expense, date: svc.wallet.today(now), at: now.getTime() })
-              }
-              return out
-            })()
-            return { skip: false as const, reply: r.reply, keyboard: r.keyboard, ok: true, sport: r.sport, expense: !!r.expense }
+            const r = applyText(db, svc, text, key)
+            return { skip: false as const, reply: r.reply, keyboard: r.keyboard, ok: true, sport: r.sport, expense: !!r.expense, unknown: !!r.unknown }
           } catch (e) {
             currentDb = null
             return { skip: false as const, reply: `⚠️ ${esc((e as Error).message)}`, ok: false }
           }
         })
         if (out.skip) return null
+        // Not understood by the rules: the coach's brain tries (already marked seen).
+        if (ai && 'unknown' in out && out.unknown && !text.startsWith('/')) return handleBrain(botId, update, cfg, text, key)
         processed++
         if (out.ok && 'sport' in out && out.sport) {
           const prog = addRepsToSportTrack(out.sport.name, out.sport.amount)

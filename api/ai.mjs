@@ -7,14 +7,21 @@ import { bearer, config, readBody, send, sessionOk } from './_lib.mjs'
 const MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
 
-/** Asks Gemini, trying the next model when one is gone (404). */
-export async function askGemini(key, prompt, fetchImpl = fetch) {
+/**
+ * Asks Gemini, trying the next model when one is gone (404).
+ * opts.json: answer as JSON; opts.media: [{mime, data (base64)}] (a voice
+ * note, a photo) sent with the prompt.
+ */
+export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
   let last = ''
   for (const model of MODELS) {
     const r = await fetchImpl(`${API}${model}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } })
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }, ...(opts.media ?? []).map((m) => ({ inline_data: { mime_type: m.mime, data: m.data } }))] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4096, ...(opts.json ? { responseMimeType: 'application/json' } : {}) }
+      })
     })
     if (r.status === 404) {
       last = `${model} is not available`

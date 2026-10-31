@@ -3951,6 +3951,19 @@ function deadlineRadar(tasks, today, within = 3) {
 		} : null;
 	}).filter((x) => !!x && x.daysLeft >= 1 && x.daysLeft <= within).filter((x) => !!x.task.deadline || x.task.priority >= 3 || IMPORTANT.test(`${x.task.content} ${x.task.section ?? ""} ${x.task.project ?? ""}`)).sort((a, b) => a.daysLeft - b.daysLeft || b.task.priority - a.task.priority);
 }
+/** "tomorrow", "in 3 days (Tue)". */
+function whenText(daysLeft, date) {
+	const wd = [
+		"Sun",
+		"Mon",
+		"Tue",
+		"Wed",
+		"Thu",
+		"Fri",
+		"Sat"
+	][(/* @__PURE__ */ new Date(`${date}T12:00:00Z`)).getUTCDay()];
+	return daysLeft === 1 ? `tomorrow (${wd})` : `in ${daysLeft} days (${wd})`;
+}
 /** The point rule that pays for a completed Todoist task. */
 var TODOIST_RULE = "tasks.todoist_done";
 /** Shown as P1…P4 (Todoist's own labels). */
@@ -7134,7 +7147,7 @@ function spendingIds(state, today = null) {
 	return ids;
 }
 // src/renderer/public/apps/finance/js/safespend.js
-var lei = (c) => Math.floor(c / 100) * 100;
+var lei$1 = (c) => Math.floor(c / 100) * 100;
 var isEveryday = (state, t) => t.type === "expense" && !t.loan && !t.recurring && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
 var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B(t), 0);
 var limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);
@@ -7146,7 +7159,7 @@ function limitStatus(state, today) {
 	const before = everydaySpent(state, `${key}-01`, addDays(today, -1));
 	const spentToday = everydaySpent(state, today, today);
 	const leftBefore = amount - before;
-	const perDay = leftBefore > 0 ? lei(leftBefore / daysLeft) : 0;
+	const perDay = leftBefore > 0 ? lei$1(leftBefore / daysLeft) : 0;
 	const spent = before + spentToday;
 	return {
 		amount,
@@ -7192,13 +7205,13 @@ function safeToSpend(state, today) {
 	const savingsLeft = pay ? 0 : Math.max(0, plan - moved);
 	const spentToday = everydaySpent(state, today, today);
 	const pool = liquid + spentToday - billsTotal - savingsLeft;
-	const moneyPerDay = pool > 0 ? lei(pool / days) : 0;
-	let tomorrow = days > 1 && pool - spentToday > 0 ? lei((pool - spentToday) / (days - 1)) : 0;
+	const moneyPerDay = pool > 0 ? lei$1(pool / days) : 0;
+	let tomorrow = days > 1 && pool - spentToday > 0 ? lei$1((pool - spentToday) / (days - 1)) : 0;
 	const limit = limitStatus(state, today);
 	const byLimit = !!limit && limit.perDay < moneyPerDay;
 	const perDay = byLimit ? limit.perDay : moneyPerDay;
 	if (limit) {
-		const lt = limit.daysLeft > 1 && limit.left > 0 ? lei(limit.left / (limit.daysLeft - 1)) : 0;
+		const lt = limit.daysLeft > 1 && limit.left > 0 ? lei$1(limit.left / (limit.daysLeft - 1)) : 0;
 		tomorrow = Math.min(tomorrow, lt);
 	}
 	const leftToday = perDay - spentToday;
@@ -7641,6 +7654,257 @@ function findExercise(s, name) {
 		return id.includes(key) || n.includes(key) || n.length > 3 && key.includes(n);
 	}) ?? null;
 }
+// src/renderer/src/web/botBrain.ts
+var MEMORY = "coach_memory";
+function loadMemory(db) {
+	try {
+		const m = JSON.parse(getSetting(db, MEMORY) || "null");
+		return {
+			facts: Array.isArray(m?.facts) ? m.facts : [],
+			chat: Array.isArray(m?.chat) ? m.chat : []
+		};
+	} catch {
+		return {
+			facts: [],
+			chat: []
+		};
+	}
+}
+function saveMemory(db, m) {
+	setSetting(db, MEMORY, JSON.stringify({
+		facts: m.facts.slice(-40),
+		chat: m.chat.slice(-24)
+	}));
+}
+/** Adds facts (no near-duplicates) and conversation turns, keeping the newest. */
+function updateMemory(m, add, now = /* @__PURE__ */ new Date()) {
+	const norm = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+	const facts = m.facts.slice();
+	for (const f of add.facts ?? []) {
+		const t = String(f).trim().slice(0, 200);
+		if (!t) continue;
+		const n = norm(t);
+		const i = facts.findIndex((x) => norm(x.t) === n || norm(x.t).includes(n) || n.includes(norm(x.t)));
+		if (i >= 0) facts.splice(i, 1);
+		facts.push({
+			t,
+			at: now.toISOString().slice(0, 10)
+		});
+	}
+	return {
+		facts: facts.slice(-40),
+		chat: [...m.chat, ...add.turns ?? []].slice(-24)
+	};
+}
+/** Which coach a bot is, from its token's id. */
+function personaFor(botId, cfg) {
+	const id = (t) => t && t.includes(":") ? t.split(":")[0] : "";
+	if (botId === id(cfg.financeBotToken)) return "finance";
+	if (botId === id(cfg.manBotToken) || botId === id(cfg.wakyBotToken)) return "waky";
+	if (botId === id(cfg.sportBotToken) || botId === id(cfg.botToken)) return "sport";
+	return "mega";
+}
+/**
+* Short, clear logs keep the fast path ("taxi 45", "30 pushups", "coffee 35
+* maib"): one number, a few words. Anything longer is for the brain.
+*/
+function isSimpleLog(text) {
+	const t = text.trim();
+	if (t.startsWith("/")) return true;
+	const nums = t.match(/\d+(?:[.,]\d+)?/g) ?? [];
+	const words = t.split(/\s+/).filter(Boolean);
+	return nums.length >= 1 && nums.length <= 2 && words.length <= 5 && !/[?]/.test(t) && !/\b(and|și|si|и|then|also|plus)\b/i.test(t);
+}
+/** Finance Helper's saved state on this device, else the copy synced to Turso. */
+function financeStateFrom(db, store) {
+	try {
+		const local = store?.getItem("finance-helper.state");
+		if (local) return JSON.parse(local);
+	} catch {}
+	try {
+		const synced = JSON.parse(getSetting(db, "app_sync_finance") || "null");
+		if (synced?.data) return synced.data;
+	} catch {}
+	try {
+		return JSON.parse(getSetting(db, "finance_backup_json") || "null");
+	} catch {
+		return null;
+	}
+}
+var lei = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
+/** The money picture: this month, this week, today, by category, against the limit. */
+function moneyContext(state, today) {
+	if (!state || !Array.isArray(state.tx)) return "Money: Finance Helper data not available.";
+	const cats = new Map((state.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
+	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
+	const month = today.slice(0, 7);
+	const weekFrom = addDays$1(today, -6);
+	const inMonth = exp.filter((t) => t.date.startsWith(month));
+	const byCat = /* @__PURE__ */ new Map();
+	for (const t of inMonth) byCat.set(cats.get(String(t.category)) ?? String(t.category ?? "Other"), (byCat.get(cats.get(String(t.category)) ?? String(t.category ?? "Other")) ?? 0) + amt(t));
+	const top = [...byCat].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, v]) => `${c} ${lei(v)}`);
+	const monthTotal = inMonth.reduce((s, t) => s + amt(t), 0);
+	const weekTotal = exp.filter((t) => t.date >= weekFrom && t.date <= today).reduce((s, t) => s + amt(t), 0);
+	const todayTotal = exp.filter((t) => t.date === today).reduce((s, t) => s + amt(t), 0);
+	const last = exp.filter((t) => t.date >= weekFrom).slice(-6).map((t) => `${t.date.slice(5)} ${cats.get(String(t.category)) ?? t.category ?? ""} ${t.note ? `"${String(t.note).slice(0, 30)}" ` : ""}${lei(amt(t))}`);
+	const limit = state.settings?.limit;
+	const daysLeft = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate() - Number(today.slice(8)) + 1;
+	const limitLine = limit?.on && Number(limit.amount) > 0 ? `Monthly limit ${lei(Number(limit.amount))}: ${Math.round(monthTotal / Number(limit.amount) * 100)}% used, ${lei(Math.max(0, Number(limit.amount) - monthTotal))} left for ${daysLeft} days (${lei(Math.max(0, Number(limit.amount) - monthTotal) / daysLeft)}/day).` : "No monthly limit set.";
+	return [
+		`Money (MDL): today ${lei(todayTotal)}, last 7 days ${lei(weekTotal)}, this month ${lei(monthTotal)}.`,
+		limitLine,
+		top.length ? `This month by category: ${top.join(", ")}.` : "",
+		last.length ? `Recent expenses: ${last.join("; ")}.` : ""
+	].filter(Boolean).join("\n");
+}
+/** Everything the coach should know about you right now, in plain lines. */
+function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
+	const today = s.wallet.today(now);
+	const sum = s.wallet.summary();
+	const f = s.focus.state(now);
+	const disc = s.discipline.state(now);
+	const body = s.body.state(now);
+	const sl = s.sleep;
+	const input = s.progress.input(financeSpending(extra.finance), now);
+	const report = progressReport(input);
+	const wp = activePlan(s.weekPlan.saved(), today);
+	const wakes = input.wakes.filter((w) => w.day > addDays$1(today, -7)).sort((a, b) => a.day < b.day ? -1 : 1);
+	const lines = [
+		`Now: ${now.toLocaleDateString("en-GB", {
+			weekday: "long",
+			day: "numeric",
+			month: "long"
+		})}, ${now.toTimeString().slice(0, 5)}.`,
+		`Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
+		`Focus today: ${hm(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
+		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
+		f.goals.length ? `Goals with deadlines: ${f.goals.map((g) => `${g.title} (${g.subject}) due ${g.deadline}, ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`}`).join("; ")}.` : "No goals with deadlines.",
+		`Week score ${report.score}/100 (last week ${report.prevScore}). ${report.verdict}`,
+		`Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`).join("; ")}.`,
+		wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ""}. Big 3: ${wp.big3.map((b) => `${b.done ? "[done]" : "[open]"} ${b.text}`).join("; ")}.` : "No week plan yet.",
+		`Sleep: bedtime target ${sl.bedtimeTarget()}, wake target weekday ${sl.weekdayTarget()} / weekend ${sl.weekendTarget()}. Last wake-ups: ${wakes.map((w) => `${w.day.slice(5)} ${w.onTime ? "on time" : "late"}`).join(", ") || "none logged"}.`,
+		`Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
+		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}.`,
+		moneyContext(extra.finance, today)
+	];
+	if (extra.todoToday) {
+		const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? " (late)" : ""}${t.priority >= 3 ? ` P${5 - t.priority}` : ""}${t.section ? ` [${t.section}]` : ""}`);
+		lines.push(`Todoist today/late (${extra.todoToday.length}): ${list.join("; ") || "nothing"}.`);
+	}
+	if (extra.upcoming) {
+		const r = deadlineRadar(extra.upcoming, today);
+		if (r.length) lines.push(`Deadlines soon: ${r.map((x) => `${x.task.content} ${whenText(x.daysLeft, x.date)}`).join("; ")}.`);
+	}
+	return lines.join("\n");
+}
+var PERSONA = {
+	mega: "You are MEGA, Victor's head coach for his whole life: study (university), cyber security skills, career, sport and training, sleep, discipline and money. You also coach his training: suggest concrete workouts (sets and reps, progressing a little each week), keep his streak alive.",
+	finance: "You are the MONEY COACH (Finance bot). Help Victor spend with intention and save: react to spending with context (how often, how much this week/month, against his limit), spot patterns, suggest one concrete change. Logging money is your main job; coaching on money is what makes you useful.",
+	waky: "You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.",
+	sport: "You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive."
+};
+var ACTIONS = `You can act. Put actions in "actions" (strings), only when Victor asked for it or clearly reported doing it:
+- "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names go before it), a wallet name may follow the amount: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
+- "mustdo: <text>" to add a must-do for today.
+- "focus: <minutes> <subject>" to start a focus timer now.
+- "fun: <minutes> <what>" to spend coins on guilt-free fun.
+- "task: <text>" to add a task to Todoist (Todoist reads dates like "friday 18:00", "p1", "#University").
+- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" for an exam or project with a deadline and the hours it needs.
+Never invent amounts or times he didn't give. Never log the same thing twice.
+IMPORTANT: something is saved ONLY if you put an action for it. If he reports spending, a workout, a wake-up, etc., include the action. Never write "logged"/"added"/"saved" in your reply: the app adds a ✅ line under your reply for each thing it really saved. The conversation history shows ✅ lines for what was saved before; if there is none, it was NOT saved.`;
+/** The full prompt for one message. */
+function brainPrompt(persona, context, memory, message, media) {
+	const chat = memory.chat.slice(-10).map((c) => `${c.role === "me" ? "Victor" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
+	return [
+		PERSONA[persona],
+		"Style: a real coach, not a recorder. Warm, direct, honest; short (2–5 sentences, Telegram). Use his real numbers. End with ONE concrete next step when it helps (with a time or a duration). Ask a question back when you need to know more. Plain text, no markdown, at most 2 emojis. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.",
+		"",
+		ACTIONS,
+		"",
+		"Also put in \"remember\" any NEW lasting fact worth keeping about Victor (goals, exams and dates, preferences, problems, promises), short, with dates. Not things already in memory, not one-off logs.",
+		"",
+		"Answer ONLY with JSON: {\"reply\": string, \"actions\": string[], \"remember\": string[]}.",
+		"",
+		"== Victor right now ==",
+		context,
+		"",
+		"== What you remember about him ==",
+		memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join("\n") : "- nothing yet",
+		"",
+		"== Recent conversation ==",
+		chat.length ? chat.join("\n") : "(none)",
+		"",
+		media === "voice" ? "Victor sent a VOICE message (attached). First understand what he said; treat it like his text message." : "",
+		media === "photo" ? "Victor sent a PHOTO (attached). If it is a receipt or a bill: you MUST add one action \"log: <kind> <shop> <total>\" with the TOTAL as a plain number LAST (e.g. \"log: groceries Linella 245\"), then comment briefly as his money coach. Otherwise react as a coach." : "",
+		`Victor's message: ${message || (media ? "(see attachment)" : "")}`
+	].filter((l) => l !== "").join("\n");
+}
+/** Reads the model's JSON (tolerating code fences or text around it). */
+function parseBrain(text) {
+	const raw = String(text ?? "").trim();
+	const json = raw.match(/\{[\s\S]*\}/)?.[0];
+	try {
+		const j = JSON.parse(json ?? raw);
+		return {
+			reply: String(j.reply ?? "").trim(),
+			actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 8),
+			remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5)
+		};
+	} catch {
+		return {
+			reply: raw.replace(/^```\w*|```$/g, "").trim(),
+			actions: [],
+			remember: []
+		};
+	}
+}
+/** Only these slash commands may come from the brain (nothing that resets or deletes). */
+var SAFE_SLASH = /^\/(wake|bed|checkin|oath|weight|waist|pushups|situps|squats|plank|run|stop)\b/i;
+/** Turns an action line into something safe to run, or null. */
+function readAction(line) {
+	const m = /^\s*(log|mustdo|focus|fun|task|goal)\s*:\s*([\s\S]+)$/i.exec(line);
+	if (!m) return null;
+	const kind = m[1].toLowerCase();
+	const arg = m[2].trim().slice(0, 200);
+	if (!arg) return null;
+	if (kind === "log") return arg.startsWith("/") && !SAFE_SLASH.test(arg) ? null : {
+		kind: "log",
+		text: arg
+	};
+	if (kind === "mustdo") return {
+		kind: "mustdo",
+		text: arg.slice(0, 140)
+	};
+	if (kind === "task") return {
+		kind: "task",
+		text: arg
+	};
+	if (kind === "focus" || kind === "fun") {
+		const minutes = Number(/\d{1,3}/.exec(arg)?.[0] ?? (kind === "focus" ? 50 : 0));
+		const rest = arg.replace(/\d{1,3}\s*(minutes|min|m)?\b/i, "").trim();
+		if (!(minutes >= 5 && minutes <= 180) && kind === "focus") return null;
+		if (!(minutes >= 1 && minutes <= 240) && kind === "fun") return null;
+		return kind === "focus" ? {
+			kind,
+			minutes,
+			subject: rest || "Focus"
+		} : {
+			kind,
+			minutes,
+			what: rest || "Fun"
+		};
+	}
+	const [title, subject, deadline, hours] = arg.split("|").map((x) => x.trim());
+	if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(deadline ?? "") || !(Number(hours) > 0)) return null;
+	return {
+		kind: "goal",
+		title,
+		subject: subject || title,
+		deadline,
+		hours: Math.min(500, Number(hours))
+	};
+}
 // src/renderer/src/web/webBots.ts
 var esc = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
@@ -7666,6 +7930,30 @@ async function tg(token, method, body) {
 		}));
 	} finally {
 		clearTimeout(t);
+	}
+}
+/**
+* A voice note or photo from Telegram, as base64 for Gemini (up to 15 MB;
+* Telegram voice notes are OGG/Opus, photos JPEG).
+*/
+async function downloadFile(token, fileId, kind) {
+	try {
+		const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`);
+		const path = info?.result?.file_path;
+		if (!info?.ok || !path || (info.result.file_size ?? 0) > 15e6) return null;
+		const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`);
+		if (!res.ok) return null;
+		const buf = new Uint8Array(await res.arrayBuffer());
+		let bin = "";
+		for (let i = 0; i < buf.length; i += 32768) bin += String.fromCharCode(...buf.subarray(i, i + 32768));
+		const ext = String(path).split(".").pop()?.toLowerCase();
+		return {
+			kind,
+			mime: kind === "photo" ? ext === "png" ? "image/png" : "image/jpeg" : ext === "mp3" ? "audio/mpeg" : ext === "m4a" ? "audio/mp4" : "audio/ogg",
+			data: btoa(bin)
+		};
+	} catch {
+		return null;
 	}
 }
 /** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
@@ -7803,7 +8091,7 @@ function stoppedReply(r, plan) {
 	};
 	return { reply: head };
 }
-function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null }) {
+function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null }) {
 	let polling = false;
 	let timer = null;
 	let lastPollAt = null;
@@ -8104,7 +8392,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				return { reply: goals.length ? `🎯 <b>Goals</b>\n\n${goals.map((g, i) => `${i + 1}. ${g.pinned ? "⭐ " : ""}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} coins`).join("\n")}` : "🎯 No open goals. Add one in the Shop." };
 			}
 			case "crush": return { reply: formatUrgeResponse() };
-			default: return { reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.` };
+			default: return {
+				reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.`,
+				unknown: true
+			};
 		}
 	}
 	/**
@@ -8308,16 +8599,188 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}).catch(() => null);
 		return reply;
 	}
+	/**
+	* One text through the app's own rules, inside the open transaction: the
+	* reply, plus the side effects (Sport Track reps on the server, Finance
+	* Helper's inbox for money).
+	*/
+	function applyText(db, svc, text, key) {
+		currentDb = db;
+		return db.transaction(() => {
+			const out = run(svc, text, key);
+			if (server && out.sport) {
+				const prog = addRepsInDb(db, out.sport.name, out.sport.amount);
+				if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
+				out.sport = void 0;
+			}
+			if (out.expense) {
+				const now = /* @__PURE__ */ new Date();
+				queueFinanceExpense(db, {
+					id: `tg-life-${key.replace(/[^\w-]/g, "-")}`,
+					...out.expense,
+					date: svc.wallet.today(now),
+					at: now.getTime()
+				});
+			}
+			return out;
+		})();
+	}
+	/** Marks a message seen; false when another device or a retry already had it. */
+	const markSeen = (key) => mirror.write((db) => {
+		if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
+		db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+		return true;
+	});
+	/**
+	* The coach's brain (botBrain.ts): free text, a voice note or a photo, with
+	* your data and the coach's memory. It answers and acts (logs, must-dos,
+	* focus, Todoist, goals); each action goes through the app's own rules.
+	*/
+	async function handleBrain(botId, update, cfg, text, key, media) {
+		const chat = String(update.message?.chat?.id ?? "");
+		const persona = personaFor(botId, cfg);
+		tg(update.__token, "sendChatAction", {
+			chat_id: chat,
+			action: "typing"
+		}).catch(() => null);
+		const [todoToday, upcoming] = todoist ? await Promise.all([todoist.today().catch(() => null), todoist.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)]) : [null, null];
+		const { context, memory } = await mirror.read((db) => ({
+			context: lifeContext(services.services(db), db, {
+				finance: financeStateFrom(db, store),
+				todoToday,
+				upcoming
+			}),
+			memory: loadMemory(db)
+		}));
+		let out;
+		try {
+			out = parseBrain(await ai(brainPrompt(persona, context, memory, text, media?.kind), {
+				json: true,
+				media: media ? [{
+					mime: media.mime,
+					data: media.data
+				}] : void 0
+			}));
+		} catch (e) {
+			const reply = `⚠️ The coach couldn't think right now (${esc(e.message).slice(0, 120)}). Try again in a minute, or use a command like <code>/today</code>.`;
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: reply,
+				parse_mode: "HTML"
+			}).catch(() => null);
+			return reply;
+		}
+		const done = [];
+		let keyboard;
+		let expense = false;
+		const acts = out.actions.map(readAction).filter((a) => !!a);
+		if (typeof process !== "undefined" && process.env?.BOT_DEBUG) console.log("brain actions:", out.actions, "→", acts);
+		for (const [i, a] of acts.entries()) try {
+			if (a.kind === "task") {
+				if (!todoist) continue;
+				const t = await todoist.quickAdd(a.text);
+				done.push(`➕ Todoist: ${t.content || a.text}${t.due ? ` (${t.due})` : ""}`);
+				continue;
+			}
+			const line = await mirror.write((db) => {
+				const svc = services.services(db);
+				if (a.kind === "log") {
+					const r = applyText(db, svc, a.text, `${key}:a${i}`);
+					if (r.unknown) return null;
+					if (r.keyboard) keyboard = r.keyboard;
+					if (r.expense) expense = true;
+					return `✅ Logged: ${a.text}`;
+				}
+				if (a.kind === "mustdo") {
+					const p = svc.focus.plan(svc.wallet.today());
+					if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null;
+					svc.focus.setPlan([...p.items.map((x) => x.text), a.text]);
+					return `📝 Must-do added: ${a.text}`;
+				}
+				if (a.kind === "focus") {
+					svc.focus.start(a.subject, a.minutes);
+					keyboard = STOP_KEYBOARD;
+					return `⏱ Focus started: ${a.subject} · ${a.minutes} min`;
+				}
+				if (a.kind === "fun") {
+					const r = svc.focus.fun(a.minutes, a.what);
+					return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} coins (left ${r.balance})`;
+				}
+				svc.focus.saveGoal({
+					title: a.title,
+					subject: a.subject,
+					deadline: a.deadline,
+					hours: a.hours
+				});
+				return `🎯 Goal: ${a.title} · ${a.hours}h by ${a.deadline}`;
+			});
+			if (line) done.push(line);
+		} catch (e) {
+			done.push(`⚠️ ${e.message}`);
+		}
+		if (expense) onExpense?.();
+		const reply = [esc(out.reply || "Got it."), done.length ? `\n${done.map(esc).join("\n")}` : ""].join("\n").trim();
+		await mirror.write((db) => saveMemory(db, updateMemory(loadMemory(db), {
+			facts: out.remember,
+			turns: [{
+				role: "me",
+				bot: persona,
+				text: media ? `[${media.kind}] ${text}`.trim() : text,
+				at: (/* @__PURE__ */ new Date()).toISOString()
+			}, {
+				role: "coach",
+				bot: persona,
+				text: [out.reply, ...done.length ? done : ["(nothing saved)"]].join(" | "),
+				at: (/* @__PURE__ */ new Date()).toISOString()
+			}]
+		}))).catch(() => null);
+		processed++;
+		addLog(text || `[${media?.kind}]`, chat, true, reply);
+		await tg(update.__token, "sendMessage", {
+			chat_id: chat,
+			text: reply,
+			parse_mode: "HTML",
+			...keyboard ? { reply_markup: keyboard } : {}
+		}).catch(() => null);
+		return reply;
+	}
 	async function handle(botId, update, cfg) {
 		if (update.callback_query) return handleButton(botId, update, cfg);
 		const viaTodoist = await handleTodoist(botId, update, cfg);
 		if (viaTodoist !== void 0) return viaTodoist;
 		const key = `${botId}:${update.update_id}`;
-		let text = String(update.message?.text ?? "").trim();
+		let text = String(update.message?.text ?? update.message?.caption ?? "").trim();
+		const chat = String(update.message?.chat?.id ?? "");
 		const asked = String(update.message?.reply_to_message?.text ?? "");
+		const prompted = !!text && !text.startsWith("/") && (asked.includes("What are your 1–3 must-dos today?") || /Evening review|One thing to change next week/.test(asked));
 		if (text && !text.startsWith("/") && asked.includes("What are your 1–3 must-dos today?")) text = `/plan ${text}`;
 		else if (text && !text.startsWith("/") && /Evening review|One thing to change next week/.test(asked)) text = `/review ${asked.includes("next week") ? "Next week: " : ""}${text}`;
-		const chat = String(update.message?.chat?.id ?? "");
+		const media = update.message?.voice ?? update.message?.audio ?? (update.message?.photo ? update.message.photo[update.message.photo.length - 1] : null);
+		if (ai && chat && (media || text && !prompted && !isSimpleLog(text))) {
+			if (!await markSeen(key)) return null;
+			if (!allowed(cfg, chat)) {
+				const reply = `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`;
+				await tg(update.__token, "sendMessage", {
+					chat_id: chat,
+					text: reply,
+					parse_mode: "HTML"
+				}).catch(() => null);
+				return reply;
+			}
+			let file;
+			if (media) {
+				file = await downloadFile(update.__token, media.file_id, update.message?.photo ? "photo" : "voice") ?? void 0;
+				if (!file) {
+					const reply = "⚠️ I couldn't open that file. Try again, or type it.";
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text: reply
+					}).catch(() => null);
+					return reply;
+				}
+			}
+			return handleBrain(botId, update, cfg, text, key, file);
+		}
 		for (let attempt = 0; attempt < 2; attempt++) try {
 			const out = await mirror.write((db) => {
 				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return { skip: true };
@@ -8329,33 +8792,16 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					ok: false
 				};
 				const svc = services.services(db);
-				currentDb = db;
 				try {
-					const r = db.transaction(() => {
-						const out = run(svc, text, key);
-						if (server && out.sport) {
-							const prog = addRepsInDb(db, out.sport.name, out.sport.amount);
-							if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
-							out.sport = void 0;
-						}
-						if (out.expense) {
-							const now = /* @__PURE__ */ new Date();
-							queueFinanceExpense(db, {
-								id: `tg-life-${key.replace(/[^\w-]/g, "-")}`,
-								...out.expense,
-								date: svc.wallet.today(now),
-								at: now.getTime()
-							});
-						}
-						return out;
-					})();
+					const r = applyText(db, svc, text, key);
 					return {
 						skip: false,
 						reply: r.reply,
 						keyboard: r.keyboard,
 						ok: true,
 						sport: r.sport,
-						expense: !!r.expense
+						expense: !!r.expense,
+						unknown: !!r.unknown
 					};
 				} catch (e) {
 					currentDb = null;
@@ -8367,6 +8813,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}
 			});
 			if (out.skip) return null;
+			if (ai && "unknown" in out && out.unknown && !text.startsWith("/")) return handleBrain(botId, update, cfg, text, key);
 			processed++;
 			if (out.ok && "sport" in out && out.sport) {
 				const prog = addRepsToSportTrack(out.sport.name, out.sport.amount);
@@ -8856,7 +9303,7 @@ function deadlineFacts(items) {
 // src/server/telegramBot.ts
 var warm = null;
 async function botsFor(env) {
-	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6);
+	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "");
 	if (warm && warm.key === key) {
 		await warm.mirror.refresh();
 		return warm;
@@ -8878,7 +9325,8 @@ async function botsFor(env) {
 				...env.defaults
 			},
 			server: true,
-			todoist: env.todoistToken ? createTodoistApi(env.todoistToken) : null
+			todoist: env.todoistToken ? createTodoistApi(env.todoistToken) : null,
+			ai: env.model ?? null
 		}),
 		mirror,
 		services
