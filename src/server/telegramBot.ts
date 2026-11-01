@@ -25,6 +25,7 @@ import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
 import { isFocusBlock } from '@core/dayTime'
+import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
 
 export { createTodoistApi }
@@ -413,4 +414,59 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
 const localIsoHM = (iso: string) => {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// ---- Sporty (the Python bot) shares water and workouts through here --------
+// POST /api/cron?job=sport with Authorization: Bearer <SPORT_SYNC_KEY>.
+//   {op:'state'}                          → today's water and reps
+//   {op:'water', ml}                      → add (or remove, negative) water
+//   {op:'reps', name, amount}             → add reps to an exercise
+//   {op:'workout', title, items?}         → a workout done (counts in Insights, +points)
+export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean; state?: SharedSport; exercise?: unknown; error?: string }> {
+  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const { mirror, services } = await botsFor(env)
+  const today = sportToday()
+  const read = (db: any) => {
+    try {
+      return JSON.parse(getSetting(db, 'sport_tracker_json') || 'null')?.data ?? null
+    } catch {
+      return null
+    }
+  }
+  const save = (db: any, st: any) => setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
+  const op = String(body?.op ?? 'state')
+  if (op === 'state') return { ok: true, state: await mirror.read((db) => sharedView(read(db), today)) }
+  // Never start an empty copy: it could replace the app's exercises on the next sync.
+  if ((op === 'water' || op === 'reps') && !(await mirror.read((db) => read(db)))) return { ok: false, error: 'Open Sport Track in the Life System app once, so there is something to share' }
+  if (op === 'water') {
+    const ml = Number(body.ml)
+    if (!Number.isFinite(ml) || Math.abs(ml) > 5000) return { ok: false, error: 'ml must be a number (−5000…5000)' }
+    const state = await mirror.write((db) => {
+      const st = addWater(read(db), ml, today)
+      save(db, st)
+      return sharedView(st, today)
+    })
+    return { ok: true, state }
+  }
+  if (op === 'reps') {
+    const amount = Number(body.amount)
+    if (!body.name || !Number.isFinite(amount) || Math.abs(amount) > 2000) return { ok: false, error: 'name and amount needed' }
+    return mirror.write((db) => {
+      const r = addReps(read(db), String(body.name), amount, today)
+      if (!r) return { ok: false, error: `No exercise called "${body.name}" in Sport Track` }
+      save(db, r.st)
+      return { ok: true, exercise: r.exercise, state: sharedView(r.st, today) }
+    })
+  }
+  if (op === 'workout') {
+    const title = String(body.title || 'Workout').slice(0, 80)
+    const items = Array.isArray(body.items) && body.items.length ? body.items : [{ exerciseId: 'ex_workout', name: title, sets: 1, reps: 1 }]
+    try {
+      await mirror.write((db) => services.services(db).body.logWorkout({ title, items } as any))
+      return { ok: true, state: await mirror.read((db) => sharedView(read(db), today)) }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  }
+  return { ok: false, error: 'op must be state | water | reps | workout' }
 }

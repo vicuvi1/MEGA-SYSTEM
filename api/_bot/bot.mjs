@@ -11182,6 +11182,73 @@ function deadlineFacts(items) {
 		};
 	});
 }
+// src/core/sportShared.ts
+var sportToday = (now = /* @__PURE__ */ new Date()) => now.toISOString().slice(0, 10);
+/** A new day starts a fresh checklist (reps and water back to 0). */
+function sportForDay(st, today) {
+	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : {};
+	if (!Array.isArray(s.exercises)) s.exercises = [];
+	if (!s.water || typeof s.water !== "object") s.water = {
+		currentMl: 0,
+		targetMl: 2700,
+		glassSizeMl: 250
+	};
+	if (s.lastDate !== today) {
+		s.lastDate = today;
+		s.exercises.forEach((e) => e.doneToday = 0);
+		s.water.currentMl = 0;
+	}
+	return s;
+}
+function sharedView(st, today) {
+	const s = sportForDay(st, today);
+	return {
+		date: today,
+		water: {
+			ml: Math.max(0, Math.round(Number(s.water.currentMl) || 0)),
+			target: Number(s.water.targetMl) || 2700,
+			glass: Number(s.water.glassSizeMl) || 250
+		},
+		exercises: s.exercises.map((e) => ({
+			id: String(e.id ?? e.name),
+			name: String(e.name ?? e.id),
+			target: Number(e.target) || 0,
+			done: Number(e.doneToday) || 0
+		}))
+	};
+}
+/** Adds (or with a negative amount, removes) water; never below 0. */
+function addWater(st, ml, today) {
+	const s = sportForDay(st, today);
+	s.water.currentMl = Math.max(0, Math.round((Number(s.water.currentMl) || 0) + ml));
+	return s;
+}
+var key = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
+/** The exercise "pushups", "Push-ups" or "push up" means. */
+function findSharedExercise(s, name) {
+	const k = key(name).replace(/s$/, "");
+	if (!k) return null;
+	return (s.exercises ?? []).find((e) => {
+		const id = key(e.id).replace(/s$/, "");
+		const n = key(e.name).replace(/s$/, "");
+		return id === k || n === k || id.includes(k) || n.includes(k) || n.length > 3 && k.includes(n);
+	}) ?? null;
+}
+/** Adds reps to an exercise (removes with a negative amount, never below 0); null if it doesn't exist. */
+function addReps(st, name, amount, today) {
+	const s = sportForDay(st, today);
+	const ex = findSharedExercise(s, name);
+	if (!ex) return null;
+	ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount));
+	return {
+		st: s,
+		exercise: {
+			name: String(ex.name ?? ex.id),
+			done: ex.doneToday,
+			target: Number(ex.target) || 0
+		}
+	};
+}
 // src/core/todoistClean.ts
 var MAX_TASKS = 150;
 var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -11721,4 +11788,92 @@ var localIsoHM = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
-export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick };
+async function sportShared(env, body) {
+	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	const { mirror, services } = await botsFor(env);
+	const today = sportToday();
+	const read = (db) => {
+		try {
+			return JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+		} catch {
+			return null;
+		}
+	};
+	const save = (db, st) => setSetting(db, "sport_tracker_json", JSON.stringify({
+		savedAt: Date.now(),
+		data: st
+	}));
+	const op = String(body?.op ?? "state");
+	if (op === "state") return {
+		ok: true,
+		state: await mirror.read((db) => sharedView(read(db), today))
+	};
+	if ((op === "water" || op === "reps") && !await mirror.read((db) => read(db))) return {
+		ok: false,
+		error: "Open Sport Track in the Life System app once, so there is something to share"
+	};
+	if (op === "water") {
+		const ml = Number(body.ml);
+		if (!Number.isFinite(ml) || Math.abs(ml) > 5e3) return {
+			ok: false,
+			error: "ml must be a number (−5000…5000)"
+		};
+		return {
+			ok: true,
+			state: await mirror.write((db) => {
+				const st = addWater(read(db), ml, today);
+				save(db, st);
+				return sharedView(st, today);
+			})
+		};
+	}
+	if (op === "reps") {
+		const amount = Number(body.amount);
+		if (!body.name || !Number.isFinite(amount) || Math.abs(amount) > 2e3) return {
+			ok: false,
+			error: "name and amount needed"
+		};
+		return mirror.write((db) => {
+			const r = addReps(read(db), String(body.name), amount, today);
+			if (!r) return {
+				ok: false,
+				error: `No exercise called "${body.name}" in Sport Track`
+			};
+			save(db, r.st);
+			return {
+				ok: true,
+				exercise: r.exercise,
+				state: sharedView(r.st, today)
+			};
+		});
+	}
+	if (op === "workout") {
+		const title = String(body.title || "Workout").slice(0, 80);
+		const items = Array.isArray(body.items) && body.items.length ? body.items : [{
+			exerciseId: "ex_workout",
+			name: title,
+			sets: 1,
+			reps: 1
+		}];
+		try {
+			await mirror.write((db) => services.services(db).body.logWorkout({
+				title,
+				items
+			}));
+			return {
+				ok: true,
+				state: await mirror.read((db) => sharedView(read(db), today))
+			};
+		} catch (e) {
+			return {
+				ok: false,
+				error: e.message
+			};
+		}
+	}
+	return {
+		ok: false,
+		error: "op must be state | water | reps | workout"
+	};
+}
+export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick, sportShared };
