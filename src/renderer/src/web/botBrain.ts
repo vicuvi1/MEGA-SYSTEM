@@ -56,6 +56,61 @@ export function updateMemory(m: Memory, add: { facts?: string[]; turns?: Memory[
   return { facts: facts.slice(-MAX_FACTS), chat: [...m.chat, ...(add.turns ?? [])].slice(-MAX_CHAT) }
 }
 
+/** What you tell the coach to push you on (Coach page → Goals & rules). */
+export interface CoachProfile {
+  about: string
+  goals: string[]
+  rules: string[]
+}
+
+const PROFILE = 'coach_profile'
+export const DEFAULT_PROFILE: CoachProfile = {
+  about: '',
+  goals: ['Top university results: pass every exam and lab well and on time', 'A cyber security career: CTFs, Rust, crypto, a portfolio, a job', 'A strong body and good health: training, sleep, skin, teeth', 'Money and discipline: spend with intention, save, keep the clean streak'],
+  rules: []
+}
+
+export function loadProfile(db: any): CoachProfile {
+  try {
+    const p = JSON.parse(getSetting(db, PROFILE) || 'null')
+    if (!p) return DEFAULT_PROFILE
+    return { about: String(p.about ?? ''), goals: Array.isArray(p.goals) ? p.goals.map(String) : [], rules: Array.isArray(p.rules) ? p.rules.map(String) : [] }
+  } catch {
+    return DEFAULT_PROFILE
+  }
+}
+
+export function saveProfile(db: any, p: CoachProfile): CoachProfile {
+  const clean = { about: String(p.about ?? '').slice(0, 1000), goals: (p.goals ?? []).map((x) => String(x).trim()).filter(Boolean).slice(0, 12), rules: (p.rules ?? []).map((x) => String(x).trim()).filter(Boolean).slice(0, 20) }
+  setSetting(db, PROFILE, JSON.stringify(clean))
+  return clean
+}
+
+/** Every coach conversation (Telegram and the app), newest last, for the Coach page. */
+export interface LogEntry {
+  role: 'me' | 'coach'
+  bot: Persona
+  via: string
+  text: string
+  done?: string[]
+  at: string
+}
+const LOG = 'coach_log'
+const MAX_LOG = 200
+
+export function loadLog(db: any): LogEntry[] {
+  try {
+    const l = JSON.parse(getSetting(db, LOG) || '[]')
+    return Array.isArray(l) ? l : []
+  } catch {
+    return []
+  }
+}
+
+export function appendLog(db: any, entries: LogEntry[]): void {
+  setSetting(db, LOG, JSON.stringify([...loadLog(db), ...entries].slice(-MAX_LOG)))
+}
+
 /** Which coach a bot is, from its token's id. */
 export function personaFor(botId: string, cfg: BotBridgeConfig): Persona {
   const id = (t?: string) => (t && t.includes(':') ? t.split(':')[0] : '')
@@ -217,7 +272,7 @@ Never invent amounts or times he didn't give. Never log the same thing twice.
 IMPORTANT: something is saved ONLY if you put an action for it. If he reports spending, a workout, a wake-up, etc., include the action. Never write "logged"/"added"/"saved" in your reply: the app adds a ✅ line under your reply for each thing it really saved. The conversation history shows ✅ lines for what was saved before; if there is none, it was NOT saved.`
 
 /** The full prompt for one message. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo'): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE): string {
   const chat = memory.chat.slice(-10).map((c) => `${c.role === 'me' ? 'Victor' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
@@ -231,6 +286,11 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     '',
     '== Victor right now ==',
     context,
+    '',
+    '== His goals (push him toward these) ==',
+    profile.goals.length ? profile.goals.map((g) => `- ${g}`).join('\n') : '- (none set)',
+    profile.rules.length ? `== His own rules (hold him to them, call it out when he breaks one) ==\n${profile.rules.map((r) => `- ${r}`).join('\n')}` : '',
+    profile.about ? `== About him, in his words ==\n${profile.about}` : '',
     '',
     '== What you remember about him ==',
     memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join('\n') : '- nothing yet',

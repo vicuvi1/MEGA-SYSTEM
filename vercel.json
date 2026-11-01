@@ -13,6 +13,10 @@
     },
     "api/ai.mjs": {
       "maxDuration": 60
+    },
+    "api/coach.mjs": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
     }
   },
   "crons": [

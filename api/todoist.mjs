@@ -13,13 +13,13 @@
 // New tasks without a #project go to the right area (by their words, else Gemini).
 import { bearer, config, readBody, send, sessionOk } from './_lib.mjs'
 import { createTodoistApi } from './_bot/bot.mjs'
-import { askGemini } from './ai.mjs'
+import { askModel } from './ai.mjs'
 
 /** Gemini picks one of your areas for a task, or none. */
 export function geminiAreaPicker(key) {
   if (!key) return undefined
   return async (text, names) => {
-    const r = await askGemini(key, `Which ONE of these life areas does this task belong to? Areas: ${names.join(', ')}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)
+    const r = await askModel(`Which ONE of these life areas does this task belong to? Areas: ${names.join(', ')}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)
     const pick = r.text.trim().replace(/^"|"$/g, '')
     return /^none$/i.test(pick) ? null : pick
   }
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   }
   if (body?.op === 'status') return send(res, 200, { connected: !!token })
   if (!token) return send(res, 200, { connected: false, error: 'Add TODOIST_TOKEN in Vercel to connect Todoist' })
-  const api = createTodoistApi(token, fetch, { pickArea: geminiAreaPicker((process.env.GEMINI_API_KEY || '').trim()) })
+  const api = createTodoistApi(token, fetch, { pickArea: geminiAreaPicker((process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()) })
   try {
     switch (body?.op) {
       case 'today':

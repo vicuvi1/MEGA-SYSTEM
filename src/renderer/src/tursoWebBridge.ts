@@ -23,6 +23,7 @@ import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { getSetting, setSetting } from '../../main/settings'
 import { financeSpending } from '@core/progress'
+import { loadLog, loadMemory, loadProfile, saveMemory, saveProfile } from './web/botBrain'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -366,6 +367,28 @@ export function createTursoWebBridge(): Bridge {
   const bridge = {
     ...base,
     google,
+    coach: {
+      chat: async (text: string) => {
+        const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error || `Coach ${r.status}`)
+        // The coach may have logged, planned or added things: everything refreshes.
+        void syncNow().catch(() => null)
+        return j
+      },
+      memory: async () => (await mirrorP).refresh().then(() => svcP).then((svc) => svc.read((s) => ({ facts: loadMemory(s.db).facts }))),
+      setFacts: async (facts: { t: string; at: string }[]) => {
+        await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
+      },
+      profile: async () => (await svcP).read((s) => loadProfile(s.db)),
+      saveProfile: async (p: { about: string; goals: string[]; rules: string[] }) => (await svcP).write((s) => saveProfile(s.db, p)),
+      log: async () => (await mirrorP).refresh().then(() => svcP).then((svc) => svc.read((s) => loadLog(s.db))),
+      model: async () => {
+        const r = await fetch('/api/ai', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: '{"op":"status"}' }).catch(() => null)
+        const j = r ? await r.json().catch(() => ({})) : {}
+        return j.model ?? null
+      }
+    },
     progress: {
       report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state')))
     },

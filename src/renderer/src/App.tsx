@@ -39,6 +39,7 @@ const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
 const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
+const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const SystemOracleDrawer = lazyNamed(() => import('./SystemOracleDrawer'), 'SystemOracleDrawer')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
 
@@ -386,10 +387,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         soundTick()
         setQuickCommandOpen((o) => !o)
       }
-      if (key === 'oracle' && features.ai) {
-        soundSystemOracle()
-        setOracleOpen((o) => !o)
-      }
+      if (key === 'oracle' && features.ai) setPage('coach')
       if (key === 'fullscreen') life.app.toggleFullScreen()
     }
     const onKey = (e: KeyboardEvent) => {
@@ -410,7 +408,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         run('palette')
       } else if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'j')) {
         e.preventDefault()
-        setOracleOpen((o) => !o)
+        setPage('coach')
       } else if (e.key === 'F11') {
         e.preventDefault()
         run('fullscreen')
@@ -441,7 +439,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       go('schedule')
     }),
     actions: [
-      ...(features.ai ? [{ id: 'a:oracle', label: 'Ask the coach', hint: 'Ctrl+J', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setOracleOpen(true) } as const] : []),
+      ...(features.ai ? [{ id: 'a:oracle', label: 'Ask the coach', hint: 'Ctrl+J', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setPage('coach') } as const] : []),
       { id: 'a:sidebar', label: 'Collapse or expand the sidebar', hint: 'Ctrl+B', group: 'Actions', icon: 'list', run: toggleSidebar },
       { id: 'a:full', label: 'Full screen', hint: 'F11', group: 'Actions', icon: 'spark', run: () => life.app.toggleFullScreen() },
       { id: 'a:urge', label: 'Urge crusher', hint: 'Ctrl+Alt+U', group: 'Actions', icon: 'bolt', color: '#FF8A3D', run: () => {
@@ -554,7 +552,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <span>Log</span>
           </button>
           {features.ai && (
-            <button className="tb-icon" aria-label="Ask the coach" title="Ask the coach (Ctrl+J)" onClick={() => setOracleOpen(true)}>
+            <button className={`tb-icon ${page === 'coach' ? 'active' : ''}`} aria-label="Coach" title="Coach (Ctrl+J)" onClick={() => setPage('coach')}>
               <Icon name="spark" size={17} />
             </button>
           )}
@@ -638,6 +636,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'progress' && <Progress onGo={setPage} />}
             {page === 'calendar' && <CalendarPage onGo={setPage} />}
+            {page === 'coach' && <Coach onWallet={onWallet} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
             {current.phase > 0 && <Soon module={current} />}

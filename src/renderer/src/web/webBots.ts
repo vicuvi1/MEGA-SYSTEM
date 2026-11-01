@@ -30,7 +30,7 @@ import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } fr
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
-import { RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
 const LOGS_KEY = 'life_bot_logs'
@@ -888,10 +888,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * your data and the coach's memory. It answers and acts (logs, must-dos,
    * focus, Todoist, goals); each action goes through the app's own rules.
    */
-  async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
-    const chat = String(update.message?.chat?.id ?? '')
-    const persona = personaFor(botId, cfg)
-    void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
+  /**
+   * The coach thinks: your message (and a voice note or photo) with your data,
+   * its memory and your goals & rules; it answers and acts. Shared by the
+   * Telegram bots and the app's Coach page (same memory, same log).
+   */
+  async function think(persona: Persona, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }, via = 'telegram'): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any }> {
     const dayStart = new Date()
     dayStart.setHours(0, 0, 0, 0)
     const [todoToday, upcoming, events] = await Promise.all([
@@ -899,17 +901,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
       calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 2 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
     ])
-    const { context, memory } = await mirror.read((db) => ({
+    const { context, memory, profile } = await mirror.read((db) => ({
       context: lifeContext(services.services(db), db, { finance: financeStateFrom(db, store), todoToday, upcoming, events }),
-      memory: loadMemory(db)
+      memory: loadMemory(db),
+      profile: loadProfile(db)
     }))
     let out: BrainOut
     try {
-      out = parseBrain(await ai!(brainPrompt(persona, context, memory, text, media?.kind), { json: true, media: media ? [{ mime: media.mime, data: media.data }] : undefined }))
+      out = parseBrain(await ai!(brainPrompt(persona, context, memory, text, media?.kind, profile), { json: true, media: media ? [{ mime: media.mime, data: media.data }] : undefined }))
     } catch (e) {
-      const reply = `⚠️ The coach couldn't think right now (${esc((e as Error).message).slice(0, 120)}). Try again in a minute, or use a command like <code>/today</code>.`
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
-      return reply
+      return { ok: false, reply: `The coach couldn't think right now (${(e as Error).message.slice(0, 120)}). Try again in a minute.`, done: [] }
     }
     const done: string[] = []
     let keyboard: any
@@ -931,7 +932,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         if (a.kind === 'task') {
           if (!todoist) continue
           const t = await todoist.quickAdd(a.text)
-          done.push(`➕ Todoist: ${t.content || a.text}${t.due ? ` (${t.due})` : ''}`)
+          done.push(`➕ Todoist: ${t.content || a.text}${t.section ? ` · ${t.section}` : ''}${t.due ? ` (${t.due})` : ''}`)
           continue
         }
         const line = await mirror.write((db) => {
@@ -956,7 +957,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           }
           if (a.kind === 'fun') {
             const r = svc.focus.fun(a.minutes, a.what)
-            return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} coins (left ${r.balance})`
+            return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} points (left ${r.balance})`
           }
           if (a.kind !== 'goal') return null
           svc.focus.saveGoal({ title: a.title, subject: a.subject, deadline: a.deadline, hours: a.hours })
@@ -968,24 +969,36 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
     }
     if (expense) onExpense?.()
-    const reply = [esc(out.reply || 'Got it.'), done.length ? `\n${done.map(esc).join('\n')}` : ''].join('\n').trim()
+    const at = new Date().toISOString()
     await mirror
-      .write((db) =>
+      .write((db) => {
         saveMemory(
           db,
           updateMemory(loadMemory(db), {
             facts: out.remember,
             turns: [
-              { role: 'me', bot: persona, text: media ? `[${media.kind}] ${text}`.trim() : text, at: new Date().toISOString() },
-              { role: 'coach', bot: persona, text: [out.reply, ...(done.length ? done : ['(nothing saved)'])].join(' | '), at: new Date().toISOString() }
+              { role: 'me', bot: persona, text: media ? `[${media.kind}] ${text}`.trim() : text, at },
+              { role: 'coach', bot: persona, text: [out.reply, ...(done.length ? done : ['(nothing saved)'])].join(' | '), at }
             ]
           })
         )
-      )
+        appendLog(db, [
+          { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : text, at },
+          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, at }
+        ])
+      })
       .catch(() => null)
     processed++
-    addLog(text || `[${media?.kind}]`, chat, true, reply)
-    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+    return { ok: true, reply: out.reply || 'Got it.', done, keyboard }
+  }
+
+  async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
+    const chat = String(update.message?.chat?.id ?? '')
+    void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
+    const r = await think(personaFor(botId, cfg), text, key, media)
+    const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join('\n')}` : ''].join('\n').trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`
+    addLog(text || `[${media?.kind}]`, chat, r.ok, reply)
+    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML', ...(r.keyboard ? { reply_markup: r.keyboard } : {}) }).catch(() => null)
     return reply
   }
 
@@ -1161,6 +1174,8 @@ His note: ${note}`,
   return {
     pollOnce,
     handleUpdate,
+    /** The app's Coach page: the same brain and memory as the bots. */
+    think: (text: string, key = `app:${Date.now()}`) => think('mega', text, key, undefined, 'app'),
     config,
     saveConfig: async (patch: Partial<BotBridgeConfig>): Promise<BotBridgeConfig> => {
       const next: BotBridgeConfig = { ...(await config()), ...patch }

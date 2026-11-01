@@ -24,6 +24,16 @@ export type Bridge = LifeApi & {
   onUpdate(cb: (s: UpdateStatus) => void): void
   onUiKey(cb: (key: string) => void): () => void
   onFullScreen(cb: (on: boolean) => void): () => void
+  /** The Coach page: chat (same brain as the bots), memory, goals & rules, the log. */
+  coach?: {
+    chat(text: string): Promise<{ ok: boolean; reply: string; done: string[] }>
+    memory(): Promise<{ facts: { t: string; at: string }[] }>
+    setFacts(facts: { t: string; at: string }[]): Promise<void>
+    profile(): Promise<{ about: string; goals: string[]; rules: string[] }>
+    saveProfile(p: { about: string; goals: string[]; rules: string[] }): Promise<{ about: string; goals: string[]; rules: string[] }>
+    log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string }[]>
+    model(): Promise<string | null>
+  }
   /** Google Calendar through the server (sign in once in Settings). */
   google?: {
     status(): Promise<GoogleStatus>

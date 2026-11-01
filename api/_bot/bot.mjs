@@ -7875,6 +7875,42 @@ function updateMemory(m, add, now = /* @__PURE__ */ new Date()) {
 		chat: [...m.chat, ...add.turns ?? []].slice(-24)
 	};
 }
+var PROFILE = "coach_profile";
+var DEFAULT_PROFILE = {
+	about: "",
+	goals: [
+		"Top university results: pass every exam and lab well and on time",
+		"A cyber security career: CTFs, Rust, crypto, a portfolio, a job",
+		"A strong body and good health: training, sleep, skin, teeth",
+		"Money and discipline: spend with intention, save, keep the clean streak"
+	],
+	rules: []
+};
+function loadProfile(db) {
+	try {
+		const p = JSON.parse(getSetting(db, PROFILE) || "null");
+		if (!p) return DEFAULT_PROFILE;
+		return {
+			about: String(p.about ?? ""),
+			goals: Array.isArray(p.goals) ? p.goals.map(String) : [],
+			rules: Array.isArray(p.rules) ? p.rules.map(String) : []
+		};
+	} catch {
+		return DEFAULT_PROFILE;
+	}
+}
+var LOG = "coach_log";
+function loadLog(db) {
+	try {
+		const l = JSON.parse(getSetting(db, LOG) || "[]");
+		return Array.isArray(l) ? l : [];
+	} catch {
+		return [];
+	}
+}
+function appendLog(db, entries) {
+	setSetting(db, LOG, JSON.stringify([...loadLog(db), ...entries].slice(-200)));
+}
 /** Which coach a bot is, from its token's id. */
 function personaFor(botId, cfg) {
 	const id = (t) => t && t.includes(":") ? t.split(":")[0] : "";
@@ -8020,7 +8056,7 @@ var ACTIONS = `You can act. Put actions in "actions" (strings), only when Victor
 Never invent amounts or times he didn't give. Never log the same thing twice.
 IMPORTANT: something is saved ONLY if you put an action for it. If he reports spending, a workout, a wake-up, etc., include the action. Never write "logged"/"added"/"saved" in your reply: the app adds a ✅ line under your reply for each thing it really saved. The conversation history shows ✅ lines for what was saved before; if there is none, it was NOT saved.`;
 /** The full prompt for one message. */
-function brainPrompt(persona, context, memory, message, media) {
+function brainPrompt(persona, context, memory, message, media, profile = DEFAULT_PROFILE) {
 	const chat = memory.chat.slice(-10).map((c) => `${c.role === "me" ? "Victor" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
 	return [
 		PERSONA[persona],
@@ -8034,6 +8070,11 @@ function brainPrompt(persona, context, memory, message, media) {
 		"",
 		"== Victor right now ==",
 		context,
+		"",
+		"== His goals (push him toward these) ==",
+		profile.goals.length ? profile.goals.map((g) => `- ${g}`).join("\n") : "- (none set)",
+		profile.rules.length ? `== His own rules (hold him to them, call it out when he breaks one) ==\n${profile.rules.map((r) => `- ${r}`).join("\n")}` : "",
+		profile.about ? `== About him, in his words ==\n${profile.about}` : "",
 		"",
 		"== What you remember about him ==",
 		memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join("\n") : "- nothing yet",
@@ -9130,13 +9171,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	* your data and the coach's memory. It answers and acts (logs, must-dos,
 	* focus, Todoist, goals); each action goes through the app's own rules.
 	*/
-	async function handleBrain(botId, update, cfg, text, key, media) {
-		const chat = String(update.message?.chat?.id ?? "");
-		const persona = personaFor(botId, cfg);
-		tg(update.__token, "sendChatAction", {
-			chat_id: chat,
-			action: "typing"
-		}).catch(() => null);
+	/**
+	* The coach thinks: your message (and a voice note or photo) with your data,
+	* its memory and your goals & rules; it answers and acts. Shared by the
+	* Telegram bots and the app's Coach page (same memory, same log).
+	*/
+	async function think(persona, text, key, media, via = "telegram") {
 		const dayStart = /* @__PURE__ */ new Date();
 		dayStart.setHours(0, 0, 0, 0);
 		const [todoToday, upcoming, events] = await Promise.all([
@@ -9144,18 +9184,19 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
 			calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 1728e5).toISOString()).catch(() => null) : Promise.resolve(null)
 		]);
-		const { context, memory } = await mirror.read((db) => ({
+		const { context, memory, profile } = await mirror.read((db) => ({
 			context: lifeContext(services.services(db), db, {
 				finance: financeStateFrom(db, store),
 				todoToday,
 				upcoming,
 				events
 			}),
-			memory: loadMemory(db)
+			memory: loadMemory(db),
+			profile: loadProfile(db)
 		}));
 		let out;
 		try {
-			out = parseBrain(await ai(brainPrompt(persona, context, memory, text, media?.kind), {
+			out = parseBrain(await ai(brainPrompt(persona, context, memory, text, media?.kind, profile), {
 				json: true,
 				media: media ? [{
 					mime: media.mime,
@@ -9163,13 +9204,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}] : void 0
 			}));
 		} catch (e) {
-			const reply = `⚠️ The coach couldn't think right now (${esc(e.message).slice(0, 120)}). Try again in a minute, or use a command like <code>/today</code>.`;
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text: reply,
-				parse_mode: "HTML"
-			}).catch(() => null);
-			return reply;
+			return {
+				ok: false,
+				reply: `The coach couldn't think right now (${e.message.slice(0, 120)}). Try again in a minute.`,
+				done: []
+			};
 		}
 		const done = [];
 		let keyboard;
@@ -9195,7 +9234,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (a.kind === "task") {
 				if (!todoist) continue;
 				const t = await todoist.quickAdd(a.text);
-				done.push(`➕ Todoist: ${t.content || a.text}${t.due ? ` (${t.due})` : ""}`);
+				done.push(`➕ Todoist: ${t.content || a.text}${t.section ? ` · ${t.section}` : ""}${t.due ? ` (${t.due})` : ""}`);
 				continue;
 			}
 			const line = await mirror.write((db) => {
@@ -9220,7 +9259,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}
 				if (a.kind === "fun") {
 					const r = svc.focus.fun(a.minutes, a.what);
-					return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} coins (left ${r.balance})`;
+					return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} points (left ${r.balance})`;
 				}
 				if (a.kind !== "goal") return null;
 				svc.focus.saveGoal({
@@ -9236,28 +9275,59 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			done.push(`⚠️ ${e.message}`);
 		}
 		if (expense) onExpense?.();
-		const reply = [esc(out.reply || "Got it."), done.length ? `\n${done.map(esc).join("\n")}` : ""].join("\n").trim();
-		await mirror.write((db) => saveMemory(db, updateMemory(loadMemory(db), {
-			facts: out.remember,
-			turns: [{
+		const at = (/* @__PURE__ */ new Date()).toISOString();
+		await mirror.write((db) => {
+			saveMemory(db, updateMemory(loadMemory(db), {
+				facts: out.remember,
+				turns: [{
+					role: "me",
+					bot: persona,
+					text: media ? `[${media.kind}] ${text}`.trim() : text,
+					at
+				}, {
+					role: "coach",
+					bot: persona,
+					text: [out.reply, ...done.length ? done : ["(nothing saved)"]].join(" | "),
+					at
+				}]
+			}));
+			appendLog(db, [{
 				role: "me",
 				bot: persona,
-				text: media ? `[${media.kind}] ${text}`.trim() : text,
-				at: (/* @__PURE__ */ new Date()).toISOString()
+				via,
+				text: media ? `[${media.kind === "voice" ? "voice note" : "photo"}] ${text}`.trim() : text,
+				at
 			}, {
 				role: "coach",
 				bot: persona,
-				text: [out.reply, ...done.length ? done : ["(nothing saved)"]].join(" | "),
-				at: (/* @__PURE__ */ new Date()).toISOString()
-			}]
-		}))).catch(() => null);
+				via,
+				text: out.reply || "Got it.",
+				done,
+				at
+			}]);
+		}).catch(() => null);
 		processed++;
-		addLog(text || `[${media?.kind}]`, chat, true, reply);
+		return {
+			ok: true,
+			reply: out.reply || "Got it.",
+			done,
+			keyboard
+		};
+	}
+	async function handleBrain(botId, update, cfg, text, key, media) {
+		const chat = String(update.message?.chat?.id ?? "");
+		tg(update.__token, "sendChatAction", {
+			chat_id: chat,
+			action: "typing"
+		}).catch(() => null);
+		const r = await think(personaFor(botId, cfg), text, key, media);
+		const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join("\n")}` : ""].join("\n").trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`;
+		addLog(text || `[${media?.kind}]`, chat, r.ok, reply);
 		await tg(update.__token, "sendMessage", {
 			chat_id: chat,
 			text: reply,
 			parse_mode: "HTML",
-			...keyboard ? { reply_markup: keyboard } : {}
+			...r.keyboard ? { reply_markup: r.keyboard } : {}
 		}).catch(() => null);
 		return reply;
 	}
@@ -9463,6 +9533,8 @@ His note: ${note}`, { json: true }));
 	return {
 		pollOnce,
 		handleUpdate,
+		/** The app's Coach page: the same brain and memory as the bots. */
+		think: (text, key = `app:${Date.now()}`) => think("mega", text, key, void 0, "app"),
 		config,
 		saveConfig: async (patch) => {
 			const next = {
@@ -10287,6 +10359,22 @@ function localMidnight(daysAgo) {
 	d.setDate(d.getDate() - daysAgo);
 	return d;
 }
+/** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
+async function coachChat(env, text) {
+	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	if (!env.model) return {
+		ok: false,
+		reply: "Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.",
+		done: []
+	};
+	const { bots } = await botsFor(env);
+	const r = await bots.think(text);
+	return {
+		ok: r.ok,
+		reply: r.reply,
+		done: r.done
+	};
+}
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 async function handleTelegramUpdate(env, token, update) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
@@ -10451,4 +10539,4 @@ async function runDaily(env, job) {
 	return sent;
 }
 var escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-export { GOOGLE_SETTING, authUrl, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localIso, payTodoistDone, runDaily };
+export { GOOGLE_SETTING, authUrl, coachChat, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localIso, payTodoistDone, runDaily };

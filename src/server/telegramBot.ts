@@ -119,6 +119,15 @@ function localMidnight(daysAgo: number): Date {
   return d
 }
 
+/** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
+export async function coachChat(env: BotEnv, text: string): Promise<{ ok: boolean; reply: string; done: string[] }> {
+  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  if (!env.model) return { ok: false, reply: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.', done: [] }
+  const { bots } = await botsFor(env)
+  const r = await bots.think(text)
+  return { ok: r.ok, reply: r.reply, done: r.done }
+}
+
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 export async function handleTelegramUpdate(env: BotEnv, token: string, update: unknown): Promise<string | null> {
   // Days, wake-up times and streaks follow your time zone, not the server's.
