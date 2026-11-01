@@ -13,9 +13,12 @@ import { LABEL as WEEK_LABEL, useWeekPlan } from './WeekPlanner'
 import { useTicker } from './useTicker'
 import { Skeleton } from './blocks'
 import { useSwipeRows } from './swipe'
+import { useTodayEvents } from './todayEvents'
+import { isFocusBlock, localDay } from '@core/dayTime'
+import { focusCoins } from '@core/focus'
 import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
-import { useAction } from './ui'
+import { useAction, useToast } from './ui'
 import { useLive } from './live'
 
 interface Props {
@@ -74,7 +77,7 @@ function useHabits({ summary, discipline, connections, body, onChange, onGo, onO
     { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
     { id: 'clean', label: 'Clean day check-in', hint: discipline?.setup ? `day ${discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
     { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), done: !!(body?.workoutDoneToday || r.includes('body.workout_done')), run: () => onGo('body') },
-    { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far` : 'points per session', done: focusMin >= 50 || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', 50), 'Focus started: 50 minutes')) },
+    { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', done: focusMin >= 50 || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', 50), 'Focus started: 50 minutes')) },
     { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
     { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: () => onOpenApp('money') }
   ]
@@ -127,6 +130,7 @@ interface Group {
 export function DayFlow(props: Props) {
   const { summary, connections, onChange, onGo } = props
   const act = useAction()
+  const toast = useToast()
   const [st, loadFocus] = useFocus()
   const [todo, loadTodo, setTodo] = useTodoist()
   const [weekPlan, loadWeek] = useWeekPlan()
@@ -145,6 +149,16 @@ export function DayFlow(props: Props) {
   const [closed, setClosed] = useState(() => storeGet('ls.modeClosed'))
   const [forced, setForced] = useState<Mode | undefined>(undefined)
   const tick = useTicker(!!st?.running)
+  // A deep-work block in your calendar that's on right now becomes the Now card.
+  const { events: calEvents } = useTodayEvents()
+  const blockNow = useMemo(() => {
+    if (st?.running) return null
+    const t = Date.now()
+    return calEvents.find((e) => !e.allDay && localDay(e.start) === today && isFocusBlock(e) && Date.parse(e.start) <= t && Date.parse(e.end) - t >= 10 * 60000) ?? null
+    // tick keeps it fresh while focusing; the 30 s live reload otherwise
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calEvents, st?.running, today, tick])
+  const [blockSkipped, setBlockSkipped] = useState<string | null>(null)
 
   const week = weekPlan ? activePlan(weekPlan, today) : null
   const reviewed = !!st && (!!st.plan.review || st.plan.reasons.length > 0)
@@ -199,7 +213,8 @@ export function DayFlow(props: Props) {
     await fadeOut(t.id)
     setTodo((cur) => (cur ?? []).filter((x) => x.id !== t.id))
     setLeaving((l) => l.filter((x) => x !== t.id))
-    const r = await act(() => life.todoist!.complete(t), 'Done in Todoist')
+    const r = await act(() => life.todoist!.complete(t))
+    if (r) toast(`Done: ${t.content}${r.paid ? ' · +5 points' : ''}`, 'good')
     if (r?.paid) soundCoin()
     refresh()
   }
@@ -227,8 +242,8 @@ export function DayFlow(props: Props) {
   const onSwipe = useCallback((key: string) => swipeRef.current(key), [])
   useSwipeRows(listRef, onSwipe)
 
-  const startFocus = async (subject: string, task: FocusTask | null = null) => {
-    if (await act(() => life.focus.start(subject, 50, task), `Focus started: ${task?.title ?? subject}`)) loadFocus()
+  const startFocus = async (subject: string, task: FocusTask | null = null, minutes = 50) => {
+    if (await act(() => life.focus.start(subject, minutes, task), `Focus started: ${task?.title ?? subject} · +3 per 10 min`)) loadFocus()
   }
   const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
   /** A must-do in the day plan (points, bots, Insights read it). */
@@ -497,7 +512,28 @@ export function DayFlow(props: Props) {
           </div>
         </section>
       )}
-      {now && !ended && (
+      {blockNow && !ended && blockSkipped !== blockNow.id && (() => {
+        const left = Math.round((Date.parse(blockNow.end) - Date.now()) / 60000)
+        const minutes = Math.min(180, left)
+        return (
+          <section className="now-card block" aria-label="Calendar block now">
+            <span className="now-label">Calendar block · now</span>
+            <h2>{blockNow.title}</h2>
+            <p>
+              Until {new Date(blockNow.end).toTimeString().slice(0, 5)} · {left} min left. Start the timer and it counts: +{focusCoins(minutes)} points.
+            </p>
+            <div className="row">
+              <button className="btn primary now-go" onClick={() => void startFocus(blockNow.title.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 40) || 'Focus', null, minutes)}>
+                ▶ Start focus · {minutes} min
+              </button>
+              <button className="btn ghost" onClick={() => setBlockSkipped(blockNow.id)}>
+                Not now
+              </button>
+            </div>
+          </section>
+        )
+      })()}
+      {now && !ended && (!blockNow || blockSkipped === blockNow.id) && (
         <section className={`now-card ${running ? 'running' : ''}`} aria-label="What to do now">
           <span className="now-label">{running ? 'Focusing' : 'Now'}</span>
           <div className="now-main">
@@ -647,6 +683,7 @@ export function DayFlow(props: Props) {
                     <span className="dl-hint">
                       {t.dueTime ?? ''}
                       {t.priority > 1 ? ` ${pLabel(t.priority)}` : ''}
+                      <b className="dl-pts"> +5</b>
                     </span>
                     <button className="dl-star" aria-label={`Make ${t.content} a must-do`} title="Make it a must-do (⭐ today)" onClick={() => void star(t)}>
                       ☆

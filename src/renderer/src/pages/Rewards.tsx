@@ -9,8 +9,9 @@ import { FunCard } from '../FunCard'
 import { Icon } from '../Icon'
 import { soundSuccess } from '../sound'
 import { useAction } from '../ui'
+import { POINT_RULES } from '../../../main/points'
 
-/** A full 50-minute focus session pays about this much. */
+/** A full 50-minute focus session pays this much (+3 per 10 min). */
 const PER_SESSION = 15
 
 const blank = { title: '', price: '', realCost: '', note: '' }
@@ -71,9 +72,19 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
             {state.balance.toLocaleString()} <span>🪙</span>
           </div>
         </div>
-        <p className="hint">
-          Earn points with focus (about {PER_SESSION} per 50-minute session), finished tasks and must-dos, and your week goals. Spend them here without guilt.
-        </p>
+        <div className="rw-rules" aria-label="How points work">
+          <span className="rw-kicker">How you earn</span>
+          <ul>
+            {POINT_RULES.map((r) => (
+              <li key={r.id} title={r.hint}>
+                <b>{r.value}</b>
+                <span>{r.label}</span>
+                <small>{r.hint}</small>
+              </li>
+            ))}
+          </ul>
+          <p className="hint small">Fun time costs 1 point a minute. A full focus session ({PER_SESSION} points) buys 15 minutes of guilt-free fun.</p>
+        </div>
       </section>
 
       <FunCard onWallet={onWallet} onOpenShop={() => document.querySelector('.rw-add input')?.scrollIntoView({ behavior: 'smooth' })} />

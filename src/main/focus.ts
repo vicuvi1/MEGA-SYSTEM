@@ -47,6 +47,8 @@ export interface FocusState {
   week: WeekReport
   funToday: number
   focusCoinsToday: number
+  /** Today's sessions with their times (for the timeline's done vs planned). */
+  todaySessions: { subject: string; startedAt: string | null; endedAt: string | null; minutes: number }[]
 }
 
 const RUNNING = 'focus_running'
@@ -97,6 +99,19 @@ export class FocusService {
       .run(p.day, JSON.stringify(p.items.slice(0, 5)), p.review, JSON.stringify(p.reasons), now.toISOString())
   }
 
+  private timed(day: string): FocusState['todaySessions'] {
+    try {
+      return (this.db.prepare('SELECT subject, started_at, ended_at, minutes FROM focus_sessions WHERE day = ? ORDER BY id').all(day) as any[]).map((r) => ({
+        subject: String(r.subject),
+        startedAt: r.started_at ? String(r.started_at) : null,
+        endedAt: r.ended_at ? String(r.ended_at) : null,
+        minutes: Number(r.minutes)
+      }))
+    } catch {
+      return []
+    }
+  }
+
   state(now = new Date()): FocusState {
     const today = this.wallet.today(now)
     const all = this.sessions(addDays(today, -400))
@@ -121,7 +136,8 @@ export class FocusService {
       plan: this.plan(today),
       week: weekReport(all, plans, this.funMin(addDays(today, -6), today), today),
       funToday: this.funMin(today, today),
-      focusCoinsToday: todays.reduce((t, s) => t + s.coins, 0)
+      focusCoinsToday: todays.reduce((t, s) => t + s.coins, 0),
+      todaySessions: this.timed(today)
     }
   }
 

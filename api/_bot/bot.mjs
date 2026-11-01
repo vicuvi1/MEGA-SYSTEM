@@ -3436,11 +3436,8 @@ var SleepService = class {
 		};
 	}
 };
-// src/core/focus.ts
-/** Coins for a focus session: 1 per 5 minutes, +5 for a full 50-minute block. */
 function focusCoins(minutes) {
-	const m = Math.max(0, Math.floor(minutes));
-	return Math.floor(m / 5) + (m >= 50 ? 5 : 0);
+	return Math.floor(Math.max(0, Math.floor(minutes)) / 10) * 3;
 }
 /** A session longer than planned counts up to 30 minutes extra; never more than 4 hours. */
 function sessionMinutes(startedAt, planned, now) {
@@ -3567,6 +3564,18 @@ var FocusService = class {
 		this.db.prepare(`INSERT INTO day_plans (day, items, review, reasons, updated_at) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(day) DO UPDATE SET items = excluded.items, review = excluded.review, reasons = excluded.reasons, updated_at = excluded.updated_at`).run(p.day, JSON.stringify(p.items.slice(0, 5)), p.review, JSON.stringify(p.reasons), now.toISOString());
 	}
+	timed(day) {
+		try {
+			return this.db.prepare("SELECT subject, started_at, ended_at, minutes FROM focus_sessions WHERE day = ? ORDER BY id").all(day).map((r) => ({
+				subject: String(r.subject),
+				startedAt: r.started_at ? String(r.started_at) : null,
+				endedAt: r.ended_at ? String(r.ended_at) : null,
+				minutes: Number(r.minutes)
+			}));
+		} catch {
+			return [];
+		}
+	}
 	state(now = /* @__PURE__ */ new Date()) {
 		const today = this.wallet.today(now);
 		const all = this.sessions(addDays$1(today, -400));
@@ -3600,7 +3609,8 @@ var FocusService = class {
 			plan: this.plan(today),
 			week: weekReport(all, plans, this.funMin(addDays$1(today, -6), today), today),
 			funToday: this.funMin(today, today),
-			focusCoinsToday: todays.reduce((t, s) => t + s.coins, 0)
+			focusCoinsToday: todays.reduce((t, s) => t + s.coins, 0),
+			todaySessions: this.timed(today)
 		};
 	}
 	/** Starts the timer (one at a time; it keeps running across devices). */
@@ -4285,6 +4295,31 @@ function applyPointsV2(db) {
 	let n = 0;
 	for (const [id, [from, to]] of Object.entries(HABIT_POINTS)) n += Number(upd.run(to, id, from).changes ?? 0);
 	setSetting(db, FLAG, (/* @__PURE__ */ new Date()).toISOString());
+	return n > 0;
+}
+var HABIT_V3 = [
+	"sleep.up_on_time",
+	"sleep.bed_on_time",
+	"discipline.clean_day",
+	"discipline.oath",
+	"body.workout_done",
+	"face.routine_done",
+	"money.logged",
+	"money.under_budget",
+	"discipline.urge_resisted"
+];
+var FLAG3 = "points_v3";
+/** old defaults (v1 or v2) that move to the v3 values. */
+function applyPointsV3(db) {
+	if (getSetting(db, FLAG3)) return false;
+	let n = 0;
+	const upd = db.prepare("UPDATE rules SET coins = ? WHERE id = ? AND coins = ?");
+	for (const id of HABIT_V3) {
+		const olds = [HABIT_POINTS[id]?.[0], HABIT_POINTS[id]?.[1]].filter((v) => typeof v === "number" && v !== 2);
+		for (const old of olds) n += Number(upd.run(2, id, old).changes ?? 0);
+	}
+	n += Number(upd.run(5, "tasks.todoist_done", 8).changes ?? 0);
+	setSetting(db, FLAG3, (/* @__PURE__ */ new Date()).toISOString());
 	return n > 0;
 }
 /** Pays a one-time bonus (ref keeps it once); false when it was already paid. */
@@ -5655,7 +5690,7 @@ var notify = (...names) => {
 };
 /** The LifeApi namespaces the services cover, like src/main/index.ts maps them. */
 function createWebServices(mirror) {
-	mirror.write((db) => applyPointsV2(db)).catch(() => {});
+	mirror.write((db) => (applyPointsV2(db), applyPointsV3(db))).catch(() => {});
 	const read = (fn) => mirror.read((db) => fn(servicesFor(db)));
 	const write = (fn, ...events) => mirror.write((db) => fn(servicesFor(db))).then((r) => {
 		notify(...events);

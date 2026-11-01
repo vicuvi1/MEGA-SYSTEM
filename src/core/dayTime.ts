@@ -109,3 +109,53 @@ export function agendaText(events: CalEvent[], day: string): string {
   if (!list.length) return 'nothing in the calendar'
   return list.map((e) => (e.allDay ? `all day: ${e.title}` : `${localHM(e.start)}–${localHM(e.end)} ${e.title}`)).join('; ')
 }
+
+// ---- The timeline: focus blocks, done vs planned, what's next ----------
+
+/** Calendar blocks meant for deep work: they become focus sessions. */
+const FOCUS_WORDS = /\b(deep|focus|study|studiu|learn\w*|lab\w*|homework|teme?|curs\w*|course\w*|project\w*|proiect\w*|revis\w*|exam\w*|ctf\w*|picoctf|rust|crypto\w*|code|coding|practice|write|writing|read(?:ing)?|cv|portfolio)\b/i
+
+export function isFocusBlock(e: Pick<CalEvent, 'title' | 'ours' | 'allDay'>): boolean {
+  if (e.allDay) return false
+  return !!e.ours || FOCUS_WORDS.test(e.title)
+}
+
+/** Minutes of [aStart, aEnd) that overlap [bStart, bEnd) (all epoch ms). */
+export function overlapMin(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
+  return Math.max(0, (Math.min(aEnd, bEnd) - Math.max(aStart, bStart)) / 60000)
+}
+
+export type BlockState = 'upcoming' | 'now' | 'done' | 'partial' | 'skipped'
+
+/**
+ * A focus block against what really happened: done when you focused at
+ * least 60% of it, partial for 10+ minutes, else skipped (once it's over).
+ */
+export function blockState(start: string, end: string, sessions: { startedAt: string | null; endedAt: string | null }[], now: number, running?: { startedAt: string } | null): { state: BlockState; focusedMin: number } {
+  const s = Date.parse(start)
+  const e = Date.parse(end)
+  let focused = 0
+  for (const x of sessions) {
+    if (!x.startedAt || !x.endedAt) continue
+    focused += overlapMin(s, e, Date.parse(x.startedAt), Date.parse(x.endedAt))
+  }
+  if (running) focused += overlapMin(s, e, Date.parse(running.startedAt), now)
+  focused = Math.round(focused)
+  if (now < s) return { state: 'upcoming', focusedMin: focused }
+  if (now < e) return { state: 'now', focusedMin: focused }
+  const len = Math.max(1, (e - s) / 60000)
+  return { state: focused >= len * 0.6 ? 'done' : focused >= 10 ? 'partial' : 'skipped', focusedMin: focused }
+}
+
+/** "Plan kept": finished blocks you did (partial counts half), as a percent. */
+export function planKept(states: BlockState[]): { done: number; total: number; pct: number | null } {
+  const past = states.filter((s) => s === 'done' || s === 'partial' || s === 'skipped')
+  const score = past.reduce((t, s) => t + (s === 'done' ? 1 : s === 'partial' ? 0.5 : 0), 0)
+  return { done: past.filter((s) => s === 'done').length, total: past.length, pct: past.length ? Math.round((score / past.length) * 100) : null }
+}
+
+/** "in 25 min" / "in 1h 10m" from now to an ISO time. */
+export function untilText(iso: string, now: number): string {
+  const m = Math.max(0, Math.round((Date.parse(iso) - now) / 60000))
+  return m < 60 ? `in ${m} min` : `in ${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`
+}

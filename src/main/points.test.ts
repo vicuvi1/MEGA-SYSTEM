@@ -7,7 +7,7 @@ import { openDb } from './db'
 const openDatabase = () => openDb(join(mkdtempSync(join(tmpdir(), 'pts-')), 'life.db'))
 import { Wallet } from './wallet'
 import { WeekPlanService } from './weekPlan'
-import { applyPointsV2, payOnce } from './points'
+import { applyPointsV2, applyPointsV3, payOnce } from './points'
 
 describe('points without the game', () => {
   it('lowers habit points once, leaving your own changes', () => {
@@ -37,5 +37,18 @@ describe('points without the game', () => {
     expect(wallet.summary(now).balance - before).toBe(25)
     expect(payOnce(wallet, 'x:1', 50, 'bonus', now)).toBe(true)
     expect(payOnce(wallet, 'x:1', 50, 'bonus', now)).toBe(false)
+  })
+
+  it('v3: five clear rules (habits +2, Todoist +5), your own values stay', () => {
+    const db = openDatabase()
+    const coins = (id: string) => (db.prepare('SELECT coins FROM rules WHERE id = ?').get(id) as { coins: number }).coins
+    db.prepare("UPDATE rules SET coins = 7 WHERE id = 'face.routine_done'").run() // your own value
+    applyPointsV2(db)
+    expect(applyPointsV3(db)).toBe(true)
+    for (const id of ['sleep.up_on_time', 'discipline.clean_day', 'discipline.oath', 'body.workout_done', 'money.logged']) expect(coins(id)).toBe(2)
+    expect(coins('face.routine_done')).toBe(7)
+    expect(coins('tasks.todoist_done')).toBe(5)
+    expect(coins('discipline.reset')).toBe(-5)
+    expect(applyPointsV3(db)).toBe(false)
   })
 })

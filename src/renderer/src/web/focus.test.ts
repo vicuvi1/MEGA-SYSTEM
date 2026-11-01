@@ -33,7 +33,7 @@ const num = (db: any, sql: string) => Number(db.exec(sql)[0]?.values[0]?.[0] ?? 
 
 describe('focus, plans and goals (pure)', () => {
   it('coins: 1 per 5 minutes, +5 for a full 50', () => {
-    expect([focusCoins(4), focusCoins(25), focusCoins(50), focusCoins(90)]).toEqual([0, 5, 15, 23])
+    expect([focusCoins(4), focusCoins(25), focusCoins(50), focusCoins(90)]).toEqual([0, 6, 15, 27])
   })
   it('a session counts up to 30 minutes over plan and never over 4 hours', () => {
     const t = Date.parse('2026-10-31T10:00:00Z')

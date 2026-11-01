@@ -4,10 +4,12 @@
 // turn into a weekly hours target, and fun time costs coins.
 import { addDays, daysBetween } from './dates'
 
-/** Coins for a focus session: 1 per 5 minutes, +5 for a full 50-minute block. */
+/** Points for a focus session: +3 for every 10 minutes (50 minutes = +15). */
+/** Focus pays +3 for every 10 minutes (50 minutes = +15). */
+export const FOCUS_POINTS_PER_10 = 3
 export function focusCoins(minutes: number): number {
   const m = Math.max(0, Math.floor(minutes))
-  return Math.floor(m / 5) + (m >= 50 ? 5 : 0)
+  return Math.floor(m / 10) * FOCUS_POINTS_PER_10
 }
 /** At most this many focus coins a day (beyond that, minutes still count). */
 export const FOCUS_DAILY_COINS = 80

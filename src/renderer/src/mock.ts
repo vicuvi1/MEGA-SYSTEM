@@ -85,7 +85,7 @@ export function createMockApi(): Bridge {
     ...createMockBody({ entries, add, rules: () => rules }),
     ...createMockConnections(),
     focus: (() => {
-      const empty = () => ({ today: dayKey(new Date()), running: null, todayMin: 0, todayBySubject: [], subjects: [], recent: [], goals: [], plan: { day: dayKey(new Date()), items: [], review: null, reasons: [] }, week: { from: '', to: '', totalMin: 0, bySubject: [], byDay: [], planDone: 0, planTotal: 0, topReasons: [], funMin: 0 }, funToday: 0, focusCoinsToday: 0 })
+      const empty = () => ({ today: dayKey(new Date()), running: null, todayMin: 0, todayBySubject: [], subjects: [], recent: [], goals: [], plan: { day: dayKey(new Date()), items: [], review: null, reasons: [] }, week: { from: '', to: '', totalMin: 0, bySubject: [], byDay: [], planDone: 0, planTotal: 0, topReasons: [], funMin: 0 }, funToday: 0, focusCoinsToday: 0, todaySessions: [] })
       const no = async (): Promise<never> => {
         throw new Error('Focus works with your data, not in the demo')
       }

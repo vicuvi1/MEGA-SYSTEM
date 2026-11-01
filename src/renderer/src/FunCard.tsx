@@ -10,7 +10,7 @@ import { Icon } from './Icon'
 import { soundSuccess } from './sound'
 import { useAction } from './ui'
 
-/** A full 50-minute focus session pays about this much (10 + 5 bonus). */
+/** A full 50-minute focus session pays this much (+3 per 10 min). */
 const COINS_PER_SESSION = 15
 const FUN = [15, 30, 60]
 

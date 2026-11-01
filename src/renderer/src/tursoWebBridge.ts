@@ -435,6 +435,33 @@ export function createTursoWebBridge(): Bridge {
       report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state'))),
       insights: async () => (await svcP).progress.insights()
     },
+    // Done / skipped marks on calendar blocks (kept 14 days, synced everywhere).
+    timeline: {
+      marks: async (day: string) => (await svcP).read((s) => {
+        try {
+          return (JSON.parse(getSetting(s.db, 'block_marks') || '{}')[day] ?? {}) as Record<string, 'done' | 'skip'>
+        } catch {
+          return {}
+        }
+      }),
+      mark: async (day: string, id: string, v: 'done' | 'skip' | null) =>
+        (await svcP).write((s) => {
+          let all: Record<string, Record<string, 'done' | 'skip'>> = {}
+          try {
+            all = JSON.parse(getSetting(s.db, 'block_marks') || '{}')
+          } catch {
+            /* start over */
+          }
+          const dayMarks = { ...(all[day] ?? {}) }
+          if (v) dayMarks[id] = v
+          else delete dayMarks[id]
+          const keep = Object.keys(all).sort().slice(-13).filter((d) => d !== day)
+          const next: typeof all = Object.fromEntries(keep.map((d) => [d, all[d]]))
+          next[day] = dayMarks
+          setSetting(s.db, 'block_marks', JSON.stringify(next))
+          return dayMarks
+        })
+    },
     weekPlan: S('weekPlan'),
     // Your Todoist: today's tasks, complete (+coins), quick add, and coins for
     // what you completed in Todoist itself (checked at most every 5 minutes).

@@ -49,6 +49,8 @@ export type Bridge = LifeApi & {
   }
   /** "Am I improving?": the last 7 days against your usual week (web). */
   progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights> }
+  /** Done / skipped marks on today's calendar blocks (web). */
+  timeline?: { marks(day: string): Promise<Record<string, 'done' | 'skip'>>; mark(day: string, id: string, v: 'done' | 'skip' | null): Promise<Record<string, 'done' | 'skip'>> }
   /** The Sunday plan: one focus area and 3 big tasks for the week (web). */
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
