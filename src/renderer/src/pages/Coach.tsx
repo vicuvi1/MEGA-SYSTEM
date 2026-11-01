@@ -7,6 +7,7 @@ import { Icon } from '../Icon'
 import { useAction } from '../ui'
 import { useLive } from '../live'
 import type { CoachMind } from '@core/coachMind'
+import type { RhythmPrefs } from '@core/rhythm'
 
 type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[] }
 type Profile = { about: string; goals: string[]; rules: string[] }
@@ -216,6 +217,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
 
       <aside className="co-side">
         {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
+        <RhythmSettings />
         {mind && (
           <Learning
             mind={mind}
@@ -351,6 +353,52 @@ function Learning({ mind, onSave }: { mind: CoachMind; onSave: (m: CoachMind) =>
           {group("What doesn't", mind.fails.map((x, i) => row(`f${i}`, x.t, '', () => onSave({ ...mind, fails: mind.fails.filter((_, k) => k !== i) }))))}
           {group('Patterns', mind.patterns.map((x, i) => row(`p${i}`, x.t, '', () => onSave({ ...mind, patterns: mind.patterns.filter((_, k) => k !== i) }))))}
         </>
+      )}
+    </section>
+  )
+}
+
+/** The daily rhythm: what the coach sends you and when (Telegram and Today). */
+function RhythmSettings() {
+  const act = useAction()
+  const [prefs, setPrefs] = useState<RhythmPrefs | null>(null)
+  useEffect(() => {
+    life.coach?.rhythm?.('state').then((r) => setPrefs(r.prefs)).catch(() => {})
+  }, [])
+  if (!life.coach?.rhythm || !prefs) return null
+  const save = async (patch: Partial<RhythmPrefs>) => {
+    setPrefs({ ...prefs, ...patch })
+    const r = await act(() => life.coach!.rhythm!('prefs', undefined, patch), 'Saved')
+    if (r) setPrefs(r.prefs)
+  }
+  return (
+    <section className="panel co-rhythm">
+      <header className="panel-head">
+        <h2>
+          <Icon name="clock" /> Daily rhythm
+        </h2>
+      </header>
+      <label className="check co-check">
+        <input type="checkbox" checked={prefs.on} onChange={(e) => void save({ on: e.target.checked })} /> On
+      </label>
+      <p className="hint small">After you wake up: a plan for the day to approve. During the day: water and training nudges. In the evening: a review and tomorrow's top 3. Sundays: the week and next week's plan.</p>
+      {prefs.on && (
+        <div className="co-rhythm-rows">
+          <label>
+            Evening review
+            <input type="time" value={prefs.evening} onChange={(e) => e.target.value && void save({ evening: e.target.value })} />
+          </label>
+          <label>
+            Sunday review
+            <input type="time" value={prefs.weekly} onChange={(e) => e.target.value && void save({ weekly: e.target.value })} />
+          </label>
+          <label className="co-check">
+            <input type="checkbox" checked={prefs.water} onChange={(e) => void save({ water: e.target.checked })} /> Water nudges
+          </label>
+          <label className="co-check">
+            <input type="checkbox" checked={prefs.training} onChange={(e) => void save({ training: e.target.checked })} /> Training nudge
+          </label>
+        </div>
       )}
     </section>
   )

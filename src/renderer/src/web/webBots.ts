@@ -33,6 +33,8 @@ import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, type MindOp } from '@core/coachMind'
+import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
+import { createRhythm } from './rhythmBot'
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
@@ -307,6 +309,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       await calendar.create({ title: `Focus: ${f.subject}`, start: new Date(end.getTime() - f.minutes * 60000).toISOString(), end: end.toISOString(), description: `${f.minutes} min of focus, logged by Life System` }).catch(() => null)
     }
   }
+  const rhythm = createRhythm({ mirror, services, todoist: todoist ?? null, calendar: calendar ?? null, ai: ai ?? null })
+  /** Sends today's plan with Approve / Change / Redo. */
+  async function sendProposal(token: string, chat: string, note = ''): Promise<string> {
+    const { plan, version } = await rhythm.propose(note)
+    const text = proposalText(plan, { version })
+    await tg(token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', reply_markup: PROPOSAL_KEYBOARD })
+    return text
+  }
   const dayBounds = () => {
     const s = new Date()
     s.setHours(0, 0, 0, 0)
@@ -318,6 +328,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * a day, if there's no plan yet), with what's in your calendar.
    */
   async function morningAfterWake(token: string, chat: string): Promise<void> {
+    // The daily rhythm: the coach's plan for the day (Approve / Change / Redo).
+    const r = await rhythm.state().catch(() => null)
+    if (r?.prefs.on) {
+      if (!r.state.briefing && new Date().getHours() < 12) await sendProposal(token, chat).catch(() => null)
+      return
+    }
     const go = await mirror.write((db) => {
       const svc = services.services(db)
       const today = svc.wallet.today()
@@ -627,7 +643,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -635,6 +651,47 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     const edit = (text: string, keyboard?: any) =>
       tg(update.__token, 'editMessageText', { chat_id: chat, message_id: cq.message.message_id, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+    // The daily rhythm: today's plan, the evening review, the Sunday review.
+    if (/^r[bvw]\|/.test(data)) {
+      if (!(await markSeen(key))) return null
+      const msg = String(cq.message?.text ?? '')
+      try {
+        if (data === 'rb|a') {
+          await answer('Approving…')
+          const r = await rhythm.approve()
+          const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join('\n')}` : esc(r.done.join(' '))
+          await edit(text)
+          return text
+        }
+        if (data === 'rb|r') {
+          await answer('Making another plan…')
+          await edit(`${esc(msg)}\n\n🔄 <i>Making another one…</i>`)
+          return await sendProposal(update.__token, chat)
+        }
+        if (data === 'rb|e' || data === 'rv|e' || data === 'rw|e') {
+          await answer('Tell me')
+          const ask = data === 'rb|e' ? EDIT_ASK : data === 'rv|e' ? TOP3_ASK : WEEK_ASK
+          await tg(update.__token, 'sendMessage', { chat_id: chat, text: ask, reply_markup: { force_reply: true, input_field_placeholder: data === 'rb|e' ? 'No gym today; lab report first' : 'One per line' } })
+          return ask
+        }
+        if (data === 'rv|k') {
+          await answer('Saved for tomorrow')
+          const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.`
+          await edit(text)
+          return text
+        }
+        if (data === 'rw|a') {
+          const line = await rhythm.applyWeekly()
+          await answer('Week planned')
+          const text = `${esc(msg)}\n\n✅ ${esc(line)}`
+          await edit(text)
+          return text
+        }
+      } catch (e) {
+        await answer((e as Error).message.slice(0, 190))
+      }
+      return null
+    }
     // A Todoist task finished after a focus session: Todoist is a network
     // call, so the tap is marked seen first, then Todoist, then the coins.
     if (data.startsWith('td|')) {
@@ -1332,6 +1389,26 @@ His note: ${note}`,
     const chat = String(update.message?.chat?.id ?? '')
     // A reply to the morning question is today's plan.
     const asked = String(update.message?.reply_to_message?.text ?? '')
+    // Answers to the rhythm's questions: change today's plan, tomorrow's top 3, next week's big 3.
+    if (text && !text.startsWith('/') && chat && (asked.includes(EDIT_ASK) || asked.includes(TOP3_ASK) || asked.includes(WEEK_ASK))) {
+      if (!(await markSeen(key))) return null
+      if (!allowed(cfg, chat)) return null
+      try {
+        if (asked.includes(EDIT_ASK)) {
+          void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
+          return await sendProposal(update.__token, chat, text)
+        }
+        const reply = asked.includes(TOP3_ASK)
+          ? `✅ Tomorrow's top 3:\n${(await rhythm.setTop3(text)).map((t, i) => `${i + 1}. ${esc(t)}`).join('\n')}`
+          : `✅ ${esc(await rhythm.applyWeekly(text))}`
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
+        return reply
+      } catch (e) {
+        const reply = `⚠️ ${esc((e as Error).message)}`
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
+        return reply
+      }
+    }
     const prompted = !!text && !text.startsWith('/') && (asked.includes(PLAN_ASK) || /Evening review|One thing to change next week/.test(asked))
     if (text && !text.startsWith('/') && asked.includes(PLAN_ASK)) text = `/plan ${text}`
     // A reply to the evening review or the weekly report is your note for the day.
@@ -1476,6 +1553,8 @@ His note: ${note}`,
     handleUpdate,
     /** The app's Coach page: the same brain and memory as the bots. */
     think: (text: string, key = `app:${Date.now()}`, onStep?: (s: string) => void) => think('mega', text, key, undefined, 'app', onStep),
+    /** The daily rhythm (morning plan, reviews), for the tick and the app. */
+    rhythm,
     config,
     saveConfig: async (patch: Partial<BotBridgeConfig>): Promise<BotBridgeConfig> => {
       const next: BotBridgeConfig = { ...(await config()), ...patch }

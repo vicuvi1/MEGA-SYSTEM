@@ -4323,6 +4323,8 @@ function growth(i, weeks = 26) {
 // src/core/todoist.ts
 /** The Todoist label that makes a task one of today's must-dos (⭐). */
 var TODAY_LABEL = "today";
+/** Is this task starred for today? */
+var isStarred = (t) => !!t.labels?.includes(TODAY_LABEL);
 /** The area name without its emoji: "🎓 University" → "University". */
 var plainName = (name) => name.replace(/[^\p{L}\p{N}&\s'-]/gu, "").replace(/\s+/g, " ").trim();
 /** Words that point to an area, matched against the area's name. */
@@ -6798,9 +6800,9 @@ var MONTHS$1 = [
 	"November",
 	"December"
 ];
-var pad$2 = (n) => String(n).padStart(2, "0");
+var pad$3 = (n) => String(n).padStart(2, "0");
 function toISO(d) {
-	return `${d.getFullYear()}-${pad$2(d.getMonth() + 1)}-${pad$2(d.getDate())}`;
+	return `${d.getFullYear()}-${pad$3(d.getMonth() + 1)}-${pad$3(d.getDate())}`;
 }
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
@@ -6811,7 +6813,7 @@ function monthLabel(key, short = false) {
 function addMonths(key, n) {
 	const [y, m] = key.split("-").map(Number);
 	const idx = y * 12 + (m - 1) + n;
-	return `${Math.floor(idx / 12)}-${pad$2(idx % 12 + 1)}`;
+	return `${Math.floor(idx / 12)}-${pad$3(idx % 12 + 1)}`;
 }
 function daysInMonth(key) {
 	const [y, m] = key.split("-").map(Number);
@@ -6864,13 +6866,13 @@ var MONTHS = {
 	"3months": 3,
 	year: 12
 };
-var pad$1 = (n) => String(n).padStart(2, "0");
+var pad$2 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays(rule.start, 14 * n);
 	const key = addMonths(monthKey(rule.start), (MONTHS[rule.every] || 1) * n);
-	return `${key}-${pad$1(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
+	return `${key}-${pad$2(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
 	const out = [];
@@ -7577,7 +7579,7 @@ function workText(state, amountBase, today) {
 	return formatWork(workHours(amountBase, r.rate));
 }
 // src/renderer/public/apps/finance/js/payyourself.js
-var pad = (n) => String(n).padStart(2, "0");
+var pad$1 = (n) => String(n).padStart(2, "0");
 var toBase = (state, c, cur) => !cur || cur === state.settings.currency ? c : convert(c, cur, state.settings.currency, state.rates);
 function suggestSalary(state, today) {
 	const key = monthKey(today);
@@ -7601,7 +7603,7 @@ function suggestSalary(state, today) {
 		months: months.length
 	};
 }
-var salaryDate = (key, day = 1) => `${key}-${pad(Math.min(Math.max(1, day), daysInMonth(key)))}`;
+var salaryDate = (key, day = 1) => `${key}-${pad$1(Math.min(Math.max(1, day), daysInMonth(key)))}`;
 var salaryOf = (state, key) => state.tx.find((t) => t.type === "transfer" && t.salary === key) || null;
 function payStatus(state, today) {
 	if (!payOn(state)) return {
@@ -8064,11 +8066,11 @@ function payTodoist(s, done) {
 	}
 	return n;
 }
-var toMin = (hm) => {
+var toMin$1 = (hm) => {
 	const [h, m] = hm.split(":").map(Number);
 	return h * 60 + (m || 0);
 };
-var fromMin = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+var fromMin$1 = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 /** "2026-11-01T14:30:00+02:00" → "14:30" in local time (the server runs in your time zone). */
 function localHM(iso) {
 	if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "00:00";
@@ -8083,11 +8085,11 @@ function localDay(iso) {
 }
 /** Timed events of one day as minute ranges, clipped to the day window. */
 function busy(events, day, from, to) {
-	const lo = toMin(from);
-	const hi = toMin(to);
+	const lo = toMin$1(from);
+	const hi = toMin$1(to);
 	return events.filter((e) => !e.allDay && localDay(e.start) === day).map((e) => {
-		const s = toMin(localHM(e.start));
-		const en = localDay(e.end) > day ? 1440 : toMin(localHM(e.end));
+		const s = toMin$1(localHM(e.start));
+		const en = localDay(e.end) > day ? 1440 : toMin$1(localHM(e.end));
 		return [Math.max(lo, s), Math.min(hi, en)];
 	}).filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
 }
@@ -8099,20 +8101,20 @@ function freeGaps(events, day, opts = {}) {
 	const from = opts.from ?? "07:00";
 	const to = opts.to ?? "23:00";
 	const min = opts.minMinutes ?? 25;
-	let cursor = Math.max(toMin(from), opts.after ? toMin(opts.after) : 0);
+	let cursor = Math.max(toMin$1(from), opts.after ? toMin$1(opts.after) : 0);
 	const out = [];
 	for (const [s, e] of busy(events, day, from, to)) {
 		if (s - cursor >= min) out.push({
-			start: fromMin(cursor),
-			end: fromMin(s),
+			start: fromMin$1(cursor),
+			end: fromMin$1(s),
 			minutes: s - cursor
 		});
 		cursor = Math.max(cursor, e);
 	}
-	if (toMin(to) - cursor >= min) out.push({
-		start: fromMin(cursor),
+	if (toMin$1(to) - cursor >= min) out.push({
+		start: fromMin$1(cursor),
 		end: to,
-		minutes: toMin(to) - cursor
+		minutes: toMin$1(to) - cursor
 	});
 	return out;
 }
@@ -8122,8 +8124,8 @@ function freeGaps(events, day, opts = {}) {
 */
 function suggestBlocks(gaps, items, breather = 10) {
 	const free = gaps.map((g) => ({
-		s: toMin(g.start),
-		e: toMin(g.end)
+		s: toMin$1(g.start),
+		e: toMin$1(g.end)
 	}));
 	const out = [];
 	for (const it of items) {
@@ -8132,8 +8134,8 @@ function suggestBlocks(gaps, items, breather = 10) {
 		if (!g) continue;
 		out.push({
 			title: it.title,
-			start: fromMin(g.s),
-			end: fromMin(g.s + need),
+			start: fromMin$1(g.s),
+			end: fromMin$1(g.s + need),
 			minutes: need
 		});
 		g.s += need + breather;
@@ -9377,6 +9379,741 @@ function answerLocal(need, d) {
 	const l = d.ledger.filter((e) => inRange(e.day));
 	return `Points ${span}: +${l.filter((e) => e.coins > 0).reduce((t, e) => t + e.coins, 0)} earned, −${-l.filter((e) => e.coins < 0).reduce((t, e) => t + e.coins, 0)} spent.`;
 }
+// src/core/rhythm.ts
+var RHYTHM = "coach_rhythm";
+var RHYTHM_PREFS = "coach_rhythm_prefs";
+var DEFAULT_RHYTHM_PREFS = {
+	on: true,
+	evening: "21:00",
+	weekly: "19:00",
+	water: true,
+	training: true
+};
+var HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+var toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var fromMin = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+function cleanPrefs(p) {
+	return {
+		on: p?.on !== false,
+		evening: HM.test(p?.evening) ? p.evening : DEFAULT_RHYTHM_PREFS.evening,
+		weekly: HM.test(p?.weekly) ? p.weekly : DEFAULT_RHYTHM_PREFS.weekly,
+		water: p?.water !== false,
+		training: p?.training !== false
+	};
+}
+/** Today's state: a new day keeps only tomorrow's top 3 and the weekly review. */
+function rhythmFor(state, today) {
+	const s = state && typeof state === "object" ? state : {};
+	if (s.day === today) return {
+		...s,
+		water: Array.isArray(s.water) ? s.water : []
+	};
+	return {
+		day: today,
+		water: [],
+		...s.tomorrow ? { tomorrow: s.tomorrow } : {},
+		...s.weekly ? { weekly: s.weekly } : {}
+	};
+}
+/** What the coach should send now (in order). */
+function dueRhythm(state, prefs, f) {
+	if (!prefs.on) return [];
+	const t = toMin(f.time);
+	const out = [];
+	const start = Math.max(toMin("06:00"), f.wakeAt ? toMin(f.wakeAt) + 5 : toMin(f.wakeTarget) + 45);
+	if (!state.briefing && t >= start && t < toMin("12:00")) out.push("briefing");
+	if (!f.paused && prefs.water && waterBehind(state, f)) out.push("water");
+	if (!f.paused && prefs.training && !f.workoutDone && !state.training && t >= toMin("18:00") && t < toMin("21:00")) out.push("training");
+	if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push("weekly");
+	if (!state.evening && t >= toMin(prefs.evening)) out.push("evening");
+	return out;
+}
+/** Water well behind the day's pace (08:00→21:00), at most 3 nudges, 2.5 h apart, 11:00–20:30. */
+function waterBehind(state, f) {
+	const t = toMin(f.time);
+	if (t < toMin("11:00") || t > toMin("20:30") || f.waterTarget <= 0) return false;
+	if (state.water.length >= 3) return false;
+	const last = state.water[state.water.length - 1];
+	if (last && t - toMin(last) < 150) return false;
+	const pace = Math.min(1, Math.max(0, (t - toMin("08:00")) / (toMin("21:00") - toMin("08:00"))));
+	return f.waterMl < f.waterTarget * pace - f.waterTarget * .25;
+}
+var quarter = (hm) => fromMin(Math.ceil(toMin(hm) / 15) * 15);
+/** A plan without the model: last night's top 3 (else starred and urgent tasks), blocks in free time, a training slot. */
+function localProposal(p) {
+	const seen = /* @__PURE__ */ new Set();
+	const pick = [];
+	const add = (t) => {
+		const k = t.trim().toLowerCase();
+		if (!k || seen.has(k) || pick.length >= 3) return;
+		seen.add(k);
+		pick.push(t.trim());
+	};
+	p.top3.forEach(add);
+	[...p.tasks].sort((a, b) => Number(!!b.starred) - Number(!!a.starred) || (b.priority ?? 1) - (a.priority ?? 1) || String(a.due ?? "9").localeCompare(String(b.due ?? "9"))).forEach((t) => add(t.content));
+	const blocks = suggestBlocks(freeGaps(p.events, p.today, {
+		after: quarter(p.now),
+		minMinutes: 30
+	}), pick.map((title) => ({
+		title,
+		minutes: 50
+	}))).map((b) => ({
+		title: b.title,
+		start: b.start,
+		minutes: b.minutes
+	}));
+	let training = null;
+	if (!p.workoutDone) {
+		const taken = blocks.map((b) => ({
+			s: toMin(b.start),
+			e: toMin(b.start) + b.minutes
+		}));
+		const evening = freeGaps(p.events, p.today, {
+			after: fromMin(Math.max(toMin(quarter(p.now)), toMin("17:00"))),
+			minMinutes: 45
+		});
+		for (const g of evening) {
+			let s = toMin(g.start);
+			while (s + 45 <= toMin(g.end) && taken.some((x) => s < x.e + 10 && s + 45 > x.s - 10)) s += 15;
+			if (s + 45 <= toMin(g.end)) {
+				training = {
+					time: fromMin(s),
+					what: "Workout · 45 min"
+				};
+				break;
+			}
+		}
+	}
+	const focus = blocks.reduce((t, b) => t + b.minutes, 0);
+	return {
+		day: p.today,
+		headline: pick.length ? `${pick.length} must-do${pick.length === 1 ? "" : "s"} · ${focus} min of focus planned` : "A light day: pick one thing that matters",
+		mustdos: pick,
+		blocks,
+		training,
+		waterMl: p.waterTarget
+	};
+}
+/** The model's plan, made safe: real times, no clashes with your calendar or each other, at most 3 must-dos. */
+function cleanProposal(raw, fallback, events, now) {
+	if (!raw || typeof raw !== "object") return fallback;
+	const day = fallback.day;
+	const busy = events.filter((e) => !e.allDay && localDayOf(e.start) === day).map((e) => ({
+		s: minOfIso(e.start),
+		e: minOfIso(e.end)
+	}));
+	const after = toMin(quarter(now));
+	const taken = [];
+	const blocks = [];
+	for (const b of Array.isArray(raw.blocks) ? raw.blocks : []) {
+		const start = String(b?.start ?? "").padStart(5, "0");
+		const minutes = Math.round(Number(b?.minutes));
+		const title = String(b?.title ?? "").trim().slice(0, 80);
+		if (!HM.test(start) || !title || !(minutes >= 15 && minutes <= 180)) continue;
+		const s = toMin(start);
+		const e = s + minutes;
+		if (s < after || e > toMin("23:30")) continue;
+		if ([...busy, ...taken].some((x) => s < x.e && e > x.s)) continue;
+		taken.push({
+			s,
+			e
+		});
+		blocks.push({
+			title,
+			start,
+			minutes
+		});
+		if (blocks.length >= 6) break;
+	}
+	const mustdos = (Array.isArray(raw.mustdos) ? raw.mustdos : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+	let training = null;
+	if (raw.training && HM.test(String(raw.training.time ?? "").padStart(5, "0"))) {
+		const t = String(raw.training.time).padStart(5, "0");
+		const s = toMin(t);
+		if (s >= after && ![...busy, ...taken].some((x) => s < x.e && s + 30 > x.s)) training = {
+			time: t,
+			what: String(raw.training.what ?? "Workout").slice(0, 60) || "Workout"
+		};
+	}
+	const waterMl = Number(raw.waterMl) >= 1e3 && Number(raw.waterMl) <= 5e3 ? Math.round(Number(raw.waterMl)) : fallback.waterMl;
+	return {
+		day,
+		headline: String(raw.headline ?? "").trim().slice(0, 140) || fallback.headline,
+		mustdos: mustdos.length ? mustdos : fallback.mustdos,
+		blocks: blocks.length || !fallback.blocks.length ? blocks : fallback.blocks,
+		training: training ?? (raw.training === null ? null : fallback.training),
+		waterMl
+	};
+}
+var localDayOf = (iso) => {
+	const d = new Date(iso);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+var minOfIso = (iso) => {
+	const d = new Date(iso);
+	return d.getHours() * 60 + d.getMinutes();
+};
+/** The plan as a Telegram message (HTML). */
+function proposalText(p, opts = {}) {
+	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	const lines = [`☀️ <b>Your day${opts.version && opts.version > 1 ? ` (v${opts.version})` : ""}</b> · ${esc(p.headline)}`];
+	if (p.mustdos.length) lines.push("", "<b>Must-dos</b>", ...p.mustdos.map((m, i) => `${i + 1}. ${esc(m)}`));
+	const timed = [...p.blocks.map((b) => ({
+		s: b.start,
+		text: `${b.start}–${fromMin(toMin(b.start) + b.minutes)} ${esc(b.title)}`
+	})), ...p.training ? [{
+		s: p.training.time,
+		text: `${p.training.time} 💪 ${esc(p.training.what)}`
+	}] : []].sort((a, b) => a.s.localeCompare(b.s));
+	if (timed.length) lines.push("", "<b>Blocks</b>", ...timed.map((x) => x.text));
+	lines.push("", `💧 Water: ${(p.waterMl / 1e3).toFixed(1)} L`);
+	lines.push("", opts.approved ? "✅ <b>Approved.</b> Blocks are in your calendar, must-dos are starred." : "Approve, change it, or ask for another one.");
+	return lines.join("\n");
+}
+var PROPOSAL_KEYBOARD = { inline_keyboard: [[
+	{
+		text: "✅ Approve",
+		callback_data: "rb|a"
+	},
+	{
+		text: "✏️ Change",
+		callback_data: "rb|e"
+	},
+	{
+		text: "🔄 Redo",
+		callback_data: "rb|r"
+	}
+]] };
+var EDIT_ASK = "What should change in today's plan?";
+/** 0–100: must-dos 40, focus against the plan 30, water 15, training 15. */
+function dayScore(r) {
+	const md = r.mustdosTotal ? r.mustdosDone / r.mustdosTotal : r.focusMin >= 50 ? 1 : 0;
+	const fo = Math.min(1, r.focusMin / Math.max(50, r.plannedFocusMin));
+	const wa = r.waterTarget ? Math.min(1, r.waterMl / r.waterTarget) : 0;
+	const tr = r.workoutDone ? 1 : r.trainingPlanned ? 0 : .5;
+	return Math.round(md * 40 + fo * 30 + wa * 15 + tr * 15);
+}
+/** The weakest part of the day, for the lesson when there's no model. */
+function weakest(r) {
+	const parts = [
+		{
+			k: r.mustdosTotal ? r.mustdosDone / r.mustdosTotal : 1,
+			t: `${r.mustdosTotal - r.mustdosDone} must-do${r.mustdosTotal - r.mustdosDone === 1 ? "" : "s"} left open. Tomorrow: the hardest one first, before noon.`
+		},
+		{
+			k: Math.min(1, r.focusMin / Math.max(50, r.plannedFocusMin)),
+			t: `Focus ${r.focusMin} of ${Math.max(50, r.plannedFocusMin)} min planned. Start the first block on time; the rest follows.`
+		},
+		{
+			k: r.waterTarget ? Math.min(1, r.waterMl / r.waterTarget) : 1,
+			t: `Water ${(r.waterMl / 1e3).toFixed(1)} of ${(r.waterTarget / 1e3).toFixed(1)} L. A full glass with every meal.`
+		},
+		{
+			k: r.workoutDone || !r.trainingPlanned ? 1 : 0,
+			t: "Training skipped. Put it before the evening, not after."
+		}
+	].sort((a, b) => a.k - b.k);
+	return parts[0].k >= 1 ? "Everything done. Keep the same rhythm tomorrow." : parts[0].t;
+}
+function reviewText(r, score, lesson, top3) {
+	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	return [
+		`🌙 <b>Day review: ${score}/100</b> ${score >= 80 ? "🔥" : score >= 55 ? "👍" : "⚠️"}`,
+		"",
+		`Must-dos ${r.mustdosDone}/${r.mustdosTotal} · Focus ${r.focusMin}${r.plannedFocusMin ? `/${r.plannedFocusMin}` : ""} min${r.blocksPlanned ? ` · Blocks ${r.blocksDone}/${r.blocksPlanned}` : ""}`,
+		`Water ${(r.waterMl / 1e3).toFixed(1)}/${(r.waterTarget / 1e3).toFixed(1)} L · Training ${r.workoutDone ? "✅" : "—"}`,
+		"",
+		`<b>Lesson:</b> ${esc(lesson)}`,
+		...top3.length ? [
+			"",
+			"<b>Tomorrow's top 3</b>",
+			...top3.map((t, i) => `${i + 1}. ${esc(t)}`)
+		] : []
+	].join("\n");
+}
+var REVIEW_KEYBOARD = { inline_keyboard: [[{
+	text: "✅ Keep as tomorrow's top 3",
+	callback_data: "rv|k"
+}, {
+	text: "✏️ Change",
+	callback_data: "rv|e"
+}]] };
+var TOP3_ASK = "Tomorrow's top 3? One per line.";
+var FOCUS_NAMES = {
+	focus: "focus time",
+	wake: "wake-ups",
+	sport: "training",
+	clean: "clean days",
+	todoist: "tasks",
+	spend: "spending",
+	mustdo: "must-dos"
+};
+var focusName = (id) => FOCUS_NAMES[id] ?? id;
+/** Next week's focus without the model: the metric furthest below its target. */
+function suggestWeekFocus(metrics) {
+	const scored = metrics.filter((m) => m.target && m.target > 0 && m.id !== "spend").map((m) => ({
+		id: m.id,
+		k: m.now / m.target
+	}));
+	scored.sort((a, b) => a.k - b.k);
+	return scored[0]?.id ?? "focus";
+}
+function weeklyText(o) {
+	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	const delta = o.score - o.prevScore;
+	return [
+		`📊 <b>Week review: ${o.score}/100</b> (${delta >= 0 ? "+" : ""}${delta} vs last week)`,
+		"",
+		...o.lines.map(esc),
+		"",
+		`🏆 <b>Win:</b> ${esc(o.win)}`,
+		`🕳 <b>Leak:</b> ${esc(o.leak)}`,
+		"",
+		`<b>Next week</b>: focus on ${esc(focusName(o.focus))}${o.note ? ` (“${esc(o.note)}”)` : ""}`,
+		...o.big3.map((b, i) => `${i + 1}. ${esc(b)}`)
+	].join("\n");
+}
+var WEEKLY_KEYBOARD = { inline_keyboard: [[{
+	text: "✅ Use this plan",
+	callback_data: "rw|a"
+}, {
+	text: "✏️ Change",
+	callback_data: "rw|e"
+}]] };
+var WEEK_ASK = "Next week's 3 big tasks? One per line.";
+/** "1. a\n2) b\n- c" → ['a','b','c'] (at most 3). */
+function readLines(text) {
+	return text.split(/\n|;/).map((l) => l.replace(/^\s*(?:\d+[.)]|[-•*])\s*/, "").trim()).filter(Boolean).slice(0, 3);
+}
+// src/renderer/src/web/rhythmBot.ts
+var pad = (n) => String(n).padStart(2, "0");
+var hmNow = (d = /* @__PURE__ */ new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function readJson(db, key, fallback) {
+	try {
+		return JSON.parse(getSetting(db, key) || "null") ?? fallback;
+	} catch {
+		return fallback;
+	}
+}
+function createRhythm({ mirror, services, todoist, calendar, ai }) {
+	const load = (db, today) => rhythmFor(readJson(db, RHYTHM, null), today);
+	const save = (db, s) => setSetting(db, RHYTHM, JSON.stringify(s));
+	const dayBounds = () => {
+		const s = /* @__PURE__ */ new Date();
+		s.setHours(0, 0, 0, 0);
+		return [s.toISOString(), new Date(s.getTime() + 864e5).toISOString()];
+	};
+	async function state() {
+		return mirror.read((db) => {
+			const today = services.services(db).wallet.today();
+			return {
+				state: load(db, today),
+				prefs: cleanPrefs(readJson(db, RHYTHM_PREFS, null))
+			};
+		});
+	}
+	async function setPrefs(p) {
+		return mirror.write((db) => {
+			const next = cleanPrefs({
+				...cleanPrefs(readJson(db, RHYTHM_PREFS, null)),
+				...p
+			});
+			setSetting(db, RHYTHM_PREFS, JSON.stringify(next));
+			return next;
+		});
+	}
+	/** Context for the model: the same picture the coach sees in chat. */
+	async function contextFor(events, todoToday, upcoming) {
+		return mirror.read((db) => {
+			const svc = services.services(db);
+			return [
+				lifeContext(svc, db, {
+					finance: financeStateFrom(db, null),
+					todoToday,
+					upcoming,
+					events
+				}),
+				mindText(loadMind(db), svc.wallet.today()),
+				`His goals: ${loadProfile(db).goals.join("; ")}`
+			].filter(Boolean).join("\n");
+		});
+	}
+	/** A plan for today (a new version when you ask to change or redo it). */
+	async function propose(note = "") {
+		const now = /* @__PURE__ */ new Date();
+		const [events, tasks, upcoming] = await Promise.all([
+			calendar ? calendar.events(...dayBounds()).catch(() => []) : Promise.resolve([]),
+			todoist ? todoist.today().catch(() => []) : Promise.resolve([]),
+			todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)
+		]);
+		const base = await mirror.read((db) => {
+			const svc = services.services(db);
+			const today = svc.wallet.today(now);
+			const st = load(db, today);
+			const sport = sportState(db);
+			return {
+				today,
+				st,
+				water: sport ? sharedView(sport, sportToday()).water.target : 2700,
+				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done")
+			};
+		});
+		const fallback = localProposal({
+			today: base.today,
+			now: hmNow(now),
+			events,
+			tasks: tasks.map((t) => ({
+				content: t.content,
+				starred: isStarred(t),
+				priority: t.priority,
+				due: t.due
+			})),
+			top3: base.st.tomorrow?.day === base.today ? base.st.tomorrow.top3 : [],
+			waterTarget: base.water,
+			workoutDone: base.workoutDone
+		});
+		let plan = fallback;
+		if (ai) try {
+			const context = await contextFor(events, tasks, upcoming);
+			const prev = base.st.briefing?.plan;
+			const raw = await ai([
+				"You are MEGA, Victor's head coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
+				`It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
+				"headline: one short line with numbers (\"3 must-dos · 2h40 focus · gym 18:00\").",
+				note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : "",
+				`A simple starting point (improve it): ${JSON.stringify(fallback)}`,
+				"Answer ONLY with JSON: {\"headline\": string, \"mustdos\": string[], \"blocks\": [{\"title\": string, \"start\": \"HH:MM\", \"minutes\": number}], \"training\": {\"time\": \"HH:MM\", \"what\": string} | null, \"waterMl\": number}",
+				"",
+				"== Victor right now ==",
+				context
+			].filter(Boolean).join("\n"), { json: true });
+			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
+			plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now));
+		} catch {
+			plan = fallback;
+		}
+		return mirror.write((db) => {
+			const st = load(db, plan.day);
+			const version = (st.briefing?.version ?? 0) + 1;
+			save(db, {
+				...st,
+				briefing: {
+					status: "proposed",
+					sentAt: (/* @__PURE__ */ new Date()).toISOString(),
+					plan,
+					version
+				}
+			});
+			return {
+				plan,
+				version
+			};
+		});
+	}
+	/** Approved: blocks and training into the calendar, must-dos on Today (starred in Todoist). */
+	async function approve() {
+		const cur = await mirror.read((db) => load(db, services.services(db).wallet.today()).briefing);
+		if (!cur) return {
+			ok: false,
+			done: ["No plan to approve yet"]
+		};
+		if (cur.status === "approved") return {
+			ok: true,
+			done: ["Already approved"],
+			plan: cur.plan
+		};
+		const p = cur.plan;
+		const done = [];
+		await mirror.write((db) => {
+			const st = load(db, p.day);
+			if (st.briefing) save(db, {
+				...st,
+				briefing: {
+					...st.briefing,
+					status: "approved"
+				}
+			});
+		});
+		if (calendar) {
+			let made = 0;
+			const items = [...p.blocks.map((b) => ({
+				title: b.title,
+				start: b.start,
+				minutes: b.minutes
+			})), ...p.training ? [{
+				title: `💪 ${p.training.what}`,
+				start: p.training.time,
+				minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45
+			}] : []];
+			for (const b of items) {
+				const start = /* @__PURE__ */ new Date(`${p.day}T${b.start}:00`);
+				if (await calendar.create({
+					title: b.title,
+					start: start.toISOString(),
+					end: new Date(start.getTime() + b.minutes * 6e4).toISOString(),
+					description: "Planned with your coach in Life System"
+				}).then(() => true).catch(() => false)) made++;
+			}
+			if (items.length) done.push(made ? `🗓 ${made} block${made === 1 ? "" : "s"} in your calendar` : "⚠️ Calendar: blocks not added");
+		} else if (p.blocks.length) done.push("⚠️ Connect Google Calendar to get the blocks in your calendar");
+		if (p.mustdos.length) {
+			const added = await mirror.write((db) => {
+				const svc = services.services(db);
+				const plan = svc.focus.plan(p.day);
+				const have = new Set(plan.items.map((x) => x.text.toLowerCase()));
+				const fresh = p.mustdos.filter((m) => !have.has(m.toLowerCase()));
+				if (fresh.length) svc.focus.setPlan([...plan.items.map((x) => x.text), ...fresh]);
+				return fresh;
+			});
+			if (todoist) {
+				const tasks = await todoist.today().catch(() => []);
+				for (const m of added) {
+					const t = tasks.find((x) => x.content.trim().toLowerCase() === m.toLowerCase());
+					if (t && todoist.update) await todoist.update(t.id, { labels: [.../* @__PURE__ */ new Set([...t.labels ?? [], "today"])] }).catch(() => null);
+					else if (!t) await todoist.quickAdd(`${m} today @today`).catch(() => null);
+				}
+			}
+			done.push(`⭐ ${p.mustdos.length} must-do${p.mustdos.length === 1 ? "" : "s"} on Today`);
+		}
+		return {
+			ok: true,
+			done,
+			plan: p
+		};
+	}
+	/** Planned vs done today. */
+	async function dayResult() {
+		return mirror.read((db) => {
+			const svc = services.services(db);
+			const today = svc.wallet.today();
+			const st = load(db, today);
+			const f = svc.focus.state();
+			const plan = svc.focus.plan(today);
+			const sport = sportState(db);
+			const water = sport ? sharedView(sport, sportToday()).water : {
+				ml: 0,
+				target: 2700
+			};
+			const blocks = st.briefing?.status === "approved" ? st.briefing.plan.blocks : [];
+			return {
+				mustdosDone: plan.items.filter((x) => x.done).length,
+				mustdosTotal: plan.items.length,
+				focusMin: f.todayMin,
+				plannedFocusMin: blocks.reduce((t, b) => t + b.minutes, 0),
+				blocksDone: 0,
+				blocksPlanned: 0,
+				waterMl: water.ml,
+				waterTarget: water.target,
+				workoutDone: (svc.wallet.summary().todayRules ?? []).includes("body.workout_done"),
+				trainingPlanned: !!st.briefing?.plan.training
+			};
+		});
+	}
+	/** The evening review: the score, one lesson, tomorrow's top 3 (saved for the morning plan). */
+	async function evening() {
+		const result = await dayResult();
+		const score = dayScore(result);
+		const [open, tomorrowTasks] = await Promise.all([mirror.read((db) => {
+			const svc = services.services(db);
+			return svc.focus.plan(svc.wallet.today()).items.filter((x) => !x.done).map((x) => x.text);
+		}), todoist?.upcoming ? todoist.upcoming(2).catch(() => []) : Promise.resolve([])]);
+		const today = await mirror.read((db) => services.services(db).wallet.today());
+		const tomorrow = addDays$1(today, 1);
+		const nextUp = tomorrowTasks.filter((t) => t.due && t.due <= tomorrow).sort((a, b) => b.priority - a.priority).map((t) => t.content);
+		let lesson = weakest(result);
+		let top3 = [.../* @__PURE__ */ new Set([...open, ...nextUp])].slice(0, 3);
+		if (ai) try {
+			const context = await contextFor(null, null, tomorrowTasks);
+			const raw = await ai([
+				"You are MEGA, Victor's head coach. It's his evening review. Be honest and short.",
+				`Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join("; ") || "none"}. Due tomorrow in Todoist: ${nextUp.join("; ") || "nothing"}.`,
+				"lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow's 3 most important things (short, as tasks).",
+				"Answer ONLY with JSON: {\"lesson\": string, \"top3\": string[]}",
+				"",
+				context
+			].join("\n"), { json: true });
+			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
+			if (typeof j.lesson === "string" && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240);
+			const t = (Array.isArray(j.top3) ? j.top3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+			if (t.length) top3 = t;
+		} catch {}
+		await mirror.write((db) => {
+			const st = load(db, today);
+			save(db, {
+				...st,
+				evening: {
+					sentAt: (/* @__PURE__ */ new Date()).toISOString(),
+					score,
+					top3,
+					lesson
+				},
+				tomorrow: {
+					day: tomorrow,
+					top3
+				}
+			});
+		});
+		return {
+			result,
+			score,
+			lesson,
+			top3
+		};
+	}
+	async function setTop3(text) {
+		const top3 = readLines(text);
+		await mirror.write((db) => {
+			const today = services.services(db).wallet.today();
+			const st = load(db, today);
+			save(db, {
+				...st,
+				tomorrow: {
+					day: addDays$1(today, 1),
+					top3
+				}
+			});
+		});
+		return top3;
+	}
+	/** The Sunday review: the week in numbers, a win, a leak, next week's focus and big 3. */
+	async function weekly() {
+		const { report, today } = await mirror.read((db) => {
+			const svc = services.services(db);
+			return {
+				report: progressReport(svc.progress.input(financeSpending(financeStateFrom(db, null)))),
+				today: svc.wallet.today()
+			};
+		});
+		const lines = report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`);
+		const ranked = report.metrics.filter((m) => m.target && m.id !== "spend").map((m) => ({
+			m,
+			k: m.now / m.target
+		})).sort((a, b) => b.k - a.k);
+		const upcoming = todoist?.upcoming ? await todoist.upcoming(8).catch(() => []) : [];
+		let out = {
+			score: report.score,
+			prevScore: report.prevScore,
+			lines,
+			win: ranked[0] ? `${ranked[0].m.label}: ${ranked[0].m.text}` : "You showed up.",
+			leak: ranked.length ? `${ranked[ranked.length - 1].m.label}: ${ranked[ranked.length - 1].m.text}${ranked[ranked.length - 1].m.target ? ` of ${ranked[ranked.length - 1].m.targetText}` : ""}` : "Not enough data yet.",
+			focus: suggestWeekFocus(report.metrics),
+			note: "",
+			big3: [...upcoming].sort((a, b) => b.priority - a.priority).slice(0, 3).map((t) => t.content)
+		};
+		if (ai) try {
+			const context = await contextFor(null, null, upcoming);
+			const raw = await ai([
+				"You are MEGA, Victor's head coach. Sunday review of his week. Honest, short, numbers.",
+				`Week score ${report.score}/100 (last week ${report.prevScore}). ${lines.join("; ")}.`,
+				"win: the best thing this week (with its number). leak: the biggest leak (with its number). focus: next week's ONE area, one of focus|wake|sport|clean|todoist|spend|mustdo. note: his target in a few words (\"up at 7:00 every day\"). big3: the 3 big tasks for next week (from his deadlines and goals).",
+				"Answer ONLY with JSON: {\"win\": string, \"leak\": string, \"focus\": string, \"note\": string, \"big3\": string[]}",
+				"",
+				context
+			].join("\n"), { json: true });
+			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
+			const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+			out = {
+				...out,
+				win: String(j.win ?? "").trim().slice(0, 200) || out.win,
+				leak: String(j.leak ?? "").trim().slice(0, 200) || out.leak,
+				focus: [
+					"focus",
+					"wake",
+					"sport",
+					"clean",
+					"todoist",
+					"spend",
+					"mustdo"
+				].includes(j.focus) ? j.focus : out.focus,
+				note: String(j.note ?? "").trim().slice(0, 140),
+				big3: big3.length ? big3 : out.big3
+			};
+		} catch {}
+		await mirror.write((db) => {
+			const st = load(db, today);
+			save(db, {
+				...st,
+				weekly: {
+					day: today,
+					focus: out.focus,
+					note: out.note,
+					big3: out.big3
+				}
+			});
+		});
+		return out;
+	}
+	/** "Use this plan": next week's focus and big 3 (typed ones replace the suggestion). */
+	async function applyWeekly(typed) {
+		return mirror.write((db) => {
+			const svc = services.services(db);
+			const st = load(db, svc.wallet.today());
+			const w = st.weekly;
+			if (!w) throw new Error("No weekly review yet");
+			const big3 = typed ? readLines(typed) : w.big3;
+			if (!big3.length) throw new Error("Give at least one big task");
+			const plan = svc.weekPlan.save({
+				focus: w.focus,
+				note: w.note,
+				big3: big3.map((text) => ({
+					text,
+					done: false
+				}))
+			});
+			if (typed) save(db, {
+				...st,
+				weekly: {
+					...w,
+					big3
+				}
+			});
+			return `🗓 Next week: ${focusName(plan.focus)} · ${plan.big3.map((b) => b.text).join(" / ")}`;
+		});
+	}
+	/** Water behind pace: one line with the numbers and what to do. */
+	async function waterLine() {
+		return mirror.write((db) => {
+			const svc = services.services(db);
+			const st = load(db, svc.wallet.today());
+			const sport = sportState(db);
+			if (!sport) return null;
+			const w = sharedView(sport, sportToday()).water;
+			save(db, {
+				...st,
+				water: [...st.water, hmNow()]
+			});
+			const glasses = Math.max(1, Math.ceil((w.target - w.ml) / w.glass / 3));
+			return `💧 Water ${(w.ml / 1e3).toFixed(1)} of ${(w.target / 1e3).toFixed(1)} L and the day is going. Drink ${glasses} glass${glasses === 1 ? "" : "es"} now. Send "water 250" after each.`;
+		});
+	}
+	/** No training yet by the evening (once a day). */
+	async function trainingLine() {
+		return mirror.write((db) => {
+			const svc = services.services(db);
+			const st = load(db, svc.wallet.today());
+			save(db, {
+				...st,
+				training: true
+			});
+			const slot = st.briefing?.plan.training;
+			const body = svc.body.state();
+			return `💪 No training today yet${slot ? ` (planned ${slot.time})` : ""}. Streak ${body.streak} day${body.streak === 1 ? "" : "s"}, ${body.workoutsThisWeek} this week. 20 minutes counts: start now.`;
+		});
+	}
+	return {
+		state,
+		setPrefs,
+		propose,
+		approve,
+		dayResult,
+		evening,
+		setTop3,
+		weekly,
+		applyWeekly,
+		waterLine,
+		trainingLine
+	};
+}
 // src/renderer/src/web/webBots.ts
 var esc = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
@@ -9666,6 +10403,25 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			}).catch(() => null);
 		}
 	};
+	const rhythm = createRhythm({
+		mirror,
+		services,
+		todoist: todoist ?? null,
+		calendar: calendar ?? null,
+		ai: ai ?? null
+	});
+	/** Sends today's plan with Approve / Change / Redo. */
+	async function sendProposal(token, chat, note = "") {
+		const { plan, version } = await rhythm.propose(note);
+		const text = proposalText(plan, { version });
+		await tg(token, "sendMessage", {
+			chat_id: chat,
+			text,
+			parse_mode: "HTML",
+			reply_markup: PROPOSAL_KEYBOARD
+		});
+		return text;
+	}
 	const dayBounds = () => {
 		const s = /* @__PURE__ */ new Date();
 		s.setHours(0, 0, 0, 0);
@@ -9676,6 +10432,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	* a day, if there's no plan yet), with what's in your calendar.
 	*/
 	async function morningAfterWake(token, chat) {
+		const r = await rhythm.state().catch(() => null);
+		if (r?.prefs.on) {
+			if (!r.state.briefing && (/* @__PURE__ */ new Date()).getHours() < 12) await sendProposal(token, chat).catch(() => null);
+			return;
+		}
 		if (!await mirror.write((db) => {
 			const svc = services.services(db);
 			const today = svc.wallet.today();
@@ -10031,7 +10792,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps])\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw])\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -10047,6 +10808,53 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			parse_mode: "HTML",
 			...keyboard ? { reply_markup: keyboard } : {}
 		}).catch(() => null);
+		if (/^r[bvw]\|/.test(data)) {
+			if (!await markSeen(key)) return null;
+			const msg = String(cq.message?.text ?? "");
+			try {
+				if (data === "rb|a") {
+					await answer("Approving…");
+					const r = await rhythm.approve();
+					const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join("\n")}` : esc(r.done.join(" "));
+					await edit(text);
+					return text;
+				}
+				if (data === "rb|r") {
+					await answer("Making another plan…");
+					await edit(`${esc(msg)}\n\n🔄 <i>Making another one…</i>`);
+					return await sendProposal(update.__token, chat);
+				}
+				if (data === "rb|e" || data === "rv|e" || data === "rw|e") {
+					await answer("Tell me");
+					const ask = data === "rb|e" ? EDIT_ASK : data === "rv|e" ? TOP3_ASK : WEEK_ASK;
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text: ask,
+						reply_markup: {
+							force_reply: true,
+							input_field_placeholder: data === "rb|e" ? "No gym today; lab report first" : "One per line"
+						}
+					});
+					return ask;
+				}
+				if (data === "rv|k") {
+					await answer("Saved for tomorrow");
+					const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.`;
+					await edit(text);
+					return text;
+				}
+				if (data === "rw|a") {
+					const line = await rhythm.applyWeekly();
+					await answer("Week planned");
+					const text = `${esc(msg)}\n\n✅ ${esc(line)}`;
+					await edit(text);
+					return text;
+				}
+			} catch (e) {
+				await answer(e.message.slice(0, 190));
+			}
+			return null;
+		}
 		if (data.startsWith("td|")) {
 			if (!await mirror.write((db) => {
 				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
@@ -10882,6 +11690,34 @@ His note: ${note}`, { json: true }));
 		const said = text;
 		const chat = String(update.message?.chat?.id ?? "");
 		const asked = String(update.message?.reply_to_message?.text ?? "");
+		if (text && !text.startsWith("/") && chat && (asked.includes("What should change in today's plan?") || asked.includes("Tomorrow's top 3? One per line.") || asked.includes("Next week's 3 big tasks? One per line."))) {
+			if (!await markSeen(key)) return null;
+			if (!allowed(cfg, chat)) return null;
+			try {
+				if (asked.includes("What should change in today's plan?")) {
+					tg(update.__token, "sendChatAction", {
+						chat_id: chat,
+						action: "typing"
+					}).catch(() => null);
+					return await sendProposal(update.__token, chat, text);
+				}
+				const reply = asked.includes("Tomorrow's top 3? One per line.") ? `✅ Tomorrow's top 3:\n${(await rhythm.setTop3(text)).map((t, i) => `${i + 1}. ${esc(t)}`).join("\n")}` : `✅ ${esc(await rhythm.applyWeekly(text))}`;
+				await tg(update.__token, "sendMessage", {
+					chat_id: chat,
+					text: reply,
+					parse_mode: "HTML"
+				}).catch(() => null);
+				return reply;
+			} catch (e) {
+				const reply = `⚠️ ${esc(e.message)}`;
+				await tg(update.__token, "sendMessage", {
+					chat_id: chat,
+					text: reply,
+					parse_mode: "HTML"
+				}).catch(() => null);
+				return reply;
+			}
+		}
 		const prompted = !!text && !text.startsWith("/") && (asked.includes("What are your 1–3 must-dos today?") || /Evening review|One thing to change next week/.test(asked));
 		if (text && !text.startsWith("/") && asked.includes("What are your 1–3 must-dos today?")) text = `/plan ${text}`;
 		else if (text && !text.startsWith("/") && /Evening review|One thing to change next week/.test(asked)) text = `/review ${asked.includes("next week") ? "Next week: " : ""}${text}`;
@@ -11046,6 +11882,8 @@ His note: ${note}`, { json: true }));
 		handleUpdate,
 		/** The app's Coach page: the same brain and memory as the bots. */
 		think: (text, key = `app:${Date.now()}`, onStep) => think("mega", text, key, void 0, "app", onStep),
+		/** The daily rhythm (morning plan, reviews), for the tick and the app. */
+		rhythm,
 		config,
 		saveConfig: async (patch) => {
 			const next = {
@@ -12068,6 +12906,9 @@ async function handleTelegramUpdate(env, token, update) {
 async function runDaily(env, job) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { services, mirror } = await botsFor(env);
+	if (job === "morning" || job === "reask" || job === "evening") {
+		if (await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) return [];
+	}
 	const send = async (text, reply_markup, token = env.botToken) => {
 		const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 			method: "POST",
@@ -12261,6 +13102,11 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		list = afterSend(list, r.id, now);
 	} catch {}
 	if (list !== reminders) await mirror.write((db) => setSetting(db, REMINDERS, JSON.stringify(list)));
+	try {
+		await rhythmTick(env, now, send);
+	} catch (e) {
+		console.error("rhythm:", e);
+	}
 	const st = await mirror.read((db) => {
 		let nudge = {};
 		try {
@@ -12332,6 +13178,93 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	}
 	if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));
 	return sent;
+}
+/** What the rhythm sends now (each thing once a day; state in settings.coach_rhythm). */
+async function rhythmTick(env, now, send) {
+	const { bots, services, mirror } = await botsFor(env);
+	const f = await mirror.read((db) => {
+		const svc = services.services(db);
+		const today = svc.wallet.today(now);
+		const prefs = cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null"));
+		const state = rhythmFor(JSON.parse(getSetting(db, "coach_rhythm") || "null"), today);
+		const row = db.prepare("SELECT wake_time, created_at FROM sleep_logs WHERE day = ?").get(today);
+		const sl = svc.sleep;
+		let sport = null;
+		try {
+			sport = JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+		} catch {
+			sport = null;
+		}
+		const water = sport ? sharedView(sport, sportToday(now)).water : {
+			ml: 0,
+			target: 0
+		};
+		let paused = false;
+		try {
+			paused = JSON.parse(getSetting(db, "coach_nudges") || "{}").pausedDay === today;
+		} catch {
+			paused = false;
+		}
+		return {
+			prefs,
+			state,
+			facts: {
+				today,
+				time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+				weekday: now.getDay(),
+				wakeAt: row?.wake_time ?? null,
+				wakeTarget: targetForDay(today, sl.weekdayTarget(), sl.weekendTarget()),
+				waterMl: water.ml,
+				waterTarget: water.target,
+				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done"),
+				paused
+			}
+		};
+	});
+	const jobs = dueRhythm(f.state, f.prefs, f.facts);
+	for (const job of jobs) if (job === "briefing") {
+		const { plan, version } = await bots.rhythm.propose();
+		await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD);
+	} else if (job === "water") {
+		const line = await bots.rhythm.waterLine();
+		if (line) await send(line, { inline_keyboard: [[{
+			text: "😴 30 min",
+			callback_data: "ns|"
+		}, {
+			text: "⏸ Pause today",
+			callback_data: "np|"
+		}]] });
+	} else if (job === "training") await send(await bots.rhythm.trainingLine());
+	else if (job === "weekly") await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);
+	else if (job === "evening") {
+		await payTodoistDone(env, { since: localMidnight(0) }).catch(() => null);
+		const r = await bots.rhythm.evening();
+		const bonus = await mirror.write((db) => {
+			const svc = services.services(db);
+			const plan = svc.weekPlan.active();
+			if (!plan) return "";
+			const m = progressReport(svc.progress.input(null)).metrics.find((x) => x.id === plan.focus);
+			if (!m?.target || m.now < m.target) return "";
+			return payOnce(svc.wallet, `weekfocus:${plan.week}`, 50, `Week focus reached: ${m.label}`) ? `\n\n🏆 Week focus reached: <b>${m.label}</b> (${m.text}). +50 points.` : "";
+		});
+		await send(reviewText(r.result, r.score, r.lesson, r.top3) + bonus, r.top3.length ? REVIEW_KEYBOARD : void 0);
+	}
+}
+/** The app: today's rhythm (state), or an action on it. */
+async function coachRhythm(env, op) {
+	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	const { bots } = await botsFor(env);
+	if (op.action === "propose") await bots.rhythm.propose(String(op.note ?? "").slice(0, 500));
+	if (op.action === "approve") {
+		const r = await bots.rhythm.approve();
+		return {
+			...await bots.rhythm.state(),
+			done: r.done
+		};
+	}
+	if (op.action === "top3") await bots.rhythm.setTop3(String(op.note ?? ""));
+	if (op.action === "prefs") await bots.rhythm.setPrefs(op.prefs ?? {});
+	return bots.rhythm.state();
 }
 var localIsoHM = (iso) => {
 	const d = new Date(iso);
@@ -12425,4 +13358,4 @@ async function sportShared(env, body) {
 		error: "op must be state | water | reps | workout"
 	};
 }
-export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick, sportShared };
+export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, coachRhythm, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick, sportShared };

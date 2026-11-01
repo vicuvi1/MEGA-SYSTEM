@@ -12,6 +12,7 @@ import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
 import { ProgressCard } from './Progress'
 import { FunCard } from '../FunCard'
 import { DayTimeline } from '../DayTimeline'
+import { CoachPlan } from '../CoachPlan'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -73,7 +74,10 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         </>
       ),
     day: () => (
+      <>
+      <CoachPlan onChange={() => onChange()} />
       <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} />
+      </>
     ),
     progress: () => <ProgressCard onOpen={() => onGo('progress')} />,
     timeline: () => <DayTimeline onGo={onGo} />,

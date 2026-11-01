@@ -711,3 +711,28 @@
 .co-learn-row small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .co-learn-row .ta-act { opacity: 0.5; }
 .co-learn-row:hover .ta-act { opacity: 1; }
+
+/* Today: the coach's plan and the evening review */
+.cp { display: grid; gap: var(--s-2); }
+.cp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
+.cp-head h2 { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); margin: 0; }
+.cp-head h2 small { color: var(--muted); font-weight: 500; font-size: var(--t-xs); }
+.cp-headline { margin: 0; font-size: var(--t-sm); color: var(--muted); }
+.cp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s-3); }
+.cp-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+.cp-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--t-sm); }
+.cp-blocks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-sm); }
+.cp-blocks li { display: flex; gap: 10px; padding: 6px 8px; border-radius: 8px; background: rgb(var(--ink) / 0.04); }
+.cp-blocks li.train { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cp-time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 92px; }
+.cp-actions, .cp-edit { display: flex; flex-wrap: wrap; gap: 8px; }
+.cp-edit input { flex: 1 1 240px; min-width: 0; }
+.cp-empty { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+.cp-empty h2 { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); margin: 0 0 4px; }
+.cp-score { font-family: var(--display); font-size: var(--t-xl); font-weight: 600; }
+.cp-score.good { color: var(--accent-text); }
+.cp-score.low { color: var(--red); }
+.cp-lesson { margin: 0; font-size: var(--t-sm); }
+.co-rhythm-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: var(--s-2); }
+.co-rhythm-rows label { display: grid; gap: 4px; font-size: var(--t-xs); color: var(--muted); }
+.co-check { display: flex !important; align-items: center; gap: 8px; font-size: var(--t-sm); color: var(--text); }

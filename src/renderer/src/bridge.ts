@@ -19,6 +19,7 @@ export interface GoogleStatus {
 }
 import { createTursoWebBridge } from './tursoWebBridge'
 import type { CoachMind } from '@core/coachMind'
+import type { RhythmPrefs, RhythmState } from '@core/rhythm'
 
 export type Bridge = LifeApi & {
   onLocked(cb: () => void): void
@@ -35,6 +36,7 @@ export type Bridge = LifeApi & {
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
     mind?(): Promise<CoachMind>
+    rhythm?(action?: 'state' | 'propose' | 'approve' | 'top3' | 'prefs', note?: string, prefs?: Partial<RhythmPrefs>): Promise<{ state: RhythmState; prefs: RhythmPrefs; done?: string[] }>
     setMind?(m: CoachMind): Promise<void>
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>
     saveProfile(p: { about: string; goals: string[]; rules: string[] }): Promise<{ about: string; goals: string[]; rules: string[] }>

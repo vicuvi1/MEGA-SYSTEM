@@ -1,0 +1,370 @@
+// The coach's daily rhythm (core/rhythm.ts holds the pure rules): it proposes
+// the day, puts an approved plan into your calendar and Todoist, writes the
+// evening and Sunday reviews, and the water and training nudges. Used by the
+// tick on the server (Telegram, Mega) and by the app (Today, Coach).
+import { addDays } from '@core/dates'
+import { progressReport, financeSpending } from '@core/progress'
+import { sharedView, sportToday } from '@core/sportShared'
+import { isStarred, type TodoTask } from '@core/todoist'
+import {
+  RHYTHM,
+  RHYTHM_PREFS,
+  cleanPrefs,
+  cleanProposal,
+  dayScore,
+  focusName,
+  localProposal,
+  readLines,
+  rhythmFor,
+  suggestWeekFocus,
+  weakest,
+  type DayProposal,
+  type DayResult,
+  type RhythmPrefs,
+  type RhythmState
+} from '@core/rhythm'
+import { getSetting, setSetting } from '../../../main/settings'
+import { financeStateFrom, lifeContext, loadMind, loadProfile, sportState } from './botBrain'
+import { mindText } from '@core/coachMind'
+import type { Mirror } from './mirror'
+import type { AskModel, CalendarLike, TodoistLike } from './webBots'
+import type { WebServices } from './webServices'
+
+export interface RhythmDeps {
+  mirror: Mirror
+  services: WebServices
+  todoist: TodoistLike | null
+  calendar: CalendarLike | null
+  ai: AskModel | null
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
+const hmNow = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+
+function readJson<T>(db: any, key: string, fallback: T): T {
+  try {
+    return JSON.parse(getSetting(db, key) || 'null') ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+export function createRhythm({ mirror, services, todoist, calendar, ai }: RhythmDeps) {
+  const load = (db: any, today: string): RhythmState => rhythmFor(readJson(db, RHYTHM, null), today)
+  const save = (db: any, s: RhythmState) => setSetting(db, RHYTHM, JSON.stringify(s))
+  const dayBounds = () => {
+    const s = new Date()
+    s.setHours(0, 0, 0, 0)
+    return [s.toISOString(), new Date(s.getTime() + 86400000).toISOString()] as const
+  }
+
+  async function state(): Promise<{ state: RhythmState; prefs: RhythmPrefs }> {
+    return mirror.read((db) => {
+      const today = services.services(db).wallet.today()
+      return { state: load(db, today), prefs: cleanPrefs(readJson(db, RHYTHM_PREFS, null)) }
+    })
+  }
+
+  async function setPrefs(p: Partial<RhythmPrefs>): Promise<RhythmPrefs> {
+    return mirror.write((db) => {
+      const next = cleanPrefs({ ...cleanPrefs(readJson(db, RHYTHM_PREFS, null)), ...p })
+      setSetting(db as any, RHYTHM_PREFS, JSON.stringify(next))
+      return next
+    })
+  }
+
+  /** Context for the model: the same picture the coach sees in chat. */
+  async function contextFor(events: any[] | null, todoToday: TodoTask[] | null, upcoming: TodoTask[] | null) {
+    return mirror.read((db) => {
+      const svc = services.services(db)
+      return [lifeContext(svc, db, { finance: financeStateFrom(db, null), todoToday, upcoming, events }), mindText(loadMind(db), svc.wallet.today()), `His goals: ${loadProfile(db).goals.join('; ')}`].filter(Boolean).join('\n')
+    })
+  }
+
+  /** A plan for today (a new version when you ask to change or redo it). */
+  async function propose(note = ''): Promise<{ plan: DayProposal; version: number }> {
+    const now = new Date()
+    const [events, tasks, upcoming] = await Promise.all([
+      calendar ? calendar.events(...dayBounds()).catch(() => []) : Promise.resolve([]),
+      todoist ? todoist.today().catch(() => [] as TodoTask[]) : Promise.resolve([] as TodoTask[]),
+      todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)
+    ])
+    const base = await mirror.read((db) => {
+      const svc = services.services(db)
+      const today = svc.wallet.today(now)
+      const st = load(db, today)
+      const sport = sportState(db)
+      const water = sport ? sharedView(sport, sportToday()).water.target : 2700
+      const workoutDone = (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done')
+      return { today, st, water, workoutDone }
+    })
+    const fallback = localProposal({
+      today: base.today,
+      now: hmNow(now),
+      events,
+      tasks: tasks.map((t) => ({ content: t.content, starred: isStarred(t), priority: t.priority, due: t.due })),
+      top3: base.st.tomorrow?.day === base.today ? base.st.tomorrow.top3 : [],
+      waterTarget: base.water,
+      workoutDone: base.workoutDone
+    })
+    let plan = fallback
+    if (ai) {
+      try {
+        const context = await contextFor(events, tasks, upcoming)
+        const prev = base.st.briefing?.plan
+        const prompt = [
+          "You are MEGA, Victor's head coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
+          `It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
+          'headline: one short line with numbers ("3 must-dos · 2h40 focus · gym 18:00").',
+          note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : '',
+          `A simple starting point (improve it): ${JSON.stringify(fallback)}`,
+          'Answer ONLY with JSON: {"headline": string, "mustdos": string[], "blocks": [{"title": string, "start": "HH:MM", "minutes": number}], "training": {"time": "HH:MM", "what": string} | null, "waterMl": number}',
+          '',
+          '== Victor right now ==',
+          context
+        ]
+          .filter(Boolean)
+          .join('\n')
+        const raw = await ai(prompt, { json: true })
+        const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
+        plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now))
+      } catch {
+        plan = fallback
+      }
+    }
+    return mirror.write((db) => {
+      const st = load(db, plan.day)
+      const version = (st.briefing?.version ?? 0) + 1
+      save(db, { ...st, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version } })
+      return { plan, version }
+    })
+  }
+
+  /** Approved: blocks and training into the calendar, must-dos on Today (starred in Todoist). */
+  async function approve(): Promise<{ ok: boolean; done: string[]; plan?: DayProposal }> {
+    const cur = await mirror.read((db) => load(db, services.services(db).wallet.today()).briefing)
+    if (!cur) return { ok: false, done: ['No plan to approve yet'] }
+    if (cur.status === 'approved') return { ok: true, done: ['Already approved'], plan: cur.plan }
+    const p = cur.plan
+    const done: string[] = []
+    // Mark first so a double tap doesn't make the blocks twice.
+    await mirror.write((db) => {
+      const st = load(db, p.day)
+      if (st.briefing) save(db, { ...st, briefing: { ...st.briefing, status: 'approved' } })
+    })
+    if (calendar) {
+      let made = 0
+      const items = [...p.blocks.map((b) => ({ title: b.title, start: b.start, minutes: b.minutes })), ...(p.training ? [{ title: `💪 ${p.training.what}`, start: p.training.time, minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45 }] : [])]
+      for (const b of items) {
+        const start = new Date(`${p.day}T${b.start}:00`)
+        const ok = await calendar
+          .create({ title: b.title, start: start.toISOString(), end: new Date(start.getTime() + b.minutes * 60000).toISOString(), description: 'Planned with your coach in Life System' })
+          .then(() => true)
+          .catch(() => false)
+        if (ok) made++
+      }
+      if (items.length) done.push(made ? `🗓 ${made} block${made === 1 ? '' : 's'} in your calendar` : '⚠️ Calendar: blocks not added')
+    } else if (p.blocks.length) done.push('⚠️ Connect Google Calendar to get the blocks in your calendar')
+    if (p.mustdos.length) {
+      const added = await mirror.write((db) => {
+        const svc = services.services(db)
+        const plan = svc.focus.plan(p.day)
+        const have = new Set(plan.items.map((x) => x.text.toLowerCase()))
+        const fresh = p.mustdos.filter((m) => !have.has(m.toLowerCase()))
+        if (fresh.length) svc.focus.setPlan([...plan.items.map((x) => x.text), ...fresh])
+        return fresh
+      })
+      if (todoist) {
+        const tasks = await todoist.today().catch(() => [] as TodoTask[])
+        for (const m of added) {
+          const t = tasks.find((x) => x.content.trim().toLowerCase() === m.toLowerCase())
+          if (t && todoist.update) await todoist.update(t.id, { labels: [...new Set([...(t.labels ?? []), 'today'])] }).catch(() => null)
+          else if (!t) await todoist.quickAdd(`${m} today @today`).catch(() => null)
+        }
+      }
+      done.push(`⭐ ${p.mustdos.length} must-do${p.mustdos.length === 1 ? '' : 's'} on Today`)
+    }
+    return { ok: true, done, plan: p }
+  }
+
+  /** Planned vs done today. */
+  async function dayResult(): Promise<DayResult> {
+    return mirror.read((db) => {
+      const svc = services.services(db)
+      const today = svc.wallet.today()
+      const st = load(db, today)
+      const f = svc.focus.state()
+      const plan = svc.focus.plan(today)
+      const sport = sportState(db)
+      const water = sport ? sharedView(sport, sportToday()).water : { ml: 0, target: 2700 }
+      const blocks = st.briefing?.status === 'approved' ? st.briefing.plan.blocks : []
+      return {
+        mustdosDone: plan.items.filter((x) => x.done).length,
+        mustdosTotal: plan.items.length,
+        focusMin: f.todayMin,
+        plannedFocusMin: blocks.reduce((t, b) => t + b.minutes, 0),
+        blocksDone: 0,
+        blocksPlanned: 0,
+        waterMl: water.ml,
+        waterTarget: water.target,
+        workoutDone: (svc.wallet.summary().todayRules ?? []).includes('body.workout_done'),
+        trainingPlanned: !!st.briefing?.plan.training
+      }
+    })
+  }
+
+  /** The evening review: the score, one lesson, tomorrow's top 3 (saved for the morning plan). */
+  async function evening(): Promise<{ result: DayResult; score: number; lesson: string; top3: string[] }> {
+    const result = await dayResult()
+    const score = dayScore(result)
+    const [open, tomorrowTasks] = await Promise.all([
+      mirror.read((db) => {
+        const svc = services.services(db)
+        return svc.focus.plan(svc.wallet.today()).items.filter((x) => !x.done).map((x) => x.text)
+      }),
+      todoist?.upcoming ? todoist.upcoming(2).catch(() => [] as TodoTask[]) : Promise.resolve([] as TodoTask[])
+    ])
+    const today = await mirror.read((db) => services.services(db).wallet.today())
+    const tomorrow = addDays(today, 1)
+    const nextUp = tomorrowTasks.filter((t) => t.due && t.due <= tomorrow).sort((a, b) => b.priority - a.priority).map((t) => t.content)
+    let lesson = weakest(result)
+    let top3 = [...new Set([...open, ...nextUp])].slice(0, 3)
+    if (ai) {
+      try {
+        const context = await contextFor(null, null, tomorrowTasks)
+        const raw = await ai(
+          [
+            "You are MEGA, Victor's head coach. It's his evening review. Be honest and short.",
+            `Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join('; ') || 'none'}. Due tomorrow in Todoist: ${nextUp.join('; ') || 'nothing'}.`,
+            'lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow\'s 3 most important things (short, as tasks).',
+            'Answer ONLY with JSON: {"lesson": string, "top3": string[]}',
+            '',
+            context
+          ].join('\n'),
+          { json: true }
+        )
+        const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
+        if (typeof j.lesson === 'string' && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240)
+        const t = (Array.isArray(j.top3) ? j.top3 : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)
+        if (t.length) top3 = t
+      } catch {
+        /* the plain review */
+      }
+    }
+    await mirror.write((db) => {
+      const st = load(db, today)
+      save(db, { ...st, evening: { sentAt: new Date().toISOString(), score, top3, lesson }, tomorrow: { day: tomorrow, top3 } })
+    })
+    return { result, score, lesson, top3 }
+  }
+
+  async function setTop3(text: string): Promise<string[]> {
+    const top3 = readLines(text)
+    await mirror.write((db) => {
+      const today = services.services(db).wallet.today()
+      const st = load(db, today)
+      save(db, { ...st, tomorrow: { day: addDays(today, 1), top3 } })
+    })
+    return top3
+  }
+
+  /** The Sunday review: the week in numbers, a win, a leak, next week's focus and big 3. */
+  async function weekly(): Promise<{ score: number; prevScore: number; lines: string[]; win: string; leak: string; focus: string; note: string; big3: string[] }> {
+    const { report, today } = await mirror.read((db) => {
+      const svc = services.services(db)
+      const input = svc.progress.input(financeSpending(financeStateFrom(db, null)))
+      return { report: progressReport(input), today: svc.wallet.today() }
+    })
+    const lines = report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`)
+    const ranked = report.metrics.filter((m) => m.target && m.id !== 'spend').map((m) => ({ m, k: m.now / (m.target as number) })).sort((a, b) => b.k - a.k)
+    const upcoming = todoist?.upcoming ? await todoist.upcoming(8).catch(() => [] as TodoTask[]) : []
+    let out = {
+      score: report.score,
+      prevScore: report.prevScore,
+      lines,
+      win: ranked[0] ? `${ranked[0].m.label}: ${ranked[0].m.text}` : 'You showed up.',
+      leak: ranked.length ? `${ranked[ranked.length - 1].m.label}: ${ranked[ranked.length - 1].m.text}${ranked[ranked.length - 1].m.target ? ` of ${ranked[ranked.length - 1].m.targetText}` : ''}` : 'Not enough data yet.',
+      focus: suggestWeekFocus(report.metrics as any),
+      note: '',
+      big3: [...upcoming].sort((a, b) => b.priority - a.priority).slice(0, 3).map((t) => t.content)
+    }
+    if (ai) {
+      try {
+        const context = await contextFor(null, null, upcoming)
+        const raw = await ai(
+          [
+            "You are MEGA, Victor's head coach. Sunday review of his week. Honest, short, numbers.",
+            `Week score ${report.score}/100 (last week ${report.prevScore}). ${lines.join('; ')}.`,
+            'win: the best thing this week (with its number). leak: the biggest leak (with its number). focus: next week\'s ONE area, one of focus|wake|sport|clean|todoist|spend|mustdo. note: his target in a few words ("up at 7:00 every day"). big3: the 3 big tasks for next week (from his deadlines and goals).',
+            'Answer ONLY with JSON: {"win": string, "leak": string, "focus": string, "note": string, "big3": string[]}',
+            '',
+            context
+          ].join('\n'),
+          { json: true }
+        )
+        const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
+        const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)
+        out = {
+          ...out,
+          win: String(j.win ?? '').trim().slice(0, 200) || out.win,
+          leak: String(j.leak ?? '').trim().slice(0, 200) || out.leak,
+          focus: ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo'].includes(j.focus) ? j.focus : out.focus,
+          note: String(j.note ?? '').trim().slice(0, 140),
+          big3: big3.length ? big3 : out.big3
+        }
+      } catch {
+        /* the plain review */
+      }
+    }
+    await mirror.write((db) => {
+      const st = load(db, today)
+      save(db, { ...st, weekly: { day: today, focus: out.focus, note: out.note, big3: out.big3 } })
+    })
+    return out
+  }
+
+  /** "Use this plan": next week's focus and big 3 (typed ones replace the suggestion). */
+  async function applyWeekly(typed?: string): Promise<string> {
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const st = load(db, svc.wallet.today())
+      const w = st.weekly
+      if (!w) throw new Error('No weekly review yet')
+      const big3 = typed ? readLines(typed) : w.big3
+      if (!big3.length) throw new Error('Give at least one big task')
+      const plan = svc.weekPlan.save({ focus: w.focus as any, note: w.note, big3: big3.map((text) => ({ text, done: false })) })
+      if (typed) save(db, { ...st, weekly: { ...w, big3 } })
+      return `🗓 Next week: ${focusName(plan.focus)} · ${plan.big3.map((b) => b.text).join(' / ')}`
+    })
+  }
+
+  /** Water behind pace: one line with the numbers and what to do. */
+  async function waterLine(): Promise<string | null> {
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const st = load(db, svc.wallet.today())
+      const sport = sportState(db)
+      if (!sport) return null
+      const w = sharedView(sport, sportToday()).water
+      save(db, { ...st, water: [...st.water, hmNow()] })
+      const glasses = Math.max(1, Math.ceil((w.target - w.ml) / w.glass / 3))
+      return `💧 Water ${(w.ml / 1000).toFixed(1)} of ${(w.target / 1000).toFixed(1)} L and the day is going. Drink ${glasses} glass${glasses === 1 ? '' : 'es'} now. Send "water 250" after each.`
+    })
+  }
+
+  /** No training yet by the evening (once a day). */
+  async function trainingLine(): Promise<string> {
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const st = load(db, svc.wallet.today())
+      save(db, { ...st, training: true })
+      const slot = st.briefing?.plan.training
+      const body = svc.body.state()
+      return `💪 No training today yet${slot ? ` (planned ${slot.time})` : ''}. Streak ${body.streak} day${body.streak === 1 ? '' : 's'}, ${body.workoutsThisWeek} this week. 20 minutes counts: start now.`
+    })
+  }
+
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, trainingLine }
+}
+
+export type Rhythm = ReturnType<typeof createRhythm>

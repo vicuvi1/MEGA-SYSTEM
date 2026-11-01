@@ -27,6 +27,7 @@ import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered a
 import { isFocusBlock } from '@core/dayTime'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
+import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText } from '@core/rhythm'
 
 export { createTodoistApi }
 export { GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, localIso } from './googleCalendar'
@@ -173,6 +174,11 @@ export type DailyJob = 'morning' | 'reask' | 'midday' | 'evening' | 'night'
 export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string>; appUrl?: string; sleepBotToken?: string }, job: DailyJob): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { services, mirror } = await botsFor(env)
+  // The daily rhythm (the tick) sends the morning plan and the evening and Sunday reviews now.
+  if (job === 'morning' || job === 'reask' || job === 'evening') {
+    const on = await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db as any, RHYTHM_PREFS) || 'null')).on).catch(() => true)
+    if (on) return []
+  }
   const send = async (text: string, reply_markup?: unknown, token = env.botToken) => {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -352,6 +358,13 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   }
   if (list !== reminders) await mirror.write((db) => setSetting(db as any, REMINDERS_KEY, JSON.stringify(list)))
 
+  // The daily rhythm: morning plan, water and training nudges, evening and Sunday reviews.
+  try {
+    await rhythmTick(env, now, send)
+  } catch (e) {
+    console.error('rhythm:', e)
+  }
+
   // 2) A study block in your calendar starts now, and 3) follow-ups when slipping.
   const st = await mirror.read((db) => {
     let nudge: NudgeState = {}
@@ -409,6 +422,90 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   }
   if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db as any, NUDGES_KEY, JSON.stringify(nudge)))
   return sent
+}
+
+/** What the rhythm sends now (each thing once a day; state in settings.coach_rhythm). */
+async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown) => Promise<void>): Promise<void> {
+  const { bots, services, mirror } = await botsFor(env)
+  const f = await mirror.read((db) => {
+    const svc = services.services(db)
+    const today = svc.wallet.today(now)
+    const prefs = cleanPrefs(JSON.parse(getSetting(db as any, RHYTHM_PREFS) || 'null'))
+    const state = rhythmFor(JSON.parse(getSetting(db as any, RHYTHM) || 'null'), today)
+    const row = db.prepare('SELECT wake_time, created_at FROM sleep_logs WHERE day = ?').get(today) as { wake_time?: string } | undefined
+    const sl = svc.sleep
+    let sport: any = null
+    try {
+      sport = JSON.parse(getSetting(db as any, 'sport_tracker_json') || 'null')?.data ?? null
+    } catch {
+      sport = null
+    }
+    const water = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: 0 }
+    let paused = false
+    try {
+      paused = JSON.parse(getSetting(db as any, NUDGES_KEY) || '{}').pausedDay === today
+    } catch {
+      paused = false
+    }
+    return {
+      prefs,
+      state,
+      facts: {
+        today,
+        time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+        weekday: now.getDay(),
+        wakeAt: row?.wake_time ?? null,
+        wakeTarget: targetForDay(today, sl.weekdayTarget(), sl.weekendTarget()),
+        waterMl: water.ml,
+        waterTarget: water.target,
+        workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done'),
+        paused
+      }
+    }
+  })
+  const jobs = dueRhythm(f.state, f.prefs, f.facts)
+  for (const job of jobs) {
+    if (job === 'briefing') {
+      // Mark it first: a slow model must not make two plans.
+      const { plan, version } = await bots.rhythm.propose()
+      await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD)
+    } else if (job === 'water') {
+      const line = await bots.rhythm.waterLine()
+      if (line) await send(line, { inline_keyboard: [[{ text: '😴 30 min', callback_data: 'ns|' }, { text: '⏸ Pause today', callback_data: 'np|' }]] })
+    } else if (job === 'training') {
+      await send(await bots.rhythm.trainingLine())
+    } else if (job === 'weekly') {
+      const w = await bots.rhythm.weekly()
+      await send(weeklyText(w), WEEKLY_KEYBOARD)
+    } else if (job === 'evening') {
+      await payTodoistDone(env, { since: localMidnight(0) }).catch(() => null)
+      const r = await bots.rhythm.evening()
+      // Reaching the week's chosen focus pays a bonus once.
+      const bonus = await mirror.write((db) => {
+        const svc = services.services(db)
+        const plan = svc.weekPlan.active()
+        if (!plan) return ''
+        const m = progressReport(svc.progress.input(null)).metrics.find((x) => x.id === plan.focus)
+        if (!m?.target || m.now < m.target) return ''
+        return payOnce(svc.wallet, `weekfocus:${plan.week}`, WEEK_FOCUS_POINTS, `Week focus reached: ${m.label}`) ? `\n\n🏆 Week focus reached: <b>${m.label}</b> (${m.text}). +${WEEK_FOCUS_POINTS} points.` : ''
+      })
+      await send(reviewText(r.result, r.score, r.lesson, r.top3) + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
+    }
+  }
+}
+
+/** The app: today's rhythm (state), or an action on it. */
+export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs'; note?: string; prefs?: any }): Promise<any> {
+  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const { bots } = await botsFor(env)
+  if (op.action === 'propose') await bots.rhythm.propose(String(op.note ?? '').slice(0, 500))
+  if (op.action === 'approve') {
+    const r = await bots.rhythm.approve()
+    return { ...(await bots.rhythm.state()), done: r.done }
+  }
+  if (op.action === 'top3') await bots.rhythm.setTop3(String(op.note ?? ''))
+  if (op.action === 'prefs') await bots.rhythm.setPrefs(op.prefs ?? {})
+  return bots.rhythm.state()
 }
 
 const localIsoHM = (iso: string) => {

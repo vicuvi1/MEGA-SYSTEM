@@ -30,6 +30,7 @@ import type { CleanChange } from '@core/todoistClean'
 import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
 import { loadLog, loadMemory, loadMind, loadProfile, saveMemory, saveMind, saveProfile } from './web/botBrain'
 import type { CoachMind } from '@core/coachMind'
+import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -468,6 +469,26 @@ export function createTursoWebBridge(): Bridge {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
       },
       mind: async () => (await svcP).read((s) => loadMind(s.db)),
+      // The daily rhythm: today's plan from the coach (read here, actions on the server).
+      rhythm: async (action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' = 'state', note?: string, prefs?: Record<string, unknown>) => {
+        if (action === 'state') {
+          return (await svcP).read((s) => {
+            const read = (k: string) => {
+              try {
+                return JSON.parse(getSetting(s.db, k) || 'null')
+              } catch {
+                return null
+              }
+            }
+            return { state: rhythmFor(read(RHYTHM), s.wallet.today()), prefs: cleanPrefs(read(RHYTHM_PREFS)) }
+          })
+        }
+        const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'rhythm', action, note, prefs }) })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error || `Coach ${r.status}`)
+        void syncNow().catch(() => null)
+        return j
+      },
       setMind: async (m: CoachMind) => {
         await (await svcP).write((s) => saveMind(s.db, m))
       },
