@@ -57,3 +57,14 @@ describe('coach toolkit', () => {
     expect(shouldNudge({ day: '2026-11-01', count: 8 }, f, now)).toBe(false)
   })
 })
+
+describe('isCorrection', () => {
+  it('spots corrections', async () => {
+    const { isCorrection } = await import('./coachKit')
+    expect(isCorrection('Thags not money thats water')).toBe(true)
+    expect(isCorrection('wrong amount, it was 45')).toBe(true)
+    expect(isCorrection('undo that')).toBe(true)
+    expect(isCorrection('nu e bine, sterge')).toBe(true)
+    expect(isCorrection('plan my afternoon')).toBe(false)
+  })
+})

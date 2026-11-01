@@ -107,3 +107,12 @@ describe('coach part 2 actions', () => {
     expect(readAction('bigdone: 2')).toEqual({ kind: 'bigdone', index: 1 })
   })
 })
+
+describe('money fixes', () => {
+  it('reads delmoney and editmoney', () => {
+    expect(readAction('delmoney: m2')).toEqual({ kind: 'delmoney', ref: 'M2' })
+    expect(readAction('editmoney: M1 | amount=45,5; category=Food; account=Maib')).toEqual({ kind: 'editmoney', ref: 'M1', amount: 45.5, category: 'Food', account: 'Maib' })
+    expect(readAction('editmoney: M1')).toBeNull()
+    expect(readAction('delmoney: T2')).toBeNull()
+  })
+})

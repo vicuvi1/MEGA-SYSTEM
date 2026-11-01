@@ -120,3 +120,79 @@ export function moneyButton(db: Db, data: string, today: string): { text: string
   const what = kind === 'fa' ? `From ${accOf(state, arg).name}` : catOf(state, arg).name
   return { text: loggedText(state, t, today), keyboard: moneyKeyboard(state, t), toast: `✓ ${what}` }
 }
+
+// ---- The coach fixes money records (M1, M2… in its prompt) ---------------
+
+export interface MoneyRef {
+  id: string
+  line: string
+}
+
+/** The last records (newest first, last 3 days) the coach can point at. */
+export function recentMoney(db: Db, today: string, n = 8): MoneyRef[] {
+  const state = financeState(db)
+  if (!state) return []
+  const from = new Date(Date.parse(`${today}T12:00:00Z`) - 3 * 86400000).toISOString().slice(0, 10)
+  return state.tx
+    .filter((t: any) => typeof t.date === 'string' && t.date >= from)
+    .sort((a: any, b: any) => (b.date + String(b.createdAt ?? 0)).localeCompare(a.date + String(a.createdAt ?? 0)) || Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))
+    .slice(0, n)
+    .map((t: any) => ({
+      id: String(t.id),
+      line: `${t.date.slice(5)} ${t.type === 'income' ? '+' : '−'}${Math.round(Number(t.amount) / 100)} ${t.currency || state.settings.currency} · ${catOf(state, t.category)?.name || 'Other'}${t.note ? ` "${String(t.note).slice(0, 40)}"` : ''} · ${accOf(state, t.account)?.name || ''}`
+    }))
+}
+
+/** Removes a record (it syncs as deleted to every device). */
+export function deleteMoney(db: Db, id: string): string | null {
+  const state = financeState(db)
+  const t = state?.tx.find((x: any) => x.id === id)
+  if (!state || !t) return null
+  state.tx = state.tx.filter((x: any) => x.id !== id)
+  state.deleted = { ...(state.deleted || {}), [id]: Date.now() }
+  save(db, state)
+  return `${t.type === 'income' ? '+' : '−'}${Math.round(Number(t.amount) / 100)} ${t.currency || state.settings.currency} ${t.note || catOf(state, t.category)?.name || ''}`.trim()
+}
+
+const fuzzy = (list: any[], name: string) => {
+  const w = fold(name).replace(/[^\p{L}\p{N} ]/gu, '').trim()
+  if (!w) return null
+  return list.find((x) => fold(x.name).replace(/[^\p{L}\p{N} ]/gu, '').trim() === w) ?? list.find((x) => fold(x.name).includes(w) || w.includes(fold(x.name))) ?? null
+}
+
+/** Changes a record: amount (in whole units), category, account (by name), note, date. */
+export function editMoney(db: Db, id: string, patch: { amount?: number; category?: string; account?: string; note?: string; date?: string }): { ok: boolean; text: string } {
+  const state = financeState(db)
+  const t = state?.tx.find((x: any) => x.id === id)
+  if (!state || !t) return { ok: false, text: 'That record is no longer there' }
+  const changed: string[] = []
+  if (patch.amount != null && patch.amount > 0) {
+    t.amount = Math.round(patch.amount * 100)
+    t.base = Math.round(t.amount * (Number(t.rate) || 1))
+    changed.push(`${patch.amount} ${t.currency || state.settings.currency}`)
+  }
+  if (patch.category) {
+    const c = fuzzy(state.settings.categories.filter((x: any) => x.type === t.type && !x.archived), patch.category)
+    if (!c) return { ok: false, text: `No category called "${patch.category}"` }
+    t.category = c.id
+    changed.push(c.name)
+  }
+  if (patch.account) {
+    const a = fuzzy(state.settings.accounts.filter((x: any) => !x.archived), patch.account)
+    if (!a) return { ok: false, text: `No account called "${patch.account}"` }
+    t.account = a.id
+    changed.push(`from ${a.name}`)
+  }
+  if (patch.note != null) {
+    t.note = patch.note
+    changed.push(`"${patch.note}"`)
+  }
+  if (patch.date && /^\d{4}-\d{2}-\d{2}$/.test(patch.date)) {
+    t.date = patch.date
+    changed.push(patch.date)
+  }
+  if (!changed.length) return { ok: false, text: 'Nothing to change' }
+  t.updatedAt = Date.now()
+  save(db, state)
+  return { ok: true, text: changed.join(' · ') }
+}

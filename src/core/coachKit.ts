@@ -143,3 +143,9 @@ export function shouldNudge(st: NudgeState, f: NudgeFacts, now = new Date()): bo
 export function nudged(st: NudgeState, today: string, now = new Date()): NudgeState {
   return { ...st, lastAt: now.toISOString(), day: today, count: (st.day === today ? (st.count ?? 0) : 0) + 1, announced: st.day === today ? st.announced : [] }
 }
+
+/** He's saying something went wrong ("that's not money", "undo", "wrong amount", "nu e bine"). */
+export function isCorrection(text: string): boolean {
+  const t = text.toLowerCase()
+  return /\b(wrong|mistake|not money|not an expense|that'?s water|undo|delete (it|that)|remove (it|that)|fix (it|that)|incorrect|shouldn'?t (be|have)|didn'?t (spend|buy|pay)|greșit|gresit|nu e (bine|corect)|nu sunt bani|șterge|sterge|неправильно|удали|ошибка|не деньги)\b/.test(t) || /\bnot money\b|\bthats water\b|\bthat's water\b/.test(t.replace(/[^\w' ]/g, ''))
+}

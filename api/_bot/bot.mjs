@@ -8046,6 +8046,85 @@ function moneyButton(db, data, today) {
 		toast: `✓ ${what}`
 	};
 }
+/** The last records (newest first, last 3 days) the coach can point at. */
+function recentMoney(db, today, n = 8) {
+	const state = financeState(db);
+	if (!state) return [];
+	const from = (/* @__PURE__ */ new Date(Date.parse(`${today}T12:00:00Z`) - 2592e5)).toISOString().slice(0, 10);
+	return state.tx.filter((t) => typeof t.date === "string" && t.date >= from).sort((a, b) => (b.date + String(b.createdAt ?? 0)).localeCompare(a.date + String(a.createdAt ?? 0)) || Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0)).slice(0, n).map((t) => ({
+		id: String(t.id),
+		line: `${t.date.slice(5)} ${t.type === "income" ? "+" : "−"}${Math.round(Number(t.amount) / 100)} ${t.currency || state.settings.currency} · ${category(state, t.category)?.name || "Other"}${t.note ? ` "${String(t.note).slice(0, 40)}"` : ""} · ${account(state, t.account)?.name || ""}`
+	}));
+}
+/** Removes a record (it syncs as deleted to every device). */
+function deleteMoney(db, id) {
+	const state = financeState(db);
+	const t = state?.tx.find((x) => x.id === id);
+	if (!state || !t) return null;
+	state.tx = state.tx.filter((x) => x.id !== id);
+	state.deleted = {
+		...state.deleted || {},
+		[id]: Date.now()
+	};
+	save(db, state);
+	return `${t.type === "income" ? "+" : "−"}${Math.round(Number(t.amount) / 100)} ${t.currency || state.settings.currency} ${t.note || category(state, t.category)?.name || ""}`.trim();
+}
+var fuzzy = (list, name) => {
+	const w = fold(name).replace(/[^\p{L}\p{N} ]/gu, "").trim();
+	if (!w) return null;
+	return list.find((x) => fold(x.name).replace(/[^\p{L}\p{N} ]/gu, "").trim() === w) ?? list.find((x) => fold(x.name).includes(w) || w.includes(fold(x.name))) ?? null;
+};
+/** Changes a record: amount (in whole units), category, account (by name), note, date. */
+function editMoney(db, id, patch) {
+	const state = financeState(db);
+	const t = state?.tx.find((x) => x.id === id);
+	if (!state || !t) return {
+		ok: false,
+		text: "That record is no longer there"
+	};
+	const changed = [];
+	if (patch.amount != null && patch.amount > 0) {
+		t.amount = Math.round(patch.amount * 100);
+		t.base = Math.round(t.amount * (Number(t.rate) || 1));
+		changed.push(`${patch.amount} ${t.currency || state.settings.currency}`);
+	}
+	if (patch.category) {
+		const c = fuzzy(state.settings.categories.filter((x) => x.type === t.type && !x.archived), patch.category);
+		if (!c) return {
+			ok: false,
+			text: `No category called "${patch.category}"`
+		};
+		t.category = c.id;
+		changed.push(c.name);
+	}
+	if (patch.account) {
+		const a = fuzzy(state.settings.accounts.filter((x) => !x.archived), patch.account);
+		if (!a) return {
+			ok: false,
+			text: `No account called "${patch.account}"`
+		};
+		t.account = a.id;
+		changed.push(`from ${a.name}`);
+	}
+	if (patch.note != null) {
+		t.note = patch.note;
+		changed.push(`"${patch.note}"`);
+	}
+	if (patch.date && /^\d{4}-\d{2}-\d{2}$/.test(patch.date)) {
+		t.date = patch.date;
+		changed.push(patch.date);
+	}
+	if (!changed.length) return {
+		ok: false,
+		text: "Nothing to change"
+	};
+	t.updatedAt = Date.now();
+	save(db, state);
+	return {
+		ok: true,
+		text: changed.join(" · ")
+	};
+}
 // src/renderer/src/web/todoistCoins.ts
 function payTodoist(s, done) {
 	const paid = new Set(s.wallet.entries().map((e) => e.ref ?? "").filter((r) => r.startsWith("todoist:")));
@@ -8317,6 +8396,11 @@ function nudged(st, today, now = /* @__PURE__ */ new Date()) {
 		count: (st.day === today ? st.count ?? 0 : 0) + 1,
 		announced: st.day === today ? st.announced : []
 	};
+}
+/** He's saying something went wrong ("that's not money", "undo", "wrong amount", "nu e bine"). */
+function isCorrection(text) {
+	const t = text.toLowerCase();
+	return /\b(wrong|mistake|not money|not an expense|that'?s water|undo|delete (it|that)|remove (it|that)|fix (it|that)|incorrect|shouldn'?t (be|have)|didn'?t (spend|buy|pay)|greșit|gresit|nu e (bine|corect)|nu sunt bani|șterge|sterge|неправильно|удали|ошибка|не деньги)\b/.test(t) || /\bnot money\b|\bthats water\b|\bthat's water\b/.test(t.replace(/[^\w' ]/g, ""));
 }
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
@@ -8960,6 +9044,9 @@ Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+Money records (use the M-numbers; this is how you FIX a wrong log):
+- "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
+- Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
 Points and the week:
 - "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
 - "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
@@ -8978,6 +9065,8 @@ Reminders (Telegram, sent by you later):
 - "remind: <YYYY-MM-DD HH:MM> | <message>" a reminder at that time.
 - "checkin: <minutes from now> | <question>" you ask him later, and keep asking every 45 min until he answers (use it when he says he'll do something: hold him to it).
 Never invent amounts or times he didn't give. Never log the same thing twice.
+When he says something is wrong ("that's not money", "wrong amount", "undo that", "delete it"), FIX it with actions now (delmoney / editmoney / water: -250 …). Never answer "ignore it" or "I won't count it": the data stays wrong unless you act.
+Never invent appointments, reviews or times: only use times from his calendar, his plan, his reminders or what he said.
 IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.`;
 var LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
 - "spending <YYYY-MM-DD> <YYYY-MM-DD> [category]" totals and top categories (or one category).
@@ -9058,9 +9147,10 @@ var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 var WHEN = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/;
 var EREF = /^E\d{1,3}$/i;
 var TREF = /^T\d{1,3}$/i;
+var MREF = /^M\d{1,2}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
-	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 400);
@@ -9151,6 +9241,29 @@ function readAction(line) {
 			minutes,
 			text: parts.slice(1).join(" | ").slice(0, 300)
 		} : null;
+	}
+	if (kind === "delmoney") return MREF.test(parts[0]) ? {
+		kind: "delmoney",
+		ref: parts[0].toUpperCase()
+	} : null;
+	if (kind === "editmoney") {
+		if (!MREF.test(parts[0])) return null;
+		const out = {
+			kind: "editmoney",
+			ref: parts[0].toUpperCase()
+		};
+		for (const kv of parts.slice(1).join("|").split(/;\s*/)) {
+			const mm = /^\s*(amount|category|account|note|date)\s*=\s*([\s\S]*)$/i.exec(kv);
+			if (!mm) continue;
+			const k = mm[1].toLowerCase();
+			const v = mm[2].trim();
+			if (k === "amount" && Number(v.replace(",", ".")) > 0) out.amount = Number(v.replace(",", "."));
+			if (k === "category" && v) out.category = v.slice(0, 40);
+			if (k === "account" && v) out.account = v.slice(0, 40);
+			if (k === "note") out.note = v.slice(0, 120);
+			if (k === "date" && DATE_RE.test(v)) out.date = v;
+		}
+		return out.amount || out.category || out.account || out.note != null || out.date ? out : null;
 	}
 	if (kind === "water") {
 		const ml = Math.round(Number(/^[+-]?\d{1,4}/.exec(arg.replace(/\s+/g, ""))?.[0]));
@@ -11210,7 +11323,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (!raw) return;
 			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
 		}).catch(() => null);
-		const { context, memory, profile, look, mind } = await mirror.read((db) => {
+		const { context, memory, profile, look, mind, money } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			let sessions = [];
@@ -11233,6 +11346,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				memory: loadMemory(db),
 				profile: loadProfile(db),
 				mind: mindText(loadMind(db), svc.wallet.today()),
+				money: recentMoney(db, svc.wallet.today()),
 				look: {
 					finance,
 					input: svc.progress.input(null, /* @__PURE__ */ new Date(), 400),
@@ -11250,10 +11364,13 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		let allEvents = events ?? [];
 		let areas = [];
 		let made = makeRefs(allEvents, allTasks);
-		const big = isBigAsk(text);
+		const moneyRefs = new Map(money.map((m, i) => [`M${i + 1}`, m.id]));
+		const moneyLines = money.length ? `Money records, newest first (use the M-number):\n${money.map((m, i) => `M${i + 1} ${m.line}`).join("\n")}` : "";
+		const correcting = isCorrection(text);
+		const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text);
 		if (big) step("Thinking it through");
-		const ask = (found) => ai(brainPrompt(persona, context, memory, text, media?.kind, profile, {
-			refs: made.lines,
+		const ask = (found, extraNote = "") => ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
+			refs: [made.lines, moneyLines].filter(Boolean).join("\n"),
 			found,
 			mind
 		}), {
@@ -11295,6 +11412,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}
 				made = makeRefs(allEvents, allTasks);
 				out = parseBrain(await ask(found.join("\n") || "Nothing found."));
+			}
+			if (correcting && !out.actions.length && !out.need?.length) {
+				step("Fixing it");
+				const again = parseBrain(await ask(void 0, "Note for the coach: he is correcting something that went wrong. Fix it NOW with actions (delmoney / editmoney / water / sleep / edit …), then confirm in one line. Words alone change nothing."));
+				if (again.actions.length) out = again;
 			}
 		} catch (e) {
 			return {
@@ -11433,6 +11555,26 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					})));
 				});
 				done.push(a.kind === "remind" ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== (/* @__PURE__ */ new Date()).toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ""}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`);
+				continue;
+			}
+			if (a.kind === "delmoney" || a.kind === "editmoney") {
+				const id = moneyRefs.get(a.ref);
+				if (!id) continue;
+				const line = await mirror.write((db) => {
+					if (a.kind === "delmoney") {
+						const what = deleteMoney(db, id);
+						if (!what) return "⚠️ That money record is already gone";
+						const life = takeLink(db, id);
+						if (life) try {
+							services.services(db).money.deleteExpense(life);
+						} catch {}
+						return `🗑 Deleted from Finance Helper: ${what}`;
+					}
+					const r = editMoney(db, id, a);
+					return r.ok ? `✏️ Money record fixed: ${r.text}` : `⚠️ ${r.text}`;
+				});
+				done.push(line);
+				expense = true;
 				continue;
 			}
 			if (a.kind === "water" || a.kind === "reps") {

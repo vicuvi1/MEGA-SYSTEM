@@ -21,14 +21,14 @@ import { addDays } from '@core/dates'
 import { formatMoney } from '@core/money'
 import { getSetting, setSetting } from '../../../main/settings'
 import { queueFinanceExpense } from './financeInbox'
-import { logMoney, moneyButton } from './financeBot'
+import { deleteMoney, editMoney, logMoney, moneyButton, recentMoney } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
 import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
 import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTime'
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
-import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, isBigAsk, makeRefs, type NudgeState, type Reminder } from '@core/coachKit'
+import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, isBigAsk, isCorrection, makeRefs, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, updateMemory, type BrainAction, type BrainOut } from './botBrain'
@@ -1023,7 +1023,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
       })
       .catch(() => null)
-    const { context, memory, profile, look, mind } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind, money } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       let sessions: LookupData['sessions'] = []
@@ -1037,6 +1037,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         memory: loadMemory(db),
         profile: loadProfile(db),
         mind: mindText(loadMind(db), svc.wallet.today()),
+        money: recentMoney(db as any, svc.wallet.today()),
         look: { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
       }
     })
@@ -1045,10 +1046,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let allEvents: CalEvent[] = events ?? []
     let areas: { key: string; name: string }[] = []
     let made = makeRefs(allEvents, allTasks)
-    const big = isBigAsk(text)
+    // Money records it can fix (M1 = newest).
+    const moneyRefs = new Map(money.map((m, i) => [`M${i + 1}`, m.id]))
+    const moneyLines = money.length ? `Money records, newest first (use the M-number):\n${money.map((m, i) => `M${i + 1} ${m.line}`).join('\n')}` : ''
+    // It thinks first for anything more than a quick log or a short chat line.
+    const correcting = isCorrection(text)
+    const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
-    const ask = (found?: string) =>
-      ai!(brainPrompt(persona, context, memory, text, media?.kind, profile, { refs: made.lines, found, mind }), { json: true, think: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+    const ask = (found?: string, extraNote = '') =>
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines].filter(Boolean).join('\n'), found, mind }), { json: true, think: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1081,6 +1087,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
         made = makeRefs(allEvents, allTasks)
         out = parseBrain(await ask(found.join('\n') || 'Nothing found.'))
+      }
+      // He's correcting a mistake but it answered with words only: once more, it must fix it.
+      if (correcting && !out.actions.length && !out.need?.length) {
+        step('Fixing it')
+        const again = parseBrain(await ask(undefined, 'Note for the coach: he is correcting something that went wrong. Fix it NOW with actions (delmoney / editmoney / water / sleep / edit …), then confirm in one line. Words alone change nothing.'))
+        if (again.actions.length) out = again
       }
     } catch (e) {
       return { ok: false, reply: `The coach couldn't think right now (${(e as Error).message.slice(0, 120)}). Try again in a minute.`, done: [] }
@@ -1197,6 +1209,30 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             setSetting(db as any, REMINDERS, JSON.stringify(addReminder(list, { at: at.toISOString(), text: a.text, kind: a.kind, follow: a.kind === 'checkin' })))
           })
           done.push(a.kind === 'remind' ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== new Date().toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ''}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`)
+          continue
+        }
+        if (a.kind === 'delmoney' || a.kind === 'editmoney') {
+          const id = moneyRefs.get(a.ref)
+          if (!id) continue
+          const line = await mirror.write((db) => {
+            if (a.kind === 'delmoney') {
+              const what = deleteMoney(db as any, id)
+              if (!what) return '⚠️ That money record is already gone'
+              const life = takeLink(db, id)
+              if (life) {
+                try {
+                  services.services(db).money.deleteExpense(life)
+                } catch {
+                  /* already gone */
+                }
+              }
+              return `🗑 Deleted from Finance Helper: ${what}`
+            }
+            const r = editMoney(db as any, id, a)
+            return r.ok ? `✏️ Money record fixed: ${r.text}` : `⚠️ ${r.text}`
+          })
+          done.push(line)
+          expense = true
           continue
         }
         if (a.kind === 'water' || a.kind === 'reps') {

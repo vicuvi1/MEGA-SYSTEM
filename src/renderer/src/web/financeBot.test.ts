@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { beforeAll, describe, expect, it } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
 import { BrowserDb } from './browserDb'
-import { financeState, logMoney, moneyButton } from './financeBot'
+import { deleteMoney, editMoney, financeState, logMoney, moneyButton, recentMoney } from './financeBot'
 
 const require = createRequire(import.meta.url)
 let SQL: SqlJsStatic
@@ -74,5 +74,25 @@ describe('money messages, the smart way', () => {
     const empty = new BrowserDb(new SQL.Database()) as any
     empty.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
     expect(logMoney(empty, 'taxi 45', 'b:9', TODAY)).toBeNull()
+  })
+})
+
+describe('the coach fixes money records', () => {
+  it('lists recent ones, edits and deletes them', () => {
+    const d = db()
+    const r = logMoney(d, 'water 250', 'b:9', TODAY)!
+    const list = recentMoney(d, TODAY)
+    expect(list[0].id).toBe(r.tx.id)
+    expect(list[0].line).toContain('250')
+    expect(list.some((m) => m.id === 'old')).toBe(false) // older than 3 days
+    const e = editMoney(d, r.tx.id, { amount: 25, account: 'wallet' })
+    expect(e.ok).toBe(true)
+    expect(financeState(d).tx.find((t: any) => t.id === r.tx.id)).toMatchObject({ amount: 2500, base: 2500, account: 'wallet' })
+    expect(editMoney(d, r.tx.id, { category: 'nonsense-xyz' }).ok).toBe(false)
+    expect(deleteMoney(d, r.tx.id)).toContain('25')
+    const st = financeState(d)
+    expect(st.tx.some((t: any) => t.id === r.tx.id)).toBe(false)
+    expect(st.deleted[r.tx.id]).toBeTruthy()
+    expect(deleteMoney(d, r.tx.id)).toBeNull()
   })
 })

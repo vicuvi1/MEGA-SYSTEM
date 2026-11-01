@@ -348,6 +348,9 @@ Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+Money records (use the M-numbers; this is how you FIX a wrong log):
+- "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
+- Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
 Points and the week:
 - "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
 - "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
@@ -366,6 +369,8 @@ Reminders (Telegram, sent by you later):
 - "remind: <YYYY-MM-DD HH:MM> | <message>" a reminder at that time.
 - "checkin: <minutes from now> | <question>" you ask him later, and keep asking every 45 min until he answers (use it when he says he'll do something: hold him to it).
 Never invent amounts or times he didn't give. Never log the same thing twice.
+When he says something is wrong ("that's not money", "wrong amount", "undo that", "delete it"), FIX it with actions now (delmoney / editmoney / water: -250 …). Never answer "ignore it" or "I won't count it": the data stays wrong unless you act.
+Never invent appointments, reviews or times: only use times from his calendar, his plan, his reminders or what he said.
 IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.`
 
 const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
@@ -470,16 +475,19 @@ export type BrainAction =
   | { kind: 'reward'; title: string; points: number; cost: number }
   | { kind: 'week'; focus?: string; note?: string; big3?: string[] }
   | { kind: 'bigdone'; index: number }
+  | { kind: 'delmoney'; ref: string }
+  | { kind: 'editmoney'; ref: string; amount?: number; category?: string; account?: string; note?: string; date?: string }
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const WHEN = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/
 const EREF = /^E\d{1,3}$/i
 const TREF = /^T\d{1,3}$/i
+const MREF = /^M\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -528,6 +536,23 @@ export function readAction(line: string): BrainAction | null {
   if (kind === 'checkin') {
     const minutes = Number(parts[0])
     return minutes >= 5 && minutes <= 720 && parts[1] ? { kind: 'checkin', minutes, text: parts.slice(1).join(' | ').slice(0, 300) } : null
+  }
+  if (kind === 'delmoney') return MREF.test(parts[0]) ? { kind: 'delmoney', ref: parts[0].toUpperCase() } : null
+  if (kind === 'editmoney') {
+    if (!MREF.test(parts[0])) return null
+    const out: Extract<BrainAction, { kind: 'editmoney' }> = { kind: 'editmoney', ref: parts[0].toUpperCase() }
+    for (const kv of parts.slice(1).join('|').split(/;\s*/)) {
+      const mm = /^\s*(amount|category|account|note|date)\s*=\s*([\s\S]*)$/i.exec(kv)
+      if (!mm) continue
+      const k = mm[1].toLowerCase()
+      const v = mm[2].trim()
+      if (k === 'amount' && Number(v.replace(',', '.')) > 0) out.amount = Number(v.replace(',', '.'))
+      if (k === 'category' && v) out.category = v.slice(0, 40)
+      if (k === 'account' && v) out.account = v.slice(0, 40)
+      if (k === 'note') out.note = v.slice(0, 120)
+      if (k === 'date' && DATE_RE.test(v)) out.date = v
+    }
+    return out.amount || out.category || out.account || out.note != null || out.date ? out : null
   }
   if (kind === 'water') {
     const ml = Math.round(Number(/^[+-]?\d{1,4}/.exec(arg.replace(/\s+/g, ''))?.[0]))
