@@ -259,7 +259,13 @@ function Celebrate({ g }: { g: Growth }) {
   useEffect(() => {
     life.progress
       ?.seenMilestones?.()
-      .then((seen) => {
+      .then(async (seen) => {
+        // A milestone shown by mistake (e.g. a miscounted total) can be celebrated again when it's really reached.
+        const stale = seen.filter((id) => g.milestones.some((m) => m.id === id && !m.at))
+        if (stale.length) {
+          seen = seen.filter((id) => !stale.includes(id))
+          await life.progress?.markMilestones?.(seen, true)
+        }
         const n = newMilestones(g.milestones, seen)
         // The first time ever, everything already reached is just recorded, not celebrated at once.
         if (!seen.length && n.length > 1) return life.progress?.markMilestones?.(n.map((m) => m.id))

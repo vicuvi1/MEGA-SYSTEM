@@ -26,7 +26,7 @@ export class ProgressService {
       focus: all('SELECT day, minutes FROM focus_sessions WHERE day >= ?', since),
       wakes: all<{ day: string; on_time: number }>('SELECT day, on_time FROM sleep_logs WHERE day >= ?', since).map((r) => ({ day: r.day, onTime: !!r.on_time })),
       workouts: all('SELECT day FROM workouts WHERE day >= ?', since),
-      discipline: all("SELECT kind, day FROM discipline_events WHERE kind IN ('start', 'reset')"),
+      discipline: all("SELECT kind, day FROM discipline_events WHERE kind IN ('start', 'reset') ORDER BY id"),
       todoist: all(
         "SELECT day FROM ledger WHERE rule_id = ? AND kind = 'earn' AND day >= ? AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)",
         TODOIST_RULE,

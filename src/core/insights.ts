@@ -44,13 +44,18 @@ export function weekday(day: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay()
 }
 
-/** Clean days: from the first 'start' on, minus days with a 'reset'. */
+/**
+ * Clean days, the same way the Discipline streak counts them: after your
+ * current start date (the latest 'start'), each day after it or after a
+ * reset is clean; the start day and reset days are not.
+ */
 export function cleanSet(ev: { kind: string; day: string }[], from: string, to: string): Set<string> {
   const out = new Set<string>()
-  const starts = ev.filter((e) => e.kind === 'start').map((e) => e.day).sort()
+  const starts = ev.filter((e) => e.kind === 'start').map((e) => e.day)
   if (!starts.length) return out
-  const resets = new Set(ev.filter((e) => e.kind === 'reset').map((e) => e.day))
-  for (let d = from < starts[0] ? starts[0] : from; d <= to; d = addDays(d, 1)) if (!resets.has(d)) out.add(d)
+  const start = starts[starts.length - 1]
+  const resets = new Set(ev.filter((e) => e.kind === 'reset' && e.day > start).map((e) => e.day))
+  for (let d = addDays(start > from ? start : addDays(from, -1), 1); d <= to; d = addDays(d, 1)) if (!resets.has(d)) out.add(d)
   return out
 }
 

@@ -49,4 +49,13 @@ describe('insights', () => {
     expect(clean.current).toBe(4) // 29, 30, 31, 1
     expect(clean.best).toBe(4)
   })
+
+  it('clean days follow the current streak (latest start, after resets), like Discipline', () => {
+    // An old start long ago, a reset, then a new start: the streak is 3 days (Oct 30, 31, Nov 1).
+    const r = insights(base({ discipline: [{ kind: 'start', day: '2026-09-01' }, { kind: 'reset', day: '2026-10-20' }, { kind: 'start', day: '2026-10-29' }] }))
+    const clean = r.streaks.find((s) => s.id === 'clean')!
+    expect(clean.current).toBe(3)
+    expect(r.days.filter((d) => d.parts.includes('Clean day')).length).toBe(3)
+  })
 })
+

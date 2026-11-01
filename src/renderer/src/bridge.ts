@@ -51,7 +51,7 @@ export type Bridge = LifeApi & {
     disconnect(): Promise<void>
   }
   /** "Am I improving?": the last 7 days against your usual week (web). */
-  progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights>; growth?(): Promise<Growth>; seenMilestones?(): Promise<string[]>; markMilestones?(ids: string[]): Promise<void> }
+  progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights>; growth?(): Promise<Growth>; seenMilestones?(): Promise<string[]>; markMilestones?(ids: string[], replace?: boolean): Promise<void> }
   /** Day templates for the calendar ("study day"), synced (web). */
   calTemplates?: { list(): Promise<DayTemplate[]>; save(t: DayTemplate): Promise<DayTemplate[]>; remove(name: string): Promise<DayTemplate[]> }
   /** Done / skipped marks on today's calendar blocks (web). */

@@ -76,13 +76,14 @@ function sum<T extends { day: string }>(rows: T[], from: string, to: string, val
   return t
 }
 
-/** Days in [from, to] after your streak started with no reset that day. */
+/** Clean days in [from, to], counted like the Discipline streak (after the current start, not on reset days). */
 function cleanDays(ev: { kind: string; day: string }[], from: string, to: string, today: string): number {
-  const starts = ev.filter((e) => e.kind === 'start').map((e) => e.day).sort()
+  const starts = ev.filter((e) => e.kind === 'start').map((e) => e.day)
   if (!starts.length) return 0
-  const resets = new Set(ev.filter((e) => e.kind === 'reset').map((e) => e.day))
+  const start = starts[starts.length - 1]
+  const resets = new Set(ev.filter((e) => e.kind === 'reset' && e.day > start).map((e) => e.day))
   let n = 0
-  for (let d = from; d <= to && d <= today; d = addDays(d, 1)) if (d >= starts[0] && !resets.has(d)) n++
+  for (let d = from; d <= to && d <= today; d = addDays(d, 1)) if (d > start && !resets.has(d)) n++
   return n
 }
 

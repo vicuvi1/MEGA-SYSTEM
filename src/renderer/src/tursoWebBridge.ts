@@ -487,7 +487,7 @@ export function createTursoWebBridge(): Bridge {
           return []
         }
       }),
-      markMilestones: async (ids: string[]) =>
+      markMilestones: async (ids: string[], replace = false) =>
         (await svcP).write((s) => {
           let cur: string[] = []
           try {
@@ -495,7 +495,7 @@ export function createTursoWebBridge(): Bridge {
           } catch {
             /* start over */
           }
-          setSetting(s.db, 'milestones_seen', JSON.stringify([...new Set([...cur, ...ids])].slice(-200)))
+          setSetting(s.db, 'milestones_seen', JSON.stringify([...new Set(replace ? ids : [...cur, ...ids])].slice(-200)))
         })
     },
     // Day templates for the calendar, synced everywhere.

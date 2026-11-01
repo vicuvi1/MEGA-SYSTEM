@@ -3797,13 +3797,14 @@ function sum(rows, from, to, value) {
 	for (const r of rows) if (r.day >= from && r.day <= to) t += value(r);
 	return t;
 }
-/** Days in [from, to] after your streak started with no reset that day. */
+/** Clean days in [from, to], counted like the Discipline streak (after the current start, not on reset days). */
 function cleanDays(ev, from, to, today) {
-	const starts = ev.filter((e) => e.kind === "start").map((e) => e.day).sort();
+	const starts = ev.filter((e) => e.kind === "start").map((e) => e.day);
 	if (!starts.length) return 0;
-	const resets = new Set(ev.filter((e) => e.kind === "reset").map((e) => e.day));
+	const start = starts[starts.length - 1];
+	const resets = new Set(ev.filter((e) => e.kind === "reset" && e.day > start).map((e) => e.day));
 	let n = 0;
-	for (let d = from; d <= to && d <= today; d = addDays$1(d, 1)) if (d >= starts[0] && !resets.has(d)) n++;
+	for (let d = from; d <= to && d <= today; d = addDays$1(d, 1)) if (d > start && !resets.has(d)) n++;
 	return n;
 }
 function progressReport(i) {
@@ -3975,13 +3976,18 @@ function weekday$2(day) {
 	const [y, m, d] = day.split("-").map(Number);
 	return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
-/** Clean days: from the first 'start' on, minus days with a 'reset'. */
+/**
+* Clean days, the same way the Discipline streak counts them: after your
+* current start date (the latest 'start'), each day after it or after a
+* reset is clean; the start day and reset days are not.
+*/
 function cleanSet(ev, from, to) {
 	const out = /* @__PURE__ */ new Set();
-	const starts = ev.filter((e) => e.kind === "start").map((e) => e.day).sort();
+	const starts = ev.filter((e) => e.kind === "start").map((e) => e.day);
 	if (!starts.length) return out;
-	const resets = new Set(ev.filter((e) => e.kind === "reset").map((e) => e.day));
-	for (let d = from < starts[0] ? starts[0] : from; d <= to; d = addDays$1(d, 1)) if (!resets.has(d)) out.add(d);
+	const start = starts[starts.length - 1];
+	const resets = new Set(ev.filter((e) => e.kind === "reset" && e.day > start).map((e) => e.day));
+	for (let d = addDays$1(start > from ? start : addDays$1(from, -1), 1); d <= to; d = addDays$1(d, 1)) if (!resets.has(d)) out.add(d);
 	return out;
 }
 /** Days in a row ending today (or yesterday, when today isn't done yet). */
@@ -4458,7 +4464,7 @@ var ProgressService = class {
 				onTime: !!r.on_time
 			})),
 			workouts: all("SELECT day FROM workouts WHERE day >= ?", since),
-			discipline: all("SELECT kind, day FROM discipline_events WHERE kind IN ('start', 'reset')"),
+			discipline: all("SELECT kind, day FROM discipline_events WHERE kind IN ('start', 'reset') ORDER BY id"),
 			todoist: all("SELECT day FROM ledger WHERE rule_id = ? AND kind = 'earn' AND day >= ? AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)", TODOIST_RULE, since),
 			mustdos: plans.flatMap((p) => {
 				try {
