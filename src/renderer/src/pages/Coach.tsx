@@ -10,6 +10,8 @@ import type { CoachMind } from '@core/coachMind'
 import type { RhythmPrefs } from '@core/rhythm'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { CoachScorecard, GoalPlans } from '../CoachPanels'
+import { CoachPlan } from '../CoachPlan'
+import type { CoachStatus } from '../web/coachStatus'
 
 type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string }
 type Profile = { about: string; goals: string[]; rules: string[] }
@@ -28,6 +30,14 @@ const QUICK = [
   "I'm procrastinating. Push me.",
   'Block 2 hours tomorrow for my most urgent task'
 ]
+const dayLabel = (iso: string) => {
+  const d = new Date(iso)
+  const t = new Date()
+  const y = new Date(t.getTime() - 86400000)
+  if (d.toDateString() === t.toDateString()) return 'Today'
+  if (d.toDateString() === y.toDateString()) return 'Yesterday'
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+}
 const timeOf = (iso: string) => {
   const d = new Date(iso)
   const today = new Date().toDateString() === d.toDateString()
@@ -43,7 +53,20 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [model, setModel] = useState<string | null>(null)
   const [mind, setMind] = useState<CoachMind | null>(null)
+  const [status, setStatus] = useState<CoachStatus | null>(null)
+  // The info drawer: open by default on wide screens, a slide-over on phones.
+  const [info, setInfo] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1400)
+  const [tab, setTab] = useState<'plan' | 'goals' | 'score' | 'about'>('plan')
   const end = useRef<HTMLDivElement>(null)
+  const loadStatus = useCallback(() => {
+    life.coach?.status?.().then(setStatus).catch(() => {})
+  }, [])
+  useEffect(() => {
+    loadStatus()
+    const t = setInterval(loadStatus, 60_000)
+    return () => clearInterval(t)
+  }, [loadStatus])
+  useLive(loadStatus)
 
   const load = useCallback(async () => {
     if (!life.coach) return setLog([])
@@ -95,6 +118,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: `I couldn't answer: ${(e as Error).message}`, at: new Date().toISOString() }])
     }
     setBusy(false)
+    loadStatus()
   }
 
   const saveFacts = async (next: { t: string; at: string }[]) => {
@@ -107,24 +131,132 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     if (r) setProfile(r)
   }
 
+  const doMove = async () => {
+    const m = status?.move
+    if (!m || busy) return
+    if (m.kind === 'focus') {
+      if (await act(() => life.focus.start(m.subject, m.minutes, null), `Focus started: ${m.subject} · ${m.minutes} min`)) loadStatus()
+    } else if (m.kind === 'running') {
+      if (await act(() => life.focus.stop(), 'Logged')) loadStatus()
+    } else if (m.kind === 'approve') {
+      if (await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')) loadStatus()
+    } else if (m.kind === 'plan') {
+      setBusy(true)
+      await act(() => life.coach!.rhythm!('propose'), 'Your plan is ready: see Plan')
+      setBusy(false)
+      setTab('plan')
+      setInfo(true)
+      loadStatus()
+    } else if (m.kind === 'answer') void send(`Done: ${m.promise}`)
+    else void send(m.kind === 'ask' && new Date().getHours() >= 21 ? 'How did today go? Review my day.' : 'What should I do right now? One thing.')
+  }
+  const moveLabel: Record<string, string> = { focus: '▶ Start', running: '⏹ Stop & log', approve: '✓ Approve', plan: 'Plan it', answer: '✅ Done', ask: 'Ask' }
+  const face = status?.face ?? '✦'
+
   return (
-    <div className="co">
-      <section className="panel co-chat">
-        <header className="co-head">
-          <h2>
-            <Icon name="spark" /> Your coach
-          </h2>
-          <span className="co-model" title="Same coach and memory as your Telegram bots">
-            <i /> {model ? model.replace(/^.*\//, '') : 'Same coach as your bots'}
+    <div className={`cx ${info ? 'info-open' : ''}`}>
+      <section className="cx-chat">
+        <header className="cx-head">
+          <button className={`cx-face mood-${status?.mood ?? 'chill'}`} onClick={() => setInfo((v) => !v)} title="Coach info" aria-label="Coach info">
+            {face}
+          </button>
+          <div className="cx-who">
+            <b>Mega</b>
+            <span className="cx-status">
+              {busy ? (
+                <span className="cx-typing-label">thinking…</span>
+              ) : status ? (
+                <>
+                  <i className={`cx-dot mood-${status.mood}`} /> {status.mood} · {status.why}
+                </>
+              ) : (
+                'your coach'
+              )}
+            </span>
+          </div>
+          <span className="cx-model" title="Quick answers on flash, hard ones on the strong model">
+            {model ? model.replace(/^.*\//, '').replace(/-\d{3,}$/, '') : 'coach'}
           </span>
+          <button className={`icon-btn cx-info-btn ${info ? 'on' : ''}`} onClick={() => setInfo((v) => !v)} aria-label="Show plan, goals and more" title="Plan, goals, score, about you">
+            <Icon name="sliders" />
+          </button>
         </header>
-        <div className="co-stream">
+
+        {status && (
+          <div className={`cx-pin move-${status.move.kind}`}>
+            <div className="cx-pin-text">
+              <small>Do this now</small>
+              <b>{status.move.title}</b>
+              <span>{status.move.sub}</span>
+            </div>
+            <div className="cx-pin-actions">
+              {status.move.kind === 'answer' && (
+                <button className="btn ghost small" disabled={busy} onClick={() => void send(`Not yet: ${(status.move as any).promise}`)}>
+                  Not yet
+                </button>
+              )}
+              <button className="btn primary" disabled={busy} onClick={() => void doMove()}>
+                {moveLabel[status.move.kind]}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {status && (
+          <div className="cx-strip" role="list">
+            <button role="listitem" className="cx-card" onClick={() => (setTab('plan'), setInfo(true))}>
+              <small>Plan</small>
+              <b>{status.plan.status === 'approved' ? '✓ Approved' : status.plan.status === 'proposed' ? 'Waiting for you' : 'Not yet'}</b>
+              <span>{status.plan.score != null ? `Day score ${status.plan.score}/100` : status.plan.status === 'none' ? 'Tap “Plan it”' : `${status.plan.mustdos} must-dos · ${status.plan.blocks} blocks`}</span>
+            </button>
+            <button role="listitem" className={`cx-card ${status.promises.missed ? 'warn' : ''}`} onClick={() => (setTab('score'), setInfo(true))}>
+              <small>Promises · 7 days</small>
+              <b>
+                {status.promises.kept} kept · {status.promises.missed} missed
+              </b>
+              <span>{status.promises.awaiting.length ? `${status.promises.awaiting.length} waiting for your answer` : 'Nothing waiting'}</span>
+            </button>
+            <button role="listitem" className="cx-card" onClick={() => (setTab('goals'), setInfo(true))}>
+              <small>Goals</small>
+              {status.goals.length ? (
+                <div className="cx-rings">
+                  {status.goals.slice(0, 3).map((g) => (
+                    <span key={g.id} className="cx-ring-wrap" title={`${g.title}: ${g.pct}% · ${g.perDayMin} min/day · ${g.daysLeft} days left`}>
+                      <span className={`cx-ring ${g.status.replace(' ', '-')}`} style={{ ['--p' as string]: `${g.pct}%` }}>
+                        <i>{g.pct}%</i>
+                      </span>
+                      <em>{g.subject}</em>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <b>None yet</b>
+                  <span>Add one with a deadline</span>
+                </>
+              )}
+            </button>
+            <div role="listitem" className="cx-card static">
+              <small>Today</small>
+              <b>
+                {Math.floor(status.today.focusMin / 60) ? `${Math.floor(status.today.focusMin / 60)}h ` : ''}
+                {status.today.focusMin % 60}m focus
+              </b>
+              <span>
+                {status.today.mustTotal ? `${status.today.mustDone}/${status.today.mustTotal} must-dos` : 'No must-dos'}
+                {status.today.waterTarget ? ` · 💧 ${(status.today.waterMl / 1000).toFixed(1)}/${(status.today.waterTarget / 1000).toFixed(1)} L` : ''}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="co-stream cx-stream">
           {log === null && <p className="hint">Loading your conversation…</p>}
           {log?.length === 0 && (
             <div className="co-hero">
-              <span className="co-avatar">✦</span>
-              <h3>What's on your mind?</h3>
-              <p>Your coach sees your day, calendar, Todoist, sleep, training and money, and can act: log things, plan blocks, add tasks. Honest, direct, on your side.</p>
+              <span className="co-avatar">{face}</span>
+              <h3>Talk to me like a friend.</h3>
+              <p>I see your day, calendar, Todoist, sleep, training and money, and I can act: log things, plan blocks, book goals, hold you to promises.</p>
               <div className="co-cards">
                 {CARDS.map((c) => (
                   <button key={c.title} className="co-card" disabled={busy} onClick={() => void send(c.ask)}>
@@ -135,65 +267,78 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               </div>
             </div>
           )}
-          {log?.map((m, i) => (
-            <div key={i} className={`co-row ${m.role}`}>
-            {m.role === 'coach' && (
-              <span className={`co-avatar ${m.mood && MOOD_FACE[m.mood as Mood] ? `mood mood-${m.mood}` : ''}`} title={m.mood ? `Coach is ${m.mood}` : undefined}>
-                {(m.mood && MOOD_FACE[m.mood as Mood]) || '✦'}
-              </span>
-            )}
-            <div className={`co-msg ${m.role} ${m.pending ? 'pending' : ''}`}>
-              <div className="co-meta">
-                {m.role === 'me' ? 'You' : `Coach${m.bot && m.bot !== 'mega' ? ` · ${BOT_LABEL[m.bot] ?? m.bot}` : ''}`}
-                <span> · {m.via === 'app' ? 'app' : 'Telegram'} · {timeOf(m.at)}</span>
-              </div>
-              <div className="co-bubble">
-                {m.pending ? (
-                  <div className="co-thinking">
-                    <span className="co-typing">
-                      <i />
-                      <i />
-                      <i />
+          {log?.map((m, i) => {
+            const prev = log[i - 1]
+            const day = new Date(m.at).toDateString()
+            const newDay = !prev || new Date(prev.at).toDateString() !== day
+            const grouped = !newDay && prev && prev.role === m.role && Date.parse(m.at) - Date.parse(prev.at) < 5 * 60000
+            return (
+              <div key={i} className="cx-item">
+                {newDay && <div className="cx-day">{dayLabel(m.at)}</div>}
+                <div className={`co-row ${m.role} ${grouped ? 'grouped' : ''}`}>
+                  {m.role === 'coach' && (
+                    <span className={`co-avatar ${m.mood && MOOD_FACE[m.mood as Mood] ? `mood mood-${m.mood}` : ''} ${grouped ? 'ghost' : ''}`} title={m.mood ? `Coach was ${m.mood}` : undefined}>
+                      {(m.mood && MOOD_FACE[m.mood as Mood]) || '✦'}
                     </span>
-                    {!!m.steps?.length && (
-                      <ul className="co-steps live">
-                        {m.steps.map((st, k) => (
-                          <li key={k} className={k === m.steps!.length - 1 ? 'now' : 'ok'}>
-                            {st}
-                            {k === m.steps!.length - 1 ? '…' : ''}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                  )}
+                  <div className={`co-msg ${m.role} ${m.pending ? 'pending' : ''}`}>
+                    <div className="co-bubble">
+                      {m.pending ? (
+                        <div className="co-thinking">
+                          <span className="co-typing">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                          {!!m.steps?.length && (
+                            <ul className="co-steps live">
+                              {m.steps.map((st, k) => (
+                                <li key={k} className={k === m.steps!.length - 1 ? 'now' : 'ok'}>
+                                  {st}
+                                  {k === m.steps!.length - 1 ? '…' : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          {!!m.steps?.length && <div className="co-steps-done">{m.steps.join(' · ')}</div>}
+                          {m.text}
+                        </>
+                      )}
+                      {!!m.done?.length && (
+                        <ul className="co-done">
+                          {m.done.map((d, k) => (
+                            <li key={k}>{d}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {!m.pending && (
+                        <span className="cx-time">
+                          {m.via === 'app' ? '' : 'Telegram · '}
+                          {new Date(m.at).toTimeString().slice(0, 5)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    {!!m.steps?.length && <div className="co-steps-done">{m.steps.join(' · ')}</div>}
-                    {m.text}
-                  </>
-                )}
-                {!!m.done?.length && (
-                  <ul className="co-done">
-                    {m.done.map((d, k) => (
-                      <li key={k}>{d}</li>
-                    ))}
-                  </ul>
-                )}
+                </div>
               </div>
-            </div>
-            </div>
-          ))}
+            )
+          })}
           <div ref={end} />
         </div>
-        {!!log?.length && <div className="co-quick">
-          {QUICK.map((q) => (
-            <button key={q} className="wp-chip" disabled={busy} onClick={() => void send(q)}>
-              {q}
-            </button>
-          ))}
-        </div>}
+        {!!log?.length && (
+          <div className="co-quick cx-quick">
+            {QUICK.map((q) => (
+              <button key={q} className="wp-chip" disabled={busy} onClick={() => void send(q)}>
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
         <form
-          className="co-composer"
+          className="co-composer cx-composer"
           onSubmit={(e) => {
             e.preventDefault()
             void send()
@@ -206,7 +351,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               e.target.style.height = 'auto'
               e.target.style.height = `${Math.min(180, e.target.scrollHeight)}px`
             }}
-            placeholder="Message your coach…"
+            placeholder="Message Mega…"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -221,29 +366,65 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         </form>
       </section>
 
-      <aside className="co-side">
-        <CoachScorecard />
-        <GoalPlans />
-        <RhythmSettings />
-        {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
-        {mind && (
-          <Learning
-            mind={mind}
-            onSave={async (next) => {
-              setMind(next)
-              await act(() => life.coach!.setMind!(next))
-            }}
-          />
-        )}
-        <section className="panel">
-          <header className="panel-head">
-            <h2>
-              <Icon name="list" /> What the coach remembers
-            </h2>
-          </header>
-          <p className="hint small">Picked up from your conversations. Edit or delete anything that's wrong or old.</p>
-          <FactList facts={facts} onSave={saveFacts} />
-        </section>
+      <div className="cx-scrim" onClick={() => setInfo(false)} aria-hidden />
+      <aside className="cx-info" aria-label="Coach info">
+        <div className="cx-info-head">
+          <span className={`cx-face big mood-${status?.mood ?? 'chill'}`}>{face}</span>
+          <div>
+            <b>Mega</b>
+            <small>Your coach · same memory on Telegram</small>
+          </div>
+          <button className="icon-btn cx-close" onClick={() => setInfo(false)} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <nav className="cx-tabs" role="tablist">
+          {(
+            [
+              ['plan', 'Plan'],
+              ['goals', 'Goals'],
+              ['score', 'Score'],
+              ['about', 'About you']
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="cx-tab-body">
+          {tab === 'plan' && (
+            <>
+              <CoachPlan onChange={loadStatus} />
+              <RhythmSettings />
+            </>
+          )}
+          {tab === 'goals' && <GoalPlans />}
+          {tab === 'score' && <CoachScorecard />}
+          {tab === 'about' && (
+            <>
+              {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
+              {mind && (
+                <Learning
+                  mind={mind}
+                  onSave={async (next) => {
+                    setMind(next)
+                    await act(() => life.coach!.setMind!(next))
+                  }}
+                />
+              )}
+              <section className="panel">
+                <header className="panel-head">
+                  <h2>
+                    <Icon name="list" /> What the coach remembers
+                  </h2>
+                </header>
+                <p className="hint small">Picked up from your conversations. Edit or delete anything that's wrong or old.</p>
+                <FactList facts={facts} onSave={saveFacts} />
+              </section>
+            </>
+          )}
+        </div>
       </aside>
     </div>
   )

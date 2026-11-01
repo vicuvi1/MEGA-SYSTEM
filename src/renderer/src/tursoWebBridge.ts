@@ -32,6 +32,7 @@ import { loadLog, loadMemory, loadMind, loadProfile, saveMemory, saveMind, saveP
 import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
+import { coachStatus } from './web/coachStatus'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -470,6 +471,8 @@ export function createTursoWebBridge(): Bridge {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
       },
       mind: async () => (await svcP).read((s) => loadMind(s.db)),
+      // The chat's header, pinned "Do this now" and live cards (read here, instant).
+      status: async () => (await svcP).read((s) => coachStatus(s as any)),
       // Is the coach working? The weekly scorecard from its history (read here).
       scorecard: async () =>
         (await svcP).read((s) => {
