@@ -1522,7 +1522,7 @@ var DataExportService = class {
 	}
 };
 // src/core/discipline.ts
-var MILESTONES = [
+var MILESTONES$1 = [
 	{
 		days: 3,
 		coins: 15
@@ -1647,13 +1647,13 @@ function milestoneRef(since, days) {
 function milestonesOf(events, today, claimedRefs, setupDay) {
 	const start = startOf(events);
 	const stats = statsOf(events, today);
-	if (!start || !stats.since) return MILESTONES.map((m) => ({
+	if (!start || !stats.since) return MILESTONES$1.map((m) => ({
 		...m,
 		status: "locked",
 		reachedOn: null
 	}));
 	const recorded = setupDay(start);
-	return MILESTONES.map((m) => {
+	return MILESTONES$1.map((m) => {
 		if (stats.current < m.days) return {
 			...m,
 			status: "locked",
@@ -4066,6 +4066,254 @@ function insights(i, length = 364) {
 		bestWeekday: active.length >= 14 && ranked[0].avg > 0 ? WEEKDAYS[ranked[0].k] : null
 	};
 }
+// src/core/growth.ts
+var pct = (now, then) => then > 0 ? Math.round((now - then) / then * 100) : now > 0 ? null : 0;
+var MILESTONES = [
+	{
+		id: "focus",
+		label: (n) => `${n} hours of focus`,
+		of: "focusH",
+		steps: [
+			10,
+			25,
+			50,
+			100,
+			250,
+			500,
+			1e3
+		]
+	},
+	{
+		id: "workouts",
+		label: (n) => `${n} workouts`,
+		of: "workouts",
+		steps: [
+			10,
+			25,
+			50,
+			100,
+			200,
+			365
+		]
+	},
+	{
+		id: "clean",
+		label: (n) => `${n} clean days`,
+		of: "clean",
+		steps: [
+			7,
+			30,
+			90,
+			180,
+			365
+		]
+	},
+	{
+		id: "tasks",
+		label: (n) => `${n} tasks done`,
+		of: "tasks",
+		steps: [
+			50,
+			100,
+			250,
+			500,
+			1e3,
+			2500
+		]
+	},
+	{
+		id: "wakes",
+		label: (n) => `${n} on-time wake-ups`,
+		of: "wakes",
+		steps: [
+			10,
+			30,
+			100,
+			200,
+			365
+		]
+	}
+];
+function growth(i, weeks = 26) {
+	const today = i.today;
+	const first = (rows) => rows.reduce((m, r) => r.day < m ? r.day : m, today);
+	const since = [
+		i.focus,
+		i.wakes,
+		i.workouts,
+		i.todoist,
+		i.mustdos ?? [],
+		i.spending ?? []
+	].map(first).reduce((a, b) => a < b ? a : b, today);
+	const clean = cleanSet(i.discipline, since, today);
+	const daily = {
+		focus: /* @__PURE__ */ new Map(),
+		wake: /* @__PURE__ */ new Map(),
+		sport: /* @__PURE__ */ new Map(),
+		clean: /* @__PURE__ */ new Map(),
+		tasks: /* @__PURE__ */ new Map(),
+		spend: /* @__PURE__ */ new Map()
+	};
+	const add = (m, d, v) => m.set(d, (m.get(d) ?? 0) + v);
+	for (const r of i.focus) add(daily.focus, r.day, r.minutes);
+	for (const r of i.wakes) if (r.onTime) daily.wake.set(r.day, 1);
+	for (const r of i.workouts) daily.sport.set(r.day, 1);
+	for (const d of clean) daily.clean.set(d, 1);
+	for (const r of i.todoist) add(daily.tasks, r.day, 1);
+	for (const r of i.mustdos ?? []) if (r.done) add(daily.tasks, r.day, 1);
+	for (const r of i.spending ?? []) add(daily.spend, r.day, r.bani);
+	const sum = (m, from, to) => {
+		let t = 0;
+		for (const [d, v] of m) if (d >= from && d <= to) t += v;
+		return t;
+	};
+	const win = (k) => ({
+		from: addDays$1(today, -6 - 7 * k),
+		to: addDays$1(today, -7 * k)
+	});
+	const monthsBack = Array.from({ length: 12 }, (_, k) => {
+		const [y, m] = today.split("-").map(Number);
+		const d = new Date(Date.UTC(y, m - 1 - (11 - k), 1));
+		return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+	});
+	const metrics = [
+		{
+			id: "focus",
+			label: "Focus",
+			higherBetter: true,
+			unit: "min"
+		},
+		{
+			id: "wake",
+			label: "On-time wake-ups",
+			higherBetter: true,
+			unit: "count"
+		},
+		{
+			id: "sport",
+			label: "Workouts",
+			higherBetter: true,
+			unit: "count"
+		},
+		{
+			id: "clean",
+			label: "Clean days",
+			higherBetter: true,
+			unit: "count"
+		},
+		{
+			id: "tasks",
+			label: "Tasks done",
+			higherBetter: true,
+			unit: "count"
+		},
+		{
+			id: "spend",
+			label: "Spending",
+			higherBetter: false,
+			unit: "bani",
+			skip: !i.spending
+		}
+	].filter((d) => !d.skip).map((d) => {
+		const m = daily[d.id];
+		const wk = Array.from({ length: weeks }, (_, k) => {
+			const w = win(weeks - 1 - k);
+			return {
+				label: w.from,
+				value: sum(m, w.from, w.to)
+			};
+		});
+		const months = monthsBack.map((mo) => ({
+			label: mo,
+			value: sum(m, `${mo}-01`, `${mo}-31`)
+		}));
+		const all = [];
+		for (let k = 0;; k++) {
+			const w = win(k);
+			if (w.to < since) break;
+			all.push({
+				label: w.from,
+				value: sum(m, w.from, w.to)
+			});
+			if (k > 520) break;
+		}
+		const thisWeek = wk[wk.length - 1]?.value ?? 0;
+		const lastWeek = wk[wk.length - 2]?.value ?? 0;
+		const prev4 = wk.slice(-5, -1);
+		const avg4 = prev4.length ? prev4.reduce((t, p) => t + p.value, 0) / prev4.length : 0;
+		const withData = all.filter((p) => p.value > 0);
+		const best = withData.length ? withData.reduce((b, p) => d.higherBetter ? p.value > b.value ? p : b : p.value < b.value ? p : b) : null;
+		const earlier = all.slice(1).filter((p) => p.value > 0);
+		const record = d.higherBetter ? thisWeek > 0 && earlier.length > 0 && earlier.every((p) => thisWeek > p.value) : false;
+		return {
+			id: d.id,
+			label: d.label,
+			higherBetter: d.higherBetter,
+			unit: d.unit,
+			weeks: wk,
+			months,
+			thisWeek,
+			lastWeek,
+			avg4,
+			best,
+			vsLast: pct(thisWeek, lastWeek),
+			vsAvg: pct(thisWeek, avg4),
+			record
+		};
+	});
+	const focusDays = [...daily.focus].sort((a, b) => b[1] - a[1]);
+	const taskDays = [...daily.tasks].sort((a, b) => b[1] - a[1]);
+	const focusMetric = metrics.find((x) => x.id === "focus");
+	const records = {
+		bestFocusDay: focusDays[0] ? {
+			day: focusDays[0][0],
+			minutes: focusDays[0][1]
+		} : null,
+		bestFocusWeek: focusMetric?.best ?? null,
+		longestCleanStreak: bestStreak(clean),
+		longestWakeStreak: bestStreak(new Set(daily.wake.keys())),
+		longestFocusStreak: bestStreak(new Set([...daily.focus].filter(([, v]) => v >= 50).map(([k]) => k))),
+		mostTasksDay: taskDays[0] ? {
+			day: taskDays[0][0],
+			count: taskDays[0][1]
+		} : null
+	};
+	const cumulative = (m, scale = 1) => {
+		const days = [...m].sort((a, b) => a[0] < b[0] ? -1 : 1);
+		let t = 0;
+		return days.map(([d, v]) => ({
+			day: d,
+			total: (t += v) / scale
+		}));
+	};
+	const totals = {
+		focusH: cumulative(daily.focus, 60),
+		workouts: cumulative(daily.sport),
+		clean: cumulative(daily.clean),
+		tasks: cumulative(daily.tasks),
+		wakes: cumulative(daily.wake)
+	};
+	const milestones = [];
+	for (const ms of MILESTONES) {
+		const run = totals[ms.of];
+		const total = run.length ? run[run.length - 1].total : 0;
+		for (const n of ms.steps) {
+			const hit = run.find((r) => r.total >= n);
+			milestones.push({
+				id: `${ms.id}-${n}`,
+				label: ms.label(n),
+				at: hit?.day ?? null,
+				progress: Math.min(1, total / n)
+			});
+			if (!hit) break;
+		}
+	}
+	return {
+		metrics,
+		records,
+		milestones
+	};
+}
 // src/core/todoist.ts
 /** The Todoist label that makes a task one of today's must-dos (⭐). */
 var TODAY_LABEL = "today";
@@ -4231,6 +4479,10 @@ var ProgressService = class {
 	/** Your year: a heatmap of good days and your streaks. */
 	insights(now = /* @__PURE__ */ new Date()) {
 		return insights(this.input(null, now, 366));
+	}
+	/** Growth over weeks and months, you vs your past, records and milestones (all your history). */
+	growth(spending, now = /* @__PURE__ */ new Date()) {
+		return growth(this.input(spending, now, 3650));
 	}
 };
 // src/core/weekPlan.ts
@@ -5826,7 +6078,8 @@ syncFinance: (recordDays) => write((s) => {
 		},
 		progress: {
 			report: (spending) => read((s) => s.progress.report(spending)),
-			insights: () => read((s) => s.progress.insights())
+			insights: () => read((s) => s.progress.insights()),
+			growth: (spending) => read((s) => s.progress.growth(spending))
 		},
 		weekPlan: {
 			saved: () => read((s) => s.weekPlan.saved()),

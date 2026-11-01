@@ -209,7 +209,8 @@ export function createWebServices(mirror: Mirror) {
     },
     progress: {
       report: (spending: { day: string; bani: number }[] | null) => read((s) => s.progress.report(spending)),
-      insights: () => read((s) => s.progress.insights())
+      insights: () => read((s) => s.progress.insights()),
+      growth: (spending: { day: string; bani: number }[] | null) => read((s) => s.progress.growth(spending))
     },
     weekPlan: {
       saved: () => read((s) => s.weekPlan.saved()),

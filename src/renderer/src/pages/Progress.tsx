@@ -12,6 +12,7 @@ import type { Insights } from '@core/insights'
 import { FocusInsights } from './Focus'
 import { PageSkeleton } from '../blocks'
 import { useLive } from '../live'
+import { GrowthSections } from './Growth'
 
 export function useProgress(): ProgressReport | null | undefined {
   const [r, setR] = useState<ProgressReport | null | undefined>(undefined)
@@ -312,6 +313,7 @@ export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWal
           <p className="hint">The score is how close your last 7 days came to a good week in each area (the goal under each bar). Arrows compare with the 7 days before.</p>
         </div>
       </section>
+      <GrowthSections />
       {ins && <Streaks ins={ins} />}
       {ins && <YearHeatmap ins={ins} />}
       <div className="pg-grid">

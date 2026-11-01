@@ -45,7 +45,7 @@ export function weekday(day: string): number {
 }
 
 /** Clean days: from the first 'start' on, minus days with a 'reset'. */
-function cleanSet(ev: { kind: string; day: string }[], from: string, to: string): Set<string> {
+export function cleanSet(ev: { kind: string; day: string }[], from: string, to: string): Set<string> {
   const out = new Set<string>()
   const starts = ev.filter((e) => e.kind === 'start').map((e) => e.day).sort()
   if (!starts.length) return out

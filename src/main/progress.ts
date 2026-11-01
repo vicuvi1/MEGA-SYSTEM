@@ -2,6 +2,7 @@
 import { addDays } from '@core/dates'
 import { progressReport, type ProgressInput, type ProgressReport } from '@core/progress'
 import { insights, type Insights } from '@core/insights'
+import { growth, type Growth } from '@core/growth'
 import { TODOIST_RULE } from '@core/todoist'
 import type { DB } from './db'
 import type { Wallet } from './wallet'
@@ -49,5 +50,10 @@ export class ProgressService {
   /** Your year: a heatmap of good days and your streaks. */
   insights(now = new Date()): Insights {
     return insights(this.input(null, now, 366))
+  }
+
+  /** Growth over weeks and months, you vs your past, records and milestones (all your history). */
+  growth(spending: ProgressInput['spending'], now = new Date()): Growth {
+    return growth(this.input(spending, now, 3650))
   }
 }

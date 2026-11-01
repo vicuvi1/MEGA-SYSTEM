@@ -477,7 +477,26 @@ export function createTursoWebBridge(): Bridge {
     },
     progress: {
       report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state'))),
-      insights: async () => (await svcP).progress.insights()
+      insights: async () => (await svcP).progress.insights(),
+      growth: async () => (await svcP).progress.growth(financeSpending(readJson('finance-helper.state'))),
+      // Milestones already celebrated (synced, so each one shows once, anywhere).
+      seenMilestones: async () => (await svcP).read((s) => {
+        try {
+          return JSON.parse(getSetting(s.db, 'milestones_seen') || '[]') as string[]
+        } catch {
+          return []
+        }
+      }),
+      markMilestones: async (ids: string[]) =>
+        (await svcP).write((s) => {
+          let cur: string[] = []
+          try {
+            cur = JSON.parse(getSetting(s.db, 'milestones_seen') || '[]')
+          } catch {
+            /* start over */
+          }
+          setSetting(s.db, 'milestones_seen', JSON.stringify([...new Set([...cur, ...ids])].slice(-200)))
+        })
     },
     // Day templates for the calendar, synced everywhere.
     calTemplates: {

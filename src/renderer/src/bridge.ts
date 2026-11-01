@@ -3,6 +3,7 @@ import type { DayTemplate } from '@core/calTemplates'
 import type { Area, TodoTask } from '@core/todoist'
 import type { ProgressReport } from '@core/progress'
 import type { Insights } from '@core/insights'
+import type { Growth } from '@core/growth'
 import type { CleanChange } from '@core/todoistClean'
 import type { WeekPlan } from '@core/weekPlan'
 import type { CalEvent } from '@core/dayTime'
@@ -50,7 +51,7 @@ export type Bridge = LifeApi & {
     disconnect(): Promise<void>
   }
   /** "Am I improving?": the last 7 days against your usual week (web). */
-  progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights> }
+  progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights>; growth?(): Promise<Growth>; seenMilestones?(): Promise<string[]>; markMilestones?(ids: string[]): Promise<void> }
   /** Day templates for the calendar ("study day"), synced (web). */
   calTemplates?: { list(): Promise<DayTemplate[]>; save(t: DayTemplate): Promise<DayTemplate[]>; remove(name: string): Promise<DayTemplate[]> }
   /** Done / skipped marks on today's calendar blocks (web). */
