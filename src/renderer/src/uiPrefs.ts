@@ -22,16 +22,15 @@ export interface UiPrefs {
   layoutV?: number
 }
 
-export type TodaySectionId = 'timeline' | 'day' | 'progress' | 'fun' | 'focus' | 'reps' | 'quicklog'
+export type TodaySectionId = 'timeline' | 'day' | 'progress' | 'fun' | 'reps' | 'quicklog'
 
 /** What each Today section is, and whether it shows on a new device. */
 export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
-  { id: 'timeline', label: 'Your day (timeline)', hint: 'Calendar events, timed tasks, free gaps and Plan my day', on: true },
-  { id: 'day', label: 'Now & today’s list', hint: 'The one next step, and one list: must-dos, habits and Todoist', on: true },
-  { id: 'progress', label: 'This week', hint: 'Am I improving? One line and a chip per area', on: true },
-  { id: 'focus', label: 'Focus timer', hint: 'Start and stop a focus session', on: true },
-  { id: 'fun', label: 'Treat yourself', hint: 'What your coins buy now: fun time and your rewards', on: true },
-  { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and water with quick + buttons', on: true },
+  { id: 'day', label: 'Now & today’s list', hint: 'Morning plan, evening shut-down, the next step, habits and one list by area', on: true },
+  { id: 'timeline', label: 'Your day (timeline)', hint: 'Calendar events, timed tasks, free gaps and Plan my day (side column)', on: true },
+  { id: 'progress', label: 'This week', hint: 'Am I improving? One line and a chip per area (side column)', on: true },
+  { id: 'fun', label: 'Treat yourself', hint: 'What your points buy now (side column)', on: false },
+  { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and water with quick + buttons (side column)', on: true },
   { id: 'quicklog', label: 'Quick log & recent', hint: 'One tap for anything else, and what you logged', on: false },
 ]
 
@@ -59,7 +58,7 @@ const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 
 
 /** Pages most people don't need day to day: hidden once (Settings → Layout brings them back). */
 const QUIET_PAGES = ['schedule', 'journey', 'rules']
-const LAYOUT_V = 6
+const LAYOUT_V = 7
 
 function load(): UiPrefs {
   try {
@@ -69,7 +68,8 @@ function load(): UiPrefs {
     const v = p.layoutV ?? 1
     if (v < LAYOUT_V) {
       // v6: Today opens with your timeline.
-      if (v < 6) p.today = []
+      // v7: Today is one command screen (main list + side column).
+      if (v < 7) p.today = []
       p.hiddenPages = [...new Set([...(p.hiddenPages ?? []), ...QUIET_PAGES])]
       // One task list: Todoist. The app's own Tasks page leaves the menu (Layout brings it back).
       if (v < 4) p.hiddenPages = [...new Set([...p.hiddenPages, 'tasks'])]

@@ -2,7 +2,7 @@
 // tasks in order, the free gaps between them, and "Plan my day": blocks for
 // your must-dos, big tasks and urgent Todoist tasks in those gaps, which
 // you approve into your calendar with one tap.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { freeGaps, localDay, localHM, suggestBlocks, type Block, type CalEvent } from '@core/dayTime'
 import { activePlan } from '@core/weekPlan'
 import { sortTasks, type TodoTask } from '@core/todoist'
@@ -65,6 +65,19 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
     const blocks = suggestBlocks(gaps, items.slice(0, 5))
     setPlan(blocks.map((b) => ({ ...b, on: true, taskId: (items.find((i) => i.title === b.title) as any)?.taskId })))
   }
+  // The morning card's "Plan my day" asks for blocks here.
+  const suggestRef = useRef(suggest)
+  suggestRef.current = suggest
+  const box = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const on = () => {
+      if (!connected) return onGo('settings')
+      suggestRef.current()
+      box.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    window.addEventListener('life-plan-day', on)
+    return () => window.removeEventListener('life-plan-day', on)
+  }, [connected, onGo])
   const approve = async () => {
     if (!plan) return
     const chosen = plan.filter((b) => b.on)
@@ -84,19 +97,19 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
 
   const nowHM = `${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`
   return (
-    <section className="panel tl">
-      <header className="tl-head">
-        <h3>
+    <section className="card tl" ref={box}>
+      <header className="card-head">
+        <h2>
           <Icon name="calendar" size={16} /> Your day
-        </h3>
-        <div className="row">
+        </h2>
+        <div className="actions">
           {connected && (
             <button className="btn small primary" onClick={suggest}>
-              <Icon name="spark" size={13} /> Plan my day
+              <Icon name="spark" size={13} /> Plan
             </button>
           )}
           <button className="btn small ghost" onClick={() => onGo(connected === false ? 'settings' : 'calendar')}>
-            {connected === false ? 'Connect Google Calendar' : 'Week view'}
+            {connected === false ? 'Connect calendar' : 'Week'}
           </button>
         </div>
       </header>

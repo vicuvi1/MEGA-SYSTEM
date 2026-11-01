@@ -5,7 +5,6 @@ import { life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
 import { soundCoin, soundSuccess } from './sound'
 import type { PageId } from './modules'
-import './soloDailyQuest.css'
 
 interface Props {
   body: BodyState | null
@@ -14,48 +13,7 @@ interface Props {
   onGo: (p: PageId) => void
 }
 
-/**
- * Isolated countdown timer so only this tiny span updates every second,
- * preventing the entire banner from re-rendering every 1000ms.
- */
-const QuestCountdownTimer = React.memo(function QuestCountdownTimer({
-  isAllCompleted,
-  onUrgent
-}: {
-  isAllCompleted: boolean
-  onUrgent?: (urgent: boolean) => void
-}) {
-  const [timeLeft, setTimeLeft] = useState('')
-
-  useEffect(() => {
-    if (isAllCompleted) return
-
-    const updateCountdown = () => {
-      const now = new Date()
-      const end = new Date(now)
-      end.setHours(23, 59, 59, 999)
-      const diff = Math.max(0, end.getTime() - now.getTime())
-      const hours = Math.floor(diff / (1000 * 60 * 60))
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-      const secs = Math.floor((diff % (1000 * 60)) / 1000)
-
-      setTimeLeft(
-        `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-      )
-      if (onUrgent) onUrgent(hours < 3)
-    }
-
-    updateCountdown()
-    const timer = setInterval(updateCountdown, 1000)
-    return () => clearInterval(timer)
-  }, [isAllCompleted, onUrgent])
-
-  if (isAllCompleted) return <span>REST SECURED</span>
-  return <span>{timeLeft} LEFT</span>
-})
-
 export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) {
-  const [isUrgent, setIsUrgent] = useState(false)
   const [waterMl, setWaterMl] = useState<number>(() => {
     try {
       const today = new Date().toISOString().slice(0, 10)
@@ -257,110 +215,54 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
   }, [objectives, waterMl, todayKey, onRefresh])
 
   return (
-    <section className={`solo-daily-quest-banner ${allCompleted ? 'completed' : isUrgent ? 'urgent' : ''}`}>
-      {/* Top Header Tag & Countdown */}
-      <div className="solo-quest-top-row">
-        <div className="solo-quest-tag-badge">
-          <span className="solo-pulse-beacon" />
-          <span>{allCompleted ? 'Reps & water: all done today ✓' : 'Reps & water today'}</span>
-        </div>
-
-        <div className="solo-quest-countdown" hidden>
-        </div>
-      </div>
-
-      {/* 4 Objectives Grid */}
-      <div className="solo-quest-grid">
+    <section className={`card reps ${allCompleted ? 'all-done' : ''}`} aria-label="Reps and water today">
+      <header className="card-head">
+        <h2>Reps & water</h2>
+        {!allCompleted ? (
+          <button className="btn small ghost" onClick={handleCompleteAll} title="Log everything that's left">
+            Mark all done
+          </button>
+        ) : (
+          <span className="chip ok">All done ✓</span>
+        )}
+      </header>
+      <ul className="reps-list">
         {objectives.map((obj) => {
           const isDone = obj.current >= obj.target
           const pct = Math.min(100, Math.round((obj.current / obj.target) * 100))
-
+          const water = obj.id === 'water'
+          const steps = water ? [250, 500] : [10, 25]
+          const log = (e: React.MouseEvent, n: number) => (water ? handleQuickLogWater(e, n) : handleQuickLogWorkout(e, obj.id, obj.name, n))
           return (
-            <div key={obj.id} className={`solo-quest-item ${isDone ? 'done' : ''}`}>
-              <div className="solo-quest-item-head">
-                <span className="solo-quest-item-name">
-                  <span>{obj.icon}</span>
-                  <span>{obj.name}</span>
+            <li key={obj.id} className={isDone ? 'done' : ''}>
+              <div className="reps-top">
+                <span className="reps-name">
+                  {obj.icon} {obj.name}
                 </span>
-                <span className="solo-quest-item-stat">
-                  {obj.current} / {obj.target} {obj.unit}
+                <span className="reps-stat">
+                  {obj.current}/{obj.target} {obj.unit}
                 </span>
               </div>
-
-              <div className="solo-quest-bar-bg">
-                <div className="solo-quest-bar-fill" style={{ width: `${pct}%` }} />
+              <div className="reps-bar">
+                <i style={{ width: `${pct}%` }} />
               </div>
-
-              <div className="solo-quest-btn-row">
-                {obj.id === 'water' ? (
-                  <>
-                    <button
-                      className="solo-quest-mini-btn"
-                      onClick={(e) => handleQuickLogWater(e, 250)}
-                      title="Log +250ml"
-                    >
-                      +250ml
+              {!isDone && (
+                <div className="reps-btns">
+                  {steps.map((n) => (
+                    <button key={n} className="chip" onClick={(e) => log(e, n)} title={water ? `Log +${n} ml` : `Log +${n} reps`}>
+                      +{n}
+                      {water ? 'ml' : ''}
                     </button>
-                    <button
-                      className="solo-quest-mini-btn"
-                      onClick={(e) => handleQuickLogWater(e, 500)}
-                      title="Log +500ml"
-                    >
-                      +500ml
-                    </button>
-                    <button
-                      className="solo-quest-mini-btn primary"
-                      onClick={(e) => handleQuickLogWater(e, Math.max(0, obj.target - obj.current))}
-                      title="Hit full 2.7L target"
-                    >
-                      ⚡ Max
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      className="solo-quest-mini-btn"
-                      onClick={(e) => handleQuickLogWorkout(e, obj.id, obj.name, 10)}
-                      title="Log +10 reps"
-                    >
-                      +10
-                    </button>
-                    <button
-                      className="solo-quest-mini-btn"
-                      onClick={(e) => handleQuickLogWorkout(e, obj.id, obj.name, 25)}
-                      title="Log +25 reps"
-                    >
-                      +25
-                    </button>
-                    <button
-                      className="solo-quest-mini-btn primary"
-                      onClick={(e) =>
-                        handleQuickLogWorkout(e, obj.id, obj.name, Math.max(1, obj.target - obj.current))
-                      }
-                      title="Log remaining reps"
-                    >
-                      ⚡ Max
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+                  ))}
+                  <button className="chip on" onClick={(e) => log(e, Math.max(1, obj.target - obj.current))} title="Log what's left">
+                    ✓ All
+                  </button>
+                </div>
+              )}
+            </li>
           )
         })}
-      </div>
-
-      {/* Footer warning & Full completion action */}
-      <div className="solo-quest-footer">
-        <span className="solo-quest-warning-text">
-          {allCompleted ? 'Done for today. Rest well.' : 'Tap + after each set. Counts reset at midnight.'}
-        </span>
-
-        {!allCompleted && (
-          <button className="solo-quest-action-all" onClick={handleCompleteAll}>
-            <span>Mark all done</span>
-          </button>
-        )}
-      </div>
+      </ul>
     </section>
   )
 }

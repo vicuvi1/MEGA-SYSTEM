@@ -34,7 +34,7 @@ const HINT: Record<MetricId, string> = {
   spend: 'e.g. under 600 lei this week, cook at home'
 }
 
-const LABEL: Record<MetricId, string> = { focus: 'Focus time', wake: 'On-time wake-ups', sport: 'Workouts', clean: 'Clean days', todoist: 'Todoist tasks done', mustdo: 'Must-dos done', spend: 'Spending' }
+export const LABEL: Record<MetricId, string> = { focus: 'Focus time', wake: 'On-time wake-ups', sport: 'Workouts', clean: 'Clean days', todoist: 'Todoist tasks done', mustdo: 'Must-dos done', spend: 'Spending' }
 
 const dm = (day: string) => `${day.slice(8)}.${day.slice(5, 7)}`
 
