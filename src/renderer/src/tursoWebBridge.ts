@@ -28,7 +28,8 @@ import { financeSpending } from '@core/progress'
 const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', 'life-focus-changed', 'life-week-changed', 'life-sport-changed', 'life-data-changed']
 import type { CleanChange } from '@core/todoistClean'
 import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
-import { loadLog, loadMemory, loadProfile, saveMemory, saveProfile } from './web/botBrain'
+import { loadLog, loadMemory, loadMind, loadProfile, saveMemory, saveMind, saveProfile } from './web/botBrain'
+import type { CoachMind } from '@core/coachMind'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -465,6 +466,10 @@ export function createTursoWebBridge(): Bridge {
       memory: async () => (await mirrorP).refresh().then(() => svcP).then((svc) => svc.read((s) => ({ facts: loadMemory(s.db).facts }))),
       setFacts: async (facts: { t: string; at: string }[]) => {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
+      },
+      mind: async () => (await svcP).read((s) => loadMind(s.db)),
+      setMind: async (m: CoachMind) => {
+        await (await svcP).write((s) => saveMind(s.db, m))
       },
       profile: async () => (await svcP).read((s) => loadProfile(s.db)),
       saveProfile: async (p: { about: string; goals: string[]; rules: string[] }) => (await svcP).write((s) => saveProfile(s.db, p)),

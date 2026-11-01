@@ -31,7 +31,9 @@ import { MirrorError, type Mirror } from './mirror'
 import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, isBigAsk, makeRefs, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
-import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { applyMind, mindText, readMindOp, type MindOp } from '@core/coachMind'
+import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
 const LOGS_KEY = 'life_bot_logs'
@@ -428,6 +430,19 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   }
 
   function run(s: Services, text: string, key = ''): RunOut {
+    // "water 500", "+250ml": the shared water log, never a food expense.
+    const ml = text.startsWith('/') ? null : parseWater(text)
+    if (ml) {
+      const st = sportState(s.db)
+      if (st) {
+        const day = sportToday()
+        const next = addWater(st, ml, day)
+        setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+        const v = sharedView(next, day)
+        const pct = Math.round((v.water.ml / Math.max(1, v.water.target)) * 100)
+        return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> · ${v.water.ml} of ${v.water.target} ml today (${pct}%)${pct >= 100 ? '\n🎯 Water goal done!' : ''}` }
+      }
+    }
     const viaFocus = runFocus(s, text)
     if (viaFocus) return viaFocus
     const parsed = parseTelegramText(text)
@@ -941,7 +956,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const [todoToday, upcoming, events] = await Promise.all([
       todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
       todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
-      calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 2 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
+      calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 8 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
     ])
     // You wrote: open follow-up check-ins stop asking.
     await mirror
@@ -951,7 +966,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
       })
       .catch(() => null)
-    const { context, memory, profile, look } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       let sessions: LookupData['sessions'] = []
@@ -964,6 +979,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         context: lifeContext(svc, db, { finance, todoToday, upcoming, events }),
         memory: loadMemory(db),
         profile: loadProfile(db),
+        mind: mindText(loadMind(db), svc.wallet.today()),
         look: { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
       }
     })
@@ -975,7 +991,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text)
     if (big) step('Thinking it through')
     const ask = (found?: string) =>
-      ai!(brainPrompt(persona, context, memory, text, media?.kind, profile, { refs: made.lines, found }), { json: true, think: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, text, media?.kind, profile, { refs: made.lines, found, mind }), { json: true, think: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1018,6 +1034,25 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let keyboard: any
     let expense = false
     const acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
+    // Its long-term notes: goals it tracks, what works, patterns.
+    const mindOps = out.actions.map(readMindOp).filter((x): x is MindOp => !!x)
+    if (mindOps.length) {
+      const lines = await mirror
+        .write((db) => {
+          let m = loadMind(db)
+          const today = services.services(db).wallet.today()
+          const said: string[] = []
+          for (const op of mindOps) {
+            const r = applyMind(m, op, today)
+            m = r.mind
+            if (r.line) said.push(r.line)
+          }
+          saveMind(db, m)
+          return said
+        })
+        .catch(() => [] as string[])
+      done.push(...lines)
+    }
     if (typeof process !== 'undefined' && process.env?.BOT_DEBUG) console.log('brain actions:', out.actions, '→', acts)
     const noCal = () => done.push("⚠️ Google Calendar isn't connected (Settings in the app)")
     const fmtHM = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -1105,6 +1140,91 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             setSetting(db as any, REMINDERS, JSON.stringify(addReminder(list, { at: at.toISOString(), text: a.text, kind: a.kind, follow: a.kind === 'checkin' })))
           })
           done.push(a.kind === 'remind' ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== new Date().toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ''}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`)
+          continue
+        }
+        if (a.kind === 'water' || a.kind === 'reps') {
+          const line = await mirror.write((db) => {
+            const st = sportState(db)
+            if (!st) return a.kind === 'water' ? '⚠️ Open Sport Track once so water has a place to go' : '⚠️ Open Sport Track once to set up your reps checklist'
+            const day = sportToday()
+            const save = (next: any) => setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+            if (a.kind === 'water') {
+              const next = addWater(st, a.ml, day)
+              save(next)
+              const v = sharedView(next, day)
+              return `💧 ${a.ml > 0 ? '+' : ''}${a.ml} ml · ${(v.water.ml / 1000).toFixed(2).replace(/0$/, '')} of ${(v.water.target / 1000).toFixed(1)} L today`
+            }
+            const r = addReps(st, a.exercise, a.amount, day)
+            if (!r) return `⚠️ No "${a.exercise}" on your Sport Track checklist`
+            save(r.st)
+            // Real reps also count as a workout (streak and points), like "30 pushups".
+            if (a.amount > 0) {
+              const svc = services.services(db)
+              svc.body.logWorkout({ title: `${r.exercise.name} (+${a.amount})`, items: [{ exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, '_'), name: r.exercise.name, amount: a.amount, unit: 'reps' }], note: 'Logged by the coach' })
+            }
+            return `💪 ${r.exercise.name} ${a.amount > 0 ? '+' : ''}${a.amount} · ${r.exercise.done}${r.exercise.target ? `/${r.exercise.target}` : ''} today`
+          })
+          done.push(line)
+          continue
+        }
+        if (a.kind === 'sleep') {
+          const line = await mirror.write((db) => {
+            const svc = services.services(db)
+            const said: string[] = []
+            if (a.wake) {
+              const r = svc.sleep.setWake(a.day, a.wake)
+              said.push(`up ${r.log.wakeTime}${r.log.onTime ? ' (on time)' : ''}`)
+            }
+            if (a.bed) {
+              // The bedtime belongs to that morning's row (the night before it).
+              const row = db.prepare('SELECT 1 FROM sleep_logs WHERE day = ?').get(a.day)
+              if (!row) svc.sleep.setWake(a.day, a.wake ?? '07:00')
+              const target = svc.sleep.bedtimeTarget()
+              const toMin = (t: string) => {
+                const [h, m] = t.split(':').map(Number)
+                return (h < 12 ? h + 24 : h) * 60 + m
+              }
+              const onTime = toMin(a.bed) <= toMin(target)
+              db.prepare('UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?').run(a.bed, target, onTime ? 1 : 0, a.day)
+              said.push(`bed ${a.bed}${onTime ? ' (on time)' : ' (late)'}`)
+            }
+            if (a.quality) {
+              svc.sleep.setQuality(a.day, a.quality)
+              said.push(`slept ${a.quality}/5`)
+            }
+            return said.length ? `😴 Sleep ${a.day.slice(5)}: ${said.join(', ')}` : null
+          })
+          if (line) done.push(line)
+          continue
+        }
+        if (a.kind === 'habit' || a.kind === 'reward' || a.kind === 'week' || a.kind === 'bigdone') {
+          const line = await mirror.write((db) => {
+            const svc = services.services(db)
+            if (a.kind === 'habit') {
+              const already = (svc.wallet.summary().todayRules ?? []).includes(a.habit === 'oath' ? 'discipline.oath' : a.habit === 'clean' ? 'discipline.clean_day' : 'face.routine_done')
+              if (already) return null
+              if (a.habit === 'oath') svc.discipline.oath()
+              else if (a.habit === 'clean') svc.discipline.checkIn()
+              else svc.wallet.award('face.routine_done', 'Ticked by the coach')
+              return `✅ Habit: ${a.habit === 'oath' ? 'morning oath' : a.habit === 'clean' ? 'clean-day check-in' : 'skincare'}`
+            }
+            if (a.kind === 'reward') {
+              svc.shop.save({ title: a.title, price: a.points, tier: 'bronze', realCost: a.cost, pinned: false, note: 'Added by your coach', currency: 'MDL' })
+              return `🎁 New reward: ${a.title} · ${a.points} points`
+            }
+            if (a.kind === 'bigdone') {
+              const plan = svc.weekPlan.active()
+              if (!plan?.big3[a.index] || plan.big3[a.index].done) return null
+              svc.weekPlan.toggle(a.index)
+              return `✅ Week task done: ${plan.big3[a.index].text}`
+            }
+            const cur = svc.weekPlan.active()
+            const big3 = a.big3?.length ? a.big3.map((text) => ({ text, done: cur?.big3.find((b) => b.text.toLowerCase() === text.toLowerCase())?.done ?? false })) : cur?.big3 ?? []
+            const plan = svc.weekPlan.save({ ...(cur ?? {}), focus: (a.focus ?? cur?.focus ?? 'focus') as any, note: a.note ?? cur?.note ?? '', big3 })
+            const names: Record<string, string> = { focus: 'focus time', wake: 'wake-ups', sport: 'training', clean: 'clean days', todoist: 'tasks', spend: 'spending', mustdo: 'must-dos' }
+            return `🗓 Week plan: ${names[plan.focus] ?? plan.focus}${plan.note ? ` ("${plan.note}")` : ''} · ${plan.big3.map((b) => b.text).join(' / ')}`
+          })
+          if (line) done.push(line)
           continue
         }
         if (a.kind === 'task') {

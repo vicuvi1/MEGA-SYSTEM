@@ -89,3 +89,21 @@ describe('specialist coaches', () => {
     expect(wakePattern([w('2026-10-27', true)])).toBeNull()
   })
 })
+
+describe('coach part 2 actions', () => {
+  it('reads water, reps, sleep, habits, rewards and the week plan', () => {
+    expect(readAction('water: 500')).toEqual({ kind: 'water', ml: 500 })
+    expect(readAction('water: -250')).toEqual({ kind: 'water', ml: -250 })
+    expect(readAction('water: 9000')).toBeNull()
+    expect(readAction('reps: pushups | 30')).toEqual({ kind: 'reps', exercise: 'pushups', amount: 30 })
+    expect(readAction('sleep: 2026-11-01 | wake=6:40; bed=23:50; quality=4')).toEqual({ kind: 'sleep', day: '2026-11-01', wake: '06:40', bed: '23:50', quality: 4 })
+    expect(readAction('sleep: 2026-11-01 | quality=9')).toBeNull()
+    expect(readAction('habit: skincare')).toEqual({ kind: 'habit', habit: 'skincare' })
+    expect(readAction('habit: clean day')).toEqual({ kind: 'habit', habit: 'clean' })
+    expect(readAction('habit: reset streak')).toBeNull()
+    expect(readAction('reward: Cinema night | 300 | 120')).toEqual({ kind: 'reward', title: 'Cinema night', points: 300, cost: 120 })
+    expect(readAction('week: focus=wake; note=up at 7; big3=Lab report / Rust ch. 4 / 3 runs')).toEqual({ kind: 'week', focus: 'wake', note: 'up at 7', big3: ['Lab report', 'Rust ch. 4', '3 runs'] })
+    expect(readAction('week: focus=nonsense')).toBeNull()
+    expect(readAction('bigdone: 2')).toEqual({ kind: 'bigdone', index: 1 })
+  })
+})

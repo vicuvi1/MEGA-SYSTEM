@@ -6,6 +6,7 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
 import { useLive } from '../live'
+import type { CoachMind } from '@core/coachMind'
 
 type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[] }
 type Profile = { about: string; goals: string[]; rules: string[] }
@@ -38,6 +39,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [facts, setFacts] = useState<{ t: string; at: string }[]>([])
   const [profile, setProfile] = useState<Profile | null>(null)
   const [model, setModel] = useState<string | null>(null)
+  const [mind, setMind] = useState<CoachMind | null>(null)
   const end = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -46,6 +48,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     setLog(l)
     setFacts(m.facts)
     if (p) setProfile(p)
+    life.coach.mind?.().then(setMind).catch(() => {})
   }, [])
   useEffect(() => {
     void load()
@@ -64,6 +67,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       .then((l) => setLog((cur) => (busyRef.current || (cur && cur.length === l.length && cur[cur.length - 1]?.at === l[l.length - 1]?.at) ? cur : l)))
       .catch(() => {})
     life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
+    life.coach.mind?.().then(setMind).catch(() => {})
   })
 
   const send = async (msg = text) => {
@@ -83,6 +87,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, at: new Date().toISOString(), steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       if (r.done.length) onWallet()
       void life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
+      void life.coach.mind?.().then(setMind).catch(() => {})
     } catch (e) {
       setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: `I couldn't answer: ${(e as Error).message}`, at: new Date().toISOString() }])
     }
@@ -211,6 +216,15 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
 
       <aside className="co-side">
         {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
+        {mind && (
+          <Learning
+            mind={mind}
+            onSave={async (next) => {
+              setMind(next)
+              await act(() => life.coach!.setMind!(next))
+            }}
+          />
+        )}
         <section className="panel">
           <header className="panel-head">
             <h2>
@@ -290,5 +304,54 @@ function FactList({ facts, onSave }: { facts: { t: string; at: string }[]; onSav
       onChange={(next) => onSave(next.map((t) => facts.find((f) => f.t === t) ?? { t, at: today }))}
       placeholder="Add something it should remember…"
     />
+  )
+}
+
+/** What the coach is learning about you: goals it tracks, what works, patterns. Delete what's wrong. */
+function Learning({ mind, onSave }: { mind: CoachMind; onSave: (m: CoachMind) => void }) {
+  const empty = !mind.goals.length && !mind.works.length && !mind.fails.length && !mind.patterns.length
+  const today = new Date().toISOString().slice(0, 10)
+  const left = (d: string) => Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000)
+  const row = (key: string, text: string, sub: string, remove: () => void) => (
+    <li key={key} className="co-learn-row">
+      <span>
+        {text}
+        {sub && <small>{sub}</small>}
+      </span>
+      <button className="ta-act" aria-label="Forget" title="Forget this" onClick={remove}>
+        ✕
+      </button>
+    </li>
+  )
+  const group = (title: string, items: React.ReactNode[]) =>
+    items.length ? (
+      <div className="co-learn-group">
+        <h3>{title}</h3>
+        <ul>{items}</ul>
+      </div>
+    ) : null
+  return (
+    <section className="panel co-learn">
+      <header className="panel-head">
+        <h2>
+          <Icon name="spark" /> What the coach is learning
+        </h2>
+      </header>
+      {empty ? (
+        <p className="hint small">Nothing yet. Tell it a goal with a date ("pass algebra by 15 Dec, 6h a week") and it tracks it; it also notes what works for you and patterns in your data.</p>
+      ) : (
+        <>
+          {group(
+            'Goals it tracks',
+            mind.goals.map((g, i) =>
+              row(`g${i}`, g.title, [g.deadline ? (left(g.deadline) >= 0 ? `${left(g.deadline)} days left` : `${-left(g.deadline)} days late`) : '', g.weekly ? `${g.weekly} a week` : ''].filter(Boolean).join(' · '), () => onSave({ ...mind, goals: mind.goals.filter((_, k) => k !== i) }))
+            )
+          )}
+          {group('What works for you', mind.works.map((x, i) => row(`w${i}`, x.t, '', () => onSave({ ...mind, works: mind.works.filter((_, k) => k !== i) }))))}
+          {group("What doesn't", mind.fails.map((x, i) => row(`f${i}`, x.t, '', () => onSave({ ...mind, fails: mind.fails.filter((_, k) => k !== i) }))))}
+          {group('Patterns', mind.patterns.map((x, i) => row(`p${i}`, x.t, '', () => onSave({ ...mind, patterns: mind.patterns.filter((_, k) => k !== i) }))))}
+        </>
+      )}
+    </section>
   )
 }

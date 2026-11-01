@@ -702,3 +702,12 @@
 @media (hover: none) { .tt-grip, .tt-more, .tt-chip.empty, .tt-row .tt-flag { opacity: 1 !important; } }
 @media (max-width: 720px) { .tt-row { flex-wrap: wrap; } .tt-chips { width: 100%; padding-left: 52px; } .tt-pop { left: 0; right: auto; } }
 .tt-row.pop-up .tt-pop { top: auto; bottom: calc(100% + 2px); }
+
+/* Coach: what it is learning */
+.co-learn-group { margin-top: var(--s-3); }
+.co-learn-group h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+.co-learn-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.co-learn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgb(var(--ink) / 0.04); font-size: 13px; }
+.co-learn-row small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.co-learn-row .ta-act { opacity: 0.5; }
+.co-learn-row:hover .ta-act { opacity: 1; }

@@ -22,3 +22,19 @@ describe('shared water and reps', () => {
     expect(addReps(st, 'squats', 10, '2026-11-01')).toBeNull()
   })
 })
+
+describe('parseWater', () => {
+  it('reads water messages and leaves money alone', async () => {
+    const { parseWater } = await import('./sportShared')
+    expect(parseWater('water 500')).toBe(500)
+    expect(parseWater('500 ml')).toBe(500)
+    expect(parseWater('+250ml')).toBe(250)
+    expect(parseWater('apă 0.5 l')).toBe(500)
+    expect(parseWater('2 glasses of water')).toBe(500)
+    expect(parseWater('вода 300')).toBe(300)
+    expect(parseWater('water 15')).toBeNull()
+    expect(parseWater('water 25 lei')).toBeNull()
+    expect(parseWater('coffee 35')).toBeNull()
+    expect(parseWater('milk 1 l')).toBeNull()
+  })
+})

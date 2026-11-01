@@ -14,6 +14,8 @@ import { financeSpending } from '@core/progress'
 import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
 import { getSetting, setSetting } from '../../../main/settings'
 import type { Services } from './webServices'
+import { cleanMind, findPatterns, focusBySubject, sleepDiary, weekAhead, type CoachMind } from '@core/coachMind'
+import { sharedView, sportToday } from '@core/sportShared'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -233,7 +235,8 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     })(),
     `Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
     `Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ''}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join('; ') || 'none'}.`,
-    moneyContext(extra.finance, today)
+    moneyContext(extra.finance, today),
+    ...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc)
   ]
   if (extra.events) {
     const nowHM = now.toTimeString().slice(0, 5)
@@ -241,6 +244,7 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     lines.push(`Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(', ') || 'none'}.`)
     const tomorrow = addDays(today, 1)
     if (extra.events.some((e) => localDay(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`)
+    if (extra.events.some((e) => localDay(e.start) > tomorrow)) lines.push(weekAhead(extra.events, today))
   }
   if (extra.todoToday) {
     const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? ' (late)' : ''}${t.priority >= 3 ? ` P${5 - t.priority}` : ''}${t.section ? ` [${t.section}]` : ''}`)
@@ -251,6 +255,80 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     if (r.length) lines.push(`Deadlines soon: ${r.map((x) => `${x.task.content} ${whenText(x.daysLeft, x.date)}`).join('; ')}.`)
   }
   return lines.filter(Boolean).join('\n')
+}
+
+/** The coach's long-term notes (goals it tracks, what works, patterns). */
+const MIND = 'coach_mind'
+export function loadMind(db: any): CoachMind {
+  try {
+    return cleanMind(JSON.parse(getSetting(db, MIND) || 'null'))
+  } catch {
+    return cleanMind(null)
+  }
+}
+export function saveMind(db: any, m: CoachMind): void {
+  setSetting(db, MIND, JSON.stringify(cleanMind(m)))
+}
+
+/** Sport Track's shared state (water and reps), if it exists. */
+export function sportState(db: any): any | null {
+  try {
+    return JSON.parse(getSetting(db, 'sport_tracker_json') || 'null')?.data ?? null
+  } catch {
+    return null
+  }
+}
+
+/** The rest of what the coach should know: water, reps, habits, sleep diary, focus by subject, patterns, past advice. */
+function moreContext(s: Services, db: any, finance: any, today: string, input: import('@core/progress').ProgressInput, todayRules: string[], disc: { checkedInToday?: boolean; oathToday?: boolean }): string[] {
+  const out: string[] = []
+  const st = sportState(db)
+  if (st) {
+    const v = sharedView(st, sportToday())
+    const reps = v.exercises.map((e) => `${e.name} ${e.done}/${e.target}`).join(', ')
+    out.push(`Water today: ${v.water.ml} of ${v.water.target} ml (${Math.round((v.water.ml / Math.max(1, v.water.target)) * 100)}%). Reps checklist: ${reps || 'none set'}.`)
+  }
+  const habit = (done: boolean, name: string) => `${done ? '[done]' : '[open]'} ${name}`
+  out.push(
+    `Habits today: ${[
+      habit(!!disc.oathToday || todayRules.includes('discipline.oath'), 'oath'),
+      habit(!!disc.checkedInToday || todayRules.includes('discipline.clean_day'), 'clean check-in'),
+      habit(todayRules.includes('body.workout_done'), 'workout'),
+      habit(todayRules.includes('face.routine_done'), 'skincare'),
+      habit(todayRules.includes('money.logged'), 'spending logged')
+    ].join(', ')}.`
+  )
+  let logs: any[] = []
+  try {
+    logs = s.sleep.logs()
+  } catch {
+    logs = []
+  }
+  out.push(sleepDiary(logs, today))
+  let sessions: { day: string; subject: string; minutes: number }[] = []
+  try {
+    sessions = (db.prepare('SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?').all(addDays(today, -60)) as any[]).map((r) => ({ day: String(r.day), subject: String(r.subject), minutes: Number(r.minutes) }))
+  } catch {
+    sessions = []
+  }
+  const bySub = focusBySubject(sessions, addDays(today, -6))
+  if (bySub) out.push(`Focus by subject, last 7 days: ${bySub}.`)
+  const pats = findPatterns({
+    today,
+    focus: input.focus,
+    sleep: logs.map((l) => ({ day: l.day, onTime: !!l.onTime, bedOnTime: l.bedOnTime ?? null, quality: l.quality ?? null })),
+    workouts: input.workouts,
+    spending: financeSpending(finance)
+  })
+  if (pats.length) out.push(`What his own data shows (last 8 weeks):\n${pats.map((p) => `- ${p}`).join('\n')}`)
+  // Advice you gave in the last days (beyond the recent chat), to follow up on it.
+  const since = addDays(today, -4)
+  const advice = loadLog(db)
+    .filter((e) => e.role === 'coach' && e.at.slice(0, 10) >= since)
+    .slice(-12, -4)
+    .map((e) => `${e.at.slice(5, 10)}: ${e.text.replace(/\s+/g, ' ').slice(0, 140)}`)
+  if (advice.length) out.push(`Your earlier advice (check if he did it):\n${advice.map((a) => `- ${a}`).join('\n')}`)
+  return out
 }
 
 const PERSONA: Record<Persona, string> = {
@@ -265,7 +343,17 @@ Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "focus: <minutes> <subject>" start a focus timer now. "fun: <minutes> <what>" spend points on fun.
-- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline.
+- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline (a focus goal with hours).
+Body, sleep and habits (one shared log with Sport Track and Sporty):
+- "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
+- "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
+- "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+Points and the week:
+- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
+- "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
+Your long-term memory (use it: this is how you get better at coaching HIM):
+- "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
+- "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
 Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
 - "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
@@ -286,11 +374,11 @@ const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string } = {}): string {
   const chat = memory.chat.slice(-10).map((c) => `${c.role === 'me' ? 'Victor' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
-    'Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. One clear next step with a time or a duration. Use his real numbers (tie advice to them: "focus 32m of 10h this week"). No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.',
+    'Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.',
     '',
     ACTIONS,
     '',
@@ -310,6 +398,8 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     profile.goals.length ? profile.goals.map((g) => `- ${g}`).join('\n') : '- (none set)',
     profile.rules.length ? `== His own rules (hold him to them, call it out when he breaks one) ==\n${profile.rules.map((r) => `- ${r}`).join('\n')}` : '',
     profile.about ? `== About him, in his words ==\n${profile.about}` : '',
+    '',
+    extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : '',
     '',
     '== What you remember about him ==',
     memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join('\n') : '- nothing yet',
@@ -373,14 +463,23 @@ export type BrainAction =
   | { kind: 'deltask'; ref: string }
   | { kind: 'remind'; day: string; time: string; text: string }
   | { kind: 'checkin'; minutes: number; text: string }
+  | { kind: 'water'; ml: number }
+  | { kind: 'reps'; exercise: string; amount: number }
+  | { kind: 'sleep'; day: string; wake?: string; bed?: string; quality?: number }
+  | { kind: 'habit'; habit: 'oath' | 'clean' | 'skincare' }
+  | { kind: 'reward'; title: string; points: number; cost: number }
+  | { kind: 'week'; focus?: string; note?: string; big3?: string[] }
+  | { kind: 'bigdone'; index: number }
 
+const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const WHEN = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/
 const EREF = /^E\d{1,3}$/i
 const TREF = /^T\d{1,3}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -429,6 +528,54 @@ export function readAction(line: string): BrainAction | null {
   if (kind === 'checkin') {
     const minutes = Number(parts[0])
     return minutes >= 5 && minutes <= 720 && parts[1] ? { kind: 'checkin', minutes, text: parts.slice(1).join(' | ').slice(0, 300) } : null
+  }
+  if (kind === 'water') {
+    const ml = Math.round(Number(/^[+-]?\d{1,4}/.exec(arg.replace(/\s+/g, ''))?.[0]))
+    return ml && Math.abs(ml) <= 3000 ? { kind: 'water', ml } : null
+  }
+  if (kind === 'reps') {
+    const amount = Math.round(Number(parts[1]))
+    return parts[0] && amount && Math.abs(amount) <= 1000 ? { kind: 'reps', exercise: parts[0].slice(0, 40), amount } : null
+  }
+  if (kind === 'sleep') {
+    if (!DATE_RE.test(parts[0] ?? '')) return null
+    const out: Extract<BrainAction, { kind: 'sleep' }> = { kind: 'sleep', day: parts[0] }
+    for (const kv of parts.slice(1).join(';').split(/;\s*/)) {
+      const mm = /^\s*(wake|bed|quality)\s*=\s*(\S+)/i.exec(kv)
+      if (!mm) continue
+      const k = mm[1].toLowerCase()
+      const t = /^(\d{1,2})[:.](\d{2})$/.exec(mm[2])
+      if ((k === 'wake' || k === 'bed') && t && Number(t[1]) < 24 && Number(t[2]) < 60) out[k] = `${t[1].padStart(2, '0')}:${t[2]}`
+      if (k === 'quality' && /^[1-5]$/.test(mm[2])) out.quality = Number(mm[2])
+    }
+    return out.wake || out.bed || out.quality ? out : null
+  }
+  if (kind === 'habit') {
+    const h = arg.toLowerCase()
+    const habit = /oath/.test(h) ? 'oath' : /clean|check/.test(h) ? 'clean' : /skin|face/.test(h) ? 'skincare' : null
+    return habit ? { kind: 'habit', habit } : null
+  }
+  if (kind === 'reward') {
+    const points = Math.round(Number(parts[1]))
+    const cost = Math.max(0, Math.round(Number(parts[2]) || 0))
+    return parts[0] && points > 0 && points <= 100000 ? { kind: 'reward', title: parts[0].slice(0, 80), points, cost } : null
+  }
+  if (kind === 'week') {
+    const out: Extract<BrainAction, { kind: 'week' }> = { kind: 'week' }
+    for (const kv of arg.split(/;\s*/)) {
+      const mm = /^\s*(focus|note|big3)\s*=\s*([\s\S]*)$/i.exec(kv)
+      if (!mm) continue
+      const k = mm[1].toLowerCase()
+      const v = mm[2].trim()
+      if (k === 'focus' && WEEK_FOCUS.includes(v.toLowerCase())) out.focus = v.toLowerCase()
+      if (k === 'note') out.note = v.slice(0, 140)
+      if (k === 'big3') out.big3 = v.split(/\s*\/\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 3)
+    }
+    return out.focus || out.note != null || out.big3?.length ? out : null
+  }
+  if (kind === 'bigdone') {
+    const index = Number(arg) - 1
+    return index >= 0 && index <= 2 ? { kind: 'bigdone', index } : null
   }
   if (kind === 'log') return arg.startsWith('/') && !SAFE_SLASH.test(arg) ? null : { kind: 'log', text: arg }
   if (kind === 'mustdo') return { kind: 'mustdo', text: arg.slice(0, 140) }

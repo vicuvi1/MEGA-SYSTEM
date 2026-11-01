@@ -3962,7 +3962,7 @@ function financeSpending(state) {
 	}));
 }
 // src/core/insights.ts
-var WEEKDAYS = [
+var WEEKDAYS$1 = [
 	"Sunday",
 	"Monday",
 	"Tuesday",
@@ -4069,7 +4069,7 @@ function insights(i, length = 364) {
 		streaks,
 		activeDays: active.length,
 		totalFocusMin: days.reduce((t, c) => t + c.focusMin, 0),
-		bestWeekday: active.length >= 14 && ranked[0].avg > 0 ? WEEKDAYS[ranked[0].k] : null
+		bestWeekday: active.length >= 14 && ranked[0].avg > 0 ? WEEKDAYS$1[ranked[0].k] : null
 	};
 }
 // src/core/growth.ts
@@ -8357,6 +8357,309 @@ function findExercise(s, name) {
 		return id.includes(key) || n.includes(key) || n.length > 3 && key.includes(n);
 	}) ?? null;
 }
+// src/core/coachMind.ts
+var MAX = {
+	goals: 8,
+	works: 12,
+	fails: 12,
+	patterns: 10
+};
+var norm$1 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+var clip = (t, n = 160) => String(t ?? "").trim().slice(0, n);
+function cleanMind(m) {
+	const list = (x) => Array.isArray(x) ? x.filter((e) => e && typeof e.t === "string").map((e) => ({
+		t: clip(e.t),
+		at: String(e.at ?? "")
+	})) : [];
+	return {
+		goals: Array.isArray(m?.goals) ? m.goals.filter((g) => g && typeof g.title === "string").map((g) => ({
+			title: clip(g.title, 120),
+			deadline: /^\d{4}-\d{2}-\d{2}$/.test(g.deadline) ? g.deadline : "",
+			weekly: clip(g.weekly ?? "", 80),
+			at: String(g.at ?? "")
+		})) : [],
+		works: list(m?.works),
+		fails: list(m?.fails),
+		patterns: list(m?.patterns)
+	};
+}
+/** Reads "aim: …", "aimdone: …", "works: …", "fails: …", "pattern: …" (the coach's memory actions). */
+function readMindOp(line) {
+	const m = /^\s*(aim|aimdone|works|fails|pattern)\s*:\s*([\s\S]+)$/i.exec(line);
+	if (!m) return null;
+	const kind = m[1].toLowerCase();
+	const arg = m[2].trim();
+	if (!arg) return null;
+	if (kind === "aim") {
+		const [title, deadline = "", weekly = ""] = arg.split("|").map((x) => x.trim());
+		if (!title) return null;
+		return {
+			kind: "aim",
+			title: clip(title, 120),
+			deadline: /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : "",
+			weekly: clip(weekly.replace(/^-$/, ""), 80)
+		};
+	}
+	if (kind === "aimdone") return {
+		kind: "aimdone",
+		title: clip(arg, 120)
+	};
+	return {
+		kind,
+		text: clip(arg)
+	};
+}
+var sameIdea = (a, b) => {
+	const x = norm$1(a);
+	const y = norm$1(b);
+	return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+};
+/** Applies one memory change; the newest version of an idea replaces the old one. */
+function applyMind(mind, op, today) {
+	const m = cleanMind(mind);
+	if (op.kind === "aim") {
+		const goals = m.goals.filter((g) => !sameIdea(g.title, op.title));
+		goals.push({
+			title: op.title,
+			deadline: op.deadline,
+			weekly: op.weekly,
+			at: today
+		});
+		return {
+			mind: {
+				...m,
+				goals: goals.slice(-MAX.goals)
+			},
+			line: `🎯 Tracking: ${op.title}${op.deadline ? ` by ${op.deadline}` : ""}${op.weekly ? ` · ${op.weekly}/week` : ""}`
+		};
+	}
+	if (op.kind === "aimdone") {
+		const hit = m.goals.find((g) => sameIdea(g.title, op.title));
+		if (!hit) return {
+			mind: m,
+			line: ""
+		};
+		return {
+			mind: {
+				...m,
+				goals: m.goals.filter((g) => g !== hit)
+			},
+			line: `🏁 Goal closed: ${hit.title}`
+		};
+	}
+	const key = op.kind === "pattern" ? "patterns" : op.kind;
+	const list = m[key].filter((x) => !sameIdea(x.t, op.text));
+	const other = op.kind === "works" ? "fails" : op.kind === "fails" ? "works" : null;
+	const next = {
+		...m,
+		[key]: [...list, {
+			t: op.text,
+			at: today
+		}].slice(-MAX[key])
+	};
+	if (other) next[other] = next[other].filter((x) => !sameIdea(x.t, op.text));
+	return {
+		mind: next,
+		line: `${op.kind === "works" ? "🧠 Noted what works" : op.kind === "fails" ? "🧠 Noted what doesn't work" : "🧠 Noted a pattern"}: ${op.text}`
+	};
+}
+var daysTo = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
+/** The mind as prompt lines. */
+function mindText(m, today) {
+	const out = [];
+	if (m.goals.length) out.push(`Goals you track with him:\n${m.goals.map((g) => {
+		const left = g.deadline ? daysTo(today, g.deadline) : null;
+		return `- ${g.title}${g.deadline ? ` · due ${g.deadline} (${left < 0 ? `${-left} days late` : `${left} days left`})` : ""}${g.weekly ? ` · weekly target ${g.weekly}` : ""}`;
+	}).join("\n")}`);
+	if (m.works.length) out.push(`What works for him:\n${m.works.map((x) => `- ${x.t}`).join("\n")}`);
+	if (m.fails.length) out.push(`What doesn't work:\n${m.fails.map((x) => `- ${x.t}`).join("\n")}`);
+	if (m.patterns.length) out.push(`Patterns you noticed:\n${m.patterns.map((x) => `- ${x.t}`).join("\n")}`);
+	return out.join("\n");
+}
+var WEEKDAYS = [
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday"
+];
+var wd = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+var avg = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+/**
+* What his last 8 weeks say: focus after a late night vs an on-time one,
+* after a late wake-up, on workout days, his best and worst weekday, and
+* weekend vs weekday spending. Only differences that are big (≥25%) and
+* seen enough (≥3 days each side) count.
+*/
+function findPatterns(p, weeks = 8) {
+	const from = addDays$1(p.today, -weeks * 7);
+	const days = [];
+	for (let d = from; d < p.today; d = addDays$1(d, 1)) days.push(d);
+	const focusBy = /* @__PURE__ */ new Map();
+	for (const f of p.focus) if (f.day >= from && f.day < p.today) focusBy.set(f.day, (focusBy.get(f.day) ?? 0) + f.minutes);
+	const firstFocus = [...focusBy.keys()].sort()[0];
+	const active = firstFocus ? days.filter((d) => d >= firstFocus) : [];
+	const fm = (d) => focusBy.get(d) ?? 0;
+	const out = [];
+	const compare = (label, a, b, aName, bName) => {
+		if (a.length < 3 || b.length < 3) return;
+		const x = avg(a.map(fm));
+		const y = avg(b.map(fm));
+		if (Math.max(x, y) < 15) return;
+		const diff = (x - y) / Math.max(x, y);
+		if (Math.abs(diff) < .25) return;
+		out.push(`${label}: ${Math.round(x)} min focus on ${aName} vs ${Math.round(y)} min on ${bName} (${a.length} vs ${b.length} days).`);
+	};
+	const sleep = new Map(p.sleep.map((s) => [s.day, s]));
+	compare("After a late night", active.filter((d) => sleep.get(d)?.bedOnTime === false), active.filter((d) => sleep.get(d)?.bedOnTime === true), "days after a late bedtime", "days after an on-time one");
+	compare("Late wake-ups", active.filter((d) => sleep.get(d)?.onTime === false), active.filter((d) => sleep.get(d)?.onTime === true), "late-wake days", "on-time days");
+	const wset = new Set(p.workouts.map((w) => w.day));
+	compare("Training", active.filter((d) => wset.has(d)), active.filter((d) => !wset.has(d)), "workout days", "rest days");
+	compare("Sleep quality", active.filter((d) => (sleep.get(d)?.quality ?? 0) > 0 && sleep.get(d).quality <= 2), active.filter((d) => (sleep.get(d)?.quality ?? 0) >= 4), "days after poor sleep (1–2/5)", "after good sleep (4–5/5)");
+	if (active.length >= 21) {
+		const by = WEEKDAYS.map((_, i) => avg(active.filter((d) => wd(d) === i).map(fm)));
+		const best = by.indexOf(Math.max(...by));
+		const worst = by.indexOf(Math.min(...by));
+		if (by[best] >= 20 && by[best] - by[worst] >= Math.max(20, by[best] * .4)) out.push(`Best focus day: ${WEEKDAYS[best]} (${Math.round(by[best])} min avg); weakest: ${WEEKDAYS[worst]} (${Math.round(by[worst])} min).`);
+	}
+	if (p.spending?.length) {
+		const spend = /* @__PURE__ */ new Map();
+		for (const s of p.spending) if (s.day >= from && s.day < p.today) spend.set(s.day, (spend.get(s.day) ?? 0) + s.bani);
+		const firstSpend = [...spend.keys()].sort()[0];
+		const sd = firstSpend ? days.filter((d) => d >= firstSpend) : [];
+		const we = sd.filter((d) => wd(d) === 0 || wd(d) === 6).map((d) => spend.get(d) ?? 0);
+		const wk = sd.filter((d) => wd(d) > 0 && wd(d) < 6).map((d) => spend.get(d) ?? 0);
+		if (we.length >= 4 && wk.length >= 10) {
+			const a = avg(we);
+			const b = avg(wk);
+			if (Math.max(a, b) >= 5e3 && Math.abs(a - b) / Math.max(a, b) >= .3) out.push(`Spending: ${Math.round(a / 100)} lei/day on weekends vs ${Math.round(b / 100)} lei/day on weekdays.`);
+		}
+	}
+	return out;
+}
+/** The last nights in one line each: "10-30 bed 00:40 (late) → up 07:20 (late) · 3/5". */
+function sleepDiary(logs, today, nights = 7) {
+	const from = addDays$1(today, -nights);
+	const rows = logs.filter((l) => l.day > from && l.day <= today).sort((a, b) => a.day < b.day ? -1 : 1);
+	if (!rows.length) return "Sleep diary: nothing logged in the last week.";
+	return `Sleep diary (bedtime is the night before): ${rows.map((l) => `${l.day.slice(5)} ${l.bedTime ? `bed ${l.bedTime}${l.bedOnTime === false ? " (late)" : ""} → ` : ""}up ${l.wakeTime}${l.onTime ? "" : " (late)"}${l.quality ? ` · ${l.quality}/5` : ""}`).join("; ")}.`;
+}
+/** The week ahead from calendar events: per day, how many blocks and busy hours. */
+function weekAhead(events, today, days = 7) {
+	const local = (iso) => {
+		const d = new Date(iso);
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+	};
+	const parts = [];
+	for (let i = 1; i <= days; i++) {
+		const day = addDays$1(today, i);
+		const list = events.filter((e) => !e.allDay && local(e.start) === day);
+		const allDay = events.filter((e) => e.allDay && String(e.start).slice(0, 10) === day);
+		const min = list.reduce((t, e) => t + Math.max(0, (Date.parse(e.end) - Date.parse(e.start)) / 6e4), 0);
+		const name = WEEKDAYS[wd(day)].slice(0, 3);
+		parts.push(list.length || allDay.length ? `${name} ${day.slice(5)}: ${list.length} blocks, ${Math.round(min / 6) / 10}h busy${allDay.length ? ` (${allDay.map((e) => e.title).join(", ")})` : ""}` : `${name} ${day.slice(5)}: free`);
+	}
+	return `Next ${days} days: ${parts.join("; ")}.`;
+}
+/** Focus minutes per subject since `from` (for "where his study time goes"). */
+function focusBySubject(sessions, from) {
+	const by = /* @__PURE__ */ new Map();
+	for (const s of sessions) if (s.day >= from) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
+	if (!by.size) return "";
+	const hm = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m}m`;
+	return [...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm(m)}`).join(", ");
+}
+// src/core/sportShared.ts
+var sportToday = (now = /* @__PURE__ */ new Date()) => now.toISOString().slice(0, 10);
+/** A new day starts a fresh checklist (reps and water back to 0). */
+function sportForDay(st, today) {
+	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : {};
+	if (!Array.isArray(s.exercises)) s.exercises = [];
+	if (!s.water || typeof s.water !== "object") s.water = {
+		currentMl: 0,
+		targetMl: 2700,
+		glassSizeMl: 250
+	};
+	if (s.lastDate !== today) {
+		s.lastDate = today;
+		s.exercises.forEach((e) => e.doneToday = 0);
+		s.water.currentMl = 0;
+	}
+	return s;
+}
+function sharedView(st, today) {
+	const s = sportForDay(st, today);
+	return {
+		date: today,
+		water: {
+			ml: Math.max(0, Math.round(Number(s.water.currentMl) || 0)),
+			target: Number(s.water.targetMl) || 2700,
+			glass: Number(s.water.glassSizeMl) || 250
+		},
+		exercises: s.exercises.map((e) => ({
+			id: String(e.id ?? e.name),
+			name: String(e.name ?? e.id),
+			target: Number(e.target) || 0,
+			done: Number(e.doneToday) || 0
+		}))
+	};
+}
+/** Adds (or with a negative amount, removes) water; never below 0. */
+function addWater(st, ml, today) {
+	const s = sportForDay(st, today);
+	s.water.currentMl = Math.max(0, Math.round((Number(s.water.currentMl) || 0) + ml));
+	return s;
+}
+var key = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
+/** The exercise "pushups", "Push-ups" or "push up" means. */
+function findSharedExercise(s, name) {
+	const k = key(name).replace(/s$/, "");
+	if (!k) return null;
+	return (s.exercises ?? []).find((e) => {
+		const id = key(e.id).replace(/s$/, "");
+		const n = key(e.name).replace(/s$/, "");
+		return id === k || n === k || id.includes(k) || n.includes(k) || n.length > 3 && k.includes(n);
+	}) ?? null;
+}
+/** Adds reps to an exercise (removes with a negative amount, never below 0); null if it doesn't exist. */
+function addReps(st, name, amount, today) {
+	const s = sportForDay(st, today);
+	const ex = findSharedExercise(s, name);
+	if (!ex) return null;
+	ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount));
+	return {
+		st: s,
+		exercise: {
+			name: String(ex.name ?? ex.id),
+			done: ex.doneToday,
+			target: Number(ex.target) || 0
+		}
+	};
+}
+/**
+* "water 500", "500 ml", "+250ml", "apă 0.5 l", "2 glasses of water", "вода 300":
+* how much water a short message means (ml), or null. A small number with
+* "water" and no unit ("water 15") is a bottle bought (money), not drunk.
+*/
+function parseWater(text, glass = 250) {
+	const t = text.trim().toLowerCase();
+	if (t.length > 40 || /\b(lei|mdl|ron|leu|\$|€|usd|eur)\b/.test(t)) return null;
+	const word = /(water|apa|apă|вод[аыу]|drank|drink)/.test(t);
+	const glasses = /(\d{1,2})\s*(glass(es)?|pahar(e)?|стакан\w*|cups?)/.exec(t);
+	if (glasses && (word || /^\+?\s*\d/.test(t))) return Math.min(3e3, Number(glasses[1]) * glass);
+	const unit = /([+-]?\d+(?:[.,]\d+)?)\s*(ml|l|л|мл)\b/.exec(t);
+	if (unit) {
+		const n = Number(unit[1].replace(",", "."));
+		const ml = /^(l|л)$/.test(unit[2]) ? n * 1e3 : n;
+		if (Math.abs(ml) >= 50 && Math.abs(ml) <= 3e3 && (word || t.replace(unit[0], "").trim().replace(/^\+/, "") === "")) return Math.round(ml);
+		return null;
+	}
+	const bare = /^(?:\+?\s*)?(?:water|apa|apă|вода)\s*\+?(\d{2,4})$|^\+?(\d{2,4})\s*(?:water|apa|apă|вода)$/.exec(t);
+	const n = Number(bare?.[1] ?? bare?.[2]);
+	return bare && n >= 100 && n <= 3e3 ? n : null;
+}
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
 function loadMemory(db) {
@@ -8541,7 +8844,8 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		})(),
 		`Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
 		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join("; ") || "none"}.`,
-		moneyContext(extra.finance, today)
+		moneyContext(extra.finance, today),
+		...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc)
 	];
 	if (extra.events) {
 		const nowHM = now.toTimeString().slice(0, 5);
@@ -8552,6 +8856,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		lines.push(`Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(", ") || "none"}.`);
 		const tomorrow = addDays$1(today, 1);
 		if (extra.events.some((e) => localDay(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`);
+		if (extra.events.some((e) => localDay(e.start) > tomorrow)) lines.push(weekAhead(extra.events, today));
 	}
 	if (extra.todoToday) {
 		const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? " (late)" : ""}${t.priority >= 3 ? ` P${5 - t.priority}` : ""}${t.section ? ` [${t.section}]` : ""}`);
@@ -8562,6 +8867,80 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		if (r.length) lines.push(`Deadlines soon: ${r.map((x) => `${x.task.content} ${whenText(x.daysLeft, x.date)}`).join("; ")}.`);
 	}
 	return lines.filter(Boolean).join("\n");
+}
+/** The coach's long-term notes (goals it tracks, what works, patterns). */
+var MIND = "coach_mind";
+function loadMind(db) {
+	try {
+		return cleanMind(JSON.parse(getSetting(db, MIND) || "null"));
+	} catch {
+		return cleanMind(null);
+	}
+}
+function saveMind(db, m) {
+	setSetting(db, MIND, JSON.stringify(cleanMind(m)));
+}
+/** Sport Track's shared state (water and reps), if it exists. */
+function sportState(db) {
+	try {
+		return JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+	} catch {
+		return null;
+	}
+}
+/** The rest of what the coach should know: water, reps, habits, sleep diary, focus by subject, patterns, past advice. */
+function moreContext(s, db, finance, today, input, todayRules, disc) {
+	const out = [];
+	const st = sportState(db);
+	if (st) {
+		const v = sharedView(st, sportToday());
+		const reps = v.exercises.map((e) => `${e.name} ${e.done}/${e.target}`).join(", ");
+		out.push(`Water today: ${v.water.ml} of ${v.water.target} ml (${Math.round(v.water.ml / Math.max(1, v.water.target) * 100)}%). Reps checklist: ${reps || "none set"}.`);
+	}
+	const habit = (done, name) => `${done ? "[done]" : "[open]"} ${name}`;
+	out.push(`Habits today: ${[
+		habit(!!disc.oathToday || todayRules.includes("discipline.oath"), "oath"),
+		habit(!!disc.checkedInToday || todayRules.includes("discipline.clean_day"), "clean check-in"),
+		habit(todayRules.includes("body.workout_done"), "workout"),
+		habit(todayRules.includes("face.routine_done"), "skincare"),
+		habit(todayRules.includes("money.logged"), "spending logged")
+	].join(", ")}.`);
+	let logs = [];
+	try {
+		logs = s.sleep.logs();
+	} catch {
+		logs = [];
+	}
+	out.push(sleepDiary(logs, today));
+	let sessions = [];
+	try {
+		sessions = db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?").all(addDays$1(today, -60)).map((r) => ({
+			day: String(r.day),
+			subject: String(r.subject),
+			minutes: Number(r.minutes)
+		}));
+	} catch {
+		sessions = [];
+	}
+	const bySub = focusBySubject(sessions, addDays$1(today, -6));
+	if (bySub) out.push(`Focus by subject, last 7 days: ${bySub}.`);
+	const pats = findPatterns({
+		today,
+		focus: input.focus,
+		sleep: logs.map((l) => ({
+			day: l.day,
+			onTime: !!l.onTime,
+			bedOnTime: l.bedOnTime ?? null,
+			quality: l.quality ?? null
+		})),
+		workouts: input.workouts,
+		spending: financeSpending(finance)
+	});
+	if (pats.length) out.push(`What his own data shows (last 8 weeks):\n${pats.map((p) => `- ${p}`).join("\n")}`);
+	const since = addDays$1(today, -4);
+	const advice = loadLog(db).filter((e) => e.role === "coach" && e.at.slice(0, 10) >= since).slice(-12, -4).map((e) => `${e.at.slice(5, 10)}: ${e.text.replace(/\s+/g, " ").slice(0, 140)}`);
+	if (advice.length) out.push(`Your earlier advice (check if he did it):\n${advice.map((a) => `- ${a}`).join("\n")}`);
+	return out;
 }
 var PERSONA = {
 	mega: "You are MEGA, Victor's head coach for his whole life: study (university), cyber security skills, career, sport and training, sleep, discipline and money. You also coach his training: suggest concrete workouts (sets and reps, progressing a little each week), keep his streak alive.",
@@ -8574,7 +8953,17 @@ Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "focus: <minutes> <subject>" start a focus timer now. "fun: <minutes> <what>" spend points on fun.
-- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline.
+- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline (a focus goal with hours).
+Body, sleep and habits (one shared log with Sport Track and Sporty):
+- "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
+- "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
+- "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+Points and the week:
+- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
+- "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
+Your long-term memory (use it: this is how you get better at coaching HIM):
+- "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
+- "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
 Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
 - "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
@@ -8597,7 +8986,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 	const chat = memory.chat.slice(-10).map((c) => `${c.role === "me" ? "Victor" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
 	return [
 		PERSONA[persona],
-		"Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. One clear next step with a time or a duration. Use his real numbers (tie advice to them: \"focus 32m of 10h this week\"). No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.",
+		"Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.",
 		"",
 		ACTIONS,
 		"",
@@ -8617,6 +9006,8 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		profile.goals.length ? profile.goals.map((g) => `- ${g}`).join("\n") : "- (none set)",
 		profile.rules.length ? `== His own rules (hold him to them, call it out when he breaks one) ==\n${profile.rules.map((r) => `- ${r}`).join("\n")}` : "",
 		profile.about ? `== About him, in his words ==\n${profile.about}` : "",
+		"",
+		extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : "",
 		"",
 		"== What you remember about him ==",
 		memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join("\n") : "- nothing yet",
@@ -8652,12 +9043,22 @@ function parseBrain(text) {
 }
 /** Only these slash commands may come from the brain (nothing that resets or deletes). */
 var SAFE_SLASH = /^\/(wake|bed|checkin|oath|weight|waist|pushups|situps|squats|plank|run|stop)\b/i;
+var WEEK_FOCUS = [
+	"focus",
+	"wake",
+	"sport",
+	"clean",
+	"todoist",
+	"spend",
+	"mustdo"
+];
+var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 var WHEN = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/;
 var EREF = /^E\d{1,3}$/i;
 var TREF = /^T\d{1,3}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
-	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 400);
@@ -8747,6 +9148,75 @@ function readAction(line) {
 			kind: "checkin",
 			minutes,
 			text: parts.slice(1).join(" | ").slice(0, 300)
+		} : null;
+	}
+	if (kind === "water") {
+		const ml = Math.round(Number(/^[+-]?\d{1,4}/.exec(arg.replace(/\s+/g, ""))?.[0]));
+		return ml && Math.abs(ml) <= 3e3 ? {
+			kind: "water",
+			ml
+		} : null;
+	}
+	if (kind === "reps") {
+		const amount = Math.round(Number(parts[1]));
+		return parts[0] && amount && Math.abs(amount) <= 1e3 ? {
+			kind: "reps",
+			exercise: parts[0].slice(0, 40),
+			amount
+		} : null;
+	}
+	if (kind === "sleep") {
+		if (!DATE_RE.test(parts[0] ?? "")) return null;
+		const out = {
+			kind: "sleep",
+			day: parts[0]
+		};
+		for (const kv of parts.slice(1).join(";").split(/;\s*/)) {
+			const mm = /^\s*(wake|bed|quality)\s*=\s*(\S+)/i.exec(kv);
+			if (!mm) continue;
+			const k = mm[1].toLowerCase();
+			const t = /^(\d{1,2})[:.](\d{2})$/.exec(mm[2]);
+			if ((k === "wake" || k === "bed") && t && Number(t[1]) < 24 && Number(t[2]) < 60) out[k] = `${t[1].padStart(2, "0")}:${t[2]}`;
+			if (k === "quality" && /^[1-5]$/.test(mm[2])) out.quality = Number(mm[2]);
+		}
+		return out.wake || out.bed || out.quality ? out : null;
+	}
+	if (kind === "habit") {
+		const h = arg.toLowerCase();
+		const habit = /oath/.test(h) ? "oath" : /clean|check/.test(h) ? "clean" : /skin|face/.test(h) ? "skincare" : null;
+		return habit ? {
+			kind: "habit",
+			habit
+		} : null;
+	}
+	if (kind === "reward") {
+		const points = Math.round(Number(parts[1]));
+		const cost = Math.max(0, Math.round(Number(parts[2]) || 0));
+		return parts[0] && points > 0 && points <= 1e5 ? {
+			kind: "reward",
+			title: parts[0].slice(0, 80),
+			points,
+			cost
+		} : null;
+	}
+	if (kind === "week") {
+		const out = { kind: "week" };
+		for (const kv of arg.split(/;\s*/)) {
+			const mm = /^\s*(focus|note|big3)\s*=\s*([\s\S]*)$/i.exec(kv);
+			if (!mm) continue;
+			const k = mm[1].toLowerCase();
+			const v = mm[2].trim();
+			if (k === "focus" && WEEK_FOCUS.includes(v.toLowerCase())) out.focus = v.toLowerCase();
+			if (k === "note") out.note = v.slice(0, 140);
+			if (k === "big3") out.big3 = v.split(/\s*\/\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 3);
+		}
+		return out.focus || out.note != null || out.big3?.length ? out : null;
+	}
+	if (kind === "bigdone") {
+		const index = Number(arg) - 1;
+		return index >= 0 && index <= 2 ? {
+			kind: "bigdone",
+			index
 		} : null;
 	}
 	if (kind === "log") return arg.startsWith("/") && !SAFE_SLASH.test(arg) ? null : {
@@ -9346,6 +9816,21 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		return { reply: goalsText(st.goals) };
 	}
 	function run(s, text, key = "") {
+		const ml = text.startsWith("/") ? null : parseWater(text);
+		if (ml) {
+			const st = sportState(s.db);
+			if (st) {
+				const day = sportToday();
+				const next = addWater(st, ml, day);
+				setSetting(s.db, "sport_tracker_json", JSON.stringify({
+					savedAt: Date.now(),
+					data: next
+				}));
+				const v = sharedView(next, day);
+				const pct = Math.round(v.water.ml / Math.max(1, v.water.target) * 100);
+				return { reply: `💧 <b>${ml > 0 ? "+" : ""}${ml} ml</b> · ${v.water.ml} of ${v.water.target} ml today (${pct}%)${pct >= 100 ? "\n🎯 Water goal done!" : ""}` };
+			}
+		}
 		const viaFocus = runFocus(s, text);
 		if (viaFocus) return viaFocus;
 		const parsed = parseTelegramText(text);
@@ -9910,14 +10395,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const [todoToday, upcoming, events] = await Promise.all([
 			todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
 			todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
-			calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 1728e5).toISOString()).catch(() => null) : Promise.resolve(null)
+			calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 6912e5).toISOString()).catch(() => null) : Promise.resolve(null)
 		]);
 		await mirror.write((db) => {
 			const raw = getSetting(db, REMINDERS);
 			if (!raw) return;
 			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
 		}).catch(() => null);
-		const { context, memory, profile, look } = await mirror.read((db) => {
+		const { context, memory, profile, look, mind } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			let sessions = [];
@@ -9939,6 +10424,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}),
 				memory: loadMemory(db),
 				profile: loadProfile(db),
+				mind: mindText(loadMind(db), svc.wallet.today()),
 				look: {
 					finance,
 					input: svc.progress.input(null, /* @__PURE__ */ new Date(), 400),
@@ -9960,7 +10446,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (big) step("Thinking it through");
 		const ask = (found) => ai(brainPrompt(persona, context, memory, text, media?.kind, profile, {
 			refs: made.lines,
-			found
+			found,
+			mind
 		}), {
 			json: true,
 			think: big,
@@ -10014,6 +10501,22 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		let keyboard;
 		let expense = false;
 		const acts = out.actions.map(readAction).filter((a) => !!a);
+		const mindOps = out.actions.map(readMindOp).filter((x) => !!x);
+		if (mindOps.length) {
+			const lines = await mirror.write((db) => {
+				let m = loadMind(db);
+				const today = services.services(db).wallet.today();
+				const said = [];
+				for (const op of mindOps) {
+					const r = applyMind(m, op, today);
+					m = r.mind;
+					if (r.line) said.push(r.line);
+				}
+				saveMind(db, m);
+				return said;
+			}).catch(() => []);
+			done.push(...lines);
+		}
 		if (typeof process !== "undefined" && process.env?.BOT_DEBUG) console.log("brain actions:", out.actions, "→", acts);
 		const noCal = () => done.push("⚠️ Google Calendar isn't connected (Settings in the app)");
 		const fmtHM = (iso) => new Date(iso).toTimeString().slice(0, 5);
@@ -10122,6 +10625,119 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					})));
 				});
 				done.push(a.kind === "remind" ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== (/* @__PURE__ */ new Date()).toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ""}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`);
+				continue;
+			}
+			if (a.kind === "water" || a.kind === "reps") {
+				const line = await mirror.write((db) => {
+					const st = sportState(db);
+					if (!st) return a.kind === "water" ? "⚠️ Open Sport Track once so water has a place to go" : "⚠️ Open Sport Track once to set up your reps checklist";
+					const day = sportToday();
+					const save = (next) => setSetting(db, "sport_tracker_json", JSON.stringify({
+						savedAt: Date.now(),
+						data: next
+					}));
+					if (a.kind === "water") {
+						const next = addWater(st, a.ml, day);
+						save(next);
+						const v = sharedView(next, day);
+						return `💧 ${a.ml > 0 ? "+" : ""}${a.ml} ml · ${(v.water.ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(v.water.target / 1e3).toFixed(1)} L today`;
+					}
+					const r = addReps(st, a.exercise, a.amount, day);
+					if (!r) return `⚠️ No "${a.exercise}" on your Sport Track checklist`;
+					save(r.st);
+					if (a.amount > 0) services.services(db).body.logWorkout({
+						title: `${r.exercise.name} (+${a.amount})`,
+						items: [{
+							exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, "_"),
+							name: r.exercise.name,
+							amount: a.amount,
+							unit: "reps"
+						}],
+						note: "Logged by the coach"
+					});
+					return `💪 ${r.exercise.name} ${a.amount > 0 ? "+" : ""}${a.amount} · ${r.exercise.done}${r.exercise.target ? `/${r.exercise.target}` : ""} today`;
+				});
+				done.push(line);
+				continue;
+			}
+			if (a.kind === "sleep") {
+				const line = await mirror.write((db) => {
+					const svc = services.services(db);
+					const said = [];
+					if (a.wake) {
+						const r = svc.sleep.setWake(a.day, a.wake);
+						said.push(`up ${r.log.wakeTime}${r.log.onTime ? " (on time)" : ""}`);
+					}
+					if (a.bed) {
+						if (!db.prepare("SELECT 1 FROM sleep_logs WHERE day = ?").get(a.day)) svc.sleep.setWake(a.day, a.wake ?? "07:00");
+						const target = svc.sleep.bedtimeTarget();
+						const toMin = (t) => {
+							const [h, m] = t.split(":").map(Number);
+							return (h < 12 ? h + 24 : h) * 60 + m;
+						};
+						const onTime = toMin(a.bed) <= toMin(target);
+						db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(a.bed, target, onTime ? 1 : 0, a.day);
+						said.push(`bed ${a.bed}${onTime ? " (on time)" : " (late)"}`);
+					}
+					if (a.quality) {
+						svc.sleep.setQuality(a.day, a.quality);
+						said.push(`slept ${a.quality}/5`);
+					}
+					return said.length ? `😴 Sleep ${a.day.slice(5)}: ${said.join(", ")}` : null;
+				});
+				if (line) done.push(line);
+				continue;
+			}
+			if (a.kind === "habit" || a.kind === "reward" || a.kind === "week" || a.kind === "bigdone") {
+				const line = await mirror.write((db) => {
+					const svc = services.services(db);
+					if (a.kind === "habit") {
+						if ((svc.wallet.summary().todayRules ?? []).includes(a.habit === "oath" ? "discipline.oath" : a.habit === "clean" ? "discipline.clean_day" : "face.routine_done")) return null;
+						if (a.habit === "oath") svc.discipline.oath();
+						else if (a.habit === "clean") svc.discipline.checkIn();
+						else svc.wallet.award("face.routine_done", "Ticked by the coach");
+						return `✅ Habit: ${a.habit === "oath" ? "morning oath" : a.habit === "clean" ? "clean-day check-in" : "skincare"}`;
+					}
+					if (a.kind === "reward") {
+						svc.shop.save({
+							title: a.title,
+							price: a.points,
+							tier: "bronze",
+							realCost: a.cost,
+							pinned: false,
+							note: "Added by your coach",
+							currency: "MDL"
+						});
+						return `🎁 New reward: ${a.title} · ${a.points} points`;
+					}
+					if (a.kind === "bigdone") {
+						const plan = svc.weekPlan.active();
+						if (!plan?.big3[a.index] || plan.big3[a.index].done) return null;
+						svc.weekPlan.toggle(a.index);
+						return `✅ Week task done: ${plan.big3[a.index].text}`;
+					}
+					const cur = svc.weekPlan.active();
+					const big3 = a.big3?.length ? a.big3.map((text) => ({
+						text,
+						done: cur?.big3.find((b) => b.text.toLowerCase() === text.toLowerCase())?.done ?? false
+					})) : cur?.big3 ?? [];
+					const plan = svc.weekPlan.save({
+						...cur ?? {},
+						focus: a.focus ?? cur?.focus ?? "focus",
+						note: a.note ?? cur?.note ?? "",
+						big3
+					});
+					return `🗓 Week plan: ${{
+						focus: "focus time",
+						wake: "wake-ups",
+						sport: "training",
+						clean: "clean days",
+						todoist: "tasks",
+						spend: "spending",
+						mustdo: "must-dos"
+					}[plan.focus] ?? plan.focus}${plan.note ? ` ("${plan.note}")` : ""} · ${plan.big3.map((b) => b.text).join(" / ")}`;
+				});
+				if (line) done.push(line);
 				continue;
 			}
 			if (a.kind === "task") {
@@ -11181,73 +11797,6 @@ function deadlineFacts(items) {
 			step: x.daysLeft === 1 ? `Finish “${x.task.content}” today: block 2 hours this afternoon.` : `Do the first 50 minutes of “${x.task.content}” today, so it isn't a last-night rush.`
 		};
 	});
-}
-// src/core/sportShared.ts
-var sportToday = (now = /* @__PURE__ */ new Date()) => now.toISOString().slice(0, 10);
-/** A new day starts a fresh checklist (reps and water back to 0). */
-function sportForDay(st, today) {
-	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : {};
-	if (!Array.isArray(s.exercises)) s.exercises = [];
-	if (!s.water || typeof s.water !== "object") s.water = {
-		currentMl: 0,
-		targetMl: 2700,
-		glassSizeMl: 250
-	};
-	if (s.lastDate !== today) {
-		s.lastDate = today;
-		s.exercises.forEach((e) => e.doneToday = 0);
-		s.water.currentMl = 0;
-	}
-	return s;
-}
-function sharedView(st, today) {
-	const s = sportForDay(st, today);
-	return {
-		date: today,
-		water: {
-			ml: Math.max(0, Math.round(Number(s.water.currentMl) || 0)),
-			target: Number(s.water.targetMl) || 2700,
-			glass: Number(s.water.glassSizeMl) || 250
-		},
-		exercises: s.exercises.map((e) => ({
-			id: String(e.id ?? e.name),
-			name: String(e.name ?? e.id),
-			target: Number(e.target) || 0,
-			done: Number(e.doneToday) || 0
-		}))
-	};
-}
-/** Adds (or with a negative amount, removes) water; never below 0. */
-function addWater(st, ml, today) {
-	const s = sportForDay(st, today);
-	s.water.currentMl = Math.max(0, Math.round((Number(s.water.currentMl) || 0) + ml));
-	return s;
-}
-var key = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
-/** The exercise "pushups", "Push-ups" or "push up" means. */
-function findSharedExercise(s, name) {
-	const k = key(name).replace(/s$/, "");
-	if (!k) return null;
-	return (s.exercises ?? []).find((e) => {
-		const id = key(e.id).replace(/s$/, "");
-		const n = key(e.name).replace(/s$/, "");
-		return id === k || n === k || id.includes(k) || n.includes(k) || n.length > 3 && k.includes(n);
-	}) ?? null;
-}
-/** Adds reps to an exercise (removes with a negative amount, never below 0); null if it doesn't exist. */
-function addReps(st, name, amount, today) {
-	const s = sportForDay(st, today);
-	const ex = findSharedExercise(s, name);
-	if (!ex) return null;
-	ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount));
-	return {
-		st: s,
-		exercise: {
-			name: String(ex.name ?? ex.id),
-			done: ex.doneToday,
-			target: Number(ex.target) || 0
-		}
-	};
 }
 // src/core/todoistClean.ts
 var MAX_TASKS = 150;

@@ -61,3 +61,26 @@ export function addReps(st: any, name: string, amount: number, today: string): {
   ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount))
   return { st: s, exercise: { name: String(ex.name ?? ex.id), done: ex.doneToday, target: Number(ex.target) || 0 } }
 }
+
+/**
+ * "water 500", "500 ml", "+250ml", "apă 0.5 l", "2 glasses of water", "вода 300":
+ * how much water a short message means (ml), or null. A small number with
+ * "water" and no unit ("water 15") is a bottle bought (money), not drunk.
+ */
+export function parseWater(text: string, glass = 250): number | null {
+  const t = text.trim().toLowerCase()
+  if (t.length > 40 || /\b(lei|mdl|ron|leu|\$|€|usd|eur)\b/.test(t)) return null
+  const word = /(water|apa|apă|вод[аыу]|drank|drink)/.test(t)
+  const glasses = /(\d{1,2})\s*(glass(es)?|pahar(e)?|стакан\w*|cups?)/.exec(t)
+  if (glasses && (word || /^\+?\s*\d/.test(t))) return Math.min(3000, Number(glasses[1]) * glass)
+  const unit = /([+-]?\d+(?:[.,]\d+)?)\s*(ml|l|л|мл)\b/.exec(t)
+  if (unit) {
+    const n = Number(unit[1].replace(',', '.'))
+    const ml = /^(l|л)$/.test(unit[2]) ? n * 1000 : n
+    if (Math.abs(ml) >= 50 && Math.abs(ml) <= 3000 && (word || t.replace(unit[0], '').trim().replace(/^\+/, '') === '')) return Math.round(ml)
+    return null
+  }
+  const bare = /^(?:\+?\s*)?(?:water|apa|apă|вода)\s*\+?(\d{2,4})$|^\+?(\d{2,4})\s*(?:water|apa|apă|вода)$/.exec(t)
+  const n = Number(bare?.[1] ?? bare?.[2])
+  return bare && n >= 100 && n <= 3000 ? n : null
+}

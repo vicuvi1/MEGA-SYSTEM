@@ -18,6 +18,7 @@ export interface GoogleStatus {
   error?: string
 }
 import { createTursoWebBridge } from './tursoWebBridge'
+import type { CoachMind } from '@core/coachMind'
 
 export type Bridge = LifeApi & {
   onLocked(cb: () => void): void
@@ -33,6 +34,8 @@ export type Bridge = LifeApi & {
     chat(text: string, onStep?: (step: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[] }>
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
+    mind?(): Promise<CoachMind>
+    setMind?(m: CoachMind): Promise<void>
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>
     saveProfile(p: { about: string; goals: string[]; rules: string[] }): Promise<{ about: string; goals: string[]; rules: string[] }>
     log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string }[]>
