@@ -329,14 +329,14 @@ export function Focus({ onWallet }: { onWallet: () => void }) {
             </h2>
             <span className="hint">{hm(w.totalMin)} focused</span>
           </header>
-          <div className="week-bars" role="img" aria-label="Focus minutes per day, last 7 days">
+          {w.totalMin === 0 ? <p className="week-empty">No focus sessions this week yet. Start one above, or tap ▶ on a task.</p> : <div className="week-bars" role="img" aria-label="Focus minutes per day, last 7 days">
             {w.byDay.map((d) => (
               <div key={d.day} className="week-bar" title={`${d.day}: ${hm(d.minutes)}`}>
                 <i style={{ height: `${Math.max(2, (d.minutes / maxDay) * 100)}%` }} />
                 <span>{new Date(`${d.day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'narrow', timeZone: 'UTC' })}</span>
               </div>
             ))}
-          </div>
+          </div>}
           <ul className="week-facts">
             {w.bySubject.map((s) => (
               <li key={s.subject}>

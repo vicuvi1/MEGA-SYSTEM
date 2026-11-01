@@ -482,3 +482,131 @@ html.calm [class*='loading'] {
 .co-item.add input { border-style: dashed; }
 .co-about { width: 100%; resize: vertical; font-size: 13px; margin-top: 6px; }
 @media (max-width: 1100px) { .co { grid-template-columns: 1fr; } .co-chat { height: 70vh; } }
+
+/* ============================================================
+   Design v3: one calm, consistent look (inputs, buttons, cards)
+   ============================================================ */
+:root textarea {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+:root textarea::placeholder, :root input::placeholder { color: var(--faint); opacity: 1; font-family: inherit; }
+:root input:not([type='checkbox']):not([type='radio']), :root select {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14px;
+}
+:root textarea:focus, :root input:not([type='checkbox']):focus, :root select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--lime) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lime) 14%, transparent);
+  background: rgba(255, 255, 255, 0.05);
+}
+:root input[type='checkbox'] { accent-color: var(--lime); }
+:root input[type='date'] { color-scheme: dark; }
+
+/* Buttons: lime is the one main action, everywhere */
+:root .btn { border-radius: 10px; font-weight: 600; box-shadow: none; }
+:root .btn.primary {
+  background: var(--lime);
+  color: var(--lime-ink);
+  border-color: transparent;
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--lime) 70%, transparent);
+}
+:root .btn.primary:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); }
+:root .btn.primary:disabled { background: color-mix(in srgb, var(--lime) 22%, transparent); color: color-mix(in srgb, var(--lime) 70%, var(--text)); box-shadow: none; opacity: 1; }
+:root .btn.small { border-radius: 8px; padding: 6px 11px; }
+
+/* Cards */
+:root .panel { border-radius: 18px; padding: 18px 20px; border: 1px solid rgba(255, 255, 255, 0.07); background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)), var(--panel); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 40px -28px rgba(0, 0, 0, 0.7); }
+:root .panel-head { margin-bottom: 12px; }
+:root .panel-head h2 { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+:root .hint { color: var(--muted); }
+
+/* ---------- Tasks: full-width text, actions float in on hover ---------- */
+.ta-task { padding: 10px 8px; align-items: flex-start; }
+.ta-body { padding-right: 4px; }
+.ta-text { font-size: 14px; line-height: 1.45; }
+.ta-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 4;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--panel-2, #151922);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 22px -10px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+.ta-task:hover .ta-actions, .ta-task:focus-within .ta-actions { pointer-events: auto; transform: none; }
+@media (hover: none) { .ta-actions { position: static; opacity: 1; pointer-events: auto; background: none; border: none; box-shadow: none; transform: none; } }
+.ta-col { padding: 14px 12px 12px; border-radius: 18px; }
+.ta-col-head h3 { font-size: 15px; font-weight: 600; }
+.ta-meta { margin-top: 2px; }
+.ta-cols { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+.ta-add { border-radius: 14px; background: rgba(255, 255, 255, 0.03); }
+.ta-add input:not([type='checkbox']) { border: none; background: transparent; box-shadow: none; padding: 8px 0; font-size: 15px; }
+.ta-add input:focus { box-shadow: none; background: transparent; }
+.ta-add:focus-within { border-color: color-mix(in srgb, var(--lime) 50%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lime) 10%, transparent); }
+
+/* ---------- Focus page ---------- */
+.goal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
+.goal-form > input:first-child { grid-column: 1 / -1; }
+.goal-form label.row { margin: 0; gap: 8px; flex-wrap: nowrap; }
+.goal-form .btn { grid-column: 1 / -1; justify-self: start; }
+.week-bars { height: 120px; align-items: flex-end; gap: 10px; }
+.week-bar i { border-radius: 6px 6px 2px 2px; background: linear-gradient(180deg, var(--lime), color-mix(in srgb, var(--lime) 45%, transparent)); min-height: 4px; }
+.week-empty { color: var(--muted); font-size: 13px; padding: 26px 0; text-align: center; }
+
+/* ---------- Coach page ---------- */
+.co-chat { padding: 0; overflow: hidden; gap: 0; }
+.co-head { padding: 16px 20px; border-bottom: 1px solid var(--line); align-items: center; }
+.co-head h2 { font-size: 17px; }
+.co-model { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.co-model i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+.co-stream { padding: 18px 20px; gap: 16px; }
+.co-row { display: flex; gap: 10px; align-items: flex-end; max-width: 82%; animation: pg-rise 0.25s ease both; }
+.co-row.me { align-self: flex-end; flex-direction: row-reverse; }
+.co-avatar { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--lime) 35%, transparent), color-mix(in srgb, var(--cyan) 25%, transparent)); border: 1px solid color-mix(in srgb, var(--lime) 40%, transparent); color: var(--lime); }
+.co-row .co-msg { max-width: 100%; }
+.co-bubble { border-radius: 18px; padding: 11px 15px; font-size: 14.5px; }
+.co-hero { margin: auto; max-width: 640px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 20px 0; }
+.co-hero .co-avatar { width: 56px; height: 56px; font-size: 24px; }
+.co-hero h3 { margin: 0; font-size: 22px; font-weight: 600; }
+.co-hero p { margin: 0; color: var(--muted); max-width: 480px; }
+.co-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; margin-top: 8px; }
+.co-card { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.025); color: var(--text); cursor: pointer; transition: border-color 0.15s, transform 0.15s, background 0.15s; }
+.co-card:hover { border-color: color-mix(in srgb, var(--lime) 45%, var(--line)); transform: translateY(-2px); background: rgba(255, 255, 255, 0.04); }
+.co-card b { font-size: 14px; font-weight: 600; }
+.co-card small { color: var(--muted); font-size: 12.5px; }
+.co-quick { padding: 0 20px 10px; }
+.co-quick .wp-chip { font-size: 12.5px; padding: 6px 12px; }
+.co-composer { margin: 0 20px 18px; display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 14px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255, 255, 255, 0.035); transition: border-color 0.15s, box-shadow 0.15s; }
+.co-composer:focus-within { border-color: color-mix(in srgb, var(--lime) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lime) 12%, transparent); }
+:root .co-composer textarea { flex: 1; border: none; background: transparent; box-shadow: none; padding: 8px 0; resize: none; min-height: 24px; max-height: 180px; }
+:root .co-composer textarea:focus { box-shadow: none; background: transparent; }
+.co-send { flex: none; width: 40px; height: 40px; border-radius: 12px; border: none; background: var(--lime); color: var(--lime-ink); cursor: pointer; display: grid; place-items: center; font-size: 18px; font-weight: 700; transition: transform 0.12s, filter 0.12s, opacity 0.12s; }
+.co-send:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); }
+.co-send:disabled { opacity: 0.35; cursor: default; }
+.co-side .panel { padding: 16px 18px; }
+.co-side h2 { font-size: 15px; }
+@media (max-width: 700px) { .co-cards { grid-template-columns: 1fr; } .co-row { max-width: 92%; } }
+
+:root[data-theme='light'] textarea, :root[data-theme='light'] input:not([type='checkbox']), :root[data-theme='light'] select { background: #fff; }
+:root[data-theme='light'] input[type='date'] { color-scheme: light; }
+/* Pages made of stacked cards: even breathing room between rows */
+.focus-page { display: flex; flex-direction: column; gap: 16px; }
+.focus-page > .cols { margin: 0; gap: 16px; }
+.focus-page .cols > .panel, .focus-page .cols > div > .panel { margin: 0; }

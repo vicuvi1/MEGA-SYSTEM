@@ -10,6 +10,12 @@ type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; don
 type Profile = { about: string; goals: string[]; rules: string[] }
 
 const BOT_LABEL: Record<string, string> = { mega: 'Mega', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
+const CARDS: { title: string; sub: string; ask: string }[] = [
+  { title: 'What now?', sub: 'The one thing that matters most right now', ask: 'What should I focus on right now? Be specific.' },
+  { title: 'Plan my day', sub: 'Blocks in my free time, from my calendar', ask: 'Plan the rest of my day around my calendar and put the blocks in it.' },
+  { title: 'Honest week review', sub: 'Where I improved, where I slipped', ask: 'How was my week, honestly? What should I change next week?' },
+  { title: 'Push me', sub: "I'm procrastinating. Tough love, one step", ask: "I'm procrastinating right now. Push me and give me one step to start." }
+]
 const QUICK = [
   'What should I focus on right now?',
   'Plan my afternoon around my calendar',
@@ -83,17 +89,31 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           <h2>
             <Icon name="spark" /> Your coach
           </h2>
-          <span className="hint">{model ? `Thinking with ${model.replace(/^.*\//, '')}` : 'Same coach as your Telegram bots'}</span>
+          <span className="co-model" title="Same coach and memory as your Telegram bots">
+            <i /> {model ? model.replace(/^.*\//, '') : 'Same coach as your bots'}
+          </span>
         </header>
         <div className="co-stream">
           {log === null && <p className="hint">Loading your conversation…</p>}
           {log?.length === 0 && (
-            <div className="co-empty">
-              <p>Ask anything about your day, your goals, money, sleep or training. The coach sees your real data, your calendar and Todoist, and can act: log things, plan blocks, add tasks.</p>
+            <div className="co-hero">
+              <span className="co-avatar">✦</span>
+              <h3>What's on your mind?</h3>
+              <p>Your coach sees your day, calendar, Todoist, sleep, training and money, and can act: log things, plan blocks, add tasks. Honest, direct, on your side.</p>
+              <div className="co-cards">
+                {CARDS.map((c) => (
+                  <button key={c.title} className="co-card" disabled={busy} onClick={() => void send(c.ask)}>
+                    <b>{c.title}</b>
+                    <small>{c.sub}</small>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {log?.map((m, i) => (
-            <div key={i} className={`co-msg ${m.role} ${m.pending ? 'pending' : ''}`}>
+            <div key={i} className={`co-row ${m.role}`}>
+            {m.role === 'coach' && <span className="co-avatar">✦</span>}
+            <div className={`co-msg ${m.role} ${m.pending ? 'pending' : ''}`}>
               <div className="co-meta">
                 {m.role === 'me' ? 'You' : `Coach${m.bot && m.bot !== 'mega' ? ` · ${BOT_LABEL[m.bot] ?? m.bot}` : ''}`}
                 <span> · {m.via === 'app' ? 'app' : 'Telegram'} · {timeOf(m.at)}</span>
@@ -117,18 +137,19 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 )}
               </div>
             </div>
+            </div>
           ))}
           <div ref={end} />
         </div>
-        <div className="co-quick">
+        {!!log?.length && <div className="co-quick">
           {QUICK.map((q) => (
             <button key={q} className="wp-chip" disabled={busy} onClick={() => void send(q)}>
               {q}
             </button>
           ))}
-        </div>
+        </div>}
         <form
-          className="co-input"
+          className="co-composer"
           onSubmit={(e) => {
             e.preventDefault()
             void send()
@@ -136,9 +157,13 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         >
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Talk to your coach… (Enter to send, Shift+Enter for a new line)"
-            rows={2}
+            onChange={(e) => {
+              setText(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = `${Math.min(180, e.target.scrollHeight)}px`
+            }}
+            placeholder="Message your coach…"
+            rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -146,8 +171,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               }
             }}
           />
-          <button className="btn primary" disabled={busy || !text.trim()}>
-            {busy ? 'Thinking…' : 'Send'}
+          <button className="co-send" disabled={busy || !text.trim()} aria-label="Send" title="Send (Enter)">
+            {busy ? '…' : '↑'}
           </button>
         </form>
       </section>
