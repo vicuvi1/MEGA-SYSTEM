@@ -6,6 +6,7 @@ import { planGoal } from '@core/goalPlan'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
 import { sharedView, sportToday } from '@core/sportShared'
 import { getSetting } from '../../../main/settings'
+import { addDays } from '@core/dates'
 import type { Services } from './webServices'
 
 export interface CoachStatus {
@@ -17,6 +18,9 @@ export interface CoachStatus {
   promises: { awaiting: string[]; kept: number; missed: number }
   goals: { id: number; title: string; subject: string; pct: number; perDayMin: number; todayLeftMin: number; status: string; daysLeft: number }[]
   today: { focusMin: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number }
+  /** Focus minutes per day, the last 7 days (oldest first). */
+  week: { day: string; min: number }[]
+  mustdos: { i: number; text: string; done: boolean }[]
 }
 
 const json = (db: any, key: string) => {
@@ -79,6 +83,14 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
       const g = f.goals.find((x) => x.id === p.goalId)!
       return { id: p.goalId, title: p.title, subject: p.subject, pct: Math.min(100, Math.round((g.doneMin / 60 / Math.max(0.1, g.hours)) * 100)), perDayMin: p.perDayMin, todayLeftMin: p.todayLeftMin, status: p.status, daysLeft: p.daysLeft }
     }),
-    today: { focusMin: f.todayMin, mustDone: f.plan.items.length - open.length, mustTotal: f.plan.items.length, waterMl: water.ml, waterTarget: water.target }
+    today: { focusMin: f.todayMin, mustDone: f.plan.items.length - open.length, mustTotal: f.plan.items.length, waterMl: water.ml, waterTarget: water.target },
+    week: (() => {
+      const focus = s.progress.input(null, now, 8).focus
+      return Array.from({ length: 7 }, (_, k) => {
+        const day = addDays(today, k - 6)
+        return { day, min: focus.filter((x) => x.day === day).reduce((t, x) => t + x.minutes, 0) }
+      })
+    })(),
+    mustdos: f.plan.items.map((x, i) => ({ i, text: x.text, done: x.done }))
   }
 }

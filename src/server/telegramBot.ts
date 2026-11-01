@@ -135,12 +135,12 @@ function localMidnight(daysAgo: number): Date {
 }
 
 /** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
-export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[] }> {
+export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   if (!env.model) return { ok: false, reply: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.', done: [] }
   const { bots } = await botsFor(env)
   const r = await bots.think(text, `app:${Date.now()}`, onStep, media)
-  return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps, mood: r.mood, at: r.at, undo: r.undo, chips: r.chips }
+  return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps, mood: r.mood, at: r.at, undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show }
 }
 
 /** The app: take back what the coach did in one reply (all, or one line). */

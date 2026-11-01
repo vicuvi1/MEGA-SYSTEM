@@ -34,6 +34,8 @@ import type { Services, WebServices } from './webServices'
 import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
+import { sparkline, telegramKeyboard } from '@core/coachButtons'
+import { coachStatus } from './coachStatus'
 import { createRhythm } from './rhythmBot'
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
 
@@ -643,7 +645,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw]|cu)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -651,6 +653,24 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     const edit = (text: string, keyboard?: any) =>
       tg(update.__token, 'editMessageText', { chat_id: chat, message_id: cq.message.message_id, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+    // A reply button: "say" sends its words as your message; "book" books a goal; "plan" makes today's plan.
+    if (data.startsWith('cs|') || data.startsWith('gb|') || data === 'rb|p') {
+      if (!(await markSeen(key))) return null
+      await answer(data.startsWith('cs|') ? '…' : 'On it')
+      if (data === 'rb|p') return sendProposal(update.__token, chat)
+      if (data.startsWith('gb|')) {
+        const want = data.slice(3).toLowerCase()
+        const plans = await rhythm.goalPlans()
+        const ids = plans.filter((p) => p.title.toLowerCase().startsWith(want) || want.startsWith(p.title.toLowerCase().slice(0, want.length))).map((p) => p.goalId)
+        const r = await rhythm.bookGoals(ids.length ? ids : undefined)
+        const text = r.lines.map(esc).join('\n')
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML' }).catch(() => null)
+        return text
+      }
+      const said = data.slice(3)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text: `💬 <i>${esc(said)}</i>`, parse_mode: 'HTML' }).catch(() => null)
+      return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:say`)
+    }
     // ↩ Undo under a coach reply: take back what it did.
     if (data.startsWith('cu|')) {
       if (!(await markSeen(key))) return null
@@ -1009,7 +1029,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     media?: { kind: 'voice' | 'photo'; mime: string; data: string },
     via = 'telegram',
     onStep?: (step: string) => void
-  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[] }> {
+  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }> {
     const step = (s: string) => {
       try {
         onStep?.(s)
@@ -1474,12 +1494,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         )
         appendLog(db, [
           { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : text, at },
-          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at, ...(undo.some(Boolean) ? { undo } : {}), ...(out.chips?.length ? { chips: out.chips } : {}) }
+          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at, ...(undo.some(Boolean) ? { undo } : {}), ...(out.chips?.length ? { chips: out.chips } : {}), ...(out.buttons?.length ? { buttons: out.buttons } : {}), ...(out.show?.length ? { show: out.show } : {}) }
         ])
       })
       .catch(() => null)
     processed++
-    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood, at, undo, chips: out.chips }
+    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood, at, undo, chips: out.chips, buttons: out.buttons, show: out.show }
   }
 
   /**
@@ -1575,15 +1595,34 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return { ok: ok.length > 0, lines }
   }
 
+  /** The mini-widgets as text for Telegram ("Focus 7 days: ▁▃▅▇▂·▄ 4.2h"). */
+  async function widgetText(show: string[]): Promise<string> {
+    const st = await mirror.read((db) => coachStatus(services.services(db) as any))
+    const out: string[] = []
+    for (const w of show) {
+      if (w === 'focus-week') out.push(`📊 Focus 7 days: <code>${sparkline(st.week.map((d) => d.min))}</code> ${(st.week.reduce((t, d) => t + d.min, 0) / 60).toFixed(1)}h`)
+      if (w === 'goals') out.push(...st.goals.map((g) => `🎯 ${esc(g.title)}: ${g.pct}% · ${g.perDayMin} min/day · ${g.daysLeft}d left`))
+      if (w === 'plan') out.push(`☀️ Plan: ${st.plan.status === 'none' ? 'not made yet' : `${st.plan.status}, ${st.plan.mustdos} must-dos, ${st.plan.blocks} blocks`}`)
+      if (w === 'water' && st.today.waterTarget) out.push(`💧 ${(st.today.waterMl / 1000).toFixed(1)} of ${(st.today.waterTarget / 1000).toFixed(1)} L`)
+      if (w === 'mustdos') out.push(...st.mustdos.map((m) => `${m.done ? '✅' : '⬜'} ${esc(m.text)}`))
+      if (w === 'promises') out.push(`🤝 Promises 7 days: ${st.promises.kept} kept, ${st.promises.missed} missed${st.promises.awaiting.length ? ` · waiting: ${esc(st.promises.awaiting[st.promises.awaiting.length - 1])}` : ''}`)
+    }
+    return out.join('\n')
+  }
+
   async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
     const chat = String(update.message?.chat?.id ?? '')
     void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
     const r = await think(personaFor(botId, cfg), text, key, media)
     const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join('\n')}` : ''].join('\n').trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`
     addLog(text || `[${media?.kind}]`, chat, r.ok, reply)
-    const undoKb = !r.keyboard && r.at && r.undo?.some(Boolean) ? { inline_keyboard: [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] } : null
-    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML', ...(r.keyboard ? { reply_markup: r.keyboard } : undoKb ? { reply_markup: undoKb } : {}) }).catch(() => null)
-    return reply
+    // Buttons the coach attached (one tap instead of typing), then ↩ Undo.
+    const rows = [...(telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? []), ...(r.at && r.undo?.some(Boolean) ? [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] : [])]
+    const markup = r.keyboard ?? (rows.length ? { inline_keyboard: rows } : null)
+    const widgets = r.ok && r.show?.length ? await widgetText(r.show).catch(() => '') : ''
+    const full = widgets ? `${reply}\n\n${widgets}` : reply
+    await tg(update.__token, 'sendMessage', { chat_id: chat, text: full, parse_mode: 'HTML', ...(markup ? { reply_markup: markup } : {}) }).catch(() => null)
+    return full
   }
 
   /** One line that turns your evening note into a lesson for tomorrow (and the coach's memory). */

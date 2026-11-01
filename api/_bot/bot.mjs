@@ -8629,6 +8629,84 @@ function planLine(p) {
 	const cost = missCost(p);
 	return `${p.title} (${p.subject}, due ${p.deadline}, ${p.daysLeft} days): ${(p.leftMin / 60).toFixed(1)}h left → ${p.perDayMin} min/day${p.todayLeftMin ? `, ${p.todayLeftMin} min still today` : ", today done"}${p.status === "behind" ? `, ${Math.abs(p.aheadH)}h behind` : p.status === "ahead" ? `, ${p.aheadH}h ahead` : ""}${cost ? `. Skipping today costs +${cost} min/day` : ""}`;
 }
+// src/core/coachButtons.ts
+var WIDGETS = [
+	"focus-week",
+	"goals",
+	"plan",
+	"water",
+	"mustdos",
+	"promises"
+];
+/** "focus:25:Algebra", "approve", "plan", "book:Algebra exam", "say:Done ✅", "open:goals". */
+function readDo(d) {
+	const s = String(d ?? "").trim();
+	const m = /^(focus|approve|plan|book|say|open)(?::([\s\S]*))?$/i.exec(s);
+	if (!m) return null;
+	const k = m[1].toLowerCase();
+	const rest = (m[2] ?? "").trim();
+	if (k === "approve") return { k: "approve" };
+	if (k === "plan") return { k: "plan" };
+	if (k === "focus") {
+		const f = /^(\d{1,3})\s*:\s*(.+)$/.exec(rest);
+		const minutes = Number(f?.[1] ?? 25);
+		const subject = (f?.[2] ?? rest).trim().slice(0, 40);
+		return subject && minutes >= 5 && minutes <= 180 ? {
+			k: "focus",
+			minutes,
+			subject
+		} : null;
+	}
+	if (k === "book") return rest ? {
+		k: "book",
+		goal: rest.slice(0, 80)
+	} : null;
+	if (k === "say") return rest ? {
+		k: "say",
+		text: rest.slice(0, 120)
+	} : null;
+	const tab = rest.toLowerCase();
+	return tab === "plan" || tab === "goals" || tab === "score" || tab === "about" ? {
+		k: "open",
+		tab
+	} : null;
+}
+function readButtons(raw) {
+	if (!Array.isArray(raw)) return [];
+	return raw.map((b) => ({
+		label: String(b?.label ?? "").trim().slice(0, 32),
+		do: String(b?.do ?? "").trim()
+	})).filter((b) => b.label && readDo(b.do)).slice(0, 3);
+}
+function readShow(raw) {
+	if (!Array.isArray(raw)) return [];
+	return [...new Set(raw.map((x) => String(x).toLowerCase().trim()).filter((x) => WIDGETS.includes(x)))].slice(0, 2);
+}
+var bytes = (s) => new TextEncoder().encode(s).length;
+var fit = (prefix, s) => {
+	let t = s;
+	while (bytes(prefix + t) > 64) t = t.slice(0, -1);
+	return prefix + t;
+};
+/** The same buttons on Telegram (inline keyboard); "open" has no Telegram form. */
+function telegramKeyboard(buttons) {
+	const row = buttons.map((b) => {
+		const d = readDo(b.do);
+		if (!d) return null;
+		const data = d.k === "focus" ? fit("fo|", d.subject) : d.k === "approve" ? "rb|a" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : null;
+		return data ? {
+			text: b.label,
+			callback_data: data
+		} : null;
+	}).filter((x) => !!x);
+	return row.length ? { inline_keyboard: row.map((b) => [b]) } : null;
+}
+var BARS = "▁▂▃▄▅▆▇█";
+/** "▁▃▅▇▂▁▄" for a week of minutes. */
+function sparkline(values) {
+	const max = Math.max(1, ...values);
+	return values.map((v) => v <= 0 ? "·" : BARS[Math.min(7, Math.round(v / max * 7))]).join("");
+}
 // src/core/coachMind.ts
 var MAX = {
 	goals: 8,
@@ -9308,10 +9386,11 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		extra.found ? "" : LOOKUPS,
 		"",
 		"Also put in \"remember\" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.",
+		"Interactive replies: \"buttons\" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. \"do\" is one of: \"focus:<minutes>:<subject>\" (start a focus timer), \"approve\" (approve today's plan), \"plan\" (make today's plan), \"book:<goal title>\" (book a goal's blocks), \"say:<his reply>\" (sends that as his message), \"open:plan|goals|score|about\". Example: {\"label\": \"▶ 25 min Algebra\", \"do\": \"focus:25:Algebra\"}. Prefer a button over telling him to type a command. \"show\" (0–2) puts a live mini-widget under your message when it helps him see it: \"focus-week\" (focus per day, 7 days), \"goals\" (goal progress), \"plan\" (today's plan), \"water\", \"mustdos\" (tickable list), \"promises\".",
 		"Put in \"chips\" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message (\"Done ✅\", \"Give me 10 min\", \"Why?\", \"Plan it\"). Never generic.",
 		"Put in \"steps\" 1–4 very short labels of what you did or checked, for the screen (\"Checked your calendar\", \"Found 2h free after 15:00\", \"Moved 3 blocks\").",
 		"",
-		`Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "chips": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? "" : ", \"need\": string[]"}}.`,
+		`Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "chips": string[], "buttons": {"label": string, "do": string}[], "show": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? "" : ", \"need\": string[]"}}.`,
 		"",
 		extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : "",
 		"== Victor right now ==",
@@ -9347,6 +9426,8 @@ function parseBrain(text) {
 			reply: String(j.reply ?? "").trim(),
 			mood: typeof j.mood === "string" ? j.mood.toLowerCase().trim() : void 0,
 			chips: (Array.isArray(j.chips) ? j.chips : []).map((x) => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 4),
+			buttons: readButtons(j.buttons),
+			show: readShow(j.show),
 			actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
 			remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
 			steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x) => x.slice(0, 80)).slice(0, 4),
@@ -10034,6 +10115,169 @@ var WEEK_ASK = "Next week's 3 big tasks? One per line.";
 /** "1. a\n2) b\n- c" → ['a','b','c'] (at most 3). */
 function readLines(text) {
 	return text.split(/\n|;/).map((l) => l.replace(/^\s*(?:\d+[.)]|[-•*])\s*/, "").trim()).filter(Boolean).slice(0, 3);
+}
+// src/core/coachNext.ts
+function nextMove(m, now = Date.now()) {
+	if (m.running) {
+		const left = Math.max(0, Math.round((m.running.endsAt - now) / 6e4));
+		return {
+			kind: "running",
+			title: `Focus on ${m.running.subject}`,
+			sub: left ? `${left} min left. Phone away, stay on it.` : "Time is up: stop and log it.",
+			endsAt: m.running.endsAt
+		};
+	}
+	const promise = m.awaiting[m.awaiting.length - 1];
+	if (promise) return {
+		kind: "answer",
+		title: promise,
+		sub: "You promised this. Did you do it?",
+		promise
+	};
+	if (m.planStatus === "proposed" && m.hour < 14) return {
+		kind: "approve",
+		title: "Approve today's plan",
+		sub: "Blocks go in your calendar, must-dos on Today."
+	};
+	const goal = m.goals.find((g) => g.todayLeftMin >= 20 && g.behind) ?? m.goals.find((g) => g.todayLeftMin >= 20);
+	if (goal && !m.evening) {
+		const minutes = Math.min(50, Math.max(25, goal.todayLeftMin));
+		return {
+			kind: "focus",
+			title: `${minutes} min on ${goal.subject}`,
+			sub: `${goal.title}: ${goal.todayLeftMin} min still today${goal.behind ? ", and you are behind" : ""}.`,
+			subject: goal.subject,
+			minutes
+		};
+	}
+	if (m.openMustDos.length && !m.evening) {
+		const t = m.openMustDos[0];
+		return {
+			kind: "focus",
+			title: `25 min: ${t}`,
+			sub: `Your must-do${m.openMustDos.length > 1 ? ` (${m.openMustDos.length} open)` : ""}. Start, the rest follows.`,
+			subject: t.split(/\s+/).slice(0, 3).join(" ").slice(0, 40),
+			minutes: 25
+		};
+	}
+	if (m.planStatus === "none" && m.hour >= 5 && m.hour < 14) return {
+		kind: "plan",
+		title: "Plan my day",
+		sub: "Must-dos, blocks in your free time, training, water."
+	};
+	return {
+		kind: "ask",
+		title: m.evening ? "How did today go?" : "What's next?",
+		sub: m.evening ? "Tell your coach, it writes the review." : "Ask your coach for the one thing that matters now."
+	};
+}
+// src/renderer/src/web/coachStatus.ts
+var json = (db, key) => {
+	try {
+		return JSON.parse(getSetting(db, key) || "null");
+	} catch {
+		return null;
+	}
+};
+function coachStatus(s, now = /* @__PURE__ */ new Date()) {
+	const db = s.db;
+	const today = s.wallet.today(now);
+	const f = s.focus.state(now);
+	const reminders = json(db, "coach_reminders") ?? [];
+	const ps = promiseStats(reminders, now);
+	const awaiting = reminders.filter((r) => r.kind === "checkin" && r.sentAt && !r.done).map((r) => r.text);
+	const rh = rhythmFor(json(db, RHYTHM), today);
+	const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)));
+	const sport = json(db, "sport_tracker_json")?.data;
+	const water = sport ? sharedView(sport, sportToday(now)).water : {
+		ml: 0,
+		target: 0
+	};
+	const lastLedger = s.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
+	const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
+	const last = Math.max(0, ...lastLedger, ...lastFocus);
+	const open = f.plan.items.filter((x) => !x.done);
+	const feel = coachMood({
+		hour: now.getHours(),
+		focusMinToday: f.todayMin,
+		idleMin: last ? (now.getTime() - last) / 6e4 : Infinity,
+		openMustDos: open.length,
+		mustDosDone: f.plan.items.length - open.length,
+		missedWeek: ps.broken + ps.ignored,
+		keptWeek: ps.kept,
+		goalsBehind: f.goals.filter((g) => g.aheadH <= -1).length
+	});
+	const planStatus = rh.briefing?.status ?? "none";
+	const move = nextMove({
+		hour: now.getHours(),
+		awaiting,
+		planStatus,
+		running: f.running ? {
+			subject: f.running.subject,
+			endsAt: Date.parse(f.running.startedAt) + f.running.planned * 6e4
+		} : null,
+		goals: plans.filter((p) => p.status !== "done" && p.status !== "late").sort((a, b) => a.daysLeft - b.daysLeft).map((p) => ({
+			title: p.title,
+			subject: p.subject,
+			todayLeftMin: p.todayLeftMin,
+			behind: p.status === "behind"
+		})),
+		openMustDos: open.map((x) => x.text),
+		evening: now.getHours() >= 21
+	}, now.getTime());
+	return {
+		mood: feel.mood,
+		face: MOOD_FACE[feel.mood],
+		why: feel.why,
+		move,
+		plan: {
+			status: planStatus,
+			blocks: rh.briefing?.plan.blocks.length ?? 0,
+			mustdos: rh.briefing?.plan.mustdos.length ?? 0,
+			headline: rh.briefing?.plan.headline ?? "",
+			score: rh.evening?.score
+		},
+		promises: {
+			awaiting,
+			kept: ps.kept,
+			missed: ps.broken + ps.ignored
+		},
+		goals: plans.map((p) => {
+			const g = f.goals.find((x) => x.id === p.goalId);
+			return {
+				id: p.goalId,
+				title: p.title,
+				subject: p.subject,
+				pct: Math.min(100, Math.round(g.doneMin / 60 / Math.max(.1, g.hours) * 100)),
+				perDayMin: p.perDayMin,
+				todayLeftMin: p.todayLeftMin,
+				status: p.status,
+				daysLeft: p.daysLeft
+			};
+		}),
+		today: {
+			focusMin: f.todayMin,
+			mustDone: f.plan.items.length - open.length,
+			mustTotal: f.plan.items.length,
+			waterMl: water.ml,
+			waterTarget: water.target
+		},
+		week: (() => {
+			const focus = s.progress.input(null, now, 8).focus;
+			return Array.from({ length: 7 }, (_, k) => {
+				const day = addDays$1(today, k - 6);
+				return {
+					day,
+					min: focus.filter((x) => x.day === day).reduce((t, x) => t + x.minutes, 0)
+				};
+			});
+		})(),
+		mustdos: f.plan.items.map((x, i) => ({
+			i,
+			text: x.text,
+			done: x.done
+		}))
+	};
 }
 // src/core/coachImpact.ts
 var COACH_HISTORY = "coach_history";
@@ -11390,7 +11634,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw]|cu)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -11406,6 +11650,36 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			parse_mode: "HTML",
 			...keyboard ? { reply_markup: keyboard } : {}
 		}).catch(() => null);
+		if (data.startsWith("cs|") || data.startsWith("gb|") || data === "rb|p") {
+			if (!await markSeen(key)) return null;
+			await answer(data.startsWith("cs|") ? "…" : "On it");
+			if (data === "rb|p") return sendProposal(update.__token, chat);
+			if (data.startsWith("gb|")) {
+				const want = data.slice(3).toLowerCase();
+				const ids = (await rhythm.goalPlans()).filter((p) => p.title.toLowerCase().startsWith(want) || want.startsWith(p.title.toLowerCase().slice(0, want.length))).map((p) => p.goalId);
+				const text = (await rhythm.bookGoals(ids.length ? ids : void 0)).lines.map(esc).join("\n");
+				await tg(update.__token, "sendMessage", {
+					chat_id: chat,
+					text,
+					parse_mode: "HTML"
+				}).catch(() => null);
+				return text;
+			}
+			const said = data.slice(3);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: `💬 <i>${esc(said)}</i>`,
+				parse_mode: "HTML"
+			}).catch(() => null);
+			return handleBrain(botId, {
+				__token: update.__token,
+				update_id: update.update_id,
+				message: {
+					chat: { id: chat },
+					text: said
+				}
+			}, cfg, said, `${key}:say`);
+		}
 		if (data.startsWith("cu|")) {
 			if (!await markSeen(key)) return null;
 			const r = await undoReply(new Date(Number(data.slice(3))).toISOString());
@@ -12376,7 +12650,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				mood,
 				at,
 				...undo.some(Boolean) ? { undo } : {},
-				...out.chips?.length ? { chips: out.chips } : {}
+				...out.chips?.length ? { chips: out.chips } : {},
+				...out.buttons?.length ? { buttons: out.buttons } : {},
+				...out.show?.length ? { show: out.show } : {}
 			}]);
 		}).catch(() => null);
 		processed++;
@@ -12389,7 +12665,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			mood,
 			at,
 			undo,
-			chips: out.chips
+			chips: out.chips,
+			buttons: out.buttons,
+			show: out.show
 		};
 	}
 	/**
@@ -12493,6 +12771,20 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			lines
 		};
 	}
+	/** The mini-widgets as text for Telegram ("Focus 7 days: ▁▃▅▇▂·▄ 4.2h"). */
+	async function widgetText(show) {
+		const st = await mirror.read((db) => coachStatus(services.services(db)));
+		const out = [];
+		for (const w of show) {
+			if (w === "focus-week") out.push(`📊 Focus 7 days: <code>${sparkline(st.week.map((d) => d.min))}</code> ${(st.week.reduce((t, d) => t + d.min, 0) / 60).toFixed(1)}h`);
+			if (w === "goals") out.push(...st.goals.map((g) => `🎯 ${esc(g.title)}: ${g.pct}% · ${g.perDayMin} min/day · ${g.daysLeft}d left`));
+			if (w === "plan") out.push(`☀️ Plan: ${st.plan.status === "none" ? "not made yet" : `${st.plan.status}, ${st.plan.mustdos} must-dos, ${st.plan.blocks} blocks`}`);
+			if (w === "water" && st.today.waterTarget) out.push(`💧 ${(st.today.waterMl / 1e3).toFixed(1)} of ${(st.today.waterTarget / 1e3).toFixed(1)} L`);
+			if (w === "mustdos") out.push(...st.mustdos.map((m) => `${m.done ? "✅" : "⬜"} ${esc(m.text)}`));
+			if (w === "promises") out.push(`🤝 Promises 7 days: ${st.promises.kept} kept, ${st.promises.missed} missed${st.promises.awaiting.length ? ` · waiting: ${esc(st.promises.awaiting[st.promises.awaiting.length - 1])}` : ""}`);
+		}
+		return out.join("\n");
+	}
 	async function handleBrain(botId, update, cfg, text, key, media) {
 		const chat = String(update.message?.chat?.id ?? "");
 		tg(update.__token, "sendChatAction", {
@@ -12502,17 +12794,20 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const r = await think(personaFor(botId, cfg), text, key, media);
 		const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join("\n")}` : ""].join("\n").trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`;
 		addLog(text || `[${media?.kind}]`, chat, r.ok, reply);
-		const undoKb = !r.keyboard && r.at && r.undo?.some(Boolean) ? { inline_keyboard: [[{
+		const rows = [...telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? [], ...r.at && r.undo?.some(Boolean) ? [[{
 			text: "↩ Undo",
 			callback_data: `cu|${Date.parse(r.at)}`
-		}]] } : null;
+		}]] : []];
+		const markup = r.keyboard ?? (rows.length ? { inline_keyboard: rows } : null);
+		const widgets = r.ok && r.show?.length ? await widgetText(r.show).catch(() => "") : "";
+		const full = widgets ? `${reply}\n\n${widgets}` : reply;
 		await tg(update.__token, "sendMessage", {
 			chat_id: chat,
-			text: reply,
+			text: full,
 			parse_mode: "HTML",
-			...r.keyboard ? { reply_markup: r.keyboard } : undoKb ? { reply_markup: undoKb } : {}
+			...markup ? { reply_markup: markup } : {}
 		}).catch(() => null);
-		return reply;
+		return full;
 	}
 	/** One line that turns your evening note into a lesson for tomorrow (and the coach's memory). */
 	async function lessonOfDay(token, chat, botId, cfg, note) {
@@ -13751,7 +14046,9 @@ async function coachChat(env, text, onStep, media) {
 		mood: r.mood,
 		at: r.at,
 		undo: r.undo,
-		chips: r.chips
+		chips: r.chips,
+		buttons: r.buttons,
+		show: r.show
 	};
 }
 /** The app: take back what the coach did in one reply (all, or one line). */

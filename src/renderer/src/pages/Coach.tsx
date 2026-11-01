@@ -12,8 +12,9 @@ import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { CoachScorecard, GoalPlans } from '../CoachPanels'
 import { CoachPlan } from '../CoachPlan'
 import type { CoachStatus } from '../web/coachStatus'
+import { readDo } from '@core/coachButtons'
 
-type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string }
+type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[] }
 type Profile = { about: string; goals: string[]; rules: string[] }
 
 const BOT_LABEL: Record<string, string> = { mega: 'Mega', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
@@ -135,6 +136,26 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [log?.length])
+  // Stay at the bottom while a reply types itself out or widgets appear (unless you scrolled up).
+  const streamRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = streamRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let stuck = true
+    const onScroll = () => (stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 140)
+    const ro = new ResizeObserver(() => {
+      if (stuck) el.scrollTop = el.scrollHeight
+    })
+    el.addEventListener('scroll', onScroll, { passive: true })
+    Array.from(el.children).forEach((c) => ro.observe(c))
+    const mo = new MutationObserver(() => Array.from(el.children).forEach((c) => ro.observe(c)))
+    mo.observe(el, { childList: true })
+    return () => {
+      ro.disconnect()
+      mo.disconnect()
+      el.removeEventListener('scroll', onScroll)
+    }
+  }, [log === null])
   // Live: what you and the coach say on Telegram appears here as it happens.
   const busyRef = useRef(false)
   busyRef.current = busy
@@ -168,7 +189,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         },
         pic ? { mime: 'image/jpeg', data: pic.data } : undefined
       )
-      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, fresh: true, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
+      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, fresh: true, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       if (r.done.length) onWallet()
       void life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
       void life.coach.mind?.().then(setMind).catch(() => {})
@@ -318,7 +339,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           </div>
         )}
 
-        <div className="co-stream cx-stream">
+        <div className="co-stream cx-stream" ref={streamRef}>
           {log === null && <p className="hint">Loading your conversation…</p>}
           {log?.length === 0 && (
             <div className="co-hero">
@@ -395,6 +416,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                           })}
                         </ul>
                       )}
+                      {!m.pending && (!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === (log?.length ?? 0) - 1} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
                       {!m.pending && (
                         <span className="cx-time">
                           {m.via === 'app' ? '' : 'Telegram · '}
@@ -721,5 +743,130 @@ function Rich({ text, reveal = false, highlight = '' }: { text: string; reveal?:
       })}
       {n < text.length && <i className="cx-caret" />}
     </span>
+  )
+}
+
+/** Buttons and live mini-widgets under a coach reply (interactive replies). */
+function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: { m: Entry; status: CoachStatus | null; latest: boolean; busy: boolean; onSay: (t: string) => void; onOpen: (tab: 'plan' | 'goals' | 'score' | 'about') => void; onDone: () => void }) {
+  const act = useAction()
+  const [used, setUsed] = useState<Record<number, boolean>>({})
+  const run = async (k: number, b: { label: string; do: string }) => {
+    const d = readDo(b.do)
+    if (!d) return
+    let ok: unknown = true
+    if (d.k === 'focus') ok = await act(() => life.focus.start(d.subject, d.minutes, null), `Focus started: ${d.subject} · ${d.minutes} min`)
+    else if (d.k === 'approve') ok = await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')
+    else if (d.k === 'plan') ok = await act(() => life.coach!.rhythm!('propose'), "Today's plan is ready (Plan tab)")
+    else if (d.k === 'book') {
+      const g = status?.goals.find((x) => x.title.toLowerCase().includes(d.goal.toLowerCase()) || d.goal.toLowerCase().includes(x.title.toLowerCase()))
+      const r = await act(() => life.coach!.rhythm!('book', g ? String(g.id) : undefined))
+      ok = r
+      if (r?.lines?.length) await act(async () => r, r.lines.join(' · '))
+    } else if (d.k === 'say') onSay(d.text)
+    else onOpen(d.tab)
+    if (ok && d.k !== 'open') setUsed((u) => ({ ...u, [k]: true }))
+    if (ok) onDone()
+  }
+  const tick = async (i: number) => {
+    if (await act(() => life.focus.togglePlan(i))) onDone()
+  }
+  return (
+    <div className="cx-extras">
+      {status &&
+        m.show?.map((w) => {
+          // Live widgets show today's numbers; on old messages they'd be misleading, so only the latest shows them.
+          if (!latest) return null
+          if (w === 'focus-week') {
+            const max = Math.max(30, ...status.week.map((d) => d.min))
+            return (
+              <div key={w} className="cx-w cx-w-week">
+                <small>Focus · last 7 days · {(status.week.reduce((t, d) => t + d.min, 0) / 60).toFixed(1)}h</small>
+                <div className="cx-bars">
+                  {status.week.map((d) => (
+                    <span key={d.day} title={`${d.day}: ${d.min} min`}>
+                      <i style={{ height: `${Math.max(3, (d.min / max) * 100)}%` }} className={d.min >= 50 ? 'ok' : ''} />
+                      <em>{new Date(`${d.day}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'narrow', timeZone: 'UTC' })}</em>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+          if (w === 'goals')
+            return (
+              <div key={w} className="cx-w">
+                <small>Goals</small>
+                {status.goals.length ? (
+                  status.goals.map((g) => (
+                    <div key={g.id} className="cx-w-goal">
+                      <span>{g.title}</span>
+                      <div className="gp-bar">
+                        <i style={{ width: `${g.pct}%` }} />
+                      </div>
+                      <em className={g.status === 'behind' ? 'bad' : ''}>
+                        {g.pct}% · {g.perDayMin} min/day
+                      </em>
+                    </div>
+                  ))
+                ) : (
+                  <span className="hint small">No goals yet.</span>
+                )}
+              </div>
+            )
+          if (w === 'water' && status.today.waterTarget)
+            return (
+              <div key={w} className="cx-w">
+                <small>
+                  💧 Water · {(status.today.waterMl / 1000).toFixed(1)} of {(status.today.waterTarget / 1000).toFixed(1)} L
+                </small>
+                <div className="gp-bar water">
+                  <i style={{ width: `${Math.min(100, (status.today.waterMl / status.today.waterTarget) * 100)}%` }} />
+                </div>
+              </div>
+            )
+          if (w === 'mustdos')
+            return (
+              <div key={w} className="cx-w">
+                <small>Must-dos</small>
+                {status.mustdos.length ? (
+                  status.mustdos.map((x) => (
+                    <label key={x.i} className={`cx-w-check ${x.done ? 'done' : ''}`}>
+                      <input type="checkbox" checked={x.done} onChange={() => void tick(x.i)} /> {x.text}
+                    </label>
+                  ))
+                ) : (
+                  <span className="hint small">No must-dos today.</span>
+                )}
+              </div>
+            )
+          if (w === 'plan')
+            return (
+              <button key={w} className="cx-w cx-w-link" onClick={() => onOpen('plan')}>
+                <small>Today's plan</small>
+                <b>{status.plan.status === 'none' ? 'Not made yet' : status.plan.status === 'proposed' ? 'Waiting for your approval' : 'Approved'}</b>
+                <span>{status.plan.headline}</span>
+              </button>
+            )
+          if (w === 'promises')
+            return (
+              <div key={w} className="cx-w">
+                <small>Promises · 7 days</small>
+                <b>
+                  {status.promises.kept} kept · {status.promises.missed} missed
+                </b>
+              </div>
+            )
+          return null
+        })}
+      {!!m.buttons?.length && (
+        <div className="cx-btns">
+          {m.buttons.map((b, k) => (
+            <button key={k} className={`cx-btn ${used[k] ? 'used' : ''}`} disabled={busy || used[k]} onClick={() => void run(k, b)}>
+              {used[k] ? `✓ ${b.label}` : b.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

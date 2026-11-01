@@ -8,7 +8,7 @@ describe('the coach brain (pure parts)', () => {
   })
 
   it('reads the model answer, even with fences around it', () => {
-    expect(parseBrain('```json\n{"reply":"Hi","actions":["log: pizza 120"],"remember":["exam 12 Nov"]}\n```')).toEqual({ reply: 'Hi', actions: ['log: pizza 120'], remember: ['exam 12 Nov'], steps: [], need: [], chips: [], mood: undefined })
+    expect(parseBrain('```json\n{"reply":"Hi","actions":["log: pizza 120"],"remember":["exam 12 Nov"]}\n```')).toMatchObject({ reply: 'Hi', actions: ['log: pizza 120'], remember: ['exam 12 Nov'], steps: [], need: [], chips: [], buttons: [], show: [] })
     expect(parseBrain('just text')).toEqual({ reply: 'just text', actions: [], remember: [] })
   })
 

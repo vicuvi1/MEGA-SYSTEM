@@ -901,3 +901,30 @@
 .cx-search input { flex: 1; border: none; background: transparent; font: inherit; color: inherit; padding: 6px 0; outline: none; }
 .cx-search span { font-size: var(--t-xs); color: var(--muted); }
 .cx-head .icon-btn.on { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
+
+/* ===== Coach Phase 3: interactive replies ===== */
+.cx-extras { display: grid; gap: 8px; margin-top: 10px; white-space: normal; }
+.cx-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.cx-btn { border: none; font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px; cursor: pointer; background: var(--accent); color: var(--lime-ink, #111); transition: transform 0.12s, filter 0.12s; }
+.cx-btn:nth-child(n+2) { background: rgb(var(--ink) / 0.09); color: var(--text); }
+.cx-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.cx-btn:disabled { opacity: 0.6; cursor: default; }
+.cx-btn.used { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
+.cx-w { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.06); text-align: left; }
+.cx-w small { font-size: 11px; font-weight: 600; color: var(--muted); }
+.cx-w b { font-size: var(--t-sm); }
+.cx-w span { font-size: 12px; }
+.cx-w-link { border: none; font: inherit; color: inherit; cursor: pointer; }
+.cx-w-link:hover { background: rgb(var(--ink) / 0.1); }
+.cx-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; height: 74px; align-items: end; }
+.cx-bars span { display: grid; grid-template-rows: 1fr auto; height: 100%; justify-items: center; gap: 3px; }
+.cx-bars i { align-self: end; width: 100%; max-width: 26px; border-radius: 5px 5px 2px 2px; background: rgb(var(--ink) / 0.2); }
+.cx-bars i.ok { background: var(--accent); }
+.cx-bars em { font-size: 10px; font-style: normal; color: var(--muted); }
+.cx-w-goal { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; align-items: center; font-size: 12px; }
+.cx-w-goal span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cx-w-goal em { font-style: normal; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.cx-w-goal em.bad { color: var(--red); }
+.gp-bar.water i { background: #4cc2ff; }
+.cx-w-check { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+.cx-w-check.done { opacity: 0.6; text-decoration: line-through; }

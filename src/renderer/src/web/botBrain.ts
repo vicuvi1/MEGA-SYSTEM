@@ -15,6 +15,7 @@ import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
 import { getSetting, setSetting } from '../../../main/settings'
 import type { Services } from './webServices'
 import { planGoal, planLine } from '@core/goalPlan'
+import { readButtons, readShow } from '@core/coachButtons'
 import { cleanMind, findPatterns, focusBySubject, sleepDiary, weekAhead, type CoachMind } from '@core/coachMind'
 import { sharedView, sportToday } from '@core/sportShared'
 
@@ -114,6 +115,9 @@ export interface LogEntry {
   undone?: boolean[]
   /** Short replies he might send next (the chips under the chat). */
   chips?: string[]
+  /** Buttons and mini-widgets under the reply (interactive replies). */
+  buttons?: { label: string; do: string }[]
+  show?: string[]
   at: string
 }
 
@@ -422,10 +426,11 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     extra.found ? '' : LOOKUPS,
     '',
     'Also put in "remember" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.',
+    'Interactive replies: "buttons" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. "do" is one of: "focus:<minutes>:<subject>" (start a focus timer), "approve" (approve today\'s plan), "plan" (make today\'s plan), "book:<goal title>" (book a goal\'s blocks), "say:<his reply>" (sends that as his message), "open:plan|goals|score|about". Example: {"label": "▶ 25 min Algebra", "do": "focus:25:Algebra"}. Prefer a button over telling him to type a command. "show" (0–2) puts a live mini-widget under your message when it helps him see it: "focus-week" (focus per day, 7 days), "goals" (goal progress), "plan" (today\'s plan), "water", "mustdos" (tickable list), "promises".',
     'Put in "chips" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message ("Done ✅", "Give me 10 min", "Why?", "Plan it"). Never generic.',
     'Put in "steps" 1–4 very short labels of what you did or checked, for the screen ("Checked your calendar", "Found 2h free after 15:00", "Moved 3 blocks").',
     '',
-    `Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "chips": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
+    `Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "chips": string[], "buttons": {"label": string, "do": string}[], "show": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
     '',
     extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : '',
     '== Victor right now ==',
@@ -458,6 +463,8 @@ export interface BrainOut {
   reply: string
   mood?: string
   chips?: string[]
+  buttons?: { label: string; do: string }[]
+  show?: string[]
   actions: string[]
   remember: string[]
   steps?: string[]
@@ -474,6 +481,8 @@ export function parseBrain(text: string): BrainOut {
       reply: String(j.reply ?? '').trim(),
       mood: typeof j.mood === 'string' ? j.mood.toLowerCase().trim() : undefined,
       chips: (Array.isArray(j.chips) ? j.chips : []).map((x: any) => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 4),
+      buttons: readButtons(j.buttons),
+      show: readShow(j.show),
       actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
       remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
       steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x: string) => x.slice(0, 80)).slice(0, 4),
