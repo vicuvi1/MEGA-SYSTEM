@@ -24,7 +24,7 @@ import { getSetting, setSetting } from '../main/settings'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
-import { isFocusBlock } from '@core/dayTime'
+import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText } from '@core/rhythm'
@@ -313,7 +313,7 @@ const TICK_AT = 'coach_tick_at'
 
 export async function runTick(env: BotEnv & { botToken: string; chatId: string }, now = new Date()): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
-  const { services, mirror, calendar } = await botsFor(env)
+  const { services, mirror, calendar, bots } = await botsFor(env)
   // At most once a minute, whoever calls.
   const fresh = await mirror.write((db) => {
     const last = Number(getSetting(db as any, TICK_AT) || 0)
@@ -339,6 +339,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     { text: '⏸ Pause today', callback_data: 'np|' }
   ]
 
+  const today0 = await mirror.read((db) => services.services(db).wallet.today(now))
   // 1) Reminders and check-ins that are due.
   const reminders = await mirror.read((db) => {
     try {
@@ -353,6 +354,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
       // Check-ins get sharper each time and name the week's missed promises.
       await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now)) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined)
       list = afterSend(list, r.id, now)
+      // Never answered after every follow-up: an ignored promise (the scorecard counts it).
+      if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, 'ignored').catch(() => null)
     } catch {
       /* Telegram hiccup: next tick */
     }
@@ -390,7 +393,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
     if (starting) {
       const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 60000)
-      const subject = starting.title.replace(/^[^\p{L}\p{N}]+/u, '').split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
+      const subject = blockSubject(starting.title).slice(0, 28)
       try {
         await send(`📚 <b>${esc(starting.title)}</b> ${Date.parse(starting.start) > now.getTime() ? `starts at ${localIsoHM(starting.start)}` : 'is on now'} · ${mins} min · +${focusCoins(mins)} points if you focus.\nStart the timer?`, {
           inline_keyboard: [[{ text: `▶ Start: ${subject}`, callback_data: `fo|${subject}` }], pauseRow]
@@ -490,15 +493,21 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
         if (!m?.target || m.now < m.target) return ''
         return payOnce(svc.wallet, `weekfocus:${plan.week}`, WEEK_FOCUS_POINTS, `Week focus reached: ${m.label}`) ? `\n\n🏆 Week focus reached: <b>${m.label}</b> (${m.text}). +${WEEK_FOCUS_POINTS} points.` : ''
       })
-      await send(reviewText(r.result, r.score, r.lesson, r.top3) + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
+      const goalText = r.goals.length ? `\n\n🎯 <b>Goals</b>\n${r.goals.map((g) => escapeHtml(g)).join('\n')}${r.rebooked.length ? `\n${r.rebooked.map((x) => escapeHtml(x)).join('\n')}` : ''}` : ''
+      await send(reviewText(r.result, r.score, r.lesson, r.top3) + goalText + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
     }
   }
 }
 
 /** The app: today's rhythm (state), or an action on it. */
-export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs'; note?: string; prefs?: any }): Promise<any> {
+export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book'; note?: string; prefs?: any }): Promise<any> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { bots } = await botsFor(env)
+  // Book a goal's blocks for the next 7 days (note: the goal id, or all goals).
+  if (op.action === 'book') {
+    const id = Number(op.note)
+    return bots.rhythm.bookGoals(Number.isFinite(id) && id > 0 ? [id] : undefined)
+  }
   if (op.action === 'propose') await bots.rhythm.propose(String(op.note ?? '').slice(0, 500))
   if (op.action === 'approve') {
     const r = await bots.rhythm.approve()

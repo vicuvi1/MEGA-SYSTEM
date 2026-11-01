@@ -15,7 +15,7 @@ import { Skeleton } from './blocks'
 import { useSwipeRows } from './swipe'
 import { TodayTaskRow, withToday } from './TodayTaskRow'
 import { useTodayEvents } from './todayEvents'
-import { isFocusBlock, localDay } from '@core/dayTime'
+import { blockSubject, isFocusBlock, localDay } from '@core/dayTime'
 import { focusCoins } from '@core/focus'
 import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
@@ -634,7 +634,7 @@ export function DayFlow(props: Props) {
               Until {new Date(blockNow.end).toTimeString().slice(0, 5)} · {left} min left. Start the timer and it counts: +{focusCoins(minutes)} points.
             </p>
             <div className="row">
-              <button className="btn primary now-go" onClick={() => void startFocus(blockNow.title.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 40) || 'Focus', null, minutes)}>
+              <button className="btn primary now-go" onClick={() => void startFocus(blockSubject(blockNow.title), null, minutes)}>
                 ▶ Start focus · {minutes} min
               </button>
               <button className="btn ghost" onClick={() => setBlockSkipped(blockNow.id)}>

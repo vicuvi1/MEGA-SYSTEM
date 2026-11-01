@@ -122,6 +122,8 @@ export interface PlanInputs {
   top3: string[]
   waterTarget: number
   workoutDone: boolean
+  /** Goal blocks needed today (planned backward from deadlines), placed first. */
+  goals?: { title: string; minutes: number }[]
 }
 
 export const quarter = (hm: string) => fromMin(Math.ceil(toMin(hm) / 15) * 15)
@@ -140,7 +142,7 @@ export function localProposal(p: PlanInputs): DayProposal {
   const ranked = [...p.tasks].sort((a, b) => Number(!!b.starred) - Number(!!a.starred) || (b.priority ?? 1) - (a.priority ?? 1) || String(a.due ?? '9').localeCompare(String(b.due ?? '9')))
   ranked.forEach((t) => add(t.content))
   const gaps = freeGaps(p.events, p.today, { after: quarter(p.now), minMinutes: 30 })
-  const blocks = suggestBlocks(gaps, pick.map((title) => ({ title, minutes: 50 }))).map((b) => ({ title: b.title, start: b.start, minutes: b.minutes }))
+  const blocks = suggestBlocks(gaps, [...(p.goals ?? []), ...pick.map((title) => ({ title, minutes: 50 }))]).map((b) => ({ title: b.title, start: b.start, minutes: b.minutes }))
   let training: DayProposal['training'] = null
   if (!p.workoutDone) {
     const taken = blocks.map((b) => ({ s: toMin(b.start), e: toMin(b.start) + b.minutes }))

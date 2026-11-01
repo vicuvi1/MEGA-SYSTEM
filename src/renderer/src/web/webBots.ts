@@ -1224,6 +1224,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           done.push(a.kind === 'remind' ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== new Date().toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ''}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`)
           continue
         }
+        if (a.kind === 'book') {
+          const plans = await rhythm.goalPlans()
+          const want = a.goal.toLowerCase().trim()
+          const ids = /^all$/.test(want) ? undefined : plans.filter((p) => p.title.toLowerCase().includes(want) || want.includes(p.title.toLowerCase()) || p.subject.toLowerCase() === want).map((p) => p.goalId)
+          if (ids && !ids.length) {
+            done.push(`⚠️ No goal called "${a.goal}"`)
+            continue
+          }
+          done.push(...(await rhythm.bookGoals(ids)).lines)
+          continue
+        }
         if (a.kind === 'promise') {
           const id = promises.refs.get(a.ref)
           if (!id) continue
@@ -1236,6 +1247,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             }
             setSetting(db as any, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)))
           })
+          await rhythm.countPromise(await services.read((sv) => sv.wallet.today()), a.outcome).catch(() => null)
           done.push(a.outcome === 'kept' ? '✅ Promise kept' : '❌ Promise broken (counted)')
           continue
         }

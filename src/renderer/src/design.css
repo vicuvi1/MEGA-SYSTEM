@@ -736,3 +736,39 @@
 .co-rhythm-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: var(--s-2); }
 .co-rhythm-rows label { display: grid; gap: 4px; font-size: var(--t-xs); color: var(--muted); }
 .co-check { display: flex !important; align-items: center; gap: 8px; font-size: var(--t-sm); color: var(--text); }
+
+/* Coach: is it working? */
+.sc-verdict { margin: 0 0 6px; font-weight: 600; font-size: var(--t-md); }
+.sc-verdict.good { color: var(--accent-text); }
+.sc-verdict.low { color: var(--red); }
+.sc-lines { margin: 0 0 var(--s-3); padding: 0; list-style: none; display: grid; gap: 2px; font-size: var(--t-xs); color: var(--muted); }
+.sc-table { display: grid; gap: 2px; font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.sc-row { display: grid; grid-template-columns: 56px 44px 1fr 44px 40px; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 6px; }
+.sc-row:not(.sc-headrow):nth-child(even) { background: rgb(var(--ink) / 0.03); }
+.sc-headrow { color: var(--muted); font-weight: 600; }
+.sc-score { position: relative; height: 16px; display: flex; align-items: center; }
+.sc-score i { position: absolute; left: 0; top: 4px; height: 8px; border-radius: 4px; background: var(--accent); opacity: 0.5; }
+.sc-score b { position: relative; font-weight: 600; padding-left: 4px; }
+
+/* Coach: goal plans */
+.gp-list { display: grid; gap: var(--s-2); }
+.gp-goal { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--ink) / 0.04); }
+.gp-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.gp-top h3 { margin: 0; font-size: var(--t-sm); }
+.gp-top small { color: var(--muted); font-size: var(--t-xs); }
+.gp-status { font-size: var(--t-xs); font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgb(var(--ink) / 0.06); white-space: nowrap; }
+.gp-status.ahead, .gp-status.done { color: var(--accent-text); }
+.gp-status.behind, .gp-status.late { color: var(--red); }
+.gp-bar { height: 6px; border-radius: 3px; background: rgb(var(--ink) / 0.08); overflow: hidden; }
+.gp-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.gp-nums { margin: 0; font-size: var(--t-xs); color: var(--muted); }
+.gp-nums b { color: var(--text); }
+.gp-cost { margin: 0; font-size: var(--t-xs); color: var(--red); }
+.gp-miles { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.gp-miles li { display: flex; gap: 6px; font-size: 11px; padding: 3px 8px; border-radius: 999px; background: rgb(var(--ink) / 0.05); color: var(--muted); }
+.gp-miles li.now { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+.gp-goal .btn { justify-self: start; }
+.gp-form { display: grid; gap: 8px; margin-top: var(--s-2); }
+.gp-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.gp-form-row label { display: grid; gap: 4px; font-size: var(--t-xs); color: var(--muted); flex: 1 1 120px; }
+.gp-add { margin-top: var(--s-2); }

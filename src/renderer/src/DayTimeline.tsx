@@ -9,7 +9,7 @@
 //   Todoist tasks as suggestions right in the timeline: add one, add all, or
 //   dismiss. No building study blocks by hand.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { blockState, freeGaps, isFocusBlock, localDay, localHM, planKept, suggestBlocks, untilText, type BlockState, type CalEvent } from '@core/dayTime'
+import { blockState, blockSubject, freeGaps, isFocusBlock, localDay, localHM, planKept, suggestBlocks, untilText, type BlockState, type CalEvent } from '@core/dayTime'
 import { focusCoins } from '@core/focus'
 import { activePlan } from '@core/weekPlan'
 import { sortTasks, type TodoTask } from '@core/todoist'
@@ -174,7 +174,7 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
   const focusOn = async (e: CalEvent) => {
     const left = Math.round((Date.parse(e.end) - Math.max(now, Date.parse(e.start))) / 60000)
     const minutes = Math.max(10, Math.min(180, left))
-    if (await act(() => life.focus.start(e.title.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 40), minutes, null), `Focus started: ${e.title} · ${minutes} min`)) {
+    if (await act(() => life.focus.start(blockSubject(e.title), minutes, null), `Focus started: ${e.title} · ${minutes} min`)) {
       soundSuccess()
       setOpen(null)
     }

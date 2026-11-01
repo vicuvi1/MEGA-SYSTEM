@@ -8,6 +8,7 @@ import { useAction } from '../ui'
 import { useLive } from '../live'
 import type { CoachMind } from '@core/coachMind'
 import type { RhythmPrefs } from '@core/rhythm'
+import { CoachScorecard, GoalPlans } from '../CoachPanels'
 
 type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[] }
 type Profile = { about: string; goals: string[]; rules: string[] }
@@ -216,8 +217,10 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       </section>
 
       <aside className="co-side">
-        {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
+        <CoachScorecard />
+        <GoalPlans />
         <RhythmSettings />
+        {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
         {mind && (
           <Learning
             mind={mind}

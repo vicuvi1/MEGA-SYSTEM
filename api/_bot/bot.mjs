@@ -7840,7 +7840,7 @@ function parseQuick(text, state) {
 		...daysAgo ? { daysAgo } : {}
 	};
 }
-var recordDay = (sentDay, f) => f?.daysAgo ? addDays(sentDay, -f.daysAgo) : sentDay;
+var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays(sentDay, -f.daysAgo) : sentDay;
 function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = Date.now() }) {
 	return {
 		id: `tg-${updateId}`,
@@ -7987,7 +7987,7 @@ function logMoney(db, text, key, today, now = Date.now()) {
 	const rate = currency === state.settings.currency ? 1 : Number(state.rates?.[currency]) || 1;
 	const tx = recordFromMessage(f, {
 		updateId: key.replace(/[^\w-]/g, "-"),
-		date: recordDay(today, f),
+		date: recordDay$1(today, f),
 		rate,
 		currency,
 		now
@@ -8229,6 +8229,11 @@ function agendaText(events, day) {
 }
 /** Calendar blocks meant for deep work: they become focus sessions. */
 var FOCUS_WORDS = /\b(deep|focus|study|studiu|learn\w*|lab\w*|homework|teme?|curs\w*|course\w*|project\w*|proiect\w*|revis\w*|exam\w*|ctf\w*|picoctf|rust|crypto\w*|code|coding|practice|write|writing|read(?:ing)?|cv|portfolio)\b/i;
+/** The focus subject of a calendar block: "Algebra: Pass the exam" → "Algebra" (goal blocks count for their goal). */
+function blockSubject(title) {
+	const t = title.replace(/^[^\p{L}\p{N}]+/u, "").trim();
+	return (t.split(/\s*[:·|—]\s*/)[0] || t).slice(0, 40) || "Focus";
+}
 function isFocusBlock(e) {
 	if (e.allDay) return false;
 	return !!e.ours || FOCUS_WORDS.test(e.title);
@@ -8491,6 +8496,105 @@ function findExercise(s, name) {
 		const n = String(e.name ?? "").toLowerCase().replace(/[^a-z]/g, "");
 		return id.includes(key) || n.includes(key) || n.length > 3 && key.includes(n);
 	}) ?? null;
+}
+// src/core/goalPlan.ts
+var round5 = (m) => Math.ceil(m / 5) * 5;
+/** Minutes a day to finish `leftMin` in `days` days. */
+var perDay = (leftMin, days) => leftMin <= 0 ? 0 : round5(leftMin / Math.max(1, days));
+/** The plan for one goal, from its progress (hours done) and today's focus on it. */
+function planGoal(g, today, todayMin = 0) {
+	const leftMin = Math.max(0, Math.round(g.hours * 60 - g.doneMin));
+	const daysLeft = Math.max(0, daysBetween$1(today, g.deadline));
+	const pd = perDay(leftMin + todayMin, daysLeft);
+	const status = leftMin === 0 ? "done" : daysLeft === 0 ? "late" : g.aheadH >= 1 ? "ahead" : g.aheadH <= -1 ? "behind" : "on track";
+	const milestones = [];
+	if (leftMin > 0 && daysLeft > 0) {
+		const doneH = g.doneMin / 60;
+		const last = addDays$1(g.deadline, -1);
+		let d = today;
+		while (d <= last && milestones.length < 12) {
+			const wd = (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay();
+			const sunday = addDays$1(d, (7 - wd) % 7);
+			const by = sunday < last ? sunday : last;
+			const daysTo = daysBetween$1(today, by) + 1;
+			const target = Math.min(g.hours, doneH + (leftMin + todayMin) / 60 * (daysTo / daysLeft) - todayMin / 60);
+			milestones.push({
+				by,
+				targetH: Math.round(target * 10) / 10,
+				state: milestones.length === 0 ? "now" : "next"
+			});
+			d = addDays$1(by, 1);
+		}
+	}
+	return {
+		goalId: g.id,
+		title: g.title,
+		subject: g.subject,
+		deadline: g.deadline,
+		leftMin,
+		daysLeft,
+		perDayMin: pd,
+		todayLeftMin: Math.max(0, pd - todayMin),
+		status,
+		aheadH: g.aheadH,
+		milestones
+	};
+}
+/** What missing today costs: the per-day minutes from tomorrow if nothing more is done today. */
+function missCost(p) {
+	if (p.daysLeft <= 1 || p.todayLeftMin <= 0) return 0;
+	return Math.max(0, perDay(p.leftMin, p.daysLeft - 1) - p.perDayMin);
+}
+/** The block title: the subject first (so the focus timer counts it for the goal). */
+var goalBlockTitle = (p) => `${p.subject}: ${p.title}`;
+/** Is this calendar event one of our blocks for this goal? */
+var isGoalBlock = (e, p) => !!e.ours && e.title.trim() === goalBlockTitle(p);
+/**
+* Blocks for the next `days` days (today from `now`), in free time between
+* 08:00 and 22:00: each goal's minutes per day, in chunks of 25–90 minutes,
+* the most urgent goal first.
+*/
+function bookBlocks(plans, events, today, now, days = 7) {
+	const out = [];
+	const urgent = plans.filter((p) => p.leftMin > 0 && p.daysLeft > 0).sort((a, b) => a.daysLeft - b.daysLeft || a.aheadH - b.aheadH);
+	for (let i = 0; i < days; i++) {
+		const day = addDays$1(today, i);
+		const items = [];
+		for (const p of urgent) {
+			if (day >= p.deadline) continue;
+			const need = i === 0 ? p.todayLeftMin : p.perDayMin;
+			if (need < 20) continue;
+			const n = Math.ceil(need / 90);
+			const chunk = Math.max(25, round5(need / n));
+			for (let k = 0; k < n; k++) items.push({
+				title: goalBlockTitle(p),
+				minutes: chunk,
+				goalId: p.goalId
+			});
+		}
+		if (!items.length) continue;
+		const placed = suggestBlocks(freeGaps(events, day, {
+			from: "08:00",
+			to: "22:00",
+			...i === 0 ? { after: now } : {},
+			minMinutes: 25
+		}), items);
+		for (const b of placed) out.push({
+			goalId: items.find((x) => x.title === b.title).goalId,
+			title: b.title,
+			day,
+			start: b.start,
+			minutes: b.minutes
+		});
+	}
+	return out;
+}
+/** One line per goal for the coach and the evening review. */
+function planLine(p) {
+	if (p.status === "done") return `${p.title}: done 🎉`;
+	if (p.status === "late") return `${p.title}: deadline reached, ${(p.leftMin / 60).toFixed(1)}h still open`;
+	const cost = missCost(p);
+	return `${p.title} (${p.subject}, due ${p.deadline}, ${p.daysLeft} days): ${(p.leftMin / 60).toFixed(1)}h left → ${p.perDayMin} min/day${p.todayLeftMin ? `, ${p.todayLeftMin} min still today` : ", today done"}${p.status === "behind" ? `, ${Math.abs(p.aheadH)}h behind` : p.status === "ahead" ? `, ${p.aheadH}h ahead` : ""}${cost ? `. Skipping today costs +${cost} min/day` : ""}`;
 }
 // src/core/coachMind.ts
 var MAX = {
@@ -8993,7 +9097,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		`Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
 		`Focus today: ${hm$1(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$1(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
 		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
-		f.goals.length ? `Goals with deadlines: ${f.goals.map((g) => `${g.title} (${g.subject}) due ${g.deadline}, ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`}`).join("; ")}.` : "No goals with deadlines.",
+		f.goals.length ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals.map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`).join("\n")}` : "No goals with deadlines (offer to set one when he mentions an exam, project or deadline).",
 		`Week score ${report.score}/100 (last week ${report.prevScore}). ${report.verdict}`,
 		`Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`).join("; ")}.`,
 		wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ""}. Big 3: ${wp.big3.map((b) => `${b.done ? "[done]" : "[open]"} ${b.text}`).join("; ")}.` : "No week plan yet.",
@@ -9117,7 +9221,7 @@ Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "focus: <minutes> <subject>" start a focus timer now. "fun: <minutes> <what>" spend points on fun.
-- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline (a focus goal with hours).
+- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
@@ -9232,7 +9336,7 @@ var TREF = /^T\d{1,3}$/i;
 var MREF = /^M\d{1,2}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
-	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 400);
@@ -9324,6 +9428,10 @@ function readAction(line) {
 			text: parts.slice(1).join(" | ").slice(0, 300)
 		} : null;
 	}
+	if (kind === "book") return {
+		kind: "book",
+		goal: arg.slice(0, 120)
+	};
 	if (kind === "kept" || kind === "broken") return /^P\d{1,2}$/i.test(parts[0]) ? {
 		kind: "promise",
 		ref: parts[0].toUpperCase(),
@@ -9654,10 +9762,10 @@ function localProposal(p) {
 	const blocks = suggestBlocks(freeGaps(p.events, p.today, {
 		after: quarter(p.now),
 		minMinutes: 30
-	}), pick.map((title) => ({
+	}), [...p.goals ?? [], ...pick.map((title) => ({
 		title,
 		minutes: 50
-	}))).map((b) => ({
+	}))]).map((b) => ({
 		title: b.title,
 		start: b.start,
 		minutes: b.minutes
@@ -9885,9 +9993,131 @@ var WEEK_ASK = "Next week's 3 big tasks? One per line.";
 function readLines(text) {
 	return text.split(/\n|;/).map((l) => l.replace(/^\s*(?:\d+[.)]|[-•*])\s*/, "").trim()).filter(Boolean).slice(0, 3);
 }
+// src/core/coachImpact.ts
+var COACH_HISTORY = "coach_history";
+function cleanHistory(h) {
+	return { days: h && typeof h.days === "object" && h.days ? h.days : {} };
+}
+/** Sets fields on a day (and drops days older than half a year). */
+function recordDay(h, day, patch) {
+	const days = { ...cleanHistory(h).days };
+	const cur = days[day] ?? {};
+	const plan = cur.plan === "approved" && patch.plan === "proposed" ? "approved" : patch.plan ?? cur.plan;
+	days[day] = {
+		...cur,
+		...patch,
+		...plan ? { plan } : {}
+	};
+	const cutoff = addDays$1(day, -180);
+	for (const d of Object.keys(days)) if (d < cutoff) delete days[d];
+	return { days };
+}
+function bump(h, day, key, by = 1) {
+	const cur = cleanHistory(h).days[day] ?? {};
+	return recordDay(h, day, { [key]: (cur[key] ?? 0) + by });
+}
+var mondayOf = (day) => {
+	return addDays$1(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+};
+/** The last `weeks` weeks (oldest first), this week included. */
+function scorecard(h, focus, today, weeks = 8) {
+	const days = cleanHistory(h).days;
+	const thisMonday = mondayOf(today);
+	const rows = [];
+	for (let i = weeks - 1; i >= 0; i--) {
+		const week = addDays$1(thisMonday, -7 * i);
+		const end = addDays$1(week, 6);
+		const ds = Object.entries(days).filter(([d]) => d >= week && d <= end && d <= today).map(([, v]) => v);
+		const kept = ds.reduce((t, d) => t + (d.kept ?? 0), 0);
+		const broken = ds.reduce((t, d) => t + (d.broken ?? 0), 0);
+		const ignored = ds.reduce((t, d) => t + (d.ignored ?? 0), 0);
+		const judged = kept + broken + ignored;
+		const scores = ds.map((d) => d.score).filter((x) => typeof x === "number");
+		rows.push({
+			week,
+			kept,
+			broken,
+			ignored,
+			keptPct: judged ? Math.round(kept / judged * 100) : null,
+			plansProposed: ds.filter((d) => d.plan).length,
+			plansApproved: ds.filter((d) => d.plan === "approved").length,
+			avgScore: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
+			mustdosDone: ds.reduce((t, d) => t + (d.mustdos?.[0] ?? 0), 0),
+			mustdosTotal: ds.reduce((t, d) => t + (d.mustdos?.[1] ?? 0), 0),
+			focusMin: focus.filter((f) => f.day >= week && f.day <= end).reduce((t, f) => t + f.minutes, 0)
+		});
+	}
+	return rows;
+}
+/**
+* The honest answer: the last 2 weeks against the 2 before them. "Working"
+* when most measures went up, "not yet" when most went down.
+*/
+function impactVerdict(rows) {
+	const recent = rows.slice(-2);
+	const before = rows.slice(-4, -2);
+	if (rows.filter((r) => r.plansProposed || r.kept + r.broken + r.ignored || r.avgScore != null).length < 2 || !before.some((r) => r.plansProposed || r.avgScore != null || r.kept + r.broken + r.ignored)) return {
+		verdict: "too early",
+		lines: ["Two weeks of using the coach are needed to compare. Keep answering its check-ins and approving plans."]
+	};
+	const sum = (rs, f) => rs.reduce((t, r) => t + f(r), 0);
+	const pct = (rs) => {
+		const j = sum(rs, (r) => r.kept + r.broken + r.ignored);
+		return j ? sum(rs, (r) => r.kept) / j : null;
+	};
+	const avg = (rs) => {
+		const s = rs.filter((r) => r.avgScore != null);
+		return s.length ? sum(s, (r) => r.avgScore) / s.length : null;
+	};
+	const measures = [
+		{
+			name: "Promises kept",
+			a: pct(recent),
+			b: pct(before),
+			fmt: (x) => `${Math.round(x * 100)}%`
+		},
+		{
+			name: "Day score",
+			a: avg(recent),
+			b: avg(before),
+			fmt: (x) => `${Math.round(x)}/100`
+		},
+		{
+			name: "Focus",
+			a: sum(recent, (r) => r.focusMin) / 2,
+			b: sum(before, (r) => r.focusMin) / 2,
+			fmt: (x) => `${(x / 60).toFixed(1)}h/week`
+		},
+		{
+			name: "Plans approved",
+			a: sum(recent, (r) => r.plansApproved),
+			b: sum(before, (r) => r.plansApproved),
+			fmt: (x) => `${x}`
+		}
+	];
+	let up = 0;
+	let down = 0;
+	const lines = [];
+	for (const m of measures) {
+		if (m.a == null || m.b == null) continue;
+		const diff = m.a - m.b;
+		const tol = Math.max(Math.abs(m.b) * .05, 1e-9);
+		if (diff > tol) up++;
+		else if (diff < -tol) down++;
+		lines.push(`${m.name}: ${m.fmt(m.a)} (was ${m.fmt(m.b)}) ${diff > tol ? "↑" : diff < -tol ? "↓" : "="}`);
+	}
+	return {
+		verdict: up > down && up >= 2 ? "working" : down > up ? "not yet" : "mixed",
+		lines
+	};
+}
 // src/renderer/src/web/rhythmBot.ts
 var pad = (n) => String(n).padStart(2, "0");
 var hmNow = (d = /* @__PURE__ */ new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+var quarterNow = (d = /* @__PURE__ */ new Date()) => {
+	const m = Math.ceil((d.getHours() * 60 + d.getMinutes()) / 15) * 15;
+	return `${pad(Math.min(23, Math.floor(m / 60)))}:${pad(m % 60)}`;
+};
 function readJson(db, key, fallback) {
 	try {
 		return JSON.parse(getSetting(db, key) || "null") ?? fallback;
@@ -9903,6 +10133,79 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		s.setHours(0, 0, 0, 0);
 		return [s.toISOString(), new Date(s.getTime() + 864e5).toISOString()];
 	};
+	const history = (db, day, patch) => setSetting(db, COACH_HISTORY, JSON.stringify(recordDay(cleanHistory(readJson(db, COACH_HISTORY, null)), day, patch)));
+	const countPromise = (db, day, key) => setSetting(db, COACH_HISTORY, JSON.stringify(bump(cleanHistory(readJson(db, COACH_HISTORY, null)), day, key)));
+	const BOOKING = "goal_booking";
+	/** Every open focus goal with its plan (minutes a day, milestones, what a miss costs). */
+	async function goalPlans() {
+		return mirror.read((db) => {
+			const svc = services.services(db);
+			const today = svc.wallet.today();
+			const f = svc.focus.state();
+			return f.goals.map((g) => {
+				const todayMin = f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0);
+				return planGoal(g, today, todayMin);
+			});
+		});
+	}
+	/**
+	* Books each goal's blocks for the next 7 days in free time (today from now).
+	* Our future blocks for those goals are removed first, so a missed day is
+	* spread again over the days left (the deadline holds).
+	*/
+	async function bookGoals(goalIds) {
+		if (!calendar?.remove) return {
+			ok: false,
+			lines: ["⚠️ Connect Google Calendar (Settings) to book goal blocks"]
+		};
+		const plans = (await goalPlans()).filter((p) => (!goalIds?.length || goalIds.includes(p.goalId)) && p.leftMin > 0 && p.daysLeft > 0);
+		if (!plans.length) return {
+			ok: false,
+			lines: ["No open goal with a deadline to plan. Add one: title, subject, deadline, hours."]
+		};
+		const now = /* @__PURE__ */ new Date();
+		const start = new Date(now);
+		start.setHours(0, 0, 0, 0);
+		const events = await calendar.events(start.toISOString(), new Date(start.getTime() + 6912e5).toISOString());
+		const stale = events.filter((e) => plans.some((p) => isGoalBlock(e, p)) && Date.parse(e.start) > now.getTime());
+		for (const e of stale) await calendar.remove(e.calendarId, e.id).catch(() => null);
+		const blocks = bookBlocks(plans, events.filter((e) => !stale.includes(e)), await mirror.read((db) => services.services(db).wallet.today()), quarterNow(now), 7);
+		let made = 0;
+		for (const b of blocks) {
+			const s = /* @__PURE__ */ new Date(`${b.day}T${b.start}:00`);
+			if (await calendar.create({
+				title: b.title,
+				start: s.toISOString(),
+				end: new Date(s.getTime() + b.minutes * 6e4).toISOString(),
+				description: "Goal plan from your coach in Life System (moves by itself when you miss a day)"
+			}).then(() => true).catch(() => false)) made++;
+		}
+		await mirror.write((db) => {
+			const cur = readJson(db, BOOKING, { goalIds: [] });
+			setSetting(db, BOOKING, JSON.stringify({
+				goalIds: [.../* @__PURE__ */ new Set([...cur.goalIds ?? [], ...plans.map((p) => p.goalId)])],
+				at: (/* @__PURE__ */ new Date()).toISOString()
+			}));
+		});
+		const lines = plans.map((p) => {
+			const mine = blocks.filter((b) => b.goalId === p.goalId);
+			const min = mine.reduce((t, b) => t + b.minutes, 0);
+			const want = p.todayLeftMin + p.perDayMin * Math.min(6, Math.max(0, p.daysLeft - 1));
+			return `🗓 ${p.title}: ${mine.length} blocks, ${(min / 60).toFixed(1)}h this week${min + 20 < want ? ` (⚠️ only room for ${(min / 60).toFixed(1)} of ${(want / 60).toFixed(1)}h)` : ""}`;
+		});
+		return {
+			ok: made > 0 || !blocks.length,
+			lines: [...lines, ...stale.length ? [`↻ Replaced ${stale.length} old block${stale.length === 1 ? "" : "s"}`] : []]
+		};
+	}
+	/** Every evening: goals with booked blocks are spread again over the days left. */
+	async function rebookGoals() {
+		const ids = await mirror.read((db) => readJson(db, BOOKING, { goalIds: [] }).goalIds ?? []);
+		if (!ids.length || !calendar?.remove) return [];
+		const open = (await goalPlans()).filter((p) => ids.includes(p.goalId) && p.leftMin > 0 && p.daysLeft > 0).map((p) => p.goalId);
+		if (!open.length) return [];
+		return (await bookGoals(open).catch(() => ({ lines: [] }))).lines;
+	}
 	async function state() {
 		return mirror.read((db) => {
 			const today = services.services(db).wallet.today();
@@ -9962,7 +10265,13 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done")
 			};
 		});
+		const plans = await goalPlans().catch(() => []);
+		const bookedToday = (p) => events.some((e) => isGoalBlock(e, p));
 		const fallback = localProposal({
+			goals: plans.filter((p) => p.todayLeftMin >= 20 && !bookedToday(p)).map((p) => ({
+				title: `${p.subject}: ${p.title}`,
+				minutes: Math.min(90, p.todayLeftMin)
+			})),
 			today: base.today,
 			now: hmNow(now),
 			events,
@@ -9986,6 +10295,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				"Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits (\"Algebra set (exam 15 Dec)\").",
 				"headline: one short line with numbers (\"3 must-dos · 2h40 focus · gym 18:00\").",
 				note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : "",
+				plans.length ? `Goals planned backward from their deadlines (today's minutes are a MUST; booked ones are already in the calendar):\n${plans.map((p) => `- ${planLine(p)}${bookedToday(p) ? " (booked today)" : ""}`).join("\n")}` : "",
 				`A simple starting point (improve it): ${JSON.stringify(fallback)}`,
 				"Answer ONLY with JSON: {\"headline\": string, \"mustdos\": string[], \"blocks\": [{\"title\": string, \"start\": \"HH:MM\", \"minutes\": number}], \"training\": {\"time\": \"HH:MM\", \"what\": string} | null, \"waterMl\": number}",
 				"",
@@ -10013,6 +10323,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					version
 				}
 			});
+			history(db, plan.day, { plan: "proposed" });
 			return {
 				plan,
 				version
@@ -10042,6 +10353,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					status: "approved"
 				}
 			});
+			history(db, p.day, { plan: "approved" });
 		});
 		if (calendar) {
 			let made = 0;
@@ -10165,12 +10477,20 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					top3
 				}
 			});
+			history(db, today, {
+				score,
+				mustdos: [result.mustdosDone, result.mustdosTotal]
+			});
 		});
+		const goals = (await goalPlans().catch(() => [])).filter((p) => p.status !== "done");
+		const rebooked = await rebookGoals().catch(() => []);
 		return {
 			result,
 			score,
 			lesson,
-			top3
+			top3,
+			goals: goals.map(planLine),
+			rebooked
 		};
 	}
 	async function setTop3(text) {
@@ -10197,7 +10517,22 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				today: svc.wallet.today()
 			};
 		});
-		const lines = report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`);
+		const coachCheck = await mirror.read((db) => {
+			const svc = services.services(db);
+			const v = impactVerdict(scorecard(cleanHistory(readJson(db, COACH_HISTORY, null)), svc.progress.input(null, /* @__PURE__ */ new Date(), 70).focus, svc.wallet.today(), 8));
+			return `Is the coach working? ${{
+				working: "working, you are improving",
+				mixed: "mixed",
+				"not yet": "not working yet, we change something",
+				"too early": "too early to tell"
+			}[v.verdict]}${v.verdict === "too early" ? "" : ` (${v.lines.join("; ")})`}`;
+		});
+		const goalLines = (await goalPlans().catch(() => [])).filter((p) => p.status !== "done").map((p) => `🎯 ${planLine(p)}`);
+		const lines = [
+			...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`),
+			...goalLines,
+			coachCheck
+		];
 		const ranked = report.metrics.filter((m) => m.target && m.id !== "spend").map((m) => ({
 			m,
 			k: m.now / m.target
@@ -10328,7 +10663,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		weekly,
 		applyWeekly,
 		waterLine,
-		trainingLine
+		trainingLine,
+		goalPlans,
+		bookGoals,
+		rebookGoals,
+		countPromise: (day, key) => mirror.write((db) => countPromise(db, day, key))
 	};
 }
 // src/renderer/src/web/webBots.ts
@@ -11682,6 +12021,17 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				done.push(a.kind === "remind" ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== (/* @__PURE__ */ new Date()).toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ""}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`);
 				continue;
 			}
+			if (a.kind === "book") {
+				const plans = await rhythm.goalPlans();
+				const want = a.goal.toLowerCase().trim();
+				const ids = /^all$/.test(want) ? void 0 : plans.filter((p) => p.title.toLowerCase().includes(want) || want.includes(p.title.toLowerCase()) || p.subject.toLowerCase() === want).map((p) => p.goalId);
+				if (ids && !ids.length) {
+					done.push(`⚠️ No goal called "${a.goal}"`);
+					continue;
+				}
+				done.push(...(await rhythm.bookGoals(ids)).lines);
+				continue;
+			}
 			if (a.kind === "promise") {
 				const id = promises.refs.get(a.ref);
 				if (!id) continue;
@@ -11694,6 +12044,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					}
 					setSetting(db, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)));
 				});
+				await rhythm.countPromise(await services.read((sv) => sv.wallet.today()), a.outcome).catch(() => null);
 				done.push(a.outcome === "kept" ? "✅ Promise kept" : "❌ Promise broken (counted)");
 				continue;
 			}
@@ -13340,7 +13691,7 @@ var escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/
 var TICK_AT = "coach_tick_at";
 async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
-	const { services, mirror, calendar } = await botsFor(env);
+	const { services, mirror, calendar, bots } = await botsFor(env);
 	if (!await mirror.write((db) => {
 		const last = Number(getSetting(db, TICK_AT) || 0);
 		if (now.getTime() - last < 5e4) return false;
@@ -13371,6 +13722,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		text: "⏸ Pause today",
 		callback_data: "np|"
 	}];
+	const today0 = await mirror.read((db) => services.services(db).wallet.today(now));
 	const reminders = await mirror.read((db) => {
 		try {
 			return JSON.parse(getSetting(db, "coach_reminders") || "[]");
@@ -13385,6 +13737,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			text: esc(r.text)
 		}, promiseStats(list, now)) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0);
 		list = afterSend(list, r.id, now);
+		if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
 	} catch {}
 	if (list !== reminders) await mirror.write((db) => setSetting(db, REMINDERS, JSON.stringify(list)));
 	try {
@@ -13424,7 +13777,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const starting = (await calendar.events((/* @__PURE__ */ new Date(now.getTime() - 18e5)).toISOString(), new Date(now.getTime() + 9e5).toISOString()).catch(() => [])).find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
 		if (starting) {
 			const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 6e4);
-			const subject = starting.title.replace(/^[^\p{L}\p{N}]+/u, "").split(/\s+/).slice(0, 4).join(" ").slice(0, 28);
+			const subject = blockSubject(starting.title).slice(0, 28);
 			try {
 				await send(`📚 <b>${esc(starting.title)}</b> ${Date.parse(starting.start) > now.getTime() ? `starts at ${localIsoHM(starting.start)}` : "is on now"} · ${mins} min · +${focusCoins(mins)} points if you focus.\nStart the timer?`, { inline_keyboard: [[{
 					text: `▶ Start: ${subject}`,
@@ -13532,13 +13885,18 @@ async function rhythmTick(env, now, send) {
 			if (!m?.target || m.now < m.target) return "";
 			return payOnce(svc.wallet, `weekfocus:${plan.week}`, 50, `Week focus reached: ${m.label}`) ? `\n\n🏆 Week focus reached: <b>${m.label}</b> (${m.text}). +50 points.` : "";
 		});
-		await send(reviewText(r.result, r.score, r.lesson, r.top3) + bonus, r.top3.length ? REVIEW_KEYBOARD : void 0);
+		const goalText = r.goals.length ? `\n\n🎯 <b>Goals</b>\n${r.goals.map((g) => escapeHtml(g)).join("\n")}${r.rebooked.length ? `\n${r.rebooked.map((x) => escapeHtml(x)).join("\n")}` : ""}` : "";
+		await send(reviewText(r.result, r.score, r.lesson, r.top3) + goalText + bonus, r.top3.length ? REVIEW_KEYBOARD : void 0);
 	}
 }
 /** The app: today's rhythm (state), or an action on it. */
 async function coachRhythm(env, op) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { bots } = await botsFor(env);
+	if (op.action === "book") {
+		const id = Number(op.note);
+		return bots.rhythm.bookGoals(Number.isFinite(id) && id > 0 ? [id] : void 0);
+	}
 	if (op.action === "propose") await bots.rhythm.propose(String(op.note ?? "").slice(0, 500));
 	if (op.action === "approve") {
 		const r = await bots.rhythm.approve();

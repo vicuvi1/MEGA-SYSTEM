@@ -53,3 +53,12 @@ describe('timeline: focus blocks and done vs planned', () => {
     expect(untilText(at('13:10'), Date.parse(at('12:00')))).toBe('in 1h 10m')
   })
 })
+
+describe('blockSubject', () => {
+  it('takes the subject of a goal block', async () => {
+    const { blockSubject } = await import('./dayTime')
+    expect(blockSubject('Algebra: Pass the algebra exam')).toBe('Algebra')
+    expect(blockSubject('📚 Study Rust')).toBe('Study Rust')
+    expect(blockSubject('Lab report · draft')).toBe('Lab report')
+  })
+})

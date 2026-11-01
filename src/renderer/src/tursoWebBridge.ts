@@ -31,6 +31,7 @@ import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
 import { loadLog, loadMemory, loadMind, loadProfile, saveMemory, saveMind, saveProfile } from './web/botBrain'
 import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
+import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -469,8 +470,21 @@ export function createTursoWebBridge(): Bridge {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
       },
       mind: async () => (await svcP).read((s) => loadMind(s.db)),
+      // Is the coach working? The weekly scorecard from its history (read here).
+      scorecard: async () =>
+        (await svcP).read((s) => {
+          let h: any = null
+          try {
+            h = JSON.parse(getSetting(s.db, COACH_HISTORY) || 'null')
+          } catch {
+            h = null
+          }
+          const today = s.wallet.today()
+          const rows = scorecard(cleanHistory(h), s.progress.input(null, new Date(), 70).focus, today, 8)
+          return { rows, ...impactVerdict(rows) }
+        }),
       // The daily rhythm: today's plan from the coach (read here, actions on the server).
-      rhythm: async (action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' = 'state', note?: string, prefs?: Record<string, unknown>) => {
+      rhythm: async (action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' = 'state', note?: string, prefs?: Record<string, unknown>) => {
         if (action === 'state') {
           return (await svcP).read((s) => {
             const read = (k: string) => {

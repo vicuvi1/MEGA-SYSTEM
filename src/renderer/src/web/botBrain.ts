@@ -14,6 +14,7 @@ import { financeSpending } from '@core/progress'
 import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
 import { getSetting, setSetting } from '../../../main/settings'
 import type { Services } from './webServices'
+import { planGoal, planLine } from '@core/goalPlan'
 import { cleanMind, findPatterns, focusBySubject, sleepDiary, weekAhead, type CoachMind } from '@core/coachMind'
 import { sharedView, sportToday } from '@core/sportShared'
 
@@ -220,7 +221,11 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     `Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
     `Focus today: ${hm(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ''}. Last 7 days ${hm(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(', ') || 'none yet'}.`,
     `Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? '[done]' : '[open]'} ${x.text}`).join('; ') : 'none written yet'}.`,
-    f.goals.length ? `Goals with deadlines: ${f.goals.map((g) => `${g.title} (${g.subject}) due ${g.deadline}, ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`}`).join('; ')}.` : 'No goals with deadlines.',
+    f.goals.length
+      ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals
+          .map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`)
+          .join('\n')}`
+      : 'No goals with deadlines (offer to set one when he mentions an exam, project or deadline).',
     `Week score ${report.score}/100 (last week ${report.prevScore}). ${report.verdict}`,
     `Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`).join('; ')}.`,
     wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ''}. Big 3: ${wp.big3.map((b) => `${b.done ? '[done]' : '[open]'} ${b.text}`).join('; ')}.` : 'No week plan yet.',
@@ -343,7 +348,7 @@ Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "focus: <minutes> <subject>" start a focus timer now. "fun: <minutes> <what>" spend points on fun.
-- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline (a focus goal with hours).
+- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
@@ -481,6 +486,7 @@ export type BrainAction =
   | { kind: 'bigdone'; index: number }
   | { kind: 'delmoney'; ref: string }
   | { kind: 'promise'; ref: string; outcome: 'kept' | 'broken' }
+  | { kind: 'book'; goal: string }
   | { kind: 'editmoney'; ref: string; amount?: number; category?: string; account?: string; note?: string; date?: string }
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
@@ -492,7 +498,7 @@ const MREF = /^M\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -542,6 +548,7 @@ export function readAction(line: string): BrainAction | null {
     const minutes = Number(parts[0])
     return minutes >= 5 && minutes <= 720 && parts[1] ? { kind: 'checkin', minutes, text: parts.slice(1).join(' | ').slice(0, 300) } : null
   }
+  if (kind === 'book') return { kind: 'book', goal: arg.slice(0, 120) }
   if (kind === 'kept' || kind === 'broken') return /^P\d{1,2}$/i.test(parts[0]) ? { kind: 'promise', ref: parts[0].toUpperCase(), outcome: kind } : null
   if (kind === 'delmoney') return MREF.test(parts[0]) ? { kind: 'delmoney', ref: parts[0].toUpperCase() } : null
   if (kind === 'editmoney') {

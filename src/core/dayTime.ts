@@ -115,6 +115,13 @@ export function agendaText(events: CalEvent[], day: string): string {
 /** Calendar blocks meant for deep work: they become focus sessions. */
 const FOCUS_WORDS = /\b(deep|focus|study|studiu|learn\w*|lab\w*|homework|teme?|curs\w*|course\w*|project\w*|proiect\w*|revis\w*|exam\w*|ctf\w*|picoctf|rust|crypto\w*|code|coding|practice|write|writing|read(?:ing)?|cv|portfolio)\b/i
 
+/** The focus subject of a calendar block: "Algebra: Pass the exam" → "Algebra" (goal blocks count for their goal). */
+export function blockSubject(title: string): string {
+  const t = title.replace(/^[^\p{L}\p{N}]+/u, '').trim()
+  const head = t.split(/\s*[:·|—]\s*/)[0]
+  return (head || t).slice(0, 40) || 'Focus'
+}
+
 export function isFocusBlock(e: Pick<CalEvent, 'title' | 'ours' | 'allDay'>): boolean {
   if (e.allDay) return false
   return !!e.ours || FOCUS_WORDS.test(e.title)
