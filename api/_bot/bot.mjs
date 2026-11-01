@@ -10415,9 +10415,16 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 			const body = {
 				summary: e.title,
 				description: e.description ?? "Added by Life System",
-				start: allDay ? { date: e.start } : { dateTime: e.start },
-				end: allDay ? { date: e.end } : { dateTime: e.end },
+				start: allDay ? { date: e.start } : {
+					dateTime: e.start,
+					...e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || "Europe/Chisinau" } : {}
+				},
+				end: allDay ? { date: e.end } : {
+					dateTime: e.end,
+					...e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || "Europe/Chisinau" } : {}
+				},
 				...e.colorId ? { colorId: e.colorId } : {},
+				...e.recurrence?.length ? { recurrence: e.recurrence.filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2) } : {},
 				extendedProperties: { private: { lifeSystem: "1" } }
 			};
 			const j = await call(`/calendars/${encodeURIComponent(calId)}/events`, {
@@ -10440,6 +10447,18 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 					start: { dateTime: start },
 					end: { dateTime: end }
 				})
+			});
+		},
+		/** Changes the title, times or notes of one event. */
+		async update(calendarId, id, patch) {
+			const body = {};
+			if (patch.title != null) body.summary = patch.title;
+			if (patch.description != null) body.description = patch.description;
+			if (patch.start) body.start = { dateTime: patch.start };
+			if (patch.end) body.end = { dateTime: patch.end };
+			await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, {
+				method: "PATCH",
+				body: JSON.stringify(body)
 			});
 		},
 		async remove(calendarId, id) {

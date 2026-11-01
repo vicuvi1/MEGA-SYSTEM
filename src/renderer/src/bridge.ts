@@ -1,4 +1,5 @@
 import type { LifeApi, UpdateStatus } from '@shared/api'
+import type { DayTemplate } from '@core/calTemplates'
 import type { Area, TodoTask } from '@core/todoist'
 import type { ProgressReport } from '@core/progress'
 import type { Insights } from '@core/insights'
@@ -41,7 +42,8 @@ export type Bridge = LifeApi & {
     status(): Promise<GoogleStatus>
     connect(): Promise<void>
     events(fromIso: string, toIso: string): Promise<CalEvent[]>
-    create(e: { title: string; start: string; end: string; description?: string; calendarId?: string }): Promise<CalEvent>
+    create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; recurrence?: string[] }): Promise<CalEvent>
+    update?(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string }): Promise<void>
     move(calendarId: string, id: string, start: string, end: string): Promise<void>
     remove(calendarId: string, id: string): Promise<void>
     setCalendars(on: string[], target: string | null): Promise<void>
@@ -49,6 +51,8 @@ export type Bridge = LifeApi & {
   }
   /** "Am I improving?": the last 7 days against your usual week (web). */
   progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights> }
+  /** Day templates for the calendar ("study day"), synced (web). */
+  calTemplates?: { list(): Promise<DayTemplate[]>; save(t: DayTemplate): Promise<DayTemplate[]>; remove(name: string): Promise<DayTemplate[]> }
   /** Done / skipped marks on today's calendar blocks (web). */
   timeline?: { marks(day: string): Promise<Record<string, 'done' | 'skip'>>; mark(day: string, id: string, v: 'done' | 'skip' | null): Promise<Record<string, 'done' | 'skip'>> }
   /** The Sunday plan: one focus area and 3 big tasks for the week (web). */

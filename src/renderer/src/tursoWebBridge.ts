@@ -27,6 +27,7 @@ import { financeSpending } from '@core/progress'
 /** What every screen listens to; sent when live data arrived. */
 const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', 'life-focus-changed', 'life-week-changed', 'life-sport-changed', 'life-data-changed']
 import type { CleanChange } from '@core/todoistClean'
+import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
 import { loadLog, loadMemory, loadProfile, saveMemory, saveProfile } from './web/botBrain'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
@@ -255,6 +256,9 @@ export function createTursoWebBridge(): Bridge {
     move: async (calendarId: string, id: string, start: string, end: string) => {
       await googleCall('move', { calendarId, id, start, end })
     },
+    update: async (calendarId: string, id: string, patch: Record<string, unknown>) => {
+      await googleCall('update', { calendarId, id, ...patch })
+    },
     remove: async (calendarId: string, id: string) => {
       await googleCall('remove', { calendarId, id })
     },
@@ -474,6 +478,40 @@ export function createTursoWebBridge(): Bridge {
     progress: {
       report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state'))),
       insights: async () => (await svcP).progress.insights()
+    },
+    // Day templates for the calendar, synced everywhere.
+    calTemplates: {
+      list: async () => (await svcP).read((s) => {
+        try {
+          return JSON.parse(getSetting(s.db, TEMPLATES) || '[]') as DayTemplate[]
+        } catch {
+          return []
+        }
+      }),
+      save: async (t: DayTemplate) =>
+        (await svcP).write((s) => {
+          let cur: DayTemplate[] = []
+          try {
+            cur = JSON.parse(getSetting(s.db, TEMPLATES) || '[]')
+          } catch {
+            /* start over */
+          }
+          const next = upsertTemplate(cur, t)
+          setSetting(s.db, TEMPLATES, JSON.stringify(next))
+          return next
+        }),
+      remove: async (name: string) =>
+        (await svcP).write((s) => {
+          let cur: DayTemplate[] = []
+          try {
+            cur = JSON.parse(getSetting(s.db, TEMPLATES) || '[]')
+          } catch {
+            /* start over */
+          }
+          const next = cur.filter((x) => x.name !== name)
+          setSetting(s.db, TEMPLATES, JSON.stringify(next))
+          return next
+        })
     },
     // Done / skipped marks on calendar blocks (kept 14 days, synced everywhere).
     timeline: {

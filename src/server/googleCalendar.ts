@@ -148,15 +148,17 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
       return all.flat().sort((a, b) => a.start.localeCompare(b.start))
     },
     /** A new event (in your chosen calendar), marked as made by Life System. */
-    async create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; colorId?: string }): Promise<CalEvent> {
+    async create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; colorId?: string; recurrence?: string[]; timeZone?: string }): Promise<CalEvent> {
       const calId = e.calendarId || (await target())
       const allDay = /^\d{4}-\d{2}-\d{2}$/.test(e.start)
       const body = {
         summary: e.title,
         description: e.description ?? 'Added by Life System',
-        start: allDay ? { date: e.start } : { dateTime: e.start },
-        end: allDay ? { date: e.end } : { dateTime: e.end },
+        start: allDay ? { date: e.start } : { dateTime: e.start, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}) },
+        end: allDay ? { date: e.end } : { dateTime: e.end, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}) },
         ...(e.colorId ? { colorId: e.colorId } : {}),
+        // Repeating blocks: one RRULE, e.g. RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR
+        ...(e.recurrence?.length ? { recurrence: e.recurrence.filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2) } : {}),
         extendedProperties: { private: { lifeSystem: '1' } }
       }
       const j = await call(`/calendars/${encodeURIComponent(calId)}/events`, { method: 'POST', body: JSON.stringify(body) })
@@ -165,6 +167,15 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
     },
     async move(calendarId: string, id: string, start: string, end: string): Promise<void> {
       await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ start: { dateTime: start }, end: { dateTime: end } }) })
+    },
+    /** Changes the title, times or notes of one event. */
+    async update(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string }): Promise<void> {
+      const body: any = {}
+      if (patch.title != null) body.summary = patch.title
+      if (patch.description != null) body.description = patch.description
+      if (patch.start) body.start = { dateTime: patch.start }
+      if (patch.end) body.end = { dateTime: patch.end }
+      await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) })
     },
     async remove(calendarId: string, id: string): Promise<void> {
       await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'DELETE' })
