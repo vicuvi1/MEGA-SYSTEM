@@ -506,3 +506,13 @@
   .tl-nowline { grid-template-columns: 74px 1fr; }
   .tl-tip { display: none; }
 }
+
+/* Coach: live steps while it thinks */
+.co-thinking { display: flex; flex-direction: column; gap: 8px; }
+.co-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--t-sm); }
+.co-steps li { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.co-steps li::before { content: '✓'; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 800; background: color-mix(in srgb, var(--green) 20%, transparent); color: var(--green); flex: none; }
+.co-steps li.now { color: var(--text); }
+.co-steps li.now::before { content: ''; border: 2px solid var(--accent); border-right-color: transparent; background: none; animation: co-spin 0.8s linear infinite; box-sizing: border-box; }
+@keyframes co-spin { to { transform: rotate(360deg); } }
+.co-steps-done { font-size: var(--t-xs); color: var(--faint); margin-bottom: 6px; }

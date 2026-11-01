@@ -1,0 +1,16 @@
+# Wakes the coach every 10 minutes so reminders, check-ins and follow-ups
+# reach Telegram even when no device has the app open. (GitHub may delay a
+# run by a few minutes; the open app also wakes it every 2 minutes.)
+name: Coach tick
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Wake the coach
+        run: curl -fsS -m 60 https://mega-system-ten.vercel.app/api/tick || true

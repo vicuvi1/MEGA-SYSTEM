@@ -28,7 +28,7 @@ export type Bridge = LifeApi & {
   onFullScreen(cb: (on: boolean) => void): () => void
   /** The Coach page: chat (same brain as the bots), memory, goals & rules, the log. */
   coach?: {
-    chat(text: string): Promise<{ ok: boolean; reply: string; done: string[] }>
+    chat(text: string, onStep?: (step: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[] }>
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>

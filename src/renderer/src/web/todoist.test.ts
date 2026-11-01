@@ -161,4 +161,46 @@ describe('Todoist in Life System', () => {
     expect(todoist.close).toHaveBeenCalledWith('b')
     expect(await say(3, '/done 1')).toBeNull() // the same message again is not handled twice
   })
+
+  it('the coach acts on calendar events and Todoist tasks by their E/T numbers', async () => {
+    fakeTurso()
+    const mirror = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'), null)
+    await mirror.ready
+    const services = createWebServices(mirror)
+    const today = await services.read((s) => s.wallet.today())
+    const at = (h: number) => new Date(`${today}T${String(h).padStart(2, '0')}:00:00`).toISOString()
+    const events = [
+      { id: 'g1', calendarId: 'cal', title: 'Deep block', start: at(9), end: at(10), allDay: false },
+      { id: 'g2', calendarId: 'cal', title: 'Sport', start: at(17), end: at(18), allDay: false }
+    ]
+    const calendar = { events: async () => events, create: vi.fn(async (e: any) => ({ ...e, id: 'n', calendarId: 'cal', allDay: false })), move: vi.fn(async () => {}), remove: vi.fn(async () => {}) }
+    const open = [task('a', 1, today), task('b', 4, today)]
+    const todoist = {
+      today: async () => open,
+      close: vi.fn(async () => {}),
+      quickAdd: vi.fn(async (text: string) => ({ ...task('n', 1, today), content: text })),
+      update: vi.fn(async () => {}),
+      move: vi.fn(async () => {}),
+      remove: vi.fn(async () => {}),
+      everything: async () => ({ tasks: open, areas: [{ key: 's:s2', name: '🛡️ Cyber' }] })
+    }
+    const ai = vi.fn(async () =>
+      JSON.stringify({
+        reply: 'Done. Sport later, focus now.',
+        actions: ['move: E1 | ' + today + ' 11:00', 'shift: 30 | E2', 'resize: E2 | 30', 'done: T1', 'star: T2', 'edit: T2 | title=Fix report; priority=P1', 'taskmove: T1 | Cyber', 'delete: E9'],
+        remember: []
+      })
+    )
+    const bots = createWebBots({ mirror, services, defaults: { botToken: '1:x', chatId: '42' } as any, todoist, calendar, ai })
+    const r = await bots.think('move my deep block to 11 and push sport 30 min', 'k1')
+    expect(calendar.move).toHaveBeenCalledWith('cal', 'g1', at(11), at(12))
+    expect(calendar.move).toHaveBeenCalledWith('cal', 'g2', new Date(Date.parse(at(17)) + 30 * 60000).toISOString(), new Date(Date.parse(at(18)) + 30 * 60000).toISOString())
+    expect(todoist.close).toHaveBeenCalledWith(open[0].id)
+    expect(todoist.update).toHaveBeenCalledWith(open[1].id, expect.objectContaining({ labels: ['today'] }))
+    expect(todoist.update).toHaveBeenCalledWith(open[1].id, expect.objectContaining({ content: 'Fix report', priority: 4 }))
+    expect(todoist.move).toHaveBeenCalledWith(open[0].id, 's:s2')
+    expect(calendar.remove).not.toHaveBeenCalled() // E9 doesn't exist
+    expect(r.done.join('\n')).toMatch(/Moved: Deep block/)
+    expect(r.done.join('\n')).toMatch(/Shifted 1 block by \+30 min/)
+  })
 })

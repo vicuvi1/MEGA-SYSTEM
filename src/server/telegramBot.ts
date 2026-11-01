@@ -23,6 +23,9 @@ import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
+import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
+import { isFocusBlock } from '@core/dayTime'
+import { focusCoins } from '@core/focus'
 
 export { createTodoistApi }
 export { GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, localIso } from './googleCalendar'
@@ -58,6 +61,16 @@ function calendarFor(env: BotEnv, mirror: Mirror): CalendarLike | null {
       const a = await api()
       if (!a) throw new Error('Connect Google Calendar in the app (Settings) first')
       return a.create(e)
+    },
+    move: async (calendarId, id, start, end) => {
+      const a = await api()
+      if (!a) throw new Error('Connect Google Calendar in the app (Settings) first')
+      return a.move(calendarId, id, start, end)
+    },
+    remove: async (calendarId, id) => {
+      const a = await api()
+      if (!a) throw new Error('Connect Google Calendar in the app (Settings) first')
+      return a.remove(calendarId, id)
     }
   }
 }
@@ -120,19 +133,28 @@ function localMidnight(daysAgo: number): Date {
 }
 
 /** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
-export async function coachChat(env: BotEnv, text: string): Promise<{ ok: boolean; reply: string; done: string[] }> {
+export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[] }> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   if (!env.model) return { ok: false, reply: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.', done: [] }
   const { bots } = await botsFor(env)
-  const r = await bots.think(text)
-  return { ok: r.ok, reply: r.reply, done: r.done }
+  const r = await bots.think(text, `app:${Date.now()}`, onStep)
+  return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps }
 }
 
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 export async function handleTelegramUpdate(env: BotEnv, token: string, update: unknown): Promise<string | null> {
   // Days, wake-up times and streaks follow your time zone, not the server's.
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
-  const { bots } = await botsFor(env)
+  const { bots, mirror } = await botsFor(env)
+  // You wrote something: open check-ins stop asking (you answered).
+  if ((update as any)?.message) {
+    await mirror
+      .write((db) => {
+        const raw = getSetting(db as any, REMINDERS_KEY)
+        if (raw) setSetting(db as any, REMINDERS_KEY, JSON.stringify(answeredReminders(JSON.parse(raw))))
+      })
+      .catch(() => null)
+  }
   const reply = await bots.handleUpdate(token, update)
   await payTodoistDone(env, { minGapMs: 3 * 60_000 }).catch(() => null)
   return reply
@@ -274,3 +296,121 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
 
 const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 export { cleanupPrompt, parseCleanup, localCleanup } from '../core/todoistClean'
+
+// ---- The tick: the coach writes first --------------------------------------
+// Called every few minutes (a GitHub Actions timer, and the open app). Sends
+// due reminders and check-ins (check-ins come back every 45 min until you
+// answer), says when a study block in your calendar starts, and follows up
+// when you're slipping (idle 60+ min with must-dos open), never while paused.
+const TICK_AT = 'coach_tick_at'
+
+export async function runTick(env: BotEnv & { botToken: string; chatId: string }, now = new Date()): Promise<string[]> {
+  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const { services, mirror, calendar } = await botsFor(env)
+  // At most once a minute, whoever calls.
+  const fresh = await mirror.write((db) => {
+    const last = Number(getSetting(db as any, TICK_AT) || 0)
+    if (now.getTime() - last < 50_000) return false
+    setSetting(db as any, TICK_AT, String(now.getTime()))
+    return true
+  })
+  if (!fresh) return []
+  const sent: string[] = []
+  const send = async (text: string, reply_markup?: unknown) => {
+    const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: env.chatId, text, parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) })
+    })
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
+    if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`)
+    sent.push(text)
+  }
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const pauseRow = [
+    { text: '😴 30 min', callback_data: 'ns|' },
+    { text: '⏸ Pause today', callback_data: 'np|' }
+  ]
+
+  // 1) Reminders and check-ins that are due.
+  const reminders = await mirror.read((db) => {
+    try {
+      return JSON.parse(getSetting(db as any, REMINDERS_KEY) || '[]') as Reminder[]
+    } catch {
+      return [] as Reminder[]
+    }
+  })
+  let list = reminders
+  for (const r of dueReminders(list, now)) {
+    try {
+      await send(r.kind === 'checkin' ? `🔔 ${esc(r.text)}${(r.tries ?? 0) > 0 ? `\n<i>(asking again: answer me, even "not yet")</i>` : ''}` : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined)
+      list = afterSend(list, r.id, now)
+    } catch {
+      /* Telegram hiccup: next tick */
+    }
+  }
+  if (list !== reminders) await mirror.write((db) => setSetting(db as any, REMINDERS_KEY, JSON.stringify(list)))
+
+  // 2) A study block in your calendar starts now, and 3) follow-ups when slipping.
+  const st = await mirror.read((db) => {
+    let nudge: NudgeState = {}
+    try {
+      nudge = JSON.parse(getSetting(db as any, NUDGES_KEY) || '{}')
+    } catch {
+      nudge = {}
+    }
+    const svc = services.services(db)
+    const today = svc.wallet.today(now)
+    const f = svc.focus.state(now)
+    const lastLedger = svc.wallet.entries().filter((e: any) => e.day === today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
+    const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
+    const last = Math.max(0, ...lastLedger, ...lastFocus)
+    return { nudge, today, focus: f, idleMin: last ? (now.getTime() - last) / 60000 : Infinity }
+  })
+  let nudge: NudgeState = st.nudge.day === st.today ? st.nudge : { ...st.nudge, day: st.today, count: 0, announced: [] }
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const paused = nudge.pausedDay === st.today
+  if (calendar && !st.focus.running && !paused) {
+    const events = await calendar.events(new Date(now.getTime() - 30 * 60000).toISOString(), new Date(now.getTime() + 15 * 60000).toISOString()).catch(() => [])
+    const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
+    if (starting) {
+      const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 60000)
+      const subject = starting.title.replace(/^[^\p{L}\p{N}]+/u, '').split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
+      try {
+        await send(`📚 <b>${esc(starting.title)}</b> ${Date.parse(starting.start) > now.getTime() ? `starts at ${localIsoHM(starting.start)}` : 'is on now'} · ${mins} min · +${focusCoins(mins)} points if you focus.\nStart the timer?`, {
+          inline_keyboard: [[{ text: `▶ Start: ${subject}`, callback_data: `fo|${subject}` }], pauseRow]
+        })
+        nudge = { ...nudge, announced: [...(nudge.announced ?? []), starting.id] }
+      } catch {
+        /* next tick */
+      }
+    }
+  }
+  const openMustDos = st.focus.plan.items.filter((x) => !x.done)
+  const facts: NudgeFacts = { today: st.today, time, focusRunning: !!st.focus.running, focusMinToday: st.focus.todayMin, openMustDos: openMustDos.length, idleMin: st.idleMin, wakeLogged: true }
+  if (!sent.length && shouldNudge(nudge, facts, now)) {
+    const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
+    const first = openMustDos[0]?.text
+    const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'
+    const text =
+      n === 1
+        ? `👀 Nothing done for ${idle}. ${first ? `Your must-do: <b>${esc(first)}</b>.` : `Focus today: ${st.focus.todayMin} min.`} 25 minutes, starting now.`
+        : n <= 3
+          ? `⏰ Still waiting. ${first ? `<b>${esc(first)}</b> won't do itself.` : 'One focus block.'} Just start the timer, the rest follows.`
+          : `🔥 Nudge ${n}: you said you want this. ${first ? `<b>${esc(first)}</b>,` : 'One block,'} 25 min. Tap and go.`
+    const subject = (first ?? 'Focus').split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
+    try {
+      await send(text, { inline_keyboard: [[{ text: `▶ 50 min: ${subject}`, callback_data: `fo|${subject}` }], pauseRow] })
+      nudge = nudged(nudge, st.today, now)
+    } catch {
+      /* next tick */
+    }
+  }
+  if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db as any, NUDGES_KEY, JSON.stringify(nudge)))
+  return sent
+}
+
+const localIsoHM = (iso: string) => {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}

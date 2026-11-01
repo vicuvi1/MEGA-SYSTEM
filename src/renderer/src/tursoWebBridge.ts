@@ -314,9 +314,15 @@ export function createTursoWebBridge(): Bridge {
     if (tab) tab.onmessage = () => void check()
     void mirrorP.then((m) => m.onChange(() => tab?.postMessage('changed')))
     let todoAt = 0
+    let tickAt = 0
     const loop = async () => {
       if (document.visibilityState === 'visible') {
         await check()
+        // Wake the coach (reminders, check-ins, follow-ups) more often than the server timer.
+        if (!direct && Date.now() - tickAt > 120_000) {
+          tickAt = Date.now()
+          void fetch('/api/tick', { method: 'POST' }).catch(() => null)
+        }
         // Todoist and Google Calendar changes made in their own apps: every 30 s.
         if (Date.now() - todoAt > 30_000) {
           todoAt = Date.now()
@@ -410,13 +416,47 @@ export function createTursoWebBridge(): Bridge {
     ...base,
     google,
     coach: {
-      chat: async (text: string) => {
+      // The answer streams: live steps ("Reading your calendar…"), then the reply.
+      chat: async (text: string, onStep?: (step: string) => void) => {
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
-        const j = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(j.error || `Coach ${r.status}`)
+        if (!r.ok || !r.body) {
+          const j = await r.json().catch(() => ({}))
+          throw new Error(j.error || `Coach ${r.status}`)
+        }
+        const reader = r.body.getReader()
+        const dec = new TextDecoder()
+        let buf = ''
+        let last: any = null
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (value) buf += dec.decode(value, { stream: true })
+          let nl
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const raw = buf.slice(0, nl).trim()
+            buf = buf.slice(nl + 1)
+            if (!raw) continue
+            try {
+              const o = JSON.parse(raw)
+              if (typeof o.step === 'string') onStep?.(o.step)
+              else last = o
+            } catch {
+              /* a broken line: skip */
+            }
+          }
+          if (done) break
+        }
+        if (buf.trim()) {
+          try {
+            last = JSON.parse(buf.trim())
+          } catch {
+            /* ignore */
+          }
+        }
+        if (!last) throw new Error('The coach gave no answer')
+        if (last.error && !last.reply) throw new Error(last.error)
         // The coach may have logged, planned or added things: everything refreshes.
         void syncNow().catch(() => null)
-        return j
+        return last
       },
       memory: async () => (await mirrorP).refresh().then(() => svcP).then((svc) => svc.read((s) => ({ facts: loadMemory(s.db).facts }))),
       setFacts: async (facts: { t: string; at: string }[]) => {

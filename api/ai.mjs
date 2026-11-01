@@ -73,8 +73,9 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
   const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-system-ten.vercel.app', 'X-Title': 'Life System' },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 2048, ...(opts.json ? { response_format: { type: 'json_object' } } : {}) }),
-    signal: AbortSignal.timeout(45_000)
+    // opts.think: big asks (plans, reviews, reshuffles) get the model's reasoning.
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: opts.think ? 4096 : 2048, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort: 'low' } } : {}) }),
+    signal: AbortSignal.timeout(opts.think ? 40_000 : 30_000)
   })
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(`OpenRouter ${r.status}: ${j?.error?.message || 'request failed'}`)

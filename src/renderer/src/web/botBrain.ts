@@ -261,31 +261,50 @@ const PERSONA: Record<Persona, string> = {
 }
 
 const ACTIONS = `You can act. Put actions in "actions" (strings), only when Victor asked for it or clearly reported doing it:
-- "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names go before it), a wallet name may follow the amount: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
-- "mustdo: <text>" to add a must-do for today.
-- "focus: <minutes> <subject>" to start a focus timer now.
-- "fun: <minutes> <what>" to spend coins on guilt-free fun.
-- "task: <text>" to add a task to Todoist (Todoist reads dates like "friday 18:00", "p1", "#University").
-- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" for an exam or project with a deadline and the hours it needs.
-- "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" to put a block in his Google Calendar (only in his free time, never over an existing event).
+Logging and the day:
+- "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
+- "mustdo: <text>" a must-do for today (also starred in Todoist).
+- "focus: <minutes> <subject>" start a focus timer now. "fun: <minutes> <what>" spend points on fun.
+- "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline.
+Google Calendar (use the E-numbers from the list; never over another event unless he asks):
+- "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
+- "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
+- "shift: <+/-minutes> | E3, E4, E5" move several (e.g. he's running late: shift the rest of today's blocks).
+Todoist (use the T-numbers):
+- "task: <text>" new task (Todoist reads "friday 18:00", "p1", "#University").
+- "edit: T2 | title=<new>; priority=P1; due=<friday 18:00 | no date>; details=<notes>" any of these.
+- "taskmove: T2 | <area name>". "done: T2". "star: T2" / "unstar: T2" (today's must-do). "deltask: T2".
+Reminders (Telegram, sent by you later):
+- "remind: <YYYY-MM-DD HH:MM> | <message>" a reminder at that time.
+- "checkin: <minutes from now> | <question>" you ask him later, and keep asking every 45 min until he answers (use it when he says he'll do something: hold him to it).
 Never invent amounts or times he didn't give. Never log the same thing twice.
-IMPORTANT: something is saved ONLY if you put an action for it. If he reports spending, a workout, a wake-up, etc., include the action. Never write "logged"/"added"/"saved" in your reply: the app adds a ✅ line under your reply for each thing it really saved. The conversation history shows ✅ lines for what was saved before; if there is none, it was NOT saved.`
+IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.`
 
-/** The full prompt for one message. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE): string {
+const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
+- "spending <YYYY-MM-DD> <YYYY-MM-DD> [category]" totals and top categories (or one category).
+- "focus <from> <to>", "workouts <from> <to>", "sleep <from> <to>", "tasks <from> <to>" (tasks done), "points <from> <to>".
+- "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
+
+/** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string } = {}): string {
   const chat = memory.chat.slice(-10).map((c) => `${c.role === 'me' ? 'Victor' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
-    'Style: a real coach, not a recorder. Warm, direct, honest; short (2–5 sentences, Telegram). Use his real numbers. End with ONE concrete next step when it helps (with a time or a duration). Ask a question back when you need to know more. Plain text, no markdown, at most 2 emojis. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.',
+    'Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. One clear next step with a time or a duration. Use his real numbers (tie advice to them: "focus 32m of 10h this week"). No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.',
     '',
     ACTIONS,
     '',
-    'Also put in "remember" any NEW lasting fact worth keeping about Victor (goals, exams and dates, preferences, problems, promises), short, with dates. Not things already in memory, not one-off logs.',
+    extra.found ? '' : LOOKUPS,
     '',
-    'Answer ONLY with JSON: {"reply": string, "actions": string[], "remember": string[]}.',
+    'Also put in "remember" any NEW lasting fact worth keeping about Victor (goals, exams and dates, preferences, problems, promises), short, with dates. Not things already in memory, not one-off logs.',
+    'Put in "steps" 1–4 very short labels of what you did or checked, for the screen ("Checked your calendar", "Found 2h free after 15:00", "Moved 3 blocks").',
+    '',
+    `Answer ONLY with JSON: {"reply": string, "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
     '',
     '== Victor right now ==',
     context,
+    extra.refs ? `\n${extra.refs}` : '',
+    extra.found ? `\n== Answers to what you asked for ==\n${extra.found}` : '',
     '',
     '== His goals (push him toward these) ==',
     profile.goals.length ? profile.goals.map((g) => `- ${g}`).join('\n') : '- (none set)',
@@ -310,6 +329,8 @@ export interface BrainOut {
   reply: string
   actions: string[]
   remember: string[]
+  steps?: string[]
+  need?: string[]
 }
 
 /** Reads the model's JSON (tolerating code fences or text around it). */
@@ -320,8 +341,10 @@ export function parseBrain(text: string): BrainOut {
     const j = JSON.parse(json ?? raw)
     return {
       reply: String(j.reply ?? '').trim(),
-      actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 8),
-      remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5)
+      actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
+      remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
+      steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x: string) => x.slice(0, 80)).slice(0, 4),
+      need: (Array.isArray(j.need) ? j.need : []).map(String).slice(0, 5)
     }
   } catch {
     return { reply: raw.replace(/^```\w*|```$/g, '').trim(), actions: [], remember: [] }
@@ -339,14 +362,74 @@ export type BrainAction =
   | { kind: 'fun'; minutes: number; what: string }
   | { kind: 'task'; text: string }
   | { kind: 'goal'; title: string; subject: string; deadline: string; hours: number }
+  | { kind: 'move'; ref: string; day: string; time: string }
+  | { kind: 'resize'; ref: string; minutes: number }
+  | { kind: 'delevent'; ref: string }
+  | { kind: 'shift'; refs: string[]; minutes: number }
+  | { kind: 'edit'; ref: string; title?: string; priority?: number; due?: string; details?: string }
+  | { kind: 'taskmove'; ref: string; area: string }
+  | { kind: 'done'; ref: string }
+  | { kind: 'star'; ref: string; on: boolean }
+  | { kind: 'deltask'; ref: string }
+  | { kind: 'remind'; day: string; time: string; text: string }
+  | { kind: 'checkin'; minutes: number; text: string }
+
+const WHEN = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/
+const EREF = /^E\d{1,3}$/i
+const TREF = /^T\d{1,3}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
-  const arg = m[2].trim().slice(0, 200)
+  const arg = m[2].trim().slice(0, 400)
   if (!arg) return null
+  const parts = arg.split('|').map((x) => x.trim())
+  if (kind === 'move') {
+    const w = WHEN.exec(parts[1] ?? '')
+    return EREF.test(parts[0]) && w ? { kind: 'move', ref: parts[0].toUpperCase(), day: w[1], time: `${w[2].padStart(2, '0')}:${w[3]}` } : null
+  }
+  if (kind === 'resize') {
+    const minutes = Number(parts[1])
+    return EREF.test(parts[0]) && minutes >= 10 && minutes <= 600 ? { kind: 'resize', ref: parts[0].toUpperCase(), minutes } : null
+  }
+  if (kind === 'delete') return EREF.test(parts[0]) ? { kind: 'delevent', ref: parts[0].toUpperCase() } : null
+  if (kind === 'shift') {
+    const minutes = Number(parts[0])
+    const refs = (parts[1] ?? '').split(/[\s,]+/).filter((x) => EREF.test(x)).map((x) => x.toUpperCase())
+    return minutes && Math.abs(minutes) <= 720 && refs.length ? { kind: 'shift', refs: refs.slice(0, 20), minutes } : null
+  }
+  if (kind === 'edit') {
+    if (!TREF.test(parts[0])) return null
+    const out: Extract<BrainAction, { kind: 'edit' }> = { kind: 'edit', ref: parts[0].toUpperCase() }
+    for (const kv of parts.slice(1).join('|').split(/;\s*/)) {
+      const mm = /^\s*(title|priority|due|details)\s*=\s*([\s\S]*)$/i.exec(kv)
+      if (!mm) continue
+      const key = mm[1].toLowerCase()
+      const v = mm[2].trim()
+      if (key === 'title' && v) out.title = v.slice(0, 200)
+      if (key === 'details') out.details = v.slice(0, 1000)
+      if (key === 'due' && v) out.due = v.slice(0, 40)
+      if (key === 'priority') {
+        const p = /^P?([1-4])$/i.exec(v)
+        if (p) out.priority = 5 - Number(p[1])
+      }
+    }
+    return out.title || out.priority || out.due || out.details != null ? out : null
+  }
+  if (kind === 'taskmove') return TREF.test(parts[0]) && parts[1] ? { kind: 'taskmove', ref: parts[0].toUpperCase(), area: parts[1].slice(0, 60) } : null
+  if (kind === 'done') return TREF.test(parts[0]) ? { kind: 'done', ref: parts[0].toUpperCase() } : null
+  if (kind === 'star' || kind === 'unstar') return TREF.test(parts[0]) ? { kind: 'star', ref: parts[0].toUpperCase(), on: kind === 'star' } : null
+  if (kind === 'deltask') return TREF.test(parts[0]) ? { kind: 'deltask', ref: parts[0].toUpperCase() } : null
+  if (kind === 'remind') {
+    const w = WHEN.exec(parts[0] ?? '')
+    return w && parts[1] ? { kind: 'remind', day: w[1], time: `${w[2].padStart(2, '0')}:${w[3]}`, text: parts.slice(1).join(' | ').slice(0, 300) } : null
+  }
+  if (kind === 'checkin') {
+    const minutes = Number(parts[0])
+    return minutes >= 5 && minutes <= 720 && parts[1] ? { kind: 'checkin', minutes, text: parts.slice(1).join(' | ').slice(0, 300) } : null
+  }
   if (kind === 'log') return arg.startsWith('/') && !SAFE_SLASH.test(arg) ? null : { kind: 'log', text: arg }
   if (kind === 'mustdo') return { kind: 'mustdo', text: arg.slice(0, 140) }
   if (kind === 'task') return { kind: 'task', text: arg }
@@ -409,4 +492,67 @@ export function wakePattern(wakes: { day: string; onTime: boolean }[]): string |
   }
   const bad = by.map((x, i) => ({ ...x, d: names[i] })).filter((x) => x.n >= 2 && x.late / x.n >= 0.5)
   return bad.length ? `Late most often on: ${bad.map((x) => `${x.d} (${x.late}/${x.n})`).join(', ')}.` : null
+}
+
+// ---- Lookups: facts the coach asks for (history, other days) -----------
+
+export interface LookupData {
+  finance: any
+  /** Long history (a year): focus, wakes, workouts, tasks, must-dos. */
+  input: import('@core/progress').ProgressInput
+  ledger: { day: string; coins: number; kind: string; note?: string | null }[]
+  sessions: { day: string; subject: string; minutes: number }[]
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/** Answers one "need" from the data on hand; null when it needs Calendar/Todoist (or isn't known). */
+export function answerLocal(need: string, d: LookupData): string | null {
+  const [kind, from, to, ...rest] = need.trim().split(/\s+/)
+  const k = (kind ?? '').toLowerCase()
+  if (!['spending', 'focus', 'workouts', 'sleep', 'tasks', 'points'].includes(k)) return null
+  if (!DATE.test(from ?? '') || !DATE.test(to ?? '')) return `${need}: give dates as YYYY-MM-DD YYYY-MM-DD.`
+  const inRange = (day: string) => day >= from && day <= to
+  const span = `${from} to ${to}`
+  if (k === 'spending') {
+    const st = d.finance
+    if (!st || !Array.isArray(st.tx)) return `Spending ${span}: Finance Helper data not available.`
+    const cats = new Map<string, string>((st.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
+    const want = rest.join(' ').toLowerCase()
+    const exp = (st.tx as any[]).filter((t) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string' && inRange(t.date.slice(0, 10)))
+    const name = (t: any) => cats.get(String(t.category)) ?? String(t.category ?? 'Other')
+    const pick = want ? exp.filter((t) => name(t).toLowerCase().includes(want) || String(t.note ?? '').toLowerCase().includes(want)) : exp
+    const amt = (t: any) => Math.abs(Number(t.base ?? t.amount) || 0)
+    const total = pick.reduce((s, t) => s + amt(t), 0)
+    const by = new Map<string, number>()
+    for (const t of pick) by.set(name(t), (by.get(name(t)) ?? 0) + amt(t))
+    const top = [...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c, v]) => `${c} ${lei(v)}`)
+    const days = Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1)
+    return `Spending ${span}${want ? ` on "${want}"` : ''}: ${lei(total)} in ${pick.length} expenses (${lei(total / days)}/day).${top.length ? ` By category: ${top.join(', ')}.` : ''}`
+  }
+  if (k === 'focus') {
+    const list = d.sessions.filter((s) => inRange(s.day))
+    const total = list.reduce((t, s) => t + s.minutes, 0)
+    const by = new Map<string, number>()
+    for (const s of list) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes)
+    const days = new Set(list.map((s) => s.day)).size
+    return `Focus ${span}: ${hm(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm(m)}`).join(', ')}.` : ''}`
+  }
+  if (k === 'workouts') {
+    const days = [...new Set(d.input.workouts.filter((w) => inRange(w.day)).map((w) => w.day))].sort()
+    return `Workouts ${span}: ${days.length} days${days.length ? ` (${days.map((x) => x.slice(5)).join(', ')})` : ''}.`
+  }
+  if (k === 'sleep') {
+    const w = d.input.wakes.filter((x) => inRange(x.day))
+    return `Wake-ups ${span}: ${w.filter((x) => x.onTime).length}/${w.length} on time.${w.length ? ` Late on: ${w.filter((x) => !x.onTime).map((x) => x.day.slice(5)).join(', ') || 'none'}.` : ''}`
+  }
+  if (k === 'tasks') {
+    const t = d.input.todoist.filter((x) => inRange(x.day)).length
+    const m = (d.input.mustdos ?? []).filter((x) => inRange(x.day))
+    return `Tasks ${span}: ${t} Todoist tasks done, ${m.filter((x) => x.done).length}/${m.length} must-dos done.`
+  }
+  const l = d.ledger.filter((e) => inRange(e.day))
+  const earned = l.filter((e) => e.coins > 0).reduce((t, e) => t + e.coins, 0)
+  const spent = -l.filter((e) => e.coins < 0).reduce((t, e) => t + e.coins, 0)
+  return `Points ${span}: +${earned} earned, −${spent} spent.`
 }

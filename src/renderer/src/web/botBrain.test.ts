@@ -8,8 +8,24 @@ describe('the coach brain (pure parts)', () => {
   })
 
   it('reads the model answer, even with fences around it', () => {
-    expect(parseBrain('```json\n{"reply":"Hi","actions":["log: pizza 120"],"remember":["exam 12 Nov"]}\n```')).toEqual({ reply: 'Hi', actions: ['log: pizza 120'], remember: ['exam 12 Nov'] })
+    expect(parseBrain('```json\n{"reply":"Hi","actions":["log: pizza 120"],"remember":["exam 12 Nov"]}\n```')).toEqual({ reply: 'Hi', actions: ['log: pizza 120'], remember: ['exam 12 Nov'], steps: [], need: [] })
     expect(parseBrain('just text')).toEqual({ reply: 'just text', actions: [], remember: [] })
+  })
+
+  it('reads steps, lookups and the new calendar, Todoist and reminder actions', () => {
+    expect(parseBrain('{"reply":"","need":["spending 2026-10-01 2026-10-31 food"],"steps":["Checked October"]}')).toMatchObject({ need: ['spending 2026-10-01 2026-10-31 food'], steps: ['Checked October'] })
+    expect(readAction('move: e3 | 2026-11-01 15:00')).toEqual({ kind: 'move', ref: 'E3', day: '2026-11-01', time: '15:00' })
+    expect(readAction('resize: E3 | 30')).toEqual({ kind: 'resize', ref: 'E3', minutes: 30 })
+    expect(readAction('delete: E2')).toEqual({ kind: 'delevent', ref: 'E2' })
+    expect(readAction('shift: 60 | E3, E4 E5')).toEqual({ kind: 'shift', refs: ['E3', 'E4', 'E5'], minutes: 60 })
+    expect(readAction('edit: T2 | title=Fix report tables; priority=P1; due=friday 18:00')).toEqual({ kind: 'edit', ref: 'T2', title: 'Fix report tables', priority: 4, due: 'friday 18:00' })
+    expect(readAction('taskmove: T2 | University')).toEqual({ kind: 'taskmove', ref: 'T2', area: 'University' })
+    expect(readAction('done: T1')).toEqual({ kind: 'done', ref: 'T1' })
+    expect(readAction('unstar: T1')).toEqual({ kind: 'star', ref: 'T1', on: false })
+    expect(readAction('remind: 2026-11-01 15:00 | Call mom')).toEqual({ kind: 'remind', day: '2026-11-01', time: '15:00', text: 'Call mom' })
+    expect(readAction('checkin: 60 | Did you start the CV?')).toEqual({ kind: 'checkin', minutes: 60, text: 'Did you start the CV?' })
+    expect(readAction('move: 3 | tomorrow')).toBeNull()
+    expect(readAction('done: buy milk')).toBeNull()
   })
 
   it('only safe actions run', () => {

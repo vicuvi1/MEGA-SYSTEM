@@ -1,4 +1,6 @@
-// POST /api/coach (session required) {text} → {ok, reply, done}
+// POST /api/coach (session required) {text} → a stream of lines (NDJSON):
+//   {"step":"Reading your day"} … while the coach works (shown live in the app)
+//   {"ok":true,"reply":"…","done":[…]} at the end.
 // The app's Coach page talks to the same coach as the Telegram bots: same
 // brain (OpenRouter DeepSeek, Gemini as backup), memory, goals & rules.
 import { bearer, botDefaults, config, readBody, send, sessionOk } from './_lib.mjs'
@@ -20,10 +22,17 @@ export default async function handler(req, res) {
   if (!text) return send(res, 400, { error: 'Say something' })
   const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
   const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('X-Accel-Buffering', 'no')
+  const line = (o) => res.write(JSON.stringify(o) + '\n')
   try {
-    send(res, 200, await coachChat({ tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg) }, text))
+    const r = await coachChat({ tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg) }, text, (step) => line({ step }))
+    line(r)
   } catch (e) {
     console.error('coach:', e)
-    send(res, 500, { error: e.message || 'The coach failed' })
+    line({ ok: false, error: e.message || 'The coach failed' })
   }
+  res.end()
 }

@@ -28,9 +28,10 @@ import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
 import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTime'
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
+import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, isBigAsk, makeRefs, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
-import { appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
 const LOGS_KEY = 'life_bot_logs'
@@ -190,9 +191,11 @@ export interface WebBotsDeps {
 export interface CalendarLike {
   events(fromIso: string, toIso: string): Promise<CalEvent[]>
   create(e: { title: string; start: string; end: string; description?: string }): Promise<CalEvent>
+  move?(calendarId: string, id: string, start: string, end: string): Promise<void>
+  remove?(calendarId: string, id: string): Promise<void>
 }
 
-export type AskModel = (prompt: string, opts?: { json?: boolean; media?: { mime: string; data: string }[] }) => Promise<string>
+export type AskModel = (prompt: string, opts?: { json?: boolean; think?: boolean; media?: { mime: string; data: string }[] }) => Promise<string>
 
 /** What the bot needs from Todoist (the server calls it directly, the page through /api/todoist). */
 export interface TodoistLike {
@@ -200,6 +203,10 @@ export interface TodoistLike {
   upcoming?(days?: number): Promise<TodoTask[]>
   close(id: string): Promise<void>
   quickAdd(text: string): Promise<TodoTask>
+  update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[] }): Promise<void>
+  move?(id: string, areaKey: string): Promise<void>
+  remove?(id: string): Promise<void>
+  everything?(): Promise<{ tasks: TodoTask[]; areas: { key: string; name: string }[] }>
 }
 
 /** 1–5 under the wake-up message: how you slept. */
@@ -605,7 +612,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -681,6 +688,26 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? 'Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes.' : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`
       const keyboard = low ? { inline_keyboard: [REASONS.slice(0, 3), REASONS.slice(3)].map((row, k) => row.map((x, i) => ({ text: x, callback_data: `pr|${day}|${k * 3 + i}` }))) } : undefined
       await edit(text, keyboard)
+      return text
+    }
+    // Coach nudges: pause them for today, or snooze 30 minutes.
+    if (data.startsWith('np|') || data.startsWith('ns|')) {
+      const pause = data.startsWith('np|')
+      await mirror.write((db) => {
+        let st: NudgeState = {}
+        try {
+          st = JSON.parse(getSetting(db as any, NUDGES) || '{}')
+        } catch {
+          st = {}
+        }
+        const now = new Date()
+        const today = services.services(db).wallet.today(now)
+        setSetting(db as any, NUDGES, JSON.stringify(pause ? { ...st, pausedDay: today } : { ...st, snoozeUntil: new Date(now.getTime() + 30 * 60000).toISOString() }))
+      })
+      const text = pause ? '⏸ Nudges paused for today. Back tomorrow.' : '😴 OK, I\'ll check again in 30 minutes.'
+      await answer(text)
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
       return text
     }
     // How you slept (1–5), under the wake-up message.
@@ -893,40 +920,191 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * its memory and your goals & rules; it answers and acts. Shared by the
    * Telegram bots and the app's Coach page (same memory, same log).
    */
-  async function think(persona: Persona, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }, via = 'telegram'): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any }> {
+  async function think(
+    persona: Persona,
+    text: string,
+    key: string,
+    media?: { kind: 'voice' | 'photo'; mime: string; data: string },
+    via = 'telegram',
+    onStep?: (step: string) => void
+  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[] }> {
+    const step = (s: string) => {
+      try {
+        onStep?.(s)
+      } catch {
+        /* the screen's problem */
+      }
+    }
     const dayStart = new Date()
     dayStart.setHours(0, 0, 0, 0)
+    step('Reading your day')
     const [todoToday, upcoming, events] = await Promise.all([
       todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
       todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
       calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 2 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
     ])
-    const { context, memory, profile } = await mirror.read((db) => ({
-      context: lifeContext(services.services(db), db, { finance: financeStateFrom(db, store), todoToday, upcoming, events }),
-      memory: loadMemory(db),
-      profile: loadProfile(db)
-    }))
+    // You wrote: open follow-up check-ins stop asking.
+    await mirror
+      .write((db) => {
+        const raw = getSetting(db as any, REMINDERS)
+        if (!raw) return
+        setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
+      })
+      .catch(() => null)
+    const { context, memory, profile, look } = await mirror.read((db) => {
+      const svc = services.services(db)
+      const finance = financeStateFrom(db, store)
+      let sessions: LookupData['sessions'] = []
+      try {
+        sessions = (db.prepare('SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?').all(addDays(svc.wallet.today(), -400)) as any[]).map((r) => ({ day: String(r.day), subject: String(r.subject), minutes: Number(r.minutes) }))
+      } catch {
+        sessions = []
+      }
+      return {
+        context: lifeContext(svc, db, { finance, todoToday, upcoming, events }),
+        memory: loadMemory(db),
+        profile: loadProfile(db),
+        look: { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
+      }
+    })
+    // Tasks and events the coach can point at (E1, T3); grows when it asks for more.
+    let allTasks: TodoTask[] = [...(todoToday ?? []), ...(upcoming ?? [])].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i)
+    let allEvents: CalEvent[] = events ?? []
+    let areas: { key: string; name: string }[] = []
+    let made = makeRefs(allEvents, allTasks)
+    const big = isBigAsk(text)
+    if (big) step('Thinking it through')
+    const ask = (found?: string) =>
+      ai!(brainPrompt(persona, context, memory, text, media?.kind, profile, { refs: made.lines, found }), { json: true, think: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
-      out = parseBrain(await ai!(brainPrompt(persona, context, memory, text, media?.kind, profile), { json: true, media: media ? [{ mime: media.mime, data: media.data }] : undefined }))
+      out = parseBrain(await ask())
+      // It asked for facts it didn't have: look them up, then it answers.
+      if (out.need?.length && !out.actions.length) {
+        const found: string[] = []
+        for (const need of out.need) {
+          const local = answerLocal(need, look)
+          if (local) {
+            step(`Checked ${need.split(/\s+/)[0]}`)
+            found.push(local)
+            continue
+          }
+          const [k, from, days] = need.trim().split(/\s+/)
+          if (/^calendar$/i.test(k) && calendar && /^\d{4}-\d{2}-\d{2}$/.test(from ?? '')) {
+            step('Read your calendar')
+            const s0 = new Date(`${from}T00:00:00`)
+            const more = await calendar.events(s0.toISOString(), new Date(s0.getTime() + Math.min(14, Math.max(1, Number(days) || 1)) * 86400000).toISOString()).catch(() => [])
+            allEvents = [...allEvents, ...more].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i)
+            found.push(`Calendar from ${from}: ${more.length} events (in the E-list below).`)
+          } else if (/^todoist$/i.test(k) && todoist?.everything) {
+            step('Read all your Todoist')
+            const all = await todoist.everything().catch(() => null)
+            if (all) {
+              allTasks = [...allTasks, ...all.tasks].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i)
+              areas = all.areas
+              found.push(`Todoist: ${all.tasks.length} open tasks (in the T-list below). Areas: ${all.areas.map((a) => a.name).join(', ')}.`)
+            }
+          } else found.push(`${need}: not available.`)
+        }
+        made = makeRefs(allEvents, allTasks)
+        out = parseBrain(await ask(found.join('\n') || 'Nothing found.'))
+      }
     } catch (e) {
       return { ok: false, reply: `The coach couldn't think right now (${(e as Error).message.slice(0, 120)}). Try again in a minute.`, done: [] }
     }
+    for (const s of out.steps ?? []) step(s)
+    const refs = made.refs
     const done: string[] = []
     let keyboard: any
     let expense = false
     const acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
     if (typeof process !== 'undefined' && process.env?.BOT_DEBUG) console.log('brain actions:', out.actions, '→', acts)
+    const noCal = () => done.push("⚠️ Google Calendar isn't connected (Settings in the app)")
+    const fmtHM = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
     for (const [i, a] of acts.entries()) {
       try {
         if (a.kind === 'event') {
           if (!calendar) {
-            done.push('⚠️ Google Calendar isn\'t connected (Settings in the app)')
+            noCal()
             continue
           }
           const start = new Date(`${a.day}T${a.time}:00`)
           await calendar.create({ title: a.title, start: start.toISOString(), end: new Date(start.getTime() + a.minutes * 60000).toISOString(), description: 'Planned with your coach in Life System' })
           done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`)
+          continue
+        }
+        if (a.kind === 'move' || a.kind === 'resize' || a.kind === 'delevent') {
+          const ev = refs.events.get(a.ref)
+          if (!ev) continue
+          if (!calendar?.move || !calendar.remove) {
+            noCal()
+            continue
+          }
+          if (a.kind === 'delevent') {
+            await calendar.remove(ev.calendarId, ev.id)
+            done.push(`🗑 Removed from your calendar: ${ev.title}`)
+            continue
+          }
+          const len = Date.parse(ev.end) - Date.parse(ev.start)
+          const start = a.kind === 'move' ? new Date(`${a.day}T${a.time}:00`).toISOString() : ev.start
+          const end = new Date(Date.parse(start) + (a.kind === 'resize' ? a.minutes * 60000 : len)).toISOString()
+          await calendar.move(ev.calendarId, ev.id, start, end)
+          done.push(a.kind === 'move' ? `🗓 Moved: ${ev.title} → ${a.day.slice(5)} ${a.time}` : `🗓 ${ev.title}: now ${a.minutes} min (${fmtHM(start)}–${fmtHM(end)})`)
+          continue
+        }
+        if (a.kind === 'shift') {
+          if (!calendar?.move) {
+            noCal()
+            continue
+          }
+          const list = a.refs.map((r) => refs.events.get(r)).filter((x): x is CalEvent => !!x)
+          for (const ev of list) await calendar.move(ev.calendarId, ev.id, new Date(Date.parse(ev.start) + a.minutes * 60000).toISOString(), new Date(Date.parse(ev.end) + a.minutes * 60000).toISOString())
+          if (list.length) done.push(`🗓 Shifted ${list.length} block${list.length === 1 ? '' : 's'} by ${a.minutes > 0 ? '+' : ''}${a.minutes} min`)
+          continue
+        }
+        if (a.kind === 'edit' || a.kind === 'taskmove' || a.kind === 'done' || a.kind === 'star' || a.kind === 'deltask') {
+          const t = refs.tasks.get(a.ref)
+          if (!t || !todoist) continue
+          if (a.kind === 'done') {
+            await todoist.close(t.id)
+            const paid = await mirror.write((db) => payTodoist(services.services(db), [{ id: t.id, content: t.content, completedAt: new Date().toISOString() } as any])).catch(() => 0)
+            done.push(`✅ Done in Todoist: ${t.content}${paid ? ' · +5' : ''}`)
+          } else if (a.kind === 'deltask' && todoist.remove) {
+            await todoist.remove(t.id)
+            done.push(`🗑 Deleted from Todoist: ${t.content}`)
+          } else if (a.kind === 'star' && todoist.update) {
+            const labels = a.on ? [...new Set([...(t.labels ?? []), 'today'])] : (t.labels ?? []).filter((l) => l !== 'today')
+            await todoist.update(t.id, { labels, ...(a.on && !(t.due && t.due <= new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)) ? { due: 'today' } : {}) })
+            done.push(a.on ? `⭐ Must-do today: ${t.content}` : `☆ No longer a must-do: ${t.content}`)
+          } else if (a.kind === 'edit' && todoist.update) {
+            await todoist.update(t.id, { content: a.title, priority: a.priority, due: a.due, description: a.details })
+            done.push(`✏️ Todoist: ${a.title ?? t.content}${a.priority ? ` · P${5 - a.priority}` : ''}${a.due ? ` · ${a.due}` : ''}`)
+          } else if (a.kind === 'taskmove' && todoist.move) {
+            if (!areas.length && todoist.everything) areas = (await todoist.everything().catch(() => null))?.areas ?? []
+            const want = a.area.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').trim()
+            const area = areas.find((x) => x.name.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').trim() === want) ?? areas.find((x) => x.name.toLowerCase().includes(want))
+            if (!area) {
+              done.push(`⚠️ No Todoist area called "${a.area}"`)
+              continue
+            }
+            await todoist.move(t.id, area.key)
+            done.push(`📂 ${t.content} → ${area.name}`)
+          }
+          continue
+        }
+        if (a.kind === 'remind' || a.kind === 'checkin') {
+          const at = a.kind === 'remind' ? new Date(`${a.day}T${a.time}:00`) : new Date(Date.now() + a.minutes * 60000)
+          if (at.getTime() < Date.now() - 60000) continue
+          await mirror.write((db) => {
+            let list: Reminder[] = []
+            try {
+              list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+            } catch {
+              list = []
+            }
+            setSetting(db as any, REMINDERS, JSON.stringify(addReminder(list, { at: at.toISOString(), text: a.text, kind: a.kind, follow: a.kind === 'checkin' })))
+          })
+          done.push(a.kind === 'remind' ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== new Date().toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ''}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`)
           continue
         }
         if (a.kind === 'task') {
@@ -991,7 +1169,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       })
       .catch(() => null)
     processed++
-    return { ok: true, reply: out.reply || 'Got it.', done, keyboard }
+    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps }
   }
 
   async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
@@ -1177,7 +1355,7 @@ His note: ${note}`,
     pollOnce,
     handleUpdate,
     /** The app's Coach page: the same brain and memory as the bots. */
-    think: (text: string, key = `app:${Date.now()}`) => think('mega', text, key, undefined, 'app'),
+    think: (text: string, key = `app:${Date.now()}`, onStep?: (s: string) => void) => think('mega', text, key, undefined, 'app', onStep),
     config,
     saveConfig: async (patch: Partial<BotBridgeConfig>): Promise<BotBridgeConfig> => {
       const next: BotBridgeConfig = { ...(await config()), ...patch }

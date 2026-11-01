@@ -7,7 +7,7 @@ import { Icon } from '../Icon'
 import { useAction } from '../ui'
 import { useLive } from '../live'
 
-type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean }
+type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[] }
 type Profile = { about: string; goals: string[]; rules: string[] }
 
 const BOT_LABEL: Record<string, string> = { mega: 'Mega', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
@@ -74,8 +74,13 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     const now = new Date().toISOString()
     setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: t, at: now }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
     try {
-      const r = await life.coach.chat(t)
-      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, at: new Date().toISOString() }])
+      const seen: string[] = []
+      const r = await life.coach.chat(t, (st) => {
+        if (seen.includes(st)) return
+        seen.push(st)
+        setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, steps: [...seen] } : x)))
+      })
+      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, at: new Date().toISOString(), steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       if (r.done.length) onWallet()
       void life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
     } catch (e) {
@@ -132,13 +137,28 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               </div>
               <div className="co-bubble">
                 {m.pending ? (
-                  <span className="co-typing">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
+                  <div className="co-thinking">
+                    <span className="co-typing">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                    {!!m.steps?.length && (
+                      <ul className="co-steps live">
+                        {m.steps.map((st, k) => (
+                          <li key={k} className={k === m.steps!.length - 1 ? 'now' : 'ok'}>
+                            {st}
+                            {k === m.steps!.length - 1 ? '…' : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 ) : (
-                  m.text
+                  <>
+                    {!!m.steps?.length && <div className="co-steps-done">{m.steps.join(' · ')}</div>}
+                    {m.text}
+                  </>
                 )}
                 {!!m.done?.length && (
                   <ul className="co-done">
