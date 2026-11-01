@@ -2,13 +2,16 @@
 // Vercel): today's tasks, complete one, quick add (Todoist understands
 // "tomorrow 17:00 p1 #University"), and what you completed since a time.
 // Uses Todoist's current API (v1), with the older REST v2 as a fallback.
-import type { TodoCompleted, TodoTask } from '@core/todoist'
+import { guessArea, plainName, type Area, type TodoCompleted, type TodoTask } from '@core/todoist'
 
 const V1 = 'https://api.todoist.com/api/v1'
 const V2 = 'https://api.todoist.com/rest/v2'
 const SYNC = 'https://api.todoist.com/sync/v9'
 
-export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch) {
+/** Optional: a model that picks an area when the words don't (the server passes Gemini). */
+export type AreaPicker = (text: string, areaNames: string[]) => Promise<string | null>
+
+export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch, opts: { pickArea?: AreaPicker } = {}) {
   const call = async (url: string, init: RequestInit = {}): Promise<any> => {
     const res = await fetchImpl(url, {
       ...init,
@@ -76,11 +79,103 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
       project: names.get(String(t.project_id)) ?? null,
       section: t.section_id ? (secs.get(String(t.section_id)) ?? null) : null,
       deadline: t.deadline?.date ? String(t.deadline.date).slice(0, 10) : null,
-      recurring: !!due?.is_recurring
+      recurring: !!due?.is_recurring,
+      projectId: t.project_id != null ? String(t.project_id) : null,
+      sectionId: t.section_id ? String(t.section_id) : null,
+      description: t.description ? String(t.description) : null
     }
   }
 
+  /** Your areas: every section (Inbox first), and every project without sections. */
+  const areaList = async (): Promise<{ areas: Area[]; inboxId: string | null; raw: { projects: any[]; sections: any[] } }> => {
+    const [projects, sections] = await Promise.all([either(() => all(`${V1}/projects`), () => all(`${V2}/projects`)), either(() => all(`${V1}/sections`), () => all(`${V2}/sections`)).catch(() => [])])
+    const live = projects.filter((p: any) => !p.is_archived && !p.is_deleted)
+    const inbox = live.find((p: any) => p.inbox_project || p.is_inbox_project)
+    const ordered = [...(inbox ? [inbox] : []), ...live.filter((p: any) => p !== inbox)]
+    const areas: Area[] = []
+    for (const p of ordered) {
+      const secs = sections.filter((x: any) => String(x.project_id) === String(p.id) && !x.is_deleted && !x.is_archived).sort((a: any, b: any) => (a.section_order ?? a.order ?? 0) - (b.section_order ?? b.order ?? 0))
+      for (const x of secs) areas.push({ key: `s:${x.id}`, name: String(x.name), kind: 'section', id: String(x.id), projectId: String(p.id), todoistColor: p.color ?? null })
+      // The project itself: its tasks outside any section (the Inbox's are "Inbox").
+      areas.push({ key: `p:${p.id}`, name: String(p.name), kind: 'project', id: String(p.id), projectId: String(p.id), todoistColor: p.color ?? null })
+    }
+    return { areas, inboxId: inbox ? String(inbox.id) : null, raw: { projects: live, sections } }
+  }
+
+  /** Moves a task to a section or a project (v1 move; the sync API on older accounts). */
+  const moveTo = async (id: string, area: Pick<Area, 'kind' | 'id'>) => {
+    const body = area.kind === 'section' ? { section_id: area.id } : { project_id: area.id }
+    await either(
+      () => call(`${V1}/tasks/${encodeURIComponent(id)}/move`, { method: 'POST', body: JSON.stringify(body) }),
+      () => call(`${SYNC}/sync`, { method: 'POST', body: JSON.stringify({ commands: [{ type: 'item_move', uuid: `${id}-${Date.now()}`, args: { id, ...body } }] }) })
+    )
+  }
+
+  /** The area for a new task: its words first, then the model (if any). */
+  const chooseArea = async (text: string, areas: Area[]): Promise<Area | null> => {
+    const byWords = guessArea(text, areas)
+    if (byWords || !opts.pickArea) return byWords
+    const choices = areas.filter((a) => a.kind === 'section' || a.name !== 'Inbox')
+    const name = await opts.pickArea(text, choices.map((a) => plainName(a.name))).catch(() => null)
+    return name ? (choices.find((a) => plainName(a.name).toLowerCase() === name.trim().toLowerCase()) ?? null) : null
+  }
+
   return {
+    /** Every open task and your areas (the Tasks page). */
+    async everything(): Promise<{ tasks: TodoTask[]; areas: Area[] }> {
+      const [list, { areas, raw }] = await Promise.all([either(() => all(`${V1}/tasks`), () => all(`${V2}/tasks`)), areaList()])
+      const names = new Map(raw.projects.map((p: any) => [String(p.id), String(p.name)]))
+      const secs = new Map(raw.sections.map((x: any) => [String(x.id), String(x.name)]))
+      return { tasks: list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs)), areas }
+    },
+    areas: async () => (await areaList()).areas,
+    /** Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or note. */
+    async update(id: string, patch: { content?: string; priority?: number; due?: string; description?: string }): Promise<void> {
+      const body: any = {}
+      if (patch.content != null) body.content = patch.content
+      if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)))
+      if (patch.due != null) body.due_string = patch.due.trim() || 'no date'
+      if (patch.description != null) body.description = patch.description
+      await either(
+        () => call(`${V1}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) }),
+        () => call(`${V2}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) })
+      )
+    },
+    async move(id: string, areaKey: string): Promise<void> {
+      const a = (await areaList()).areas.find((x) => x.key === areaKey)
+      if (!a) throw new Error('That area no longer exists in Todoist')
+      await moveTo(id, a)
+    },
+    async reopen(id: string): Promise<void> {
+      await either(
+        () => call(`${V1}/tasks/${encodeURIComponent(id)}/reopen`, { method: 'POST' }),
+        () => call(`${V2}/tasks/${encodeURIComponent(id)}/reopen`, { method: 'POST' })
+      )
+    },
+    async remove(id: string): Promise<void> {
+      await either(
+        () => call(`${V1}/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+        () => call(`${V2}/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      )
+    },
+    /** A new area: a section in the Inbox (or the given project). */
+    async addArea(name: string, projectId?: string): Promise<Area> {
+      const { inboxId } = await areaList()
+      const pid = projectId || inboxId
+      const x = await either(
+        () => call(`${V1}/sections`, { method: 'POST', body: JSON.stringify({ name, project_id: pid }) }),
+        () => call(`${V2}/sections`, { method: 'POST', body: JSON.stringify({ name, project_id: pid }) })
+      )
+      return { key: `s:${x.id}`, name: String(x.name), kind: 'section', id: String(x.id), projectId: String(pid) }
+    },
+    async renameArea(areaKey: string, name: string): Promise<void> {
+      const [kind, id] = [areaKey.slice(0, 1), areaKey.slice(2)]
+      const path = kind === 's' ? 'sections' : 'projects'
+      await either(
+        () => call(`${V1}/${path}/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ name }) }),
+        () => call(`${V2}/${path}/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ name }) })
+      )
+    },
     /** Due today or overdue, not completed. */
     async today(): Promise<TodoTask[]> {
       const q = encodeURIComponent('today | overdue')
@@ -108,13 +203,32 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch)
         () => call(`${V2}/tasks/${encodeURIComponent(id)}/close`, { method: 'POST' })
       )
     },
-    /** Todoist reads the date, time, priority and #project from the text. */
-    async quickAdd(text: string): Promise<TodoTask> {
+    /**
+     * Todoist reads the date, time, priority and #project from the text. A
+     * task that lands in the plain Inbox is then put in its area (by its
+     * words, else the model); `areaKey` picks the area yourself.
+     */
+    async quickAdd(text: string, areaKey?: string): Promise<TodoTask & { area?: string | null }> {
       const t = await either(
         () => call(`${V1}/tasks/quick`, { method: 'POST', body: JSON.stringify({ text }) }),
         () => call(`${SYNC}/quick/add`, { method: 'POST', body: JSON.stringify({ text }) })
       )
-      return toTask(t ?? {}, await projects())
+      const task: TodoTask & { area?: string | null } = toTask(t ?? {}, await projects())
+      try {
+        const { areas, inboxId } = await areaList()
+        const inPlainInbox = !task.sectionId && (!task.projectId || task.projectId === inboxId)
+        const target = areaKey ? areas.find((a) => a.key === areaKey) ?? null : inPlainInbox && !/#\S/.test(text) ? await chooseArea(text, areas) : null
+        if (target && task.id && target.key !== `p:${task.projectId}`) {
+          await moveTo(task.id, target)
+          task.section = target.kind === 'section' ? target.name : null
+          task.sectionId = target.kind === 'section' ? target.id : null
+          task.projectId = target.projectId
+          task.area = target.name
+        }
+      } catch {
+        /* the task is saved; it just stays where Todoist put it */
+      }
+      return task
     },
     /** Completed since `since` (ISO), newest first. */
     async completedSince(since: string): Promise<TodoCompleted[]> {

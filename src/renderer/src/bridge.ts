@@ -1,5 +1,5 @@
 import type { LifeApi, UpdateStatus } from '@shared/api'
-import type { TodoTask } from '@core/todoist'
+import type { Area, TodoTask } from '@core/todoist'
 import type { ProgressReport } from '@core/progress'
 import type { WeekPlan } from '@core/weekPlan'
 import { createTursoWebBridge } from './tursoWebBridge'
@@ -22,9 +22,20 @@ export type Bridge = LifeApi & {
     status(): Promise<{ connected: boolean }>
     today(): Promise<TodoTask[]>
     upcoming?(): Promise<TodoTask[]>
-    quickAdd(text: string): Promise<TodoTask>
+    quickAdd(text: string, area?: string): Promise<TodoTask & { area?: string | null }>
     complete(task: TodoTask): Promise<{ paid: number }>
     sync(force?: boolean): Promise<number>
+    /** The Tasks page: every open task and your areas. */
+    everything?(): Promise<{ tasks: TodoTask[]; areas: Area[] }>
+    update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string }): Promise<void>
+    move?(id: string, area: string): Promise<void>
+    reopen?(id: string): Promise<void>
+    remove?(id: string): Promise<void>
+    addArea?(name: string): Promise<Area>
+    renameArea?(area: string, name: string): Promise<void>
+    /** Area colors you picked (area key → color), synced to every device. */
+    colors?(): Promise<Record<string, string>>
+    setColor?(area: string, color: string): Promise<Record<string, string>>
   }
 }
 

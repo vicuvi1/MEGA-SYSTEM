@@ -50,7 +50,14 @@ async function botsFor(env: BotEnv) {
   await mirror.ready
   const services = createWebServices(mirror)
   const defaults = { enabled: true, pollingEnabled: true, morningBriefing: true, eveningNudge: true, ...env.defaults } as BotBridgeConfig
-  const todoist = env.todoistToken ? createTodoistApi(env.todoistToken) : null
+  // New tasks from the bots go to their area too (words first, then Gemini).
+  const pickArea = env.model
+    ? async (text: string, names: string[]) => {
+        const r = (await env.model!(`Which ONE of these life areas does this task belong to? Areas: ${names.join(', ')}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, '')
+        return /^none$/i.test(r) ? null : r
+      }
+    : undefined
+  const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null
   const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: env.model ?? null })
   warm = { key, bots, mirror, services }
   return warm

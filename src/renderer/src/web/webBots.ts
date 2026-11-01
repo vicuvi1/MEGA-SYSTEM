@@ -726,7 +726,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           if (!arg) reply = '➕ What should I add? e.g. <code>/task call Leo tomorrow 17:00 p1 #University</code>'
           else {
             const t = await todoist.quickAdd(arg)
-            reply = `➕ <b>Added to Todoist:</b> ${esc(t.content || arg)}${t.due ? `\n📅 ${t.due === today ? 'Today' : t.due}${t.dueTime ? ' ' + t.dueTime : ''}` : ''}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ''}${t.project ? ` · #${esc(t.project)}` : ''}`
+            reply = `➕ <b>Added to Todoist:</b> ${esc(t.content || arg)}${t.section ? `\n📂 ${esc(t.section)}` : t.project ? `\n📂 ${esc(t.project)}` : ''}${t.due ? `\n📅 ${t.due === today ? 'Today' : t.due}${t.dueTime ? ' ' + t.dueTime : ''}` : ''}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ''}`
           }
         } else if (cmd === 'done' && arg) {
           const list = sortToday(await todoist.today(), today)

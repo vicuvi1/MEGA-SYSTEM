@@ -3942,6 +3942,53 @@ function financeSpending(state) {
 	}));
 }
 // src/core/todoist.ts
+/** The area name without its emoji: "🎓 University" → "University". */
+var plainName = (name) => name.replace(/[^\p{L}\p{N}&\s'-]/gu, "").replace(/\s+/g, " ").trim();
+/** Words that point to an area, matched against the area's name. */
+var AREA_WORDS = [
+	{
+		area: /univ|study|school|facult/i,
+		words: /\b(univ\w*|lab\w*|exam\w*|curs\w*|course\w*|lecture\w*|seminar\w*|homework|teza|referat\w*|colloq\w*|coloc\w*|etica|thesis|assignment|professor|prof|teacher|grade)\b/i
+	},
+	{
+		area: /cyber|secur|hack/i,
+		words: /\b(ctf\w*|picoctf|rust|crypto\w*|hack\w*|secur\w*|cyber\w*|pentest\w*|linux|tryhackme|htb|exploit\w*|reverse|malware|ctftime)\b/i
+	},
+	{
+		area: /job|career|work/i,
+		words: /\b(cv|resume|linkedin|job\w*|interview\w*|intern\w*|career|portfolio|apply|application|recruiter|salary|freelance)\b/i
+	},
+	{
+		area: /sport|gym|fit|train/i,
+		words: /\b(gym|workout\w*|run|running|sport\w*|train\w*|push-?ups?|squats?|swim\w*|football|box\w*)\b/i
+	},
+	{
+		area: /health|medic/i,
+		words: /\b(doctor|dentist|teeth|tooth|health|pharmac\w*|medic\w*|pills?|vitamin\w*|blood|clinic|hospital|eyes?)\b/i
+	},
+	{
+		area: /skin|look|beauty|groom/i,
+		words: /\b(skin\w*|hair\w*|face|barber|beard|shave\w*|cream|serum|acne|nails?)\b/i
+	},
+	{
+		area: /idea/i,
+		words: /\b(idea\w*|maybe|someday|think about|brainstorm|business)\b/i
+	},
+	{
+		area: /admin|life|home|errand/i,
+		words: /\b(bank|revolut|maib|pay|bill\w*|buy|order|fix|repair|call|mouse|buds|phone|laptop|documents?|passport|clean\w*|wash|groceries)\b/i
+	}
+];
+/** The area a new task most likely belongs to, by its words (null when unclear). */
+function guessArea(text, areas) {
+	for (const rule of AREA_WORDS) {
+		if (!rule.words.test(text)) continue;
+		const hit = areas.find((a) => rule.area.test(plainName(a.name)));
+		if (hit) return hit;
+	}
+	const lower = text.toLowerCase();
+	return areas.find((a) => plainName(a.name).length > 2 && lower.includes(plainName(a.name).toLowerCase())) ?? null;
+}
 var IMPORTANT = /univ|lab|exam|examen|curs|course|test|colloq|deadline|essay|referat|proiect|project|cv|interview/i;
 var dayDiff = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 864e5);
 /**
@@ -8790,7 +8837,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (!arg) reply = "➕ What should I add? e.g. <code>/task call Leo tomorrow 17:00 p1 #University</code>";
 				else {
 					const t = await todoist.quickAdd(arg);
-					reply = `➕ <b>Added to Todoist:</b> ${esc(t.content || arg)}${t.due ? `\n📅 ${t.due === today ? "Today" : t.due}${t.dueTime ? " " + t.dueTime : ""}` : ""}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ""}${t.project ? ` · #${esc(t.project)}` : ""}`;
+					reply = `➕ <b>Added to Todoist:</b> ${esc(t.content || arg)}${t.section ? `\n📂 ${esc(t.section)}` : t.project ? `\n📂 ${esc(t.project)}` : ""}${t.due ? `\n📅 ${t.due === today ? "Today" : t.due}${t.dueTime ? " " + t.dueTime : ""}` : ""}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ""}`;
 				}
 			} else if (cmd === "done" && arg) {
 				const list = sortToday(await todoist.today(), today);
@@ -9267,7 +9314,7 @@ His note: ${note}`, { json: true }));
 var V1 = "https://api.todoist.com/api/v1";
 var V2 = "https://api.todoist.com/rest/v2";
 var SYNC = "https://api.todoist.com/sync/v9";
-function createTodoistApi(token, fetchImpl = fetch) {
+function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 	const call = async (url, init = {}) => {
 		const res = await fetchImpl(url, {
 			...init,
@@ -9336,10 +9383,147 @@ function createTodoistApi(token, fetchImpl = fetch) {
 			project: names.get(String(t.project_id)) ?? null,
 			section: t.section_id ? secs.get(String(t.section_id)) ?? null : null,
 			deadline: t.deadline?.date ? String(t.deadline.date).slice(0, 10) : null,
-			recurring: !!due?.is_recurring
+			recurring: !!due?.is_recurring,
+			projectId: t.project_id != null ? String(t.project_id) : null,
+			sectionId: t.section_id ? String(t.section_id) : null,
+			description: t.description ? String(t.description) : null
 		};
 	};
+	/** Your areas: every section (Inbox first), and every project without sections. */
+	const areaList = async () => {
+		const [projects, sections] = await Promise.all([either(() => all(`${V1}/projects`), () => all(`${V2}/projects`)), either(() => all(`${V1}/sections`), () => all(`${V2}/sections`)).catch(() => [])]);
+		const live = projects.filter((p) => !p.is_archived && !p.is_deleted);
+		const inbox = live.find((p) => p.inbox_project || p.is_inbox_project);
+		const ordered = [...inbox ? [inbox] : [], ...live.filter((p) => p !== inbox)];
+		const areas = [];
+		for (const p of ordered) {
+			const secs = sections.filter((x) => String(x.project_id) === String(p.id) && !x.is_deleted && !x.is_archived).sort((a, b) => (a.section_order ?? a.order ?? 0) - (b.section_order ?? b.order ?? 0));
+			for (const x of secs) areas.push({
+				key: `s:${x.id}`,
+				name: String(x.name),
+				kind: "section",
+				id: String(x.id),
+				projectId: String(p.id),
+				todoistColor: p.color ?? null
+			});
+			areas.push({
+				key: `p:${p.id}`,
+				name: String(p.name),
+				kind: "project",
+				id: String(p.id),
+				projectId: String(p.id),
+				todoistColor: p.color ?? null
+			});
+		}
+		return {
+			areas,
+			inboxId: inbox ? String(inbox.id) : null,
+			raw: {
+				projects: live,
+				sections
+			}
+		};
+	};
+	/** Moves a task to a section or a project (v1 move; the sync API on older accounts). */
+	const moveTo = async (id, area) => {
+		const body = area.kind === "section" ? { section_id: area.id } : { project_id: area.id };
+		await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}/move`, {
+			method: "POST",
+			body: JSON.stringify(body)
+		}), () => call(`${SYNC}/sync`, {
+			method: "POST",
+			body: JSON.stringify({ commands: [{
+				type: "item_move",
+				uuid: `${id}-${Date.now()}`,
+				args: {
+					id,
+					...body
+				}
+			}] })
+		}));
+	};
+	/** The area for a new task: its words first, then the model (if any). */
+	const chooseArea = async (text, areas) => {
+		const byWords = guessArea(text, areas);
+		if (byWords || !opts.pickArea) return byWords;
+		const choices = areas.filter((a) => a.kind === "section" || a.name !== "Inbox");
+		const name = await opts.pickArea(text, choices.map((a) => plainName(a.name))).catch(() => null);
+		return name ? choices.find((a) => plainName(a.name).toLowerCase() === name.trim().toLowerCase()) ?? null : null;
+	};
 	return {
+		/** Every open task and your areas (the Tasks page). */
+		async everything() {
+			const [list, { areas, raw }] = await Promise.all([either(() => all(`${V1}/tasks`), () => all(`${V2}/tasks`)), areaList()]);
+			const names = new Map(raw.projects.map((p) => [String(p.id), String(p.name)]));
+			const secs = new Map(raw.sections.map((x) => [String(x.id), String(x.name)]));
+			return {
+				tasks: list.filter((t) => !t.checked && !t.is_completed).map((t) => toTask(t, names, secs)),
+				areas
+			};
+		},
+		areas: async () => (await areaList()).areas,
+		/** Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or note. */
+		async update(id, patch) {
+			const body = {};
+			if (patch.content != null) body.content = patch.content;
+			if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)));
+			if (patch.due != null) body.due_string = patch.due.trim() || "no date";
+			if (patch.description != null) body.description = patch.description;
+			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}`, {
+				method: "POST",
+				body: JSON.stringify(body)
+			}), () => call(`${V2}/tasks/${encodeURIComponent(id)}`, {
+				method: "POST",
+				body: JSON.stringify(body)
+			}));
+		},
+		async move(id, areaKey) {
+			const a = (await areaList()).areas.find((x) => x.key === areaKey);
+			if (!a) throw new Error("That area no longer exists in Todoist");
+			await moveTo(id, a);
+		},
+		async reopen(id) {
+			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}/reopen`, { method: "POST" }), () => call(`${V2}/tasks/${encodeURIComponent(id)}/reopen`, { method: "POST" }));
+		},
+		async remove(id) {
+			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }), () => call(`${V2}/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }));
+		},
+		/** A new area: a section in the Inbox (or the given project). */
+		async addArea(name, projectId) {
+			const { inboxId } = await areaList();
+			const pid = projectId || inboxId;
+			const x = await either(() => call(`${V1}/sections`, {
+				method: "POST",
+				body: JSON.stringify({
+					name,
+					project_id: pid
+				})
+			}), () => call(`${V2}/sections`, {
+				method: "POST",
+				body: JSON.stringify({
+					name,
+					project_id: pid
+				})
+			}));
+			return {
+				key: `s:${x.id}`,
+				name: String(x.name),
+				kind: "section",
+				id: String(x.id),
+				projectId: String(pid)
+			};
+		},
+		async renameArea(areaKey, name) {
+			const [kind, id] = [areaKey.slice(0, 1), areaKey.slice(2)];
+			const path = kind === "s" ? "sections" : "projects";
+			await either(() => call(`${V1}/${path}/${encodeURIComponent(id)}`, {
+				method: "POST",
+				body: JSON.stringify({ name })
+			}), () => call(`${V2}/${path}/${encodeURIComponent(id)}`, {
+				method: "POST",
+				body: JSON.stringify({ name })
+			}));
+		},
 		/** Due today or overdue, not completed. */
 		async today() {
 			const q = encodeURIComponent("today | overdue");
@@ -9375,8 +9559,12 @@ function createTodoistApi(token, fetchImpl = fetch) {
 		async close(id) {
 			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }), () => call(`${V2}/tasks/${encodeURIComponent(id)}/close`, { method: "POST" }));
 		},
-		/** Todoist reads the date, time, priority and #project from the text. */
-		async quickAdd(text) {
+		/**
+		* Todoist reads the date, time, priority and #project from the text. A
+		* task that lands in the plain Inbox is then put in its area (by its
+		* words, else the model); `areaKey` picks the area yourself.
+		*/
+		async quickAdd(text, areaKey) {
 			const t = await either(() => call(`${V1}/tasks/quick`, {
 				method: "POST",
 				body: JSON.stringify({ text })
@@ -9384,7 +9572,20 @@ function createTodoistApi(token, fetchImpl = fetch) {
 				method: "POST",
 				body: JSON.stringify({ text })
 			}));
-			return toTask(t ?? {}, await projects());
+			const task = toTask(t ?? {}, await projects());
+			try {
+				const { areas, inboxId } = await areaList();
+				const inPlainInbox = !task.sectionId && (!task.projectId || task.projectId === inboxId);
+				const target = areaKey ? areas.find((a) => a.key === areaKey) ?? null : inPlainInbox && !/#\S/.test(text) ? await chooseArea(text, areas) : null;
+				if (target && task.id && target.key !== `p:${task.projectId}`) {
+					await moveTo(task.id, target);
+					task.section = target.kind === "section" ? target.name : null;
+					task.sectionId = target.kind === "section" ? target.id : null;
+					task.projectId = target.projectId;
+					task.area = target.name;
+				}
+			} catch {}
+			return task;
 		},
 		/** Completed since `since` (ISO), newest first. */
 		async completedSince(since) {
@@ -9562,20 +9763,25 @@ async function botsFor(env) {
 	const mirror = new Mirror(await initSqlJs({ locateFile: (f) => require.resolve(`sql.js/dist/${f}`) }), new TursoHttp(env.tursoUrl, env.tursoToken), null);
 	await mirror.ready;
 	const services = createWebServices(mirror);
+	const defaults = {
+		enabled: true,
+		pollingEnabled: true,
+		morningBriefing: true,
+		eveningNudge: true,
+		...env.defaults
+	};
+	const pickArea = env.model ? async (text, names) => {
+		const r = (await env.model(`Which ONE of these life areas does this task belong to? Areas: ${names.join(", ")}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, "");
+		return /^none$/i.test(r) ? null : r;
+	} : void 0;
 	warm = {
 		key,
 		bots: createWebBots({
 			mirror,
 			services,
-			defaults: {
-				enabled: true,
-				pollingEnabled: true,
-				morningBriefing: true,
-				eveningNudge: true,
-				...env.defaults
-			},
+			defaults,
 			server: true,
-			todoist: env.todoistToken ? createTodoistApi(env.todoistToken) : null,
+			todoist: env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null,
 			ai: env.model ?? null
 		}),
 		mirror,

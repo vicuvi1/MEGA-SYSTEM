@@ -60,7 +60,7 @@ const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 
 
 /** Pages most people don't need day to day: hidden once (Settings → Layout brings them back). */
 const QUIET_PAGES = ['schedule', 'journey', 'rules']
-const LAYOUT_V = 4
+const LAYOUT_V = 5
 
 function load(): UiPrefs {
   try {
@@ -73,6 +73,8 @@ function load(): UiPrefs {
       p.hiddenPages = [...new Set([...(p.hiddenPages ?? []), ...QUIET_PAGES])]
       // One task list: Todoist. The app's own Tasks page leaves the menu (Layout brings it back).
       if (v < 4) p.hiddenPages = [...new Set([...p.hiddenPages, 'tasks'])]
+      // Tasks is your Todoist now: back in the menu.
+      if (v < 5) p.hiddenPages = p.hiddenPages.filter((x) => x !== 'tasks')
       p.layoutV = LAYOUT_V
       try {
         localStorage.setItem(KEY, JSON.stringify(p))

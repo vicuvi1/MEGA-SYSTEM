@@ -21,6 +21,7 @@ import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
 import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
+import { getSetting, setSetting } from '../../main/settings'
 import { financeSpending } from '@core/progress'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
@@ -229,7 +230,7 @@ export function createTursoWebBridge(): Bridge {
     close: async (id: string) => {
       await todoistCall('close', { id })
     },
-    quickAdd: async (text: string) => (await todoistCall('quick', { text })).task as TodoTask
+    quickAdd: async (text: string, area?: string) => (await todoistCall('quick', { text, area })).task as TodoTask
   }
   const todoistOnP: Promise<boolean> = sessionReady
     .then(() => todoistCall('status'))
@@ -337,7 +338,47 @@ export function createTursoWebBridge(): Bridge {
       status: async () => ({ connected: await todoistOnP }),
       today: async () => ((await todoistOnP) ? todoist.today() : []),
       upcoming: async () => ((await todoistOnP) ? (((await todoistCall('upcoming')).tasks ?? []) as TodoTask[]) : []),
-      quickAdd: async (text: string) => todoist.quickAdd(text),
+      quickAdd: async (text: string, area?: string) => todoist.quickAdd(text, area),
+      everything: async () => {
+        const j = await todoistCall('everything')
+        return { tasks: (j.tasks ?? []) as TodoTask[], areas: j.areas ?? [] }
+      },
+      update: async (id: string, patch: Record<string, unknown>) => {
+        await todoistCall('update', { id, ...patch })
+      },
+      move: async (id: string, area: string) => {
+        await todoistCall('move', { id, area })
+      },
+      reopen: async (id: string) => {
+        await todoistCall('reopen', { id })
+      },
+      remove: async (id: string) => {
+        await todoistCall('remove', { id })
+      },
+      addArea: async (name: string) => (await todoistCall('addArea', { name })).area,
+      renameArea: async (area: string, name: string) => {
+        await todoistCall('renameArea', { area, name })
+      },
+      // Colors live with your data (Turso), so every device shows the same.
+      colors: async () => (await svcP).read((s) => {
+        try {
+          return JSON.parse(getSetting(s.db, 'task_area_colors') || '{}') as Record<string, string>
+        } catch {
+          return {}
+        }
+      }),
+      setColor: async (area: string, color: string) =>
+        (await svcP).write((s) => {
+          let cur: Record<string, string> = {}
+          try {
+            cur = JSON.parse(getSetting(s.db, 'task_area_colors') || '{}')
+          } catch {
+            /* start over */
+          }
+          const next = { ...cur, [area]: color }
+          setSetting(s.db, 'task_area_colors', JSON.stringify(next))
+          return next
+        }),
       complete: async (task: TodoTask) => {
         await todoist.close(task.id)
         const paid = await (await svcP).write((s) => payTodoist(s, [task]), 'life-wallet-changed')

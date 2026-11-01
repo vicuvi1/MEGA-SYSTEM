@@ -19,7 +19,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'today', label: 'Today', icon: 'home', color: 'var(--lime)', phase: 0, blurb: 'Your day at a glance' },
   { id: 'focus', label: 'Focus', icon: 'clock', color: 'var(--lime)', phase: 0, blurb: 'Focus timer, today\'s must-dos, goals and your week' },
   { id: 'progress', label: 'Progress', icon: 'chart', color: 'var(--lime)', phase: 0, blurb: 'Am I improving? Your last 7 days against your usual week' },
-  { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'Your to-dos' },
+  { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'Your Todoist, by area' },
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },
   { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 0, blurb: 'Private streak, urge crusher and honest resets' },
   { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Workouts and body metrics' },

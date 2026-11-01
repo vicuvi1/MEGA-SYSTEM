@@ -30,7 +30,7 @@ const History = lazyNamed(() => import('./pages/History'), 'History')
 const Focus = lazyNamed(() => import('./pages/Focus'), 'Focus')
 const Settings = lazyNamed(() => import('./pages/Settings'), 'Settings')
 const Rewards = lazyNamed(() => import('./pages/Rewards'), 'Rewards')
-const Tasks = lazyNamed(() => import('./pages/Tasks'), 'Tasks')
+const TodoTasks = lazyNamed(() => import('./pages/TodoTasks'), 'TodoTasks')
 const Discipline = lazyNamed(() => import('./pages/Discipline'), 'Discipline')
 const Body = lazyNamed(() => import('./pages/Body'), 'Body')
 const Sleep = lazyNamed(() => import('./pages/Sleep'), 'Sleep')
@@ -443,7 +443,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const shopReady = !!shop && shop.rewards.some((r) => !r.archived && r.price <= shop.balance)
   const updateReady = !!update && ['available', 'ready'].includes(update.state)
   const badges: Partial<Record<PageId, { n?: number; dot?: 'lime' | 'warn' }>> = {
-    tasks: tasksLeft ? { n: tasksLeft, dot: overdue ? 'warn' : undefined } : undefined,
     discipline: checkInDue ? { dot: 'lime' } : undefined,
     shop: shopReady ? { dot: 'lime' } : undefined,
     settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
@@ -611,7 +610,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'bots' && <BotCenter />}
             {page === 'focus' && <Focus onWallet={onWallet} />}
-            {page === 'tasks' && tasks && <Tasks state={tasks} onState={setTasks} onWallet={onWallet} />}
+            {page === 'tasks' && <TodoTasks onWallet={onWallet} />}
             {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'progress' && <Progress onGo={setPage} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}

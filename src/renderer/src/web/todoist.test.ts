@@ -20,6 +20,55 @@ afterEach(() => vi.unstubAllGlobals())
 
 const json = (body: unknown, status = 200) => ({ ok: status < 300, status, text: async () => JSON.stringify(body) }) as unknown as Response
 
+describe('Todoist areas and the Tasks page', () => {
+  const projects = [{ id: 'inbox', name: 'Inbox', inbox_project: true }, { id: 'p2', name: 'University', color: 'blue' }]
+  const sections = [{ id: 's1', name: '🎓 University', project_id: 'inbox', section_order: 1 }, { id: 's2', name: '🛡️ Cyber', project_id: 'inbox', section_order: 2 }, { id: 's3', name: '🏠 Life admin', project_id: 'inbox', section_order: 3 }]
+  const fake = (calls: string[], quick: any = { id: '9', content: 'PicoCTF level 5', project_id: 'inbox', priority: 1 }) =>
+    (async (url: string, init?: RequestInit) => {
+      const path = url.replace('https://api.todoist.com', '')
+      calls.push(`${init?.method ?? 'GET'} ${path}${init?.body ? ' ' + init.body : ''}`)
+      if (path.startsWith('/api/v1/projects')) return json({ results: projects, next_cursor: null })
+      if (path.startsWith('/api/v1/sections')) return json({ results: sections, next_cursor: null })
+      if (path === '/api/v1/tasks') return json({ results: [{ id: '1', content: 'Lab 3', priority: 4, project_id: 'inbox', section_id: 's1' }, { id: '2', content: 'Loose', priority: 1, project_id: 'inbox' }], next_cursor: null })
+      if (path === '/api/v1/tasks/quick') return json(quick)
+      return json({})
+    }) as unknown as typeof fetch
+
+  it('guesses the area from the words', async () => {
+    const { guessArea } = await import('@core/todoist')
+    const areas: any[] = sections.map((x) => ({ key: `s:${x.id}`, name: x.name, kind: 'section', id: x.id, projectId: 'inbox' }))
+    expect(guessArea('PicoCTF level 5', areas)?.name).toBe('🛡️ Cyber')
+    expect(guessArea('finish etica course', areas)?.name).toBe('🎓 University')
+    expect(guessArea('solve the Revolut problem', areas)?.name).toBe('🏠 Life admin')
+    expect(guessArea('random thing', areas)).toBeNull()
+  })
+
+  it('lists every task with its area, and areas: sections first, projects too', async () => {
+    const calls: string[] = []
+    const r = await createTodoistApi('t', fake(calls)).everything()
+    expect(r.areas.map((a) => a.key)).toEqual(['s:s1', 's:s2', 's:s3', 'p:inbox', 'p:p2'])
+    expect(r.tasks[0]).toMatchObject({ id: '1', sectionId: 's1', projectId: 'inbox', section: '🎓 University' })
+  })
+
+  it('a new task goes to its area (words first, then the model), and moves/updates hit Todoist', async () => {
+    const calls: string[] = []
+    const api = createTodoistApi('t', fake(calls))
+    const t = await api.quickAdd('PicoCTF level 5')
+    expect(t.area).toBe('🛡️ Cyber')
+    expect(calls).toContain('POST /api/v1/tasks/9/move {"section_id":"s2"}')
+    const calls2: string[] = []
+    const picked = createTodoistApi('t', fake(calls2, { id: '10', content: 'Call grandma', project_id: 'inbox', priority: 1 }), { pickArea: async () => 'Life admin' })
+    expect((await picked.quickAdd('Call grandma')).area).toBe('🏠 Life admin')
+    await api.update('1', { priority: 3, due: 'friday' })
+    await api.move('1', 's:s2')
+    expect(calls).toContain('POST /api/v1/tasks/1 {"priority":3,"due_string":"friday"}')
+    expect(calls).toContain('POST /api/v1/tasks/1/move {"section_id":"s2"}')
+    const calls3: string[] = []
+    await createTodoistApi('t', fake(calls3)).quickAdd('Read #University chapter 2')
+    expect(calls3.some((c) => c.includes('/move'))).toBe(false) // you named the project yourself
+  })
+})
+
 describe('Todoist API client', () => {
   it("reads today's tasks (all pages) with project and section names, completes and quick-adds", async () => {
     const calls: string[] = []
@@ -35,7 +84,7 @@ describe('Todoist API client', () => {
     }) as unknown as typeof fetch
     const api = createTodoistApi('tok', fetchImpl)
     const tasks = await api.today()
-    expect(tasks).toEqual([
+    expect(tasks).toMatchObject([
       { id: '1', content: 'Essay', priority: 4, due: '2026-10-31', dueTime: null, project: 'University', section: 'Essays', recurring: false, deadline: null },
       { id: '2', content: 'Gym', priority: 1, due: '2026-10-30', dueTime: '18:00', project: null, section: null, recurring: true, deadline: null }
     ])

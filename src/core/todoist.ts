@@ -16,6 +16,71 @@ export interface TodoTask {
   recurring: boolean
   /** Todoist's deadline (a date that can't move), when set. */
   deadline?: string | null
+  projectId?: string | null
+  sectionId?: string | null
+  description?: string | null
+}
+
+/**
+ * One of your life areas: a section (in the Inbox or a project) or a project
+ * without sections. The key is how the app remembers its color.
+ */
+export interface Area {
+  key: string
+  name: string
+  kind: 'section' | 'project'
+  id: string
+  projectId: string
+  /** Todoist's own color name for projects (e.g. "berry_red"), sections have none. */
+  todoistColor?: string | null
+}
+
+/** "s:<id>" for a section, "p:<id>" for a project (its tasks outside sections). */
+export const areaKey = (t: { projectId?: string | null; sectionId?: string | null }) => (t.sectionId ? `s:${t.sectionId}` : `p:${t.projectId ?? ''}`)
+
+/** The area name without its emoji: "🎓 University" → "University". */
+export const plainName = (name: string) => name.replace(/[^\p{L}\p{N}&\s'-]/gu, '').replace(/\s+/g, ' ').trim()
+
+/** The colors you can pick for an area (they read well in dark and light). */
+export const AREA_COLORS = ['#7CC4FF', '#C8F135', '#FF8A3D', '#FF6B8B', '#B892FF', '#6EE7D8', '#F5C84B', '#4ADE80', '#F472B6', '#94A3B8'] as const
+
+/** A color for an area with none chosen yet: from Todoist's project color, else by name. */
+export function defaultAreaColor(a: Pick<Area, 'name' | 'todoistColor'>): string {
+  const tc: Record<string, string> = { berry_red: '#FF6B8B', red: '#FF6B8B', orange: '#FF8A3D', yellow: '#F5C84B', olive_green: '#C8F135', lime_green: '#C8F135', green: '#4ADE80', mint_green: '#6EE7D8', teal: '#6EE7D8', sky_blue: '#7CC4FF', light_blue: '#7CC4FF', blue: '#7CC4FF', grape: '#B892FF', violet: '#B892FF', lavender: '#B892FF', magenta: '#F472B6', salmon: '#FF8A3D' }
+  if (a.todoistColor && tc[a.todoistColor]) return tc[a.todoistColor]
+  let h = 0
+  for (const c of plainName(a.name)) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return AREA_COLORS[h % AREA_COLORS.length]
+}
+
+/** Words that point to an area, matched against the area's name. */
+const AREA_WORDS: { area: RegExp; words: RegExp }[] = [
+  { area: /univ|study|school|facult/i, words: /\b(univ\w*|lab\w*|exam\w*|curs\w*|course\w*|lecture\w*|seminar\w*|homework|teza|referat\w*|colloq\w*|coloc\w*|etica|thesis|assignment|professor|prof|teacher|grade)\b/i },
+  { area: /cyber|secur|hack/i, words: /\b(ctf\w*|picoctf|rust|crypto\w*|hack\w*|secur\w*|cyber\w*|pentest\w*|linux|tryhackme|htb|exploit\w*|reverse|malware|ctftime)\b/i },
+  { area: /job|career|work/i, words: /\b(cv|resume|linkedin|job\w*|interview\w*|intern\w*|career|portfolio|apply|application|recruiter|salary|freelance)\b/i },
+  { area: /sport|gym|fit|train/i, words: /\b(gym|workout\w*|run|running|sport\w*|train\w*|push-?ups?|squats?|swim\w*|football|box\w*)\b/i },
+  { area: /health|medic/i, words: /\b(doctor|dentist|teeth|tooth|health|pharmac\w*|medic\w*|pills?|vitamin\w*|blood|clinic|hospital|eyes?)\b/i },
+  { area: /skin|look|beauty|groom/i, words: /\b(skin\w*|hair\w*|face|barber|beard|shave\w*|cream|serum|acne|nails?)\b/i },
+  { area: /idea/i, words: /\b(idea\w*|maybe|someday|think about|brainstorm|business)\b/i },
+  { area: /admin|life|home|errand/i, words: /\b(bank|revolut|maib|pay|bill\w*|buy|order|fix|repair|call|mouse|buds|phone|laptop|documents?|passport|clean\w*|wash|groceries)\b/i }
+]
+
+/** The area a new task most likely belongs to, by its words (null when unclear). */
+export function guessArea(text: string, areas: Area[]): Area | null {
+  for (const rule of AREA_WORDS) {
+    if (!rule.words.test(text)) continue
+    const hit = areas.find((a) => rule.area.test(plainName(a.name)))
+    if (hit) return hit
+  }
+  // A task that names an area directly ("university: read chapter 3").
+  const lower = text.toLowerCase()
+  return areas.find((a) => plainName(a.name).length > 2 && lower.includes(plainName(a.name).toLowerCase())) ?? null
+}
+
+/** Late first, then most urgent, then soonest, then without a date. */
+export function sortTasks(tasks: TodoTask[], today: string): TodoTask[] {
+  const rank = (t: TodoTask) => (t.due && t.due < today ? 0 : t.due === today ? 1 : t.due ? 2 : 3)
+  return tasks.slice().sort((a, b) => rank(a) - rank(b) || b.priority - a.priority || String(a.due ?? '9999').localeCompare(String(b.due ?? '9999')) || String(a.dueTime ?? '99').localeCompare(String(b.dueTime ?? '99')))
 }
 
 export interface RadarItem {
