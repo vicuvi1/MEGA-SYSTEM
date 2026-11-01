@@ -16,6 +16,7 @@ import { UpdatePanel } from '../updates'
 import { LayoutEditor } from '../LayoutEditor'
 import { useUiPrefs } from '../uiPrefs'
 import { features, life } from '../bridge'
+import { GooglePanel } from '../GooglePanel'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -602,6 +603,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   return (
     <div className="settings">
       {features.updates && <UpdatePanel status={update} onStatus={onUpdate} />}
+
+      <GooglePanel />
 
       {onGo && (
         <section className="panel">

@@ -5,6 +5,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { botDefaults, config, readBody, send, serverBots, webhookSecret } from './_lib.mjs'
 import { handleTelegramUpdate } from './_bot/bot.mjs'
 import { askGemini } from './ai.mjs'
+import { googleEnv } from './google.mjs'
 
 const same = (a, b) => {
   const x = Buffer.from(String(a))
@@ -25,7 +26,7 @@ export default async function handler(req, res) {
   try {
     const update = await readBody(req)
     await handleTelegramUpdate(
-      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model },
+      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg) },
       bot.token,
       update
     )

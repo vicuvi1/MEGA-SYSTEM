@@ -1,7 +1,7 @@
 import type { IconName } from './Icon'
 
 export type PageId =
-  | 'today' | 'focus' | 'progress' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
+  | 'today' | 'focus' | 'progress' | 'calendar' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
   | 'history' | 'rules' | 'connected' | 'settings' | 'bots'
 
 export interface ModuleDef {
@@ -17,6 +17,7 @@ export interface ModuleDef {
 // The sidebar is built from this list; a new section is one entry plus its page.
 export const MODULES: ModuleDef[] = [
   { id: 'today', label: 'Today', icon: 'home', color: 'var(--lime)', phase: 0, blurb: 'Your day at a glance' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Your Google Calendar and timed tasks, by week or day' },
   { id: 'focus', label: 'Focus', icon: 'clock', color: 'var(--lime)', phase: 0, blurb: 'Focus timer, today\'s must-dos, goals and your week' },
   { id: 'progress', label: 'Progress', icon: 'chart', color: 'var(--lime)', phase: 0, blurb: 'Am I improving? Your last 7 days against your usual week' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'Your Todoist, by area' },

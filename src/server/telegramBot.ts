@@ -9,7 +9,8 @@ import type { BotBridgeConfig } from '@shared/api'
 import { Mirror } from '../renderer/src/web/mirror'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
-import { createWebBots, focusKeyboard, type AskModel } from '../renderer/src/web/webBots'
+import { createWebBots, focusKeyboard, type AskModel, type CalendarLike } from '../renderer/src/web/webBots'
+import { GOOGLE_SETTING as GSET, createCalendarApi as makeCal, type GoogleEnv, type GoogleStored } from './googleCalendar'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
@@ -19,11 +20,12 @@ import { shouldPlan } from '@core/weekPlan'
 import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
-import { getSetting } from '../main/settings'
+import { getSetting, setSetting } from '../main/settings'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 
 export { createTodoistApi }
+export { GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, localIso } from './googleCalendar'
 
 export interface BotEnv {
   tursoUrl: string
@@ -34,12 +36,36 @@ export interface BotEnv {
   todoistToken?: string
   /** Gemini (GEMINI_API_KEY): the coach's brain for free text, voice and photos. */
   model?: AskModel
+  /** Google sign-in app (GOOGLE_CLIENT_ID/SECRET + the server secret): your calendar. */
+  google?: GoogleEnv | null
 }
 
-let warm: { key: string; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices> } | null = null
+/**
+ * Your Google Calendar for the bots, when you signed in (Settings): reads
+ * the sealed sign-in from the database each time, so a new sign-in works
+ * without a restart.
+ */
+function calendarFor(env: BotEnv, mirror: Mirror): CalendarLike | null {
+  if (!env.google) return null
+  const api = async () => {
+    const raw = await mirror.read((db) => getSetting(db as any, GSET))
+    const st = raw ? (JSON.parse(raw) as GoogleStored | null) : null
+    return st?.enc ? makeCal(env.google!, st) : null
+  }
+  return {
+    events: async (from, to) => (await api())?.events(from, to) ?? [],
+    create: async (e) => {
+      const a = await api()
+      if (!a) throw new Error('Connect Google Calendar in the app (Settings) first')
+      return a.create(e)
+    }
+  }
+}
+
+let warm: { key: string; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null } | null = null
 
 async function botsFor(env: BotEnv) {
-  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '')
+  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '')
   if (warm && warm.key === key) {
     await warm.mirror.refresh() // what the devices changed since the last message
     return warm
@@ -58,8 +84,9 @@ async function botsFor(env: BotEnv) {
       }
     : undefined
   const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: env.model ?? null })
-  warm = { key, bots, mirror, services }
+  const calendar = calendarFor(env, mirror)
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: env.model ?? null, calendar })
+  warm = { key, bots, mirror, services, calendar }
   return warm
 }
 
@@ -164,11 +191,14 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
   const sent: string[] = []
   if (job === 'morning') {
     const planAlready = st.plan.items.length > 0
-    await send(
+    // Already asked when you logged your wake-up on Telegram: just the coach.
+    const askedToday = await mirror.read((db) => getSetting(db as any, 'morning_sent_day') === input.today)
+    if (!askedToday) await mirror.write((db) => setSetting(db as any, 'morning_sent_day', input.today))
+    if (!askedToday) await send(
       morningText({ focusYesterdayMin: st.week.byDay[5]?.minutes ?? 0, goalsBehind: st.goals.filter((g) => g.aheadH < 0), todoistToday, planAlready }),
       planAlready ? undefined : { force_reply: true, input_field_placeholder: 'Essay intro; gym; call Leo' }
     )
-    sent.push('morning')
+    if (!askedToday) sent.push('morning')
     if (worthSaying(facts)) {
       await send(await coach('morning', coachText(facts)), focusButtons())
       sent.push('coach')

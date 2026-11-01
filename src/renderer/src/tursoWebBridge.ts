@@ -225,6 +225,43 @@ export function createTursoWebBridge(): Bridge {
     if (!r.ok) throw new Error(j.error || `Todoist ${r.status}`)
     return j
   }
+  // Google Calendar through the server (the sign-in stays sealed there).
+  const googleCall = async (op: string, extra: Record<string, unknown> = {}): Promise<any> => {
+    if (direct) return { connected: false, configured: false, events: [] }
+    const r = await fetch('/api/google', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op, ...extra }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok || j.error) throw new Error(j.error || `Google ${r.status}`)
+    return j
+  }
+  let googleOn: Promise<boolean> | null = null
+  const googleConnected = () => (googleOn ??= sessionReady.then(() => googleCall('status')).then((j) => !!j.connected).catch(() => false))
+  const google = {
+    status: async () => {
+      const j = await googleCall('status').catch((e) => ({ configured: true, connected: false, error: (e as Error).message }))
+      googleOn = Promise.resolve(!!j.connected)
+      return j
+    },
+    connect: async () => {
+      const j = await googleCall('connect')
+      if (j.url) window.location.href = j.url
+    },
+    events: async (from: string, to: string) => ((await googleConnected()) ? ((await googleCall('events', { from, to })).events ?? []) : []),
+    create: async (e: Record<string, unknown>) => (await googleCall('create', e)).event,
+    move: async (calendarId: string, id: string, start: string, end: string) => {
+      await googleCall('move', { calendarId, id, start, end })
+    },
+    remove: async (calendarId: string, id: string) => {
+      await googleCall('remove', { calendarId, id })
+    },
+    setCalendars: async (on: string[], target: string | null) => {
+      await googleCall('setCalendars', { on, target })
+    },
+    disconnect: async () => {
+      await googleCall('disconnect')
+      googleOn = Promise.resolve(false)
+    }
+  }
+
   const todoist = {
     today: async () => ((await todoistCall('today')).tasks ?? []) as TodoTask[],
     close: async (id: string) => {
@@ -328,6 +365,7 @@ export function createTursoWebBridge(): Bridge {
 
   const bridge = {
     ...base,
+    google,
     progress: {
       report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state')))
     },
@@ -514,6 +552,12 @@ export function createTursoWebBridge(): Bridge {
       get: (_t, method: string) => async (...args: unknown[]) => {
         const r = await ((await svcP).focus as any)[method](...args)
         if (method !== 'state') window.dispatchEvent(new CustomEvent('life-focus-changed'))
+        // Every focus session goes into Google Calendar too (when connected).
+        if (method === 'stop' && r?.session && r.session.minutes >= 5) {
+          const end = new Date()
+          const start = new Date(end.getTime() - r.session.minutes * 60000)
+          void googleConnected().then((on) => on && google.create({ title: `Focus: ${r.session.subject}`, start: start.toISOString(), end: end.toISOString(), description: `${r.session.minutes} min of focus, logged by Life System` }).catch(() => null))
+        }
         // A session for a must-do or a Todoist task: Today asks whether it's done.
         if (method === 'stop' && r?.task) window.dispatchEvent(new CustomEvent('life-focus-ended', { detail: { task: r.task, minutes: r.session?.minutes ?? 0 } }))
         return r

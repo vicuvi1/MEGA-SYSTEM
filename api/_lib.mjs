@@ -35,7 +35,7 @@ export async function turso(cfg, body, fetchImpl = fetch) {
 const text = (v) => ({ type: 'text', value: String(v) })
 const cell = (v) => (!v || v.type === 'null' ? null : v.value ?? null)
 
-async function getSetting(cfg, key, fetchImpl) {
+export async function getSetting(cfg, key, fetchImpl) {
   const { status, json } = await turso(cfg, { requests: [{ type: 'execute', stmt: { sql: 'SELECT value FROM settings WHERE key = ?', args: [text(key)] } }, { type: 'close' }] }, fetchImpl)
   const r = json?.results?.[0]
   if (status !== 200 || !r || r.type === 'error') throw new Error('Database not reachable')
@@ -43,7 +43,7 @@ async function getSetting(cfg, key, fetchImpl) {
   return row ? cell(row[0]) : null
 }
 
-async function setSetting(cfg, key, value, fetchImpl) {
+export async function setSetting(cfg, key, value, fetchImpl) {
   await turso(cfg, {
     requests: [
       { type: 'execute', stmt: { sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [text(key), text(value)] } },
@@ -69,7 +69,7 @@ export async function pinMatches(stored, pin) {
 }
 
 const b64 = (s) => Buffer.from(s).toString('base64url')
-const sign = (secret, data) => createHmac('sha256', secret).update(data).digest('base64url')
+export const sign = (secret, data) => createHmac('sha256', secret).update(data).digest('base64url')
 
 export function makeSession(cfg, now = Date.now()) {
   const data = b64(JSON.stringify({ exp: now + SESSION_DAYS * 86400_000 }))

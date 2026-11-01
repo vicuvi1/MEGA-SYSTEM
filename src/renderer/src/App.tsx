@@ -38,6 +38,7 @@ const Money = lazyNamed(() => import('./pages/Money'), 'Money')
 const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
 const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
+const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const SystemOracleDrawer = lazyNamed(() => import('./SystemOracleDrawer'), 'SystemOracleDrawer')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
 
@@ -65,6 +66,24 @@ export function App() {
 function WindowErrors() {
   const toast = useToast()
   useEffect(() => installWindowErrorHandlers((t) => toast(t, 'bad')), [toast])
+  // Back from the Google sign-in (/?google=connected): say how it went, open Calendar.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('google')
+    if (!q) return
+    const msg: Record<string, [string, 'good' | 'bad']> = {
+      connected: ['Google Calendar connected ✓', 'good'],
+      cancelled: ['Google sign-in cancelled', 'bad'],
+      expired: ['That sign-in link expired: try Connect again', 'bad'],
+      failed: ['Google sign-in failed: try Connect again', 'bad'],
+      'not-configured': ['Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel first', 'bad']
+    }
+    const [text, kind] = msg[q] ?? ['Google: ' + q, 'bad']
+    toast(text, kind)
+    // Shell opens the Calendar page (it may mount a moment later).
+    if (q === 'connected') setTimeout(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'calendar' })), 800)
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [toast])
+
   // Tasks you ticked in the Todoist app itself, paid when this page checks.
   useEffect(() => {
     const on = (e: Event) => {
@@ -120,6 +139,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const act = useAction()
   const toast = useToast()
   const [isSyncingMobile, setIsSyncingMobile] = useState(false)
+  useEffect(() => {
+    const on = (e: Event) => setPage((e as CustomEvent).detail as PageId)
+    window.addEventListener('life-open-page', on)
+    return () => window.removeEventListener('life-open-page', on)
+  }, [])
   const [wakeEdit, setWakeEdit] = useState(0) // "Fix wake-up" taps: opens the editor on Sleep
 
   const triggerMobileSync = async () => {
@@ -613,6 +637,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'tasks' && <TodoTasks onWallet={onWallet} />}
             {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
             {page === 'progress' && <Progress onGo={setPage} />}
+            {page === 'calendar' && <CalendarPage onGo={setPage} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
             {current.phase > 0 && <Soon module={current} />}

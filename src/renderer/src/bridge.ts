@@ -2,6 +2,17 @@ import type { LifeApi, UpdateStatus } from '@shared/api'
 import type { Area, TodoTask } from '@core/todoist'
 import type { ProgressReport } from '@core/progress'
 import type { WeekPlan } from '@core/weekPlan'
+import type { CalEvent } from '@core/dayTime'
+
+export interface GoogleStatus {
+  configured: boolean
+  connected: boolean
+  email?: string | null
+  calendars?: { id: string; name: string; color: string; primary: boolean; canWrite: boolean }[]
+  on?: string[]
+  target?: string | null
+  error?: string
+}
 import { createTursoWebBridge } from './tursoWebBridge'
 
 export type Bridge = LifeApi & {
@@ -13,6 +24,17 @@ export type Bridge = LifeApi & {
   onUpdate(cb: (s: UpdateStatus) => void): void
   onUiKey(cb: (key: string) => void): () => void
   onFullScreen(cb: (on: boolean) => void): () => void
+  /** Google Calendar through the server (sign in once in Settings). */
+  google?: {
+    status(): Promise<GoogleStatus>
+    connect(): Promise<void>
+    events(fromIso: string, toIso: string): Promise<CalEvent[]>
+    create(e: { title: string; start: string; end: string; description?: string; calendarId?: string }): Promise<CalEvent>
+    move(calendarId: string, id: string, start: string, end: string): Promise<void>
+    remove(calendarId: string, id: string): Promise<void>
+    setCalendars(on: string[], target: string | null): Promise<void>
+    disconnect(): Promise<void>
+  }
   /** "Am I improving?": the last 7 days against your usual week (web). */
   progress?: { report(): Promise<ProgressReport> }
   /** The Sunday plan: one focus area and 3 big tasks for the week (web). */

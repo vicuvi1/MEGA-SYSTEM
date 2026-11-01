@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import initSqlJs from "sql.js";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 // src/core/schema.ts
 var MIGRATIONS = [
 	`
@@ -7646,6 +7647,88 @@ function payTodoist(s, done) {
 	}
 	return n;
 }
+var toMin = (hm) => {
+	const [h, m] = hm.split(":").map(Number);
+	return h * 60 + (m || 0);
+};
+var fromMin = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+/** "2026-11-01T14:30:00+02:00" → "14:30" in local time (the server runs in your time zone). */
+function localHM(iso) {
+	if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "00:00";
+	const d = new Date(iso);
+	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+/** The local day (YYYY-MM-DD) an event starts on. */
+function localDay(iso) {
+	if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+	const d = new Date(iso);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** Timed events of one day as minute ranges, clipped to the day window. */
+function busy(events, day, from, to) {
+	const lo = toMin(from);
+	const hi = toMin(to);
+	return events.filter((e) => !e.allDay && localDay(e.start) === day).map((e) => {
+		const s = toMin(localHM(e.start));
+		const en = localDay(e.end) > day ? 1440 : toMin(localHM(e.end));
+		return [Math.max(lo, s), Math.min(hi, en)];
+	}).filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
+}
+/**
+* Free time between events (07:00–23:00 by default), from `after` (e.g. now)
+* on, at least `minMinutes` long.
+*/
+function freeGaps(events, day, opts = {}) {
+	const from = opts.from ?? "07:00";
+	const to = opts.to ?? "23:00";
+	const min = opts.minMinutes ?? 25;
+	let cursor = Math.max(toMin(from), opts.after ? toMin(opts.after) : 0);
+	const out = [];
+	for (const [s, e] of busy(events, day, from, to)) {
+		if (s - cursor >= min) out.push({
+			start: fromMin(cursor),
+			end: fromMin(s),
+			minutes: s - cursor
+		});
+		cursor = Math.max(cursor, e);
+	}
+	if (toMin(to) - cursor >= min) out.push({
+		start: fromMin(cursor),
+		end: to,
+		minutes: toMin(to) - cursor
+	});
+	return out;
+}
+/**
+* Puts each item into the free gaps, in order, with a 10-minute breather
+* after each block. Items that don't fit are left out.
+*/
+function suggestBlocks(gaps, items, breather = 10) {
+	const free = gaps.map((g) => ({
+		s: toMin(g.start),
+		e: toMin(g.end)
+	}));
+	const out = [];
+	for (const it of items) {
+		const need = Math.max(15, Math.round(it.minutes));
+		const g = free.find((x) => x.e - x.s >= need);
+		if (!g) continue;
+		out.push({
+			title: it.title,
+			start: fromMin(g.s),
+			end: fromMin(g.s + need),
+			minutes: need
+		});
+		g.s += need + breather;
+	}
+	return out;
+}
+/** "09:00–10:30 Lecture; 14:00–15:00 Gym" for the coach. */
+function agendaText(events, day) {
+	const list = events.filter((e) => localDay(e.start) === day).sort((a, b) => a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1);
+	if (!list.length) return "nothing in the calendar";
+	return list.map((e) => e.allDay ? `all day: ${e.title}` : `${localHM(e.start)}–${localHM(e.end)} ${e.title}`).join("; ");
+}
 // src/core/focusBot.ts
 var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
@@ -7900,6 +7983,16 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join("; ") || "none"}.`,
 		moneyContext(extra.finance, today)
 	];
+	if (extra.events) {
+		const nowHM = now.toTimeString().slice(0, 5);
+		const gaps = freeGaps(extra.events, today, {
+			after: nowHM,
+			minMinutes: 30
+		});
+		lines.push(`Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(", ") || "none"}.`);
+		const tomorrow = addDays$1(today, 1);
+		if (extra.events.some((e) => localDay(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`);
+	}
 	if (extra.todoToday) {
 		const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? " (late)" : ""}${t.priority >= 3 ? ` P${5 - t.priority}` : ""}${t.section ? ` [${t.section}]` : ""}`);
 		lines.push(`Todoist today/late (${extra.todoToday.length}): ${list.join("; ") || "nothing"}.`);
@@ -7923,6 +8016,7 @@ var ACTIONS = `You can act. Put actions in "actions" (strings), only when Victor
 - "fun: <minutes> <what>" to spend coins on guilt-free fun.
 - "task: <text>" to add a task to Todoist (Todoist reads dates like "friday 18:00", "p1", "#University").
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" for an exam or project with a deadline and the hours it needs.
+- "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" to put a block in his Google Calendar (only in his free time, never over an existing event).
 Never invent amounts or times he didn't give. Never log the same thing twice.
 IMPORTANT: something is saved ONLY if you put an action for it. If he reports spending, a workout, a wake-up, etc., include the action. Never write "logged"/"added"/"saved" in your reply: the app adds a ✅ line under your reply for each thing it really saved. The conversation history shows ✅ lines for what was saved before; if there is none, it was NOT saved.`;
 /** The full prompt for one message. */
@@ -7975,7 +8069,7 @@ function parseBrain(text) {
 var SAFE_SLASH = /^\/(wake|bed|checkin|oath|weight|waist|pushups|situps|squats|plank|run|stop)\b/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
-	const m = /^\s*(log|mustdo|focus|fun|task|goal)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 200);
@@ -7992,6 +8086,19 @@ function readAction(line) {
 		kind: "task",
 		text: arg
 	};
+	if (kind === "event") {
+		const [title, when, mins] = arg.split("|").map((x) => x.trim());
+		const w = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/.exec(when ?? "");
+		const minutes = Number(mins) || 50;
+		if (!title || !w || minutes < 10 || minutes > 600) return null;
+		return {
+			kind: "event",
+			title: title.slice(0, 120),
+			day: w[1],
+			time: `${w[2].padStart(2, "0")}:${w[3]}`,
+			minutes
+		};
+	}
 	if (kind === "focus" || kind === "fun") {
 		const minutes = Number(/\d{1,3}/.exec(arg)?.[0] ?? (kind === "focus" ? 50 : 0));
 		const rest = arg.replace(/\d{1,3}\s*(minutes|min|m)?\b/i, "").trim();
@@ -8297,7 +8404,7 @@ function stoppedReply(r, plan) {
 		keyboard: { inline_keyboard: [rate] }
 	};
 }
-function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null }) {
+function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null }) {
 	let polling = false;
 	let timer = null;
 	let lastPollAt = null;
@@ -8342,6 +8449,89 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		cfg.plannerBotChatId,
 		cfg.coachBotChatId
 	].filter(Boolean).some((id) => String(id) === chat);
+	/** Focus sessions stopped from Telegram: they go into Google Calendar after the reply. */
+	const focusEnded = [];
+	const flushFocus = async () => {
+		const list = focusEnded.splice(0);
+		if (!calendar) return;
+		for (const f of list) {
+			if (f.minutes < 5) continue;
+			const end = /* @__PURE__ */ new Date();
+			await calendar.create({
+				title: `Focus: ${f.subject}`,
+				start: (/* @__PURE__ */ new Date(end.getTime() - f.minutes * 6e4)).toISOString(),
+				end: end.toISOString(),
+				description: `${f.minutes} min of focus, logged by Life System`
+			}).catch(() => null);
+		}
+	};
+	const dayBounds = () => {
+		const s = /* @__PURE__ */ new Date();
+		s.setHours(0, 0, 0, 0);
+		return [s.toISOString(), new Date(s.getTime() + 864e5).toISOString()];
+	};
+	/**
+	* Right after you log your wake-up on Telegram: today's plan question (once
+	* a day, if there's no plan yet), with what's in your calendar.
+	*/
+	async function morningAfterWake(token, chat) {
+		if (!await mirror.write((db) => {
+			const svc = services.services(db);
+			const today = svc.wallet.today();
+			if (getSetting(db, "morning_sent_day") === today || svc.focus.plan(today).items.length) return false;
+			setSetting(db, "morning_sent_day", today);
+			return true;
+		})) return;
+		const events = calendar ? await calendar.events(...dayBounds()).catch(() => []) : [];
+		const today = await services.read((s) => s.wallet.today());
+		await tg(token, "sendMessage", {
+			chat_id: chat,
+			text: `☀️ <b>Good morning!</b>${events.length ? `\n🗓 Today: ${esc(agendaText(events, today))}\n` : ""}\n<b>${PLAN_ASK}</b>\nReply to this message, one per line.`,
+			parse_mode: "HTML",
+			reply_markup: {
+				force_reply: true,
+				input_field_placeholder: "Essay intro; gym; call Leo"
+			}
+		}).catch(() => null);
+	}
+	/** After you send the plan: time blocks for it in your free time, to approve with one tap. */
+	async function offerBlocks(token, chat) {
+		if (!calendar) return;
+		const events = await calendar.events(...dayBounds()).catch(() => null);
+		if (!events) return;
+		const now = /* @__PURE__ */ new Date();
+		const after = `${String(now.getHours()).padStart(2, "0")}:${String(Math.ceil(now.getMinutes() / 15) * 15 % 60).padStart(2, "0")}`;
+		const blocks = await mirror.write((db) => {
+			const svc = services.services(db);
+			const today = svc.wallet.today();
+			const items = svc.focus.plan(today).items.filter((x) => !x.done).map((x) => ({
+				title: x.text,
+				minutes: 50
+			}));
+			const b = suggestBlocks(freeGaps(events, today, {
+				after,
+				minMinutes: 30
+			}), items);
+			if (b.length) setSetting(db, "plan_suggestion", JSON.stringify({
+				day: today,
+				blocks: b
+			}));
+			return b;
+		});
+		if (!blocks.length) return;
+		await tg(token, "sendMessage", {
+			chat_id: chat,
+			text: `🗓 <b>I can fit them into your free time:</b>\n${blocks.map((b) => `${b.start}–${b.end} · ${esc(b.title)}`).join("\n")}`,
+			parse_mode: "HTML",
+			reply_markup: { inline_keyboard: [[{
+				text: "✅ Put them in my calendar",
+				callback_data: "gp|"
+			}, {
+				text: "No thanks",
+				callback_data: "gx|"
+			}]] }
+		}).catch(() => null);
+	}
 	/** One command, on the services. Returns the reply and what changed. */
 	let currentDb = null;
 	/**
@@ -8390,7 +8580,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				keyboard: STOP_KEYBOARD
 			};
 		}
-		if (cmd === "stop") return stoppedReply(f.stop(), f.plan(s.wallet.today()));
+		if (cmd === "stop") {
+			const r = f.stop();
+			focusEnded.push({
+				subject: r.session.subject,
+				minutes: r.session.minutes
+			});
+			return stoppedReply(r, f.plan(s.wallet.today()));
+		}
 		if (cmd === "plan") {
 			if (arg) f.setPlan(parsePlan(arg));
 			const plan = f.plan(s.wallet.today());
@@ -8618,7 +8815,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px])\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -8657,6 +8854,34 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				await answer(`Todoist: ${e.message}`.slice(0, 190));
 				return null;
 			}
+		}
+		if (data.startsWith("gp|") || data.startsWith("gx|")) {
+			const sug = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return void 0;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				try {
+					return JSON.parse(getSetting(db, "plan_suggestion") || "null");
+				} catch {
+					return null;
+				}
+			});
+			if (sug === void 0) return null;
+			if (data.startsWith("gx|") || !sug || !calendar) {
+				await answer("Okay");
+				await edit(`${esc(String(cq.message?.text ?? ""))}\n\nOkay, no blocks. Start when you're ready: /focus 50`);
+				return "no blocks";
+			}
+			let made = 0;
+			for (const b of sug.blocks) if (await calendar.create({
+				title: b.title,
+				start: (/* @__PURE__ */ new Date(`${sug.day}T${b.start}:00`)).toISOString(),
+				end: (/* @__PURE__ */ new Date(`${sug.day}T${b.end}:00`)).toISOString(),
+				description: "Planned with your coach in Life System"
+			}).then(() => true).catch(() => false)) made++;
+			await answer(made ? `${made} blocks added` : "Calendar failed");
+			const text = `${esc(String(cq.message?.text ?? ""))}\n\n✅ ${made} block${made === 1 ? "" : "s"} in your Google Calendar. When one starts, I'll be here: /focus 50`;
+			await edit(text);
+			return text;
 		}
 		if (data.startsWith("fq|")) {
 			const [, day, n, minutes] = data.split("|");
@@ -8725,6 +8950,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						};
 					}
 					const r = f.stop();
+					focusEnded.push({
+						subject: r.session.subject,
+						minutes: r.session.minutes
+					});
 					const out = stoppedReply(r, f.plan(services.services(db).wallet.today()));
 					return {
 						text: out.reply,
@@ -8749,6 +8978,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				reply_markup: res.keyboard
 			}).catch(() => null);
 			else await edit(res.text, res.keyboard);
+			await flushFocus();
 			if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-focus-changed"));
 			return res.text;
 		}
@@ -8907,12 +9137,19 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			chat_id: chat,
 			action: "typing"
 		}).catch(() => null);
-		const [todoToday, upcoming] = todoist ? await Promise.all([todoist.today().catch(() => null), todoist.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)]) : [null, null];
+		const dayStart = /* @__PURE__ */ new Date();
+		dayStart.setHours(0, 0, 0, 0);
+		const [todoToday, upcoming, events] = await Promise.all([
+			todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
+			todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
+			calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 1728e5).toISOString()).catch(() => null) : Promise.resolve(null)
+		]);
 		const { context, memory } = await mirror.read((db) => ({
 			context: lifeContext(services.services(db), db, {
 				finance: financeStateFrom(db, store),
 				todoToday,
-				upcoming
+				upcoming,
+				events
 			}),
 			memory: loadMemory(db)
 		}));
@@ -8940,6 +9177,21 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const acts = out.actions.map(readAction).filter((a) => !!a);
 		if (typeof process !== "undefined" && process.env?.BOT_DEBUG) console.log("brain actions:", out.actions, "→", acts);
 		for (const [i, a] of acts.entries()) try {
+			if (a.kind === "event") {
+				if (!calendar) {
+					done.push("⚠️ Google Calendar isn't connected (Settings in the app)");
+					continue;
+				}
+				const start = /* @__PURE__ */ new Date(`${a.day}T${a.time}:00`);
+				await calendar.create({
+					title: a.title,
+					start: start.toISOString(),
+					end: new Date(start.getTime() + a.minutes * 6e4).toISOString(),
+					description: "Planned with your coach in Life System"
+				});
+				done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`);
+				continue;
+			}
 			if (a.kind === "task") {
 				if (!todoist) continue;
 				const t = await todoist.quickAdd(a.text);
@@ -8970,6 +9222,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					const r = svc.focus.fun(a.minutes, a.what);
 					return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} coins (left ${r.balance})`;
 				}
+				if (a.kind !== "goal") return null;
 				svc.focus.saveGoal({
 					title: a.title,
 					subject: a.subject,
@@ -9125,6 +9378,9 @@ His note: ${note}`, { json: true }));
 				...keyboard ? { reply_markup: keyboard } : {}
 			}).catch(() => null);
 			if (ai && out.ok && prompted && /Evening review/.test(asked)) await lessonOfDay(update.__token, chat, botId, cfg, said).catch(() => null);
+			await flushFocus();
+			if (server && out.ok && /^\/wake(@\w+)?$/i.test(text)) await morningAfterWake(update.__token, chat).catch(() => null);
+			if (out.ok && prompted && asked.includes("What are your 1–3 must-dos today?")) await offerBlocks(update.__token, chat).catch(() => null);
 			return out.reply;
 		} catch (e) {
 			if (e instanceof MirrorError && attempt === 0) continue;
@@ -9309,6 +9565,186 @@ His note: ${note}`, { json: true }));
 			return false;
 		}
 	};
+}
+// src/server/googleCalendar.ts
+var GOOGLE_SETTING = "google_oauth";
+var GOOGLE_SCOPES = [
+	"https://www.googleapis.com/auth/calendar",
+	"openid",
+	"email"
+];
+var TOKEN_URL = "https://oauth2.googleapis.com/token";
+var API = "https://www.googleapis.com/calendar/v3";
+var keyOf = (secret) => createHash("sha256").update("life-google:" + secret).digest();
+function sealToken(secret, token) {
+	const iv = randomBytes(12);
+	const c = createCipheriv("aes-256-gcm", keyOf(secret), iv);
+	const enc = Buffer.concat([c.update(token, "utf8"), c.final()]);
+	return Buffer.concat([
+		iv,
+		c.getAuthTag(),
+		enc
+	]).toString("base64");
+}
+function openToken(secret, sealed) {
+	const buf = Buffer.from(sealed, "base64");
+	const d = createDecipheriv("aes-256-gcm", keyOf(secret), buf.subarray(0, 12));
+	d.setAuthTag(buf.subarray(12, 28));
+	return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString("utf8");
+}
+function authUrl(env, redirectUri, state) {
+	return `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+		client_id: env.clientId,
+		redirect_uri: redirectUri,
+		response_type: "code",
+		scope: GOOGLE_SCOPES.join(" "),
+		access_type: "offline",
+		prompt: "consent",
+		include_granted_scopes: "true",
+		state
+	})}`;
+}
+/** The code from the sign-in → a refresh token (sealed) and your email. */
+async function exchangeCode(env, redirectUri, code, fetchImpl = fetch) {
+	const res = await fetchImpl(TOKEN_URL, {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			code,
+			client_id: env.clientId,
+			client_secret: env.clientSecret,
+			redirect_uri: redirectUri,
+			grant_type: "authorization_code"
+		})
+	});
+	const j = await res.json().catch(() => ({}));
+	if (!res.ok || !j.refresh_token) throw new Error(j.error_description || j.error || "Google did not give a refresh token");
+	let email = null;
+	try {
+		email = JSON.parse(Buffer.from(String(j.id_token).split(".")[1], "base64url").toString("utf8")).email ?? null;
+	} catch {}
+	return {
+		enc: sealToken(env.secret, j.refresh_token),
+		email,
+		on: [],
+		target: null
+	};
+}
+function createCalendarApi(env, stored, fetchImpl = fetch) {
+	let access = null;
+	const token = async () => {
+		if (access && access.until > Date.now() + 6e4) return access.token;
+		const res = await fetchImpl(TOKEN_URL, {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				client_id: env.clientId,
+				client_secret: env.clientSecret,
+				refresh_token: openToken(env.secret, stored.enc),
+				grant_type: "refresh_token"
+			})
+		});
+		const j = await res.json().catch(() => ({}));
+		if (!res.ok) throw new Error(j.error === "invalid_grant" ? "Google sign-in expired: connect Google Calendar again in Settings" : j.error_description || "Google refused the sign-in");
+		access = {
+			token: j.access_token,
+			until: Date.now() + (Number(j.expires_in) || 3600) * 1e3
+		};
+		return access.token;
+	};
+	const call = async (path, init = {}) => {
+		const res = await fetchImpl(`${API}${path}`, {
+			...init,
+			headers: {
+				Authorization: `Bearer ${await token()}`,
+				...init.body ? { "Content-Type": "application/json" } : {}
+			},
+			signal: AbortSignal.timeout(12e3)
+		});
+		if (res.status === 204) return null;
+		const j = await res.json().catch(() => ({}));
+		if (!res.ok) throw new Error(`Google Calendar ${res.status}: ${j?.error?.message ?? "request failed"}`);
+		return j;
+	};
+	let cals = null;
+	const calendars = async () => {
+		if (cals) return cals;
+		cals = ((await call("/users/me/calendarList?minAccessRole=reader&maxResults=100")).items ?? []).filter((c) => !c.deleted && !c.hidden).map((c) => ({
+			id: String(c.id),
+			name: String(c.summaryOverride ?? c.summary ?? c.id),
+			color: String(c.backgroundColor ?? "#7CC4FF"),
+			primary: !!c.primary,
+			canWrite: c.accessRole === "owner" || c.accessRole === "writer"
+		}));
+		return cals;
+	};
+	const target = async () => {
+		const list = await calendars();
+		return stored.target && list.some((c) => c.id === stored.target && c.canWrite) ? stored.target : list.find((c) => c.primary)?.id ?? "primary";
+	};
+	const toEvent = (e, cal) => ({
+		id: String(e.id),
+		calendarId: cal.id,
+		title: String(e.summary ?? "(no title)"),
+		start: String(e.start?.dateTime ?? e.start?.date ?? ""),
+		end: String(e.end?.dateTime ?? e.end?.date ?? ""),
+		allDay: !e.start?.dateTime,
+		color: cal.color,
+		location: e.location ?? null,
+		ours: e.extendedProperties?.private?.lifeSystem === "1"
+	});
+	return {
+		calendars,
+		/** Events of the shown calendars between two ISO times, sorted. */
+		async events(fromIso, toIso) {
+			const list = (await calendars()).filter((c) => !stored.on?.length || stored.on.includes(c.id));
+			return (await Promise.all(list.map((c) => call(`/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${encodeURIComponent(fromIso)}&timeMax=${encodeURIComponent(toIso)}`).then((j) => (j.items ?? []).filter((e) => e.status !== "cancelled").map((e) => toEvent(e, c))).catch(() => [])))).flat().sort((a, b) => a.start.localeCompare(b.start));
+		},
+		/** A new event (in your chosen calendar), marked as made by Life System. */
+		async create(e) {
+			const calId = e.calendarId || await target();
+			const allDay = /^\d{4}-\d{2}-\d{2}$/.test(e.start);
+			const body = {
+				summary: e.title,
+				description: e.description ?? "Added by Life System",
+				start: allDay ? { date: e.start } : { dateTime: e.start },
+				end: allDay ? { date: e.end } : { dateTime: e.end },
+				...e.colorId ? { colorId: e.colorId } : {},
+				extendedProperties: { private: { lifeSystem: "1" } }
+			};
+			const j = await call(`/calendars/${encodeURIComponent(calId)}/events`, {
+				method: "POST",
+				body: JSON.stringify(body)
+			});
+			const cal = (await calendars()).find((c) => c.id === calId) ?? {
+				id: calId,
+				name: "",
+				color: "#C8F135",
+				primary: false,
+				canWrite: true
+			};
+			return toEvent(j, cal);
+		},
+		async move(calendarId, id, start, end) {
+			await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, {
+				method: "PATCH",
+				body: JSON.stringify({
+					start: { dateTime: start },
+					end: { dateTime: end }
+				})
+			});
+		},
+		async remove(calendarId, id) {
+			await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: "DELETE" });
+		}
+	};
+}
+/** Local "YYYY-MM-DD" + "HH:MM" → an ISO time with the local offset (the server runs in your time zone). */
+function localIso(day, hm) {
+	const off = -(/* @__PURE__ */ new Date(`${day}T${hm}:00`)).getTimezoneOffset();
+	const sign = off >= 0 ? "+" : "-";
+	const p = (n) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+	return `${day}T${hm}:00${sign}${p(off / 60)}:${p(off % 60)}`;
 }
 // src/server/todoistApi.ts
 var V1 = "https://api.todoist.com/api/v1";
@@ -9752,9 +10188,30 @@ function deadlineFacts(items) {
 	});
 }
 // src/server/telegramBot.ts
+/**
+* Your Google Calendar for the bots, when you signed in (Settings): reads
+* the sealed sign-in from the database each time, so a new sign-in works
+* without a restart.
+*/
+function calendarFor(env, mirror) {
+	if (!env.google) return null;
+	const api = async () => {
+		const raw = await mirror.read((db) => getSetting(db, GOOGLE_SETTING));
+		const st = raw ? JSON.parse(raw) : null;
+		return st?.enc ? createCalendarApi(env.google, st) : null;
+	};
+	return {
+		events: async (from, to) => (await api())?.events(from, to) ?? [],
+		create: async (e) => {
+			const a = await api();
+			if (!a) throw new Error("Connect Google Calendar in the app (Settings) first");
+			return a.create(e);
+		}
+	};
+}
 var warm = null;
 async function botsFor(env) {
-	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "");
+	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "") + "|" + (env.google ? "g" : "");
 	if (warm && warm.key === key) {
 		await warm.mirror.refresh();
 		return warm;
@@ -9774,6 +10231,8 @@ async function botsFor(env) {
 		const r = (await env.model(`Which ONE of these life areas does this task belong to? Areas: ${names.join(", ")}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, "");
 		return /^none$/i.test(r) ? null : r;
 	} : void 0;
+	const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null;
+	const calendar = calendarFor(env, mirror);
 	warm = {
 		key,
 		bots: createWebBots({
@@ -9781,11 +10240,13 @@ async function botsFor(env) {
 			services,
 			defaults,
 			server: true,
-			todoist: env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null,
-			ai: env.model ?? null
+			todoist,
+			ai: env.model ?? null,
+			calendar
 		}),
 		mirror,
-		services
+		services,
+		calendar
 	};
 	return warm;
 }
@@ -9907,7 +10368,9 @@ async function runDaily(env, job) {
 	const sent = [];
 	if (job === "morning") {
 		const planAlready = st.plan.items.length > 0;
-		await send(morningText({
+		const askedToday = await mirror.read((db) => getSetting(db, "morning_sent_day") === input.today);
+		if (!askedToday) await mirror.write((db) => setSetting(db, "morning_sent_day", input.today));
+		if (!askedToday) await send(morningText({
 			focusYesterdayMin: st.week.byDay[5]?.minutes ?? 0,
 			goalsBehind: st.goals.filter((g) => g.aheadH < 0),
 			todoistToday,
@@ -9916,7 +10379,7 @@ async function runDaily(env, job) {
 			force_reply: true,
 			input_field_placeholder: "Essay intro; gym; call Leo"
 		});
-		sent.push("morning");
+		if (!askedToday) sent.push("morning");
 		if (worthSaying(facts)) {
 			await send(await coach("morning", coachText(facts)), focusButtons());
 			sent.push("coach");
@@ -9988,4 +10451,4 @@ async function runDaily(env, job) {
 	return sent;
 }
 var escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-export { createTodoistApi, handleTelegramUpdate, payTodoistDone, runDaily };
+export { GOOGLE_SETTING, authUrl, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localIso, payTodoistDone, runDaily };

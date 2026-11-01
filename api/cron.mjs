@@ -6,6 +6,7 @@
 import { botDefaults, config, send, serverBots } from './_lib.mjs'
 import { runDaily } from './_bot/bot.mjs'
 import { askGemini } from './ai.mjs'
+import { googleEnv } from './google.mjs'
 
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET || ''
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
   const ai = key ? async (prompt) => (await askGemini(key, prompt)).text : undefined
   try {
     const sent = await runDaily(
-      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, botToken: bot.token, chatId, ai, sleepBotToken: sleepBot?.token, appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '') },
+      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, ai, sleepBotToken: sleepBot?.token, appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '') },
       job
     )
     send(res, 200, { ok: true, sent })

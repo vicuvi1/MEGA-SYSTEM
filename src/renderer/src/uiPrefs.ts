@@ -22,10 +22,11 @@ export interface UiPrefs {
   layoutV?: number
 }
 
-export type TodaySectionId = 'day' | 'progress' | 'fun' | 'focus' | 'todoist' | 'reps' | 'apps' | 'quicklog'
+export type TodaySectionId = 'timeline' | 'day' | 'progress' | 'fun' | 'focus' | 'todoist' | 'reps' | 'apps' | 'quicklog'
 
 /** What each Today section is, and whether it shows on a new device. */
 export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
+  { id: 'timeline', label: 'Your day (timeline)', hint: 'Calendar events, timed tasks, free gaps and Plan my day', on: true },
   { id: 'day', label: 'Now & today’s list', hint: 'The one next step, and one list: must-dos, habits and Todoist', on: true },
   { id: 'progress', label: 'This week', hint: 'Am I improving? One line and a chip per area', on: true },
   { id: 'focus', label: 'Focus timer', hint: 'Start and stop a focus session', on: true },
@@ -60,7 +61,7 @@ const DEFAULTS: UiPrefs = { theme: 'dark', accent: 'lime', sound: true, volume: 
 
 /** Pages most people don't need day to day: hidden once (Settings → Layout brings them back). */
 const QUIET_PAGES = ['schedule', 'journey', 'rules']
-const LAYOUT_V = 5
+const LAYOUT_V = 6
 
 function load(): UiPrefs {
   try {
@@ -69,7 +70,8 @@ function load(): UiPrefs {
     // focus, reps) and rarely used pages leave the menu.
     const v = p.layoutV ?? 1
     if (v < LAYOUT_V) {
-      if (v < 3) p.today = []
+      // v6: Today opens with your timeline.
+      if (v < 6) p.today = []
       p.hiddenPages = [...new Set([...(p.hiddenPages ?? []), ...QUIET_PAGES])]
       // One task list: Todoist. The app's own Tasks page leaves the menu (Layout brings it back).
       if (v < 4) p.hiddenPages = [...new Set([...p.hiddenPages, 'tasks'])]

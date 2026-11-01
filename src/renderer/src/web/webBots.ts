@@ -25,6 +25,7 @@ import { logMoney, moneyButton } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
 import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
+import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTime'
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
 import { findExercise, updateSport } from '../sportTrack'
@@ -182,6 +183,13 @@ export interface WebBotsDeps {
   todoist?: TodoistLike | null
   /** Gemini, when set up: free text, voice and photos go to the coach's brain (botBrain.ts). */
   ai?: AskModel | null
+  calendar?: CalendarLike | null
+}
+
+/** Your Google Calendar (server, when signed in): the coach reads and adds events. */
+export interface CalendarLike {
+  events(fromIso: string, toIso: string): Promise<CalEvent[]>
+  create(e: { title: string; start: string; end: string; description?: string }): Promise<CalEvent>
 }
 
 export type AskModel = (prompt: string, opts?: { json?: boolean; media?: { mime: string; data: string }[] }) => Promise<string>
@@ -235,7 +243,7 @@ function stoppedReply(r: { session: { minutes: number; subject: string }; coins:
 
 
 
-export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null }: WebBotsDeps) {
+export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
   let lastPollAt: string | null = null
@@ -278,6 +286,66 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     [cfg.chatId, cfg.sportBotChatId, cfg.financeBotChatId, cfg.manBotChatId, cfg.wakyBotChatId, cfg.plannerBotChatId, cfg.coachBotChatId]
       .filter(Boolean)
       .some((id) => String(id) === chat)
+
+  /** Focus sessions stopped from Telegram: they go into Google Calendar after the reply. */
+  const focusEnded: { subject: string; minutes: number }[] = []
+  const flushFocus = async () => {
+    const list = focusEnded.splice(0)
+    if (!calendar) return
+    for (const f of list) {
+      if (f.minutes < 5) continue
+      const end = new Date()
+      await calendar.create({ title: `Focus: ${f.subject}`, start: new Date(end.getTime() - f.minutes * 60000).toISOString(), end: end.toISOString(), description: `${f.minutes} min of focus, logged by Life System` }).catch(() => null)
+    }
+  }
+  const dayBounds = () => {
+    const s = new Date()
+    s.setHours(0, 0, 0, 0)
+    return [s.toISOString(), new Date(s.getTime() + 86400000).toISOString()] as const
+  }
+
+  /**
+   * Right after you log your wake-up on Telegram: today's plan question (once
+   * a day, if there's no plan yet), with what's in your calendar.
+   */
+  async function morningAfterWake(token: string, chat: string): Promise<void> {
+    const go = await mirror.write((db) => {
+      const svc = services.services(db)
+      const today = svc.wallet.today()
+      if (getSetting(db as any, 'morning_sent_day') === today || svc.focus.plan(today).items.length) return false
+      setSetting(db as any, 'morning_sent_day', today)
+      return true
+    })
+    if (!go) return
+    const events = calendar ? await calendar.events(...dayBounds()).catch(() => []) : []
+    const today = await services.read((s) => s.wallet.today())
+    const agenda = events.length ? `\n🗓 Today: ${esc(agendaText(events, today))}\n` : ''
+    await tg(token, 'sendMessage', { chat_id: chat, text: `☀️ <b>Good morning!</b>${agenda}\n<b>${PLAN_ASK}</b>\nReply to this message, one per line.`, parse_mode: 'HTML', reply_markup: { force_reply: true, input_field_placeholder: 'Essay intro; gym; call Leo' } }).catch(() => null)
+  }
+
+  /** After you send the plan: time blocks for it in your free time, to approve with one tap. */
+  async function offerBlocks(token: string, chat: string): Promise<void> {
+    if (!calendar) return
+    const events = await calendar.events(...dayBounds()).catch(() => null)
+    if (!events) return
+    const now = new Date()
+    const after = `${String(now.getHours()).padStart(2, '0')}:${String(Math.ceil(now.getMinutes() / 15) * 15 % 60).padStart(2, '0')}`
+    const blocks = await mirror.write((db) => {
+      const svc = services.services(db)
+      const today = svc.wallet.today()
+      const items = svc.focus.plan(today).items.filter((x) => !x.done).map((x) => ({ title: x.text, minutes: 50 }))
+      const b = suggestBlocks(freeGaps(events, today, { after, minMinutes: 30 }), items)
+      if (b.length) setSetting(db as any, 'plan_suggestion', JSON.stringify({ day: today, blocks: b }))
+      return b
+    })
+    if (!blocks.length) return
+    await tg(token, 'sendMessage', {
+      chat_id: chat,
+      text: `🗓 <b>I can fit them into your free time:</b>\n${blocks.map((b) => `${b.start}–${b.end} · ${esc(b.title)}`).join('\n')}`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '✅ Put them in my calendar', callback_data: 'gp|' }, { text: 'No thanks', callback_data: 'gx|' }]] }
+    }).catch(() => null)
+  }
 
   /** One command, on the services. Returns the reply and what changed. */
   let currentDb: any = null
@@ -325,6 +393,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     if (cmd === 'stop') {
       const r = f.stop()
+      focusEnded.push({ subject: r.session.subject, minutes: r.session.minutes })
       return stoppedReply(r, f.plan(s.wallet.today()))
     }
     if (cmd === 'plan') {
@@ -536,7 +605,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -567,6 +636,33 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         await answer(`Todoist: ${(e as Error).message}`.slice(0, 190))
         return null
       }
+    }
+    // The suggested time blocks: into Google Calendar (or not).
+    if (data.startsWith('gp|') || data.startsWith('gx|')) {
+      const sug = await mirror.write((db) => {
+        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return undefined
+        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
+        try {
+          return JSON.parse(getSetting(db as any, 'plan_suggestion') || 'null') as { day: string; blocks: { title: string; start: string; end: string }[] } | null
+        } catch {
+          return null
+        }
+      })
+      if (sug === undefined) return null
+      if (data.startsWith('gx|') || !sug || !calendar) {
+        await answer('Okay')
+        await edit(`${esc(String(cq.message?.text ?? ''))}\n\nOkay, no blocks. Start when you're ready: /focus 50`)
+        return 'no blocks'
+      }
+      let made = 0
+      for (const b of sug.blocks) {
+        const ok = await calendar.create({ title: b.title, start: new Date(`${sug.day}T${b.start}:00`).toISOString(), end: new Date(`${sug.day}T${b.end}:00`).toISOString(), description: 'Planned with your coach in Life System' }).then(() => true).catch(() => false)
+        if (ok) made++
+      }
+      await answer(made ? `${made} blocks added` : 'Calendar failed')
+      const text = `${esc(String(cq.message?.text ?? ''))}\n\n✅ ${made} block${made === 1 ? '' : 's'} in your Google Calendar. When one starts, I'll be here: /focus 50`
+      await edit(text)
+      return text
     }
     // How a focus session went (1–5); a low one asks what got in the way.
     if (data.startsWith('fq|')) {
@@ -624,6 +720,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             return { text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · 50 min.\nPhone away. Tap Stop when you finish.`, keyboard: STOP_KEYBOARD, toast: 'Focus started' }
           }
           const r = f.stop()
+          focusEnded.push({ subject: r.session.subject, minutes: r.session.minutes })
           const out = stoppedReply(r, f.plan(services.services(db).wallet.today()))
           return { text: out.reply, keyboard: out.keyboard, toast: r.coins ? `+${r.coins} coins` : 'Logged' }
         } catch (e) {
@@ -636,6 +733,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       // A start sends a new message (the coach's stays); a stop edits the timer message.
       if (data.startsWith('fo|')) await tg(update.__token, 'sendMessage', { chat_id: chat, text: res.text, parse_mode: 'HTML', reply_markup: res.keyboard }).catch(() => null)
       else await edit(res.text, res.keyboard)
+      await flushFocus()
       if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-focus-changed'))
       return res.text
     }
@@ -794,11 +892,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(update.message?.chat?.id ?? '')
     const persona = personaFor(botId, cfg)
     void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
-    const [todoToday, upcoming] = todoist
-      ? await Promise.all([todoist.today().catch(() => null), todoist.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)])
-      : [null, null]
+    const dayStart = new Date()
+    dayStart.setHours(0, 0, 0, 0)
+    const [todoToday, upcoming, events] = await Promise.all([
+      todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
+      todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
+      calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 2 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
+    ])
     const { context, memory } = await mirror.read((db) => ({
-      context: lifeContext(services.services(db), db, { finance: financeStateFrom(db, store), todoToday, upcoming }),
+      context: lifeContext(services.services(db), db, { finance: financeStateFrom(db, store), todoToday, upcoming, events }),
       memory: loadMemory(db)
     }))
     let out: BrainOut
@@ -816,6 +918,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (typeof process !== 'undefined' && process.env?.BOT_DEBUG) console.log('brain actions:', out.actions, '→', acts)
     for (const [i, a] of acts.entries()) {
       try {
+        if (a.kind === 'event') {
+          if (!calendar) {
+            done.push('⚠️ Google Calendar isn\'t connected (Settings in the app)')
+            continue
+          }
+          const start = new Date(`${a.day}T${a.time}:00`)
+          await calendar.create({ title: a.title, start: start.toISOString(), end: new Date(start.getTime() + a.minutes * 60000).toISOString(), description: 'Planned with your coach in Life System' })
+          done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`)
+          continue
+        }
         if (a.kind === 'task') {
           if (!todoist) continue
           const t = await todoist.quickAdd(a.text)
@@ -846,6 +958,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             const r = svc.focus.fun(a.minutes, a.what)
             return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} coins (left ${r.balance})`
           }
+          if (a.kind !== 'goal') return null
           svc.focus.saveGoal({ title: a.title, subject: a.subject, deadline: a.deadline, hours: a.hours })
           return `🎯 Goal: ${a.title} · ${a.hours}h by ${a.deadline}`
         })
@@ -962,6 +1075,10 @@ His note: ${note}`,
         await tg(update.__token, 'sendMessage', { chat_id: chat, text: out.reply, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
         // Your evening reply becomes a lesson the coach remembers.
         if (ai && out.ok && prompted && /Evening review/.test(asked)) await lessonOfDay(update.__token, chat, botId, cfg, said).catch(() => null)
+        await flushFocus()
+        // Up (Telegram /wake): the plan question comes now. Plan sent: blocks for it in your free time.
+        if (server && out.ok && /^\/wake(@\w+)?$/i.test(text)) await morningAfterWake(update.__token, chat).catch(() => null)
+        if (out.ok && prompted && asked.includes(PLAN_ASK)) await offerBlocks(update.__token, chat).catch(() => null)
         return out.reply
       } catch (e) {
         if (e instanceof MirrorError && attempt === 0) continue // reloaded: try once more

@@ -11,6 +11,7 @@ import { progressReport } from '@core/progress'
 import { activePlan } from '@core/weekPlan'
 import { deadlineRadar, whenText, type TodoTask } from '@core/todoist'
 import { financeSpending } from '@core/progress'
+import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
 import { getSetting, setSetting } from '../../../main/settings'
 import type { Services } from './webServices'
 
@@ -146,7 +147,7 @@ export function moneyContext(state: any, today: string): string {
 }
 
 /** Everything the coach should know about you right now, in plain lines. */
-export function lifeContext(s: Services, db: any, extra: { finance: any; todoToday: TodoTask[] | null; upcoming: TodoTask[] | null }, now = new Date()): string {
+export function lifeContext(s: Services, db: any, extra: { finance: any; todoToday: TodoTask[] | null; upcoming: TodoTask[] | null; events?: CalEvent[] | null }, now = new Date()): string {
   const today = s.wallet.today(now)
   const sum = s.wallet.summary()
   const f = s.focus.state(now)
@@ -179,6 +180,13 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     `Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ''}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join('; ') || 'none'}.`,
     moneyContext(extra.finance, today)
   ]
+  if (extra.events) {
+    const nowHM = now.toTimeString().slice(0, 5)
+    const gaps = freeGaps(extra.events, today, { after: nowHM, minMinutes: 30 })
+    lines.push(`Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(', ') || 'none'}.`)
+    const tomorrow = addDays(today, 1)
+    if (extra.events.some((e) => localDay(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`)
+  }
   if (extra.todoToday) {
     const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? ' (late)' : ''}${t.priority >= 3 ? ` P${5 - t.priority}` : ''}${t.section ? ` [${t.section}]` : ''}`)
     lines.push(`Todoist today/late (${extra.todoToday.length}): ${list.join('; ') || 'nothing'}.`)
@@ -204,6 +212,7 @@ const ACTIONS = `You can act. Put actions in "actions" (strings), only when Vict
 - "fun: <minutes> <what>" to spend coins on guilt-free fun.
 - "task: <text>" to add a task to Todoist (Todoist reads dates like "friday 18:00", "p1", "#University").
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" for an exam or project with a deadline and the hours it needs.
+- "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" to put a block in his Google Calendar (only in his free time, never over an existing event).
 Never invent amounts or times he didn't give. Never log the same thing twice.
 IMPORTANT: something is saved ONLY if you put an action for it. If he reports spending, a workout, a wake-up, etc., include the action. Never write "logged"/"added"/"saved" in your reply: the app adds a ✅ line under your reply for each thing it really saved. The conversation history shows ✅ lines for what was saved before; if there is none, it was NOT saved.`
 
@@ -263,6 +272,7 @@ export function parseBrain(text: string): BrainOut {
 const SAFE_SLASH = /^\/(wake|bed|checkin|oath|weight|waist|pushups|situps|squats|plank|run|stop)\b/i
 
 export type BrainAction =
+  | { kind: 'event'; title: string; day: string; time: string; minutes: number }
   | { kind: 'log'; text: string }
   | { kind: 'mustdo'; text: string }
   | { kind: 'focus'; minutes: number; subject: string }
@@ -272,7 +282,7 @@ export type BrainAction =
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 200)
@@ -280,6 +290,13 @@ export function readAction(line: string): BrainAction | null {
   if (kind === 'log') return arg.startsWith('/') && !SAFE_SLASH.test(arg) ? null : { kind: 'log', text: arg }
   if (kind === 'mustdo') return { kind: 'mustdo', text: arg.slice(0, 140) }
   if (kind === 'task') return { kind: 'task', text: arg }
+  if (kind === 'event') {
+    const [title, when, mins] = arg.split('|').map((x) => x.trim())
+    const w = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/.exec(when ?? '')
+    const minutes = Number(mins) || 50
+    if (!title || !w || minutes < 10 || minutes > 600) return null
+    return { kind: 'event', title: title.slice(0, 120), day: w[1], time: `${w[2].padStart(2, '0')}:${w[3]}`, minutes }
+  }
   if (kind === 'focus' || kind === 'fun') {
     const minutes = Number(/\d{1,3}/.exec(arg)?.[0] ?? (kind === 'focus' ? 50 : 0))
     const rest = arg.replace(/\d{1,3}\s*(minutes|min|m)?\b/i, '').trim()
