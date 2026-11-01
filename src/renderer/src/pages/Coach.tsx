@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
+import { useLive } from '../live'
 
 type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean }
 type Profile = { about: string; goals: string[]; rules: string[] }
@@ -52,7 +53,18 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   }, [load])
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [log])
+  }, [log?.length])
+  // Live: what you and the coach say on Telegram appears here as it happens.
+  const busyRef = useRef(false)
+  busyRef.current = busy
+  useLive(() => {
+    if (busyRef.current || !life.coach) return
+    life.coach
+      .log()
+      .then((l) => setLog((cur) => (busyRef.current || (cur && cur.length === l.length && cur[cur.length - 1]?.at === l[l.length - 1]?.at) ? cur : l)))
+      .catch(() => {})
+    life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
+  })
 
   const send = async (msg = text) => {
     const t = msg.trim()

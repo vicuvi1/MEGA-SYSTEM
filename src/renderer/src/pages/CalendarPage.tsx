@@ -9,6 +9,7 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import type { PageId } from '../modules'
 import { useAction } from '../ui'
+import { useLive } from '../live'
 
 const HOUR_PX = 52
 const START_H = Number(DAY_START.slice(0, 2))
@@ -69,6 +70,8 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   useEffect(() => {
     void load()
   }, [load])
+  // Live: events and tasks changed elsewhere (Google, Todoist, a bot) appear by themselves.
+  useLive(() => void load(), { external: true })
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(t)

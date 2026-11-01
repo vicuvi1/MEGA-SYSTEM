@@ -1023,7 +1023,11 @@ var Mirror = class {
 			return result;
 		});
 	}
-	/** Reloads the copy from Turso (e.g. after the phone or a bot changed something). */
+	/**
+	* Reloads the copy from Turso (e.g. after the phone or a bot changed
+	* something). Cheap when nothing changed: one tiny query. True when the
+	* copy was reloaded (listeners hear it only then).
+	*/
 	refresh() {
 		if (this.refreshing) return this.refreshing;
 		this.refreshing = this.lock(async () => {
@@ -1034,11 +1038,15 @@ var Mirror = class {
 				}]);
 				if (!(r instanceof Error) && String(r.rows[0]?.[0] ?? "") === this.version) {
 					this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
-					return;
+					return false;
 				}
 			}
 			await this.rebuild();
-		}).then(() => this.emit()).finally(() => {
+			return true;
+		}).then((changed) => {
+			if (changed) this.emit();
+			return changed;
+		}).finally(() => {
 			this.refreshing = null;
 		});
 		return this.refreshing;

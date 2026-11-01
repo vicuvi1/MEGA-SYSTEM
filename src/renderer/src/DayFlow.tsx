@@ -16,6 +16,7 @@ import { useSwipeRows } from './swipe'
 import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
 import { useAction } from './ui'
+import { useLive } from './live'
 
 interface Props {
   summary: Summary
@@ -54,6 +55,8 @@ function useTodoist() {
   useEffect(() => {
     void load()
   }, [load])
+  // Live: tasks added or done on Telegram or in Todoist itself show up by themselves.
+  useLive(() => void load(), { external: true })
   return [tasks, load, setTasks] as const
 }
 

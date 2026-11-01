@@ -13,6 +13,7 @@ import { useFocus } from './pages/Focus'
 import { useWeekPlan } from './WeekPlanner'
 import { soundSuccess } from './sound'
 import { useAction } from './ui'
+import { useLive } from './live'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -44,6 +45,7 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
   useEffect(() => {
     void load()
   }, [load])
+  useLive(() => void load(), { external: true })
 
   const rows: Row[] = useMemo(() => {
     const timed: Row[] = [

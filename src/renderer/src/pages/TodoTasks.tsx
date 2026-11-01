@@ -14,6 +14,7 @@ import { soundCoin, soundSuccess } from '../sound'
 import { useAction, useToast } from '../ui'
 import type { CleanChange } from '@core/todoistClean'
 import { useSwipeRows } from '../swipe'
+import { useLive } from '../live'
 
 type View = 'areas' | 'today' | 'upcoming' | 'all'
 
@@ -58,6 +59,7 @@ function useTodoistData() {
   useEffect(() => {
     void load()
   }, [load])
+  useLive(() => void load(), { external: true })
   return { data, setData, error, load, colors, setColors }
 }
 

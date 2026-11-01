@@ -9,6 +9,7 @@ function downloadBlob(content: string, mime: string, filename: string) {
 }
 
 import { useEffect, useState } from 'react'
+import { rememberPinLength } from './LockScreen'
 import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, BotBridgeConfig, UpdateStatus, VerifyResult, AIConfig, CalendarConfig, SyncConfig, SyncResult } from '@shared/api'
 import { POPULAR_MODELS, DEFAULT_AI_CONFIG } from '@core/ai'
 import { DEFAULT_CALENDAR_CONFIG } from '@shared/api'
@@ -154,6 +155,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
     setIsUpdatingPin(true)
     try {
       const next = await life.auth.setPin(newPin, currentPin)
+      rememberPinLength(newPin)
       onAuth(next)
       setPinSuccess('PIN updated successfully!')
       setCurrentPin('')

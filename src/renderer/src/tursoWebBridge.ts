@@ -23,6 +23,9 @@ import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { getSetting, setSetting } from '../../main/settings'
 import { financeSpending } from '@core/progress'
+
+/** What every screen listens to; sent when live data arrived. */
+const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', 'life-focus-changed', 'life-week-changed', 'life-sport-changed', 'life-data-changed']
 import type { CleanChange } from '@core/todoistClean'
 import { loadLog, loadMemory, loadProfile, saveMemory, saveProfile } from './web/botBrain'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
@@ -278,21 +281,59 @@ export function createTursoWebBridge(): Bridge {
   let todoistSyncedAt = 0
   const botsP = Promise.all([mirrorP, svcP, botDefaultsP, todoistOnP]).then(([mirror, services, defaults, todoOn]) => createWebBots({ mirror, services, defaults, onExpense: () => void applyFinance(), todoist: todoOn ? todoist : null }))
 
-  // Fresh data from Turso when coming back to the tab, and every minute while
-  // it's open, so the phone and the PC see each other's changes.
+  // Live data: while the app is open it asks Turso "anything new?" every few
+  // seconds (one tiny query; every change anywhere moves a marker). When a
+  // bot, the phone or another tab changed something, the copy reloads and
+  // every screen redraws by itself. Fast (3 s) while you use the app, slower
+  // when it sits in the background, paused when the tab is hidden.
   if (typeof window !== 'undefined') {
-    const refresh = () =>
-      mirrorP
-        .then((m) => m.refresh())
-        .then(() => applyFinance())
-        .then(() => syncAll())
-        .then(() => bridge.todoist?.sync().catch(() => 0))
-        .then(() => {
-          for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed']) window.dispatchEvent(new CustomEvent(n))
-        })
-        .catch(() => {})
-    document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && refresh())
-    setInterval(() => document.visibilityState === 'visible' && refresh(), 60_000)
+    let lastUse = Date.now()
+    for (const ev of ['pointerdown', 'keydown', 'focus', 'touchstart']) window.addEventListener(ev, () => (lastUse = Date.now()), { passive: true })
+    const announce = () => {
+      for (const n of LIVE_EVENTS) window.dispatchEvent(new CustomEvent(n, { detail: { live: true, fromSync: true } }))
+    }
+    const tab = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('life-live') : null
+    let checking = false
+    const check = async (force = false) => {
+      if (checking) return
+      checking = true
+      try {
+        const changed = await (await mirrorP).refresh()
+        if (changed || force) {
+          await applyFinance().catch(() => {})
+          await syncAll().catch(() => {})
+          announce()
+        }
+      } catch {
+        /* offline: the next check retries */
+      } finally {
+        checking = false
+      }
+    }
+    // Another tab of this app wrote something: check now.
+    if (tab) tab.onmessage = () => void check()
+    void mirrorP.then((m) => m.onChange(() => tab?.postMessage('changed')))
+    let todoAt = 0
+    const loop = async () => {
+      if (document.visibilityState === 'visible') {
+        await check()
+        // Todoist and Google Calendar changes made in their own apps: every 30 s.
+        if (Date.now() - todoAt > 30_000) {
+          todoAt = Date.now()
+          window.dispatchEvent(new CustomEvent('life-external-changed'))
+          bridge.todoist?.sync().catch(() => 0)
+        }
+      }
+      const active = Date.now() - lastUse < 3 * 60_000 && document.hasFocus()
+      setTimeout(loop, active ? 3000 : 12_000)
+    }
+    setTimeout(loop, 3000)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        todoAt = 0
+        void check(true)
+      }
+    })
   }
 
   /**

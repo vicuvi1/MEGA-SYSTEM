@@ -63,7 +63,7 @@ export class Mirror {
   private db: BrowserDb | null = null
   private queue: Promise<unknown> = Promise.resolve()
   private listeners = new Set<() => void>()
-  private refreshing: Promise<void> | null = null
+  private refreshing: Promise<boolean> | null = null
   /**
    * A marker every change sets in Turso (settings.data_version): a refresh
    * reads it first and downloads everything only when it moved, instead of
@@ -164,8 +164,12 @@ export class Mirror {
     })
   }
 
-  /** Reloads the copy from Turso (e.g. after the phone or a bot changed something). */
-  refresh(): Promise<void> {
+  /**
+   * Reloads the copy from Turso (e.g. after the phone or a bot changed
+   * something). Cheap when nothing changed: one tiny query. True when the
+   * copy was reloaded (listeners hear it only then).
+   */
+  refresh(): Promise<boolean> {
     if (this.refreshing) return this.refreshing
     this.refreshing = this.lock(async () => {
       // Nothing changed since our copy (and it's not old): skip the download.
@@ -173,12 +177,16 @@ export class Mirror {
         const [r] = await this.turso.readMany([{ sql: "SELECT value FROM settings WHERE key = 'data_version'", args: [] }])
         if (!(r instanceof Error) && String(r.rows[0]?.[0] ?? '') === this.version) {
           this.syncedAt = new Date().toISOString()
-          return
+          return false
         }
       }
       await this.rebuild()
+      return true
     })
-      .then(() => this.emit())
+      .then((changed) => {
+        if (changed) this.emit()
+        return changed
+      })
       .finally(() => {
         this.refreshing = null
       })

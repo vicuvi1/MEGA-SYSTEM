@@ -11,6 +11,7 @@ import { activePlan } from '@core/weekPlan'
 import type { Insights } from '@core/insights'
 import { FocusInsights } from './Focus'
 import { PageSkeleton } from '../blocks'
+import { useLive } from '../live'
 
 export function useProgress(): ProgressReport | null | undefined {
   const [r, setR] = useState<ProgressReport | null | undefined>(undefined)
@@ -197,9 +198,11 @@ function MetricCard({ m, index, onGo }: { m: Metric; index: number; onGo?: (p: P
 
 function useInsights(): Insights | null {
   const [r, setR] = useState<Insights | null>(null)
-  useEffect(() => {
+  const load = useCallback(() => {
     life.progress?.insights?.().then(setR).catch(() => setR(null))
   }, [])
+  useEffect(load, [load])
+  useLive(load)
   return r
 }
 
