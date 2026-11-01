@@ -467,6 +467,8 @@ export interface LifeApi {
     start(subject: string, planned?: number, task?: FocusTask | null): Promise<FocusState>
     stop(): Promise<{ session: FocusSession; coins: number; state: FocusState; task?: FocusTask | null }>
     cancel(): Promise<FocusState>
+    /** Adds minutes to the running timer (web app). */
+    extend?(minutes: number): Promise<FocusState>
     add(subject: string, minutes: number, day?: string): Promise<{ session: FocusSession; coins: number; state: FocusState }>
     setPlan(items: string[]): Promise<DayPlan>
     togglePlan(index: number): Promise<{ plan: DayPlan; coins: number }>

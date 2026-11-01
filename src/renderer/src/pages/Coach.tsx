@@ -728,7 +728,8 @@ function Rich({ text, reveal = false, highlight = '' }: { text: string; reveal?:
   }, [text, reveal])
   const shown = text.slice(0, n)
   const h = highlight.trim().toLowerCase()
-  const parts = shown.split(/(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|%|km|kg|reps|days?|\/\d+))?)/g)
+  // Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
+  const parts = shown.split(/(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu)
   return (
     <span className="cx-rich">
       {parts.map((p, i) => {

@@ -163,6 +163,17 @@ export class FocusService {
     })()
   }
 
+  /** Adds minutes to the running timer (the island's +5 / +15); at most 4 hours in all. */
+  extend(minutes: number, now = new Date()): FocusState {
+    const run = this.running()
+    if (!run) throw new LedgerError('No focus session is running')
+    const m = Math.round(Number(minutes) || 0)
+    if (!m) return this.state(now)
+    const planned = Math.min(240, Math.max(5, run.planned + m))
+    setSetting(this.db, RUNNING, JSON.stringify({ ...run, planned }))
+    return this.state(now)
+  }
+
   /** Drops the running timer without logging it. */
   cancel(now = new Date()): FocusState {
     setSetting(this.db, RUNNING, 'null')

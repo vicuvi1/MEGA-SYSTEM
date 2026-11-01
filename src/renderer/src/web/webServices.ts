@@ -199,6 +199,7 @@ export function createWebServices(mirror: Mirror) {
       start: (subject: string, planned?: number, task?: FocusTask | null) => write((s) => s.focus.start(subject, planned, new Date(), task ?? null)),
       stop: () => write((s) => s.focus.stop(), W),
       cancel: () => write((s) => s.focus.cancel()),
+      extend: (minutes: number) => write((s) => s.focus.extend(minutes)),
       add: (subject: string, minutes: number, day?: string) => write((s) => s.focus.add(subject, minutes, day), W),
       setPlan: (items: string[]) => write((s) => s.focus.setPlan(items)),
       togglePlan: (index: number) => write((s) => s.focus.togglePlan(index), W),

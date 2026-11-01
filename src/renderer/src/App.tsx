@@ -20,6 +20,7 @@ import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
 import { useCoachUnread } from './coachUnread'
 import { NewVersionBar } from './newVersion'
+import { FocusIsland } from './FocusIsland'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
@@ -514,6 +515,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       />
 
       <div className="main">
+        <FocusIsland />
         <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">
             <h1>{current.label}</h1>

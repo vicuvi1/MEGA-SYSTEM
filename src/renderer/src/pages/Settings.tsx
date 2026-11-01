@@ -679,6 +679,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
               <small>Lighter and faster: effects play once instead of looping, no glass blur. Turn off for the full effects.</small>
             </span>
           </label>
+          <IslandToggle />
           <label className="check toggle-row" style={{ margin: 0 }}>
             <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ sound: e.target.checked })} />
             <span>
@@ -1516,5 +1517,35 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
 
 
     </div>
+  )
+}
+
+/** The focus island on/off (its other options live in its own ⚙). */
+function IslandToggle() {
+  const read = () => {
+    try {
+      return JSON.parse(localStorage.getItem('ls.island') || '{}').on !== false
+    } catch {
+      return true
+    }
+  }
+  const [on, setOn] = useState(read)
+  const set = (v: boolean) => {
+    try {
+      localStorage.setItem('ls.island', JSON.stringify({ ...JSON.parse(localStorage.getItem('ls.island') || '{}'), on: v }))
+    } catch {
+      /* private window */
+    }
+    setOn(v)
+    window.dispatchEvent(new Event('life-island-prefs'))
+  }
+  return (
+    <label className="check toggle-row" style={{ margin: 0 }}>
+      <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />
+      <span>
+        Focus island
+        <small>A live timer pill at the top of every page, like the iPhone's Dynamic Island. Hover it to stop, add time or start; ⚙ inside to customize.</small>
+      </span>
+    </label>
   )
 }
