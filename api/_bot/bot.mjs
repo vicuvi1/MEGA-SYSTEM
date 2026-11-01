@@ -10809,7 +10809,8 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 			projectId: t.project_id != null ? String(t.project_id) : null,
 			sectionId: t.section_id ? String(t.section_id) : null,
 			description: t.description ? String(t.description) : null,
-			labels: Array.isArray(t.labels) ? t.labels.map(String) : []
+			labels: Array.isArray(t.labels) ? t.labels.map(String) : [],
+			duration: t.duration?.amount ? Number(t.duration.amount) * (t.duration.unit === "day" ? 1440 : 1) : null
 		};
 	};
 	/** Your areas: every section (Inbox first), and every project without sections. */
@@ -10893,6 +10894,12 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 			if (patch.due != null) body.due_string = patch.due.trim() || "no date";
 			if (patch.description != null) body.description = patch.description;
 			if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20);
+			if (patch.duration !== void 0) {
+				if (patch.duration && patch.duration > 0) {
+					body.duration = Math.min(1440, Math.round(patch.duration));
+					body.duration_unit = "minute";
+				} else body.duration = null;
+			}
 			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}`, {
 				method: "POST",
 				body: JSON.stringify(body)

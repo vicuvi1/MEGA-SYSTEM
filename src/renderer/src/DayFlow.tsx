@@ -3,7 +3,7 @@
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
-import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, pLabel, sortToday, whenText, type TodoTask } from '@core/todoist'
+import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, plainName, sortToday, whenText, type Area, type TodoTask } from '@core/todoist'
 import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
@@ -13,6 +13,7 @@ import { LABEL as WEEK_LABEL, useWeekPlan } from './WeekPlanner'
 import { useTicker } from './useTicker'
 import { Skeleton } from './blocks'
 import { useSwipeRows } from './swipe'
+import { TodayTaskRow, withToday } from './TodayTaskRow'
 import { useTodayEvents } from './todayEvents'
 import { isFocusBlock, localDay } from '@core/dayTime'
 import { focusCoins } from '@core/focus'
@@ -136,9 +137,13 @@ export function DayFlow(props: Props) {
   const [weekPlan, loadWeek] = useWeekPlan()
   const [colors, setColors] = useState<Record<string, string>>({})
   const [upcoming, setUpcoming] = useState<TodoTask[]>([])
+  const [areas, setAreas] = useState<Area[]>([])
+  const [order, setOrder] = useState<string[]>([])
   useEffect(() => {
     life.todoist?.upcoming?.().then(setUpcoming).catch(() => {})
     life.todoist?.colors?.().then(setColors).catch(() => {})
+    life.todoist?.everything?.().then((x) => setAreas(x.areas)).catch(() => {})
+    life.todoist?.order?.().then(setOrder).catch(() => {})
   }, [])
   const today = summary.today
   const radar = deadlineRadar(upcoming, today)
@@ -363,8 +368,14 @@ export function DayFlow(props: Props) {
 
   const todoList = useMemo(() => (todo ? sortToday(todo, today) : null), [todo, today])
   const bigIds = useMemo(() => new Set((week?.big3 ?? []).map((b) => b.todoistId).filter(Boolean) as string[]), [week])
-  const starred = useMemo(() => (todoList ?? []).filter(isStarred), [todoList])
-  const loose = useMemo(() => (todoList ?? []).filter((t) => !isStarred(t) && !bigIds.has(t.id)), [todoList, bigIds])
+  const starredRaw = useMemo(() => (todoList ?? []).filter(isStarred), [todoList])
+  // Your own order first (dragged), the rest as Todoist sorts them (late and urgent on top).
+  const rank = useCallback((list: TodoTask[]) => {
+    const pos = new Map(order.map((id, i) => [id, i]))
+    return list.map((t, i) => ({ t, k: pos.has(t.id) ? pos.get(t.id)! : 10_000 + i })).sort((a, b) => a.k - b.k).map((x) => x.t)
+  }, [order])
+  const starred = useMemo(() => rank(starredRaw), [starredRaw, rank])
+  const loose = useMemo(() => rank((todoList ?? []).filter((t) => !isStarred(t) && !bigIds.has(t.id))), [todoList, bigIds, rank])
   const colorOf = (t: TodoTask) => {
     const k = areaKey(t)
     return colors[k] ?? defaultAreaColor({ name: t.section || (t.project && t.project !== 'Inbox' ? t.project : 'Inbox') })
@@ -381,6 +392,106 @@ export function DayFlow(props: Props) {
     }
     return out
   }, [loose, colors])
+
+  // ---- Editing tasks in place -------------------------------------------
+  const patchTask = async (t: TodoTask, patch: { content?: string; priority?: number; due?: string; description?: string; duration?: number | null }, local: Partial<TodoTask>, msg?: string) => {
+    setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, ...local } : x)))
+    const ok = await act(() => life.todoist!.update!(t.id, patch).then(() => true), msg)
+    // Moved out of today, or a date Todoist worked out: reload to see where it went.
+    if (!ok || patch.due) void loadTodo()
+  }
+  const moveTask = async (t: TodoTask, a: Area) => {
+    setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, sectionId: a.kind === 'section' ? a.id : null, projectId: a.projectId, section: a.kind === 'section' ? a.name : null, project: a.kind === 'project' ? a.name : x.project } : x)))
+    if (!(await act(() => life.todoist!.move!(t.id, a.key).then(() => true), `Moved to ${plainName(a.name) || a.name}`))) void loadTodo()
+  }
+  const deleteTask = async (t: TodoTask) => {
+    setTodo((cur) => (cur ?? []).filter((x) => x.id !== t.id))
+    if (!(await act(() => life.todoist!.remove!(t.id).then(() => true), `Deleted: ${t.content}`))) void loadTodo()
+  }
+  const addToArea = async (areaK: string, text: string) => {
+    const v = text.trim()
+    if (!v || !life.todoist) return false
+    const ok = await act(() => life.todoist!.quickAdd(withToday(v), areaK).then(() => true), `Added: ${v}`)
+    if (ok) void loadTodo()
+    return !!ok
+  }
+  // Drag a task: onto another task (reorder, and move area if it's in another group).
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dropOn, setDropOn] = useState<string | null>(null)
+  const dropTask = (targetId: string | null, targetArea: string | null) => {
+    const id = dragId
+    setDragId(null)
+    setDropOn(null)
+    if (!id || id === targetId) return
+    const t = (todo ?? []).find((x) => x.id === id)
+    if (!t) return
+    const ids = [...starred, ...loose].map((x) => x.id).filter((x) => x !== id)
+    const at = targetId ? ids.indexOf(targetId) : -1
+    const next = at >= 0 ? [...ids.slice(0, at), id, ...ids.slice(at)] : [...ids, id]
+    setOrder(next)
+    void life.todoist?.setOrder?.(next).catch(() => null)
+    const area = targetArea ? areas.find((a) => a.key === targetArea) : undefined
+    if (area && area.key !== areaKey(t)) void moveTask(t, area)
+  }
+  const rowDrag = (t: TodoTask, group: string | null) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      setDragId(t.id)
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/x-task', JSON.stringify({ id: t.id, title: t.content, minutes: t.duration ?? 50 }))
+    },
+    onDragEnd: () => {
+      setDragId(null)
+      setDropOn(null)
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragId) return
+      e.preventDefault()
+      if (dropOn !== t.id) setDropOn(t.id)
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      dropTask(t.id, group)
+    }
+  })
+  // Keys 1–4 on the task under the mouse: priority.
+  const hotRef = useRef<string | null>(null)
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  keyRef.current = (e: KeyboardEvent) => {
+    const el = e.target as HTMLElement | null
+    if (e.ctrlKey || e.metaKey || e.altKey || (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))) return
+    if (!/^[1-4]$/.test(e.key) || !hotRef.current) return
+    const t = (todo ?? []).find((x) => x.id === hotRef.current)
+    if (!t) return
+    const p = 5 - Number(e.key)
+    void patchTask(t, { priority: p }, { priority: p }, `P${e.key}`)
+  }
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keyRef.current(e)
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [])
+  const taskRow = (t: TodoTask, isStar: boolean, group: string | null) => (
+    <TodayTaskRow
+      key={t.id}
+      t={t}
+      today={today}
+      color={colorOf(t)}
+      areas={areas}
+      starred={isStar}
+      running={!!st?.running}
+      leaving={leaving.includes(t.id)}
+      dropping={dropOn === t.id && dragId !== t.id}
+      onDone={() => void (isStar ? doneStarred(t) : doneTodo(t))}
+      onFocus={() => void startFocus(todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content }, t.duration ?? 50)}
+      onStar={() => void (isStar ? unstar(t) : star(t))}
+      onPatch={(patch, local, msg) => void patchTask(t, patch, local, msg)}
+      onMove={(a) => void moveTask(t, a)}
+      onDelete={() => void deleteTask(t)}
+      onHot={(id) => (hotRef.current = id)}
+      dragHandlers={rowDrag(t, group)}
+    />
+  )
 
   if (!st)
     return (
@@ -602,23 +713,7 @@ export function DayFlow(props: Props) {
             <i /> Must-dos <small>+10 each</small>
           </h3>
           <ul className="dl">
-            {starred.map((t) => (
-              <li key={t.id} style={{ ['--c' as string]: colorOf(t) }} data-swipe={`star:${t.id}`} className={leaving.includes(t.id) ? 'leaving' : ''}>
-                <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={() => void doneStarred(t)} />
-                <span className="dl-text">
-                  {t.content}
-                  {t.due && t.due < today && <em className="dl-late"> late</em>}
-                </span>
-                {playBtn(t.content, todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content })}
-                <span className="dl-area" title={t.section || t.project || ''}>
-                  <i />
-                  {(t.section || (t.project !== 'Inbox' ? t.project : '') || '').replace(/^[^\p{L}\p{N}]+/u, '')}
-                </span>
-                <button className="dl-star on" aria-label={`Unstar ${t.content}`} title="No longer a must-do" onClick={() => void unstar(t)}>
-                  ★
-                </button>
-              </li>
-            ))}
+            {starred.map((t) => taskRow(t, true, null))}
             {planOnly.map(({ p, i }) => (
               <li key={`m${i}`} className={p.done ? 'done' : ''} data-swipe={p.done ? undefined : `must:${i}`}>
                 <button className="dl-check" aria-label={p.done ? `Untick ${p.text}` : `Tick ${p.text}`} onClick={() => void tickMustDo(i)}>
@@ -668,29 +763,22 @@ export function DayFlow(props: Props) {
           if (!items.length) return null
           return (
             <div key={g.key} className="dl-group" style={{ ['--c' as string]: g.color }}>
-              <h3 className="dl-head">
-                <i /> {g.name} <small>{g.items.length}</small>
+              <h3
+                className={`dl-head ${dragId && dropOn === `g:${g.key}` ? 'drop' : ''}`}
+                onDragOver={(e) => {
+                  if (!dragId) return
+                  e.preventDefault()
+                  setDropOn(`g:${g.key}`)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  dropTask(items[0]?.id ?? null, g.key)
+                }}
+              >
+                <i /> {g.name} <small>{g.items.length} · +5 each</small>
               </h3>
-              <ul className="dl">
-                {items.map((t) => (
-                  <li key={t.id} data-swipe={`todo:${t.id}`} className={leaving.includes(t.id) ? 'leaving' : ''}>
-                    <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={() => void doneTodo(t)} />
-                    <span className="dl-text">
-                      {t.content}
-                      {t.due && t.due < today && <em className="dl-late"> late</em>}
-                    </span>
-                    {playBtn(t.content, todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content })}
-                    <span className="dl-hint">
-                      {t.dueTime ?? ''}
-                      {t.priority > 1 ? ` ${pLabel(t.priority)}` : ''}
-                      <b className="dl-pts"> +5</b>
-                    </span>
-                    <button className="dl-star" aria-label={`Make ${t.content} a must-do`} title="Make it a must-do (⭐ today)" onClick={() => void star(t)}>
-                      ☆
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <ul className="dl">{items.map((t) => taskRow(t, false, g.key))}</ul>
+              <AreaAdd name={plainName(g.name) || g.name} onAdd={(v) => addToArea(g.key, v)} />
             </div>
           )
         })}
@@ -810,3 +898,24 @@ function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, openTodo, 
     </section>
   )
 }
+
+/** A quick "+ Add to University" under each area (due today unless you say when). */
+function AreaAdd({ name, onAdd }: { name: string; onAdd: (v: string) => Promise<boolean> }) {
+  const [v, setV] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <form
+      className="dl-area-add"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (!v.trim() || busy) return
+        setBusy(true)
+        if (await onAdd(v)) setV('')
+        setBusy(false)
+      }}
+    >
+      <input value={v} onChange={(e) => setV(e.target.value)} placeholder={`+ Add to ${name} (today, or "fri 18:00")`} maxLength={300} disabled={busy} />
+    </form>
+  )
+}
+

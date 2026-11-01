@@ -278,7 +278,7 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
                   key={r.key}
                   className={`tl-row gap ${past ? 'past' : ''} ${dragOver === r.key ? 'drop' : ''}`}
                   onDragOver={(e) => {
-                    if (past || !e.dataTransfer.types.includes('text/x-event')) return
+                    if (past || !(e.dataTransfer.types.includes('text/x-event') || e.dataTransfer.types.includes('text/x-task'))) return
                     e.preventDefault()
                     setDragOver(r.key)
                   }}
@@ -286,8 +286,22 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
                   onDrop={(e) => {
                     e.preventDefault()
                     setDragOver(null)
+                    const at = r.start < nowHM ? hmUp15() : r.start
+                    const raw = e.dataTransfer.getData('text/x-task')
+                    if (raw) {
+                      // A task from Today's list: a block in your free time, and its time in Todoist.
+                      try {
+                        const t = JSON.parse(raw) as { id: string; title: string; minutes: number }
+                        const startMin = Number(at.slice(0, 2)) * 60 + Number(at.slice(3, 5))
+                        const endMin = Math.min(Number(r.end.slice(0, 2)) * 60 + Number(r.end.slice(3, 5)), startMin + (t.minutes || 50))
+                        void addSuggestions([{ title: t.title, start: at, end: `${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}`, taskId: t.id }])
+                      } catch {
+                        /* not a task */
+                      }
+                      return
+                    }
                     const ev = todayEvents.find((x) => x.id === e.dataTransfer.getData('text/x-event'))
-                    if (ev) void moveTo(ev, r.start < nowHM ? hmUp15() : r.start)
+                    if (ev) void moveTo(ev, at)
                   }}
                 >
                   <span className="tl-time">

@@ -63,7 +63,7 @@ export default async function handler(req, res) {
         }
       }
       case 'update':
-        await api.update(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description, labels: Array.isArray(body.labels) ? body.labels : undefined })
+        await api.update(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description, labels: Array.isArray(body.labels) ? body.labels : undefined, duration: body.duration === undefined ? undefined : body.duration === null ? null : Number(body.duration) })
         return send(res, 200, { ok: true })
       case 'move':
         await api.move(String(body.id), String(body.area))

@@ -70,7 +70,10 @@ export type Bridge = LifeApi & {
     everything?(): Promise<{ tasks: TodoTask[]; areas: Area[] }>
     /** Suggested fixes for your Todoist (AI, else duplicates and long-overdue tasks), to approve. */
     cleanup?(today: string): Promise<{ changes: CleanChange[]; ai: boolean; error?: string }>
-    update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[] }): Promise<void>
+    update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }): Promise<void>
+    /** Your own order of today's tasks (ids), synced. */
+    order?(): Promise<string[]>
+    setOrder?(ids: string[]): Promise<void>
     move?(id: string, area: string): Promise<void>
     reopen?(id: string): Promise<void>
     remove?(id: string): Promise<void>

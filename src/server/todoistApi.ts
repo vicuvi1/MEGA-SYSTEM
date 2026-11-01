@@ -83,7 +83,8 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
       projectId: t.project_id != null ? String(t.project_id) : null,
       sectionId: t.section_id ? String(t.section_id) : null,
       description: t.description ? String(t.description) : null,
-      labels: Array.isArray(t.labels) ? t.labels.map(String) : []
+      labels: Array.isArray(t.labels) ? t.labels.map(String) : [],
+      duration: t.duration?.amount ? Number(t.duration.amount) * (t.duration.unit === 'day' ? 1440 : 1) : null
     }
   }
 
@@ -131,13 +132,20 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
     },
     areas: async () => (await areaList()).areas,
     /** Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or note. */
-    async update(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[] }): Promise<void> {
+    async update(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }): Promise<void> {
       const body: any = {}
       if (patch.content != null) body.content = patch.content
       if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)))
       if (patch.due != null) body.due_string = patch.due.trim() || 'no date'
       if (patch.description != null) body.description = patch.description
       if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20)
+      // How long it takes (minutes); 0 clears it.
+      if (patch.duration !== undefined) {
+        if (patch.duration && patch.duration > 0) {
+          body.duration = Math.min(1440, Math.round(patch.duration))
+          body.duration_unit = 'minute'
+        } else body.duration = null
+      }
       await either(
         () => call(`${V1}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) }),
         () => call(`${V2}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) })

@@ -21,6 +21,8 @@ export interface TodoTask {
   description?: string | null
   /** Todoist labels; 'today' (⭐) makes it one of today's must-dos. */
   labels?: string[]
+  /** How long it takes, in minutes (Todoist's duration), when set. */
+  duration?: number | null
 }
 
 /** The Todoist label that makes a task one of today's must-dos (⭐). */

@@ -591,6 +591,16 @@ export function createTursoWebBridge(): Bridge {
       renameArea: async (area: string, name: string) => {
         await todoistCall('renameArea', { area, name })
       },
+      order: async () => (await svcP).read((s) => {
+        try {
+          return JSON.parse(getSetting(s.db, 'today_order') || '[]') as string[]
+        } catch {
+          return []
+        }
+      }),
+      setOrder: async (ids: string[]) => {
+        await (await svcP).write((s) => setSetting(s.db, 'today_order', JSON.stringify(ids.slice(0, 300))))
+      },
       // Colors live with your data (Turso), so every device shows the same.
       colors: async () => (await svcP).read((s) => {
         try {
