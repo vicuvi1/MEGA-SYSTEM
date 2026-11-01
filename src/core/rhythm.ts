@@ -269,7 +269,7 @@ export function weakest(r: DayResult): string {
 
 export function reviewText(r: DayResult, score: number, lesson: string, top3: string[]): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const mark = score >= 80 ? '🔥' : score >= 55 ? '👍' : '⚠️'
+  const mark = score >= 80 ? '😎🔥' : score >= 55 ? '🙂' : score >= 35 ? '😤' : '😠'
   return [
     `🌙 <b>Day review: ${score}/100</b> ${mark}`,
     '',

@@ -207,7 +207,51 @@ export function followUpText(r: Reminder, s: PromiseStats): string {
   const tries = r.tries ?? 0
   const misses = s.broken + s.ignored
   if (tries === 0) return `🔔 ${r.text}`
-  if (tries === 1) return `🔔 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`
-  if (tries === 2) return `⏰ ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? '' : 's'} missed this week already.` : ''} Answer me.`
-  return `🚨 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ''}You said you'd do it. Do it now, or tell me why not.`
+  if (tries === 1) return `😤 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`
+  if (tries === 2) return `😠 ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? '' : 's'} missed this week already.` : ''} Answer me.`
+  return `😡 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ''}You said you'd do it. Do it now, or tell me why not.`
+}
+
+// ---- The coach's mood: how it feels about your day, from the data --------
+
+export type Mood = 'proud' | 'happy' | 'chill' | 'annoyed' | 'angry' | 'furious'
+export const MOOD_FACE: Record<Mood, string> = { proud: '😎', happy: '😄', chill: '🙂', annoyed: '😤', angry: '😠', furious: '😡' }
+export const isMood = (m: unknown): m is Mood => typeof m === 'string' && m in MOOD_FACE
+
+export interface MoodFacts {
+  /** Local hour 0–23. */
+  hour: number
+  focusMinToday: number
+  /** Minutes since anything was done today (Infinity: nothing yet). */
+  idleMin: number
+  openMustDos: number
+  mustDosDone: number
+  /** Broken + ignored promises in the last 7 days, and kept ones. */
+  missedWeek: number
+  keptWeek: number
+  /** Goals behind their pace by an hour or more. */
+  goalsBehind: number
+}
+
+/**
+ * Proud when the day is strong, angry when you're slipping on purpose:
+ * missed promises, goals falling behind, hours with nothing done.
+ */
+export function coachMood(f: MoodFacts): { mood: Mood; why: string } {
+  let heat = 0
+  const why: string[] = []
+  if (f.missedWeek >= 3) (heat += 2), why.push(`${f.missedWeek} promises missed this week`)
+  else if (f.missedWeek >= 1) (heat += 1), why.push(`${f.missedWeek} promise${f.missedWeek === 1 ? '' : 's'} missed this week`)
+  if (f.goalsBehind) (heat += f.goalsBehind >= 2 ? 2 : 1), why.push(`${f.goalsBehind} goal${f.goalsBehind === 1 ? '' : 's'} behind`)
+  if (f.hour >= 11 && f.focusMinToday === 0) (heat += f.hour >= 16 ? 2 : 1), why.push('no focus yet today')
+  if (f.hour >= 10 && f.idleMin >= 180 && f.openMustDos) (heat += 1), why.push(`nothing done for ${Number.isFinite(f.idleMin) ? `${Math.round(f.idleMin / 60)}h` : 'the whole day'}`)
+  let good = 0
+  if (f.focusMinToday >= 100) (good += 2), why.push(`${f.focusMinToday} min of focus today`)
+  else if (f.focusMinToday >= 50) good += 1
+  if (f.mustDosDone >= 2 && f.openMustDos === 0) (good += 2), why.push('every must-do done')
+  else if (f.mustDosDone >= 1) good += 1
+  if (f.keptWeek >= 3 && f.missedWeek === 0) (good += 1), why.push(`${f.keptWeek} promises kept`)
+  const score = good - heat
+  const mood: Mood = heat >= 5 ? 'furious' : heat >= 3 && good < 2 ? 'angry' : score <= -1 ? 'annoyed' : score >= 4 ? 'proud' : score >= 2 ? 'happy' : 'chill'
+  return { mood, why: why.join(', ') || 'a normal day so far' }
 }

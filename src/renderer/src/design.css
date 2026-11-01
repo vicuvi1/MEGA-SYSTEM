@@ -772,3 +772,11 @@
 .gp-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .gp-form-row label { display: grid; gap: 4px; font-size: var(--t-xs); color: var(--muted); flex: 1 1 120px; }
 .gp-add { margin-top: var(--s-2); }
+
+/* Coach: its mood face */
+.co-avatar.mood { font-size: 18px; background: rgb(var(--ink) / 0.06); }
+.co-avatar.mood-angry, .co-avatar.mood-furious { background: color-mix(in srgb, var(--red) 18%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent); }
+.co-avatar.mood-furious { animation: co-shake 0.5s ease 1; }
+.co-avatar.mood-proud, .co-avatar.mood-happy { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+@keyframes co-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px) rotate(-6deg); } 75% { transform: translateX(2px) rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { .co-avatar.mood-furious { animation: none; } }

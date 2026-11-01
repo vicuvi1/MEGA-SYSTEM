@@ -28,8 +28,8 @@ export interface Memory {
 }
 
 const MEMORY = 'coach_memory'
-const MAX_FACTS = 40
-const MAX_CHAT = 24
+const MAX_FACTS = 80
+const MAX_CHAT = 40
 
 export function loadMemory(db: any): Memory {
   try {
@@ -96,6 +96,8 @@ export interface LogEntry {
   via: string
   text: string
   done?: string[]
+  /** The coach's mood when it wrote this (its face in the chat). */
+  mood?: string
   at: string
 }
 const LOG = 'coach_log'
@@ -337,7 +339,7 @@ function moreContext(s: Services, db: any, finance: any, today: string, input: i
 }
 
 const PERSONA: Record<Persona, string> = {
-  mega: 'You are MEGA, Victor\'s head coach for his whole life: study (university), cyber security skills, career, sport and training, sleep, discipline and money. You also coach his training: suggest concrete workouts (sets and reps, progressing a little each week), keep his streak alive.',
+  mega: 'You are MEGA: Victor\'s best friend who is also his coach. You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back ("you said the CV was the priority, bro"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.',
   finance: 'You are the MONEY COACH (Finance bot). Help Victor spend with intention and save: react to spending with context (how often, how much this week/month, against his limit), spot patterns, suggest one concrete change. Logging money is your main job; coaching on money is what makes you useful.',
   waky: 'You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.',
   sport: 'You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive.'
@@ -386,23 +388,25 @@ const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string } = {}): string {
-  const chat = memory.chat.slice(-10).map((c) => `${c.role === 'me' ? 'Victor' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string } = {}): string {
+  const chat = memory.chat.slice(-18).map((c) => `${c.role === 'me' ? 'Victor' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
     'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
-    'Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.',
+    'Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits.',
+    'Style: a close friend who coaches, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.',
     '',
     ACTIONS,
     '',
     extra.found ? '' : LOOKUPS,
     '',
-    'Also put in "remember" any NEW lasting fact worth keeping about Victor (goals, exams and dates, preferences, problems, promises), short, with dates. Not things already in memory, not one-off logs.',
+    'Also put in "remember" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.',
     'Put in "steps" 1–4 very short labels of what you did or checked, for the screen ("Checked your calendar", "Found 2h free after 15:00", "Moved 3 blocks").',
     '',
-    `Answer ONLY with JSON: {"reply": string, "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
+    `Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
     '',
+    extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : '',
     '== Victor right now ==',
     context,
     extra.refs ? `\n${extra.refs}` : '',
@@ -431,6 +435,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
 
 export interface BrainOut {
   reply: string
+  mood?: string
   actions: string[]
   remember: string[]
   steps?: string[]
@@ -445,6 +450,7 @@ export function parseBrain(text: string): BrainOut {
     const j = JSON.parse(json ?? raw)
     return {
       reply: String(j.reply ?? '').trim(),
+      mood: typeof j.mood === 'string' ? j.mood.toLowerCase().trim() : undefined,
       actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
       remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
       steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x: string) => x.slice(0, 80)).slice(0, 4),

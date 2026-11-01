@@ -90,5 +90,20 @@ describe('promises', () => {
     expect(k.promiseLine(s)).toContain('1 broken, 1 ignored')
     expect(k.followUpText({ ...a, tries: 3 }, s)).toContain('miss #3')
     expect(k.followUpText({ ...a, tries: 0 }, s)).toBe('🔔 Start the CV')
+    expect(k.followUpText({ ...a, tries: 3 }, s).startsWith('😡')).toBe(true)
+  })
+})
+
+describe('coach mood', () => {
+  it('goes from proud to furious with the data', async () => {
+    const { coachMood } = await import('./coachKit')
+    const base = { hour: 15, focusMinToday: 0, idleMin: 60, openMustDos: 2, mustDosDone: 0, missedWeek: 0, keptWeek: 0, goalsBehind: 0 }
+    expect(coachMood({ ...base, focusMinToday: 120, mustDosDone: 3, openMustDos: 0 }).mood).toBe('proud')
+    expect(coachMood({ ...base, focusMinToday: 60 }).mood).toBe('chill')
+    expect(coachMood({ ...base }).mood).toBe('annoyed')
+    expect(coachMood({ ...base, missedWeek: 3, goalsBehind: 1 }).mood).toBe('angry')
+    const f = coachMood({ ...base, hour: 18, idleMin: 400, missedWeek: 4, goalsBehind: 2 })
+    expect(f.mood).toBe('furious')
+    expect(f.why).toContain('4 promises missed this week')
   })
 })

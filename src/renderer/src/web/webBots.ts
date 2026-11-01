@@ -28,7 +28,7 @@ import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
 import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTime'
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
-import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, isBigAsk, isCorrection, makeRefs, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
+import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, updateMemory, type BrainAction, type BrainOut } from './botBrain'
@@ -999,7 +999,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     media?: { kind: 'voice' | 'photo'; mime: string; data: string },
     via = 'telegram',
     onStep?: (step: string) => void
-  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[] }> {
+  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood }> {
     const step = (s: string) => {
       try {
         onStep?.(s)
@@ -1023,7 +1023,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
       })
       .catch(() => null)
-    const { context, memory, profile, look, mind, money, promises } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind, money, promises, feel } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       let sessions: LookupData['sessions'] = []
@@ -1040,6 +1040,32 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           const inp = svc.progress.input(null)
           const today = svc.wallet.today()
           return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))
+        })(),
+        feel: (() => {
+          // How the coach feels about the day, from the data (its face in the chat).
+          const f = svc.focus.state()
+          let list: Reminder[] = []
+          try {
+            list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+          } catch {
+            list = []
+          }
+          const ps = promiseStats(list)
+          const now = new Date()
+          const todayKey = svc.wallet.today(now)
+          const lastLedger = svc.wallet.entries().filter((e: any) => e.day === todayKey).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
+          const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
+          const last = Math.max(0, ...lastLedger, ...lastFocus)
+          return coachMood({
+            hour: now.getHours(),
+            focusMinToday: f.todayMin,
+            idleMin: last ? (now.getTime() - last) / 60000 : Infinity,
+            openMustDos: f.plan.items.filter((x) => !x.done).length,
+            mustDosDone: f.plan.items.filter((x) => x.done).length,
+            missedWeek: ps.broken + ps.ignored,
+            keptWeek: ps.kept,
+            goalsBehind: f.goals.filter((g) => g.aheadH <= -1).length
+          })
         })(),
         promises: (() => {
           let list: Reminder[] = []
@@ -1067,7 +1093,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
     const ask = (found?: string, extraNote = '') =>
-      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n') }), { json: true, think: big, strong: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${feel.mood} ${MOOD_FACE[feel.mood]} because: ${feel.why}. (Your own call can differ if his message changes things.)` }), { json: true, think: big, strong: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1111,6 +1137,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       return { ok: false, reply: `The coach couldn't think right now (${(e as Error).message.slice(0, 120)}). Try again in a minute.`, done: [] }
     }
     for (const s of out.steps ?? []) step(s)
+    // Its mood: the model's call, else the data's; the reply starts with its face.
+    const mood: Mood = isMood(out.mood) ? out.mood : feel.mood
+    if (out.reply && !/^\p{Extended_Pictographic}/u.test(out.reply)) out.reply = `${MOOD_FACE[mood]} ${out.reply}`
     const refs = made.refs
     const done: string[] = []
     let keyboard: any
@@ -1417,12 +1446,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         )
         appendLog(db, [
           { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : text, at },
-          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, at }
+          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at }
         ])
       })
       .catch(() => null)
     processed++
-    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps }
+    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood }
   }
 
   async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {

@@ -33,7 +33,7 @@ export type Bridge = LifeApi & {
   onFullScreen(cb: (on: boolean) => void): () => void
   /** The Coach page: chat (same brain as the bots), memory, goals & rules, the log. */
   coach?: {
-    chat(text: string, onStep?: (step: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[] }>
+    chat(text: string, onStep?: (step: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string }>
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
     mind?(): Promise<CoachMind>
@@ -42,7 +42,7 @@ export type Bridge = LifeApi & {
     setMind?(m: CoachMind): Promise<void>
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>
     saveProfile(p: { about: string; goals: string[]; rules: string[] }): Promise<{ about: string; goals: string[]; rules: string[] }>
-    log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string }[]>
+    log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; mood?: string }[]>
     model(): Promise<string | null>
   }
   /** Google Calendar through the server (sign in once in Settings). */

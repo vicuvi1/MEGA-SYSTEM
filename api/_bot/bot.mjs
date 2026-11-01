@@ -8452,9 +8452,42 @@ function followUpText(r, s) {
 	const tries = r.tries ?? 0;
 	const misses = s.broken + s.ignored;
 	if (tries === 0) return `🔔 ${r.text}`;
-	if (tries === 1) return `🔔 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`;
-	if (tries === 2) return `⏰ ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? "" : "s"} missed this week already.` : ""} Answer me.`;
-	return `🚨 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ""}You said you'd do it. Do it now, or tell me why not.`;
+	if (tries === 1) return `😤 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`;
+	if (tries === 2) return `😠 ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? "" : "s"} missed this week already.` : ""} Answer me.`;
+	return `😡 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ""}You said you'd do it. Do it now, or tell me why not.`;
+}
+var MOOD_FACE = {
+	proud: "😎",
+	happy: "😄",
+	chill: "🙂",
+	annoyed: "😤",
+	angry: "😠",
+	furious: "😡"
+};
+var isMood = (m) => typeof m === "string" && m in MOOD_FACE;
+/**
+* Proud when the day is strong, angry when you're slipping on purpose:
+* missed promises, goals falling behind, hours with nothing done.
+*/
+function coachMood(f) {
+	let heat = 0;
+	const why = [];
+	if (f.missedWeek >= 3) heat += 2, why.push(`${f.missedWeek} promises missed this week`);
+	else if (f.missedWeek >= 1) heat += 1, why.push(`${f.missedWeek} promise${f.missedWeek === 1 ? "" : "s"} missed this week`);
+	if (f.goalsBehind) heat += f.goalsBehind >= 2 ? 2 : 1, why.push(`${f.goalsBehind} goal${f.goalsBehind === 1 ? "" : "s"} behind`);
+	if (f.hour >= 11 && f.focusMinToday === 0) heat += f.hour >= 16 ? 2 : 1, why.push("no focus yet today");
+	if (f.hour >= 10 && f.idleMin >= 180 && f.openMustDos) heat += 1, why.push(`nothing done for ${Number.isFinite(f.idleMin) ? `${Math.round(f.idleMin / 60)}h` : "the whole day"}`);
+	let good = 0;
+	if (f.focusMinToday >= 100) good += 2, why.push(`${f.focusMinToday} min of focus today`);
+	else if (f.focusMinToday >= 50) good += 1;
+	if (f.mustDosDone >= 2 && f.openMustDos === 0) good += 2, why.push("every must-do done");
+	else if (f.mustDosDone >= 1) good += 1;
+	if (f.keptWeek >= 3 && f.missedWeek === 0) good += 1, why.push(`${f.keptWeek} promises kept`);
+	const score = good - heat;
+	return {
+		mood: heat >= 5 ? "furious" : heat >= 3 && good < 2 ? "angry" : score <= -1 ? "annoyed" : score >= 4 ? "proud" : score >= 2 ? "happy" : "chill",
+		why: why.join(", ") || "a normal day so far"
+	};
 }
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
@@ -8946,8 +8979,8 @@ function loadMemory(db) {
 }
 function saveMemory(db, m) {
 	setSetting(db, MEMORY, JSON.stringify({
-		facts: m.facts.slice(-40),
-		chat: m.chat.slice(-24)
+		facts: m.facts.slice(-80),
+		chat: m.chat.slice(-40)
 	}));
 }
 /** Adds facts (no near-duplicates) and conversation turns, keeping the newest. */
@@ -8966,8 +8999,8 @@ function updateMemory(m, add, now = /* @__PURE__ */ new Date()) {
 		});
 	}
 	return {
-		facts: facts.slice(-40),
-		chat: [...m.chat, ...add.turns ?? []].slice(-24)
+		facts: facts.slice(-80),
+		chat: [...m.chat, ...add.turns ?? []].slice(-40)
 	};
 }
 var PROFILE = "coach_profile";
@@ -9211,7 +9244,7 @@ function moreContext(s, db, finance, today, input, todayRules, disc) {
 	return out;
 }
 var PERSONA = {
-	mega: "You are MEGA, Victor's head coach for his whole life: study (university), cyber security skills, career, sport and training, sleep, discipline and money. You also coach his training: suggest concrete workouts (sets and reps, progressing a little each week), keep his streak alive.",
+	mega: "You are MEGA: Victor's best friend who is also his coach. You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back (\"you said the CV was the priority, bro\"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.",
 	finance: "You are the MONEY COACH (Finance bot). Help Victor spend with intention and save: react to spending with context (how often, how much this week/month, against his limit), spot patterns, suggest one concrete change. Logging money is your main job; coaching on money is what makes you useful.",
 	waky: "You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.",
 	sport: "You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive."
@@ -9258,22 +9291,24 @@ var LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put r
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`;
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
 function brainPrompt(persona, context, memory, message, media, profile = DEFAULT_PROFILE, extra = {}) {
-	const chat = memory.chat.slice(-10).map((c) => `${c.role === "me" ? "Victor" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
+	const chat = memory.chat.slice(-18).map((c) => `${c.role === "me" ? "Victor" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
 	return [
 		PERSONA[persona],
 		"Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don't have a number, don't make one up; ask for it with \"need\" or leave it out.",
 		"Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count (\"3rd promise missed this week\"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn't).",
-		"Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.",
+		"Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits.",
+		"Style: a close friend who coaches, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.",
 		"",
 		ACTIONS,
 		"",
 		extra.found ? "" : LOOKUPS,
 		"",
-		"Also put in \"remember\" any NEW lasting fact worth keeping about Victor (goals, exams and dates, preferences, problems, promises), short, with dates. Not things already in memory, not one-off logs.",
+		"Also put in \"remember\" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.",
 		"Put in \"steps\" 1–4 very short labels of what you did or checked, for the screen (\"Checked your calendar\", \"Found 2h free after 15:00\", \"Moved 3 blocks\").",
 		"",
-		`Answer ONLY with JSON: {"reply": string, "actions": string[], "remember": string[], "steps": string[]${extra.found ? "" : ", \"need\": string[]"}}.`,
+		`Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "actions": string[], "remember": string[], "steps": string[]${extra.found ? "" : ", \"need\": string[]"}}.`,
 		"",
+		extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : "",
 		"== Victor right now ==",
 		context,
 		extra.refs ? `\n${extra.refs}` : "",
@@ -9305,6 +9340,7 @@ function parseBrain(text) {
 		const j = JSON.parse(json ?? raw);
 		return {
 			reply: String(j.reply ?? "").trim(),
+			mood: typeof j.mood === "string" ? j.mood.toLowerCase().trim() : void 0,
 			actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
 			remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
 			steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x) => x.slice(0, 80)).slice(0, 4),
@@ -9926,7 +9962,7 @@ function weakest(r) {
 function reviewText(r, score, lesson, top3) {
 	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	return [
-		`🌙 <b>Day review: ${score}/100</b> ${score >= 80 ? "🔥" : score >= 55 ? "👍" : "⚠️"}`,
+		`🌙 <b>Day review: ${score}/100</b> ${score >= 80 ? "😎🔥" : score >= 55 ? "🙂" : score >= 35 ? "😤" : "😠"}`,
 		"",
 		`Must-dos ${r.mustdosDone}/${r.mustdosTotal} · Focus ${r.focusMin}${r.plannedFocusMin ? `/${r.plannedFocusMin}` : ""} min${r.blocksPlanned ? ` · Blocks ${r.blocksDone}/${r.blocksPlanned}` : ""}`,
 		`Water ${(r.waterMl / 1e3).toFixed(1)}/${(r.waterTarget / 1e3).toFixed(1)} L · Training ${r.workoutDone ? "✅" : "—"}`,
@@ -11766,7 +11802,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (!raw) return;
 			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
 		}).catch(() => null);
-		const { context, memory, profile, look, mind, money, promises } = await mirror.read((db) => {
+		const { context, memory, profile, look, mind, money, promises, feel } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			let sessions = [];
@@ -11792,6 +11828,31 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					const inp = svc.progress.input(null);
 					const today = svc.wallet.today();
 					return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist));
+				})(),
+				feel: (() => {
+					const f = svc.focus.state();
+					let list = [];
+					try {
+						list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+					} catch {
+						list = [];
+					}
+					const ps = promiseStats(list);
+					const now = /* @__PURE__ */ new Date();
+					const todayKey = svc.wallet.today(now);
+					const lastLedger = svc.wallet.entries().filter((e) => e.day === todayKey).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
+					const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
+					const last = Math.max(0, ...lastLedger, ...lastFocus);
+					return coachMood({
+						hour: now.getHours(),
+						focusMinToday: f.todayMin,
+						idleMin: last ? (now.getTime() - last) / 6e4 : Infinity,
+						openMustDos: f.plan.items.filter((x) => !x.done).length,
+						mustDosDone: f.plan.items.filter((x) => x.done).length,
+						missedWeek: ps.broken + ps.ignored,
+						keptWeek: ps.kept,
+						goalsBehind: f.goals.filter((g) => g.aheadH <= -1).length
+					});
 				})(),
 				promises: (() => {
 					let list = [];
@@ -11835,7 +11896,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				promises.lines
 			].filter(Boolean).join("\n"),
 			found,
-			mind: [promises.stats, mind].filter(Boolean).join("\n")
+			mind: [promises.stats, mind].filter(Boolean).join("\n"),
+			mood: `${feel.mood} ${MOOD_FACE[feel.mood]} because: ${feel.why}. (Your own call can differ if his message changes things.)`
 		}), {
 			json: true,
 			think: big,
@@ -11890,6 +11952,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			};
 		}
 		for (const s of out.steps ?? []) step(s);
+		const mood = isMood(out.mood) ? out.mood : feel.mood;
+		if (out.reply && !/^\p{Extended_Pictographic}/u.test(out.reply)) out.reply = `${MOOD_FACE[mood]} ${out.reply}`;
 		const refs = made.refs;
 		const done = [];
 		let keyboard;
@@ -12254,6 +12318,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				via,
 				text: out.reply || "Got it.",
 				done,
+				mood,
 				at
 			}]);
 		}).catch(() => null);
@@ -12263,7 +12328,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			reply: out.reply || "Got it.",
 			done,
 			keyboard,
-			steps: out.steps
+			steps: out.steps,
+			mood
 		};
 	}
 	async function handleBrain(botId, update, cfg, text, key, media) {
@@ -13514,7 +13580,8 @@ async function coachChat(env, text, onStep) {
 		ok: r.ok,
 		reply: r.reply,
 		done: r.done,
-		steps: r.steps
+		steps: r.steps,
+		mood: r.mood
 	};
 }
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
@@ -13804,7 +13871,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1;
 		const first = openMustDos[0]?.text;
 		const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ""}${Math.round(st.idleMin % 60)}m` : "all day";
-		const text = n === 1 ? `👀 Nothing done for ${idle}. ${first ? `Your must-do: <b>${esc(first)}</b>.` : `Focus today: ${st.focus.todayMin} min.`} 25 minutes, starting now.` : n <= 3 ? `⏰ Still waiting. ${first ? `<b>${esc(first)}</b> won't do itself.` : "One focus block."} Just start the timer, the rest follows.` : `🔥 Nudge ${n}: you said you want this. ${first ? `<b>${esc(first)}</b>,` : "One block,"} 25 min. Tap and go.`;
+		const text = n === 1 ? `😤 Nothing done for ${idle}. ${first ? `Your must-do: <b>${esc(first)}</b>.` : `Focus today: ${st.focus.todayMin} min.`} 25 minutes, starting now.` : n <= 3 ? `😠 Still waiting. ${first ? `<b>${esc(first)}</b> won't do itself.` : "One focus block."} Just start the timer, the rest follows.` : `😡 Nudge ${n}: you said you want this. ${first ? `<b>${esc(first)}</b>,` : "One block,"} 25 min. Tap and go.`;
 		const subject = (first ?? "Focus").split(/\s+/).slice(0, 4).join(" ").slice(0, 28);
 		try {
 			await send(text, { inline_keyboard: [[{

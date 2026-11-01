@@ -8,9 +8,10 @@ import { useAction } from '../ui'
 import { useLive } from '../live'
 import type { CoachMind } from '@core/coachMind'
 import type { RhythmPrefs } from '@core/rhythm'
+import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { CoachScorecard, GoalPlans } from '../CoachPanels'
 
-type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[] }
+type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string }
 type Profile = { about: string; goals: string[]; rules: string[] }
 
 const BOT_LABEL: Record<string, string> = { mega: 'Mega', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
@@ -86,7 +87,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         seen.push(st)
         setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, steps: [...seen] } : x)))
       })
-      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, at: new Date().toISOString(), steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
+      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: new Date().toISOString(), steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       if (r.done.length) onWallet()
       void life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
       void life.coach.mind?.().then(setMind).catch(() => {})
@@ -136,7 +137,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           )}
           {log?.map((m, i) => (
             <div key={i} className={`co-row ${m.role}`}>
-            {m.role === 'coach' && <span className="co-avatar">✦</span>}
+            {m.role === 'coach' && (
+              <span className={`co-avatar ${m.mood && MOOD_FACE[m.mood as Mood] ? `mood mood-${m.mood}` : ''}`} title={m.mood ? `Coach is ${m.mood}` : undefined}>
+                {(m.mood && MOOD_FACE[m.mood as Mood]) || '✦'}
+              </span>
+            )}
             <div className={`co-msg ${m.role} ${m.pending ? 'pending' : ''}`}>
               <div className="co-meta">
                 {m.role === 'me' ? 'You' : `Coach${m.bot && m.bot !== 'mega' ? ` · ${BOT_LABEL[m.bot] ?? m.bot}` : ''}`}

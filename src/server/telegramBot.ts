@@ -135,12 +135,12 @@ function localMidnight(daysAgo: number): Date {
 }
 
 /** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
-export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[] }> {
+export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string }> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   if (!env.model) return { ok: false, reply: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.', done: [] }
   const { bots } = await botsFor(env)
   const r = await bots.think(text, `app:${Date.now()}`, onStep)
-  return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps }
+  return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps, mood: r.mood }
 }
 
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
@@ -412,10 +412,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'
     const text =
       n === 1
-        ? `👀 Nothing done for ${idle}. ${first ? `Your must-do: <b>${esc(first)}</b>.` : `Focus today: ${st.focus.todayMin} min.`} 25 minutes, starting now.`
+        ? `😤 Nothing done for ${idle}. ${first ? `Your must-do: <b>${esc(first)}</b>.` : `Focus today: ${st.focus.todayMin} min.`} 25 minutes, starting now.`
         : n <= 3
-          ? `⏰ Still waiting. ${first ? `<b>${esc(first)}</b> won't do itself.` : 'One focus block.'} Just start the timer, the rest follows.`
-          : `🔥 Nudge ${n}: you said you want this. ${first ? `<b>${esc(first)}</b>,` : 'One block,'} 25 min. Tap and go.`
+          ? `😠 Still waiting. ${first ? `<b>${esc(first)}</b> won't do itself.` : 'One focus block.'} Just start the timer, the rest follows.`
+          : `😡 Nudge ${n}: you said you want this. ${first ? `<b>${esc(first)}</b>,` : 'One block,'} 25 min. Tap and go.`
     const subject = (first ?? 'Focus').split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
     try {
       await send(text, { inline_keyboard: [[{ text: `▶ 50 min: ${subject}`, callback_data: `fo|${subject}` }], pauseRow] })
