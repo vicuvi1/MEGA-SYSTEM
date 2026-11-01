@@ -273,3 +273,4 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
 }
 
 const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+export { cleanupPrompt, parseCleanup, localCleanup } from '../core/todoistClean'

@@ -1,8 +1,10 @@
 // Tasks = your Todoist, cleanly split by area (University, Cyber, Job…).
 // Each area has its color (yours to pick), tasks sorted late → urgent →
 // soonest. Add (the right area is picked for you), complete (points), change
-// the priority, date, area or text, delete, focus on a task. Every change
-// goes straight to Todoist.
+// the priority, date, area or text, delete, focus on a task, drag a task to
+// another area. "Clean up" asks the coach for fixes you approve one by one.
+// Keys: n new task, / search, e edit, 1–4 priority, x complete (on the task
+// under the mouse or keyboard focus). Every change goes straight to Todoist.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AREA_COLORS, defaultAreaColor, plainName, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life } from '../bridge'
@@ -10,6 +12,7 @@ import { Icon } from '../Icon'
 import { EmptyState } from '../blocks'
 import { soundCoin, soundSuccess } from '../sound'
 import { useAction, useToast } from '../ui'
+import type { CleanChange } from '@core/todoistClean'
 
 type View = 'areas' | 'today' | 'upcoming' | 'all'
 
@@ -71,6 +74,11 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
+  const [hot, setHot] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
+  const addRef = useRef<HTMLInputElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const today = todayStr()
 
   const color = useCallback((a: Area | undefined) => (a ? colors[a.key] ?? defaultAreaColor(a) : 'var(--muted)'), [colors])
@@ -120,6 +128,44 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
     const subject = (a && a.name !== 'Inbox' ? plainName(a.name) : '') || t.content.split(/\s+/).slice(0, 3).join(' ')
     if (await act(() => life.focus.start(subject.slice(0, 40), 50, { kind: 'todoist', ref: t.id, title: t.content }), `Focus started: ${t.content}`)) soundSuccess()
   }
+  const moveTo = (t: TodoTask, x: Area) =>
+    change(() => life.todoist!.move!(t.id, x.key), (ts) => ts.map((y) => (y.id === t.id ? { ...y, sectionId: x.kind === 'section' ? x.id : null, projectId: x.projectId } : y)), `Moved to ${plainName(x.name)}`)
+  const setPriority = (t: TodoTask, p: number) => change(() => life.todoist!.update!(t.id, { priority: p }), (ts) => ts.map((x) => (x.id === t.id ? { ...x, priority: p } : x)), `${P_LABEL[p]}`)
+
+  // Shortcuts (not while typing): n, /, and e · 1–4 · x on the task under the pointer.
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  keyRef.current = (e: KeyboardEvent) => {
+    const el = e.target as HTMLElement | null
+    if (e.ctrlKey || e.metaKey || e.altKey || (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))) return
+    if (e.key === 'n') {
+      e.preventDefault()
+      addRef.current?.focus()
+      return
+    }
+    if (e.key === '/') {
+      e.preventDefault()
+      searchRef.current?.focus()
+      return
+    }
+    const t = hot ? data?.tasks.find((x) => x.id === hot) : undefined
+    if (!t) return
+    if (e.key === 'e') {
+      e.preventDefault()
+      setEditing(t.id)
+    } else if (/^[1-4]$/.test(e.key)) {
+      e.preventDefault()
+      void setPriority(t, 5 - Number(e.key))
+    } else if (e.key === 'x') {
+      e.preventDefault()
+      void complete(t)
+    }
+  }
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keyRef.current(e)
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [])
+
   if (error) return <section className="card"><EmptyState icon="tasks" title="Todoist isn't connected">{error}</EmptyState></section>
   if (!data) return <section className="card"><p className="hint">Loading your Todoist…</p></section>
 
@@ -135,7 +181,19 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
     const due = dueLabel(t, today)
     const open = menu?.id === t.id ? menu.kind : null
     return (
-      <li key={t.id} className={`ta-task ${t.due && t.due < today ? 'is-late' : ''}`}>
+      <li
+        key={t.id}
+        className={`ta-task ${t.due && t.due < today ? 'is-late' : ''} ${hot === t.id ? 'hot' : ''}`}
+        style={{ ['--pc' as string]: P_COLOR[t.priority] }}
+        tabIndex={0}
+        draggable={editing !== t.id}
+        onMouseEnter={() => setHot(t.id)}
+        onFocus={() => setHot(t.id)}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/x-task', t.id)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+      >
         <button className="ta-check" style={{ borderColor: P_COLOR[t.priority] }} aria-label={`Complete ${t.content}`} title="Complete (points)" onClick={() => void complete(t)} />
         <div className="ta-body">
           {editing === t.id ? (
@@ -191,8 +249,8 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
         {open === 'prio' && (
           <div className="ta-pop">
             {[4, 3, 2, 1].map((p) => (
-              <button key={p} className={`ta-pop-item ${t.priority === p ? 'on' : ''}`} onClick={() => { setMenu(null); void change(() => life.todoist!.update!(t.id, { priority: p }), (ts) => ts.map((x) => (x.id === t.id ? { ...x, priority: p } : x))) }}>
-                <span style={{ color: P_COLOR[p] }}>⚑</span> {P_LABEL[p]}
+              <button key={p} className={`ta-pop-item ${t.priority === p ? 'on' : ''}`} onClick={() => { setMenu(null); void setPriority(t, p) }}>
+                <span style={{ color: P_COLOR[p] }}>⚑</span> {P_LABEL[p]} <kbd>{5 - p}</kbd>
               </button>
             ))}
           </div>
@@ -228,7 +286,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
             {data.areas
               .filter((x) => x.key !== areaOf(t))
               .map((x) => (
-                <button key={x.key} className="ta-pop-item" onClick={() => { setMenu(null); void change(() => life.todoist!.move!(t.id, x.key), (ts) => ts.map((y) => (y.id === t.id ? { ...y, sectionId: x.kind === 'section' ? x.id : null, projectId: x.projectId } : y)), `Moved to ${plainName(x.name)}`) }}>
+                <button key={x.key} className="ta-pop-item" onClick={() => { setMenu(null); void moveTo(t, x) }}>
                   <i className="ta-dot" style={{ background: color(x) }} /> {x.name}
                 </button>
               ))}
@@ -249,7 +307,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
           }}
         >
           <Icon name="plus" size={16} />
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a task… e.g. “fix lab 3 friday 18:00 p1”" maxLength={300} />
+          <input ref={addRef} value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a task… e.g. “fix lab 3 friday 18:00 p1”  (n)" maxLength={300} />
           <select value={addArea} onChange={(e) => setAddArea(e.target.value)} aria-label="Area">
             <option value="auto">Area: automatic</option>
             {data.areas.map((a) => (
@@ -283,7 +341,10 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
                 ⚑ P{5 - p}
               </button>
             ))}
-            <input className="ta-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" />
+            <input ref={searchRef} className="ta-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…  /" />
+            <button className="btn small ta-clean" onClick={() => setCleaning(true)} disabled={!data.tasks.length} title="The coach suggests fixes: typos, short titles, areas, priorities, dates, duplicates. You approve each one.">
+              <Icon name="spark" size={13} /> Clean up
+            </button>
           </div>
         </div>
       </section>
@@ -302,7 +363,26 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
             const list = sortTasks(filtered.filter((t) => areaOf(t) === a.key), today)
             const c = color(a)
             return (
-              <section key={a.key} className="ta-col" style={{ ['--c' as string]: c }}>
+              <section
+                key={a.key}
+                className={`ta-col ${dragOver === a.key ? 'drop' : ''}`}
+                style={{ ['--c' as string]: c }}
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes('text/x-task')) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragOver !== a.key) setDragOver(a.key)
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragOver(null)
+                  const t = data.tasks.find((x) => x.id === e.dataTransfer.getData('text/x-task'))
+                  if (t && areaOf(t) !== a.key) void moveTo(t, a)
+                }}
+              >
                 <header className="ta-col-head">
                   <button className="ta-swatch" style={{ background: c }} aria-label={`Color of ${a.name}`} title="Change color" onClick={() => setPalette(palette === a.key ? null : a.key)} />
                   {renaming === a.key ? (
@@ -372,6 +452,132 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
           })()}
         </section>
       )}
+      <p className="hint small ta-keys">
+        <kbd>n</kbd> new · <kbd>/</kbd> search · on a task: <kbd>e</kbd> edit · <kbd>1</kbd>–<kbd>4</kbd> priority · <kbd>x</kbd> done · drag it to another area
+      </p>
+      {cleaning && <CleanupSheet tasks={data.tasks} areas={data.areas} color={color} today={today} onClose={() => setCleaning(false)} onDone={() => { setCleaning(false); void load() }} />}
+    </div>
+  )
+}
+
+/** The coach's suggested fixes; you tick which ones to apply. */
+function CleanupSheet({ tasks, areas, color, today, onClose, onDone }: { tasks: TodoTask[]; areas: Area[]; color: (a: Area | undefined) => string; today: string; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [res, setRes] = useState<{ changes: CleanChange[]; ai: boolean; error?: string } | null>(null)
+  const [off, setOff] = useState<string[]>([])
+  const [applying, setApplying] = useState<number | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  useEffect(() => {
+    life.todoist!.cleanup!(today).then(setRes).catch((e) => setFailed((e as Error).message))
+  }, [today])
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => e.key === 'Escape' && applying === null && onClose()
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [applying, onClose])
+  const areaBy = new Map(areas.map((a) => [a.key, a]))
+  const chosen = (res?.changes ?? []).filter((c) => !off.includes(c.id))
+  const apply = async () => {
+    let n = 0
+    let bad = 0
+    for (const c of chosen) {
+      setApplying(++n)
+      try {
+        if (c.remove) await life.todoist!.remove!(c.id)
+        else {
+          const patch: { content?: string; description?: string; priority?: number; due?: string } = {}
+          if (c.title) patch.content = c.title
+          if (c.details) patch.description = c.details
+          if (c.priority) patch.priority = c.priority
+          if (c.due) patch.due = c.due
+          if (Object.keys(patch).length) await life.todoist!.update!(c.id, patch)
+          if (c.area) await life.todoist!.move!(c.id, c.area)
+        }
+      } catch {
+        bad++
+      }
+    }
+    soundSuccess()
+    toast(bad ? `${chosen.length - bad} fixed, ${bad} failed` : `${chosen.length} task${chosen.length === 1 ? '' : 's'} cleaned up`, bad ? 'bad' : 'good')
+    onDone()
+  }
+  return (
+    <div className="sheet" role="dialog" aria-label="Clean up my Todoist" onClick={(e) => e.target === e.currentTarget && applying === null && onClose()}>
+      <div className="sheet-card cu">
+        <header className="card-head">
+          <h2>
+            <Icon name="spark" size={16} /> Clean up my Todoist
+          </h2>
+          <button className="btn small ghost" onClick={onClose} disabled={applying !== null}>
+            Close
+          </button>
+        </header>
+        {failed && <p className="hint">Couldn't get suggestions: {failed}</p>}
+        {!res && !failed && (
+          <div className="cu-loading">
+            <span className="co-typing">
+              <i />
+              <i />
+              <i />
+            </span>
+            <p className="hint">Reading your {tasks.length} tasks…</p>
+          </div>
+        )}
+        {res && (
+          <>
+            <p className="hint">
+              {res.changes.length
+                ? `${res.changes.length} suggestion${res.changes.length === 1 ? '' : 's'}${res.ai ? '' : ' (without AI: exact duplicates and long-overdue tasks)'}. Untick what you don't want.`
+                : 'Your Todoist looks clean. Nothing to fix.'}
+            </p>
+            <ul className="cu-list">
+              {res.changes.map((c) => {
+                const on = !off.includes(c.id)
+                const a = c.area ? areaBy.get(c.area) : undefined
+                return (
+                  <li key={c.id} className={`${on ? '' : 'off'} ${c.remove ? 'remove' : ''}`}>
+                    <label>
+                      <input type="checkbox" checked={on} onChange={() => setOff((cur) => (on ? [...cur, c.id] : cur.filter((x) => x !== c.id)))} />
+                      <span className="cu-main">
+                        {c.remove ? (
+                          <span className="cu-title">
+                            <s>{c.before}</s>
+                          </span>
+                        ) : c.title ? (
+                          <span className="cu-title">
+                            <s>{c.before}</s> → <b>{c.title}</b>
+                          </span>
+                        ) : (
+                          <span className="cu-title">{c.before}</span>
+                        )}
+                        {c.details && <span className="cu-details">{c.details}</span>}
+                        <span className="chips">
+                          {c.remove === 'duplicate' && <span className="chip bad">Delete: same as “{c.duplicateOf}”</span>}
+                          {c.remove === 'stale' && <span className="chip bad">Delete: stale</span>}
+                          {a && <span className="chip" title="Move to"><i className="dot" style={{ ['--c' as string]: color(a) }} />→ {plainName(a.name) || a.name}</span>}
+                          {c.priority && <span className="chip" style={{ color: P_COLOR[c.priority] }}>⚑ {P_LABEL[c.priority]}</span>}
+                          {c.due && <span className="chip">📅 {c.due}</span>}
+                          <span className="cu-why">{c.why}</span>
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="sheet-actions">
+              {res.changes.length > 0 && (
+                <button className="btn small ghost" onClick={() => setOff(off.length ? [] : res.changes.map((c) => c.id))} disabled={applying !== null}>
+                  {off.length ? 'Select all' : 'Select none'}
+                </button>
+              )}
+              <button className="btn primary" disabled={!chosen.length || applying !== null} onClick={() => void apply()}>
+                {applying !== null ? `Applying ${applying}/${chosen.length}…` : `Apply ${chosen.length}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

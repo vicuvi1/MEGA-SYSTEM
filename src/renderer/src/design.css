@@ -341,3 +341,39 @@
 .heat-legend { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .heat-legend i { width: 12px; flex: none; }
 .pg { display: flex; flex-direction: column; gap: var(--s-4); max-width: 1280px; margin: 0 auto; }
+
+/* ============================================================
+   Tasks: calm cards, drag between areas, clean-up sheet
+   ============================================================ */
+:root .ta-col { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--c, var(--border)); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); transition: border-color 0.12s, background 0.12s, box-shadow 0.12s; }
+:root .ta-col.drop { background: color-mix(in srgb, var(--c) 7%, var(--surface)); border-color: color-mix(in srgb, var(--c) 55%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent); }
+:root .ta-task { border-radius: var(--radius-sm); padding: 9px 8px 9px 10px; cursor: grab; outline: none; }
+:root .ta-task::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--pc); opacity: 0; }
+:root .ta-task[style*='#FF5D6C']::before, :root .ta-task[style*='#FF9F43']::before { opacity: 0.9; }
+:root .ta-task + .ta-task { border-top: 1px solid var(--border); }
+:root .ta-task:hover, :root .ta-task.hot:focus-visible { background: var(--surface-2); }
+:root .ta-task:hover + .ta-task { border-top-color: transparent; }
+:root .ta-task:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); }
+:root .ta-task:active { cursor: grabbing; }
+:root .ta-check { border-color: var(--pc); width: 19px; height: 19px; }
+:root .ta-check:hover { background: color-mix(in srgb, var(--pc) 22%, transparent); }
+:root .ta-text { font-size: var(--t-md); }
+:root .ta-meta { gap: 8px; font-size: var(--t-xs); }
+:root .ta-pop kbd, .ta-keys kbd, :root kbd { font: 600 10.5px var(--mono); padding: 1px 5px; border-radius: 5px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--muted); }
+:root .ta-pop-item kbd { margin-left: auto; }
+.ta-keys { text-align: center; margin: var(--s-2) 0 0; }
+@media (hover: none) { .ta-keys { display: none; } }
+.ta-clean { white-space: nowrap; }
+
+.cu { width: min(720px, calc(100vw - 32px)) !important; max-height: min(84vh, 900px); overflow: hidden; display: flex !important; flex-direction: column; border-color: var(--border) !important; background: var(--surface) !important; }
+.cu-loading { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); padding: var(--s-8) 0; }
+.cu-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s-2); min-height: 0; }
+.cu-list li { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); transition: opacity 0.12s; }
+.cu-list li.off { opacity: 0.45; }
+.cu-list label { display: flex; gap: var(--s-3); padding: var(--s-3); cursor: pointer; align-items: flex-start; color: var(--text) !important; font-size: var(--t-md) !important; }
+.cu-list input[type='checkbox'] { margin-top: 3px; width: 16px; height: 16px; flex: none; }
+.cu-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cu-title { line-height: 1.4; }
+.cu-title s { color: var(--muted); }
+.cu-details { font-size: var(--t-sm); color: var(--muted); white-space: pre-wrap; }
+.cu-why { font-size: var(--t-xs); color: var(--faint); align-self: center; }

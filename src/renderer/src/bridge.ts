@@ -2,6 +2,7 @@ import type { LifeApi, UpdateStatus } from '@shared/api'
 import type { Area, TodoTask } from '@core/todoist'
 import type { ProgressReport } from '@core/progress'
 import type { Insights } from '@core/insights'
+import type { CleanChange } from '@core/todoistClean'
 import type { WeekPlan } from '@core/weekPlan'
 import type { CalEvent } from '@core/dayTime'
 
@@ -60,6 +61,8 @@ export type Bridge = LifeApi & {
     sync(force?: boolean): Promise<number>
     /** The Tasks page: every open task and your areas. */
     everything?(): Promise<{ tasks: TodoTask[]; areas: Area[] }>
+    /** Suggested fixes for your Todoist (AI, else duplicates and long-overdue tasks), to approve. */
+    cleanup?(today: string): Promise<{ changes: CleanChange[]; ai: boolean; error?: string }>
     update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[] }): Promise<void>
     move?(id: string, area: string): Promise<void>
     reopen?(id: string): Promise<void>

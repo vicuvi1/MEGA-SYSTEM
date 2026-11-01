@@ -10,9 +10,10 @@
 //   update {id, content?, priority?, due?, description?, labels?}
 //   move {id, area}   reopen {id}   remove {id}
 //   addArea {name}  → {area}   renameArea {area, name}
+//   cleanup           → {changes, ai}    suggested fixes to approve (AI, else duplicates/overdue)
 // New tasks without a #project go to the right area (by their words, else Gemini).
 import { bearer, config, readBody, send, sessionOk } from './_lib.mjs'
-import { createTodoistApi } from './_bot/bot.mjs'
+import { cleanupPrompt, createTodoistApi, localCleanup, parseCleanup } from './_bot/bot.mjs'
 import { askModel } from './ai.mjs'
 
 /** Gemini picks one of your areas for a task, or none. */
@@ -51,6 +52,16 @@ export default async function handler(req, res) {
         return send(res, 200, { task: await api.quickAdd(String(body.text || '').slice(0, 500), body.area ? String(body.area) : undefined) })
       case 'everything':
         return send(res, 200, await api.everything())
+      case 'cleanup': {
+        const { tasks, areas } = await api.everything()
+        const today = String(body.today || new Date().toISOString().slice(0, 10)).slice(0, 10)
+        try {
+          const r = await askModel(cleanupPrompt(tasks, areas, today), { json: true })
+          return send(res, 200, { changes: parseCleanup(r.text, tasks, areas), ai: true })
+        } catch (e) {
+          return send(res, 200, { changes: localCleanup(tasks, today), ai: false, error: String(e?.message || e) })
+        }
+      }
       case 'update':
         await api.update(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description, labels: Array.isArray(body.labels) ? body.labels : undefined })
         return send(res, 200, { ok: true })

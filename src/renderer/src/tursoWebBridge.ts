@@ -23,6 +23,7 @@ import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { getSetting, setSetting } from '../../main/settings'
 import { financeSpending } from '@core/progress'
+import type { CleanChange } from '@core/todoistClean'
 import { loadLog, loadMemory, loadProfile, saveMemory, saveProfile } from './web/botBrain'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
@@ -407,6 +408,10 @@ export function createTursoWebBridge(): Bridge {
       },
       update: async (id: string, patch: Record<string, unknown>) => {
         await todoistCall('update', { id, ...patch })
+      },
+      cleanup: async (today: string) => {
+        const j = await todoistCall('cleanup', { today })
+        return { changes: (j.changes ?? []) as CleanChange[], ai: !!j.ai, error: j.error as string | undefined }
       },
       move: async (id: string, area: string) => {
         await todoistCall('move', { id, area })

@@ -132,7 +132,7 @@ export function WeekPlanner({ report, plan, today, onDone }: { report: ProgressR
               className="wp-big"
               value={b.text}
               onChange={(e) => setBig((cur) => cur.map((x, k) => (k === i ? { text: e.target.value, todoistId: null } : x)))}
-              placeholder={['e.g. Finish the etica course', 'e.g. Fix lab 3 (Maxim’s notes)', 'e.g. Simplify the CV website'][i]}
+              placeholder={['e.g. Finish the etica course', 'e.g. Fix the lab report', 'e.g. Simplify the CV website'][i]}
               maxLength={140}
             />
           ))}
