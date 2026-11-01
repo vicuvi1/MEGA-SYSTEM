@@ -375,7 +375,7 @@ const ACTIONS = `You can act. Put actions in "actions" (strings), only when Vict
 Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
-- "focus: <minutes> <subject>" start a focus timer now. "fun: <minutes> <what>" spend points on fun.
+- "focus: <minutes> <subject>" start a focus timer now: ONLY when he clearly says to start it now ("start 25 min", "go", "timer"). Otherwise never start it yourself: offer a button {"label": "▶ 25 min <subject>", "do": "focus:25:<subject>"} and let him tap. "fun: <minutes> <what>" spend points on fun.
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
@@ -404,7 +404,7 @@ Reminders (Telegram, sent by you later):
 - "checkin: <minutes from now> | <question>" you ask him later, and keep asking every 45 min until he answers (use it when he says he'll do something: hold him to it).
 Never invent amounts or times he didn't give. Never log the same thing twice.
 Promises (use the P-numbers): when he answers a check-in, judge it: "kept: P1" (he did it) or "broken: P1" (he didn't, or made an excuse). An ignored check-in is broken unless he shows it's done.
-Default to ACTING: when an action clearly helps (he reports something done → tick/log it; he says he'll do X → a checkin; he's behind → put a block in the calendar), do it without asking. Ask first only before deleting things he didn't mention.
+Default to ACTING: when an action clearly helps (he reports something done → tick/log it; he says he'll do X → a checkin; he's behind → put a block in the calendar), do it without asking. Exception: never start a focus timer unless he asks to start it now; offer the ▶ button instead. Ask first only before deleting things he didn't mention.
 When he says something is wrong ("that's not money", "wrong amount", "undo that", "delete it"), FIX it with actions now (delmoney / editmoney / water: -250 …). Never answer "ignore it" or "I won't count it": the data stays wrong unless you act.
 Never invent appointments, reviews or times: only use times from his calendar, his plan, his reminders or what he said.
 IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.`

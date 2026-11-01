@@ -8693,7 +8693,7 @@ function telegramKeyboard(buttons) {
 	const row = buttons.map((b) => {
 		const d = readDo(b.do);
 		if (!d) return null;
-		const data = d.k === "focus" ? fit("fo|", d.subject) : d.k === "approve" ? "rb|a" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : null;
+		const data = d.k === "focus" ? fit(`fo|${d.minutes}|`, d.subject) : d.k === "approve" ? "rb|a" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : null;
 		return data ? {
 			text: b.label,
 			callback_data: data
@@ -9366,7 +9366,7 @@ var ACTIONS = `You can act. Put actions in "actions" (strings), only when Victor
 Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
-- "focus: <minutes> <subject>" start a focus timer now. "fun: <minutes> <what>" spend points on fun.
+- "focus: <minutes> <subject>" start a focus timer now: ONLY when he clearly says to start it now ("start 25 min", "go", "timer"). Otherwise never start it yourself: offer a button {"label": "▶ 25 min <subject>", "do": "focus:25:<subject>"} and let him tap. "fun: <minutes> <what>" spend points on fun.
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
@@ -9395,7 +9395,7 @@ Reminders (Telegram, sent by you later):
 - "checkin: <minutes from now> | <question>" you ask him later, and keep asking every 45 min until he answers (use it when he says he'll do something: hold him to it).
 Never invent amounts or times he didn't give. Never log the same thing twice.
 Promises (use the P-numbers): when he answers a check-in, judge it: "kept: P1" (he did it) or "broken: P1" (he didn't, or made an excuse). An ignored check-in is broken unless he shows it's done.
-Default to ACTING: when an action clearly helps (he reports something done → tick/log it; he says he'll do X → a checkin; he's behind → put a block in the calendar), do it without asking. Ask first only before deleting things he didn't mention.
+Default to ACTING: when an action clearly helps (he reports something done → tick/log it; he says he'll do X → a checkin; he's behind → put a block in the calendar), do it without asking. Exception: never start a focus timer unless he asks to start it now; offer the ▶ button instead. Ask first only before deleting things he didn't mention.
 When he says something is wrong ("that's not money", "wrong amount", "undo that", "delete it"), FIX it with actions now (delmoney / editmoney / water: -250 …). Never answer "ignore it" or "I won't count it": the data stays wrong unless you act.
 Never invent appointments, reviews or times: only use times from his calendar, his plan, his reminders or what he said.
 IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.`;
@@ -11959,15 +11959,17 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				const f = services.services(db).focus;
 				try {
 					if (data.startsWith("fo|")) {
-						const subject = data.slice(3) || "Focus";
+						const m = /^fo\|(\d{1,3})\|(.*)$/.exec(data);
+						const minutes = m ? Math.min(180, Math.max(5, Number(m[1]))) : 50;
+						const subject = (m ? m[2] : data.slice(3)) || "Focus";
 						const item = f.plan(services.services(db).wallet.today()).items.find((p) => !p.done && p.text.startsWith(subject));
-						f.start(subject, 50, /* @__PURE__ */ new Date(), item ? {
+						f.start(subject, minutes, /* @__PURE__ */ new Date(), item ? {
 							kind: "mustdo",
 							ref: item.text,
 							title: item.text
 						} : null);
 						return {
-							text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · 50 min.\nPhone away. Tap Stop when you finish.`,
+							text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · ${minutes} min.\nPhone away. Tap Stop when you finish.`,
 							keyboard: STOP_KEYBOARD,
 							toast: "Focus started"
 						};
@@ -12333,7 +12335,18 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const done = [];
 		let keyboard;
 		let expense = false;
-		const acts = out.actions.map(readAction).filter((a) => !!a);
+		let acts = out.actions.map(readAction).filter((a) => !!a);
+		if (!/\b(start|go|begin|timer|focus now|let'?s go|incep|încep|porne|start\w*|начн|запуст|поехали)\b/i.test(text)) {
+			for (const a of acts) {
+				if (a.kind !== "focus") continue;
+				const label = `▶ ${a.minutes} min ${a.subject}`.slice(0, 32);
+				out.buttons = [...(out.buttons ?? []).filter((b) => !b.do.startsWith("focus:")), {
+					label,
+					do: `focus:${a.minutes}:${a.subject}`
+				}].slice(0, 3);
+			}
+			acts = acts.filter((a) => a.kind !== "focus");
+		}
 		const mindOps = out.actions.map(readMindOp).filter((x) => !!x);
 		if (mindOps.length) {
 			const lines = await mirror.write((db) => {

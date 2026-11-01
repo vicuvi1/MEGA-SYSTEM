@@ -19,6 +19,7 @@ import { PageSkeleton } from './blocks'
 import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
 import { useCoachUnread } from './coachUnread'
+import { NewVersionBar } from './newVersion'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
@@ -56,6 +57,7 @@ export function App() {
     <ToastProvider>
       <ErrorBoundary area="Life System">
         <WindowErrors />
+        <NewVersionBar />
         <Gate />
       </ErrorBoundary>
     </ToastProvider>

@@ -842,11 +842,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const f = services.services(db).focus
         try {
           if (data.startsWith('fo|')) {
-            const subject = data.slice(3) || 'Focus'
+            // "fo|Subject" (50 min) or "fo|25|Subject" (a coach button with its own length).
+            const m = /^fo\|(\d{1,3})\|(.*)$/.exec(data)
+            const minutes = m ? Math.min(180, Math.max(5, Number(m[1]))) : 50
+            const subject = (m ? m[2] : data.slice(3)) || 'Focus'
             const plan = f.plan(services.services(db).wallet.today())
             const item = plan.items.find((p) => !p.done && p.text.startsWith(subject))
-            f.start(subject, 50, new Date(), item ? { kind: 'mustdo', ref: item.text, title: item.text } : null)
-            return { text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · 50 min.\nPhone away. Tap Stop when you finish.`, keyboard: STOP_KEYBOARD, toast: 'Focus started' }
+            f.start(subject, minutes, new Date(), item ? { kind: 'mustdo', ref: item.text, title: item.text } : null)
+            return { text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · ${minutes} min.\nPhone away. Tap Stop when you finish.`, keyboard: STOP_KEYBOARD, toast: 'Focus started' }
           }
           const r = f.stop()
           focusEnded.push({ subject: r.session.subject, minutes: r.session.minutes })
@@ -1174,7 +1177,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const done: string[] = []
     let keyboard: any
     let expense = false
-    const acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
+    let acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
+    // A focus timer starts only when he asked for it now; otherwise it becomes a ▶ button he can tap.
+    const askedToStart = /\b(start|go|begin|timer|focus now|let'?s go|incep|încep|porne|start\w*|начн|запуст|поехали)\b/i.test(text)
+    if (!askedToStart) {
+      for (const a of acts) {
+        if (a.kind !== 'focus') continue
+        const label = `▶ ${a.minutes} min ${a.subject}`.slice(0, 32)
+        out.buttons = [...(out.buttons ?? []).filter((b) => !b.do.startsWith('focus:')), { label, do: `focus:${a.minutes}:${a.subject}` }].slice(0, 3)
+      }
+      acts = acts.filter((a) => a.kind !== 'focus')
+    }
     // Its long-term notes: goals it tracks, what works, patterns.
     const mindOps = out.actions.map(readMindOp).filter((x): x is MindOp => !!x)
     if (mindOps.length) {

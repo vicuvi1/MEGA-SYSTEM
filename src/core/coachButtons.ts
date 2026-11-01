@@ -64,7 +64,7 @@ export function telegramKeyboard(buttons: ReplyButton[]): { inline_keyboard: { t
     .map((b) => {
       const d = readDo(b.do)
       if (!d) return null
-      const data = d.k === 'focus' ? fit('fo|', d.subject) : d.k === 'approve' ? 'rb|a' : d.k === 'plan' ? 'rb|p' : d.k === 'book' ? fit('gb|', d.goal) : d.k === 'say' ? fit('cs|', d.text) : null
+      const data = d.k === 'focus' ? fit(`fo|${d.minutes}|`, d.subject) : d.k === 'approve' ? 'rb|a' : d.k === 'plan' ? 'rb|p' : d.k === 'book' ? fit('gb|', d.goal) : d.k === 'say' ? fit('cs|', d.text) : null
       return data ? { text: b.label, callback_data: data } : null
     })
     .filter((x): x is { text: string; callback_data: string } => !!x)
