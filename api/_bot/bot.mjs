@@ -9027,7 +9027,11 @@ function loadProfile(db) {
 		return DEFAULT_PROFILE;
 	}
 }
+function saveLog(db, entries) {
+	setSetting(db, LOG, JSON.stringify(entries.slice(-MAX_LOG)));
+}
 var LOG = "coach_log";
+var MAX_LOG = 200;
 function loadLog(db) {
 	try {
 		const l = JSON.parse(getSetting(db, LOG) || "[]");
@@ -9304,9 +9308,10 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		extra.found ? "" : LOOKUPS,
 		"",
 		"Also put in \"remember\" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.",
+		"Put in \"chips\" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message (\"Done ✅\", \"Give me 10 min\", \"Why?\", \"Plan it\"). Never generic.",
 		"Put in \"steps\" 1–4 very short labels of what you did or checked, for the screen (\"Checked your calendar\", \"Found 2h free after 15:00\", \"Moved 3 blocks\").",
 		"",
-		`Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "actions": string[], "remember": string[], "steps": string[]${extra.found ? "" : ", \"need\": string[]"}}.`,
+		`Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "chips": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? "" : ", \"need\": string[]"}}.`,
 		"",
 		extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : "",
 		"== Victor right now ==",
@@ -9341,6 +9346,7 @@ function parseBrain(text) {
 		return {
 			reply: String(j.reply ?? "").trim(),
 			mood: typeof j.mood === "string" ? j.mood.toLowerCase().trim() : void 0,
+			chips: (Array.isArray(j.chips) ? j.chips : []).map((x) => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 4),
 			actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
 			remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
 			steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x) => x.slice(0, 80)).slice(0, 4),
@@ -11384,7 +11390,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw])\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw]|cu)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -11400,6 +11406,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			parse_mode: "HTML",
 			...keyboard ? { reply_markup: keyboard } : {}
 		}).catch(() => null);
+		if (data.startsWith("cu|")) {
+			if (!await markSeen(key)) return null;
+			const r = await undoReply(new Date(Number(data.slice(3))).toISOString());
+			await answer(r.ok ? "Undone" : r.lines[0] ?? "Nothing to undo");
+			const text = `${esc(String(cq.message?.text ?? ""))}\n\n${r.lines.map(esc).join("\n")}`;
+			await edit(text);
+			return text;
+		}
 		if (/^r[bvw]\|/.test(data)) {
 			if (!await markSeen(key)) return null;
 			const msg = String(cq.message?.text ?? "");
@@ -11978,316 +11992,357 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (typeof process !== "undefined" && process.env?.BOT_DEBUG) console.log("brain actions:", out.actions, "→", acts);
 		const noCal = () => done.push("⚠️ Google Calendar isn't connected (Settings in the app)");
 		const fmtHM = (iso) => new Date(iso).toTimeString().slice(0, 5);
-		for (const [i, a] of acts.entries()) try {
-			if (a.kind === "event") {
-				if (!calendar) {
-					noCal();
-					continue;
-				}
-				const start = /* @__PURE__ */ new Date(`${a.day}T${a.time}:00`);
-				await calendar.create({
-					title: a.title,
-					start: start.toISOString(),
-					end: new Date(start.getTime() + a.minutes * 6e4).toISOString(),
-					description: "Planned with your coach in Life System"
-				});
-				done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`);
-				continue;
-			}
-			if (a.kind === "move" || a.kind === "resize" || a.kind === "delevent") {
-				const ev = refs.events.get(a.ref);
-				if (!ev) continue;
-				if (!calendar?.move || !calendar.remove) {
-					noCal();
-					continue;
-				}
-				if (a.kind === "delevent") {
-					await calendar.remove(ev.calendarId, ev.id);
-					done.push(`🗑 Removed from your calendar: ${ev.title}`);
-					continue;
-				}
-				const len = Date.parse(ev.end) - Date.parse(ev.start);
-				const start = a.kind === "move" ? (/* @__PURE__ */ new Date(`${a.day}T${a.time}:00`)).toISOString() : ev.start;
-				const end = new Date(Date.parse(start) + (a.kind === "resize" ? a.minutes * 6e4 : len)).toISOString();
-				await calendar.move(ev.calendarId, ev.id, start, end);
-				done.push(a.kind === "move" ? `🗓 Moved: ${ev.title} → ${a.day.slice(5)} ${a.time}` : `🗓 ${ev.title}: now ${a.minutes} min (${fmtHM(start)}–${fmtHM(end)})`);
-				continue;
-			}
-			if (a.kind === "shift") {
-				if (!calendar?.move) {
-					noCal();
-					continue;
-				}
-				const list = a.refs.map((r) => refs.events.get(r)).filter((x) => !!x);
-				for (const ev of list) await calendar.move(ev.calendarId, ev.id, new Date(Date.parse(ev.start) + a.minutes * 6e4).toISOString(), new Date(Date.parse(ev.end) + a.minutes * 6e4).toISOString());
-				if (list.length) done.push(`🗓 Shifted ${list.length} block${list.length === 1 ? "" : "s"} by ${a.minutes > 0 ? "+" : ""}${a.minutes} min`);
-				continue;
-			}
-			if (a.kind === "edit" || a.kind === "taskmove" || a.kind === "done" || a.kind === "star" || a.kind === "deltask") {
-				const t = refs.tasks.get(a.ref);
-				if (!t || !todoist) continue;
-				if (a.kind === "done") {
-					await todoist.close(t.id);
-					const paid = await mirror.write((db) => payTodoist(services.services(db), [{
-						id: t.id,
-						content: t.content,
-						completedAt: (/* @__PURE__ */ new Date()).toISOString()
-					}])).catch(() => 0);
-					done.push(`✅ Done in Todoist: ${t.content}${paid ? " · +5" : ""}`);
-				} else if (a.kind === "deltask" && todoist.remove) {
-					await todoist.remove(t.id);
-					done.push(`🗑 Deleted from Todoist: ${t.content}`);
-				} else if (a.kind === "star" && todoist.update) {
-					const labels = a.on ? [.../* @__PURE__ */ new Set([...t.labels ?? [], "today"])] : (t.labels ?? []).filter((l) => l !== "today");
-					await todoist.update(t.id, {
-						labels,
-						...a.on && !(t.due && t.due <= (/* @__PURE__ */ new Date(Date.now() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4)).toISOString().slice(0, 10)) ? { due: "today" } : {}
-					});
-					done.push(a.on ? `⭐ Must-do today: ${t.content}` : `☆ No longer a must-do: ${t.content}`);
-				} else if (a.kind === "edit" && todoist.update) {
-					await todoist.update(t.id, {
-						content: a.title,
-						priority: a.priority,
-						due: a.due,
-						description: a.details
-					});
-					done.push(`✏️ Todoist: ${a.title ?? t.content}${a.priority ? ` · P${5 - a.priority}` : ""}${a.due ? ` · ${a.due}` : ""}`);
-				} else if (a.kind === "taskmove" && todoist.move) {
-					if (!areas.length && todoist.everything) areas = (await todoist.everything().catch(() => null))?.areas ?? [];
-					const want = a.area.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim();
-					const area = areas.find((x) => x.name.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim() === want) ?? areas.find((x) => x.name.toLowerCase().includes(want));
-					if (!area) {
-						done.push(`⚠️ No Todoist area called "${a.area}"`);
+		const undo = done.map(() => null);
+		let opNow = null;
+		for (const [i, a] of acts.entries()) {
+			const mark = done.length;
+			opNow = null;
+			try {
+				if (a.kind === "event") {
+					if (!calendar) {
+						noCal();
 						continue;
 					}
-					await todoist.move(t.id, area.key);
-					done.push(`📂 ${t.content} → ${area.name}`);
-				}
-				continue;
-			}
-			if (a.kind === "remind" || a.kind === "checkin") {
-				const at = a.kind === "remind" ? /* @__PURE__ */ new Date(`${a.day}T${a.time}:00`) : new Date(Date.now() + a.minutes * 6e4);
-				if (at.getTime() < Date.now() - 6e4) continue;
-				await mirror.write((db) => {
-					let list = [];
-					try {
-						list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
-					} catch {
-						list = [];
-					}
-					setSetting(db, REMINDERS, JSON.stringify(addReminder(list, {
-						at: at.toISOString(),
-						text: a.text,
-						kind: a.kind,
-						follow: a.kind === "checkin"
-					})));
-				});
-				done.push(a.kind === "remind" ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== (/* @__PURE__ */ new Date()).toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ""}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`);
-				continue;
-			}
-			if (a.kind === "book") {
-				const plans = await rhythm.goalPlans();
-				const want = a.goal.toLowerCase().trim();
-				const ids = /^all$/.test(want) ? void 0 : plans.filter((p) => p.title.toLowerCase().includes(want) || want.includes(p.title.toLowerCase()) || p.subject.toLowerCase() === want).map((p) => p.goalId);
-				if (ids && !ids.length) {
-					done.push(`⚠️ No goal called "${a.goal}"`);
+					const start = /* @__PURE__ */ new Date(`${a.day}T${a.time}:00`);
+					const ev = await calendar.create({
+						title: a.title,
+						start: start.toISOString(),
+						end: new Date(start.getTime() + a.minutes * 6e4).toISOString(),
+						description: "Planned with your coach in Life System"
+					});
+					if (ev?.id) opNow = {
+						k: "event",
+						cal: ev.calendarId,
+						id: ev.id
+					};
+					done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`);
 					continue;
 				}
-				done.push(...(await rhythm.bookGoals(ids)).lines);
-				continue;
-			}
-			if (a.kind === "promise") {
-				const id = promises.refs.get(a.ref);
-				if (!id) continue;
-				await mirror.write((db) => {
-					let list = [];
-					try {
-						list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
-					} catch {
-						list = [];
+				if (a.kind === "move" || a.kind === "resize" || a.kind === "delevent") {
+					const ev = refs.events.get(a.ref);
+					if (!ev) continue;
+					if (!calendar?.move || !calendar.remove) {
+						noCal();
+						continue;
 					}
-					setSetting(db, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)));
-				});
-				await rhythm.countPromise(await services.read((sv) => sv.wallet.today()), a.outcome).catch(() => null);
-				done.push(a.outcome === "kept" ? "✅ Promise kept" : "❌ Promise broken (counted)");
-				continue;
-			}
-			if (a.kind === "delmoney" || a.kind === "editmoney") {
-				const id = moneyRefs.get(a.ref);
-				if (!id) continue;
-				const line = await mirror.write((db) => {
-					if (a.kind === "delmoney") {
-						const what = deleteMoney(db, id);
-						if (!what) return "⚠️ That money record is already gone";
-						const life = takeLink(db, id);
-						if (life) try {
-							services.services(db).money.deleteExpense(life);
-						} catch {}
-						return `🗑 Deleted from Finance Helper: ${what}`;
+					if (a.kind === "delevent") {
+						await calendar.remove(ev.calendarId, ev.id);
+						done.push(`🗑 Removed from your calendar: ${ev.title}`);
+						continue;
 					}
-					const r = editMoney(db, id, a);
-					return r.ok ? `✏️ Money record fixed: ${r.text}` : `⚠️ ${r.text}`;
-				});
-				done.push(line);
-				expense = true;
-				continue;
-			}
-			if (a.kind === "water" || a.kind === "reps") {
-				const line = await mirror.write((db) => {
-					const st = sportState(db);
-					if (!st) return a.kind === "water" ? "⚠️ Open Sport Track once so water has a place to go" : "⚠️ Open Sport Track once to set up your reps checklist";
-					const day = sportToday();
-					const save = (next) => setSetting(db, "sport_tracker_json", JSON.stringify({
-						savedAt: Date.now(),
-						data: next
-					}));
-					if (a.kind === "water") {
-						const next = addWater(st, a.ml, day);
-						save(next);
-						const v = sharedView(next, day);
-						return `💧 ${a.ml > 0 ? "+" : ""}${a.ml} ml · ${(v.water.ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(v.water.target / 1e3).toFixed(1)} L today`;
+					const len = Date.parse(ev.end) - Date.parse(ev.start);
+					const start = a.kind === "move" ? (/* @__PURE__ */ new Date(`${a.day}T${a.time}:00`)).toISOString() : ev.start;
+					const end = new Date(Date.parse(start) + (a.kind === "resize" ? a.minutes * 6e4 : len)).toISOString();
+					await calendar.move(ev.calendarId, ev.id, start, end);
+					done.push(a.kind === "move" ? `🗓 Moved: ${ev.title} → ${a.day.slice(5)} ${a.time}` : `🗓 ${ev.title}: now ${a.minutes} min (${fmtHM(start)}–${fmtHM(end)})`);
+					continue;
+				}
+				if (a.kind === "shift") {
+					if (!calendar?.move) {
+						noCal();
+						continue;
 					}
-					const r = addReps(st, a.exercise, a.amount, day);
-					if (!r) return `⚠️ No "${a.exercise}" on your Sport Track checklist`;
-					save(r.st);
-					if (a.amount > 0) services.services(db).body.logWorkout({
-						title: `${r.exercise.name} (+${a.amount})`,
-						items: [{
-							exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, "_"),
-							name: r.exercise.name,
-							amount: a.amount,
-							unit: "reps"
-						}],
-						note: "Logged by the coach"
-					});
-					return `💪 ${r.exercise.name} ${a.amount > 0 ? "+" : ""}${a.amount} · ${r.exercise.done}${r.exercise.target ? `/${r.exercise.target}` : ""} today`;
-				});
-				done.push(line);
-				continue;
-			}
-			if (a.kind === "sleep") {
-				const line = await mirror.write((db) => {
-					const svc = services.services(db);
-					const said = [];
-					if (a.wake) {
-						const r = svc.sleep.setWake(a.day, a.wake);
-						said.push(`up ${r.log.wakeTime}${r.log.onTime ? " (on time)" : ""}`);
-					}
-					if (a.bed) {
-						if (!db.prepare("SELECT 1 FROM sleep_logs WHERE day = ?").get(a.day)) svc.sleep.setWake(a.day, a.wake ?? "07:00");
-						const target = svc.sleep.bedtimeTarget();
-						const toMin = (t) => {
-							const [h, m] = t.split(":").map(Number);
-							return (h < 12 ? h + 24 : h) * 60 + m;
-						};
-						const onTime = toMin(a.bed) <= toMin(target);
-						db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(a.bed, target, onTime ? 1 : 0, a.day);
-						said.push(`bed ${a.bed}${onTime ? " (on time)" : " (late)"}`);
-					}
-					if (a.quality) {
-						svc.sleep.setQuality(a.day, a.quality);
-						said.push(`slept ${a.quality}/5`);
-					}
-					return said.length ? `😴 Sleep ${a.day.slice(5)}: ${said.join(", ")}` : null;
-				});
-				if (line) done.push(line);
-				continue;
-			}
-			if (a.kind === "habit" || a.kind === "reward" || a.kind === "week" || a.kind === "bigdone") {
-				const line = await mirror.write((db) => {
-					const svc = services.services(db);
-					if (a.kind === "habit") {
-						if ((svc.wallet.summary().todayRules ?? []).includes(a.habit === "oath" ? "discipline.oath" : a.habit === "clean" ? "discipline.clean_day" : "face.routine_done")) return null;
-						if (a.habit === "oath") svc.discipline.oath();
-						else if (a.habit === "clean") svc.discipline.checkIn();
-						else svc.wallet.award("face.routine_done", "Ticked by the coach");
-						return `✅ Habit: ${a.habit === "oath" ? "morning oath" : a.habit === "clean" ? "clean-day check-in" : "skincare"}`;
-					}
-					if (a.kind === "reward") {
-						svc.shop.save({
-							title: a.title,
-							price: a.points,
-							tier: "bronze",
-							realCost: a.cost,
-							pinned: false,
-							note: "Added by your coach",
-							currency: "MDL"
+					const list = a.refs.map((r) => refs.events.get(r)).filter((x) => !!x);
+					for (const ev of list) await calendar.move(ev.calendarId, ev.id, new Date(Date.parse(ev.start) + a.minutes * 6e4).toISOString(), new Date(Date.parse(ev.end) + a.minutes * 6e4).toISOString());
+					if (list.length) done.push(`🗓 Shifted ${list.length} block${list.length === 1 ? "" : "s"} by ${a.minutes > 0 ? "+" : ""}${a.minutes} min`);
+					continue;
+				}
+				if (a.kind === "edit" || a.kind === "taskmove" || a.kind === "done" || a.kind === "star" || a.kind === "deltask") {
+					const t = refs.tasks.get(a.ref);
+					if (!t || !todoist) continue;
+					if (a.kind === "done") {
+						await todoist.close(t.id);
+						const paid = await mirror.write((db) => payTodoist(services.services(db), [{
+							id: t.id,
+							content: t.content,
+							completedAt: (/* @__PURE__ */ new Date()).toISOString()
+						}])).catch(() => 0);
+						done.push(`✅ Done in Todoist: ${t.content}${paid ? " · +5" : ""}`);
+					} else if (a.kind === "deltask" && todoist.remove) {
+						await todoist.remove(t.id);
+						done.push(`🗑 Deleted from Todoist: ${t.content}`);
+					} else if (a.kind === "star" && todoist.update) {
+						const labels = a.on ? [.../* @__PURE__ */ new Set([...t.labels ?? [], "today"])] : (t.labels ?? []).filter((l) => l !== "today");
+						await todoist.update(t.id, {
+							labels,
+							...a.on && !(t.due && t.due <= (/* @__PURE__ */ new Date(Date.now() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4)).toISOString().slice(0, 10)) ? { due: "today" } : {}
 						});
-						return `🎁 New reward: ${a.title} · ${a.points} points`;
+						done.push(a.on ? `⭐ Must-do today: ${t.content}` : `☆ No longer a must-do: ${t.content}`);
+					} else if (a.kind === "edit" && todoist.update) {
+						await todoist.update(t.id, {
+							content: a.title,
+							priority: a.priority,
+							due: a.due,
+							description: a.details
+						});
+						done.push(`✏️ Todoist: ${a.title ?? t.content}${a.priority ? ` · P${5 - a.priority}` : ""}${a.due ? ` · ${a.due}` : ""}`);
+					} else if (a.kind === "taskmove" && todoist.move) {
+						if (!areas.length && todoist.everything) areas = (await todoist.everything().catch(() => null))?.areas ?? [];
+						const want = a.area.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim();
+						const area = areas.find((x) => x.name.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim() === want) ?? areas.find((x) => x.name.toLowerCase().includes(want));
+						if (!area) {
+							done.push(`⚠️ No Todoist area called "${a.area}"`);
+							continue;
+						}
+						await todoist.move(t.id, area.key);
+						done.push(`📂 ${t.content} → ${area.name}`);
 					}
-					if (a.kind === "bigdone") {
-						const plan = svc.weekPlan.active();
-						if (!plan?.big3[a.index] || plan.big3[a.index].done) return null;
-						svc.weekPlan.toggle(a.index);
-						return `✅ Week task done: ${plan.big3[a.index].text}`;
-					}
-					const cur = svc.weekPlan.active();
-					const big3 = a.big3?.length ? a.big3.map((text) => ({
-						text,
-						done: cur?.big3.find((b) => b.text.toLowerCase() === text.toLowerCase())?.done ?? false
-					})) : cur?.big3 ?? [];
-					const plan = svc.weekPlan.save({
-						...cur ?? {},
-						focus: a.focus ?? cur?.focus ?? "focus",
-						note: a.note ?? cur?.note ?? "",
-						big3
+					continue;
+				}
+				if (a.kind === "remind" || a.kind === "checkin") {
+					const at = a.kind === "remind" ? /* @__PURE__ */ new Date(`${a.day}T${a.time}:00`) : new Date(Date.now() + a.minutes * 6e4);
+					if (at.getTime() < Date.now() - 6e4) continue;
+					await mirror.write((db) => {
+						let list = [];
+						try {
+							list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+						} catch {
+							list = [];
+						}
+						const next = addReminder(list, {
+							at: at.toISOString(),
+							text: a.text,
+							kind: a.kind,
+							follow: a.kind === "checkin"
+						});
+						opNow = {
+							k: "remind",
+							id: next[next.length - 1].id
+						};
+						setSetting(db, REMINDERS, JSON.stringify(next));
 					});
-					return `🗓 Week plan: ${{
-						focus: "focus time",
-						wake: "wake-ups",
-						sport: "training",
-						clean: "clean days",
-						todoist: "tasks",
-						spend: "spending",
-						mustdo: "must-dos"
-					}[plan.focus] ?? plan.focus}${plan.note ? ` ("${plan.note}")` : ""} · ${plan.big3.map((b) => b.text).join(" / ")}`;
+					done.push(a.kind === "remind" ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== (/* @__PURE__ */ new Date()).toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ""}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`);
+					continue;
+				}
+				if (a.kind === "book") {
+					const plans = await rhythm.goalPlans();
+					const want = a.goal.toLowerCase().trim();
+					const ids = /^all$/.test(want) ? void 0 : plans.filter((p) => p.title.toLowerCase().includes(want) || want.includes(p.title.toLowerCase()) || p.subject.toLowerCase() === want).map((p) => p.goalId);
+					if (ids && !ids.length) {
+						done.push(`⚠️ No goal called "${a.goal}"`);
+						continue;
+					}
+					done.push(...(await rhythm.bookGoals(ids)).lines);
+					continue;
+				}
+				if (a.kind === "promise") {
+					const id = promises.refs.get(a.ref);
+					if (!id) continue;
+					await mirror.write((db) => {
+						let list = [];
+						try {
+							list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+						} catch {
+							list = [];
+						}
+						setSetting(db, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)));
+					});
+					await rhythm.countPromise(await services.read((sv) => sv.wallet.today()), a.outcome).catch(() => null);
+					done.push(a.outcome === "kept" ? "✅ Promise kept" : "❌ Promise broken (counted)");
+					continue;
+				}
+				if (a.kind === "delmoney" || a.kind === "editmoney") {
+					const id = moneyRefs.get(a.ref);
+					if (!id) continue;
+					const line = await mirror.write((db) => {
+						if (a.kind === "delmoney") {
+							const what = deleteMoney(db, id);
+							if (!what) return "⚠️ That money record is already gone";
+							const life = takeLink(db, id);
+							if (life) try {
+								services.services(db).money.deleteExpense(life);
+							} catch {}
+							return `🗑 Deleted from Finance Helper: ${what}`;
+						}
+						const r = editMoney(db, id, a);
+						return r.ok ? `✏️ Money record fixed: ${r.text}` : `⚠️ ${r.text}`;
+					});
+					done.push(line);
+					expense = true;
+					continue;
+				}
+				if (a.kind === "water" || a.kind === "reps") {
+					const line = await mirror.write((db) => {
+						const st = sportState(db);
+						if (!st) return a.kind === "water" ? "⚠️ Open Sport Track once so water has a place to go" : "⚠️ Open Sport Track once to set up your reps checklist";
+						const day = sportToday();
+						const save = (next) => setSetting(db, "sport_tracker_json", JSON.stringify({
+							savedAt: Date.now(),
+							data: next
+						}));
+						if (a.kind === "water") {
+							const next = addWater(st, a.ml, day);
+							save(next);
+							opNow = {
+								k: "water",
+								ml: -a.ml
+							};
+							const v = sharedView(next, day);
+							return `💧 ${a.ml > 0 ? "+" : ""}${a.ml} ml · ${(v.water.ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(v.water.target / 1e3).toFixed(1)} L today`;
+						}
+						const r = addReps(st, a.exercise, a.amount, day);
+						if (!r) return `⚠️ No "${a.exercise}" on your Sport Track checklist`;
+						save(r.st);
+						opNow = {
+							k: "reps",
+							ex: a.exercise,
+							amount: -a.amount
+						};
+						if (a.amount > 0) services.services(db).body.logWorkout({
+							title: `${r.exercise.name} (+${a.amount})`,
+							items: [{
+								exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, "_"),
+								name: r.exercise.name,
+								amount: a.amount,
+								unit: "reps"
+							}],
+							note: "Logged by the coach"
+						});
+						return `💪 ${r.exercise.name} ${a.amount > 0 ? "+" : ""}${a.amount} · ${r.exercise.done}${r.exercise.target ? `/${r.exercise.target}` : ""} today`;
+					});
+					done.push(line);
+					continue;
+				}
+				if (a.kind === "sleep") {
+					const line = await mirror.write((db) => {
+						const svc = services.services(db);
+						const said = [];
+						if (a.wake) {
+							const r = svc.sleep.setWake(a.day, a.wake);
+							said.push(`up ${r.log.wakeTime}${r.log.onTime ? " (on time)" : ""}`);
+						}
+						if (a.bed) {
+							if (!db.prepare("SELECT 1 FROM sleep_logs WHERE day = ?").get(a.day)) svc.sleep.setWake(a.day, a.wake ?? "07:00");
+							const target = svc.sleep.bedtimeTarget();
+							const toMin = (t) => {
+								const [h, m] = t.split(":").map(Number);
+								return (h < 12 ? h + 24 : h) * 60 + m;
+							};
+							const onTime = toMin(a.bed) <= toMin(target);
+							db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(a.bed, target, onTime ? 1 : 0, a.day);
+							said.push(`bed ${a.bed}${onTime ? " (on time)" : " (late)"}`);
+						}
+						if (a.quality) {
+							svc.sleep.setQuality(a.day, a.quality);
+							said.push(`slept ${a.quality}/5`);
+						}
+						return said.length ? `😴 Sleep ${a.day.slice(5)}: ${said.join(", ")}` : null;
+					});
+					if (line) done.push(line);
+					continue;
+				}
+				if (a.kind === "habit" || a.kind === "reward" || a.kind === "week" || a.kind === "bigdone") {
+					const line = await mirror.write((db) => {
+						const svc = services.services(db);
+						if (a.kind === "habit") {
+							if ((svc.wallet.summary().todayRules ?? []).includes(a.habit === "oath" ? "discipline.oath" : a.habit === "clean" ? "discipline.clean_day" : "face.routine_done")) return null;
+							if (a.habit === "oath") svc.discipline.oath();
+							else if (a.habit === "clean") svc.discipline.checkIn();
+							else svc.wallet.award("face.routine_done", "Ticked by the coach");
+							return `✅ Habit: ${a.habit === "oath" ? "morning oath" : a.habit === "clean" ? "clean-day check-in" : "skincare"}`;
+						}
+						if (a.kind === "reward") {
+							svc.shop.save({
+								title: a.title,
+								price: a.points,
+								tier: "bronze",
+								realCost: a.cost,
+								pinned: false,
+								note: "Added by your coach",
+								currency: "MDL"
+							});
+							return `🎁 New reward: ${a.title} · ${a.points} points`;
+						}
+						if (a.kind === "bigdone") {
+							const plan = svc.weekPlan.active();
+							if (!plan?.big3[a.index] || plan.big3[a.index].done) return null;
+							svc.weekPlan.toggle(a.index);
+							return `✅ Week task done: ${plan.big3[a.index].text}`;
+						}
+						const cur = svc.weekPlan.active();
+						const big3 = a.big3?.length ? a.big3.map((text) => ({
+							text,
+							done: cur?.big3.find((b) => b.text.toLowerCase() === text.toLowerCase())?.done ?? false
+						})) : cur?.big3 ?? [];
+						const plan = svc.weekPlan.save({
+							...cur ?? {},
+							focus: a.focus ?? cur?.focus ?? "focus",
+							note: a.note ?? cur?.note ?? "",
+							big3
+						});
+						return `🗓 Week plan: ${{
+							focus: "focus time",
+							wake: "wake-ups",
+							sport: "training",
+							clean: "clean days",
+							todoist: "tasks",
+							spend: "spending",
+							mustdo: "must-dos"
+						}[plan.focus] ?? plan.focus}${plan.note ? ` ("${plan.note}")` : ""} · ${plan.big3.map((b) => b.text).join(" / ")}`;
+					});
+					if (line) done.push(line);
+					continue;
+				}
+				if (a.kind === "task") {
+					if (!todoist) continue;
+					const t = await todoist.quickAdd(a.text);
+					if (t?.id) opNow = {
+						k: "task",
+						id: t.id
+					};
+					done.push(`➕ Todoist: ${t.content || a.text}${t.section ? ` · ${t.section}` : ""}${t.due ? ` (${t.due})` : ""}`);
+					continue;
+				}
+				const line = await mirror.write((db) => {
+					const svc = services.services(db);
+					if (a.kind === "log") {
+						const r = applyText(db, svc, a.text, `${key}:a${i}`);
+						if (r.unknown) return null;
+						if (r.keyboard) keyboard = r.keyboard;
+						if (r.expense) expense = true;
+						const txId = (r.keyboard?.inline_keyboard ?? []).flat().map((b) => String(b.callback_data ?? "")).find((d) => d.startsWith("fu|"))?.split("|")[1];
+						if (txId) opNow = {
+							k: "money",
+							id: txId
+						};
+						return `✅ Logged: ${a.text}`;
+					}
+					if (a.kind === "mustdo") {
+						const p = svc.focus.plan(svc.wallet.today());
+						if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null;
+						svc.focus.setPlan([...p.items.map((x) => x.text), a.text]);
+						opNow = {
+							k: "mustdo",
+							text: a.text
+						};
+						return `📝 Must-do added: ${a.text}${todoist ? " (⭐ in Todoist)" : ""}`;
+					}
+					if (a.kind === "focus") {
+						svc.focus.start(a.subject, a.minutes);
+						opNow = { k: "focus" };
+						keyboard = STOP_KEYBOARD;
+						return `⏱ Focus started: ${a.subject} · ${a.minutes} min`;
+					}
+					if (a.kind === "fun") {
+						const r = svc.focus.fun(a.minutes, a.what);
+						return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} points (left ${r.balance})`;
+					}
+					if (a.kind !== "goal") return null;
+					svc.focus.saveGoal({
+						title: a.title,
+						subject: a.subject,
+						deadline: a.deadline,
+						hours: a.hours
+					});
+					return `🎯 Goal: ${a.title} · ${a.hours}h by ${a.deadline}`;
 				});
 				if (line) done.push(line);
-				continue;
+				if (line && a.kind === "mustdo" && todoist) await todoist.quickAdd(`${a.text} today @today`).catch(() => null);
+			} catch (e) {
+				done.push(`⚠️ ${e.message}`);
+			} finally {
+				while (undo.length < done.length) undo.push(undo.length === mark && !String(done[mark] ?? "").startsWith("⚠️") ? opNow : null);
 			}
-			if (a.kind === "task") {
-				if (!todoist) continue;
-				const t = await todoist.quickAdd(a.text);
-				done.push(`➕ Todoist: ${t.content || a.text}${t.section ? ` · ${t.section}` : ""}${t.due ? ` (${t.due})` : ""}`);
-				continue;
-			}
-			const line = await mirror.write((db) => {
-				const svc = services.services(db);
-				if (a.kind === "log") {
-					const r = applyText(db, svc, a.text, `${key}:a${i}`);
-					if (r.unknown) return null;
-					if (r.keyboard) keyboard = r.keyboard;
-					if (r.expense) expense = true;
-					return `✅ Logged: ${a.text}`;
-				}
-				if (a.kind === "mustdo") {
-					const p = svc.focus.plan(svc.wallet.today());
-					if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null;
-					svc.focus.setPlan([...p.items.map((x) => x.text), a.text]);
-					return `📝 Must-do added: ${a.text}${todoist ? " (⭐ in Todoist)" : ""}`;
-				}
-				if (a.kind === "focus") {
-					svc.focus.start(a.subject, a.minutes);
-					keyboard = STOP_KEYBOARD;
-					return `⏱ Focus started: ${a.subject} · ${a.minutes} min`;
-				}
-				if (a.kind === "fun") {
-					const r = svc.focus.fun(a.minutes, a.what);
-					return `🎮 ${a.minutes} min of ${a.what}: −${r.cost} points (left ${r.balance})`;
-				}
-				if (a.kind !== "goal") return null;
-				svc.focus.saveGoal({
-					title: a.title,
-					subject: a.subject,
-					deadline: a.deadline,
-					hours: a.hours
-				});
-				return `🎯 Goal: ${a.title} · ${a.hours}h by ${a.deadline}`;
-			});
-			if (line) done.push(line);
-			if (line && a.kind === "mustdo" && todoist) await todoist.quickAdd(`${a.text} today @today`).catch(() => null);
-		} catch (e) {
-			done.push(`⚠️ ${e.message}`);
 		}
 		if (expense) onExpense?.();
 		const at = (/* @__PURE__ */ new Date()).toISOString();
@@ -12319,7 +12374,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				text: out.reply || "Got it.",
 				done,
 				mood,
-				at
+				at,
+				...undo.some(Boolean) ? { undo } : {},
+				...out.chips?.length ? { chips: out.chips } : {}
 			}]);
 		}).catch(() => null);
 		processed++;
@@ -12329,7 +12386,111 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			done,
 			keyboard,
 			steps: out.steps,
-			mood
+			mood,
+			at,
+			undo,
+			chips: out.chips
+		};
+	}
+	/**
+	* Takes back what the coach did in one reply (`at`): all of it, or one line.
+	* Each line once; the log remembers what was undone.
+	*/
+	async function undoReply(at, index) {
+		const entry = await mirror.read((db) => loadLog(db).find((e) => e.role === "coach" && e.at === at) ?? null);
+		if (!entry?.undo) return {
+			ok: false,
+			lines: ["Nothing to undo there"]
+		};
+		const idx = entry.undo.map((op, k) => op && !entry.undone?.[k] && (index == null || index === k) ? k : -1).filter((k) => k >= 0);
+		if (!idx.length) return {
+			ok: false,
+			lines: ["Already undone"]
+		};
+		const lines = [];
+		const ok = [];
+		for (const k of idx) {
+			const op = entry.undo[k];
+			try {
+				if (op.k === "event") {
+					if (!calendar?.remove) throw new Error("Calendar not connected");
+					await calendar.remove(op.cal, op.id);
+					lines.push("↩ Block removed from your calendar");
+				} else if (op.k === "task") {
+					if (!todoist?.remove) throw new Error("Todoist not connected");
+					await todoist.remove(op.id);
+					lines.push("↩ Todoist task removed");
+				} else {
+					const line = await mirror.write((db) => {
+						const svc = services.services(db);
+						if (op.k === "water" || op.k === "reps") {
+							const st = sportState(db);
+							if (!st) return "⚠️ Sport Track data is gone";
+							const day = sportToday();
+							if (op.k === "water") {
+								setSetting(db, "sport_tracker_json", JSON.stringify({
+									savedAt: Date.now(),
+									data: addWater(st, op.ml, day)
+								}));
+								return `↩ Water ${op.ml > 0 ? "+" : ""}${op.ml} ml`;
+							}
+							const r = addReps(st, op.ex, op.amount, day);
+							if (!r) return "⚠️ Exercise not found";
+							setSetting(db, "sport_tracker_json", JSON.stringify({
+								savedAt: Date.now(),
+								data: r.st
+							}));
+							return `↩ ${r.exercise.name} back to ${r.exercise.done}`;
+						}
+						if (op.k === "money") {
+							const what = deleteMoney(db, op.id);
+							const life = takeLink(db, op.id);
+							if (life) try {
+								svc.money.deleteExpense(life);
+							} catch {}
+							return what ? `↩ Removed: ${what}` : "⚠️ That money record is already gone";
+						}
+						if (op.k === "remind") {
+							let list = [];
+							try {
+								list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+							} catch {
+								list = [];
+							}
+							setSetting(db, REMINDERS, JSON.stringify(list.filter((r) => r.id !== op.id)));
+							return "↩ Reminder cancelled";
+						}
+						if (op.k === "mustdo") {
+							const rest = svc.focus.plan(svc.wallet.today()).items.map((x) => x.text).filter((t) => t.toLowerCase() !== op.text.toLowerCase());
+							if (!rest.length) return "⚠️ It is your only must-do: tick it or replace it";
+							svc.focus.setPlan(rest);
+							return `↩ Must-do removed: ${op.text}`;
+						}
+						svc.focus.cancel();
+						return "↩ Focus timer cancelled";
+					});
+					lines.push(line);
+					if (line.startsWith("⚠️")) continue;
+				}
+				ok.push(k);
+			} catch (e) {
+				lines.push(`⚠️ ${e.message}`);
+			}
+		}
+		if (ok.length) await mirror.write((db) => {
+			const log = loadLog(db);
+			const e = log.find((x) => x.role === "coach" && x.at === at);
+			if (e) {
+				const undone = e.undone ?? [];
+				for (const k of ok) undone[k] = true;
+				e.undone = undone;
+				saveLog(db, log);
+			}
+		});
+		if (ok.length) onExpense?.();
+		return {
+			ok: ok.length > 0,
+			lines
 		};
 	}
 	async function handleBrain(botId, update, cfg, text, key, media) {
@@ -12341,11 +12502,15 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const r = await think(personaFor(botId, cfg), text, key, media);
 		const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join("\n")}` : ""].join("\n").trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`;
 		addLog(text || `[${media?.kind}]`, chat, r.ok, reply);
+		const undoKb = !r.keyboard && r.at && r.undo?.some(Boolean) ? { inline_keyboard: [[{
+			text: "↩ Undo",
+			callback_data: `cu|${Date.parse(r.at)}`
+		}]] } : null;
 		await tg(update.__token, "sendMessage", {
 			chat_id: chat,
 			text: reply,
 			parse_mode: "HTML",
-			...r.keyboard ? { reply_markup: r.keyboard } : {}
+			...r.keyboard ? { reply_markup: r.keyboard } : undoKb ? { reply_markup: undoKb } : {}
 		}).catch(() => null);
 		return reply;
 	}
@@ -12580,9 +12745,11 @@ His note: ${note}`, { json: true }));
 		pollOnce,
 		handleUpdate,
 		/** The app's Coach page: the same brain and memory as the bots. */
-		think: (text, key = `app:${Date.now()}`, onStep) => think("mega", text, key, void 0, "app", onStep),
+		think: (text, key = `app:${Date.now()}`, onStep, media) => think("mega", text, key, media, "app", onStep),
 		/** The daily rhythm (morning plan, reviews), for the tick and the app. */
 		rhythm,
+		/** Undo what the coach did in one reply (all, or one line). */
+		undoReply,
 		config,
 		saveConfig: async (patch) => {
 			const next = {
@@ -13567,7 +13734,7 @@ function localMidnight(daysAgo) {
 	return d;
 }
 /** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
-async function coachChat(env, text, onStep) {
+async function coachChat(env, text, onStep, media) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	if (!env.model) return {
 		ok: false,
@@ -13575,14 +13742,23 @@ async function coachChat(env, text, onStep) {
 		done: []
 	};
 	const { bots } = await botsFor(env);
-	const r = await bots.think(text, `app:${Date.now()}`, onStep);
+	const r = await bots.think(text, `app:${Date.now()}`, onStep, media);
 	return {
 		ok: r.ok,
 		reply: r.reply,
 		done: r.done,
 		steps: r.steps,
-		mood: r.mood
+		mood: r.mood,
+		at: r.at,
+		undo: r.undo,
+		chips: r.chips
 	};
+}
+/** The app: take back what the coach did in one reply (all, or one line). */
+async function coachUndo(env, at, index) {
+	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	const { bots } = await botsFor(env);
+	return bots.undoReply(at, index);
 }
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 async function handleTelegramUpdate(env, token, update) {
@@ -14068,4 +14244,4 @@ async function sportShared(env, body) {
 		error: "op must be state | water | reps | workout"
 	};
 }
-export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, coachRhythm, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick, sportShared };
+export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick, sportShared };

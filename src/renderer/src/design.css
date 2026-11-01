@@ -875,3 +875,29 @@
   .cx-pin-actions { width: 100%; justify-content: flex-end; }
 }
 @media (prefers-reduced-motion: reduce) { .cx-face.mood-furious { animation: none; } }
+
+/* ===== Coach Phase 2: premium chat ===== */
+.cx-rich b { font-weight: 700; color: var(--text); }
+.cx-msg-me .cx-rich b { color: inherit; }
+.cx-rich mark { background: color-mix(in srgb, var(--accent) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.cx-caret { display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; background: var(--accent); border-radius: 2px; animation: co-blink 0.9s infinite; }
+.cx-actions { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.cx-action { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgb(var(--ink) / 0.06); font-size: 12.5px; white-space: normal; animation: pg-rise 0.25s ease both; }
+.cx-action span { flex: 1; min-width: 0; }
+.cx-action.warn { background: color-mix(in srgb, var(--red) 12%, transparent); }
+.cx-action.undone span { text-decoration: line-through; opacity: 0.55; }
+.cx-action em { font-size: 11px; color: var(--muted); font-style: normal; }
+.cx-undo { flex: none; border: none; background: rgb(var(--ink) / 0.08); color: var(--text); font: inherit; font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 8px; cursor: pointer; opacity: 0.7; transition: opacity 0.15s, background 0.15s; }
+.cx-action:hover .cx-undo, .cx-undo:focus-visible { opacity: 1; }
+.cx-undo:hover { background: color-mix(in srgb, var(--red) 22%, transparent); }
+.cx-photo { display: block; max-width: 240px; max-height: 240px; border-radius: 10px; margin-bottom: 6px; object-fit: cover; }
+.cx-tool { flex: none; width: 36px; height: 36px; border-radius: 10px; border: none; background: transparent; cursor: pointer; font-size: 17px; display: grid; place-items: center; opacity: 0.75; transition: opacity 0.15s, background 0.15s; }
+.cx-tool:hover { opacity: 1; background: rgb(var(--ink) / 0.06); }
+.cx-tool.rec { opacity: 1; background: color-mix(in srgb, var(--red) 22%, transparent); animation: cx-pulse 1.2s ease-in-out infinite; }
+.cx-attach { position: relative; flex: none; }
+.cx-attach img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; display: block; }
+.cx-attach button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: none; background: var(--red); color: #fff; font-size: 10px; cursor: pointer; display: grid; place-items: center; }
+.cx-search { display: flex; align-items: center; gap: 10px; margin: 10px 14px 0; padding: 6px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.05); }
+.cx-search input { flex: 1; border: none; background: transparent; font: inherit; color: inherit; padding: 6px 0; outline: none; }
+.cx-search span { font-size: var(--t-xs); color: var(--muted); }
+.cx-head .icon-btn.on { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }

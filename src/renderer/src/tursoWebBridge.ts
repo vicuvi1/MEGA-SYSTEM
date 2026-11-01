@@ -425,8 +425,8 @@ export function createTursoWebBridge(): Bridge {
     google,
     coach: {
       // The answer streams: live steps ("Reading your calendar…"), then the reply.
-      chat: async (text: string, onStep?: (step: string) => void) => {
-        const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
+      chat: async (text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }) => {
+        const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, ...(media ? { media } : {}) }) })
         if (!r.ok || !r.body) {
           const j = await r.json().catch(() => ({}))
           throw new Error(j.error || `Coach ${r.status}`)
@@ -471,6 +471,14 @@ export function createTursoWebBridge(): Bridge {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
       },
       mind: async () => (await svcP).read((s) => loadMind(s.db)),
+      // ↩ Undo what the coach did in one reply (all of it, or one line).
+      undo: async (at: string, index?: number) => {
+        const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'undo', at, index }) })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error || `Coach ${r.status}`)
+        void syncNow().catch(() => null)
+        return j as { ok: boolean; lines: string[] }
+      },
       // The chat's header, pinned "Do this now" and live cards (read here, instant).
       status: async () => (await svcP).read((s) => coachStatus(s as any)),
       // Is the coach working? The weekly scorecard from its history (read here).

@@ -90,6 +90,17 @@ export function saveProfile(db: any, p: CoachProfile): CoachProfile {
 }
 
 /** Every coach conversation (Telegram and the app), newest last, for the Coach page. */
+/** How to take back one thing the coach did (the Undo on its action cards). */
+export type UndoOp =
+  | { k: 'water'; ml: number }
+  | { k: 'reps'; ex: string; amount: number }
+  | { k: 'money'; id: string }
+  | { k: 'event'; cal: string; id: string }
+  | { k: 'task'; id: string }
+  | { k: 'remind'; id: string }
+  | { k: 'mustdo'; text: string }
+  | { k: 'focus' }
+
 export interface LogEntry {
   role: 'me' | 'coach'
   bot: Persona
@@ -98,7 +109,16 @@ export interface LogEntry {
   done?: string[]
   /** The coach's mood when it wrote this (its face in the chat). */
   mood?: string
+  /** One undo per `done` line (null: can't be undone), and which were undone. */
+  undo?: (UndoOp | null)[]
+  undone?: boolean[]
+  /** Short replies he might send next (the chips under the chat). */
+  chips?: string[]
   at: string
+}
+
+export function saveLog(db: any, entries: LogEntry[]): void {
+  setSetting(db, LOG, JSON.stringify(entries.slice(-MAX_LOG)))
 }
 const LOG = 'coach_log'
 const MAX_LOG = 200
@@ -402,9 +422,10 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     extra.found ? '' : LOOKUPS,
     '',
     'Also put in "remember" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.',
+    'Put in "chips" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message ("Done ✅", "Give me 10 min", "Why?", "Plan it"). Never generic.',
     'Put in "steps" 1–4 very short labels of what you did or checked, for the screen ("Checked your calendar", "Found 2h free after 15:00", "Moved 3 blocks").',
     '',
-    `Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
+    `Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "chips": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
     '',
     extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : '',
     '== Victor right now ==',
@@ -436,6 +457,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
 export interface BrainOut {
   reply: string
   mood?: string
+  chips?: string[]
   actions: string[]
   remember: string[]
   steps?: string[]
@@ -451,6 +473,7 @@ export function parseBrain(text: string): BrainOut {
     return {
       reply: String(j.reply ?? '').trim(),
       mood: typeof j.mood === 'string' ? j.mood.toLowerCase().trim() : undefined,
+      chips: (Array.isArray(j.chips) ? j.chips : []).map((x: any) => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 4),
       actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
       remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
       steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x: string) => x.slice(0, 80)).slice(0, 4),

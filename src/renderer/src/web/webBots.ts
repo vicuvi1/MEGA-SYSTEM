@@ -31,7 +31,7 @@ import { MirrorError, type Mirror } from './mirror'
 import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
-import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
 import { createRhythm } from './rhythmBot'
@@ -643,7 +643,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[px]|n[ps]|r[bvw]|cu)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -651,6 +651,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     const edit = (text: string, keyboard?: any) =>
       tg(update.__token, 'editMessageText', { chat_id: chat, message_id: cq.message.message_id, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+    // ↩ Undo under a coach reply: take back what it did.
+    if (data.startsWith('cu|')) {
+      if (!(await markSeen(key))) return null
+      const at = new Date(Number(data.slice(3))).toISOString()
+      const r = await undoReply(at)
+      await answer(r.ok ? 'Undone' : r.lines[0] ?? 'Nothing to undo')
+      const text = `${esc(String(cq.message?.text ?? ''))}\n\n${r.lines.map(esc).join('\n')}`
+      await edit(text)
+      return text
+    }
     // The daily rhythm: today's plan, the evening review, the Sunday review.
     if (/^r[bvw]\|/.test(data)) {
       if (!(await markSeen(key))) return null
@@ -999,7 +1009,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     media?: { kind: 'voice' | 'photo'; mime: string; data: string },
     via = 'telegram',
     onStep?: (step: string) => void
-  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood }> {
+  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[] }> {
     const step = (s: string) => {
       try {
         onStep?.(s)
@@ -1167,7 +1177,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (typeof process !== 'undefined' && process.env?.BOT_DEBUG) console.log('brain actions:', out.actions, '→', acts)
     const noCal = () => done.push("⚠️ Google Calendar isn't connected (Settings in the app)")
     const fmtHM = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
+    // One undo per thing done (aligned with `done`); null when it can't be undone.
+    const undo: (UndoOp | null)[] = done.map(() => null)
+    let opNow: UndoOp | null = null
     for (const [i, a] of acts.entries()) {
+      const mark = done.length
+      opNow = null
       try {
         if (a.kind === 'event') {
           if (!calendar) {
@@ -1175,7 +1190,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             continue
           }
           const start = new Date(`${a.day}T${a.time}:00`)
-          await calendar.create({ title: a.title, start: start.toISOString(), end: new Date(start.getTime() + a.minutes * 60000).toISOString(), description: 'Planned with your coach in Life System' })
+          const ev = await calendar.create({ title: a.title, start: start.toISOString(), end: new Date(start.getTime() + a.minutes * 60000).toISOString(), description: 'Planned with your coach in Life System' })
+          if (ev?.id) opNow = { k: 'event', cal: ev.calendarId, id: ev.id }
           done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`)
           continue
         }
@@ -1248,7 +1264,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             } catch {
               list = []
             }
-            setSetting(db as any, REMINDERS, JSON.stringify(addReminder(list, { at: at.toISOString(), text: a.text, kind: a.kind, follow: a.kind === 'checkin' })))
+            const next = addReminder(list, { at: at.toISOString(), text: a.text, kind: a.kind, follow: a.kind === 'checkin' })
+            opNow = { k: 'remind', id: next[next.length - 1].id }
+            setSetting(db as any, REMINDERS, JSON.stringify(next))
           })
           done.push(a.kind === 'remind' ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== new Date().toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ''}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`)
           continue
@@ -1313,12 +1331,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             if (a.kind === 'water') {
               const next = addWater(st, a.ml, day)
               save(next)
+              opNow = { k: 'water', ml: -a.ml }
               const v = sharedView(next, day)
               return `💧 ${a.ml > 0 ? '+' : ''}${a.ml} ml · ${(v.water.ml / 1000).toFixed(2).replace(/0$/, '')} of ${(v.water.target / 1000).toFixed(1)} L today`
             }
             const r = addReps(st, a.exercise, a.amount, day)
             if (!r) return `⚠️ No "${a.exercise}" on your Sport Track checklist`
             save(r.st)
+            opNow = { k: 'reps', ex: a.exercise, amount: -a.amount }
             // Real reps also count as a workout (streak and points), like "30 pushups".
             if (a.amount > 0) {
               const svc = services.services(db)
@@ -1392,6 +1412,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         if (a.kind === 'task') {
           if (!todoist) continue
           const t = await todoist.quickAdd(a.text)
+          if (t?.id) opNow = { k: 'task', id: t.id }
           done.push(`➕ Todoist: ${t.content || a.text}${t.section ? ` · ${t.section}` : ''}${t.due ? ` (${t.due})` : ''}`)
           continue
         }
@@ -1402,16 +1423,21 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             if (r.unknown) return null
             if (r.keyboard) keyboard = r.keyboard
             if (r.expense) expense = true
+            // A money record can be undone (its id is on its Undo button).
+            const txId = ((r.keyboard?.inline_keyboard ?? []) as any[][]).flat().map((b: any) => String(b.callback_data ?? '')).find((d) => d.startsWith('fu|'))?.split('|')[1]
+            if (txId) opNow = { k: 'money', id: txId }
             return `✅ Logged: ${a.text}`
           }
           if (a.kind === 'mustdo') {
             const p = svc.focus.plan(svc.wallet.today())
             if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null
             svc.focus.setPlan([...p.items.map((x) => x.text), a.text])
+            opNow = { k: 'mustdo', text: a.text }
             return `📝 Must-do added: ${a.text}${todoist ? ' (⭐ in Todoist)' : ''}`
           }
           if (a.kind === 'focus') {
             svc.focus.start(a.subject, a.minutes)
+            opNow = { k: 'focus' }
             keyboard = STOP_KEYBOARD
             return `⏱ Focus started: ${a.subject} · ${a.minutes} min`
           }
@@ -1428,6 +1454,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         if (line && a.kind === 'mustdo' && todoist) await todoist.quickAdd(`${a.text} today @today`).catch(() => null)
       } catch (e) {
         done.push(`⚠️ ${(e as Error).message}`)
+      } finally {
+        while (undo.length < done.length) undo.push(undo.length === mark && !String(done[mark] ?? '').startsWith('⚠️') ? opNow : null)
       }
     }
     if (expense) onExpense?.()
@@ -1446,12 +1474,105 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         )
         appendLog(db, [
           { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : text, at },
-          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at }
+          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at, ...(undo.some(Boolean) ? { undo } : {}), ...(out.chips?.length ? { chips: out.chips } : {}) }
         ])
       })
       .catch(() => null)
     processed++
-    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood }
+    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood, at, undo, chips: out.chips }
+  }
+
+  /**
+   * Takes back what the coach did in one reply (`at`): all of it, or one line.
+   * Each line once; the log remembers what was undone.
+   */
+  async function undoReply(at: string, index?: number): Promise<{ ok: boolean; lines: string[] }> {
+    const entry = await mirror.read((db) => loadLog(db).find((e) => e.role === 'coach' && e.at === at) ?? null)
+    if (!entry?.undo) return { ok: false, lines: ['Nothing to undo there'] }
+    const idx = entry.undo.map((op, k) => (op && !entry.undone?.[k] && (index == null || index === k) ? k : -1)).filter((k) => k >= 0)
+    if (!idx.length) return { ok: false, lines: ['Already undone'] }
+    const lines: string[] = []
+    const ok: number[] = []
+    for (const k of idx) {
+      const op = entry.undo[k]!
+      try {
+        if (op.k === 'event') {
+          if (!calendar?.remove) throw new Error('Calendar not connected')
+          await calendar.remove(op.cal, op.id)
+          lines.push('↩ Block removed from your calendar')
+        } else if (op.k === 'task') {
+          if (!todoist?.remove) throw new Error('Todoist not connected')
+          await todoist.remove(op.id)
+          lines.push('↩ Todoist task removed')
+        } else {
+          const line = await mirror.write((db) => {
+            const svc = services.services(db)
+            if (op.k === 'water' || op.k === 'reps') {
+              const st = sportState(db)
+              if (!st) return '⚠️ Sport Track data is gone'
+              const day = sportToday()
+              if (op.k === 'water') {
+                setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: addWater(st, op.ml, day) }))
+                return `↩ Water ${op.ml > 0 ? '+' : ''}${op.ml} ml`
+              }
+              const r = addReps(st, op.ex, op.amount, day)
+              if (!r) return '⚠️ Exercise not found'
+              setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: r.st }))
+              return `↩ ${r.exercise.name} back to ${r.exercise.done}`
+            }
+            if (op.k === 'money') {
+              const what = deleteMoney(db as any, op.id)
+              const life = takeLink(db, op.id)
+              if (life) {
+                try {
+                  svc.money.deleteExpense(life)
+                } catch {
+                  /* already gone */
+                }
+              }
+              return what ? `↩ Removed: ${what}` : '⚠️ That money record is already gone'
+            }
+            if (op.k === 'remind') {
+              let list: Reminder[] = []
+              try {
+                list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+              } catch {
+                list = []
+              }
+              setSetting(db as any, REMINDERS, JSON.stringify(list.filter((r) => r.id !== op.id)))
+              return '↩ Reminder cancelled'
+            }
+            if (op.k === 'mustdo') {
+              const p = svc.focus.plan(svc.wallet.today())
+              const rest = p.items.map((x) => x.text).filter((t) => t.toLowerCase() !== op.text.toLowerCase())
+              if (!rest.length) return '⚠️ It is your only must-do: tick it or replace it'
+              svc.focus.setPlan(rest)
+              return `↩ Must-do removed: ${op.text}`
+            }
+            svc.focus.cancel()
+            return '↩ Focus timer cancelled'
+          })
+          lines.push(line)
+          if (line.startsWith('⚠️')) continue
+        }
+        ok.push(k)
+      } catch (e) {
+        lines.push(`⚠️ ${(e as Error).message}`)
+      }
+    }
+    if (ok.length)
+      await mirror.write((db) => {
+        const log = loadLog(db)
+        const e = log.find((x) => x.role === 'coach' && x.at === at)
+        if (e) {
+          const undone = e.undone ?? []
+          for (const k of ok) undone[k] = true
+          e.undone = undone
+          saveLog(db, log)
+        }
+      })
+    if (ok.length) onExpense?.()
+    return { ok: ok.length > 0, lines }
   }
 
   async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
@@ -1460,7 +1581,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const r = await think(personaFor(botId, cfg), text, key, media)
     const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join('\n')}` : ''].join('\n').trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`
     addLog(text || `[${media?.kind}]`, chat, r.ok, reply)
-    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML', ...(r.keyboard ? { reply_markup: r.keyboard } : {}) }).catch(() => null)
+    const undoKb = !r.keyboard && r.at && r.undo?.some(Boolean) ? { inline_keyboard: [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] } : null
+    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML', ...(r.keyboard ? { reply_markup: r.keyboard } : undoKb ? { reply_markup: undoKb } : {}) }).catch(() => null)
     return reply
   }
 
@@ -1657,9 +1779,11 @@ His note: ${note}`,
     pollOnce,
     handleUpdate,
     /** The app's Coach page: the same brain and memory as the bots. */
-    think: (text: string, key = `app:${Date.now()}`, onStep?: (s: string) => void) => think('mega', text, key, undefined, 'app', onStep),
+    think: (text: string, key = `app:${Date.now()}`, onStep?: (s: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }) => think('mega', text, key, media, 'app', onStep),
     /** The daily rhythm (morning plan, reviews), for the tick and the app. */
     rhythm,
+    /** Undo what the coach did in one reply (all, or one line). */
+    undoReply,
     config,
     saveConfig: async (patch: Partial<BotBridgeConfig>): Promise<BotBridgeConfig> => {
       const next: BotBridgeConfig = { ...(await config()), ...patch }

@@ -13,7 +13,7 @@ import { CoachScorecard, GoalPlans } from '../CoachPanels'
 import { CoachPlan } from '../CoachPlan'
 import type { CoachStatus } from '../web/coachStatus'
 
-type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string }
+type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string }
 type Profile = { about: string; goals: string[]; rules: string[] }
 
 const BOT_LABEL: Record<string, string> = { mega: 'Mega', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
@@ -54,6 +54,58 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [model, setModel] = useState<string | null>(null)
   const [mind, setMind] = useState<CoachMind | null>(null)
   const [status, setStatus] = useState<CoachStatus | null>(null)
+  const [photo, setPhoto] = useState<{ url: string; data: string } | null>(null)
+  const [query, setQuery] = useState<string | null>(null)
+  const [listening, setListening] = useState(false)
+  const recog = useRef<any>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const undoLine = async (m: Entry, index?: number) => {
+    if (!life.coach?.undo) return
+    const r = await act(() => life.coach!.undo!(m.at, index))
+    if (!r) return
+    const marks = [...(m.undone ?? [])]
+    if (r.ok) (m.undo ?? []).forEach((op, k) => op && (index == null || index === k) && (marks[k] = true))
+    setLog((l) => (l ?? []).map((x) => (x === m ? { ...x, undone: marks } : x)))
+    await act(async () => r, r.lines.join(' · '))
+    onWallet()
+    loadStatus()
+  }
+  // 🎤 Dictation (the browser's speech recognition): words go into the box.
+  const Speech = typeof window !== 'undefined' ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition) : null
+  const toggleMic = () => {
+    if (!Speech) return
+    if (listening) {
+      recog.current?.stop()
+      return
+    }
+    const r = new Speech()
+    r.lang = navigator.language || 'en-US'
+    r.interimResults = true
+    r.continuous = false
+    const base = text ? `${text.trim()} ` : ''
+    r.onresult = (e: any) => setText(base + Array.from(e.results as ArrayLike<any>).map((x: any) => x[0].transcript).join(''))
+    r.onend = () => setListening(false)
+    r.onerror = () => setListening(false)
+    recog.current = r
+    setListening(true)
+    r.start()
+  }
+  // 📷 A photo (receipt, meal, screen): shrunk to 1280 px JPEG before it goes.
+  const pickPhoto = async (f: File | undefined) => {
+    if (!f) return
+    const img = new Image()
+    const src = URL.createObjectURL(f)
+    img.src = src
+    await img.decode().catch(() => null)
+    const k = Math.min(1, 1280 / Math.max(img.width || 1, img.height || 1))
+    const c = document.createElement('canvas')
+    c.width = Math.round((img.width || 1) * k)
+    c.height = Math.round((img.height || 1) * k)
+    c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height)
+    const url = c.toDataURL('image/jpeg', 0.85)
+    URL.revokeObjectURL(src)
+    setPhoto({ url, data: url.split(',')[1] })
+  }
   // The info drawer: open by default on wide screens, a slide-over on phones.
   const [info, setInfo] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1400)
   const [tab, setTab] = useState<'plan' | 'goals' | 'score' | 'about'>('plan')
@@ -98,19 +150,25 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
 
   const send = async (msg = text) => {
     const t = msg.trim()
-    if (!t || busy || !life.coach) return
+    const pic = photo
+    if ((!t && !pic) || busy || !life.coach) return
     setText('')
+    setPhoto(null)
     setBusy(true)
     const now = new Date().toISOString()
-    setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: t, at: now }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
+    setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: t, at: now, photo: pic?.url }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
     try {
       const seen: string[] = []
-      const r = await life.coach.chat(t, (st) => {
-        if (seen.includes(st)) return
-        seen.push(st)
-        setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, steps: [...seen] } : x)))
-      })
-      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: new Date().toISOString(), steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
+      const r = await life.coach.chat(
+        t,
+        (st) => {
+          if (seen.includes(st)) return
+          seen.push(st)
+          setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, steps: [...seen] } : x)))
+        },
+        pic ? { mime: 'image/jpeg', data: pic.data } : undefined
+      )
+      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, fresh: true, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       if (r.done.length) onWallet()
       void life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
       void life.coach.mind?.().then(setMind).catch(() => {})
@@ -177,12 +235,22 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           <span className="cx-model" title="Quick answers on flash, hard ones on the strong model">
             {model ? model.replace(/^.*\//, '').replace(/-\d{3,}$/, '') : 'coach'}
           </span>
+          <button className={`icon-btn ${query != null ? 'on' : ''}`} onClick={() => setQuery((q) => (q == null ? '' : null))} aria-label="Search the chat" title="Search the chat">
+            <Icon name="search" />
+          </button>
           <button className={`icon-btn cx-info-btn ${info ? 'on' : ''}`} onClick={() => setInfo((v) => !v)} aria-label="Show plan, goals and more" title="Plan, goals, score, about you">
             <Icon name="sliders" />
           </button>
         </header>
 
-        {status && (
+        {query != null && (
+          <div className="cx-search">
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your chats with Mega…" onKeyDown={(e) => e.key === 'Escape' && setQuery(null)} />
+            <span>{query.trim() ? `${(log ?? []).filter((m) => m.text.toLowerCase().includes(query.trim().toLowerCase())).length} found` : ''}</span>
+          </div>
+        )}
+
+        {status && query == null && (
           <div className={`cx-pin move-${status.move.kind}`}>
             <div className="cx-pin-text">
               <small>Do this now</small>
@@ -202,7 +270,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           </div>
         )}
 
-        {status && (
+        {status && query == null && (
           <div className="cx-strip" role="list">
             <button role="listitem" className="cx-card" onClick={() => (setTab('plan'), setInfo(true))}>
               <small>Plan</small>
@@ -268,6 +336,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             </div>
           )}
           {log?.map((m, i) => {
+            if (query?.trim() && !m.text.toLowerCase().includes(query.trim().toLowerCase())) return null
             const prev = log[i - 1]
             const day = new Date(m.at).toDateString()
             const newDay = !prev || new Date(prev.at).toDateString() !== day
@@ -304,14 +373,26 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                       ) : (
                         <>
                           {!!m.steps?.length && <div className="co-steps-done">{m.steps.join(' · ')}</div>}
-                          {m.text}
+                          {m.photo && <img className="cx-photo" src={m.photo} alt="Your photo" />}
+                          {m.role === 'coach' ? <Rich text={m.text} reveal={!!m.fresh} highlight={query ?? ''} /> : <Rich text={m.text} highlight={query ?? ''} />}
                         </>
                       )}
                       {!!m.done?.length && (
-                        <ul className="co-done">
-                          {m.done.map((d, k) => (
-                            <li key={k}>{d}</li>
-                          ))}
+                        <ul className="cx-actions">
+                          {m.done.map((d, k) => {
+                            const can = !!m.undo?.[k] && !m.undone?.[k]
+                            return (
+                              <li key={k} className={`cx-action ${m.undone?.[k] ? 'undone' : ''} ${d.startsWith('⚠️') ? 'warn' : ''}`}>
+                                <span>{d}</span>
+                                {can && (
+                                  <button className="cx-undo" onClick={() => void undoLine(m, k)} title="Take this back">
+                                    ↩ Undo
+                                  </button>
+                                )}
+                                {m.undone?.[k] && <em>undone</em>}
+                              </li>
+                            )
+                          })}
                         </ul>
                       )}
                       {!m.pending && (
@@ -330,7 +411,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         </div>
         {!!log?.length && (
           <div className="co-quick cx-quick">
-            {QUICK.map((q) => (
+            {([...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)?.chips?.length ? [...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)!.chips! : QUICK).map((q) => (
               <button key={q} className="wp-chip" disabled={busy} onClick={() => void send(q)}>
                 {q}
               </button>
@@ -344,6 +425,18 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             void send()
           }}
         >
+          {photo && (
+            <span className="cx-attach">
+              <img src={photo.url} alt="" />
+              <button type="button" onClick={() => setPhoto(null)} aria-label="Remove photo">
+                ✕
+              </button>
+            </span>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0]).then(() => (e.target.value = ''))} />
+          <button type="button" className="cx-tool" onClick={() => fileRef.current?.click()} aria-label="Send a photo" title="Photo (a receipt, a meal…)">
+            📷
+          </button>
           <textarea
             value={text}
             onChange={(e) => {
@@ -351,7 +444,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               e.target.style.height = 'auto'
               e.target.style.height = `${Math.min(180, e.target.scrollHeight)}px`
             }}
-            placeholder="Message Mega…"
+            placeholder={listening ? 'Listening…' : 'Message Mega…'}
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -360,7 +453,12 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               }
             }}
           />
-          <button className="co-send" disabled={busy || !text.trim()} aria-label="Send" title="Send (Enter)">
+          {Speech && (
+            <button type="button" className={`cx-tool ${listening ? 'rec' : ''}`} onClick={toggleMic} aria-label={listening ? 'Stop dictation' : 'Dictate'} title={listening ? 'Listening… tap to stop' : 'Speak instead of typing'}>
+              🎤
+            </button>
+          )}
+          <button className="co-send" disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter)">
             {busy ? '…' : '↑'}
           </button>
         </form>
@@ -590,5 +688,38 @@ function RhythmSettings() {
         </div>
       )}
     </section>
+  )
+}
+
+/** Coach text with numbers in bold (and search hits marked); a new reply types itself out. */
+function Rich({ text, reveal = false, highlight = '' }: { text: string; reveal?: boolean; highlight?: string }) {
+  const [n, setN] = useState(reveal ? 0 : text.length)
+  useEffect(() => {
+    if (!reveal || typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setN(text.length)
+    setN(0)
+    const step = Math.max(2, Math.ceil(text.length / 60))
+    const t = setInterval(() => setN((x) => (x + step >= text.length ? (clearInterval(t), text.length) : x + step)), 16)
+    return () => clearInterval(t)
+  }, [text, reveal])
+  const shown = text.slice(0, n)
+  const h = highlight.trim().toLowerCase()
+  const parts = shown.split(/(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|%|km|kg|reps|days?|\/\d+))?)/g)
+  return (
+    <span className="cx-rich">
+      {parts.map((p, i) => {
+        const hit = h && p.toLowerCase().includes(h)
+        if (i % 2 === 1) return <b key={i} className={hit ? 'hit' : ''}>{p}</b>
+        if (!hit) return p
+        const k = p.toLowerCase().indexOf(h)
+        return (
+          <span key={i}>
+            {p.slice(0, k)}
+            <mark>{p.slice(k, k + h.length)}</mark>
+            {p.slice(k + h.length)}
+          </span>
+        )
+      })}
+      {n < text.length && <i className="cx-caret" />}
+    </span>
   )
 }
