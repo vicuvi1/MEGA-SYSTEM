@@ -9,7 +9,6 @@ import { todayLayout, useUiPrefs, type TodaySectionId } from '../uiPrefs'
 import type { QuestState } from '@shared/api'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { soundSuccess } from '../sound'
-import { TodoistPanel } from '../TodoistPanel'
 import { FocusToday } from './Focus'
 import { DayFlow } from '../DayFlow'
 import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
@@ -66,20 +65,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   const [ui] = useUiPrefs()
   // Your sections, in your order (Settings → Today screen).
   const sections: Record<TodaySectionId, () => ReactNode> = {
-    apps: () => (
-        <>
-      <StatsStrip5
-        summary={summary}
-        shop={shop}
-        connections={connections}
-        discipline={discipline}
-        body={body ?? null}
-        pops={pops}
-        onOpenApp={onOpenApp}
-        onOpenShop={onOpenShop}
-      />
-        </>
-      ),
     reps: () => (
         <>
       <SoloDailyQuestBanner
@@ -97,7 +82,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     progress: () => <ProgressCard onOpen={() => onGo('progress')} />,
     timeline: () => <DayTimeline onGo={onGo} />,
     fun: () => <FunCard onWallet={() => onChange()} onOpenShop={onOpenShop} />,
-    todoist: () => <TodoistPanel today={summary.today} onWallet={() => onChange()} />,
     quicklog: () => (
         <>
       <div className="cols">

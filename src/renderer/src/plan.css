@@ -39,7 +39,7 @@
 .seg button.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px #2c3446; }
 .weekdays { display: flex; gap: 6px; }
 .wd { width: 38px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg-2); color: var(--muted); font-size: 12.5px; }
-.wd.on { background: color-mix(in srgb, var(--lime) 16%, var(--bg-2)); color: var(--lime); border-color: rgba(200, 241, 53, 0.45); }
+.wd.on { background: color-mix(in srgb, var(--lime) 16%, var(--bg-2)); color: var(--accent-text); border-color: rgba(200, 241, 53, 0.45); }
 
 /* ---------- Schedule ---------- */
 .week { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -134,12 +134,12 @@
 .app-tabs { display: flex; gap: 4px; padding: 10px 28px 0; border-bottom: 1px solid var(--line); }
 .app-tabs button { border: 0; background: transparent; color: var(--muted); padding: 8px 14px 10px; font-weight: 600; border-bottom: 2px solid transparent; }
 .app-tabs button:hover { color: var(--text); }
-.app-tabs button.on { color: var(--text); border-bottom-color: var(--lime); }
+.app-tabs button.on { color: var(--text); border-bottom-color: var(--accent-text); }
 .embed-host { display: none; flex: 1; position: relative; min-height: 0; background: var(--bg); }
 .embed-host.on { display: block; }
 .embed { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .embed-msg { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); text-align: center; }
 
 /* ---------- Updates ---------- */
-.update-chip { color: var(--lime); border-color: rgba(200, 241, 53, 0.5); background: rgba(200, 241, 53, 0.08); }
+.update-chip { color: var(--accent-text); border-color: rgba(200, 241, 53, 0.5); background: rgba(200, 241, 53, 0.08); }
 .update-bar { margin: 0 0 12px; }

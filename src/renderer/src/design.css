@@ -1,0 +1,209 @@
+/* ============================================================
+   Design system (loaded last). One set of tokens and building
+   blocks for every page: calm surfaces, no glows, one accent.
+   Use these classes for anything new:
+     .card / .card-head      a section
+     .list-row               one row in a list (title, meta, actions)
+     .chip (.ok .warn .bad .on)  small labels and toggles
+     .empty-state            what to show instead of zeros
+     .page-head              a heading inside a page
+   React wrappers: src/renderer/src/blocks.tsx
+   ============================================================ */
+
+:root {
+  /* spacing: 4px steps */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  /* type scale */
+  --t-xs: 11.5px;
+  --t-sm: 12.5px;
+  --t-md: 14px;
+  --t-lg: 16px;
+  --t-xl: 20px;
+  --t-2xl: 28px;
+  /* surfaces (solid, no blur) */
+  --surface: #0f131b;
+  --surface-2: #151a24;
+  --surface-3: #1c2230;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 8px 28px -12px rgba(0, 0, 0, 0.55);
+  --accent: var(--lime);
+  --accent-ink: var(--lime-ink);
+  --accent-soft: color-mix(in srgb, var(--lime) 14%, transparent);
+  --accent-text: var(--lime);
+  --ink: 255 255 255;
+  /* the old neon glows are switched off everywhere */
+  --line: var(--border);
+  --line-glow: transparent;
+  --cyan-glow: transparent;
+  --purple-glow: transparent;
+  --panel: var(--surface);
+  --panel-2: var(--surface-2);
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 18px;
+  --display: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+}
+:root[data-theme='light'] {
+  --surface: #ffffff;
+  --surface-2: #f4f5f8;
+  --surface-3: #eceef3;
+  --border: #e3e6ec;
+  --border-strong: #cfd4dd;
+  --shadow-1: 0 1px 2px rgba(20, 25, 34, 0.06);
+  --shadow-2: 0 10px 30px -14px rgba(20, 25, 34, 0.25);
+  --accent-soft: color-mix(in srgb, var(--lime) 28%, transparent);
+  --accent-text: #4d6a00;
+  --ink: 20 25 34;
+  --line: var(--border);
+}
+
+/* ---------- page base ---------- */
+:root body { background: var(--bg); font: var(--t-md) / 1.5 var(--font); letter-spacing: -0.005em; }
+:root .topbar { background: color-mix(in srgb, var(--bg) 92%, transparent); border-bottom-color: var(--border); }
+:root .title h1 { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.02em; }
+:root .content { padding: var(--s-5) var(--s-6) var(--s-8); }
+:root .hint { color: var(--muted); font-size: var(--t-sm); line-height: 1.5; }
+:root .hint.small { font-size: var(--t-xs); }
+
+/* no neon: kill glows and text shadows from the old game look */
+:root * { text-shadow: none !important; }
+:root .panel,
+:root .stat,
+:root .card {
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+:root .panel { padding: var(--s-4) var(--s-5); }
+:root .panel:hover,
+:root .stat:hover { border-color: var(--border-strong); box-shadow: var(--shadow-1); transform: none; }
+:root .stat.hero { background: var(--surface); border-color: var(--border); }
+:root .stat .label { font-size: var(--t-xs); letter-spacing: 0.04em; font-weight: 600; text-transform: none; }
+:root .stat .big { font-weight: 700; font-size: var(--t-2xl); }
+:root .panel-head { margin-bottom: var(--s-3); }
+:root .panel-head h2,
+:root .panel h3 { letter-spacing: -0.01em; }
+:root .panel-head h2 { font-size: var(--t-lg); font-weight: 600; }
+:root .icon-btn:hover { border-color: var(--border-strong); transform: none; }
+:root .pop { color: var(--accent); }
+:root[data-theme='light'] .pop { color: var(--lime-text); }
+
+/* ---------- card ---------- */
+.card { padding: var(--s-4) var(--s-5); display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; }
+.card.flat { box-shadow: none; background: var(--surface-2); }
+.card.tight { padding: var(--s-3) var(--s-4); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: 28px; }
+.card-head h2, .card-head h3 { margin: 0; font-size: var(--t-lg); font-weight: 600; display: flex; align-items: center; gap: var(--s-2); letter-spacing: -0.01em; }
+.card-head h3 { font-size: var(--t-md); }
+.card-head .actions { display: flex; gap: var(--s-2); align-items: center; }
+.card-head svg { color: var(--muted); }
+
+/* ---------- list rows ---------- */
+.list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.list-row {
+  position: relative;
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 9px var(--s-2);
+  min-height: 42px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: background 0.12s;
+}
+.list-row + .list-row { border-top: 1px solid var(--border); }
+.list-row:hover { background: var(--surface-2); }
+.list-row:hover + .list-row { border-top-color: transparent; }
+.list-row .lr-lead { flex: none; display: grid; place-items: center; width: 22px; color: var(--muted); }
+.list-row .lr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.list-row .lr-title { font-size: var(--t-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-row .lr-meta { font-size: var(--t-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-row .lr-trail { flex: none; display: flex; align-items: center; gap: var(--s-2); color: var(--muted); font-size: var(--t-sm); }
+.list-row.done .lr-title { color: var(--faint); text-decoration: line-through; }
+.list-row.clickable { cursor: pointer; }
+
+/* ---------- chips ---------- */
+:root .chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; min-height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-xs); font-weight: 500;
+  white-space: nowrap;
+}
+:root button.chip { cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s; }
+:root button.chip:hover { color: var(--text); border-color: var(--border-strong); }
+:root .chip.on { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); }
+:root .chip.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 35%, transparent); background: color-mix(in srgb, var(--green) 10%, transparent); }
+:root .chip.warn { color: var(--orange); border-color: color-mix(in srgb, var(--orange) 35%, transparent); background: color-mix(in srgb, var(--orange) 10%, transparent); }
+:root .chip.bad { color: var(--red); border-color: color-mix(in srgb, var(--red) 35%, transparent); background: color-mix(in srgb, var(--red) 10%, transparent); }
+:root .chip.muted { color: var(--faint); }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--muted)); }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+/* ---------- empty state ---------- */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s-2);
+  padding: var(--s-6) var(--s-4);
+  color: var(--muted);
+}
+.empty-state .es-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.empty-state b { color: var(--text); font-size: var(--t-md); font-weight: 600; }
+.empty-state p { margin: 0; font-size: var(--t-sm); max-width: 340px; }
+.empty-state .btn { margin-top: var(--s-2); }
+.empty-state.compact { padding: var(--s-3); flex-direction: row; text-align: left; }
+
+/* ---------- page head (inside a page) ---------- */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s-4); margin: 0 0 var(--s-4); flex-wrap: wrap; }
+.page-head h2 { margin: 0; font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.02em; }
+.page-head p { margin: 2px 0 0; color: var(--muted); font-size: var(--t-sm); }
+.page-head .actions { display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; }
+
+/* ---------- buttons: one accent, quiet hover ---------- */
+:root .btn { transition: background 0.12s, border-color 0.12s, color 0.12s; }
+:root .btn:not(.primary) { background: var(--surface-2); border-color: var(--border); }
+:root .btn:not(.primary):hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); transform: none; }
+:root .btn.ghost { background: transparent; border-color: transparent; }
+:root .btn.ghost:hover:not(:disabled) { background: var(--surface-2); }
+:root .btn.primary { box-shadow: none; }
+:root .btn.primary:hover:not(:disabled) { transform: none; filter: brightness(1.06); }
+
+/* ---------- light mode fixes for common pieces ---------- */
+:root[data-theme='light'] .sidebar { background: var(--surface); }
+:root[data-theme='light'] textarea,
+:root[data-theme='light'] input:not([type='checkbox']):not([type='radio']),
+:root[data-theme='light'] select { background: var(--surface); }
+:root[data-theme='light'] input[type='date'] { color-scheme: light; }
+:root[data-theme='light'] .co-bubble { background: var(--surface-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+@media (max-width: 720px) {
+  :root .content { padding: var(--s-3) var(--s-3) 96px; }
+  :root .panel, .card { padding: var(--s-3) var(--s-4); }
+}
+
+/* ---------- sidebar: flat, no glow ---------- */
+:root .sb { background: var(--surface); box-shadow: var(--shadow-2); border-color: var(--border); }
+:root .sb-glow { display: none; }
+:root .sb-active { background: var(--surface-3); border-color: var(--border); box-shadow: none; }
+:root .sb-item.on .sb-tile { box-shadow: none; }
+:root .sb-item.on .sb-dot { box-shadow: 0 0 0 2px var(--surface); }
+:root .sb-dot { box-shadow: 0 0 0 2px var(--surface); }
+:root .sb-tagline { color: var(--muted); }
+
+:root .tb-search { background: var(--surface); border-color: var(--border); }
+:root .sb-mark { box-shadow: none !important; }
+:root .dl-play { box-shadow: none; }

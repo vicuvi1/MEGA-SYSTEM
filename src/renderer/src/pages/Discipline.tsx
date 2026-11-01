@@ -8,7 +8,7 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction } from '../ui'
 import { mmss } from './planUi'
-import { useTicker } from './Schedule'
+import { useTicker } from '../useTicker'
 
 interface Props {
   state: DisciplineState

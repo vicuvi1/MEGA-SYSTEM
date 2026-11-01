@@ -22,7 +22,7 @@ export interface UiPrefs {
   layoutV?: number
 }
 
-export type TodaySectionId = 'timeline' | 'day' | 'progress' | 'fun' | 'focus' | 'todoist' | 'reps' | 'apps' | 'quicklog'
+export type TodaySectionId = 'timeline' | 'day' | 'progress' | 'fun' | 'focus' | 'reps' | 'quicklog'
 
 /** What each Today section is, and whether it shows on a new device. */
 export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; on: boolean }[] = [
@@ -31,9 +31,7 @@ export const TODAY_SECTIONS: { id: TodaySectionId; label: string; hint: string; 
   { id: 'progress', label: 'This week', hint: 'Am I improving? One line and a chip per area', on: true },
   { id: 'focus', label: 'Focus timer', hint: 'Start and stop a focus session', on: true },
   { id: 'fun', label: 'Treat yourself', hint: 'What your coins buy now: fun time and your rewards', on: true },
-  { id: 'todoist', label: 'Todoist box', hint: 'Todoist on its own, with an add box (Todoist is also in the list)', on: false },
   { id: 'reps', label: 'Reps & water', hint: 'Push-ups, sit-ups, press and water with quick + buttons', on: true },
-  { id: 'apps', label: 'Your apps', hint: 'Coins, Waky, Finance Helper, MAN and Sport Track at a glance', on: false },
   { id: 'quicklog', label: 'Quick log & recent', hint: 'One tap for anything else, and what you logged', on: false },
 ]
 

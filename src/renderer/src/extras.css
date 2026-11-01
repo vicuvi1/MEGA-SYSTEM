@@ -65,7 +65,7 @@
   --p: 0; flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
   background: conic-gradient(var(--lime) calc(var(--p) * 1%), #232938 0);
 }
-.profile-ring span { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); font: 800 14px var(--display); color: var(--lime); }
+.profile-ring span { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); font: 800 14px var(--display); color: var(--accent-text); }
 .profile-text { display: grid; min-width: 0; line-height: 1.25; }
 .profile-text b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile-text small { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
@@ -98,11 +98,11 @@
 .notif-item { width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center; padding: 8px; border: 0; border-radius: 10px; background: transparent; text-align: left; position: relative; }
 .notif-item:hover { background: var(--panel-2); }
 .notif-item.new::before { content: ''; position: absolute; left: 1px; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: var(--lime); }
-.ni-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--lime); background: rgba(200, 241, 53, 0.1); }
+.ni-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--accent-text); background: rgba(200, 241, 53, 0.1); }
 .ni-icon.neg { color: var(--red); background: rgba(255, 93, 108, 0.1); }
 .alert.warn .ni-icon { color: var(--orange); background: rgba(255, 138, 61, 0.12); }
 .alert.info .ni-icon { color: #7cc4ff; background: rgba(124, 196, 255, 0.12); }
-.alert.good .ni-icon { color: var(--lime); background: rgba(200, 241, 53, 0.12); }
+.alert.good .ni-icon { color: var(--accent-text); background: rgba(200, 241, 53, 0.12); }
 .ni-body { display: grid; gap: 1px; min-width: 0; }
 .ni-body b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ni-body small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -161,7 +161,7 @@
 .rank-step { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-2); opacity: 0.5; }
 .rank-step.reached { opacity: 1; }
 .rank-step.current { border-color: rgba(200, 241, 53, 0.5); box-shadow: 0 0 18px rgba(200, 241, 53, 0.15); }
-.rank-step.current b { color: var(--lime); }
+.rank-step.current b { color: var(--accent-text); }
 .rank-step small { color: var(--muted); font-size: 11.5px; }
 
 .day-pillar-dots {

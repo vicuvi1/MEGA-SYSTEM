@@ -19,8 +19,7 @@ import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
-import { soundTick, stopAllSounds, soundSystemOracle, soundFanfare, soundCoin, soundWarning } from './sound'
-import './gameCards.css'
+import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at once).
 function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) {
@@ -40,7 +39,6 @@ const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
-const SystemOracleDrawer = lazyNamed(() => import('./SystemOracleDrawer'), 'SystemOracleDrawer')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
 
 
@@ -120,7 +118,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [page, setPage] = useState<PageId>(known ? known.id : 'today')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
-  const [oracleOpen, setOracleOpen] = useState(false)
   const [quickCommandOpen, setQuickCommandOpen] = useState(false)
   const [backup, setBackup] = useState<BackupStatus | null>(null)
   const [shop, setShop] = useState<ShopState | null>(null)
@@ -645,7 +642,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           </motion.main>}
         </AnimatePresence>
         <Suspense fallback={null}>
-          {oracleOpen && <SystemOracleDrawer open onClose={() => setOracleOpen(false)} summary={summary} />}
           {quickCommandOpen && <QuickCommandBar open onClose={() => setQuickCommandOpen(false)} onRefreshWallet={onWallet} />}
         </Suspense>
         <MobileBottomBar page={page} onGo={go} onQuickCommand={() => setQuickCommandOpen(true)} />

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AREA_COLORS, defaultAreaColor, plainName, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
+import { EmptyState } from '../blocks'
 import { soundCoin, soundSuccess } from '../sound'
 import { useAction, useToast } from '../ui'
 
@@ -119,8 +120,8 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
     const subject = (a && a.name !== 'Inbox' ? plainName(a.name) : '') || t.content.split(/\s+/).slice(0, 3).join(' ')
     if (await act(() => life.focus.start(subject.slice(0, 40), 50, { kind: 'todoist', ref: t.id, title: t.content }), `Focus started: ${t.content}`)) soundSuccess()
   }
-  if (error) return <section className="panel"><p className="hint">{error}</p></section>
-  if (!data) return <section className="panel"><p className="hint">Loading your Todoist…</p></section>
+  if (error) return <section className="card"><EmptyState icon="tasks" title="Todoist isn't connected">{error}</EmptyState></section>
+  if (!data) return <section className="card"><p className="hint">Loading your Todoist…</p></section>
 
   const shownAreas = data.areas.filter((a) => a.kind === 'section' || filtered.some((t) => areaOf(t) === a.key))
   const counts = {
@@ -286,6 +287,14 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
           </div>
         </div>
       </section>
+
+      {!data.tasks.length && (
+        <section className="card">
+          <EmptyState icon="tasks" title="No open tasks">
+            Add one above, or send it to your bot. Tasks go to the right area by themselves.
+          </EmptyState>
+        </section>
+      )}
 
       {view === 'areas' && (
         <div className="ta-cols">

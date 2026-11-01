@@ -52,7 +52,7 @@
 .setup { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 48px 24px; max-width: 620px; margin: 20px auto; }
 .setup .hint { max-width: 460px; margin: 0; }
 
-.comeback { justify-items: start; color: var(--lime); }
+.comeback { justify-items: start; color: var(--accent-text); }
 .comeback h3 { color: var(--text); }
 .comeback ul { margin: 0; padding-left: 18px; color: var(--text); display: grid; gap: 6px; }
 

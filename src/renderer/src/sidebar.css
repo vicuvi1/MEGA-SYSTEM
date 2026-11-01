@@ -8,9 +8,9 @@
 .sb {
   position: absolute; top: 10px; bottom: 10px; left: 10px; width: calc(var(--side) - 20px);
   display: flex; flex-direction: column; padding: 14px 12px 12px; overflow: hidden; isolation: isolate;
-  border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px; border: 1px solid rgb(var(--ink) / 0.06);
   background: linear-gradient(180deg, rgba(23, 27, 38, 0.96), rgba(13, 15, 21, 0.96));
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgb(var(--ink) / 0.05);
   transition: width 0.22s cubic-bezier(0.3, 1.1, 0.5, 1), box-shadow 0.2s, padding 0.2s;
   scrollbar-width: none;
 }
@@ -26,7 +26,7 @@
 }
 .sb-brand-info { display: flex; flex-direction: column; justify-content: center; }
 .sb-word { font: 800 15px var(--display); letter-spacing: 0.28em; color: var(--text); white-space: nowrap; line-height: 1.1; }
-.sb-tagline { font: 800 8.5px var(--mono); letter-spacing: 0.22em; color: var(--lime); opacity: 0.9; margin-top: 2px; white-space: nowrap; }
+.sb-tagline { font: 800 8.5px var(--mono); letter-spacing: 0.22em; color: var(--accent-text); opacity: 0.9; margin-top: 2px; white-space: nowrap; }
 
 /* Groups and items */
 .sb-nav { display: grid; gap: 4px; overflow-y: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; }
@@ -39,7 +39,7 @@
   background: transparent; color: var(--muted); text-align: left; transition: color 0.15s;
 }
 .sb-item:hover { color: var(--text); }
-.sb-item:hover:not(.on)::after { content: ''; position: absolute; inset: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.035); z-index: -1; }
+.sb-item:hover:not(.on)::after { content: ''; position: absolute; inset: 0; border-radius: 12px; background: rgb(var(--ink) / 0.035); z-index: -1; }
 .sb-active {
   position: absolute; inset: 0; z-index: -1; border-radius: 12px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--c) 17%, transparent), color-mix(in srgb, var(--c) 4%, transparent) 85%);
@@ -67,26 +67,26 @@
 
 /* Footer: system icons and you */
 .sb-foot { margin-top: auto; display: grid; gap: 10px; padding-top: 12px; }
-.sb-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: rgba(255, 255, 255, 0.025); border: 1px solid rgba(255, 255, 255, 0.04); }
+.sb-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: rgb(var(--ink) / 0.025); border: 1px solid rgb(var(--ink) / 0.04); }
 .sb-tool { position: relative; display: grid; justify-items: center; gap: 3px; padding: 7px 0 5px; border: 0; border-radius: 10px; background: transparent; color: var(--faint); }
-.sb-tool:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
-.sb-tool.on { color: var(--lime); background: rgba(200, 241, 53, 0.1); }
+.sb-tool:hover { color: var(--text); background: rgb(var(--ink) / 0.04); }
+.sb-tool.on { color: var(--accent-text); background: rgba(200, 241, 53, 0.1); }
 .sb-tool-name { font-size: 10px; font-weight: 600; white-space: nowrap; }
 .sb-tool .sb-dot { top: 4px; right: calc(50% - 14px); }
 
-.sb-me { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.06); background: rgba(255, 255, 255, 0.03); text-align: left; min-width: 0; }
+.sb-me { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 14px; border: 1px solid rgb(var(--ink) / 0.06); background: rgb(var(--ink) / 0.03); text-align: left; min-width: 0; }
 .sb-me:hover { border-color: rgba(200, 241, 53, 0.3); }
 .sb-ring { --p: 0; flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--lime) calc(var(--p) * 1%), #262c3a 0); box-shadow: 0 0 16px rgba(200, 241, 53, 0.18); }
-.sb-ring span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #151924; font: 800 13px var(--display); color: var(--lime); }
+.sb-ring span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #151924; font: 800 13px var(--display); color: var(--accent-text); }
 .sb-me-text { display: grid; min-width: 0; flex: 1; line-height: 1.2; }
 .sb-me-text b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sb-me-text small { font-size: 11px; color: var(--lime); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+.sb-me-text small { font-size: 11px; color: var(--accent-text); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
 .sb-me-coins { display: inline-flex; align-items: center; gap: 5px; font-weight: 800; font-size: 13px; color: var(--gold); white-space: nowrap; }
 
 /* Collapse button: top-right when open, bottom of the dock when slim. */
 .sb-toggle {
   position: absolute; top: 20px; right: 12px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.04); color: var(--faint); font-size: 16px; line-height: 1;
+  border: 1px solid rgb(var(--ink) / 0.08); background: rgb(var(--ink) / 0.04); color: var(--faint); font-size: 16px; line-height: 1;
 }
 .sb-toggle:hover { color: var(--text); border-color: rgba(200, 241, 53, 0.4); }
 .sb-toggle span { display: inline-block; transition: transform 0.2s; margin-top: -2px; }
@@ -96,7 +96,7 @@
 .sb.collapsed { width: calc(var(--rail) - 20px); padding: 12px 7px; }
 .sb.collapsed:not(.peek) .sb-label { display: none; }
 .sb.collapsed:not(.peek) .sb-brand { justify-content: center; padding: 2px 0 6px; }
-.sb.collapsed:not(.peek) .sb-group { justify-items: center; padding-top: 8px; margin-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.sb.collapsed:not(.peek) .sb-group { justify-items: center; padding-top: 8px; margin-top: 6px; border-top: 1px solid rgb(var(--ink) / 0.05); }
 .sb.collapsed:not(.peek) .sb-group:first-child { border-top: 0; margin-top: 0; }
 .sb.collapsed:not(.peek) .sb-item { width: 44px; height: 44px; padding: 0; justify-content: center; }
 .sb.collapsed:not(.peek) .sb-tools { grid-template-columns: 1fr; padding: 3px; }
@@ -104,7 +104,7 @@
 .sb.collapsed:not(.peek) .sb-me { padding: 4px; justify-content: center; border-color: transparent; background: transparent; }
 .sb.collapsed:not(.peek) .sb-toggle { position: static; margin: 10px auto 0; flex: none; }
 .sb.collapsed:not(.peek) .sb-glow { left: -130px; }
-.sb.peek { width: calc(252px - 20px); padding: 14px 12px 12px; box-shadow: 18px 0 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); }
+.sb.peek { width: calc(252px - 20px); padding: 14px 12px 12px; box-shadow: 18px 0 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgb(var(--ink) / 0.05); border-color: rgb(var(--ink) / 0.1); }
 
 .sb-tip {
   position: fixed; left: calc(var(--rail) + 2px); z-index: 80; transform: translateY(-50%); pointer-events: none; white-space: pre;
@@ -131,7 +131,7 @@
 
 /* Brand mark = the app icon: dark tile, lime ring and spark. */
 .sb-mark {
-  color: var(--lime); background: linear-gradient(135deg, #263044, #0b0d12);
-  border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 6px 22px rgba(200, 241, 53, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: var(--accent-text); background: linear-gradient(135deg, #263044, #0b0d12);
+  border: 1px solid rgb(var(--ink) / 0.1); box-shadow: 0 6px 22px rgba(200, 241, 53, 0.22), inset 0 1px 0 rgb(var(--ink) / 0.08);
 }
 :root[data-theme='light'] .sb-mark { color: var(--lime); }
