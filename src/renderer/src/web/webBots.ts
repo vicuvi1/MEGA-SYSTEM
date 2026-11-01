@@ -1123,7 +1123,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
     const ask = (found?: string, extraNote = '') =>
-      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${feel.mood} ${MOOD_FACE[feel.mood]} because: ${feel.why}. (Your own call can differ if his message changes things.)` }), { json: true, think: big, strong: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${feel.mood} ${MOOD_FACE[feel.mood]} because: ${feel.why}. (Your own call can differ if his message changes things.)` }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())

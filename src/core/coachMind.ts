@@ -16,21 +16,24 @@ export interface MindGoal {
 }
 
 export interface CoachMind {
+  /** People in his life the coach knows about ("Andrei: best friend, games"). */
+  people: { name: string; note: string; at: string }[]
   goals: MindGoal[]
   works: { t: string; at: string }[]
   fails: { t: string; at: string }[]
   patterns: { t: string; at: string }[]
 }
 
-export const EMPTY_MIND: CoachMind = { goals: [], works: [], fails: [], patterns: [] }
+export const EMPTY_MIND: CoachMind = { people: [], goals: [], works: [], fails: [], patterns: [] }
 
-const MAX = { goals: 8, works: 12, fails: 12, patterns: 10 }
+const MAX = { goals: 8, works: 12, fails: 12, patterns: 10, people: 20 }
 const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 const clip = (t: string, n = 160) => String(t ?? '').trim().slice(0, n)
 
 export function cleanMind(m: any): CoachMind {
   const list = (x: any) => (Array.isArray(x) ? x.filter((e) => e && typeof e.t === 'string').map((e) => ({ t: clip(e.t), at: String(e.at ?? '') })) : [])
   return {
+    people: Array.isArray(m?.people) ? m.people.filter((x: any) => x && typeof x.name === 'string').map((x: any) => ({ name: clip(x.name, 40), note: clip(x.note ?? '', 120), at: String(x.at ?? '') })) : [],
     goals: Array.isArray(m?.goals) ? m.goals.filter((g: any) => g && typeof g.title === 'string').map((g: any) => ({ title: clip(g.title, 120), deadline: /^\d{4}-\d{2}-\d{2}$/.test(g.deadline) ? g.deadline : '', weekly: clip(g.weekly ?? '', 80), at: String(g.at ?? '') })) : [],
     works: list(m?.works),
     fails: list(m?.fails),
@@ -42,10 +45,11 @@ export type MindOp =
   | { kind: 'aim'; title: string; deadline: string; weekly: string }
   | { kind: 'aimdone'; title: string }
   | { kind: 'works' | 'fails' | 'pattern'; text: string }
+  | { kind: 'person'; name: string; note: string }
 
 /** Reads "aim: …", "aimdone: …", "works: …", "fails: …", "pattern: …" (the coach's memory actions). */
 export function readMindOp(line: string): MindOp | null {
-  const m = /^\s*(aim|aimdone|works|fails|pattern)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(aim|aimdone|works|fails|pattern|person)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim()
@@ -56,6 +60,10 @@ export function readMindOp(line: string): MindOp | null {
     return { kind: 'aim', title: clip(title, 120), deadline: /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : '', weekly: clip(weekly.replace(/^-$/, ''), 80) }
   }
   if (kind === 'aimdone') return { kind: 'aimdone', title: clip(arg, 120) }
+  if (kind === 'person') {
+    const [name, note = ''] = arg.split('|').map((x) => x.trim())
+    return name ? { kind: 'person', name: clip(name, 40), note: clip(note, 120) } : null
+  }
   return { kind: kind as 'works' | 'fails' | 'pattern', text: clip(arg) }
 }
 
@@ -77,6 +85,12 @@ export function applyMind(mind: CoachMind, op: MindOp, today: string): { mind: C
     const hit = m.goals.find((g) => sameIdea(g.title, op.title))
     if (!hit) return { mind: m, line: '' }
     return { mind: { ...m, goals: m.goals.filter((g) => g !== hit) }, line: `🏁 Goal closed: ${hit.title}` }
+  }
+  if (op.kind === 'person') {
+    const people = m.people.filter((x) => x.name.toLowerCase() !== op.name.toLowerCase())
+    const old = m.people.find((x) => x.name.toLowerCase() === op.name.toLowerCase())
+    people.push({ name: op.name, note: op.note || old?.note || '', at: today })
+    return { mind: { ...m, people: people.slice(-MAX.people) }, line: `👤 Noted: ${op.name}${op.note ? ` (${op.note})` : ''}` }
   }
   const key = op.kind === 'pattern' ? 'patterns' : op.kind
   const list = m[key].filter((x) => !sameIdea(x.t, op.text))
@@ -129,6 +143,7 @@ export function mindText(m: CoachMind, today: string, week?: WeekSoFar): string 
         })
         .join('\n')}`
     )
+  if (m.people.length) out.push(`People in his life:\n${m.people.map((x) => `- ${x.name}${x.note ? `: ${x.note}` : ''}`).join('\n')}`)
   if (m.works.length) out.push(`What works for him:\n${m.works.map((x) => `- ${x.t}`).join('\n')}`)
   if (m.fails.length) out.push(`What doesn't work:\n${m.fails.map((x) => `- ${x.t}`).join('\n')}`)
   if (m.patterns.length) out.push(`Patterns you noticed:\n${m.patterns.map((x) => `- ${x.t}`).join('\n')}`)

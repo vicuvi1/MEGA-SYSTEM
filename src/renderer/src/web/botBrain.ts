@@ -115,6 +115,8 @@ export interface LogEntry {
   undone?: boolean[]
   /** Short replies he might send next (the chips under the chat). */
   chips?: string[]
+  /** Sent by the coach on its own (check-ins, plans, reviews, nudges). */
+  proactive?: boolean
   /** Buttons and mini-widgets under the reply (interactive replies). */
   buttons?: { label: string; do: string }[]
   show?: string[]
@@ -387,6 +389,7 @@ Points and the week:
 - "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
 Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
+- "person: <name> | <who they are to him, short>" when he mentions someone in his life (friend, family, teacher, partner).
 - "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
 Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
@@ -778,4 +781,23 @@ export function answerLocal(need: string, d: LookupData): string | null {
   const earned = l.filter((e) => e.coins > 0).reduce((t, e) => t + e.coins, 0)
   const spent = -l.filter((e) => e.coins < 0).reduce((t, e) => t + e.coins, 0)
   return `Points ${span}: +${earned} earned, −${spent} spent.`
+}
+
+/** Weekly letters from the coach (newest last). */
+export const LETTERS = 'coach_letters'
+export interface Letter {
+  week: string
+  text: string
+  at: string
+}
+export function loadLetters(db: any): Letter[] {
+  try {
+    const l = JSON.parse(getSetting(db, LETTERS) || '[]')
+    return Array.isArray(l) ? l : []
+  } catch {
+    return []
+  }
+}
+export function saveLetter(db: any, l: Letter): void {
+  setSetting(db, LETTERS, JSON.stringify([...loadLetters(db).filter((x) => x.week !== l.week), l].slice(-12)))
 }

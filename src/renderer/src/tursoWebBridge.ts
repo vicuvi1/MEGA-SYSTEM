@@ -33,6 +33,7 @@ import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus } from './web/coachStatus'
+import { profileView } from './web/coachProfile'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
 /**
@@ -471,6 +472,8 @@ export function createTursoWebBridge(): Bridge {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
       },
       mind: async () => (await svcP).read((s) => loadMind(s.db)),
+      // "What I know about you" (read here, instant).
+      profileView: async () => (await svcP).read((s) => profileView(s as any)),
       // ↩ Undo what the coach did in one reply (all of it, or one line).
       undo: async (at: string, index?: number) => {
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'undo', at, index }) })
@@ -495,7 +498,7 @@ export function createTursoWebBridge(): Bridge {
           return { rows, ...impactVerdict(rows) }
         }),
       // The daily rhythm: today's plan from the coach (read here, actions on the server).
-      rhythm: async (action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' = 'state', note?: string, prefs?: Record<string, unknown>) => {
+      rhythm: async (action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' = 'state', note?: string, prefs?: Record<string, unknown>) => {
         if (action === 'state') {
           return (await svcP).read((s) => {
             const read = (k: string) => {

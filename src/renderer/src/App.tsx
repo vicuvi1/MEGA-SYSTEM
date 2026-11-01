@@ -18,6 +18,7 @@ import { PwaInstallBanner } from './PwaInstallBanner'
 import { PageSkeleton } from './blocks'
 import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
+import { useCoachUnread } from './coachUnread'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
@@ -463,7 +464,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const checkInDue = !!discipline?.setup && !discipline.checkedInToday && !discipline.resetToday && !discipline.stealth
   const shopReady = !!shop && shop.rewards.some((r) => !r.archived && r.price <= shop.balance)
   const updateReady = !!update && ['available', 'ready'].includes(update.state)
+  const coachUnread = useCoachUnread(page === 'coach', ui.sound !== false)
   const badges: Partial<Record<PageId, { n?: number; dot?: 'lime' | 'warn' }>> = {
+    coach: coachUnread ? { n: coachUnread } : undefined,
     discipline: checkInDue ? { dot: 'lime' } : undefined,
     shop: shopReady ? { dot: 'lime' } : undefined,
     settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
@@ -553,6 +556,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           {features.ai && (
             <button className={`tb-icon ${page === 'coach' ? 'active' : ''}`} aria-label="Coach" title="Coach (Ctrl+J)" onClick={() => setPage('coach')}>
               <Icon name="spark" size={17} />
+              {coachUnread > 0 && <span className="tb-badge">{coachUnread}</span>}
             </button>
           )}
           {activeEmbed && (

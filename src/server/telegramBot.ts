@@ -10,6 +10,7 @@ import { Mirror } from '../renderer/src/web/mirror'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
 import { createWebBots, focusKeyboard, type AskModel, type CalendarLike } from '../renderer/src/web/webBots'
+import { appendLog } from '../renderer/src/web/botBrain'
 import { GOOGLE_SETTING as GSET, createCalendarApi as makeCal, type GoogleEnv, type GoogleStored } from './googleCalendar'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
@@ -339,6 +340,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
     if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`)
     sent.push(text)
+    // What the coach says on its own shows in the app's chat too (live).
+    await mirror
+      .write((db) => appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: text.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'), at: new Date().toISOString(), proactive: true }]))
+      .catch(() => null)
   }
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const pauseRow = [
@@ -488,6 +493,8 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     } else if (job === 'weekly') {
       const w = await bots.rhythm.weekly()
       await send(weeklyText(w), WEEKLY_KEYBOARD)
+      const letter = await bots.rhythm.letter().catch(() => null)
+      if (letter) await send(`💌 <b>A letter from Mega</b>\n\n${escapeHtml(letter)}`)
     } else if (job === 'evening') {
       await payTodoistDone(env, { since: localMidnight(0) }).catch(() => null)
       const r = await bots.rhythm.evening()
@@ -507,7 +514,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
 }
 
 /** The app: today's rhythm (state), or an action on it. */
-export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book'; note?: string; prefs?: any }): Promise<any> {
+export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter'; note?: string; prefs?: any }): Promise<any> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { bots } = await botsFor(env)
   // Book a goal's blocks for the next 7 days (note: the goal id, or all goals).
@@ -522,6 +529,7 @@ export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose'
   }
   if (op.action === 'top3') await bots.rhythm.setTop3(String(op.note ?? ''))
   if (op.action === 'prefs') await bots.rhythm.setPrefs(op.prefs ?? {})
+  if (op.action === 'letter') return { letter: await bots.rhythm.letter() }
   return bots.rhythm.state()
 }
 

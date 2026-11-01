@@ -6696,7 +6696,7 @@ function queueFinanceExpense(db, entry) {
 	setSetting(db, SETTING$1, JSON.stringify(list));
 }
 // src/renderer/public/apps/finance/js/money.js
-var LETTERS = /[^\d.,+\-*/()x×÷]/gi;
+var LETTERS$1 = /[^\d.,+\-*/()x×÷]/gi;
 function parseAmount(text) {
 	if (text == null) return null;
 	if (typeof text === "number") return Number.isFinite(text) ? Math.round(text * 100) : null;
@@ -6723,7 +6723,7 @@ function toNumber(s) {
 }
 function evalAmount(text) {
 	if (text == null) return null;
-	const s = String(text).replace(/[\s  ]/g, "").replace(LETTERS, "").replace(/[x×]/gi, "*").replace(/÷/g, "/");
+	const s = String(text).replace(/[\s  ]/g, "").replace(LETTERS$1, "").replace(/[x×]/gi, "*").replace(/÷/g, "/");
 	if (!s) return null;
 	if (!/[+*/()]/.test(s.slice(1)) && !/\d-/.test(s)) return parseAmount(s);
 	const tokens = s.match(/\d[\d.,]*|[+\-*/()]/g);
@@ -8712,7 +8712,8 @@ var MAX = {
 	goals: 8,
 	works: 12,
 	fails: 12,
-	patterns: 10
+	patterns: 10,
+	people: 20
 };
 var norm$1 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 var clip = (t, n = 160) => String(t ?? "").trim().slice(0, n);
@@ -8722,6 +8723,11 @@ function cleanMind(m) {
 		at: String(e.at ?? "")
 	})) : [];
 	return {
+		people: Array.isArray(m?.people) ? m.people.filter((x) => x && typeof x.name === "string").map((x) => ({
+			name: clip(x.name, 40),
+			note: clip(x.note ?? "", 120),
+			at: String(x.at ?? "")
+		})) : [],
 		goals: Array.isArray(m?.goals) ? m.goals.filter((g) => g && typeof g.title === "string").map((g) => ({
 			title: clip(g.title, 120),
 			deadline: /^\d{4}-\d{2}-\d{2}$/.test(g.deadline) ? g.deadline : "",
@@ -8735,7 +8741,7 @@ function cleanMind(m) {
 }
 /** Reads "aim: …", "aimdone: …", "works: …", "fails: …", "pattern: …" (the coach's memory actions). */
 function readMindOp(line) {
-	const m = /^\s*(aim|aimdone|works|fails|pattern)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(aim|aimdone|works|fails|pattern|person)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim();
@@ -8754,6 +8760,14 @@ function readMindOp(line) {
 		kind: "aimdone",
 		title: clip(arg, 120)
 	};
+	if (kind === "person") {
+		const [name, note = ""] = arg.split("|").map((x) => x.trim());
+		return name ? {
+			kind: "person",
+			name: clip(name, 40),
+			note: clip(note, 120)
+		} : null;
+	}
 	return {
 		kind,
 		text: clip(arg)
@@ -8797,6 +8811,22 @@ function applyMind(mind, op, today) {
 			line: `🏁 Goal closed: ${hit.title}`
 		};
 	}
+	if (op.kind === "person") {
+		const people = m.people.filter((x) => x.name.toLowerCase() !== op.name.toLowerCase());
+		const old = m.people.find((x) => x.name.toLowerCase() === op.name.toLowerCase());
+		people.push({
+			name: op.name,
+			note: op.note || old?.note || "",
+			at: today
+		});
+		return {
+			mind: {
+				...m,
+				people: people.slice(-MAX.people)
+			},
+			line: `👤 Noted: ${op.name}${op.note ? ` (${op.note})` : ""}`
+		};
+	}
 	const key = op.kind === "pattern" ? "patterns" : op.kind;
 	const list = m[key].filter((x) => !sameIdea(x.t, op.text));
 	const other = op.kind === "works" ? "fails" : op.kind === "fails" ? "works" : null;
@@ -8838,6 +8868,7 @@ function mindText(m, today, week) {
 		const prog = g.weekly && week ? goalProgress(g.weekly, week) : null;
 		return `- ${g.title}${g.deadline ? ` · due ${g.deadline} (${left < 0 ? `${-left} days late` : `${left} days left`})` : ""}${g.weekly ? ` · weekly target ${g.weekly}` : ""}${prog ? ` · ${prog}` : ""}`;
 	}).join("\n")}`);
+	if (m.people.length) out.push(`People in his life:\n${m.people.map((x) => `- ${x.name}${x.note ? `: ${x.note}` : ""}`).join("\n")}`);
 	if (m.works.length) out.push(`What works for him:\n${m.works.map((x) => `- ${x.t}`).join("\n")}`);
 	if (m.fails.length) out.push(`What doesn't work:\n${m.fails.map((x) => `- ${x.t}`).join("\n")}`);
 	if (m.patterns.length) out.push(`Patterns you noticed:\n${m.patterns.map((x) => `- ${x.t}`).join("\n")}`);
@@ -9349,6 +9380,7 @@ Points and the week:
 - "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
 Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
+- "person: <name> | <who they are to him, short>" when he mentions someone in his life (friend, family, teacher, partner).
 - "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
 Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
@@ -9809,6 +9841,19 @@ function answerLocal(need, d) {
 	}
 	const l = d.ledger.filter((e) => inRange(e.day));
 	return `Points ${span}: +${l.filter((e) => e.coins > 0).reduce((t, e) => t + e.coins, 0)} earned, −${-l.filter((e) => e.coins < 0).reduce((t, e) => t + e.coins, 0)} spent.`;
+}
+/** Weekly letters from the coach (newest last). */
+var LETTERS = "coach_letters";
+function loadLetters(db) {
+	try {
+		const l = JSON.parse(getSetting(db, "coach_letters") || "[]");
+		return Array.isArray(l) ? l : [];
+	} catch {
+		return [];
+	}
+}
+function saveLetter(db, l) {
+	setSetting(db, LETTERS, JSON.stringify([...loadLetters(db).filter((x) => x.week !== l.week), l].slice(-12)));
 }
 // src/core/rhythm.ts
 var RHYTHM = "coach_rhythm";
@@ -10881,6 +10926,47 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		});
 		return out;
 	}
+	/**
+	* The weekly letter: the coach writes to you like a friend who watched your
+	* week. What it noticed, what it's proud of or worried about, what it wants
+	* next week. Saved (Coach → About you) and sent on Sundays.
+	*/
+	async function letter() {
+		if (!ai) return null;
+		const today = await mirror.read((db) => services.services(db).wallet.today());
+		const context = await contextFor(null, null, null);
+		const extra = await mirror.read((db) => {
+			return scorecard(cleanHistory(readJson(db, COACH_HISTORY, null)), services.services(db).progress.input(null, /* @__PURE__ */ new Date(), 70).focus, today, 4).map((r) => `week of ${r.week}: promises kept ${r.keptPct ?? "—"}%, day score ${r.avgScore ?? "—"}, focus ${(r.focusMin / 60).toFixed(1)}h, plans approved ${r.plansApproved}/${r.plansProposed}`).join("\n");
+		});
+		try {
+			const raw = await ai([
+				"You are MEGA, Victor's best friend and coach. Write him this week's letter.",
+				"Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it \"— Mega\". Plain text, no markdown, at most 2 emoji. Write in the language he writes to you in.",
+				"Answer ONLY with JSON: {\"letter\": string}",
+				"",
+				"== His last weeks ==",
+				extra,
+				"",
+				context
+			].join("\n"), {
+				json: true,
+				think: true,
+				strong: true
+			});
+			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
+			const text = String(j.letter ?? "").trim().slice(0, 2e3);
+			if (!text) return null;
+			const week = mondayOf(today);
+			await mirror.write((db) => saveLetter(db, {
+				week,
+				text,
+				at: (/* @__PURE__ */ new Date()).toISOString()
+			}));
+			return text;
+		} catch {
+			return null;
+		}
+	}
 	/** "Use this plan": next week's focus and big 3 (typed ones replace the suggestion). */
 	async function applyWeekly(typed) {
 		return mirror.write((db) => {
@@ -10950,6 +11036,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		applyWeekly,
 		waterLine,
 		trainingLine,
+		letter,
 		goalPlans,
 		bookGoals,
 		rebookGoals,
@@ -12189,7 +12276,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}), {
 			json: true,
 			think: big,
-			strong: big,
+			strong: isBigAsk(text) || correcting || !!media,
 			media: media ? [{
 				mime: media.mime,
 				data: media.data
@@ -14253,6 +14340,14 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const j = await res.json().catch(() => ({}));
 		if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`);
 		sent.push(text);
+		await mirror.write((db) => appendLog(db, [{
+			role: "coach",
+			bot: "mega",
+			via: "telegram",
+			text: text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"),
+			at: (/* @__PURE__ */ new Date()).toISOString(),
+			proactive: true
+		}])).catch(() => null);
 	};
 	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	const pauseRow = [{
@@ -14413,8 +14508,11 @@ async function rhythmTick(env, now, send) {
 			callback_data: "np|"
 		}]] });
 	} else if (job === "training") await send(await bots.rhythm.trainingLine());
-	else if (job === "weekly") await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);
-	else if (job === "evening") {
+	else if (job === "weekly") {
+		await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);
+		const letter = await bots.rhythm.letter().catch(() => null);
+		if (letter) await send(`💌 <b>A letter from Mega</b>\n\n${escapeHtml(letter)}`);
+	} else if (job === "evening") {
 		await payTodoistDone(env, { since: localMidnight(0) }).catch(() => null);
 		const r = await bots.rhythm.evening();
 		const bonus = await mirror.write((db) => {
@@ -14447,6 +14545,7 @@ async function coachRhythm(env, op) {
 	}
 	if (op.action === "top3") await bots.rhythm.setTop3(String(op.note ?? ""));
 	if (op.action === "prefs") await bots.rhythm.setPrefs(op.prefs ?? {});
+	if (op.action === "letter") return { letter: await bots.rhythm.letter() };
 	return bots.rhythm.state();
 }
 var localIsoHM = (iso) => {

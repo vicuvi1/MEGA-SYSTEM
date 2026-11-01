@@ -24,9 +24,9 @@ import {
   type RhythmState
 } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
-import { financeStateFrom, lifeContext, loadMind, loadProfile, sportState } from './botBrain'
+import { financeStateFrom, lifeContext, loadMind, loadProfile, saveLetter, sportState } from './botBrain'
 import { mindText, weekSoFar } from '@core/coachMind'
-import { COACH_HISTORY, bump, cleanHistory, impactVerdict, recordDay, scorecard, type CoachDay } from '@core/coachImpact'
+import { COACH_HISTORY, bump, cleanHistory, impactVerdict, mondayOf, recordDay, scorecard, type CoachDay } from '@core/coachImpact'
 import { bookBlocks, isGoalBlock, planGoal, planLine, type GoalPlan } from '@core/goalPlan'
 import type { Mirror } from './mirror'
 import type { AskModel, CalendarLike, TodoistLike } from './webBots'
@@ -421,6 +421,44 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     return out
   }
 
+  /**
+   * The weekly letter: the coach writes to you like a friend who watched your
+   * week. What it noticed, what it's proud of or worried about, what it wants
+   * next week. Saved (Coach → About you) and sent on Sundays.
+   */
+  async function letter(): Promise<string | null> {
+    if (!ai) return null
+    const today = await mirror.read((db) => services.services(db).wallet.today())
+    const context = await contextFor(null, null, null)
+    const extra = await mirror.read((db) => {
+      const rows = scorecard(cleanHistory(readJson(db, COACH_HISTORY, null)), services.services(db).progress.input(null, new Date(), 70).focus, today, 4)
+      return rows.map((r) => `week of ${r.week}: promises kept ${r.keptPct ?? '—'}%, day score ${r.avgScore ?? '—'}, focus ${(r.focusMin / 60).toFixed(1)}h, plans approved ${r.plansApproved}/${r.plansProposed}`).join('\n')
+    })
+    try {
+      const raw = await ai(
+        [
+          "You are MEGA, Victor's best friend and coach. Write him this week's letter.",
+          'Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it "— Mega". Plain text, no markdown, at most 2 emoji. Write in the language he writes to you in.',
+          'Answer ONLY with JSON: {"letter": string}',
+          '',
+          '== His last weeks ==',
+          extra,
+          '',
+          context
+        ].join('\n'),
+        { json: true, think: true, strong: true }
+      )
+      const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
+      const text = String(j.letter ?? '').trim().slice(0, 2000)
+      if (!text) return null
+      const week = mondayOf(today)
+      await mirror.write((db) => saveLetter(db, { week, text, at: new Date().toISOString() }))
+      return text
+    } catch {
+      return null
+    }
+  }
+
   /** "Use this plan": next week's focus and big 3 (typed ones replace the suggestion). */
   async function applyWeekly(typed?: string): Promise<string> {
     return mirror.write((db) => {
@@ -462,7 +500,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, trainingLine, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, trainingLine, letter, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

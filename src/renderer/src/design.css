@@ -928,3 +928,20 @@
 .gp-bar.water i { background: #4cc2ff; }
 .cx-w-check { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
 .cx-w-check.done { opacity: 0.6; text-decoration: line-through; }
+
+/* ===== Coach Phase 4: about you ===== */
+.ab-letter { background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 10%, transparent), rgb(var(--ink) / 0.03)) !important; }
+.ab-when { color: var(--muted); font-size: var(--t-xs); }
+.ab-letter-text { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.6; font-size: 14px; font-family: var(--display); }
+.ab-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
+.ab-list.wins { list-style: none; padding: 0; }
+.ab-list.wins b { color: var(--accent-text); margin-right: 6px; }
+.ab-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ab-timeline li { display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 6px 8px; border-radius: 8px; background: rgb(var(--ink) / 0.04); }
+.ab-ptext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ab-timeline small { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.ab-state { font-size: 11px; font-weight: 700; text-align: center; padding: 2px 6px; border-radius: 999px; background: rgb(var(--ink) / 0.07); }
+.ab-state.good { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.ab-state.bad { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+.tb-icon { position: relative; }
+.tb-badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg); }

@@ -81,3 +81,15 @@ describe('goal progress', () => {
     expect(goalProgress('save 2000 lei', w)).toBeNull()
   })
 })
+
+describe('people', () => {
+  it('remembers people in his life, newest note wins', async () => {
+    const { applyMind, readMindOp, mindText, EMPTY_MIND } = await import('./coachMind')
+    const op = readMindOp('person: Andrei | best friend, plays games with him')!
+    expect(op).toEqual({ kind: 'person', name: 'Andrei', note: 'best friend, plays games with him' })
+    let m = applyMind(EMPTY_MIND, op, '2026-11-01').mind
+    m = applyMind(m, { kind: 'person', name: 'andrei', note: 'study buddy now' }, '2026-11-02').mind
+    expect(m.people).toEqual([{ name: 'andrei', note: 'study buddy now', at: '2026-11-02' }])
+    expect(mindText(m, '2026-11-02')).toContain('People in his life:\n- andrei: study buddy now')
+  })
+})

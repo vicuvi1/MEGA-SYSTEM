@@ -11,6 +11,7 @@ import type { RhythmPrefs } from '@core/rhythm'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { CoachScorecard, GoalPlans } from '../CoachPanels'
 import { CoachPlan } from '../CoachPlan'
+import { CoachAbout } from '../CoachAbout'
 import type { CoachStatus } from '../web/coachStatus'
 import { readDo } from '@core/coachButtons'
 
@@ -523,6 +524,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           {tab === 'score' && <CoachScorecard />}
           {tab === 'about' && (
             <>
+              <CoachAbout />
               {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
               {mind && (
                 <Learning
@@ -620,7 +622,7 @@ function FactList({ facts, onSave }: { facts: { t: string; at: string }[]; onSav
 
 /** What the coach is learning about you: goals it tracks, what works, patterns. Delete what's wrong. */
 function Learning({ mind, onSave }: { mind: CoachMind; onSave: (m: CoachMind) => void }) {
-  const empty = !mind.goals.length && !mind.works.length && !mind.fails.length && !mind.patterns.length
+  const empty = !mind.goals.length && !mind.works.length && !mind.fails.length && !mind.patterns.length && !(mind.people ?? []).length
   const today = new Date().toISOString().slice(0, 10)
   const left = (d: string) => Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000)
   const row = (key: string, text: string, sub: string, remove: () => void) => (
@@ -645,7 +647,7 @@ function Learning({ mind, onSave }: { mind: CoachMind; onSave: (m: CoachMind) =>
     <section className="panel co-learn">
       <header className="panel-head">
         <h2>
-          <Icon name="spark" /> What the coach is learning
+          <Icon name="spark" /> What the coach knows about you
         </h2>
       </header>
       {empty ? (
@@ -658,6 +660,7 @@ function Learning({ mind, onSave }: { mind: CoachMind; onSave: (m: CoachMind) =>
               row(`g${i}`, g.title, [g.deadline ? (left(g.deadline) >= 0 ? `${left(g.deadline)} days left` : `${-left(g.deadline)} days late`) : '', g.weekly ? `${g.weekly} a week` : ''].filter(Boolean).join(' · '), () => onSave({ ...mind, goals: mind.goals.filter((_, k) => k !== i) }))
             )
           )}
+          {group('People in your life', (mind.people ?? []).map((x, i) => row(`pp${i}`, x.name, x.note, () => onSave({ ...mind, people: mind.people.filter((_, k) => k !== i) }))))}
           {group('What works for you', mind.works.map((x, i) => row(`w${i}`, x.t, '', () => onSave({ ...mind, works: mind.works.filter((_, k) => k !== i) }))))}
           {group("What doesn't", mind.fails.map((x, i) => row(`f${i}`, x.t, '', () => onSave({ ...mind, fails: mind.fails.filter((_, k) => k !== i) }))))}
           {group('Patterns', mind.patterns.map((x, i) => row(`p${i}`, x.t, '', () => onSave({ ...mind, patterns: mind.patterns.filter((_, k) => k !== i) }))))}
