@@ -13,4 +13,4 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Wake the coach
-        run: curl -fsS -m 60 https://mega-system-ten.vercel.app/api/tick || true
+        run: curl -fsS -m 60 "https://mega-system-ten.vercel.app/api/cron?job=tick" || true

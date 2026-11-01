@@ -321,7 +321,7 @@ export function createTursoWebBridge(): Bridge {
         // Wake the coach (reminders, check-ins, follow-ups) more often than the server timer.
         if (!direct && Date.now() - tickAt > 120_000) {
           tickAt = Date.now()
-          void fetch('/api/tick', { method: 'POST' }).catch(() => null)
+          void fetch('/api/cron?job=tick').catch(() => null)
         }
         // Todoist and Google Calendar changes made in their own apps: every 30 s.
         if (Date.now() - todoAt > 30_000) {

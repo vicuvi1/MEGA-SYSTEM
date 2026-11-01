@@ -20,10 +20,6 @@
     },
     "api/todoist.mjs": {
       "maxDuration": 60
-    },
-    "api/tick.mjs": {
-      "maxDuration": 60,
-      "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
     }
   },
   "crons": [
