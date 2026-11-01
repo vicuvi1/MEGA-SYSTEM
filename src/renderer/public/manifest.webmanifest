@@ -1,17 +1,23 @@
 {
-  "name": "Life System — Real Growth RPG",
-  "short_name": "Life System",
-  "description": "Solo Leveling RPG Real-Life Productivity & Self-Discipline Cockpit",
+  "id": "/",
+  "name": "Life System",
+  "short_name": "Life",
+  "description": "Your day, tasks, calendar and coach in one calm place",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0c10",
-  "theme_color": "#0a0c10",
+  "orientation": "any",
+  "background_color": "#07090e",
+  "theme_color": "#07090e",
+  "categories": ["productivity", "lifestyle"],
   "icons": [
-    {
-      "src": "/icon.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Today", "url": "/?page=today", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
+    { "name": "Tasks", "url": "/?page=tasks", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
+    { "name": "Coach", "url": "/?page=coach", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
+    { "name": "Calendar", "url": "/?page=calendar", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] }
   ]
 }

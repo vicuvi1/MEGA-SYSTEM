@@ -15,6 +15,7 @@ import { Notifications, type Alert } from './Notifications'
 import { Sidebar } from './Sidebar'
 import { MobileBottomBar } from './MobileBottomBar'
 import { PwaInstallBanner } from './PwaInstallBanner'
+import { PageSkeleton } from './blocks'
 import { ErrorBoundary, installWindowErrorHandlers } from './ErrorBoundary'
 import { useUiPrefs } from './uiPrefs'
 import { describeEntry, useAction } from './ui'
@@ -113,7 +114,9 @@ function Gate() {
 
 function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => void }) {
   const last = useRef(loadLastPlace()).current
-  const known = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === last?.page && m.phase === 0)
+  // A home-screen shortcut (/?page=tasks) opens that page; else where you left off.
+  const asked = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('page') : null
+  const known = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === (asked ?? last?.page) && m.phase === 0)
   const [page, setPage] = useState<PageId>(known ? known.id : 'today')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
@@ -613,9 +616,10 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
 
         <AnimatePresence initial={false}>
-          {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.08 }}>
+          {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
             <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
-            <Suspense fallback={<div className="empty">Loading…</div>}>
+            <Suspense fallback={<PageSkeleton />}>
+            {page === 'today' && !summary && <PageSkeleton />}
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
             )}

@@ -10,6 +10,7 @@ import { WeekCard, WeekPlanner, shouldPlan, useWeekPlan } from '../WeekPlanner'
 import { activePlan } from '@core/weekPlan'
 import type { Insights } from '@core/insights'
 import { FocusInsights } from './Focus'
+import { PageSkeleton } from '../blocks'
 
 export function useProgress(): ProgressReport | null | undefined {
   const [r, setR] = useState<ProgressReport | null | undefined>(undefined)
@@ -282,7 +283,7 @@ export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWal
   const r = useProgress()
   const [plan] = useWeekPlan()
   const [editing, setEditing] = useState(false)
-  if (r === undefined) return <section className="panel"><p className="hint">Adding up your weeks…</p></section>
+  if (r === undefined) return <PageSkeleton />
   if (r === null) return <section className="panel"><p className="hint">Progress needs your data on this device. Open it on the website.</p></section>
   const diff = r.score - r.prevScore
   const best = r.metrics.filter((m) => m.trend === 'better')

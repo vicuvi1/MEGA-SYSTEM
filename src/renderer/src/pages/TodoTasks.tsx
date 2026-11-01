@@ -9,10 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AREA_COLORS, defaultAreaColor, plainName, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
-import { EmptyState } from '../blocks'
+import { EmptyState, Skeleton } from '../blocks'
 import { soundCoin, soundSuccess } from '../sound'
 import { useAction, useToast } from '../ui'
 import type { CleanChange } from '@core/todoistClean'
+import { useSwipeRows } from '../swipe'
 
 type View = 'areas' | 'today' | 'upcoming' | 'all'
 
@@ -102,11 +103,17 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
     void load()
   }
 
+  const [leaving, setLeaving] = useState<string[]>([])
   const complete = async (t: TodoTask) => {
+    if (leaving.includes(t.id)) return
+    soundSuccess()
+    setLeaving((l) => [...l, t.id])
+    await new Promise((done) => setTimeout(done, 320))
+    setLeaving((l) => l.filter((x) => x !== t.id))
     setData((d) => (d ? { ...d, tasks: d.tasks.filter((x) => x.id !== t.id) } : d))
     const r = await act(() => life.todoist!.complete(t))
     if (!r) return void load()
-    r.paid ? soundCoin() : soundSuccess()
+    if (r.paid) soundCoin()
     onWallet()
     toast(`Done: ${t.content}${r.paid ? ' · points added' : ''}`, 'good')
   }
@@ -133,6 +140,16 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
   const setPriority = (t: TodoTask, p: number) => change(() => life.todoist!.update!(t.id, { priority: p }), (ts) => ts.map((x) => (x.id === t.id ? { ...x, priority: p } : x)), `${P_LABEL[p]}`)
 
   // Shortcuts (not while typing): n, /, and e · 1–4 · x on the task under the pointer.
+  // Swipe right on a task to complete it (phone).
+  const rootRef = useRef<HTMLDivElement>(null)
+  const swipeRef = useRef<(id: string) => void>(() => {})
+  swipeRef.current = (id: string) => {
+    const t = data?.tasks.find((x) => x.id === id)
+    if (t) void complete(t)
+  }
+  const onSwipe = useCallback((id: string) => swipeRef.current(id), [])
+  useSwipeRows(rootRef, onSwipe)
+
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {})
   keyRef.current = (e: KeyboardEvent) => {
     const el = e.target as HTMLElement | null
@@ -167,7 +184,21 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
   }, [])
 
   if (error) return <section className="card"><EmptyState icon="tasks" title="Todoist isn't connected">{error}</EmptyState></section>
-  if (!data) return <section className="card"><p className="hint">Loading your Todoist…</p></section>
+  if (!data)
+    return (
+      <div className="ta">
+        <section className="card">
+          <Skeleton lines={1} />
+        </section>
+        <div className="ta-cols">
+          {[5, 3, 4].map((n) => (
+            <section key={n} className="card">
+              <Skeleton lines={n} />
+            </section>
+          ))}
+        </div>
+      </div>
+    )
 
   const shownAreas = data.areas.filter((a) => a.kind === 'section' || filtered.some((t) => areaOf(t) === a.key))
   const counts = {
@@ -183,7 +214,8 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
     return (
       <li
         key={t.id}
-        className={`ta-task ${t.due && t.due < today ? 'is-late' : ''} ${hot === t.id ? 'hot' : ''}`}
+        className={`ta-task ${t.due && t.due < today ? 'is-late' : ''} ${hot === t.id ? 'hot' : ''} ${leaving.includes(t.id) ? 'leaving' : ''}`}
+        data-swipe={t.id}
         style={{ ['--pc' as string]: P_COLOR[t.priority] }}
         tabIndex={0}
         draggable={editing !== t.id}
@@ -297,7 +329,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
   }
 
   return (
-    <div className="ta" onClick={(e) => { if (!(e.target as HTMLElement).closest('.ta-pop, .ta-act, .ta-swatch, .ta-palette')) { setMenu(null); setPalette(null) } }}>
+    <div className="ta" ref={rootRef} onClick={(e) => { if (!(e.target as HTMLElement).closest('.ta-pop, .ta-act, .ta-swatch, .ta-palette')) { setMenu(null); setPalette(null) } }}>
       <section className="panel ta-top">
         <form
           className="ta-add"

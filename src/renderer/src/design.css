@@ -377,3 +377,61 @@
 .cu-title s { color: var(--muted); }
 .cu-details { font-size: var(--t-sm); color: var(--muted); white-space: pre-wrap; }
 .cu-why { font-size: var(--t-xs); color: var(--faint); align-self: center; }
+
+/* ============================================================
+   Feel: skeletons, done animation, swipe, phone
+   ============================================================ */
+.sk { display: flex; flex-direction: column; gap: 10px; }
+.sk i { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, rgb(var(--ink) / 0.05) 0%, rgb(var(--ink) / 0.11) 50%, rgb(var(--ink) / 0.05) 100%); background-size: 200% 100%; animation: sk-shine 1.3s ease-in-out infinite; }
+.sk .sk-title { height: 18px; width: 40%; margin-bottom: 4px; }
+@keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.sk-page { display: flex; flex-direction: column; gap: var(--s-4); max-width: 1280px; margin: 0 auto; }
+.sk-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--s-4); }
+@media (max-width: 900px) { .sk-cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* Done: the check fills, the row fades and folds away */
+@keyframes done-pop { 0% { transform: scale(1); } 45% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes row-out { 0% { opacity: 1; max-height: 80px; } 55% { opacity: 0.55; max-height: 80px; } 100% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin: 0; border-width: 0; } }
+.dl li.leaving, .ta-task.leaving { animation: row-out 0.32s ease forwards; overflow: hidden; pointer-events: none; }
+.dl li.leaving .dl-check, .ta-task.leaving .ta-check { background: var(--c, var(--accent)); border-color: var(--c, var(--accent)); animation: done-pop 0.3s ease; }
+.ta-task.leaving .ta-check { background: var(--pc); border-color: var(--pc); }
+.dl li.leaving .dl-text, .ta-task.leaving .ta-text { text-decoration: line-through; color: var(--muted); }
+.dl li.done .dl-check { animation: done-pop 0.3s ease; }
+:root .chip.habit.on .hc-check { animation: done-pop 0.3s ease; }
+
+/* Swipe right to complete (touch) */
+[data-swipe] { touch-action: pan-y; position: relative; }
+[data-swipe].swiping { background: var(--surface); z-index: 1; box-shadow: -60px 0 0 0 color-mix(in srgb, var(--green) 18%, transparent); }
+[data-swipe].swipe-ready { box-shadow: -160px 0 0 0 color-mix(in srgb, var(--green) 38%, transparent); }
+[data-swipe].swipe-ready .dl-check, [data-swipe].swipe-ready .ta-check { background: var(--green); border-color: var(--green); }
+
+/* Phone: comfortable taps, full-width sheets, nothing hidden behind the bar */
+@media (max-width: 720px) {
+  :root .dl li { padding: 11px 2px; }
+  :root .dl-check, :root .ta-check { width: 24px; height: 24px; }
+  :root .ta-actions { opacity: 1; }
+  .sheet { place-items: end center !important; }
+  .sheet-card { width: 100vw !important; max-width: 100vw; border-radius: 18px 18px 0 0 !important; max-height: 88vh; overflow-y: auto; padding-bottom: calc(18px + env(safe-area-inset-bottom)) !important; }
+  .ta-cols { grid-template-columns: minmax(0, 1fr) !important; }
+  .ta-bar { flex-direction: column; align-items: stretch !important; gap: var(--s-2); }
+  .ta-filters { flex-wrap: wrap; }
+  .ta-tabs { overflow-x: auto; scrollbar-width: none; }
+  .ins-two, .cmd-side { gap: var(--s-3); }
+  .now-main { align-items: flex-start; }
+}
+
+/* Lock screen: the calm look from the first second */
+:root .lock { background: var(--bg); }
+:root .lock-card { width: min(340px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); padding: var(--s-8) var(--s-6) var(--s-6); gap: var(--s-3); }
+:root .lock-card h1 { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.02em; margin: var(--s-2) 0 0; }
+:root .lock-icon { background: var(--accent); color: var(--accent-ink); box-shadow: none; border-radius: 14px; }
+:root .lock-card .pin { width: 100%; text-align: center; font: 600 22px var(--mono); letter-spacing: 0.4em; padding: 12px; }
+@media (max-width: 720px) {
+  :root .ta-task { flex-wrap: wrap; row-gap: 4px; }
+  :root .ta-body { flex: 1 1 calc(100% - 40px); }
+  :root .ta-actions { position: static !important; transform: none !important; pointer-events: auto !important; width: 100%; padding-left: 30px; justify-content: flex-start; gap: 4px; background: none !important; box-shadow: none !important; border: 0 !important; }
+  :root .ta-add { flex-wrap: wrap; }
+  :root .ta-add input { flex: 1 1 calc(100% - 40px); min-width: 0; }
+  :root .ta-add select { flex: 1 1 auto; }
+  :root .ta-tabs button small { margin-left: 4px; }
+}

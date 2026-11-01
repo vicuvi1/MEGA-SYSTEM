@@ -76,3 +76,34 @@ export function PageHeader({ title, sub, actions }: { title: ReactNode; sub?: Re
     </header>
   )
 }
+
+/** A grey placeholder while something loads (shimmers gently). */
+export function Skeleton({ lines = 3, title = true }: { lines?: number; title?: boolean }) {
+  return (
+    <div className="sk" aria-hidden="true">
+      {title && <i className="sk-title" />}
+      {Array.from({ length: lines }, (_, k) => (
+        <i key={k} className="sk-line" style={{ width: `${92 - ((k * 17) % 40)}%` }} />
+      ))}
+    </div>
+  )
+}
+
+/** The page's shape while it loads: a big card, then two columns of cards. */
+export function PageSkeleton() {
+  return (
+    <div className="sk-page" role="status" aria-label="Loading">
+      <section className="card">
+        <Skeleton lines={2} />
+      </section>
+      <div className="sk-cols">
+        <section className="card">
+          <Skeleton lines={5} />
+        </section>
+        <section className="card">
+          <Skeleton lines={3} />
+        </section>
+      </div>
+    </div>
+  )
+}

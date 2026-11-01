@@ -26,8 +26,8 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
         <div className="lock-icon">
           <Icon name="lock" size={26} />
         </div>
-        <h1>System locked</h1>
-        <p>Enter your PIN to continue.</p>
+        <h1>Welcome back</h1>
+        <p>Enter your PIN to open Life System.</p>
         <input
           className="pin"
           type="password"

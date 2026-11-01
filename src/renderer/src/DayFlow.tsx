@@ -1,7 +1,7 @@
 // Today's core: the morning plan / evening shut-down cards, the "Now" card
 // (one next step, a live timer while focusing), habit chips, and one list:
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
 import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, pLabel, sortToday, whenText, type TodoTask } from '@core/todoist'
 import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Rule, Summary } from '@shared/api'
@@ -11,6 +11,8 @@ import type { PageId } from './modules'
 import { useFocus } from './pages/Focus'
 import { LABEL as WEEK_LABEL, useWeekPlan } from './WeekPlanner'
 import { useTicker } from './useTicker'
+import { Skeleton } from './blocks'
+import { useSwipeRows } from './swipe'
 import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
 import { useAction } from './ui'
@@ -181,8 +183,19 @@ export function DayFlow(props: Props) {
     r.coins ? soundCoin() : soundSuccess()
     refresh()
   }
+  // A finished row plays a short "done" animation before it leaves.
+  const [leaving, setLeaving] = useState<string[]>([])
+  const fadeOut = (id: string) =>
+    new Promise<void>((done) => {
+      setLeaving((l) => [...l, id])
+      setTimeout(done, 320)
+    })
   const doneTodo = async (t: TodoTask) => {
+    if (leaving.includes(t.id)) return
+    soundSuccess()
+    await fadeOut(t.id)
     setTodo((cur) => (cur ?? []).filter((x) => x.id !== t.id))
+    setLeaving((l) => l.filter((x) => x !== t.id))
     const r = await act(() => life.todoist!.complete(t), 'Done in Todoist')
     if (r?.paid) soundCoin()
     refresh()
@@ -197,6 +210,20 @@ export function DayFlow(props: Props) {
       onChange()
     }
   }
+  // Swipe a row right to complete it (phone).
+  const listRef = useRef<HTMLElement>(null)
+  const swipeRef = useRef<(key: string) => void>(() => {})
+  swipeRef.current = (key: string) => {
+    const [kind, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)]
+    const t = todo?.find((x) => x.id === id)
+    if (kind === 'star' && t) void doneStarred(t)
+    else if (kind === 'todo' && t) void doneTodo(t)
+    else if (kind === 'must') void tickMustDo(Number(id))
+    else if (kind === 'big') void toggleBig(Number(id))
+  }
+  const onSwipe = useCallback((key: string) => swipeRef.current(key), [])
+  useSwipeRows(listRef, onSwipe)
+
   const startFocus = async (subject: string, task: FocusTask | null = null) => {
     if (await act(() => life.focus.start(subject, 50, task), `Focus started: ${task?.title ?? subject}`)) loadFocus()
   }
@@ -337,7 +364,17 @@ export function DayFlow(props: Props) {
     return out
   }, [loose, colors])
 
-  if (!st) return null
+  if (!st)
+    return (
+      <div className="cmd-day">
+        <section className="now-card">
+          <Skeleton lines={2} />
+        </section>
+        <section className="card">
+          <Skeleton lines={6} />
+        </section>
+      </div>
+    )
   const plan = st.plan.items
   const bigOpen = week?.big3.map((b, i) => ({ ...b, i })).filter((b) => b.text) ?? []
   const doneCount = plan.filter((p) => p.done).length + bigOpen.filter((b) => b.done).length
@@ -491,7 +528,7 @@ export function DayFlow(props: Props) {
         </section>
       )}
 
-      <section className="card day-list" aria-label="Today's list">
+      <section className="card day-list" aria-label="Today's list" ref={listRef}>
         <header className="card-head">
           <h2>Today</h2>
           <div className="actions">
@@ -527,7 +564,7 @@ export function DayFlow(props: Props) {
           </h3>
           <ul className="dl">
             {starred.map((t) => (
-              <li key={t.id} style={{ ['--c' as string]: colorOf(t) }}>
+              <li key={t.id} style={{ ['--c' as string]: colorOf(t) }} data-swipe={`star:${t.id}`} className={leaving.includes(t.id) ? 'leaving' : ''}>
                 <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={() => void doneStarred(t)} />
                 <span className="dl-text">
                   {t.content}
@@ -544,7 +581,7 @@ export function DayFlow(props: Props) {
               </li>
             ))}
             {planOnly.map(({ p, i }) => (
-              <li key={`m${i}`} className={p.done ? 'done' : ''}>
+              <li key={`m${i}`} className={p.done ? 'done' : ''} data-swipe={p.done ? undefined : `must:${i}`}>
                 <button className="dl-check" aria-label={p.done ? `Untick ${p.text}` : `Tick ${p.text}`} onClick={() => void tickMustDo(i)}>
                   {p.done ? '✓' : ''}
                 </button>
@@ -575,7 +612,7 @@ export function DayFlow(props: Props) {
             </h3>
             <ul className="dl">
               {bigOpen.map((b) => (
-                <li key={`b${b.i}`} className={b.done ? 'done' : ''}>
+                <li key={`b${b.i}`} className={b.done ? 'done' : ''} data-swipe={b.done ? undefined : `big:${b.i}`}>
                   <button className="dl-check" aria-label={b.done ? `Untick ${b.text}` : `Tick ${b.text}`} onClick={() => void toggleBig(b.i)}>
                     {b.done ? '✓' : ''}
                   </button>
@@ -597,7 +634,7 @@ export function DayFlow(props: Props) {
               </h3>
               <ul className="dl">
                 {items.map((t) => (
-                  <li key={t.id}>
+                  <li key={t.id} data-swipe={`todo:${t.id}`} className={leaving.includes(t.id) ? 'leaving' : ''}>
                     <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={() => void doneTodo(t)} />
                     <span className="dl-text">
                       {t.content}
