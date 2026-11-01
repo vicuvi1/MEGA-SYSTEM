@@ -37,6 +37,24 @@ describe('OpenRouter first, Gemini as backup', () => {
     expect(await openRouterModel({ OPENROUTER_MODEL: 'deepseek/other' }, f)).toBe('deepseek/other')
   })
 
+  it('picks a strong model for hard thinking, and falls back to flash when it fails', async () => {
+    // @ts-expect-error plain JS module without types
+    const { strongModel, askOpenRouter } = await import('../../../../api/ai.mjs?strong')
+    const list = { data: [{ id: 'deepseek/deepseek-v4.1-flash' }, { id: 'deepseek/deepseek-v4-pro' }, { id: 'deepseek/deepseek-v4.1-pro' }, { id: 'deepseek/deepseek-r1-distill-qwen' }, { id: 'deepseek/deepseek-v4.1-pro:free' }] }
+    const used: string[] = []
+    const f = (async (url: string, init?: any) => {
+      if (String(url).endsWith('/models')) return json(200, list)
+      const body = JSON.parse(init.body)
+      used.push(body.model)
+      if (body.model.includes('pro')) return json(500, { error: { message: 'busy' } })
+      return json(200, { choices: [{ message: { content: '{"reply":"ok"}' } }] })
+    }) as unknown as typeof fetch
+    expect(await strongModel({}, f)).toBe('deepseek/deepseek-v4.1-pro')
+    const r = await askOpenRouter('k', 'hi', f, { strong: true }, {})
+    expect(used).toEqual(['deepseek/deepseek-v4.1-pro', 'deepseek/deepseek-v4.1-flash'])
+    expect(r.model).toBe('deepseek/deepseek-v4.1-flash')
+  })
+
   it('uses OpenRouter for text, Gemini for photos and when OpenRouter fails', async () => {
     // @ts-expect-error plain JS module without types
     const { askModel } = await import('../../../../api/ai.mjs?route')

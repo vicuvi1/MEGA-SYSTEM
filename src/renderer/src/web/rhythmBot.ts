@@ -25,7 +25,7 @@ import {
 } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
 import { financeStateFrom, lifeContext, loadMind, loadProfile, sportState } from './botBrain'
-import { mindText } from '@core/coachMind'
+import { mindText, weekSoFar } from '@core/coachMind'
 import type { Mirror } from './mirror'
 import type { AskModel, CalendarLike, TodoistLike } from './webBots'
 import type { WebServices } from './webServices'
@@ -77,7 +77,11 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
   async function contextFor(events: any[] | null, todoToday: TodoTask[] | null, upcoming: TodoTask[] | null) {
     return mirror.read((db) => {
       const svc = services.services(db)
-      return [lifeContext(svc, db, { finance: financeStateFrom(db, null), todoToday, upcoming, events }), mindText(loadMind(db), svc.wallet.today()), `His goals: ${loadProfile(db).goals.join('; ')}`].filter(Boolean).join('\n')
+      return [lifeContext(svc, db, { finance: financeStateFrom(db, null), todoToday, upcoming, events }), (() => {
+        const inp = svc.progress.input(null)
+        const today = svc.wallet.today()
+        return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))
+      })(), `His goals: ${loadProfile(db).goals.join('; ')}`].filter(Boolean).join('\n')
     })
   }
 
@@ -115,6 +119,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const prompt = [
           "You are MEGA, Victor's head coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
           `It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
+          'Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits ("Algebra set (exam 15 Dec)").',
           'headline: one short line with numbers ("3 must-dos · 2h40 focus · gym 18:00").',
           note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : '',
           `A simple starting point (improve it): ${JSON.stringify(fallback)}`,
@@ -125,7 +130,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         ]
           .filter(Boolean)
           .join('\n')
-        const raw = await ai(prompt, { json: true })
+        const raw = await ai(prompt, { json: true, think: true, strong: true })
         const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
         plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now))
       } catch {
@@ -241,7 +246,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
             '',
             context
           ].join('\n'),
-          { json: true }
+          { json: true, think: true, strong: true }
         )
         const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
         if (typeof j.lesson === 'string' && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240)
@@ -300,7 +305,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
             '',
             context
           ].join('\n'),
-          { json: true }
+          { json: true, think: true, strong: true }
         )
         const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
         const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)

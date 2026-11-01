@@ -68,3 +68,27 @@ describe('isCorrection', () => {
     expect(isCorrection('plan my afternoon')).toBe(false)
   })
 })
+
+describe('promises', () => {
+  it('tracks kept, broken and ignored check-ins and escalates', async () => {
+    const k = await import('./coachKit')
+    const t0 = new Date('2026-11-01T10:00:00Z')
+    let list = k.addReminder([], { at: t0.toISOString(), text: 'Start the CV', kind: 'checkin', follow: true }, t0)
+    list = k.addReminder(list, { at: t0.toISOString(), text: 'Go to the gym', kind: 'checkin', follow: true }, t0)
+    const [a, b] = list
+    // a: answered; b: never answered after every follow-up
+    list = k.afterSend(list, a.id, t0)
+    list = k.answered(list, new Date(t0.getTime() + 60000))
+    for (let i = 0; i < k.FOLLOW_MAX; i++) list = k.afterSend(list, b.id, new Date(t0.getTime() + i * 60000))
+    expect(list.find((r) => r.id === b.id)?.ignored).toBe(true)
+    const pr = k.promiseRefs(list, new Date(t0.getTime() + 3600_000))
+    expect(pr.lines).toContain('P1 "Start the CV"')
+    expect(pr.lines).toContain('IGNORED')
+    list = k.setOutcome(list, pr.refs.get('P1')!, 'broken')
+    const s = k.promiseStats(list, new Date(t0.getTime() + 3600_000))
+    expect(s).toMatchObject({ kept: 0, broken: 1, ignored: 1 })
+    expect(k.promiseLine(s)).toContain('1 broken, 1 ignored')
+    expect(k.followUpText({ ...a, tries: 3 }, s)).toContain('miss #3')
+    expect(k.followUpText({ ...a, tries: 0 }, s)).toBe('🔔 Start the CV')
+  })
+})

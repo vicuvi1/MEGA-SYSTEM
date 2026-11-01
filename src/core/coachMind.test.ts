@@ -70,3 +70,14 @@ describe('coach mind', () => {
     expect(focusBySubject([{ day: '2026-10-30', subject: 'Math', minutes: 90 }, { day: '2026-10-31', subject: 'Rust', minutes: 30 }, { day: '2026-09-01', subject: 'Old', minutes: 500 }], '2026-10-26')).toBe('Math 1h 30m, Rust 30m')
   })
 })
+
+describe('goal progress', () => {
+  it('measures weekly targets', async () => {
+    const { goalProgress, weekSoFar } = await import('./coachMind')
+    const w = weekSoFar('2026-11-04', [{ day: '2026-11-02', minutes: 120 }, { day: '2026-11-04', minutes: 80 }, { day: '2026-11-01', minutes: 500 }], [{ day: '2026-11-03' }], [{ day: '2026-11-02' }, { day: '2026-11-03' }])
+    expect(w).toEqual({ focusMin: 200, workouts: 1, tasks: 2, daysLeft: 5 })
+    expect(goalProgress('6h focus', w)).toBe('this week 3.3h of 6h (56%), 32 min/day needed for 5 days')
+    expect(goalProgress('3 workouts', w)).toBe('this week 1 of 3 workouts')
+    expect(goalProgress('save 2000 lei', w)).toBeNull()
+  })
+})

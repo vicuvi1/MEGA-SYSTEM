@@ -90,15 +90,42 @@ export function applyMind(mind: CoachMind, op: MindOp, today: string): { mind: C
 
 const daysTo = (from: string, to: string) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86400000)
 
-/** The mind as prompt lines. */
-export function mindText(m: CoachMind, today: string): string {
+/** This week so far (Monday → today), to check weekly targets against. */
+export interface WeekSoFar {
+  focusMin: number
+  workouts: number
+  tasks: number
+  /** Days left in the week, today included. */
+  daysLeft: number
+}
+
+/** "6h focus" → focus 3h20 of 6h (56%); "3 workouts" → 1 of 3. Null when the target isn't something measured. */
+export function goalProgress(weekly: string, w: WeekSoFar): string | null {
+  const t = weekly.toLowerCase()
+  const hours = /(\d+(?:[.,]\d+)?)\s*(?:h|hours?|ore|часов|ч)\b/.exec(t)
+  if (hours && !/(sleep|somn|сон)/.test(t)) {
+    const target = Number(hours[1].replace(',', '.')) * 60
+    const pct = Math.round((w.focusMin / Math.max(1, target)) * 100)
+    const need = Math.max(0, target - w.focusMin)
+    return `this week ${(w.focusMin / 60).toFixed(1)}h of ${target / 60}h (${pct}%)${need ? `, ${Math.round(need / Math.max(1, w.daysLeft))} min/day needed for ${w.daysLeft} days` : ', done'}`
+  }
+  const n = /(\d+)\s*(workouts?|runs?|trainings?|gym|sessions?|antrenament\w*|тренировк\w*)/.exec(t)
+  if (n) return `this week ${w.workouts} of ${n[1]} workouts`
+  const k = /(\d+)\s*(tasks?|sarcini|задач\w*)/.exec(t)
+  if (k) return `this week ${w.tasks} of ${k[1]} tasks`
+  return null
+}
+
+/** The mind as prompt lines (with this week's progress on each tracked goal when known). */
+export function mindText(m: CoachMind, today: string, week?: WeekSoFar): string {
   const out: string[] = []
   if (m.goals.length)
     out.push(
       `Goals you track with him:\n${m.goals
         .map((g) => {
           const left = g.deadline ? daysTo(today, g.deadline) : null
-          return `- ${g.title}${g.deadline ? ` · due ${g.deadline} (${left! < 0 ? `${-left!} days late` : `${left} days left`})` : ''}${g.weekly ? ` · weekly target ${g.weekly}` : ''}`
+          const prog = g.weekly && week ? goalProgress(g.weekly, week) : null
+          return `- ${g.title}${g.deadline ? ` · due ${g.deadline} (${left! < 0 ? `${-left!} days late` : `${left} days left`})` : ''}${g.weekly ? ` · weekly target ${g.weekly}` : ''}${prog ? ` · ${prog}` : ''}`
         })
         .join('\n')}`
     )
@@ -221,4 +248,17 @@ export function focusBySubject(sessions: { day: string; subject: string; minutes
   if (!by.size) return ''
   const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`)
   return [...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm(m)}`).join(', ')
+}
+
+/** Monday-to-today numbers from the history lists. */
+export function weekSoFar(today: string, focus: { day: string; minutes: number }[], workouts: { day: string }[], tasks: { day: string }[]): WeekSoFar {
+  const wdN = new Date(`${today}T12:00:00Z`).getUTCDay()
+  const monday = addDays(today, -((wdN + 6) % 7))
+  const inWeek = (d: string) => d >= monday && d <= today
+  return {
+    focusMin: focus.filter((f) => inWeek(f.day)).reduce((t, f) => t + f.minutes, 0),
+    workouts: new Set(workouts.filter((x) => inWeek(x.day)).map((x) => x.day)).size,
+    tasks: tasks.filter((x) => inWeek(x.day)).length,
+    daysLeft: 7 - ((wdN + 6) % 7)
+  }
 }

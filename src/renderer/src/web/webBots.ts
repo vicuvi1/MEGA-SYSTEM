@@ -28,11 +28,11 @@ import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
 import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTime'
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
-import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, isBigAsk, isCorrection, makeRefs, type NudgeState, type Reminder } from '@core/coachKit'
+import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, isBigAsk, isCorrection, makeRefs, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, updateMemory, type BrainAction, type BrainOut } from './botBrain'
-import { applyMind, mindText, readMindOp, type MindOp } from '@core/coachMind'
+import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
 import { createRhythm } from './rhythmBot'
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
@@ -199,7 +199,7 @@ export interface CalendarLike {
   remove?(calendarId: string, id: string): Promise<void>
 }
 
-export type AskModel = (prompt: string, opts?: { json?: boolean; think?: boolean; media?: { mime: string; data: string }[] }) => Promise<string>
+export type AskModel = (prompt: string, opts?: { json?: boolean; think?: boolean; strong?: boolean; media?: { mime: string; data: string }[] }) => Promise<string>
 
 /** What the bot needs from Todoist (the server calls it directly, the page through /api/todoist). */
 export interface TodoistLike {
@@ -1023,7 +1023,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
       })
       .catch(() => null)
-    const { context, memory, profile, look, mind, money } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind, money, promises } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       let sessions: LookupData['sessions'] = []
@@ -1036,7 +1036,20 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         context: lifeContext(svc, db, { finance, todoToday, upcoming, events }),
         memory: loadMemory(db),
         profile: loadProfile(db),
-        mind: mindText(loadMind(db), svc.wallet.today()),
+        mind: (() => {
+          const inp = svc.progress.input(null)
+          const today = svc.wallet.today()
+          return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))
+        })(),
+        promises: (() => {
+          let list: Reminder[] = []
+          try {
+            list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+          } catch {
+            list = []
+          }
+          return { ...promiseRefs(list), stats: promiseLine(promiseStats(list)) }
+        })(),
         money: recentMoney(db as any, svc.wallet.today()),
         look: { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
       }
@@ -1054,7 +1067,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
     const ask = (found?: string, extraNote = '') =>
-      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines].filter(Boolean).join('\n'), found, mind }), { json: true, think: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n') }), { json: true, think: big, strong: big, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1209,6 +1222,21 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             setSetting(db as any, REMINDERS, JSON.stringify(addReminder(list, { at: at.toISOString(), text: a.text, kind: a.kind, follow: a.kind === 'checkin' })))
           })
           done.push(a.kind === 'remind' ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== new Date().toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ''}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`)
+          continue
+        }
+        if (a.kind === 'promise') {
+          const id = promises.refs.get(a.ref)
+          if (!id) continue
+          await mirror.write((db) => {
+            let list: Reminder[] = []
+            try {
+              list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+            } catch {
+              list = []
+            }
+            setSetting(db as any, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)))
+          })
+          done.push(a.outcome === 'kept' ? '✅ Promise kept' : '❌ Promise broken (counted)')
           continue
         }
         if (a.kind === 'delmoney' || a.kind === 'editmoney') {

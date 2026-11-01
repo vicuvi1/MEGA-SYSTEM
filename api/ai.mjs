@@ -67,15 +67,51 @@ export async function openRouterModel(env = process.env, fetchImpl = fetch) {
   return resolvedModel
 }
 
-/** Asks OpenRouter (text only). opts.json: answer as a JSON object. */
+let resolvedStrong
+/**
+ * The strong model for hard thinking (plans, reviews, corrections, questions):
+ * OPENROUTER_STRONG_MODEL if set, else the newest DeepSeek "pro"/reasoning
+ * model OpenRouter lists (not flash, lite or distilled); null if none.
+ */
+export async function strongModel(env = process.env, fetchImpl = fetch) {
+  if ((env.OPENROUTER_STRONG_MODEL || '').trim()) return env.OPENROUTER_STRONG_MODEL.trim()
+  if (resolvedStrong !== undefined) return resolvedStrong
+  try {
+    const r = await fetchImpl(`${OPENROUTER}/models`)
+    const ids = ((await r.json())?.data ?? []).map((m) => String(m.id)).filter((id) => /^deepseek\//i.test(id) && !/:free$|flash|lite|distill|prover|ocr|coder/i.test(id))
+    const pro = ids.filter((id) => /pro|reason|-r\d/i.test(id)).sort(newer)
+    resolvedStrong = pro[0] ?? ids.filter((id) => /v\d/i.test(id)).sort(newer)[0] ?? null
+  } catch {
+    resolvedStrong = null
+  }
+  return resolvedStrong
+}
+
+/** Asks OpenRouter (text only). opts.json: answer as a JSON object; opts.strong: the strong model (flash if it fails). */
 export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, env = process.env) {
+  if (opts.strong) {
+    const strong = await strongModel(env, fetchImpl)
+    const flash = await openRouterModel(env, fetchImpl)
+    if (strong && strong !== flash) {
+      try {
+        return await callOpenRouter(key, strong, prompt, fetchImpl, { ...opts, think: true }, 35_000, 'medium')
+      } catch (e) {
+        console.warn('strong model failed, using flash:', e.message)
+        return callOpenRouter(key, flash, prompt, fetchImpl, { ...opts, think: false }, 20_000)
+      }
+    }
+  }
   const model = await openRouterModel(env, fetchImpl)
+  return callOpenRouter(key, model, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000)
+}
+
+async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effort = 'low') {
   const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-system-ten.vercel.app', 'X-Title': 'Life System' },
     // opts.think: big asks (plans, reviews, reshuffles) get the model's reasoning.
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: opts.think ? 4096 : 2048, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort: 'low' } } : {}) }),
-    signal: AbortSignal.timeout(opts.think ? 40_000 : 30_000)
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
+    signal: AbortSignal.timeout(timeout)
   })
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(`OpenRouter ${r.status}: ${j?.error?.message || 'request failed'}`)
@@ -113,7 +149,10 @@ export default async function handler(req, res) {
     return send(res, 400, { error: 'Bad request' })
   }
   const orKey = (process.env.OPENROUTER_API_KEY || '').trim()
-  if (body?.op === 'status') return send(res, 200, { configured: !!(key || orKey), model: orKey ? await openRouterModel() : key ? 'gemini' : null })
+  if (body?.op === 'status') {
+    const strong = orKey ? await strongModel() : null
+    return send(res, 200, { configured: !!(key || orKey), model: orKey ? await openRouterModel() : key ? 'gemini' : null, strong })
+  }
   if (!key && !orKey) return send(res, 503, { error: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use AI on the website' })
   const prompt = String(body?.prompt || '').slice(0, 60_000)
   if (!prompt.trim()) return send(res, 400, { error: 'Empty prompt' })

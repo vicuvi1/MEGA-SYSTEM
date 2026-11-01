@@ -23,7 +23,7 @@ import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
-import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
+import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
 import { isFocusBlock } from '@core/dayTime'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
@@ -350,7 +350,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   let list = reminders
   for (const r of dueReminders(list, now)) {
     try {
-      await send(r.kind === 'checkin' ? `🔔 ${esc(r.text)}${(r.tries ?? 0) > 0 ? `\n<i>(asking again: answer me, even "not yet")</i>` : ''}` : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined)
+      // Check-ins get sharper each time and name the week's missed promises.
+      await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now)) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined)
       list = afterSend(list, r.id, now)
     } catch {
       /* Telegram hiccup: next tick */

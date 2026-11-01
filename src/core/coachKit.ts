@@ -59,6 +59,12 @@ export interface Reminder {
   sentAt?: string | null
   done?: boolean
   createdAt: string
+  /** When you wrote back after it was sent. */
+  answeredAt?: string | null
+  /** A check-in never answered after every follow-up. */
+  ignored?: boolean
+  /** The coach's call after your answer: promise kept or broken. */
+  outcome?: 'kept' | 'broken' | null
 }
 
 export const REMINDERS = 'coach_reminders'
@@ -68,7 +74,7 @@ export const FOLLOW_MAX = 4
 
 export function addReminder(list: Reminder[], r: Omit<Reminder, 'id' | 'createdAt'>, now = new Date()): Reminder[] {
   const id = `${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-  return [...list.filter((x) => !x.done || Date.parse(x.at) > now.getTime() - 3 * 86400000), { ...r, id, createdAt: now.toISOString() }].slice(-50)
+  return [...list.filter((x) => !x.done || Date.parse(x.at) > now.getTime() - 8 * 86400000), { ...r, id, createdAt: now.toISOString() }].slice(-60)
 }
 
 /** Reminders to send now. */
@@ -85,13 +91,13 @@ export function afterSend(list: Reminder[], id: string, now = new Date()): Remin
     if (r.id !== id) return r
     const tries = (r.tries ?? 0) + 1
     if (r.kind === 'checkin' && r.follow && tries < FOLLOW_MAX) return { ...r, tries, sentAt: now.toISOString(), at: new Date(now.getTime() + FOLLOW_EVERY_MIN * 60000).toISOString() }
-    return { ...r, tries, sentAt: now.toISOString(), done: true }
+    return { ...r, tries, sentAt: now.toISOString(), done: true, ...(r.kind === 'checkin' && r.follow ? { ignored: true } : {}) }
   })
 }
 
 /** You wrote to the coach: open follow-ups stop. */
 export function answered(list: Reminder[], now = new Date()): Reminder[] {
-  return list.map((r) => (!r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() ? { ...r, done: true } : r))
+  return list.map((r) => (!r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() ? { ...r, done: true, ignored: false, answeredAt: now.toISOString() } : r))
 }
 
 // ---- Follow-up nudges when you're slipping -------------------------------
@@ -148,4 +154,60 @@ export function nudged(st: NudgeState, today: string, now = new Date()): NudgeSt
 export function isCorrection(text: string): boolean {
   const t = text.toLowerCase()
   return /\b(wrong|mistake|not money|not an expense|that'?s water|undo|delete (it|that)|remove (it|that)|fix (it|that)|incorrect|shouldn'?t (be|have)|didn'?t (spend|buy|pay)|greșit|gresit|nu e (bine|corect)|nu sunt bani|șterge|sterge|неправильно|удали|ошибка|не деньги)\b/.test(t) || /\bnot money\b|\bthats water\b|\bthat's water\b/.test(t.replace(/[^\w' ]/g, ''))
+}
+
+// ---- Promises: every check-in is something you said you'd do ------------
+
+/** Check-ins of the last 2 days without a verdict yet, as P1, P2… for the coach. */
+export function promiseRefs(list: Reminder[], now = new Date()): { refs: Map<string, string>; lines: string } {
+  const refs = new Map<string, string>()
+  const open = list.filter((r) => r.kind === 'checkin' && r.sentAt && !r.outcome && Date.parse(r.createdAt) > now.getTime() - 2 * 86400000).slice(-6)
+  const lines = open.map((r, i) => {
+    refs.set(`P${i + 1}`, r.id)
+    const state = r.answeredAt ? 'he answered' : r.ignored ? 'IGNORED (no answer to any follow-up)' : `asked ${r.tries ?? 1}×, no answer yet`
+    return `P${i + 1} "${r.text}" (${new Date(r.sentAt as string).toTimeString().slice(0, 5)}, ${state})`
+  })
+  return { refs, lines: lines.length ? `Promises you're checking (use the P-number):\n${lines.join('\n')}` : '' }
+}
+
+export function setOutcome(list: Reminder[], id: string, outcome: 'kept' | 'broken'): Reminder[] {
+  return list.map((r) => (r.id === id ? { ...r, outcome, done: true } : r))
+}
+
+export interface PromiseStats {
+  kept: number
+  broken: number
+  ignored: number
+  open: number
+  /** Broken or ignored, newest first (for calling it out). */
+  misses: string[]
+}
+
+/** The last 7 days of promises: kept, broken, ignored. */
+export function promiseStats(list: Reminder[], now = new Date()): PromiseStats {
+  const week = list.filter((r) => r.kind === 'checkin' && Date.parse(r.createdAt) > now.getTime() - 7 * 86400000)
+  const missed = week.filter((r) => r.outcome === 'broken' || (r.ignored && r.outcome !== 'kept'))
+  return {
+    kept: week.filter((r) => r.outcome === 'kept').length,
+    broken: week.filter((r) => r.outcome === 'broken').length,
+    ignored: week.filter((r) => r.ignored && !r.outcome).length,
+    open: week.filter((r) => !r.done).length,
+    misses: missed.slice(-5).reverse().map((r) => r.text)
+  }
+}
+
+/** One line for the coach (and the escalating follow-ups). */
+export function promiseLine(s: PromiseStats): string {
+  if (!s.kept && !s.broken && !s.ignored) return ''
+  return `Promises in the last 7 days: ${s.kept} kept, ${s.broken} broken, ${s.ignored} ignored${s.misses.length ? `. Missed: ${s.misses.map((m) => `"${m.slice(0, 60)}"`).join(', ')}` : ''}.`
+}
+
+/** The follow-up gets sharper each time, and names the pattern when there is one. */
+export function followUpText(r: Reminder, s: PromiseStats): string {
+  const tries = r.tries ?? 0
+  const misses = s.broken + s.ignored
+  if (tries === 0) return `🔔 ${r.text}`
+  if (tries === 1) return `🔔 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`
+  if (tries === 2) return `⏰ ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? '' : 's'} missed this week already.` : ''} Answer me.`
+  return `🚨 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ''}You said you'd do it. Do it now, or tell me why not.`
 }

@@ -3460,7 +3460,7 @@ function parsePlan(text) {
 	return String(text || "").split(/\n|;|•/).flatMap((l) => /,/.test(l) && !/\d,\d/.test(l) && l.split(",").length <= 3 && l.length < 120 ? l.split(",") : [l]).map((l) => l.replace(/^\s*(\d+[.)]|[-*✅⬜☐]|\[\s?[xX]?\s?\])\s*/, "").trim()).filter((l) => l.length > 0).slice(0, 5);
 }
 /** Where a goal stands: hours done, the weekly target from here, ahead or behind. */
-function goalProgress(g, doneMin, today) {
+function goalProgress$1(g, doneMin, today) {
 	const total = Math.max(1, daysBetween$1(g.createdDay, g.deadline));
 	const elapsed = Math.min(total, Math.max(0, daysBetween$1(g.createdDay, today)));
 	const daysLeft = Math.max(0, daysBetween$1(today, g.deadline));
@@ -3591,7 +3591,7 @@ var FocusService = class {
 				hours: Number(g.hours),
 				createdDay: String(g.created_day)
 			};
-			return goalProgress(goal, all.filter((s) => s.day >= goal.createdDay && s.subject.toLowerCase() === goal.subject.toLowerCase()).reduce((t, s) => t + s.minutes, 0), today);
+			return goalProgress$1(goal, all.filter((s) => s.day >= goal.createdDay && s.subject.toLowerCase() === goal.subject.toLowerCase()).reduce((t, s) => t + s.minutes, 0), today);
 		});
 		const plans = Array.from({ length: 7 }, (_, i) => this.plan(addDays$1(today, -i)));
 		const subjects = [.../* @__PURE__ */ new Set([...goals.map((g) => g.subject), ...all.map((s) => s.subject)])].slice(0, 8);
@@ -8333,11 +8333,11 @@ var REMINDERS = "coach_reminders";
 var NUDGES = "coach_nudges";
 function addReminder(list, r, now = /* @__PURE__ */ new Date()) {
 	const id = `${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-	return [...list.filter((x) => !x.done || Date.parse(x.at) > now.getTime() - 2592e5), {
+	return [...list.filter((x) => !x.done || Date.parse(x.at) > now.getTime() - 6912e5), {
 		...r,
 		id,
 		createdAt: now.toISOString()
-	}].slice(-50);
+	}].slice(-60);
 }
 /** Reminders to send now. */
 function dueReminders(list, now = /* @__PURE__ */ new Date()) {
@@ -8361,7 +8361,8 @@ function afterSend(list, id, now = /* @__PURE__ */ new Date()) {
 			...r,
 			tries,
 			sentAt: now.toISOString(),
-			done: true
+			done: true,
+			...r.kind === "checkin" && r.follow ? { ignored: true } : {}
 		};
 	});
 }
@@ -8369,7 +8370,9 @@ function afterSend(list, id, now = /* @__PURE__ */ new Date()) {
 function answered(list, now = /* @__PURE__ */ new Date()) {
 	return list.map((r) => !r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() ? {
 		...r,
-		done: true
+		done: true,
+		ignored: false,
+		answeredAt: now.toISOString()
 	} : r);
 }
 /**
@@ -8401,6 +8404,52 @@ function nudged(st, today, now = /* @__PURE__ */ new Date()) {
 function isCorrection(text) {
 	const t = text.toLowerCase();
 	return /\b(wrong|mistake|not money|not an expense|that'?s water|undo|delete (it|that)|remove (it|that)|fix (it|that)|incorrect|shouldn'?t (be|have)|didn'?t (spend|buy|pay)|greșit|gresit|nu e (bine|corect)|nu sunt bani|șterge|sterge|неправильно|удали|ошибка|не деньги)\b/.test(t) || /\bnot money\b|\bthats water\b|\bthat's water\b/.test(t.replace(/[^\w' ]/g, ""));
+}
+/** Check-ins of the last 2 days without a verdict yet, as P1, P2… for the coach. */
+function promiseRefs(list, now = /* @__PURE__ */ new Date()) {
+	const refs = /* @__PURE__ */ new Map();
+	const lines = list.filter((r) => r.kind === "checkin" && r.sentAt && !r.outcome && Date.parse(r.createdAt) > now.getTime() - 1728e5).slice(-6).map((r, i) => {
+		refs.set(`P${i + 1}`, r.id);
+		const state = r.answeredAt ? "he answered" : r.ignored ? "IGNORED (no answer to any follow-up)" : `asked ${r.tries ?? 1}×, no answer yet`;
+		return `P${i + 1} "${r.text}" (${new Date(r.sentAt).toTimeString().slice(0, 5)}, ${state})`;
+	});
+	return {
+		refs,
+		lines: lines.length ? `Promises you're checking (use the P-number):\n${lines.join("\n")}` : ""
+	};
+}
+function setOutcome(list, id, outcome) {
+	return list.map((r) => r.id === id ? {
+		...r,
+		outcome,
+		done: true
+	} : r);
+}
+/** The last 7 days of promises: kept, broken, ignored. */
+function promiseStats(list, now = /* @__PURE__ */ new Date()) {
+	const week = list.filter((r) => r.kind === "checkin" && Date.parse(r.createdAt) > now.getTime() - 6048e5);
+	const missed = week.filter((r) => r.outcome === "broken" || r.ignored && r.outcome !== "kept");
+	return {
+		kept: week.filter((r) => r.outcome === "kept").length,
+		broken: week.filter((r) => r.outcome === "broken").length,
+		ignored: week.filter((r) => r.ignored && !r.outcome).length,
+		open: week.filter((r) => !r.done).length,
+		misses: missed.slice(-5).reverse().map((r) => r.text)
+	};
+}
+/** One line for the coach (and the escalating follow-ups). */
+function promiseLine(s) {
+	if (!s.kept && !s.broken && !s.ignored) return "";
+	return `Promises in the last 7 days: ${s.kept} kept, ${s.broken} broken, ${s.ignored} ignored${s.misses.length ? `. Missed: ${s.misses.map((m) => `"${m.slice(0, 60)}"`).join(", ")}` : ""}.`;
+}
+/** The follow-up gets sharper each time, and names the pattern when there is one. */
+function followUpText(r, s) {
+	const tries = r.tries ?? 0;
+	const misses = s.broken + s.ignored;
+	if (tries === 0) return `🔔 ${r.text}`;
+	if (tries === 1) return `🔔 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`;
+	if (tries === 2) return `⏰ ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? "" : "s"} missed this week already.` : ""} Answer me.`;
+	return `🚨 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ""}You said you'd do it. Do it now, or tell me why not.`;
 }
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
@@ -8550,12 +8599,29 @@ function applyMind(mind, op, today) {
 	};
 }
 var daysTo = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
-/** The mind as prompt lines. */
-function mindText(m, today) {
+/** "6h focus" → focus 3h20 of 6h (56%); "3 workouts" → 1 of 3. Null when the target isn't something measured. */
+function goalProgress(weekly, w) {
+	const t = weekly.toLowerCase();
+	const hours = /(\d+(?:[.,]\d+)?)\s*(?:h|hours?|ore|часов|ч)\b/.exec(t);
+	if (hours && !/(sleep|somn|сон)/.test(t)) {
+		const target = Number(hours[1].replace(",", ".")) * 60;
+		const pct = Math.round(w.focusMin / Math.max(1, target) * 100);
+		const need = Math.max(0, target - w.focusMin);
+		return `this week ${(w.focusMin / 60).toFixed(1)}h of ${target / 60}h (${pct}%)${need ? `, ${Math.round(need / Math.max(1, w.daysLeft))} min/day needed for ${w.daysLeft} days` : ", done"}`;
+	}
+	const n = /(\d+)\s*(workouts?|runs?|trainings?|gym|sessions?|antrenament\w*|тренировк\w*)/.exec(t);
+	if (n) return `this week ${w.workouts} of ${n[1]} workouts`;
+	const k = /(\d+)\s*(tasks?|sarcini|задач\w*)/.exec(t);
+	if (k) return `this week ${w.tasks} of ${k[1]} tasks`;
+	return null;
+}
+/** The mind as prompt lines (with this week's progress on each tracked goal when known). */
+function mindText(m, today, week) {
 	const out = [];
 	if (m.goals.length) out.push(`Goals you track with him:\n${m.goals.map((g) => {
 		const left = g.deadline ? daysTo(today, g.deadline) : null;
-		return `- ${g.title}${g.deadline ? ` · due ${g.deadline} (${left < 0 ? `${-left} days late` : `${left} days left`})` : ""}${g.weekly ? ` · weekly target ${g.weekly}` : ""}`;
+		const prog = g.weekly && week ? goalProgress(g.weekly, week) : null;
+		return `- ${g.title}${g.deadline ? ` · due ${g.deadline} (${left < 0 ? `${-left} days late` : `${left} days left`})` : ""}${g.weekly ? ` · weekly target ${g.weekly}` : ""}${prog ? ` · ${prog}` : ""}`;
 	}).join("\n")}`);
 	if (m.works.length) out.push(`What works for him:\n${m.works.map((x) => `- ${x.t}`).join("\n")}`);
 	if (m.fails.length) out.push(`What doesn't work:\n${m.fails.map((x) => `- ${x.t}`).join("\n")}`);
@@ -8656,6 +8722,18 @@ function focusBySubject(sessions, from) {
 	if (!by.size) return "";
 	const hm = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m}m`;
 	return [...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm(m)}`).join(", ");
+}
+/** Monday-to-today numbers from the history lists. */
+function weekSoFar(today, focus, workouts, tasks) {
+	const wdN = (/* @__PURE__ */ new Date(`${today}T12:00:00Z`)).getUTCDay();
+	const monday = addDays$1(today, -((wdN + 6) % 7));
+	const inWeek = (d) => d >= monday && d <= today;
+	return {
+		focusMin: focus.filter((f) => inWeek(f.day)).reduce((t, f) => t + f.minutes, 0),
+		workouts: new Set(workouts.filter((x) => inWeek(x.day)).map((x) => x.day)).size,
+		tasks: tasks.filter((x) => inWeek(x.day)).length,
+		daysLeft: 7 - (wdN + 6) % 7
+	};
 }
 // src/core/sportShared.ts
 var sportToday = (now = /* @__PURE__ */ new Date()) => now.toISOString().slice(0, 10);
@@ -9065,6 +9143,8 @@ Reminders (Telegram, sent by you later):
 - "remind: <YYYY-MM-DD HH:MM> | <message>" a reminder at that time.
 - "checkin: <minutes from now> | <question>" you ask him later, and keep asking every 45 min until he answers (use it when he says he'll do something: hold him to it).
 Never invent amounts or times he didn't give. Never log the same thing twice.
+Promises (use the P-numbers): when he answers a check-in, judge it: "kept: P1" (he did it) or "broken: P1" (he didn't, or made an excuse). An ignored check-in is broken unless he shows it's done.
+Default to ACTING: when an action clearly helps (he reports something done → tick/log it; he says he'll do X → a checkin; he's behind → put a block in the calendar), do it without asking. Ask first only before deleting things he didn't mention.
 When he says something is wrong ("that's not money", "wrong amount", "undo that", "delete it"), FIX it with actions now (delmoney / editmoney / water: -250 …). Never answer "ignore it" or "I won't count it": the data stays wrong unless you act.
 Never invent appointments, reviews or times: only use times from his calendar, his plan, his reminders or what he said.
 IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.`;
@@ -9077,6 +9157,8 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 	const chat = memory.chat.slice(-10).map((c) => `${c.role === "me" ? "Victor" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
 	return [
 		PERSONA[persona],
+		"Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don't have a number, don't make one up; ask for it with \"need\" or leave it out.",
+		"Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count (\"3rd promise missed this week\"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn't).",
 		"Style: a real coach, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown, at most 1 emoji. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.",
 		"",
 		ACTIONS,
@@ -9150,7 +9232,7 @@ var TREF = /^T\d{1,3}$/i;
 var MREF = /^M\d{1,2}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
-	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 400);
@@ -9242,6 +9324,11 @@ function readAction(line) {
 			text: parts.slice(1).join(" | ").slice(0, 300)
 		} : null;
 	}
+	if (kind === "kept" || kind === "broken") return /^P\d{1,2}$/i.test(parts[0]) ? {
+		kind: "promise",
+		ref: parts[0].toUpperCase(),
+		outcome: kind
+	} : null;
 	if (kind === "delmoney") return MREF.test(parts[0]) ? {
 		kind: "delmoney",
 		ref: parts[0].toUpperCase()
@@ -9846,7 +9933,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					upcoming,
 					events
 				}),
-				mindText(loadMind(db), svc.wallet.today()),
+				(() => {
+					const inp = svc.progress.input(null);
+					const today = svc.wallet.today();
+					return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist));
+				})(),
 				`His goals: ${loadProfile(db).goals.join("; ")}`
 			].filter(Boolean).join("\n");
 		});
@@ -9892,6 +9983,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const raw = await ai([
 				"You are MEGA, Victor's head coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
 				`It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
+				"Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits (\"Algebra set (exam 15 Dec)\").",
 				"headline: one short line with numbers (\"3 must-dos · 2h40 focus · gym 18:00\").",
 				note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : "",
 				`A simple starting point (improve it): ${JSON.stringify(fallback)}`,
@@ -9899,7 +9991,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				"",
 				"== Victor right now ==",
 				context
-			].filter(Boolean).join("\n"), { json: true });
+			].filter(Boolean).join("\n"), {
+				json: true,
+				think: true,
+				strong: true
+			});
 			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
 			plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now));
 		} catch {
@@ -10044,7 +10140,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				"Answer ONLY with JSON: {\"lesson\": string, \"top3\": string[]}",
 				"",
 				context
-			].join("\n"), { json: true });
+			].join("\n"), {
+				json: true,
+				think: true,
+				strong: true
+			});
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			if (typeof j.lesson === "string" && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240);
 			const t = (Array.isArray(j.top3) ? j.top3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
@@ -10122,7 +10222,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				"Answer ONLY with JSON: {\"win\": string, \"leak\": string, \"focus\": string, \"note\": string, \"big3\": string[]}",
 				"",
 				context
-			].join("\n"), { json: true });
+			].join("\n"), {
+				json: true,
+				think: true,
+				strong: true
+			});
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
 			out = {
@@ -11323,7 +11427,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (!raw) return;
 			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
 		}).catch(() => null);
-		const { context, memory, profile, look, mind, money } = await mirror.read((db) => {
+		const { context, memory, profile, look, mind, money, promises } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			let sessions = [];
@@ -11345,7 +11449,23 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}),
 				memory: loadMemory(db),
 				profile: loadProfile(db),
-				mind: mindText(loadMind(db), svc.wallet.today()),
+				mind: (() => {
+					const inp = svc.progress.input(null);
+					const today = svc.wallet.today();
+					return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist));
+				})(),
+				promises: (() => {
+					let list = [];
+					try {
+						list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+					} catch {
+						list = [];
+					}
+					return {
+						...promiseRefs(list),
+						stats: promiseLine(promiseStats(list))
+					};
+				})(),
 				money: recentMoney(db, svc.wallet.today()),
 				look: {
 					finance,
@@ -11370,12 +11490,17 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text);
 		if (big) step("Thinking it through");
 		const ask = (found, extraNote = "") => ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
-			refs: [made.lines, moneyLines].filter(Boolean).join("\n"),
+			refs: [
+				made.lines,
+				moneyLines,
+				promises.lines
+			].filter(Boolean).join("\n"),
 			found,
-			mind
+			mind: [promises.stats, mind].filter(Boolean).join("\n")
 		}), {
 			json: true,
 			think: big,
+			strong: big,
 			media: media ? [{
 				mime: media.mime,
 				data: media.data
@@ -11555,6 +11680,21 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					})));
 				});
 				done.push(a.kind === "remind" ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== (/* @__PURE__ */ new Date()).toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ""}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`);
+				continue;
+			}
+			if (a.kind === "promise") {
+				const id = promises.refs.get(a.ref);
+				if (!id) continue;
+				await mirror.write((db) => {
+					let list = [];
+					try {
+						list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+					} catch {
+						list = [];
+					}
+					setSetting(db, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)));
+				});
+				done.push(a.outcome === "kept" ? "✅ Promise kept" : "❌ Promise broken (counted)");
 				continue;
 			}
 			if (a.kind === "delmoney" || a.kind === "editmoney") {
@@ -13240,7 +13380,10 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	});
 	let list = reminders;
 	for (const r of dueReminders(list, now)) try {
-		await send(r.kind === "checkin" ? `🔔 ${esc(r.text)}${(r.tries ?? 0) > 0 ? `\n<i>(asking again: answer me, even "not yet")</i>` : ""}` : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0);
+		await send(r.kind === "checkin" ? followUpText({
+			...r,
+			text: esc(r.text)
+		}, promiseStats(list, now)) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0);
 		list = afterSend(list, r.id, now);
 	} catch {}
 	if (list !== reminders) await mirror.write((db) => setSetting(db, REMINDERS, JSON.stringify(list)));
