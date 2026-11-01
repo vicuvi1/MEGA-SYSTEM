@@ -948,7 +948,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             const p = svc.focus.plan(svc.wallet.today())
             if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null
             svc.focus.setPlan([...p.items.map((x) => x.text), a.text])
-            return `📝 Must-do added: ${a.text}`
+            return `📝 Must-do added: ${a.text}${todoist ? ' (⭐ in Todoist)' : ''}`
           }
           if (a.kind === 'focus') {
             svc.focus.start(a.subject, a.minutes)
@@ -964,6 +964,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           return `🎯 Goal: ${a.title} · ${a.hours}h by ${a.deadline}`
         })
         if (line) done.push(line)
+        // One list: a new must-do is also a Todoist task due today, starred ⭐ (@today).
+        if (line && a.kind === 'mustdo' && todoist) await todoist.quickAdd(`${a.text} today @today`).catch(() => null)
       } catch (e) {
         done.push(`⚠️ ${(e as Error).message}`)
       }

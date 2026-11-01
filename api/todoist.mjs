@@ -7,7 +7,7 @@
 //   quick {text}      → {task}           Todoist reads date, time, p1, #project
 //   completed {since} → {items}          completed since an ISO time
 //   everything        → {tasks, areas}   every open task and your areas
-//   update {id, content?, priority?, due?, description?}
+//   update {id, content?, priority?, due?, description?, labels?}
 //   move {id, area}   reopen {id}   remove {id}
 //   addArea {name}  → {area}   renameArea {area, name}
 // New tasks without a #project go to the right area (by their words, else Gemini).
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       case 'everything':
         return send(res, 200, await api.everything())
       case 'update':
-        await api.update(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description })
+        await api.update(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description, labels: Array.isArray(body.labels) ? body.labels : undefined })
         return send(res, 200, { ok: true })
       case 'move':
         await api.move(String(body.id), String(body.area))

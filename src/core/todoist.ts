@@ -19,7 +19,15 @@ export interface TodoTask {
   projectId?: string | null
   sectionId?: string | null
   description?: string | null
+  /** Todoist labels; 'today' (⭐) makes it one of today's must-dos. */
+  labels?: string[]
 }
+
+/** The Todoist label that makes a task one of today's must-dos (⭐). */
+export const TODAY_LABEL = 'today'
+
+/** Is this task starred for today? */
+export const isStarred = (t: Pick<TodoTask, 'labels'>) => !!t.labels?.includes(TODAY_LABEL)
 
 /**
  * One of your life areas: a section (in the Inbox or a project) or a project

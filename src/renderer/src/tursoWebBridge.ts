@@ -390,7 +390,8 @@ export function createTursoWebBridge(): Bridge {
       }
     },
     progress: {
-      report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state')))
+      report: async () => (await svcP).progress.report(financeSpending(readJson('finance-helper.state'))),
+      insights: async () => (await svcP).progress.insights()
     },
     weekPlan: S('weekPlan'),
     // Your Todoist: today's tasks, complete (+coins), quick add, and coins for

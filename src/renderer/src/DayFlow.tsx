@@ -3,7 +3,7 @@
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
-import { areaKey, deadlineRadar, defaultAreaColor, pLabel, sortToday, whenText, type TodoTask } from '@core/todoist'
+import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, pLabel, sortToday, whenText, type TodoTask } from '@core/todoist'
 import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
@@ -69,7 +69,7 @@ function useHabits({ summary, discipline, connections, body, onChange, onGo, onO
     { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
     { id: 'clean', label: 'Clean day check-in', hint: discipline?.setup ? `day ${discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
     { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), done: !!(body?.workoutDoneToday || r.includes('body.workout_done')), run: () => onGo('body') },
-    { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far` : 'points per session', done: focusMin >= 50 || r.includes('study.block_done'), run: () => onGo('focus') },
+    { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far` : 'points per session', done: focusMin >= 50 || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', 50), 'Focus started: 50 minutes')) },
     { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
     { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: () => onOpenApp('money') }
   ]
@@ -188,6 +188,9 @@ export function DayFlow(props: Props) {
     refresh()
   }
   const toggleBig = async (i: number) => {
+    const b = week?.big3[i]
+    const linked = b && !b.done && b.todoistId ? todo?.find((x) => x.id === b.todoistId) : undefined
+    if (linked) await doneTodo(linked)
     if (await act(() => life.weekPlan!.toggle(i))) {
       soundSuccess()
       loadWeek()
@@ -197,13 +200,44 @@ export function DayFlow(props: Props) {
   const startFocus = async (subject: string, task: FocusTask | null = null) => {
     if (await act(() => life.focus.start(subject, 50, task), `Focus started: ${task?.title ?? subject}`)) loadFocus()
   }
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+  /** A must-do in the day plan (points, bots, Insights read it). */
+  const addPlanItem = async (t: string) => {
+    if (!st || st.plan.items.some((p) => same(p.text, t))) return true
+    return !!(await act(() => life.focus.setPlan([...st.plan.items.map((i) => i.text), t])))
+  }
+  /** A typed must-do: in the plan and, with Todoist, a task due today starred ⭐. */
   const addMustDo = async (text = adding) => {
     const t = text.trim()
-    if (!t || !st || st.plan.items.some((p) => p.text.toLowerCase() === t.toLowerCase())) return
-    if (await act(() => life.focus.setPlan([...st.plan.items.map((i) => i.text), t]))) {
-      setAdding('')
-      loadFocus()
+    if (!t || !st) return
+    if (!(await addPlanItem(t))) return
+    setAdding('')
+    if (todo !== null && life.todoist) await life.todoist.quickAdd(`${t} today @${TODAY_LABEL}`).catch(() => null)
+    refresh()
+  }
+  /** ⭐ a Todoist task: it becomes one of today's must-dos (label @today, due today). */
+  const star = async (t: TodoTask) => {
+    const labels = [...new Set([...(t.labels ?? []), TODAY_LABEL])]
+    setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, labels } : x)))
+    const ok = await act(() => life.todoist!.update!(t.id, { labels, ...(t.due && t.due <= today ? {} : { due: 'today' }) }).then(() => true), `⭐ Must-do: ${t.content}`)
+    if (ok) await addPlanItem(t.content)
+    refresh()
+  }
+  const unstar = async (t: TodoTask) => {
+    const labels = (t.labels ?? []).filter((l) => l !== TODAY_LABEL)
+    setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, labels } : x)))
+    await act(() => life.todoist!.update!(t.id, { labels }).then(() => true))
+    if (st) {
+      const keep = st.plan.items.filter((p) => p.done || !same(p.text, t.content)).map((p) => p.text)
+      if (keep.length !== st.plan.items.length) await act(() => life.focus.setPlan(keep))
     }
+    refresh()
+  }
+  /** Done on a starred task: Todoist and the must-do (+10) together. */
+  const doneStarred = async (t: TodoTask) => {
+    const i = st ? st.plan.items.findIndex((p) => !p.done && same(p.text, t.content)) : -1
+    await doneTodo(t)
+    if (i >= 0) await tickMustDo(i)
   }
   const toTomorrow = async (t: TodoTask) => {
     setTodo((cur) => (cur ?? []).filter((x) => x.id !== t.id))
@@ -267,7 +301,7 @@ export function DayFlow(props: Props) {
       case 'habit':
         return habits.find((h) => h.id === a.id)?.run()
       default:
-        return onGo('focus')
+        return onGo('progress')
     }
   }
   const BUTTON: Record<NowAction['kind'], string> = {
@@ -279,14 +313,21 @@ export function DayFlow(props: Props) {
     'focus-goal': 'Start 50 min focus',
     todo: 'Mark done',
     habit: 'Do it now',
-    done: 'Open Focus'
+    done: 'See my week'
   }
 
   const todoList = useMemo(() => (todo ? sortToday(todo, today) : null), [todo, today])
+  const bigIds = useMemo(() => new Set((week?.big3 ?? []).map((b) => b.todoistId).filter(Boolean) as string[]), [week])
+  const starred = useMemo(() => (todoList ?? []).filter(isStarred), [todoList])
+  const loose = useMemo(() => (todoList ?? []).filter((t) => !isStarred(t) && !bigIds.has(t.id)), [todoList, bigIds])
+  const colorOf = (t: TodoTask) => {
+    const k = areaKey(t)
+    return colors[k] ?? defaultAreaColor({ name: t.section || (t.project && t.project !== 'Inbox' ? t.project : 'Inbox') })
+  }
   // Today's Todoist, grouped by area (its section, else its project), urgent groups first.
   const groups: Group[] = useMemo(() => {
     const out: Group[] = []
-    for (const t of todoList ?? []) {
+    for (const t of loose) {
       const k = areaKey(t)
       const name = t.section || (t.project && t.project !== 'Inbox' ? t.project : 'Inbox')
       let g = out.find((x) => x.key === k)
@@ -294,13 +335,15 @@ export function DayFlow(props: Props) {
       g.items.push(t)
     }
     return out
-  }, [todoList, colors])
+  }, [loose, colors])
 
   if (!st) return null
   const plan = st.plan.items
   const bigOpen = week?.big3.map((b, i) => ({ ...b, i })).filter((b) => b.text) ?? []
   const doneCount = plan.filter((p) => p.done).length + bigOpen.filter((b) => b.done).length
-  const total = plan.length + bigOpen.length + (todoList?.length ?? 0)
+  // Plan items shown on their own: those without a starred Todoist task.
+  const planOnly = plan.map((p, i) => ({ p, i })).filter((x) => !starred.some((t) => same(t.content, x.p.text)))
+  const total = planOnly.length + starred.length + bigOpen.length + loose.length
   const running = st.running
   const elapsed = running ? tick - new Date(running.startedAt).getTime() : 0
   const leftMs = running ? running.planned * 60000 - elapsed : 0
@@ -312,12 +355,12 @@ export function DayFlow(props: Props) {
     )
 
   // Morning suggestions: late and important Todoist tasks, then the week's big 3.
-  const suggestions = [
-    ...(todoList ?? []).filter((t) => (t.due && t.due < today) || t.priority >= 3).map((t) => t.content),
-    ...bigOpen.filter((b) => !b.done).map((b) => b.text),
-    ...radar.map((r) => r.task.content)
+  const suggestions: { text: string; task?: TodoTask }[] = [
+    ...loose.filter((t) => (t.due && t.due < today) || t.priority >= 3).map((t) => ({ text: t.content, task: t })),
+    ...bigOpen.filter((b) => !b.done).map((b) => ({ text: b.text })),
+    ...radar.filter((r) => !isStarred(r.task)).map((r) => ({ text: r.task.content, task: r.task }))
   ]
-    .filter((x, i, all) => all.indexOf(x) === i && !plan.some((p) => p.text === x))
+    .filter((x, i, all) => all.findIndex((y) => same(y.text, x.text)) === i && !plan.some((p) => same(p.text, x.text)))
     .slice(0, 6)
   const openLeft = [...plan.map((p, i) => ({ p, i })).filter((x) => !x.p.done)]
   const doneToday = plan.filter((p) => p.done).length
@@ -355,8 +398,8 @@ export function DayFlow(props: Props) {
               {suggestions.length > 0 && (
                 <div className="chips">
                   {suggestions.map((s) => (
-                    <button key={s} type="button" className="chip" onClick={() => void addMustDo(s)} title="Make it a must-do">
-                      ＋ {s.length > 48 ? `${s.slice(0, 46)}…` : s}
+                    <button key={s.text} type="button" className="chip" onClick={() => void (s.task && life.todoist ? star(s.task) : addMustDo(s.text))} title="Make it a must-do (⭐ in Todoist)">
+                      ☆ {s.text.length > 48 ? `${s.text.slice(0, 46)}…` : s.text}
                     </button>
                   ))}
                 </div>
@@ -483,7 +526,24 @@ export function DayFlow(props: Props) {
             <i /> Must-dos <small>+10 each</small>
           </h3>
           <ul className="dl">
-            {plan.map((p, i) => (
+            {starred.map((t) => (
+              <li key={t.id} style={{ ['--c' as string]: colorOf(t) }}>
+                <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={() => void doneStarred(t)} />
+                <span className="dl-text">
+                  {t.content}
+                  {t.due && t.due < today && <em className="dl-late"> late</em>}
+                </span>
+                {playBtn(t.content, todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content })}
+                <span className="dl-area" title={t.section || t.project || ''}>
+                  <i />
+                  {(t.section || (t.project !== 'Inbox' ? t.project : '') || '').replace(/^[^\p{L}\p{N}]+/u, '')}
+                </span>
+                <button className="dl-star on" aria-label={`Unstar ${t.content}`} title="No longer a must-do" onClick={() => void unstar(t)}>
+                  ★
+                </button>
+              </li>
+            ))}
+            {planOnly.map(({ p, i }) => (
               <li key={`m${i}`} className={p.done ? 'done' : ''}>
                 <button className="dl-check" aria-label={p.done ? `Untick ${p.text}` : `Tick ${p.text}`} onClick={() => void tickMustDo(i)}>
                   {p.done ? '✓' : ''}
@@ -493,6 +553,7 @@ export function DayFlow(props: Props) {
               </li>
             ))}
           </ul>
+          {!plan.length && !starred.length && <p className="hint dl-tip">Tap ☆ on any task below to make it a must-do, or type one.</p>}
           {plan.length < 5 && (
             <form
               className="dl-add"
@@ -547,15 +608,18 @@ export function DayFlow(props: Props) {
                       {t.dueTime ?? ''}
                       {t.priority > 1 ? ` ${pLabel(t.priority)}` : ''}
                     </span>
+                    <button className="dl-star" aria-label={`Make ${t.content} a must-do`} title="Make it a must-do (⭐ today)" onClick={() => void star(t)}>
+                      ☆
+                    </button>
                   </li>
                 ))}
               </ul>
             </div>
           )
         })}
-        {todoList && todoList.length > LIMIT && (
+        {loose.length > LIMIT && (
           <button className="btn ghost dl-more" onClick={() => setShowAll(!showAll)}>
-            {showAll ? 'Show fewer' : `Show all ${todoList.length} (the most urgent are on top)`}
+            {showAll ? 'Show fewer' : `Show all ${loose.length} (the most urgent are on top)`}
           </button>
         )}
         {todoList && todoList.length === 0 && <p className="hint dl-empty">Nothing due in Todoist today.</p>}

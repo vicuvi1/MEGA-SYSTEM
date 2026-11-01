@@ -26,7 +26,6 @@ function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(l
   return lazy(() => load().then((m) => ({ default: m[name] })))
 }
 const History = lazyNamed(() => import('./pages/History'), 'History')
-const Focus = lazyNamed(() => import('./pages/Focus'), 'Focus')
 const Settings = lazyNamed(() => import('./pages/Settings'), 'Settings')
 const Rewards = lazyNamed(() => import('./pages/Rewards'), 'Rewards')
 const TodoTasks = lazyNamed(() => import('./pages/TodoTasks'), 'TodoTasks')
@@ -345,7 +344,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   }, [summary, rules])
 
   // A page that no longer exists (Schedule, Journey, Game Rules) opens Today.
-  const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === page) ?? MODULES[0]
+  const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === (page === 'focus' ? 'progress' : page)) ?? MODULES[0]
   useEffect(() => {
     if (![...MODULES, ...SYSTEM_PAGES].some((m) => m.id === page)) setPage('today')
   }, [page])
@@ -628,10 +627,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'bots' && <BotCenter />}
-            {page === 'focus' && <Focus onWallet={onWallet} />}
             {page === 'tasks' && <TodoTasks onWallet={onWallet} />}
             {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
-            {page === 'progress' && <Progress onGo={setPage} />}
+            {(page === 'progress' || page === 'focus') && <Progress onGo={setPage} onWallet={onWallet} />}
             {page === 'calendar' && <CalendarPage onGo={setPage} />}
             {page === 'coach' && <Coach onWallet={onWallet} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}

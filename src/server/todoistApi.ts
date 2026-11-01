@@ -2,7 +2,7 @@
 // Vercel): today's tasks, complete one, quick add (Todoist understands
 // "tomorrow 17:00 p1 #University"), and what you completed since a time.
 // Uses Todoist's current API (v1), with the older REST v2 as a fallback.
-import { guessArea, plainName, type Area, type TodoCompleted, type TodoTask } from '@core/todoist'
+import { TODAY_LABEL, guessArea, plainName, type Area, type TodoCompleted, type TodoTask } from '@core/todoist'
 
 const V1 = 'https://api.todoist.com/api/v1'
 const V2 = 'https://api.todoist.com/rest/v2'
@@ -82,7 +82,8 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
       recurring: !!due?.is_recurring,
       projectId: t.project_id != null ? String(t.project_id) : null,
       sectionId: t.section_id ? String(t.section_id) : null,
-      description: t.description ? String(t.description) : null
+      description: t.description ? String(t.description) : null,
+      labels: Array.isArray(t.labels) ? t.labels.map(String) : []
     }
   }
 
@@ -130,12 +131,13 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
     },
     areas: async () => (await areaList()).areas,
     /** Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or note. */
-    async update(id: string, patch: { content?: string; priority?: number; due?: string; description?: string }): Promise<void> {
+    async update(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[] }): Promise<void> {
       const body: any = {}
       if (patch.content != null) body.content = patch.content
       if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)))
       if (patch.due != null) body.due_string = patch.due.trim() || 'no date'
       if (patch.description != null) body.description = patch.description
+      if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20)
       await either(
         () => call(`${V1}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) }),
         () => call(`${V2}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) })
@@ -176,9 +178,9 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
         () => call(`${V2}/${path}/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ name }) })
       )
     },
-    /** Due today or overdue, not completed. */
+    /** Due today or overdue, or starred for today (label @today), not completed. */
     async today(): Promise<TodoTask[]> {
-      const q = encodeURIComponent('today | overdue')
+      const q = encodeURIComponent(`today | overdue | @${TODAY_LABEL}`)
       const [list, names, secs] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects(), sections()])
       return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs))
     },

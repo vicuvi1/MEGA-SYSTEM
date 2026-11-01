@@ -1,6 +1,7 @@
 // Reads what "Am I improving?" (@core/progress) needs from the database.
 import { addDays } from '@core/dates'
 import { progressReport, type ProgressInput, type ProgressReport } from '@core/progress'
+import { insights, type Insights } from '@core/insights'
 import { TODOIST_RULE } from '@core/todoist'
 import type { DB } from './db'
 import type { Wallet } from './wallet'
@@ -8,9 +9,9 @@ import type { Wallet } from './wallet'
 export class ProgressService {
   constructor(private db: DB, private wallet: Wallet) {}
 
-  input(spending: ProgressInput['spending'], now = new Date()): ProgressInput {
+  input(spending: ProgressInput['spending'], now = new Date(), days = 60): ProgressInput {
     const today = this.wallet.today(now)
-    const since = addDays(today, -60)
+    const since = addDays(today, -days)
     const all = <T>(sql: string, ...args: unknown[]) => {
       try {
         return this.db.prepare(sql).all(...args) as T[]
@@ -43,5 +44,10 @@ export class ProgressService {
 
   report(spending: ProgressInput['spending'], now = new Date()): ProgressReport {
     return progressReport(this.input(spending, now))
+  }
+
+  /** Your year: a heatmap of good days and your streaks. */
+  insights(now = new Date()): Insights {
+    return insights(this.input(null, now, 366))
   }
 }

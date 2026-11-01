@@ -8,6 +8,8 @@ import { Icon } from '../Icon'
 import type { PageId } from '../modules'
 import { WeekCard, WeekPlanner, shouldPlan, useWeekPlan } from '../WeekPlanner'
 import { activePlan } from '@core/weekPlan'
+import type { Insights } from '@core/insights'
+import { FocusInsights } from './Focus'
 
 export function useProgress(): ProgressReport | null | undefined {
   const [r, setR] = useState<ProgressReport | null | undefined>(undefined)
@@ -135,7 +137,7 @@ function WeekBars({ m }: { m: Metric }) {
 }
 
 const EMPTY: Partial<Record<Metric['id'], string>> = {
-  focus: 'No focus sessions yet. Start one on Focus or send /focus 50 math to the bot.',
+  focus: 'No focus sessions yet. Tap ▶ on any task on Today, or send /focus 50 math to the bot.',
   mustdo: 'No must-dos yet. Write 1–3 each morning on Today.',
   todoist: 'Tasks you finish in Todoist show up here.',
   sport: 'Log a workout in Sport Track or the reps on Today.',
@@ -175,8 +177,8 @@ function MetricCard({ m, index, onGo }: { m: Metric; index: number; onGo?: (p: P
         <p className="pg-empty">
           {EMPTY[m.id] ?? 'Nothing logged yet.'}
           {m.id === 'focus' && onGo && (
-            <button className="btn small" onClick={() => onGo('focus')}>
-              Open Focus
+            <button className="btn small" onClick={() => onGo('today')}>
+              Start on Today
             </button>
           )}
         </p>
@@ -191,7 +193,92 @@ function MetricCard({ m, index, onGo }: { m: Metric; index: number; onGo?: (p: P
 }
 
 /** The full page. */
-export function Progress({ onGo }: { onGo?: (p: PageId) => void }) {
+
+function useInsights(): Insights | null {
+  const [r, setR] = useState<Insights | null>(null)
+  useEffect(() => {
+    life.progress?.insights?.().then(setR).catch(() => setR(null))
+  }, [])
+  return r
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const STREAK_ICON: Record<string, string> = { focus: '🎯', wake: '☀️', sport: '💪', clean: '🛡️', tasks: '✅' }
+
+/** Your year: one square per day, darker for more good things that day. */
+function YearHeatmap({ ins }: { ins: Insights }) {
+  // Columns are weeks (Monday on top), so pad the first week.
+  const first = ins.days[0]
+  const pad = first ? (new Date(`${first.day}T12:00:00Z`).getUTCDay() + 6) % 7 : 0
+  const cells = [...Array.from({ length: pad }, () => null), ...ins.days]
+  const weeks = Math.ceil(cells.length / 7)
+  const labels: { col: number; text: string }[] = []
+  let last = -1
+  for (let c = 0; c < weeks; c++) {
+    const d = cells[c * 7] ?? cells[c * 7 + 6]
+    if (!d) continue
+    const m = Number(d.day.slice(5, 7)) - 1
+    if (m !== last) {
+      labels.push({ col: c, text: MONTHS[m] })
+      last = m
+    }
+  }
+  return (
+    <section className="card ins-heat">
+      <header className="card-head">
+        <h2>
+          <Icon name="calendar" size={16} /> Your year
+        </h2>
+        <span className="hint">
+          {ins.activeDays} good days · {Math.round(ins.totalFocusMin / 60)}h focus{ins.bestWeekday ? ` · best day: ${ins.bestWeekday}` : ''}
+        </span>
+      </header>
+      <div className="heat-scroll">
+        <div className="heat" style={{ gridTemplateColumns: `repeat(${weeks}, 1fr)` }} role="img" aria-label={`${ins.activeDays} good days in the last year`}>
+          <div className="heat-months" style={{ gridColumn: `1 / span ${weeks}`, gridTemplateColumns: `repeat(${weeks}, 1fr)` }}>
+            {labels.map((l) => (
+              <span key={l.col} style={{ gridColumn: l.col + 1 }}>
+                {l.text}
+              </span>
+            ))}
+          </div>
+          {cells.map((c, k) =>
+            c ? (
+              <i key={c.day} className={`l${c.level}`} style={{ gridColumn: Math.floor(k / 7) + 1, gridRow: (k % 7) + 2 }} title={`${c.day}: ${c.parts.length ? c.parts.join(', ') : 'nothing logged'}${c.focusMin ? ` (${c.focusMin} min focus)` : ''}`} />
+            ) : (
+              <b key={`p${k}`} style={{ gridColumn: 1, gridRow: (k % 7) + 2 }} />
+            )
+          )}
+        </div>
+      </div>
+      <div className="heat-legend">
+        <span className="hint small">Less</span>
+        {[0, 1, 2, 3, 4].map((l) => (
+          <i key={l} className={`l${l}`} />
+        ))}
+        <span className="hint small">More · a day counts 50+ min focus, on-time wake-up, workout, clean day, a task done</span>
+      </div>
+    </section>
+  )
+}
+
+function Streaks({ ins }: { ins: Insights }) {
+  return (
+    <section className="ins-streaks" aria-label="Streaks">
+      {ins.streaks.map((s) => (
+        <div key={s.id} className={`card tight ins-streak ${s.current > 0 ? 'on' : ''}`}>
+          <span className="ins-streak-icon">{STREAK_ICON[s.id]}</span>
+          <b>{s.current}</b>
+          <span className="ins-streak-label">{s.label}</span>
+          <small>{s.current === 1 ? 'day' : 'days'} in a row · best {s.best}</small>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWallet?: () => void }) {
+  const ins = useInsights()
   const r = useProgress()
   const [plan] = useWeekPlan()
   const [editing, setEditing] = useState(false)
@@ -221,11 +308,14 @@ export function Progress({ onGo }: { onGo?: (p: PageId) => void }) {
           <p className="hint">The score is how close your last 7 days came to a good week in each area (the goal under each bar). Arrows compare with the 7 days before.</p>
         </div>
       </section>
+      {ins && <Streaks ins={ins} />}
+      {ins && <YearHeatmap ins={ins} />}
       <div className="pg-grid">
         {r.metrics.map((m, k) => (
           <MetricCard key={m.id} m={m} index={k} onGo={onGo} />
         ))}
       </div>
+      <FocusInsights onWallet={onWallet ?? (() => {})} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import type { LifeApi, UpdateStatus } from '@shared/api'
 import type { Area, TodoTask } from '@core/todoist'
 import type { ProgressReport } from '@core/progress'
+import type { Insights } from '@core/insights'
 import type { WeekPlan } from '@core/weekPlan'
 import type { CalEvent } from '@core/dayTime'
 
@@ -46,7 +47,7 @@ export type Bridge = LifeApi & {
     disconnect(): Promise<void>
   }
   /** "Am I improving?": the last 7 days against your usual week (web). */
-  progress?: { report(): Promise<ProgressReport> }
+  progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights> }
   /** The Sunday plan: one focus area and 3 big tasks for the week (web). */
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
@@ -59,7 +60,7 @@ export type Bridge = LifeApi & {
     sync(force?: boolean): Promise<number>
     /** The Tasks page: every open task and your areas. */
     everything?(): Promise<{ tasks: TodoTask[]; areas: Area[] }>
-    update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string }): Promise<void>
+    update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[] }): Promise<void>
     move?(id: string, area: string): Promise<void>
     reopen?(id: string): Promise<void>
     remove?(id: string): Promise<void>

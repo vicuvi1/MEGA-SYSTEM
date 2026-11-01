@@ -219,7 +219,7 @@ html.calm [class*='loading'] {
 }
 :root[data-theme='light'] .pg-ring-bg, :root[data-theme='light'] .pg-goal-bar { stroke: rgba(0, 0, 0, 0.08); background: rgba(0, 0, 0, 0.07); }
 :root[data-theme='light'] .pg-week i, :root[data-theme='light'] .pg-dot, :root[data-theme='light'] .pg-mini-bar i { background: rgba(0, 0, 0, 0.1); }
-:root[data-theme='light'] .pg-week.now i, :root[data-theme='light'] .pg-dot.on, :root[data-theme='light'] .pg-mini-bar i.on { background: var(--lime-ink, var(--lime)); }
+:root[data-theme='light'] .pg-week.now i, :root[data-theme='light'] .pg-dot.on, :root[data-theme='light'] .pg-mini-bar i.on { background: var(--accent-text); }
 
 /* Treat yourself */
 .fun-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }

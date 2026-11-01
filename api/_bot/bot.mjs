@@ -3942,7 +3942,115 @@ function financeSpending(state) {
 		bani: Math.abs(Number(t.base ?? t.amount) || 0)
 	}));
 }
+// src/core/insights.ts
+var WEEKDAYS = [
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday"
+];
+/** Weekday of a YYYY-MM-DD (0 = Sunday), without local-time Date math. */
+function weekday$2(day) {
+	const [y, m, d] = day.split("-").map(Number);
+	return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+/** Clean days: from the first 'start' on, minus days with a 'reset'. */
+function cleanSet(ev, from, to) {
+	const out = /* @__PURE__ */ new Set();
+	const starts = ev.filter((e) => e.kind === "start").map((e) => e.day).sort();
+	if (!starts.length) return out;
+	const resets = new Set(ev.filter((e) => e.kind === "reset").map((e) => e.day));
+	for (let d = from < starts[0] ? starts[0] : from; d <= to; d = addDays$1(d, 1)) if (!resets.has(d)) out.add(d);
+	return out;
+}
+/** Days in a row ending today (or yesterday, when today isn't done yet). */
+function currentStreak(done, today) {
+	let d = done.has(today) ? today : addDays$1(today, -1);
+	let n = 0;
+	while (done.has(d)) {
+		n++;
+		d = addDays$1(d, -1);
+	}
+	return n;
+}
+/** The longest run of consecutive days. */
+function bestStreak(done) {
+	const days = [...done].sort();
+	let best = 0;
+	let run = 0;
+	let prev = "";
+	for (const d of days) {
+		run = prev && addDays$1(prev, 1) === d ? run + 1 : 1;
+		best = Math.max(best, run);
+		prev = d;
+	}
+	return best;
+}
+function insights(i, length = 364) {
+	const to = i.today;
+	const from = addDays$1(to, -(length - 1));
+	const focus = /* @__PURE__ */ new Map();
+	for (const r of i.focus) if (r.day >= from && r.day <= to) focus.set(r.day, (focus.get(r.day) ?? 0) + r.minutes);
+	const sets = {
+		focus: new Set([...focus].filter(([, m]) => m >= 50).map(([d]) => d)),
+		wake: new Set(i.wakes.filter((w) => w.onTime).map((w) => w.day)),
+		sport: new Set(i.workouts.map((w) => w.day)),
+		clean: cleanSet(i.discipline, from, to),
+		tasks: /* @__PURE__ */ new Set([...i.todoist.map((t) => t.day), ...(i.mustdos ?? []).filter((m) => m.done).map((m) => m.day)])
+	};
+	const LABEL = {
+		focus: "50+ min focus",
+		wake: "On-time wake-up",
+		sport: "Workout",
+		clean: "Clean day",
+		tasks: "Task done"
+	};
+	const days = [];
+	for (let d = from; d <= to; d = addDays$1(d, 1)) {
+		const parts = Object.keys(sets).filter((k) => sets[k].has(d)).map((k) => LABEL[k]);
+		const count = parts.length;
+		days.push({
+			day: d,
+			count,
+			level: count === 0 ? 0 : count === 1 ? 1 : count === 2 ? 2 : count <= 3 ? 3 : 4,
+			focusMin: focus.get(d) ?? 0,
+			parts
+		});
+	}
+	const streaks = Object.keys(sets).map((id) => ({
+		id,
+		label: LABEL[id],
+		current: currentStreak(sets[id], to),
+		best: bestStreak(new Set([...sets[id]].filter((d) => d >= from && d <= to)))
+	}));
+	const byWd = Array.from({ length: 7 }, () => ({
+		n: 0,
+		t: 0
+	}));
+	for (const c of days) {
+		const w = byWd[weekday$2(c.day)];
+		w.n++;
+		w.t += c.count;
+	}
+	const active = days.filter((c) => c.count > 0);
+	const ranked = byWd.map((w, k) => ({
+		k,
+		avg: w.n ? w.t / w.n : 0
+	})).sort((a, b) => b.avg - a.avg);
+	return {
+		days,
+		streaks,
+		activeDays: active.length,
+		totalFocusMin: days.reduce((t, c) => t + c.focusMin, 0),
+		bestWeekday: active.length >= 14 && ranked[0].avg > 0 ? WEEKDAYS[ranked[0].k] : null
+	};
+}
 // src/core/todoist.ts
+/** The Todoist label that makes a task one of today's must-dos (⭐). */
+var TODAY_LABEL = "today";
 /** The area name without its emoji: "🎓 University" → "University". */
 var plainName = (name) => name.replace(/[^\p{L}\p{N}&\s'-]/gu, "").replace(/\s+/g, " ").trim();
 /** Words that point to an area, matched against the area's name. */
@@ -4065,9 +4173,9 @@ var ProgressService = class {
 		this.db = db;
 		this.wallet = wallet;
 	}
-	input(spending, now = /* @__PURE__ */ new Date()) {
+	input(spending, now = /* @__PURE__ */ new Date(), days = 60) {
 		const today = this.wallet.today(now);
-		const since = addDays$1(today, -60);
+		const since = addDays$1(today, -days);
 		const all = (sql, ...args) => {
 			try {
 				return this.db.prepare(sql).all(...args);
@@ -4101,6 +4209,10 @@ var ProgressService = class {
 	}
 	report(spending, now = /* @__PURE__ */ new Date()) {
 		return progressReport(this.input(spending, now));
+	}
+	/** Your year: a heatmap of good days and your streaks. */
+	insights(now = /* @__PURE__ */ new Date()) {
+		return insights(this.input(null, now, 366));
 	}
 };
 // src/core/weekPlan.ts
@@ -5669,7 +5781,10 @@ syncFinance: (recordDays) => write((s) => {
 			archiveGoal: (id) => write((s) => s.focus.archiveGoal(id)),
 			fun: (minutes, what) => write((s) => s.focus.fun(minutes, what), W)
 		},
-		progress: { report: (spending) => read((s) => s.progress.report(spending)) },
+		progress: {
+			report: (spending) => read((s) => s.progress.report(spending)),
+			insights: () => read((s) => s.progress.insights())
+		},
 		weekPlan: {
 			saved: () => read((s) => s.weekPlan.saved()),
 			save: (p) => write((s) => s.weekPlan.save(p), "life-week-changed"),
@@ -9250,7 +9365,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					const p = svc.focus.plan(svc.wallet.today());
 					if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null;
 					svc.focus.setPlan([...p.items.map((x) => x.text), a.text]);
-					return `📝 Must-do added: ${a.text}`;
+					return `📝 Must-do added: ${a.text}${todoist ? " (⭐ in Todoist)" : ""}`;
 				}
 				if (a.kind === "focus") {
 					svc.focus.start(a.subject, a.minutes);
@@ -9271,6 +9386,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				return `🎯 Goal: ${a.title} · ${a.hours}h by ${a.deadline}`;
 			});
 			if (line) done.push(line);
+			if (line && a.kind === "mustdo" && todoist) await todoist.quickAdd(`${a.text} today @today`).catch(() => null);
 		} catch (e) {
 			done.push(`⚠️ ${e.message}`);
 		}
@@ -9894,7 +10010,8 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 			recurring: !!due?.is_recurring,
 			projectId: t.project_id != null ? String(t.project_id) : null,
 			sectionId: t.section_id ? String(t.section_id) : null,
-			description: t.description ? String(t.description) : null
+			description: t.description ? String(t.description) : null,
+			labels: Array.isArray(t.labels) ? t.labels.map(String) : []
 		};
 	};
 	/** Your areas: every section (Inbox first), and every project without sections. */
@@ -9977,6 +10094,7 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 			if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)));
 			if (patch.due != null) body.due_string = patch.due.trim() || "no date";
 			if (patch.description != null) body.description = patch.description;
+			if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20);
 			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}`, {
 				method: "POST",
 				body: JSON.stringify(body)
@@ -10032,9 +10150,9 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 				body: JSON.stringify({ name })
 			}));
 		},
-		/** Due today or overdue, not completed. */
+		/** Due today or overdue, or starred for today (label @today), not completed. */
 		async today() {
-			const q = encodeURIComponent("today | overdue");
+			const q = encodeURIComponent(`today | overdue | @${TODAY_LABEL}`);
 			const [list, names, secs] = await Promise.all([
 				either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)),
 				projects(),
