@@ -9,6 +9,8 @@ describe('do this now', () => {
     expect(nextMove({ ...base, running: { subject: 'Algebra', endsAt: now + 20 * 60000 }, awaiting: ['Start the CV'] }, now)).toMatchObject({ kind: 'running', sub: '20 min left. Phone away, stay on it.' })
     expect(nextMove({ ...base, awaiting: ['Start the CV'], planStatus: 'proposed' })).toMatchObject({ kind: 'answer', promise: 'Start the CV' })
     expect(nextMove({ ...base, planStatus: 'proposed' }).kind).toBe('approve')
+    expect(nextMove({ ...base, hour: 15, planStatus: 'proposed' }).kind).toBe('approve') // still waiting after lunch
+    expect(nextMove({ ...base, hour: 20, evening: false, planStatus: 'proposed' }).kind).not.toBe('approve')
     const goals = [{ title: 'CV live', subject: 'CV', todayLeftMin: 40, behind: false }, { title: 'Algebra exam', subject: 'Algebra', todayLeftMin: 65, behind: true }]
     expect(nextMove({ ...base, goals })).toMatchObject({ kind: 'focus', subject: 'Algebra', minutes: 50 })
     expect(nextMove({ ...base, openMustDos: ['Lab report intro', 'Gym'] })).toMatchObject({ kind: 'focus', title: '25 min: Lab report intro' })

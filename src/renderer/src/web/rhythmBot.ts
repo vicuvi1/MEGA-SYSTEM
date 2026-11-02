@@ -241,7 +241,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
     if (calendar) {
       let made = 0
-      const items = [...p.blocks.map((b) => ({ title: b.title, start: b.start, minutes: b.minutes })), ...(p.training ? [{ title: `💪 ${p.training.what}`, start: p.training.time, minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45 }] : [])]
+      // Blocks that already ended (approved late) don't go into the calendar.
+      const items = [...p.blocks.map((b) => ({ title: b.title, start: b.start, minutes: b.minutes })), ...(p.training ? [{ title: `💪 ${p.training.what}`, start: p.training.time, minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45 }] : [])].filter((b) => new Date(`${p.day}T${b.start}:00`).getTime() + b.minutes * 60000 > Date.now())
       for (const b of items) {
         const start = new Date(`${p.day}T${b.start}:00`)
         const ok = await calendar

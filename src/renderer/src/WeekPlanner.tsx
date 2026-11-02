@@ -175,7 +175,7 @@ export function WeekCard({ plan, report, compact, onEdit, onFocus }: { plan: Wee
     if (await act(() => life.weekPlan!.toggle(i))) soundSuccess()
   }
   return (
-    <section className={`panel wk ${compact ? 'compact' : ''}`}>
+    <section className={`panel wk-card ${compact ? 'compact' : ''}`}>
       <header className="wk-head">
         <h3>
           <Icon name="calendar" size={16} /> This week

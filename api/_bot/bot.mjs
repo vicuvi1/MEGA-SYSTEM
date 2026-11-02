@@ -10366,7 +10366,7 @@ function nextMove(m, now = Date.now()) {
 		sub: "You promised this. Did you do it?",
 		promise
 	};
-	if (m.planStatus === "proposed" && m.hour < 14) return {
+	if (m.planStatus === "proposed" && m.hour < 20) return {
 		kind: "approve",
 		title: "Approve today's plan",
 		sub: "Blocks go in your calendar, must-dos on Today."
@@ -10883,7 +10883,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				title: `💪 ${p.training.what}`,
 				start: p.training.time,
 				minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45
-			}] : []];
+			}] : []].filter((b) => (/* @__PURE__ */ new Date(`${p.day}T${b.start}:00`)).getTime() + b.minutes * 6e4 > Date.now());
 			for (const b of items) {
 				const start = /* @__PURE__ */ new Date(`${p.day}T${b.start}:00`);
 				if (await calendar.create({
@@ -15001,14 +15001,19 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const j = await res.json().catch(() => ({}));
 		if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`);
 		sent.push(text);
-		await mirror.write((db) => appendLog(db, [{
-			role: "coach",
-			bot: "mega",
-			via: "telegram",
-			text: text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"),
-			at: (/* @__PURE__ */ new Date()).toISOString(),
-			proactive: true
-		}])).catch(() => null);
+		await mirror.write((db) => {
+			const plain = text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+			const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith("🔔") ? "annoyed" : "chill"])[0];
+			appendLog(db, [{
+				role: "coach",
+				bot: "mega",
+				via: "telegram",
+				text: plain,
+				at: (/* @__PURE__ */ new Date()).toISOString(),
+				proactive: true,
+				mood
+			}]);
+		}).catch(() => null);
 	};
 	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	const pauseRow = [{
@@ -15069,8 +15074,10 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	};
 	const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 	const paused = nudge.pausedDay === st.today;
+	const events = calendar ? await calendar.events((/* @__PURE__ */ new Date(now.getTime() - 144e5)).toISOString(), new Date(now.getTime() + 9e5).toISOString()).catch(() => []) : [];
+	const inEvent = events.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime());
 	if (calendar && !st.focus.running && !paused) {
-		const starting = (await calendar.events((/* @__PURE__ */ new Date(now.getTime() - 18e5)).toISOString(), new Date(now.getTime() + 9e5).toISOString()).catch(() => [])).find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
+		const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
 		if (starting) {
 			const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 6e4);
 			const subject = blockSubject(starting.title).slice(0, 28);
@@ -15096,7 +15103,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		idleMin: st.idleMin,
 		wakeLogged: true
 	};
-	if (!sent.length && shouldNudge(nudge, facts, now)) {
+	if (!sent.length && !inEvent && shouldNudge(nudge, facts, now)) {
 		const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1;
 		const first = openMustDos[0]?.text;
 		const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ""}${Math.round(st.idleMin % 60)}m` : "all day";

@@ -24,7 +24,7 @@ import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
-import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
+import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, MOOD_FACE, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
 import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
@@ -343,7 +343,11 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     sent.push(text)
     // What the coach says on its own shows in the app's chat too (live).
     await mirror
-      .write((db) => appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: text.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'), at: new Date().toISOString(), proactive: true }]))
+      .write((db) => {
+        const plain = text.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+        const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith('🔔') ? 'annoyed' : 'chill'])[0]
+        appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood }])
+      })
       .catch(() => null)
   }
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -401,8 +405,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   let nudge: NudgeState = st.nudge.day === st.today ? st.nudge : { ...st.nudge, day: st.today, count: 0, announced: [] }
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const paused = nudge.pausedDay === st.today
+  // What's in the calendar around now (a class or meeting means: don't nag).
+  const events = calendar ? await calendar.events(new Date(now.getTime() - 4 * 3600_000).toISOString(), new Date(now.getTime() + 15 * 60000).toISOString()).catch(() => []) : []
+  const inEvent = events.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime())
   if (calendar && !st.focus.running && !paused) {
-    const events = await calendar.events(new Date(now.getTime() - 30 * 60000).toISOString(), new Date(now.getTime() + 15 * 60000).toISOString()).catch(() => [])
     const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
     if (starting) {
       const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 60000)
@@ -419,7 +425,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   }
   const openMustDos = st.focus.plan.items.filter((x) => !x.done)
   const facts: NudgeFacts = { today: st.today, time, focusRunning: !!st.focus.running, focusMinToday: st.focus.todayMin, openMustDos: openMustDos.length, idleMin: st.idleMin, wakeLogged: true }
-  if (!sent.length && shouldNudge(nudge, facts, now)) {
+  // Never "nothing done for 1h" while he's in class or a meeting.
+  if (!sent.length && !inEvent && shouldNudge(nudge, facts, now)) {
     const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
     const first = openMustDos[0]?.text
     const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'

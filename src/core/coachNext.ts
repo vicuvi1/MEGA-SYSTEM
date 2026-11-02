@@ -29,7 +29,7 @@ export function nextMove(m: MoveInput, now = Date.now()): Move {
   }
   const promise = m.awaiting[m.awaiting.length - 1]
   if (promise) return { kind: 'answer', title: promise, sub: 'You promised this. Did you do it?', promise }
-  if (m.planStatus === 'proposed' && m.hour < 14) return { kind: 'approve', title: "Approve today's plan", sub: 'Blocks go in your calendar, must-dos on Today.' }
+  if (m.planStatus === 'proposed' && m.hour < 20) return { kind: 'approve', title: "Approve today's plan", sub: 'Blocks go in your calendar, must-dos on Today.' }
   const goal = m.goals.find((g) => g.todayLeftMin >= 20 && g.behind) ?? m.goals.find((g) => g.todayLeftMin >= 20)
   if (goal && !m.evening) {
     const minutes = Math.min(50, Math.max(25, goal.todayLeftMin))
