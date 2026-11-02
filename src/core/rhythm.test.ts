@@ -29,7 +29,7 @@ describe('rhythm: when things are due', () => {
     expect(waterBehind(s, facts({ time: '14:00', waterMl: 300 }))).toBe(true)
     expect(waterBehind(s, facts({ time: '14:00', waterMl: 1200 }))).toBe(false)
     expect(waterBehind({ ...s, water: ['13:00'] }, facts({ time: '14:00', waterMl: 300 }))).toBe(false)
-    expect(waterBehind({ ...s, water: ['11:00', '13:30', '16:00'] }, facts({ time: '19:00', waterMl: 300 }))).toBe(false)
+    expect(waterBehind({ ...s, water: ['11:00', '13:00', '15:00', '16:50', '18:40'] }, facts({ time: '20:30', waterMl: 300 }))).toBe(false)
   })
 
   it('a new day keeps tomorrow and the weekly review only', () => {

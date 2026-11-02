@@ -195,7 +195,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const context = await contextFor(events, tasks, upcoming)
         const prev = base.st.briefing?.plan
         const prompt = [
-          "You are MEGA, Victor's head coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
+          "You are BEN, Victor's best friend and coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
           `It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
           'Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits ("Algebra set (exam 15 Dec)").',
           'headline: one short line with numbers ("3 must-dos · 2h40 focus · gym 18:00").',
@@ -320,7 +320,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const context = await contextFor(null, null, tomorrowTasks)
         const raw = await ai(
           [
-            "You are MEGA, Victor's head coach. It's his evening review. Be honest and short.",
+            "You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
             `Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join('; ') || 'none'}. Due tomorrow in Todoist: ${nextUp.join('; ') || 'nothing'}.`,
             'lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow\'s 3 most important things (short, as tasks).',
             'Answer ONLY with JSON: {"lesson": string, "top3": string[]}',
@@ -391,7 +391,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const context = await contextFor(null, null, upcoming)
         const raw = await ai(
           [
-            "You are MEGA, Victor's head coach. Sunday review of his week. Honest, short, numbers.",
+            "You are BEN, Victor's best friend and coach. Sunday review of his week. Honest, short, numbers.",
             `Week score ${report.score}/100 (last week ${report.prevScore}). ${lines.join('; ')}.`,
             'win: the best thing this week (with its number). leak: the biggest leak (with its number). focus: next week\'s ONE area, one of focus|wake|sport|clean|todoist|spend|mustdo. note: his target in a few words ("up at 7:00 every day"). big3: the 3 big tasks for next week (from his deadlines and goals).',
             'Answer ONLY with JSON: {"win": string, "leak": string, "focus": string, "note": string, "big3": string[]}',
@@ -437,8 +437,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     try {
       const raw = await ai(
         [
-          "You are MEGA, Victor's best friend and coach. Write him this week's letter.",
-          'Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it "— Mega". Plain text, no markdown, at most 2 emoji. Write in the language he writes to you in.',
+          "You are BEN, Victor's best friend and coach. Write him this week's letter.",
+          'Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it "— Ben". Plain text, no markdown, at most 2 emoji. Write in English.',
           'Answer ONLY with JSON: {"letter": string}',
           '',
           '== His last weeks ==',

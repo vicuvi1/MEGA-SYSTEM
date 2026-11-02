@@ -365,7 +365,7 @@ function moreContext(s: Services, db: any, finance: any, today: string, input: i
 }
 
 const PERSONA: Record<Persona, string> = {
-  mega: 'You are MEGA: Victor\'s best friend who is also his coach. You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back ("you said the CV was the priority, bro"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.',
+  mega: 'You are BEN: Victor\'s best friend who is also his coach (your name is Ben; the Telegram bot may still be called Mega). You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back ("you said the CV was the priority, bro"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.',
   finance: 'You are the MONEY COACH (Finance bot). Help Victor spend with intention and save: react to spending with context (how often, how much this week/month, against his limit), spot patterns, suggest one concrete change. Logging money is your main job; coaching on money is what makes you useful.',
   waky: 'You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.',
   sport: 'You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive.'
@@ -381,6 +381,8 @@ Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+- His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
+- He can see/tap his cards: button {"do": "workout"} shows today's workout checklist, {"do": "water"} the water card.
 Money records (use the M-numbers; this is how you FIX a wrong log):
 - "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
 - Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
@@ -416,13 +418,13 @@ const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
 export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string } = {}): string {
-  const chat = memory.chat.slice(-18).map((c) => `${c.role === 'me' ? 'Victor' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
+  const chat = memory.chat.slice(-18).map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
     'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
     'Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits.',
-    'Style: a close friend who coaches, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.',
+    'Style: a close friend who coaches, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).',
     '',
     ACTIONS,
     '',
@@ -528,6 +530,8 @@ export type BrainAction =
   | { kind: 'delmoney'; ref: string }
   | { kind: 'promise'; ref: string; outcome: 'kept' | 'broken' }
   | { kind: 'book'; goal: string }
+  | { kind: 'exercise'; name: string; target?: number; unit?: string }
+  | { kind: 'noexercise'; name: string }
   | { kind: 'editmoney'; ref: string; amount?: number; category?: string; account?: string; note?: string; date?: string }
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
@@ -539,7 +543,7 @@ const MREF = /^M\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -590,6 +594,11 @@ export function readAction(line: string): BrainAction | null {
     return minutes >= 5 && minutes <= 720 && parts[1] ? { kind: 'checkin', minutes, text: parts.slice(1).join(' | ').slice(0, 300) } : null
   }
   if (kind === 'book') return { kind: 'book', goal: arg.slice(0, 120) }
+  if (kind === 'exercise' || kind === 'target') {
+    const target = Math.round(Number(parts[1]))
+    return parts[0] ? { kind: 'exercise', name: parts[0].slice(0, 30), ...(target > 0 && target <= 2000 ? { target } : {}), ...(parts[2] ? { unit: parts[2].slice(0, 10) } : {}) } : null
+  }
+  if (kind === 'noexercise') return parts[0] ? { kind: 'noexercise', name: parts[0].slice(0, 30) } : null
   if (kind === 'kept' || kind === 'broken') return /^P\d{1,2}$/i.test(parts[0]) ? { kind: 'promise', ref: parts[0].toUpperCase(), outcome: kind } : null
   if (kind === 'delmoney') return MREF.test(parts[0]) ? { kind: 'delmoney', ref: parts[0].toUpperCase() } : null
   if (kind === 'editmoney') {

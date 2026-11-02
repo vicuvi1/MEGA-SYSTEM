@@ -37,7 +37,8 @@ import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus } from './coachStatus'
 import { createRhythm } from './rhythmBot'
-import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
+import { addReps, addWater, parseWater, sharedView, sportForDay, sportToday } from '@core/sportShared'
+import { activeExercises, allDone, applyWorkoutTap, defaultSport, progression, recordWorkoutDay, removeExercise, setExercise, waterCard, workoutCard, type WorkoutLog } from '@core/sportCards'
 
 const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
 const LOGS_KEY = 'life_bot_logs'
@@ -448,18 +449,24 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   }
 
   function run(s: Services, text: string, key = ''): RunOut {
+    // Ben's cards (what Sporty did): /water and /workout, on the one shared log.
+    const cmd = /^\/(water|workout|w|gym)(?:@\w+)?$/i.exec(text.trim())
+    if (cmd) {
+      const day = sportToday()
+      const st = sportState(s.db) ?? defaultSport(day)
+      if (!sportState(s.db)) setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
+      const c = /^water$/i.test(cmd[1]) ? waterCard(st, day) : workoutCard(st, day)
+      return { reply: c.text, keyboard: c.keyboard }
+    }
     // "water 500", "+250ml": the shared water log, never a food expense.
     const ml = text.startsWith('/') ? null : parseWater(text)
     if (ml) {
-      const st = sportState(s.db)
-      if (st) {
-        const day = sportToday()
-        const next = addWater(st, ml, day)
-        setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
-        const v = sharedView(next, day)
-        const pct = Math.round((v.water.ml / Math.max(1, v.water.target)) * 100)
-        return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> · ${v.water.ml} of ${v.water.target} ml today (${pct}%)${pct >= 100 ? '\n🎯 Water goal done!' : ''}` }
-      }
+      const day = sportToday()
+      const st = sportState(s.db) ?? defaultSport(day)
+      const next = addWater(st, ml, day)
+      setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+      const c = waterCard(next, day)
+      return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> logged.\n\n${c.text}`, keyboard: c.keyboard }
     }
     const viaFocus = runFocus(s, text)
     if (viaFocus) return viaFocus
@@ -645,7 +652,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -653,6 +660,61 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     const edit = (text: string, keyboard?: any) =>
       tg(update.__token, 'editMessageText', { chat_id: chat, message_id: cq.message.message_id, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
+    // Water and workout cards: a tap updates the shared log and the card.
+    if (data.startsWith('wa|') || data.startsWith('wk|')) {
+      if (!(await markSeen(key))) return null
+      const show = data === 'wa|show' || data === 'wk|show'
+      const r = await mirror.write((db) => {
+        const svc = services.services(db)
+        const day = sportToday()
+        let st = sportState(db) ?? defaultSport(day)
+        const save = (x: any) => setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: x }))
+        if (data.startsWith('wa|')) {
+          if (!show) {
+            st = addWater(st, Number(data.slice(3)) || 0, day)
+            save(st)
+          }
+          const c = waterCard(st, day)
+          return { ...c, toast: show ? '' : `${Number(data.slice(3)) > 0 ? '+' : ''}${data.slice(3)} ml` }
+        }
+        let extra = ''
+        let toast = ''
+        if (!show) {
+          const was = allDone(sportForDay(st, day))
+          st = applyWorkoutTap(st, day, data.slice(3))
+          save(st)
+          toast = 'Logged'
+          if (!was && allDone(st)) {
+            // Finished: it counts as today's workout (streak, points), and targets may go up.
+            const list = activeExercises(st)
+            try {
+              svc.body.logWorkout({ title: `Daily workout: ${list.map((e: any) => `${e.doneToday} ${e.name}`).join(', ')}`, items: list.map((e: any) => ({ exerciseId: String(e.id ?? e.name), name: String(e.name), amount: Number(e.doneToday) || 0, unit: e.unit === 'sec' ? 'minutes' : 'reps' })), note: 'Logged with Ben' })
+            } catch {
+              /* already logged today */
+            }
+            let log: WorkoutLog = { days: {} }
+            try {
+              log = JSON.parse(getSetting(db as any, 'ben_workouts') || '{"days":{}}')
+            } catch {
+              log = { days: {} }
+            }
+            log = recordWorkoutDay(log, st, day)
+            setSetting(db as any, 'ben_workouts', JSON.stringify(log))
+            const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st)
+            for (const u of ups) st = setExercise(st, day, u.name, u.to).st
+            if (ups.length) save(st)
+            const body = svc.body.state()
+            extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? '' : 's'} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `📈 ${u.name}: ${u.from} → ${u.to} (3 full days in a row)`)].join('\n')
+            toast = 'Workout done! 🔥'
+          }
+        }
+        return { ...workoutCard(st, day, extra), toast }
+      })
+      await answer(r.toast || 'OK')
+      if (show) await tg(update.__token, 'sendMessage', { chat_id: chat, text: r.text, parse_mode: 'HTML', reply_markup: r.keyboard }).catch(() => null)
+      else await edit(r.text, r.keyboard)
+      return r.text
+    }
     // A reply button: "say" sends its words as your message; "book" books a goal; "plan" makes today's plan.
     if (data.startsWith('cs|') || data.startsWith('gb|') || data === 'rb|p') {
       if (!(await markSeen(key))) return null
@@ -1355,11 +1417,22 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           expense = true
           continue
         }
+        if (a.kind === 'exercise' || a.kind === 'noexercise') {
+          const line = await mirror.write((db) => {
+            const day = sportToday()
+            const st = sportState(db) ?? defaultSport(day)
+            const r = a.kind === 'exercise' ? setExercise(st, day, a.name, a.target, a.unit) : removeExercise(st, day, a.name)
+            if (!r.line) return a.kind === 'exercise' ? `⚠️ Give "${a.name}" a daily target` : `⚠️ No exercise "${a.name}" on your list`
+            setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: r.st }))
+            return r.line
+          })
+          done.push(line)
+          continue
+        }
         if (a.kind === 'water' || a.kind === 'reps') {
           const line = await mirror.write((db) => {
-            const st = sportState(db)
-            if (!st) return a.kind === 'water' ? '⚠️ Open Sport Track once so water has a place to go' : '⚠️ Open Sport Track once to set up your reps checklist'
             const day = sportToday()
+            const st = sportState(db) ?? defaultSport(day)
             const save = (next: any) => setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
             if (a.kind === 'water') {
               const next = addWater(st, a.ml, day)

@@ -18,7 +18,7 @@ import { readDo } from '@core/coachButtons'
 type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[] }
 type Profile = { about: string; goals: string[]; rules: string[] }
 
-const BOT_LABEL: Record<string, string> = { mega: 'Mega', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
+const BOT_LABEL: Record<string, string> = { mega: 'Ben', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
 const CARDS: { title: string; sub: string; ask: string }[] = [
   { title: 'What now?', sub: 'The one thing that matters most right now', ask: 'What should I focus on right now? Be specific.' },
   { title: 'Plan my day', sub: 'Blocks in my free time, from my calendar', ask: 'Plan the rest of my day around my calendar and put the blocks in it.' },
@@ -241,7 +241,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             {face}
           </button>
           <div className="cx-who">
-            <b>Mega</b>
+            <b>Ben</b>
             <span className="cx-status">
               {busy ? (
                 <span className="cx-typing-label">thinking…</span>
@@ -267,7 +267,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
 
         {query != null && (
           <div className="cx-search">
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your chats with Mega…" onKeyDown={(e) => e.key === 'Escape' && setQuery(null)} />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your chats with Ben…" onKeyDown={(e) => e.key === 'Escape' && setQuery(null)} />
             <span>{query.trim() ? `${(log ?? []).filter((m) => m.text.toLowerCase().includes(query.trim().toLowerCase())).length} found` : ''}</span>
           </div>
         )}
@@ -467,7 +467,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               e.target.style.height = 'auto'
               e.target.style.height = `${Math.min(180, e.target.scrollHeight)}px`
             }}
-            placeholder={listening ? 'Listening…' : 'Message Mega…'}
+            placeholder={listening ? 'Listening…' : 'Message Ben…'}
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -492,7 +492,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         <div className="cx-info-head">
           <span className={`cx-face big mood-${status?.mood ?? 'chill'}`}>{face}</span>
           <div>
-            <b>Mega</b>
+            <b>Ben</b>
             <small>Your coach · same memory on Telegram</small>
           </div>
           <button className="icon-btn cx-close" onClick={() => setInfo(false)} aria-label="Close">
@@ -767,8 +767,9 @@ function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: { m: En
       ok = r
       if (r?.lines?.length) await act(async () => r, r.lines.join(' · '))
     } else if (d.k === 'say') onSay(d.text)
+    else if (d.k === 'workout' || d.k === 'water') window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'body' }))
     else onOpen(d.tab)
-    if (ok && d.k !== 'open') setUsed((u) => ({ ...u, [k]: true }))
+    if (ok && d.k !== 'open' && d.k !== 'workout' && d.k !== 'water') setUsed((u) => ({ ...u, [k]: true }))
     if (ok) onDone()
   }
   const tick = async (i: number) => {

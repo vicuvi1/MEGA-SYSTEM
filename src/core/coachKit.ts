@@ -126,7 +126,7 @@ export interface NudgeFacts {
   wakeLogged: boolean
 }
 
-export const NUDGE_MAX_PER_DAY = 8
+export const NUDGE_MAX_PER_DAY = 12
 
 /**
  * "Follow up until I act": between 09:00 and 21:30, when nothing is running,

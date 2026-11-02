@@ -8,6 +8,8 @@ export type ButtonDo =
   | { k: 'book'; goal: string }
   | { k: 'say'; text: string }
   | { k: 'open'; tab: 'plan' | 'goals' | 'score' | 'about' }
+  | { k: 'workout' }
+  | { k: 'water' }
 
 export interface ReplyButton {
   label: string
@@ -20,11 +22,13 @@ export type Widget = (typeof WIDGETS)[number]
 /** "focus:25:Algebra", "approve", "plan", "book:Algebra exam", "say:Done ✅", "open:goals". */
 export function readDo(d: string): ButtonDo | null {
   const s = String(d ?? '').trim()
-  const m = /^(focus|approve|plan|book|say|open)(?::([\s\S]*))?$/i.exec(s)
+  const m = /^(focus|approve|plan|book|say|open|workout|water)(?::([\s\S]*))?$/i.exec(s)
   if (!m) return null
   const k = m[1].toLowerCase()
   const rest = (m[2] ?? '').trim()
   if (k === 'approve') return { k: 'approve' }
+  if (k === 'workout') return { k: 'workout' }
+  if (k === 'water') return { k: 'water' }
   if (k === 'plan') return { k: 'plan' }
   if (k === 'focus') {
     const f = /^(\d{1,3})\s*:\s*(.+)$/.exec(rest)
@@ -64,7 +68,7 @@ export function telegramKeyboard(buttons: ReplyButton[]): { inline_keyboard: { t
     .map((b) => {
       const d = readDo(b.do)
       if (!d) return null
-      const data = d.k === 'focus' ? fit(`fo|${d.minutes}|`, d.subject) : d.k === 'approve' ? 'rb|a' : d.k === 'plan' ? 'rb|p' : d.k === 'book' ? fit('gb|', d.goal) : d.k === 'say' ? fit('cs|', d.text) : null
+      const data = d.k === 'focus' ? fit(`fo|${d.minutes}|`, d.subject) : d.k === 'approve' ? 'rb|a' : d.k === 'plan' ? 'rb|p' : d.k === 'book' ? fit('gb|', d.goal) : d.k === 'say' ? fit('cs|', d.text) : d.k === 'workout' ? 'wk|show' : d.k === 'water' ? 'wa|show' : null
       return data ? { text: b.label, callback_data: data } : null
     })
     .filter((x): x is { text: string; callback_data: string } => !!x)

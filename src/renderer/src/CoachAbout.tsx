@@ -38,7 +38,7 @@ export function CoachAbout() {
     <>
       <section className="panel ab-letter">
         <header className="panel-head">
-          <h2>💌 Letter from Mega</h2>
+          <h2>💌 Letter from Ben</h2>
           <button className="btn small ghost" disabled={writing} onClick={() => void write()}>
             {writing ? 'Writing…' : letter ? 'Write a new one' : "Write this week's"}
           </button>

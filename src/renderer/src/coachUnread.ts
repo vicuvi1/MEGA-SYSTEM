@@ -43,7 +43,7 @@ export function useCoachUnread(onCoachPage: boolean, sound = true): number {
     if (newest && newest.at !== last.current && !onCoachPage) {
       if (last.current !== null) {
         const face = (newest.mood && MOOD_FACE[newest.mood as Mood]) || '💬'
-        toast(`${face} Mega: ${newest.text.replace(/\s+/g, ' ').slice(0, 110)}`, 'info')
+        toast(`${face} Ben: ${newest.text.replace(/\s+/g, ' ').slice(0, 110)}`, 'info')
         if (sound) soundSystemOracle()
       }
       last.current = newest.at

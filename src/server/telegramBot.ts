@@ -28,6 +28,7 @@ import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered a
 import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
+import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText } from '@core/rhythm'
 
 export { createTodoistApi }
@@ -479,6 +480,24 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       }
     }
   })
+  // The training slot in today's approved plan: Ben opens the workout then.
+  const slot = f.state.briefing?.status === 'approved' ? f.state.briefing.plan.training : null
+  if (f.prefs.on && slot && !f.facts.workoutDone && !(f.state as any).slotSent && f.facts.time >= slot.time && f.facts.time < addMinutesHM(slot.time, 40)) {
+    await mirror.write((db) => {
+      const cur = rhythmFor(JSON.parse(getSetting(db as any, RHYTHM) || 'null'), f.facts.today)
+      setSetting(db as any, RHYTHM, JSON.stringify({ ...cur, slotSent: true }))
+    })
+    const day = sportToday(now)
+    const st = await mirror.read((db) => {
+      try {
+        return JSON.parse(getSetting(db as any, 'sport_tracker_json') || 'null')?.data ?? null
+      } catch {
+        return null
+      }
+    })
+    const card = workoutCard(st ?? defaultSport(day), day)
+    await send(`💪 <b>Training time</b> (${escapeHtml(slot.what)}). Let's go.\n\n${card.text}`, card.keyboard)
+  }
   const jobs = dueRhythm(f.state, f.prefs, f.facts)
   for (const job of jobs) {
     if (job === 'briefing') {
@@ -489,12 +508,12 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const line = await bots.rhythm.waterLine()
       if (line) await send(line, { inline_keyboard: [[{ text: '😴 30 min', callback_data: 'ns|' }, { text: '⏸ Pause today', callback_data: 'np|' }]] })
     } else if (job === 'training') {
-      await send(await bots.rhythm.trainingLine())
+      await send(await bots.rhythm.trainingLine(), { inline_keyboard: [[{ text: '🏋️ Start workout', callback_data: 'wk|show' }, { text: '😴 30 min', callback_data: 'ns|' }]] })
     } else if (job === 'weekly') {
       const w = await bots.rhythm.weekly()
       await send(weeklyText(w), WEEKLY_KEYBOARD)
       const letter = await bots.rhythm.letter().catch(() => null)
-      if (letter) await send(`💌 <b>A letter from Mega</b>\n\n${escapeHtml(letter)}`)
+      if (letter) await send(`💌 <b>A letter from Ben</b>\n\n${escapeHtml(letter)}`)
     } else if (job === 'evening') {
       await payTodoistDone(env, { since: localMidnight(0) }).catch(() => null)
       const r = await bots.rhythm.evening()
@@ -531,6 +550,11 @@ export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose'
   if (op.action === 'prefs') await bots.rhythm.setPrefs(op.prefs ?? {})
   if (op.action === 'letter') return { letter: await bots.rhythm.letter() }
   return bots.rhythm.state()
+}
+
+const addMinutesHM = (hm: string, m: number) => {
+  const t = Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)) + m
+  return `${String(Math.min(23, Math.floor(t / 60))).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
 }
 
 const localIsoHM = (iso: string) => {

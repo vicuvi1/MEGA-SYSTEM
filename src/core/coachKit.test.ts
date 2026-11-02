@@ -54,7 +54,7 @@ describe('coach toolkit', () => {
     const st = nudged({}, '2026-11-01', now)
     expect(shouldNudge(st, f, new Date('2026-11-01T14:30:00Z'))).toBe(false)
     expect(shouldNudge(st, f, new Date('2026-11-01T14:50:00Z'))).toBe(true)
-    expect(shouldNudge({ day: '2026-11-01', count: 8 }, f, now)).toBe(false)
+    expect(shouldNudge({ day: '2026-11-01', count: 12 }, f, now)).toBe(false)
   })
 })
 

@@ -629,7 +629,7 @@ function cleanStats(start, relapses, today) {
 	};
 }
 // src/core/body.ts
-var DEFAULT_EXERCISES = [
+var DEFAULT_EXERCISES$1 = [
 	{
 		id: "situps",
 		name: "Sit-ups",
@@ -1167,7 +1167,7 @@ var Mirror = class {
 			enabled: r.enabled ? 1 : 0,
 			sort: i
 		})).filter((r) => !haveRules.has(r.id));
-		const exercises = DEFAULT_EXERCISES.filter((e) => !haveEx.has(e.id));
+		const exercises = DEFAULT_EXERCISES$1.filter((e) => !haveEx.has(e.id));
 		if (!rules.length && !exercises.length) return;
 		db.dropChanges();
 		db.transaction(() => {
@@ -1326,11 +1326,11 @@ var Body = class {
 	exercises() {
 		let rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
 		if (rows.length === 0) {
-			for (const ex of DEFAULT_EXERCISES) this.saveExercise(ex);
+			for (const ex of DEFAULT_EXERCISES$1) this.saveExercise(ex);
 			rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
 		} else {
 			const existingIds = new Set(rows.map((r) => r.id));
-			for (const ex of DEFAULT_EXERCISES.slice(0, 3)) if (!existingIds.has(ex.id)) this.saveExercise(ex);
+			for (const ex of DEFAULT_EXERCISES$1.slice(0, 3)) if (!existingIds.has(ex.id)) this.saveExercise(ex);
 			rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
 		}
 		return rows.map((r) => ({
@@ -3645,6 +3645,19 @@ var FocusService = class {
 			};
 		})();
 	}
+	/** Adds minutes to the running timer (the island's +5 / +15); at most 4 hours in all. */
+	extend(minutes, now = /* @__PURE__ */ new Date()) {
+		const run = this.running();
+		if (!run) throw new LedgerError("No focus session is running");
+		const m = Math.round(Number(minutes) || 0);
+		if (!m) return this.state(now);
+		const planned = Math.min(240, Math.max(5, run.planned + m));
+		setSetting(this.db, RUNNING, JSON.stringify({
+			...run,
+			planned
+		}));
+		return this.state(now);
+	}
 	/** Drops the running timer without logging it. */
 	cancel(now = /* @__PURE__ */ new Date()) {
 		setSetting(this.db, RUNNING, "null");
@@ -4416,7 +4429,7 @@ function sortToday(tasks, today) {
 		return String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99"));
 	});
 }
-var esc$3 = (s) => s.replace(/[<>&]/g, (c) => ({
+var esc$4 = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
 	">": "&gt;",
 	"&": "&amp;"
@@ -4434,8 +4447,8 @@ function todayText(tasks, today) {
 	const lines = list.slice(0, 15).map((t, i) => {
 		const late = t.due && t.due < today ? " <i>(late)</i>" : "";
 		const time = t.dueTime ? ` · ${t.dueTime}` : "";
-		const proj = t.project ? ` · #${esc$3(t.project)}` : "";
-		return `${i + 1}. ${P_ICON[t.priority] ?? "⚪"} <b>${esc$3(t.content)}</b>${time}${proj}${late}`;
+		const proj = t.project ? ` · #${esc$4(t.project)}` : "";
+		return `${i + 1}. ${P_ICON[t.priority] ?? "⚪"} <b>${esc$4(t.content)}</b>${time}${proj}${late}`;
 	});
 	return `📋 <b>Todoist today</b> (${list.length})\n\n${lines.join("\n")}${list.length > 15 ? `\n…and ${list.length - 15} more` : ""}\n\n<i>Done one? Send</i> <code>/done 1</code> · <i>add:</i> <code>/task …</code>`;
 }
@@ -6076,6 +6089,7 @@ syncFinance: (recordDays) => write((s) => {
 			start: (subject, planned, task) => write((s) => s.focus.start(subject, planned, /* @__PURE__ */ new Date(), task ?? null)),
 			stop: () => write((s) => s.focus.stop(), W),
 			cancel: () => write((s) => s.focus.cancel()),
+			extend: (minutes) => write((s) => s.focus.extend(minutes)),
 			add: (subject, minutes, day) => write((s) => s.focus.add(subject, minutes, day), W),
 			setPlan: (items) => write((s) => s.focus.setPlan(items)),
 			togglePlan: (index) => write((s) => s.focus.togglePlan(index), W),
@@ -7858,12 +7872,12 @@ function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = D
 		source: "telegram"
 	};
 }
-var esc$2 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
+var esc$3 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;"
 })[c]);
-var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
+var fm = (state, c) => esc$3(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
 var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
@@ -7871,15 +7885,15 @@ function loggedText(state, t, today = null) {
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
 	const work = t.type === "expense" ? workText(state, B(t), t.date) : "";
-	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
-	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
+	const lines = [`✅ <b>${sign}${esc$3(formatMoney(t.amount, t.currency))}</b> · ${esc$3(t.note || c)}`, `${esc$3(c)} · ${esc$3(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
+	if (work) lines.push(`⏱ ${esc$3(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
 		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
-		lines.push(`${esc$2(c || "This category")} this month: ${fm(state, catMonth)}`);
+		lines.push(`${esc$3(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
-	if (alert) lines.push(`⚠️ ${esc$2(alert.text)}`);
+	if (alert) lines.push(`⚠️ ${esc$3(alert.text)}`);
 	if (today && t.type === "expense" && (state.recurring?.length || state.tx.length > 10)) lines.push(safeLine(state, today, (c) => fm(state, c)));
 	return lines.join("\n");
 }
@@ -8239,7 +8253,7 @@ function isFocusBlock(e) {
 	return !!e.ours || FOCUS_WORDS.test(e.title);
 }
 // src/core/focusBot.ts
-var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
+var esc$2 = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
 	">": "&gt;",
 	"&": "&amp;"
@@ -8249,7 +8263,7 @@ var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
 	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$1(o.focusYesterdayMin)}</b> of focus.`);
-	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$1(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
+	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$2(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
 	lines.push(o.planAlready ? "You already have a plan for today: /plan to see it." : `<b>${PLAN_ASK}</b>\nReply to this message, one per line.`);
@@ -8258,7 +8272,7 @@ function morningText(o) {
 function planText(plan, title = "📝 <b>Today's must-dos</b>") {
 	if (!plan.items.length) return `${title}\n\nNo plan yet. Send <code>/plan essay; gym; call Leo</code>.`;
 	const done = plan.items.filter((i) => i.done).length;
-	const lines = plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`);
+	const lines = plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$2(it.text)}`);
 	return `${title} (${done}/${plan.items.length})\n\n${lines.join("\n")}\n\n<i>Tap to tick · +10 coins each</i>`;
 }
 /** Buttons under a plan: tick each must-do; in the evening, what got in the way. */
@@ -8281,7 +8295,7 @@ function eveningText(plan, focusMin) {
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
-	return `${head}\n\n${plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`).join("\n")}\n\n${verdict}`;
+	return `${head}\n\n${plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$2(it.text)}`).join("\n")}\n\n${verdict}`;
 }
 function weekText(w, goals) {
 	const lines = [
@@ -8289,17 +8303,17 @@ function weekText(w, goals) {
 		"",
 		`⏱ Focus: <b>${hm$1(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm$1(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$2(s.subject)}: ${hm$1(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
-	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$1(r.reason)} ×${r.count}`).join(", ")}`);
+	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$2(r.reason)} ×${r.count}`).join(", ")}`);
 	if (w.funMin) lines.push(`🎮 Fun: ${hm$1(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm$1(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$2(g.title)}: ${hm$1(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$1(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$2(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$1(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/coachKit.ts
 var hm = (iso) => {
@@ -8392,7 +8406,7 @@ function shouldNudge(st, f, now = /* @__PURE__ */ new Date()) {
 	if (f.focusRunning) return false;
 	if (f.openMustDos === 0 && f.focusMinToday >= 50) return false;
 	if (f.idleMin < 60) return false;
-	if ((st.day === f.today ? st.count ?? 0 : 0) >= 8) return false;
+	if ((st.day === f.today ? st.count ?? 0 : 0) >= 12) return false;
 	if (st.lastAt && now.getTime() - Date.parse(st.lastAt) < 27e5) return false;
 	return true;
 }
@@ -8641,11 +8655,13 @@ var WIDGETS = [
 /** "focus:25:Algebra", "approve", "plan", "book:Algebra exam", "say:Done ✅", "open:goals". */
 function readDo(d) {
 	const s = String(d ?? "").trim();
-	const m = /^(focus|approve|plan|book|say|open)(?::([\s\S]*))?$/i.exec(s);
+	const m = /^(focus|approve|plan|book|say|open|workout|water)(?::([\s\S]*))?$/i.exec(s);
 	if (!m) return null;
 	const k = m[1].toLowerCase();
 	const rest = (m[2] ?? "").trim();
 	if (k === "approve") return { k: "approve" };
+	if (k === "workout") return { k: "workout" };
+	if (k === "water") return { k: "water" };
 	if (k === "plan") return { k: "plan" };
 	if (k === "focus") {
 		const f = /^(\d{1,3})\s*:\s*(.+)$/.exec(rest);
@@ -8693,7 +8709,7 @@ function telegramKeyboard(buttons) {
 	const row = buttons.map((b) => {
 		const d = readDo(b.do);
 		if (!d) return null;
-		const data = d.k === "focus" ? fit(`fo|${d.minutes}|`, d.subject) : d.k === "approve" ? "rb|a" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : null;
+		const data = d.k === "focus" ? fit(`fo|${d.minutes}|`, d.subject) : d.k === "approve" ? "rb|a" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : d.k === "workout" ? "wk|show" : d.k === "water" ? "wa|show" : null;
 		return data ? {
 			text: b.label,
 			callback_data: data
@@ -9357,7 +9373,7 @@ function moreContext(s, db, finance, today, input, todayRules, disc) {
 	return out;
 }
 var PERSONA = {
-	mega: "You are MEGA: Victor's best friend who is also his coach. You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back (\"you said the CV was the priority, bro\"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.",
+	mega: "You are BEN: Victor's best friend who is also his coach (your name is Ben; the Telegram bot may still be called Mega). You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back (\"you said the CV was the priority, bro\"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.",
 	finance: "You are the MONEY COACH (Finance bot). Help Victor spend with intention and save: react to spending with context (how often, how much this week/month, against his limit), spot patterns, suggest one concrete change. Logging money is your main job; coaching on money is what makes you useful.",
 	waky: "You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.",
 	sport: "You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive."
@@ -9372,6 +9388,8 @@ Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+- His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
+- He can see/tap his cards: button {"do": "workout"} shows today's workout checklist, {"do": "water"} the water card.
 Money records (use the M-numbers; this is how you FIX a wrong log):
 - "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
 - Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
@@ -9405,13 +9423,13 @@ var LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put r
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`;
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
 function brainPrompt(persona, context, memory, message, media, profile = DEFAULT_PROFILE, extra = {}) {
-	const chat = memory.chat.slice(-18).map((c) => `${c.role === "me" ? "Victor" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
+	const chat = memory.chat.slice(-18).map((c) => `${c.role === "me" ? "Victor" : c.bot === "mega" ? "Ben" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 300)}`);
 	return [
 		PERSONA[persona],
 		"Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don't have a number, don't make one up; ask for it with \"need\" or leave it out.",
 		"Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count (\"3rd promise missed this week\"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn't).",
 		"Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits.",
-		"Style: a close friend who coaches, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language Victor writes in (English, Romanian or Russian); with no text from him, in English.",
+		"Style: a close friend who coaches, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).",
 		"",
 		ACTIONS,
 		"",
@@ -9491,7 +9509,7 @@ var TREF = /^T\d{1,3}$/i;
 var MREF = /^M\d{1,2}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
-	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 400);
@@ -9587,6 +9605,19 @@ function readAction(line) {
 		kind: "book",
 		goal: arg.slice(0, 120)
 	};
+	if (kind === "exercise" || kind === "target") {
+		const target = Math.round(Number(parts[1]));
+		return parts[0] ? {
+			kind: "exercise",
+			name: parts[0].slice(0, 30),
+			...target > 0 && target <= 2e3 ? { target } : {},
+			...parts[2] ? { unit: parts[2].slice(0, 10) } : {}
+		} : null;
+	}
+	if (kind === "noexercise") return parts[0] ? {
+		kind: "noexercise",
+		name: parts[0].slice(0, 30)
+	} : null;
 	if (kind === "kept" || kind === "broken") return /^P\d{1,2}$/i.test(parts[0]) ? {
 		kind: "promise",
 		ref: parts[0].toUpperCase(),
@@ -9904,13 +9935,13 @@ function dueRhythm(state, prefs, f) {
 	if (!state.evening && t >= toMin(prefs.evening)) out.push("evening");
 	return out;
 }
-/** Water well behind the day's pace (08:00→21:00), at most 3 nudges, 2.5 h apart, 11:00–20:30. */
+/** Water well behind the day's pace (08:00→21:00), at most 5 nudges, 1h50 apart, 11:00–20:30. */
 function waterBehind(state, f) {
 	const t = toMin(f.time);
 	if (t < toMin("11:00") || t > toMin("20:30") || f.waterTarget <= 0) return false;
-	if (state.water.length >= 3) return false;
+	if (state.water.length >= 5) return false;
 	const last = state.water[state.water.length - 1];
-	if (last && t - toMin(last) < 150) return false;
+	if (last && t - toMin(last) < 110) return false;
 	const pace = Math.min(1, Math.max(0, (t - toMin("08:00")) / (toMin("21:00") - toMin("08:00"))));
 	return f.waterMl < f.waterTarget * pace - f.waterTarget * .25;
 }
@@ -10621,7 +10652,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const context = await contextFor(events, tasks, upcoming);
 			const prev = base.st.briefing?.plan;
 			const raw = await ai([
-				"You are MEGA, Victor's head coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
+				"You are BEN, Victor's best friend and coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
 				`It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
 				"Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits (\"Algebra set (exam 15 Dec)\").",
 				"headline: one short line with numbers (\"3 must-dos · 2h40 focus · gym 18:00\").",
@@ -10777,7 +10808,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		if (ai) try {
 			const context = await contextFor(null, null, tomorrowTasks);
 			const raw = await ai([
-				"You are MEGA, Victor's head coach. It's his evening review. Be honest and short.",
+				"You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
 				`Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join("; ") || "none"}. Due tomorrow in Todoist: ${nextUp.join("; ") || "nothing"}.`,
 				"lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow's 3 most important things (short, as tasks).",
 				"Answer ONLY with JSON: {\"lesson\": string, \"top3\": string[]}",
@@ -10882,7 +10913,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		if (ai) try {
 			const context = await contextFor(null, null, upcoming);
 			const raw = await ai([
-				"You are MEGA, Victor's head coach. Sunday review of his week. Honest, short, numbers.",
+				"You are BEN, Victor's best friend and coach. Sunday review of his week. Honest, short, numbers.",
 				`Week score ${report.score}/100 (last week ${report.prevScore}). ${lines.join("; ")}.`,
 				"win: the best thing this week (with its number). leak: the biggest leak (with its number). focus: next week's ONE area, one of focus|wake|sport|clean|todoist|spend|mustdo. note: his target in a few words (\"up at 7:00 every day\"). big3: the 3 big tasks for next week (from his deadlines and goals).",
 				"Answer ONLY with JSON: {\"win\": string, \"leak\": string, \"focus\": string, \"note\": string, \"big3\": string[]}",
@@ -10940,8 +10971,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		});
 		try {
 			const raw = await ai([
-				"You are MEGA, Victor's best friend and coach. Write him this week's letter.",
-				"Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it \"— Mega\". Plain text, no markdown, at most 2 emoji. Write in the language he writes to you in.",
+				"You are BEN, Victor's best friend and coach. Write him this week's letter.",
+				"Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it \"— Ben\". Plain text, no markdown, at most 2 emoji. Write in English.",
 				"Answer ONLY with JSON: {\"letter\": string}",
 				"",
 				"== His last weeks ==",
@@ -11041,6 +11072,245 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		bookGoals,
 		rebookGoals,
 		countPromise: (day, key) => mirror.write((db) => countPromise(db, day, key))
+	};
+}
+// src/core/sportCards.ts
+var DEFAULT_EXERCISES = [
+	{
+		id: "ex_pushups",
+		name: "Push-ups",
+		target: 100,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_situps",
+		name: "Sit-ups",
+		target: 60,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_squats",
+		name: "Squats",
+		target: 60,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_press",
+		name: "Press",
+		target: 50,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	}
+];
+/** A fresh Sport Track state when there is none yet (so Ben works from day one). */
+function defaultSport(today) {
+	return {
+		lastDate: today,
+		exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })),
+		water: {
+			currentMl: 0,
+			targetMl: 2700,
+			glassSizeMl: 250
+		},
+		history: [],
+		sportySettings: { autoProgression: true }
+	};
+}
+function bar(done, target, len = 8) {
+	if (target <= 0) return "█".repeat(len);
+	const r = Math.min(1, Math.max(0, done / target));
+	const f = Math.round(r * len);
+	return "█".repeat(f) + "░".repeat(len - f);
+}
+var esc$1 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function waterCard(st, today) {
+	const s = sportForDay(st, today);
+	const ml = Math.round(Number(s.water.currentMl) || 0);
+	const target = Number(s.water.targetMl) || 2700;
+	const glass = Number(s.water.glassSizeMl) || 250;
+	const left = Math.max(0, target - ml);
+	return {
+		text: [
+			"💧 <b>Water today</b>",
+			`<code>${bar(ml, target, 11)}</code> ${(ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(target / 1e3).toFixed(1)} L`,
+			`${Math.floor(ml / glass)} of ${Math.ceil(target / glass)} glasses (${glass} ml)`,
+			left ? `<b>${left} ml</b> to go.` : "🎯 <b>Target reached.</b> Nice.",
+			"<i>Or just type: water 250</i>"
+		].join("\n"),
+		keyboard: { inline_keyboard: [
+			[{
+				text: `💧 +${glass} (glass)`,
+				callback_data: `wa|${glass}`
+			}, {
+				text: "💧 +500 (bottle)",
+				callback_data: "wa|500"
+			}],
+			[{
+				text: "💧 +1000",
+				callback_data: "wa|1000"
+			}, {
+				text: `➖ −${glass}`,
+				callback_data: `wa|-${glass}`
+			}],
+			[{
+				text: "🏋️ Workout",
+				callback_data: "wk|show"
+			}]
+		] }
+	};
+}
+var activeExercises = (s) => (s.exercises ?? []).filter((e) => e.active !== false);
+var allDone = (s) => {
+	const a = activeExercises(s);
+	return a.length > 0 && a.every((e) => (Number(e.doneToday) || 0) >= (Number(e.target) || 0));
+};
+function workoutCard(st, today, extra = "") {
+	const s = sportForDay(st, today);
+	const list = activeExercises(s);
+	const done = allDone(s);
+	const lines = list.map((e) => {
+		const d = Number(e.doneToday) || 0;
+		const t = Number(e.target) || 0;
+		return `${d >= t ? "✅" : "▫️"} <b>${esc$1(e.name)}</b> ${d}/${t} ${esc$1(e.unit || "reps")}\n<code>${bar(d, t)}</code> ${t ? Math.round(Math.min(1, d / t) * 100) : 100}%`;
+	});
+	const total = list.reduce((a, e) => a + Math.min(Number(e.doneToday) || 0, Number(e.target) || 0), 0);
+	const goal = list.reduce((a, e) => a + (Number(e.target) || 0), 0);
+	const head = done ? "🔥 <b>Workout done for today!</b>" : `🏋️ <b>Today's workout</b> · ${goal ? Math.round(total / goal * 100) : 0}%`;
+	const rows = list.map((e, i) => ({
+		e,
+		i
+	})).filter(({ e }) => (Number(e.doneToday) || 0) < (Number(e.target) || 0)).slice(0, 6).map(({ e, i }) => [
+		{
+			text: `${String(e.name).slice(0, 12)} +10`,
+			callback_data: `wk|${i}|10`
+		},
+		{
+			text: "+25",
+			callback_data: `wk|${i}|25`
+		},
+		{
+			text: "✓ All",
+			callback_data: `wk|${i}|all`
+		}
+	]);
+	const tail = done ? [[{
+		text: "💧 Water",
+		callback_data: "wa|show"
+	}]] : [[{
+		text: "✅ Complete all",
+		callback_data: "wk|all"
+	}, {
+		text: "💧 Water",
+		callback_data: "wa|show"
+	}]];
+	return {
+		text: [
+			head,
+			"",
+			...lines,
+			...extra ? ["", extra] : [],
+			...done ? [] : ["", "<i>Or type: 30 pushups</i>"]
+		].join("\n"),
+		keyboard: { inline_keyboard: [...rows, ...tail] }
+	};
+}
+/** Applies a button: "3|10", "3|all", "all". Returns the new state. */
+function applyWorkoutTap(st, today, data) {
+	const s = sportForDay(st, today);
+	const list = activeExercises(s);
+	if (data === "all") {
+		for (const e of list) e.doneToday = Math.max(Number(e.doneToday) || 0, Number(e.target) || 0);
+		return s;
+	}
+	const [i, amt] = data.split("|");
+	const e = list[Number(i)];
+	if (!e) return s;
+	e.doneToday = amt === "all" ? Math.max(Number(e.doneToday) || 0, Number(e.target) || 0) : Math.max(0, (Number(e.doneToday) || 0) + (Number(amt) || 0));
+	return s;
+}
+function recordWorkoutDay(log, st, today) {
+	const s = sportForDay(st, today);
+	const days = { ...log?.days ?? {} };
+	days[today] = activeExercises(s).map((e) => ({
+		name: String(e.name),
+		target: Number(e.target) || 0,
+		done: Number(e.doneToday) || 0
+	}));
+	const keep = Object.keys(days).sort().slice(-60);
+	return { days: Object.fromEntries(keep.map((d) => [d, days[d]])) };
+}
+/**
+* Auto-progression (like Sporty): an exercise done in full at its current
+* target on the last 3 recorded days goes up 5% (at least +1).
+*/
+function progression(log, st, needed = 3, pct = 5) {
+	const recent = Object.keys(log.days ?? {}).sort().slice(-needed);
+	if (recent.length < needed) return [];
+	const out = [];
+	for (const e of activeExercises(st)) {
+		const cur = Number(e.target) || 0;
+		if (!cur) continue;
+		if (recent.every((d) => {
+			const r = log.days[d].find((x) => x.name.toLowerCase() === String(e.name).toLowerCase());
+			return r && r.target >= cur && r.done >= r.target;
+		})) out.push({
+			name: String(e.name),
+			from: cur,
+			to: cur + Math.max(1, Math.ceil(cur * pct / 100))
+		});
+	}
+	return out;
+}
+/** Exercise plan changes from Ben: set a target, add an exercise, remove one. */
+function setExercise(st, today, name, target, unit = "reps") {
+	const s = sportForDay(st, today);
+	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key || String(x.id).toLowerCase().replace(/[^a-z0-9]/g, "").includes(key));
+	if (e) {
+		const from = Number(e.target) || 0;
+		if (target && target > 0) e.target = Math.round(target);
+		e.active = true;
+		return {
+			st: s,
+			line: `🏋️ ${e.name}: target ${from} → ${e.target} ${e.unit || unit}`
+		};
+	}
+	if (!(target && target > 0)) return {
+		st: s,
+		line: ""
+	};
+	s.exercises.push({
+		id: `ex_${key || Date.now()}`,
+		name: name.slice(0, 30),
+		target: Math.round(target),
+		unit,
+		active: true,
+		doneToday: 0
+	});
+	return {
+		st: s,
+		line: `🏋️ New exercise: ${name} · ${Math.round(target)} ${unit} a day`
+	};
+}
+function removeExercise(st, today, name) {
+	const s = sportForDay(st, today);
+	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key);
+	if (!e) return {
+		st: s,
+		line: ""
+	};
+	e.active = false;
+	return {
+		st: s,
+		line: `🏋️ ${e.name} off the daily list`
 	};
 }
 // src/renderer/src/web/webBots.ts
@@ -11506,20 +11776,33 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		return { reply: goalsText(st.goals) };
 	}
 	function run(s, text, key = "") {
+		const cmd = /^\/(water|workout|w|gym)(?:@\w+)?$/i.exec(text.trim());
+		if (cmd) {
+			const day = sportToday();
+			const st = sportState(s.db) ?? defaultSport(day);
+			if (!sportState(s.db)) setSetting(s.db, "sport_tracker_json", JSON.stringify({
+				savedAt: Date.now(),
+				data: st
+			}));
+			const c = /^water$/i.test(cmd[1]) ? waterCard(st, day) : workoutCard(st, day);
+			return {
+				reply: c.text,
+				keyboard: c.keyboard
+			};
+		}
 		const ml = text.startsWith("/") ? null : parseWater(text);
 		if (ml) {
-			const st = sportState(s.db);
-			if (st) {
-				const day = sportToday();
-				const next = addWater(st, ml, day);
-				setSetting(s.db, "sport_tracker_json", JSON.stringify({
-					savedAt: Date.now(),
-					data: next
-				}));
-				const v = sharedView(next, day);
-				const pct = Math.round(v.water.ml / Math.max(1, v.water.target) * 100);
-				return { reply: `💧 <b>${ml > 0 ? "+" : ""}${ml} ml</b> · ${v.water.ml} of ${v.water.target} ml today (${pct}%)${pct >= 100 ? "\n🎯 Water goal done!" : ""}` };
-			}
+			const day = sportToday();
+			const next = addWater(sportState(s.db) ?? defaultSport(day), ml, day);
+			setSetting(s.db, "sport_tracker_json", JSON.stringify({
+				savedAt: Date.now(),
+				data: next
+			}));
+			const c = waterCard(next, day);
+			return {
+				reply: `💧 <b>${ml > 0 ? "+" : ""}${ml} ml</b> logged.\n\n${c.text}`,
+				keyboard: c.keyboard
+			};
 		}
 		const viaFocus = runFocus(s, text);
 		if (viaFocus) return viaFocus;
@@ -11721,7 +12004,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -11737,6 +12020,79 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			parse_mode: "HTML",
 			...keyboard ? { reply_markup: keyboard } : {}
 		}).catch(() => null);
+		if (data.startsWith("wa|") || data.startsWith("wk|")) {
+			if (!await markSeen(key)) return null;
+			const show = data === "wa|show" || data === "wk|show";
+			const r = await mirror.write((db) => {
+				const svc = services.services(db);
+				const day = sportToday();
+				let st = sportState(db) ?? defaultSport(day);
+				const save = (x) => setSetting(db, "sport_tracker_json", JSON.stringify({
+					savedAt: Date.now(),
+					data: x
+				}));
+				if (data.startsWith("wa|")) {
+					if (!show) {
+						st = addWater(st, Number(data.slice(3)) || 0, day);
+						save(st);
+					}
+					return {
+						...waterCard(st, day),
+						toast: show ? "" : `${Number(data.slice(3)) > 0 ? "+" : ""}${data.slice(3)} ml`
+					};
+				}
+				let extra = "";
+				let toast = "";
+				if (!show) {
+					const was = allDone(sportForDay(st, day));
+					st = applyWorkoutTap(st, day, data.slice(3));
+					save(st);
+					toast = "Logged";
+					if (!was && allDone(st)) {
+						const list = activeExercises(st);
+						try {
+							svc.body.logWorkout({
+								title: `Daily workout: ${list.map((e) => `${e.doneToday} ${e.name}`).join(", ")}`,
+								items: list.map((e) => ({
+									exerciseId: String(e.id ?? e.name),
+									name: String(e.name),
+									amount: Number(e.doneToday) || 0,
+									unit: e.unit === "sec" ? "minutes" : "reps"
+								})),
+								note: "Logged with Ben"
+							});
+						} catch {}
+						let log = { days: {} };
+						try {
+							log = JSON.parse(getSetting(db, "ben_workouts") || "{\"days\":{}}");
+						} catch {
+							log = { days: {} };
+						}
+						log = recordWorkoutDay(log, st, day);
+						setSetting(db, "ben_workouts", JSON.stringify(log));
+						const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st);
+						for (const u of ups) st = setExercise(st, day, u.name, u.to).st;
+						if (ups.length) save(st);
+						const body = svc.body.state();
+						extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? "" : "s"} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `📈 ${u.name}: ${u.from} → ${u.to} (3 full days in a row)`)].join("\n");
+						toast = "Workout done! 🔥";
+					}
+				}
+				return {
+					...workoutCard(st, day, extra),
+					toast
+				};
+			});
+			await answer(r.toast || "OK");
+			if (show) await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: r.text,
+				parse_mode: "HTML",
+				reply_markup: r.keyboard
+			}).catch(() => null);
+			else await edit(r.text, r.keyboard);
+			return r.text;
+		}
 		if (data.startsWith("cs|") || data.startsWith("gb|") || data === "rb|p") {
 			if (!await markSeen(key)) return null;
 			await answer(data.startsWith("cs|") ? "…" : "On it");
@@ -12535,11 +12891,25 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					expense = true;
 					continue;
 				}
+				if (a.kind === "exercise" || a.kind === "noexercise") {
+					const line = await mirror.write((db) => {
+						const day = sportToday();
+						const st = sportState(db) ?? defaultSport(day);
+						const r = a.kind === "exercise" ? setExercise(st, day, a.name, a.target, a.unit) : removeExercise(st, day, a.name);
+						if (!r.line) return a.kind === "exercise" ? `⚠️ Give "${a.name}" a daily target` : `⚠️ No exercise "${a.name}" on your list`;
+						setSetting(db, "sport_tracker_json", JSON.stringify({
+							savedAt: Date.now(),
+							data: r.st
+						}));
+						return r.line;
+					});
+					done.push(line);
+					continue;
+				}
 				if (a.kind === "water" || a.kind === "reps") {
 					const line = await mirror.write((db) => {
-						const st = sportState(db);
-						if (!st) return a.kind === "water" ? "⚠️ Open Sport Track once so water has a place to go" : "⚠️ Open Sport Track once to set up your reps checklist";
 						const day = sportToday();
+						const st = sportState(db) ?? defaultSport(day);
 						const save = (next) => setSetting(db, "sport_tracker_json", JSON.stringify({
 							savedAt: Date.now(),
 							data: next
@@ -14507,6 +14877,25 @@ async function rhythmTick(env, now, send) {
 			}
 		};
 	});
+	const slot = f.state.briefing?.status === "approved" ? f.state.briefing.plan.training : null;
+	if (f.prefs.on && slot && !f.facts.workoutDone && !f.state.slotSent && f.facts.time >= slot.time && f.facts.time < addMinutesHM(slot.time, 40)) {
+		await mirror.write((db) => {
+			const cur = rhythmFor(JSON.parse(getSetting(db, "coach_rhythm") || "null"), f.facts.today);
+			setSetting(db, RHYTHM, JSON.stringify({
+				...cur,
+				slotSent: true
+			}));
+		});
+		const day = sportToday(now);
+		const card = workoutCard(await mirror.read((db) => {
+			try {
+				return JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+			} catch {
+				return null;
+			}
+		}) ?? defaultSport(day), day);
+		await send(`💪 <b>Training time</b> (${escapeHtml(slot.what)}). Let's go.\n\n${card.text}`, card.keyboard);
+	}
 	const jobs = dueRhythm(f.state, f.prefs, f.facts);
 	for (const job of jobs) if (job === "briefing") {
 		const { plan, version } = await bots.rhythm.propose();
@@ -14520,11 +14909,17 @@ async function rhythmTick(env, now, send) {
 			text: "⏸ Pause today",
 			callback_data: "np|"
 		}]] });
-	} else if (job === "training") await send(await bots.rhythm.trainingLine());
+	} else if (job === "training") await send(await bots.rhythm.trainingLine(), { inline_keyboard: [[{
+		text: "🏋️ Start workout",
+		callback_data: "wk|show"
+	}, {
+		text: "😴 30 min",
+		callback_data: "ns|"
+	}]] });
 	else if (job === "weekly") {
 		await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);
 		const letter = await bots.rhythm.letter().catch(() => null);
-		if (letter) await send(`💌 <b>A letter from Mega</b>\n\n${escapeHtml(letter)}`);
+		if (letter) await send(`💌 <b>A letter from Ben</b>\n\n${escapeHtml(letter)}`);
 	} else if (job === "evening") {
 		await payTodoistDone(env, { since: localMidnight(0) }).catch(() => null);
 		const r = await bots.rhythm.evening();
@@ -14561,6 +14956,10 @@ async function coachRhythm(env, op) {
 	if (op.action === "letter") return { letter: await bots.rhythm.letter() };
 	return bots.rhythm.state();
 }
+var addMinutesHM = (hm, m) => {
+	const t = Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)) + m;
+	return `${String(Math.min(23, Math.floor(t / 60))).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+};
 var localIsoHM = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;

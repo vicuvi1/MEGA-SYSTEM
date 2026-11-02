@@ -98,13 +98,13 @@ export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts
   return out
 }
 
-/** Water well behind the day's pace (08:00→21:00), at most 3 nudges, 2.5 h apart, 11:00–20:30. */
+/** Water well behind the day's pace (08:00→21:00), at most 5 nudges, 1h50 apart, 11:00–20:30. */
 export function waterBehind(state: RhythmState, f: RhythmFacts): boolean {
   const t = toMin(f.time)
   if (t < toMin('11:00') || t > toMin('20:30') || f.waterTarget <= 0) return false
-  if (state.water.length >= 3) return false
+  if (state.water.length >= 5) return false
   const last = state.water[state.water.length - 1]
-  if (last && t - toMin(last) < 150) return false
+  if (last && t - toMin(last) < 110) return false
   const pace = Math.min(1, Math.max(0, (t - toMin('08:00')) / (toMin('21:00') - toMin('08:00'))))
   return f.waterMl < f.waterTarget * pace - f.waterTarget * 0.25
 }
