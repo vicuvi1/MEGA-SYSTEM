@@ -13,6 +13,7 @@ import { ProgressCard } from './Progress'
 import { FunCard } from '../FunCard'
 import { DayTimeline } from '../DayTimeline'
 import { CoachPlan } from '../CoachPlan'
+import { TodayHero } from '../TodayHero'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -61,6 +62,22 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   }
 
   const [ui] = useUiPrefs()
+  // "More" stays as you left it (on this device).
+  const [moreOpen, setMoreOpenState] = useState(() => {
+    try {
+      return localStorage.getItem('ls.todayMore') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setMoreOpen = (v: boolean) => {
+    setMoreOpenState(v)
+    try {
+      localStorage.setItem('ls.todayMore', v ? '1' : '0')
+    } catch {
+      /* private window */
+    }
+  }
   // Your sections, in your order (Settings → Today screen).
   const sections: Record<TodaySectionId, () => ReactNode> = {
     reps: () => (
@@ -144,21 +161,39 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       )
   }
 
-  // One command screen: the day itself on the left, context on the right.
+  // One clean screen: Ben and the one move on top, the day below, extras folded.
   const on = todayLayout(ui).filter((x) => x.on)
-  const MAIN: TodaySectionId[] = ['day', 'quicklog']
+  const MAIN: TodaySectionId[] = ['day']
+  const SIDE: TodaySectionId[] = ['timeline', 'reps']
+  const FOLDED = on.filter((x) => !MAIN.includes(x.id) && !SIDE.includes(x.id))
   return (
-    <div className="today cmd">
-      <div className="cmd-main">
-        {on.filter((x) => MAIN.includes(x.id)).map((x) => (
-          <Fragment key={x.id}>{sections[x.id]()}</Fragment>
-        ))}
+    <div className="today td2">
+      <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
+      <div className="cmd">
+        <div className="cmd-main">
+          {on.filter((x) => MAIN.includes(x.id)).map((x) => (
+            <Fragment key={x.id}>{sections[x.id]()}</Fragment>
+          ))}
+        </div>
+        <aside className="cmd-side">
+          {on.filter((x) => SIDE.includes(x.id)).map((x) => (
+            <Fragment key={x.id}>{sections[x.id]()}</Fragment>
+          ))}
+        </aside>
       </div>
-      <aside className="cmd-side">
-        {on.filter((x) => !MAIN.includes(x.id)).map((x) => (
-          <Fragment key={x.id}>{sections[x.id]()}</Fragment>
-        ))}
-      </aside>
+      {FOLDED.length > 0 && (
+        <details className="td-more" open={moreOpen} onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
+          <summary>
+            <span>More</span>
+            <small>{FOLDED.map((x) => ({ progress: 'week score', fun: 'fun time', quicklog: 'quick log', day: '', timeline: '', reps: '' })[x.id]).filter(Boolean).join(' · ')}</small>
+          </summary>
+          <div className="td-more-body">
+            {FOLDED.map((x) => (
+              <Fragment key={x.id}>{sections[x.id]()}</Fragment>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   )
 }
