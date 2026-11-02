@@ -418,6 +418,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                         </ul>
                       )}
                       {!m.pending && (!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === (log?.length ?? 0) - 1} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
+                      {!m.pending && m.role === 'coach' && life.coach?.feedback && <Feedback m={m} />}
                       {!m.pending && (
                         <span className="cx-time">
                           {m.via === 'app' ? '' : 'Telegram · '}
@@ -873,5 +874,31 @@ function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: { m: En
         </div>
       )}
     </div>
+  )
+}
+
+/** 👍 👎 📏 ❌ under Ben's replies: he learns what you like. */
+function Feedback({ m }: { m: Entry }) {
+  const [sent, setSent] = useState<string | null>(null)
+  const give = async (kind: 'up' | 'down' | 'long' | 'wrong') => {
+    setSent(kind)
+    await life.coach?.feedback?.(m.at, kind).catch(() => setSent(null))
+  }
+  if (sent) return <span className="cx-fb done">{sent === 'up' ? '👍 thanks' : sent === 'long' ? '📏 noted: shorter' : sent === 'wrong' ? '❌ noted: tell me what' : '👎 noted'}</span>
+  return (
+    <span className="cx-fb" aria-label="Rate this reply">
+      <button onClick={() => void give('up')} title="Good reply">
+        👍
+      </button>
+      <button onClick={() => void give('down')} title="Not helpful">
+        👎
+      </button>
+      <button onClick={() => void give('long')} title="Too long">
+        📏
+      </button>
+      <button onClick={() => void give('wrong')} title="Wrong">
+        ❌
+      </button>
+    </span>
   )
 }

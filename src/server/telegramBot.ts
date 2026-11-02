@@ -498,6 +498,14 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     const card = workoutCard(st ?? defaultSport(day), day)
     await send(`💪 <b>Training time</b> (${escapeHtml(slot.what)}). Let's go.\n\n${card.text}`, card.keyboard)
   }
+  // 23:15: Ben reviews his own day (silent) and writes notes for tomorrow.
+  if (f.prefs.on && f.facts.time >= '23:15' && !(f.state as any).selfReviewed) {
+    await mirror.write((db) => {
+      const cur = rhythmFor(JSON.parse(getSetting(db as any, RHYTHM) || 'null'), f.facts.today)
+      setSetting(db as any, RHYTHM, JSON.stringify({ ...cur, selfReviewed: true }))
+    })
+    await bots.rhythm.selfReview().catch(() => null)
+  }
   const jobs = dueRhythm(f.state, f.prefs, f.facts)
   for (const job of jobs) {
     if (job === 'briefing') {

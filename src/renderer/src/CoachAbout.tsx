@@ -36,6 +36,21 @@ export function CoachAbout() {
   }
   return (
     <>
+      <StylePanel />
+      {v.selfReview && (
+        <section className="panel">
+          <header className="panel-head">
+            <h2>🧠 Ben's notes to himself</h2>
+          </header>
+          <small className="ab-when">From his review of {short(`${v.selfReview.day}T12:00:00`)}</small>
+          <ul className="ab-list">
+            {v.selfReview.notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+          <p className="hint small">Every night at 23:15 Ben reads his own day (what helped, what you ignored, your 👍/👎) and changes how he coaches you tomorrow.</p>
+        </section>
+      )}
       <section className="panel ab-letter">
         <header className="panel-head">
           <h2>💌 Letter from Ben</h2>
@@ -103,5 +118,43 @@ export function CoachAbout() {
         </section>
       )}
     </>
+  )
+}
+
+const TONE_LABEL = ['', 'Gentle', 'Warm', 'Tough love', 'Hard', 'Drill sergeant']
+/** How Ben talks: length and tone (he also changes it when you tell him "be shorter"). */
+function StylePanel() {
+  const act = useAction()
+  const [st, setSt] = useState<{ length: 'short' | 'normal' | 'detailed'; tone: number } | null>(null)
+  useEffect(() => {
+    life.coach?.style?.().then(setSt).catch(() => {})
+  }, [])
+  if (!st || !life.coach?.setStyle) return null
+  const save = async (p: Partial<typeof st>) => {
+    setSt({ ...st, ...p })
+    await act(() => life.coach!.setStyle!(p))
+  }
+  return (
+    <section className="panel ab-style">
+      <header className="panel-head">
+        <h2>🎚 How Ben talks</h2>
+      </header>
+      <small className="ab-when">Length</small>
+      <div className="isl-seg ab-seg">
+        {(['short', 'normal', 'detailed'] as const).map((l) => (
+          <button key={l} className={st.length === l ? 'on' : ''} onClick={() => void save({ length: l })}>
+            {l === 'short' ? 'Short' : l === 'normal' ? 'Normal' : 'Detailed'}
+          </button>
+        ))}
+      </div>
+      <small className="ab-when">
+        Tone: <b>{TONE_LABEL[st.tone]}</b>
+      </small>
+      <input className="ab-tone" type="range" min={1} max={5} step={1} value={st.tone} onChange={(e) => void save({ tone: Number(e.target.value) })} aria-label="Tone" />
+      <div className="ab-tone-ends">
+        <span>😊 Gentle</span>
+        <span>😡 Drill sergeant</span>
+      </div>
+    </section>
   )
 }

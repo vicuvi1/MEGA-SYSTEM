@@ -6,7 +6,7 @@ import { findPatterns, type CoachMind } from '@core/coachMind'
 import { addDays } from '@core/dates'
 import { financeSpending } from '@core/progress'
 import { getSetting } from '../../../main/settings'
-import { financeStateFrom, loadLetters, loadMind, type Letter } from './botBrain'
+import { financeStateFrom, loadLetters, loadMind, loadSelfReview, type Letter } from './botBrain'
 import type { Services } from './webServices'
 
 export interface ProfileView {
@@ -16,6 +16,8 @@ export interface ProfileView {
   promises: { text: string; at: string; state: 'kept' | 'broken' | 'ignored' | 'answered' | 'open' }[]
   wins: { day: string; text: string }[]
   letters: Letter[]
+  /** Ben's notes to himself from his last nightly self-review. */
+  selfReview: { day: string; notes: string[] } | null
 }
 
 export function profileView(s: Services, now = new Date()): ProfileView {
@@ -61,5 +63,5 @@ export function profileView(s: Services, now = new Date()): ProfileView {
   for (const f of input.focus) if (f.day >= addDays(today, -30)) byDay.set(f.day, (byDay.get(f.day) ?? 0) + f.minutes)
   const best = [...byDay].sort((a, b) => b[1] - a[1])[0]
   if (best && best[1] >= 60) wins.unshift({ day: best[0], text: `Best focus day this month: ${Math.floor(best[1] / 60)}h ${best[1] % 60}m` })
-  return { mind: loadMind(db), dataPatterns, promises, wins: wins.slice(0, 5), letters: loadLetters(db) }
+  return { mind: loadMind(db), dataPatterns, promises, wins: wins.slice(0, 5), letters: loadLetters(db), selfReview: loadSelfReview(db) }
 }

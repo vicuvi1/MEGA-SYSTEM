@@ -31,7 +31,7 @@ import { MirrorError, type Mirror } from './mirror'
 import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
-import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
@@ -652,7 +652,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -732,6 +732,21 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const said = data.slice(3)
       await tg(update.__token, 'sendMessage', { chat_id: chat, text: `💬 <i>${esc(said)}</i>`, parse_mode: 'HTML' }).catch(() => null)
       return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:say`)
+    }
+    // 👍 / 👎 / too long / wrong on a reply: saved, and Ben adjusts.
+    if (data.startsWith('fb|')) {
+      if (!(await markSeen(key))) return null
+      const [, ms, kind] = data.split('|')
+      const at = new Date(Number(ms)).toISOString()
+      await mirror.write((db) => {
+        const e = loadLog(db).find((x) => x.role === 'coach' && x.at === at)
+        addFeedback(db, { at, kind: (['up', 'down', 'long', 'wrong'].includes(kind) ? kind : 'down') as Feedback['kind'], text: e?.text ?? String(cq.message?.text ?? '').slice(0, 300) })
+      })
+      await answer(kind === 'up' ? '👍 Noted' : kind === 'long' ? 'Got it: shorter' : kind === 'wrong' ? 'Got it: tell me what was wrong' : 'Noted: I will do better')
+      // Keep the other buttons, drop the feedback row (it's been answered).
+      const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row: any[]) => !row.some((b) => String(b.callback_data ?? '').startsWith('fb|')))
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: kb } }).catch(() => null)
+      return null
     }
     // ↩ Undo under a coach reply: take back what it did.
     if (data.startsWith('cu|')) {
@@ -1118,7 +1133,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
       })
       .catch(() => null)
-    const { context, memory, profile, look, mind, money, promises, feel } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind, money, promises, feel, talk } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       let sessions: LookupData['sessions'] = []
@@ -1135,6 +1150,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           const inp = svc.progress.input(null)
           const today = svc.wallet.today()
           return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))
+        })(),
+        talk: (() => {
+          const sr = loadSelfReview(db)
+          return {
+            style: styleText(loadStyle(db)),
+            feedback: feedbackText(loadFeedback(db)),
+            selfReview: sr && sr.day >= addDays(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join('\n') : ''
+          }
         })(),
         feel: (() => {
           // How the coach feels about the day, from the data (its face in the chat).
@@ -1188,7 +1211,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
     const ask = (found?: string, extraNote = '') =>
-      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${feel.mood} ${MOOD_FACE[feel.mood]} because: ${feel.why}. (Your own call can differ if his message changes things.)` }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${feel.mood} ${MOOD_FACE[feel.mood]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, feedback: talk.feedback, selfReview: talk.selfReview }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1415,6 +1438,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           })
           done.push(line)
           expense = true
+          continue
+        }
+        if (a.kind === 'style') {
+          const st = await mirror.write((db) => saveStyle(db, { ...(a.length ? { length: a.length } : {}), ...(a.tone ? { tone: a.tone } : {}) }))
+          done.push(`🎚 Style: ${st.length}, tone ${st.tone}/5`)
           continue
         }
         if (a.kind === 'exercise' || a.kind === 'noexercise') {
@@ -1703,7 +1731,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join('\n')}` : ''].join('\n').trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`
     addLog(text || `[${media?.kind}]`, chat, r.ok, reply)
     // Buttons the coach attached (one tap instead of typing), then ↩ Undo.
-    const rows = [...(telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? []), ...(r.at && r.undo?.some(Boolean) ? [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] : [])]
+    const rows = [
+      ...(telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? []),
+      ...(r.at && r.undo?.some(Boolean) ? [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] : []),
+      // Feedback: Ben learns what you like.
+      ...(r.ok && r.at ? [[{ text: '👍', callback_data: `fb|${Date.parse(r.at)}|up` }, { text: '👎', callback_data: `fb|${Date.parse(r.at)}|down` }, { text: '📏 Too long', callback_data: `fb|${Date.parse(r.at)}|long` }, { text: '❌ Wrong', callback_data: `fb|${Date.parse(r.at)}|wrong` }]] : [])
+    ]
     const markup = r.keyboard ?? (rows.length ? { inline_keyboard: rows } : null)
     const widgets = r.ok && r.show?.length ? await widgetText(r.show).catch(() => '') : ''
     const full = widgets ? `${reply}\n\n${widgets}` : reply

@@ -28,7 +28,7 @@ import { financeSpending } from '@core/progress'
 const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', 'life-focus-changed', 'life-week-changed', 'life-sport-changed', 'life-data-changed']
 import type { CleanChange } from '@core/todoistClean'
 import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
-import { loadLog, loadMemory, loadMind, loadProfile, saveMemory, saveMind, saveProfile } from './web/botBrain'
+import { addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
 import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
@@ -472,6 +472,15 @@ export function createTursoWebBridge(): Bridge {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
       },
       mind: async () => (await svcP).read((s) => loadMind(s.db)),
+      // 👍 / 👎 / too long / wrong on one of Ben's replies (saved here; Ben reads it).
+      feedback: async (at: string, kind: 'up' | 'down' | 'long' | 'wrong') =>
+        (await svcP).write((s) => {
+          const e = loadLog(s.db).find((x) => x.role === 'coach' && x.at === at)
+          addFeedback(s.db, { at, kind, text: e?.text ?? '' })
+        }),
+      // How Ben writes: length and tone.
+      style: async () => (await svcP).read((s) => loadStyle(s.db)),
+      setStyle: async (st: Partial<CoachStyle>) => (await svcP).write((s) => saveStyle(s.db, st)),
       // "What I know about you" (read here, instant).
       profileView: async () => (await svcP).read((s) => profileView(s as any)),
       // ↩ Undo what the coach did in one reply (all of it, or one line).

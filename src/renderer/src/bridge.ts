@@ -42,6 +42,9 @@ export type Bridge = LifeApi & {
     mind?(): Promise<CoachMind>
     rhythm?(action?: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter', note?: string, prefs?: Partial<RhythmPrefs>): Promise<{ state: RhythmState; prefs: RhythmPrefs; done?: string[]; ok?: boolean; lines?: string[]; letter?: string | null }>
     profileView?(): Promise<ProfileView>
+    feedback?(at: string, kind: 'up' | 'down' | 'long' | 'wrong'): Promise<void>
+    style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>
+    setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>
     status?(): Promise<CoachStatus>
     scorecard?(): Promise<{ rows: WeekRow[]; verdict: 'working' | 'mixed' | 'not yet' | 'too early'; lines: string[] }>
     setMind?(m: CoachMind): Promise<void>

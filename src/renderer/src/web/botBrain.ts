@@ -279,6 +279,7 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     if (extra.events.some((e) => localDay(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`)
     if (extra.events.some((e) => localDay(e.start) > tomorrow)) lines.push(weekAhead(extra.events, today))
   }
+  lines.push(...nowContext(s, db, extra.events ?? null, extra.finance, now))
   if (extra.todoToday) {
     const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? ' (late)' : ''}${t.priority >= 3 ? ` P${5 - t.priority}` : ''}${t.section ? ` [${t.section}]` : ''}`)
     lines.push(`Todoist today/late (${extra.todoToday.length}): ${list.join('; ') || 'nothing'}.`)
@@ -288,6 +289,141 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     if (r.length) lines.push(`Deadlines soon: ${r.map((x) => `${x.task.content} ${whenText(x.daysLeft, x.date)}`).join('; ')}.`)
   }
   return lines.filter(Boolean).join('\n')
+}
+
+const hmOf = (d: Date) => d.toTimeString().slice(0, 5)
+
+/**
+ * Ben's "right now": where he is in his calendar, what he did in the last
+ * hours (logs, focus, his own messages today) and when each kind of data was
+ * last updated, so Ben explains from the data instead of guessing.
+ */
+export function nowContext(s: Services, db: any, events: CalEvent[] | null, finance: any, now = new Date()): string[] {
+  const out: string[] = []
+  const t = now.getTime()
+  const today = s.wallet.today(now)
+  if (events) {
+    const timed = events.filter((e) => !e.allDay)
+    const cur = timed.find((e) => Date.parse(e.start) <= t && Date.parse(e.end) > t)
+    const next = timed.filter((e) => Date.parse(e.start) > t).sort((a, b) => a.start.localeCompare(b.start))[0]
+    out.push(
+      `RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : 'nothing in his calendar'}${next ? `; next: "${next.title}" at ${hmOf(new Date(next.start))} (in ${Math.round((Date.parse(next.start) - t) / 60000)} min)` : '; nothing else today'}.`
+    )
+  } else out.push(`RIGHT NOW (${hmOf(now)}): his calendar is not connected, so you don't know where he is; ask if it matters.`)
+  const items: { at: number; text: string }[] = []
+  try {
+    for (const e of s.wallet.entries() as any[]) {
+      if (e.day !== today || e.kind === 'undo') continue
+      const at = Date.parse(e.ts)
+      if (Number.isFinite(at)) items.push({ at, text: `${e.note || e.ruleId || e.kind}${e.coins ? ` (${e.coins > 0 ? '+' : ''}${e.coins} pts)` : ''}` })
+    }
+  } catch {
+    /* no ledger */
+  }
+  const f = s.focus.state(now)
+  for (const x of f.todaySessions) {
+    const end = Date.parse(x.endedAt ?? '')
+    if (Number.isFinite(end)) items.push({ at: end, text: `focus ${x.minutes} min on ${x.subject}` })
+  }
+  if (f.running) items.push({ at: Date.parse(f.running.startedAt), text: `STARTED focus on ${f.running.subject} (${f.running.planned} min, still running)` })
+  for (const e of loadLog(db)) {
+    if (e.role !== 'me' || !e.at.startsWith(today)) continue
+    items.push({ at: Date.parse(e.at), text: `he wrote${e.via === 'app' ? ' (app)' : ''}: "${e.text.replace(/\s+/g, ' ').slice(0, 90)}"` })
+  }
+  items.sort((a, b) => a.at - b.at)
+  if (items.length) out.push(`HIS DAY SO FAR (with times, newest last):\n${items.slice(-16).map((x) => `- ${hmOf(new Date(x.at))} ${x.text}`).join('\n')}`)
+  else out.push('HIS DAY SO FAR: nothing logged and no messages yet today.')
+  // Where each number comes from and how fresh it is.
+  const fresh: string[] = []
+  try {
+    const saved = JSON.parse(getSetting(db, 'sport_tracker_json') || 'null')
+    if (saved?.savedAt) fresh.push(`water/reps last changed ${new Date(saved.savedAt).toDateString() === now.toDateString() ? hmOf(new Date(saved.savedAt)) : new Date(saved.savedAt).toISOString().slice(0, 10)}`)
+    else fresh.push('water/reps: nothing logged yet')
+  } catch {
+    /* none */
+  }
+  try {
+    const logs = s.sleep.logs()
+    const last = logs.sort((a, b) => (a.day < b.day ? 1 : -1))[0]
+    if (last) fresh.push(`last sleep log ${last.day}`)
+  } catch {
+    /* none */
+  }
+  const tx = Array.isArray(finance?.tx) ? finance.tx.filter((x: any) => x && !x.deleted).sort((a: any, b: any) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))[0] : null
+  if (tx?.createdAt) fresh.push(`last money record ${new Date(tx.createdAt).toISOString().slice(0, 16).replace('T', ' ')} UTC`)
+  out.push(
+    `DATA SOURCES: ${fresh.join('; ')}. Water and reps are only what was logged with you (Ben), the app or Sport Track. Sporty (his old workout bot) keeps its OWN separate log you cannot see: if he logged something there, tell him plainly and offer to log it here. Never blame "sync" vaguely; say exactly where the number comes from.`
+  )
+  return out
+}
+
+/** How Ben writes: length and tone, set by Victor (Coach → About you, or "be shorter"). */
+export interface CoachStyle {
+  length: 'short' | 'normal' | 'detailed'
+  /** 1 = gentle friend … 5 = drill sergeant. */
+  tone: number
+}
+export const COACH_STYLE = 'coach_style'
+export const DEFAULT_STYLE: CoachStyle = { length: 'short', tone: 4 }
+export function loadStyle(db: any): CoachStyle {
+  try {
+    const j = JSON.parse(getSetting(db, COACH_STYLE) || 'null')
+    return { length: ['short', 'normal', 'detailed'].includes(j?.length) ? j.length : DEFAULT_STYLE.length, tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone))) }
+  } catch {
+    return DEFAULT_STYLE
+  }
+}
+export function saveStyle(db: any, st: Partial<CoachStyle>): CoachStyle {
+  const next = { ...loadStyle(db), ...st }
+  const clean = { length: ['short', 'normal', 'detailed'].includes(next.length) ? next.length : 'short', tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4))) } as CoachStyle
+  setSetting(db, COACH_STYLE, JSON.stringify(clean))
+  return clean
+}
+const TONES = ['', 'gentle and encouraging, no anger', 'warm friend, honest, light push', 'friend with tough love (angry only when clearly earned)', 'tough love, direct, calls out excuses, angry when he slips', 'drill sergeant: blunt, demanding, zero excuses (still on his side, never insulting)']
+export function styleText(st: CoachStyle): string {
+  const len = st.length === 'short' ? 'SHORT: 2–4 short lines.' : st.length === 'normal' ? 'NORMAL length: up to 6–8 lines when useful.' : 'DETAILED when he asks for depth: clear sections, still no fluff.'
+  return `His chosen style: ${len} Tone ${st.tone}/5: ${TONES[st.tone]}.`
+}
+
+/** Victor's 👍 / 👎 / "too long" / "wrong" on Ben's replies: Ben adjusts from them. */
+export interface Feedback {
+  at: string
+  kind: 'up' | 'down' | 'long' | 'wrong'
+  text: string
+}
+export const COACH_FEEDBACK = 'coach_feedback'
+export function loadFeedback(db: any): Feedback[] {
+  try {
+    const l = JSON.parse(getSetting(db, COACH_FEEDBACK) || '[]')
+    return Array.isArray(l) ? l : []
+  } catch {
+    return []
+  }
+}
+export function addFeedback(db: any, f: Feedback): void {
+  setSetting(db, COACH_FEEDBACK, JSON.stringify([...loadFeedback(db).filter((x) => x.at !== f.at), f].slice(-120)))
+}
+/** The last two weeks of feedback as prompt lines. */
+export function feedbackText(list: Feedback[], now = new Date()): string {
+  const recent = list.filter((f) => Date.parse(f.at) > now.getTime() - 14 * 86400000)
+  if (!recent.length) return ''
+  const n = (k: Feedback['kind']) => recent.filter((f) => f.kind === k).length
+  const bad = recent.filter((f) => f.kind !== 'up').slice(-4)
+  return [
+    `His feedback on your replies (14 days): 👍 ${n('up')}, 👎 ${n('down')}, too long ${n('long')}, wrong ${n('wrong')}. Adjust to it.`,
+    ...bad.map((f) => `- he marked "${f.kind === 'long' ? 'too long' : f.kind === 'wrong' ? 'wrong' : 'bad'}": "${f.text.replace(/\s+/g, ' ').slice(0, 120)}"`)
+  ].join('\n')
+}
+
+/** Ben's notes to himself from last night's self-review. */
+export const COACH_SELFREVIEW = 'coach_selfreview'
+export function loadSelfReview(db: any): { day: string; notes: string[] } | null {
+  try {
+    const j = JSON.parse(getSetting(db, COACH_SELFREVIEW) || 'null')
+    return j && Array.isArray(j.notes) ? j : null
+  } catch {
+    return null
+  }
 }
 
 /** The coach's long-term notes (goals it tracks, what works, patterns). */
@@ -382,6 +518,7 @@ Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
 - His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
+- "style: short|normal|detailed; tone=1-5" when he tells you how to talk ("be shorter", "go harder on me", "more detail"). 1 = gentle, 5 = drill sergeant.
 - He can see/tap his cards: button {"do": "workout"} shows today's workout checklist, {"do": "water"} the water card.
 Money records (use the M-numbers; this is how you FIX a wrong log):
 - "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
@@ -417,14 +554,15 @@ const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; feedback?: string; selfReview?: string } = {}): string {
   const chat = memory.chat.slice(-18).map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
+    'Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks "why"/"how come" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.',
     'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
     'Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits.',
-    'Style: a close friend who coaches, tough love, on his side. SHORT AND CLEAR: at most 3–4 short lines. Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).',
+    'Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see "How he wants you to write"; default short: 3–4 lines). Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).',
     '',
     ACTIONS,
     '',
@@ -437,6 +575,9 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     '',
     `Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"annoyed"|"angry"|"furious", "chips": string[], "buttons": {"label": string, "do": string}[], "show": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? '' : ', "need": string[]'}}.`,
     '',
+    extra.style ? `== How he wants you to write ==\n${extra.style}` : '',
+    extra.feedback ? `== ${extra.feedback}` : '',
+    extra.selfReview ? `== Your notes to yourself from last night ==\n${extra.selfReview}` : '',
     extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : '',
     '== Victor right now ==',
     context,
@@ -532,6 +673,7 @@ export type BrainAction =
   | { kind: 'book'; goal: string }
   | { kind: 'exercise'; name: string; target?: number; unit?: string }
   | { kind: 'noexercise'; name: string }
+  | { kind: 'style'; length?: 'short' | 'normal' | 'detailed'; tone?: number }
   | { kind: 'editmoney'; ref: string; amount?: number; category?: string; account?: string; note?: string; date?: string }
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
@@ -543,7 +685,7 @@ const MREF = /^M\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -597,6 +739,11 @@ export function readAction(line: string): BrainAction | null {
   if (kind === 'exercise' || kind === 'target') {
     const target = Math.round(Number(parts[1]))
     return parts[0] ? { kind: 'exercise', name: parts[0].slice(0, 30), ...(target > 0 && target <= 2000 ? { target } : {}), ...(parts[2] ? { unit: parts[2].slice(0, 10) } : {}) } : null
+  }
+  if (kind === 'style') {
+    const len = /\b(short|normal|detailed)\b/i.exec(arg)?.[1]?.toLowerCase() as 'short' | 'normal' | 'detailed' | undefined
+    const tone = Number(/tone\s*=?\s*([1-5])/i.exec(arg)?.[1])
+    return len || tone ? { kind: 'style', ...(len ? { length: len } : {}), ...(tone ? { tone } : {}) } : null
   }
   if (kind === 'noexercise') return parts[0] ? { kind: 'noexercise', name: parts[0].slice(0, 30) } : null
   if (kind === 'kept' || kind === 'broken') return /^P\d{1,2}$/i.test(parts[0]) ? { kind: 'promise', ref: parts[0].toUpperCase(), outcome: kind } : null

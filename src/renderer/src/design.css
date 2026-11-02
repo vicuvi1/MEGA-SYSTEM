@@ -1018,3 +1018,15 @@
 .isl-off { margin-top: 6px; justify-self: start; opacity: 0.7; }
 @media (max-width: 760px) { .isl { top: max(6px, env(safe-area-inset-top)); } .isl-subj { max-width: 110px; } .isl-checks { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .isl, .isl-body { transition: none; animation: none; } .isl.flash { animation: none; box-shadow: 0 0 0 3px #ff6b6b; } }
+
+/* Ben: feedback + style */
+.cx-fb { position: absolute; left: 10px; bottom: 3px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; }
+.co-msg:hover .cx-fb, .cx-fb.done { opacity: 1; }
+.cx-fb button { border: none; background: transparent; cursor: pointer; font-size: 12px; padding: 1px 3px; border-radius: 6px; filter: grayscale(0.6); }
+.cx-fb button:hover { background: rgb(var(--ink) / 0.1); filter: none; }
+.cx-fb.done { font-size: 10.5px; color: var(--muted); }
+@media (hover: none) { .cx-fb { opacity: 0.8; } }
+.ab-seg button { background: rgb(var(--ink) / 0.06); color: var(--text); }
+.ab-seg button.on { background: var(--accent); color: var(--lime-ink, #111); }
+.ab-tone { width: 100%; accent-color: var(--accent); }
+.ab-tone-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }

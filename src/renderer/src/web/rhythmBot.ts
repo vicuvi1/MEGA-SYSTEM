@@ -24,7 +24,8 @@ import {
   type RhythmState
 } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
-import { financeStateFrom, lifeContext, loadMind, loadProfile, saveLetter, sportState } from './botBrain'
+import { COACH_SELFREVIEW, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMind, loadProfile, saveLetter, saveMind, sportState } from './botBrain'
+import { applyMind } from '@core/coachMind'
 import { mindText, weekSoFar } from '@core/coachMind'
 import { COACH_HISTORY, bump, cleanHistory, impactVerdict, mondayOf, recordDay, scorecard, type CoachDay } from '@core/coachImpact'
 import { bookBlocks, isGoalBlock, planGoal, planLine, type GoalPlan } from '@core/goalPlan'
@@ -459,6 +460,53 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     }
   }
 
+  /**
+   * Ben's nightly self-review: he reads his own day (what he said, what Victor
+   * answered or ignored, the feedback, promises) and writes notes to himself
+   * for tomorrow, plus lessons for his long-term memory. Silent; shown in the
+   * app (Coach → About you) and used in tomorrow's answers.
+   */
+  async function selfReview(): Promise<string[] | null> {
+    if (!ai) return null
+    const data = await mirror.read((db) => {
+      const today = services.services(db).wallet.today()
+      const log = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-40)
+      const fb = loadFeedback(db).filter((f) => f.at.slice(0, 10) === today)
+      return {
+        today,
+        chat: log.map((e) => `${e.at.slice(11, 16)} ${e.role === 'me' ? 'Victor' : 'Ben'}${e.proactive ? ' (on his own)' : ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'),
+        feedback: fb.map((f) => `${f.kind}: "${f.text.slice(0, 100)}"`).join('\n')
+      }
+    })
+    if (!data.chat) return null
+    try {
+      const raw = await ai(
+        [
+          "You are BEN, Victor's coach, reviewing YOUR OWN coaching today, honestly. What helped him act? What did he ignore? Where were you too long, too generic, wrong, or too soft/hard? What should you do differently tomorrow?",
+          'Answer ONLY with JSON: {"notes": string[] (2–4 short concrete notes to yourself for tomorrow, e.g. "Ask about the lab report before 10:00, he ignored it after lunch"), "works": string (one thing that worked with him, or ""), "fails": string (one thing that did not, or "")}',
+          '',
+          `== Today (${data.today}) ==`,
+          data.chat,
+          data.feedback ? `\n== His feedback today ==\n${data.feedback}` : ''
+        ].join('\n'),
+        { json: true, think: true }
+      )
+      const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
+      const notes = (Array.isArray(j.notes) ? j.notes : []).map((x: any) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 4)
+      if (!notes.length) return null
+      await mirror.write((db) => {
+        setSetting(db as any, COACH_SELFREVIEW, JSON.stringify({ day: data.today, notes }))
+        let m = loadMind(db)
+        if (String(j.works ?? '').trim()) m = applyMind(m, { kind: 'works', text: String(j.works).trim().slice(0, 160) }, data.today).mind
+        if (String(j.fails ?? '').trim()) m = applyMind(m, { kind: 'fails', text: String(j.fails).trim().slice(0, 160) }, data.today).mind
+        saveMind(db, m)
+      })
+      return notes
+    } catch {
+      return null
+    }
+  }
+
   /** "Use this plan": next week's focus and big 3 (typed ones replace the suggestion). */
   async function applyWeekly(typed?: string): Promise<string> {
     return mirror.write((db) => {
@@ -500,7 +548,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, trainingLine, letter, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

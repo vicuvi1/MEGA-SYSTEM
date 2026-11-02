@@ -116,3 +116,19 @@ describe('money fixes', () => {
     expect(readAction('delmoney: T2')).toBeNull()
   })
 })
+
+describe('how Ben talks and learns', () => {
+  it('reads style requests and writes the style line', async () => {
+    const { styleText, feedbackText } = await import('./botBrain')
+    expect(readAction('style: short; tone=5')).toEqual({ kind: 'style', length: 'short', tone: 5 })
+    expect(readAction('style: detailed')).toEqual({ kind: 'style', length: 'detailed' })
+    expect(readAction('style: whatever')).toBeNull()
+    expect(styleText({ length: 'short', tone: 5 })).toContain('drill sergeant')
+    const now = new Date('2026-11-02T12:00:00Z')
+    const fb = feedbackText([{ at: '2026-11-01T10:00:00Z', kind: 'long', text: 'A very long answer about planning' }, { at: '2026-11-02T09:00:00Z', kind: 'up', text: 'ok' }, { at: '2026-09-01T09:00:00Z', kind: 'down', text: 'old' }], now)
+    expect(fb).toContain('👍 1, 👎 0, too long 1, wrong 0')
+    expect(fb).toContain('too long": "A very long answer')
+    expect(fb).not.toContain('old')
+    expect(feedbackText([], now)).toBe('')
+  })
+})
