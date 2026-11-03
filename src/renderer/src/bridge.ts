@@ -106,17 +106,46 @@ declare global {
   }
 }
 
-/** Real IPC bridge inside Electron; live Turso Cloud client when opened in web/mobile browser. */
-export const isDemo = !window.life
+// desktop = running inside Electron (preload exposes window.life).
+// Always false when opened as a normal web page.
+export const isDesktop = !!window.life
+export const isDemo = false
 
-/** What works where: the website has no AI key, Google Calendar, Cloudflare sync, log folder or installer updates. */
+/** What works where. */
 export const features = {
   ai: true,
-  /** AI keys are typed in only on the desktop; the website's key is in Vercel. */
   aiSettings: !!window.life,
   calendar: !!window.life,
   cloudflareSync: !!window.life,
   logFolder: !!window.life,
   updates: !!window.life
 }
-export const life: Bridge = window.life ?? createTursoWebBridge()
+
+// Always use Turso Cloud as the data source — same DB on web and desktop.
+// Electron IPC (window.life) is kept only for desktop extras: updates, tray, fullscreen events.
+const turso = createTursoWebBridge()
+const desktop = window.life
+function noOp() {}
+function noOpOff() { return noOp }
+
+export const life: Bridge = {
+  ...turso,
+  // Desktop-only services: use IPC when in Electron, graceful no-ops on web.
+  updates: desktop?.updates ?? {
+    status: async () => ({ current: '—', state: 'dev' as const, latest: null, progress: 0, error: null, checkedAt: null }),
+    check:  async () => ({ current: '—', state: 'dev' as const, latest: null, progress: 0, error: null, checkedAt: null }),
+    run:    async () => ({ current: '—', state: 'dev' as const, latest: null, progress: 0, error: null, checkedAt: null }),
+  },
+  app:  desktop?.app  ?? turso.app,
+  apps: desktop?.apps ?? turso.apps,
+  hud:  desktop?.hud  ?? { hide: async () => {}, toggle: async () => {}, show: async () => {} },
+  // IPC event subscriptions — desktop only, silent no-ops on web.
+  onLocked:            (cb) => desktop ? desktop.onLocked(cb)                            : noOp(),
+  onUrge:              (cb) => desktop ? desktop.onUrge(cb)                              : noOp(),
+  onWalletChanged:     (cb) => desktop ? desktop.onWalletChanged(cb)                     : noOp(),
+  onDisciplineChanged: (cb) => desktop ? (desktop.onDisciplineChanged?.(cb) ?? noOpOff()) : noOpOff(),
+  onNavigate:          (cb) => desktop ? desktop.onNavigate(cb)                          : noOp(),
+  onUpdate:            (cb) => desktop ? desktop.onUpdate(cb)                            : noOp(),
+  onUiKey:             (cb) => desktop ? (desktop.onUiKey?.(cb) ?? noOpOff())            : noOpOff(),
+  onFullScreen:        (cb) => desktop ? (desktop.onFullScreen?.(cb) ?? noOpOff())       : noOpOff(),
+}
