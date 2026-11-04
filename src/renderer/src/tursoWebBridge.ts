@@ -44,7 +44,7 @@ import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyReques
 
 const sportyViewOf = (db: any) => sportyView(parseJson<SportyStatus>(getSetting(db, SPORTY_STATUS)), parseJson<{ at: string }>(getSetting(db, 'sport_sync_seen')), parseJson<SportyRequest>(getSetting(db, SPORTY_REQUEST)), new Date())
 import { profileView } from './web/coachProfile'
-import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
+import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag } from './web/session'
 
 /**
  * A direct Turso connection, only for development and tests (set turso_url
@@ -169,6 +169,8 @@ export function createTursoWebBridge(): Bridge {
   const direct = getTursoConfig()
   const lockListeners = new Set<() => void>()
   let unlocked = false
+  // "Lock now" on a remembered device still locks until the PIN.
+  let lockedOnPurpose = false
   const lockNow = () => {
     unlocked = false
     lockListeners.forEach((cb) => cb())
@@ -855,7 +857,27 @@ export function createTursoWebBridge(): Bridge {
       return () => lockListeners.delete(cb)
     },
     auth: {
-      status: async () => ({ pinSet: true, locked: !unlocked }),
+      status: async () => {
+        // A remembered device opens by itself (unless you locked it on purpose).
+        if (!unlocked && !lockedOnPurpose && remembered() && (direct || sessionValid(currentSession()) || window.desktop)) {
+          unlocked = true
+          if (!direct) void renewSession()
+        }
+        return { pinSet: true, locked: !unlocked }
+      },
+      remembered: async () => remembered(),
+      setRemembered: async (on: boolean, pin?: string) => {
+        if (on) {
+          // Once with the PIN, so someone at your open screen can't switch it off.
+          if (!pin) throw new Error('Enter your PIN once to turn this on')
+          if (direct) {
+            const s = await (await authP).unlock(pin)
+            if (s.locked) throw new Error('Wrong PIN')
+          } else await serverLogin(pin)
+        }
+        setRememberedFlag(on)
+        return on
+      },
       // The server checks the PIN and opens a session; offline, a device that
       // still has a session checks it against its own copy.
       unlock: async (pin: string) => {
@@ -871,11 +893,13 @@ export function createTursoWebBridge(): Bridge {
         }
         const s = await (await authP).unlock(pin, checked)
         unlocked = !s.locked
+        if (unlocked) lockedOnPurpose = false
         return s
       },
       setPin: async (pin: string, current?: string) => (await authP).setPin(pin, current),
       lock: async () => {
         unlocked = false
+        lockedOnPurpose = true
         return (await authP).lock()
       }
     },

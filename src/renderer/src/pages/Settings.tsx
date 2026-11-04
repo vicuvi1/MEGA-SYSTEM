@@ -23,6 +23,7 @@ import { DesktopBackupPanel } from '../DesktopBackups'
 import { HealthPanel } from '../HealthPanel'
 import { IslandLogPanel } from '../IslandLogPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
+import { SettingsShell, type SettingsGroup } from '../SettingsShell'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -71,7 +72,7 @@ interface Props {
   update: UpdateStatus | null
   onUpdate: (s: UpdateStatus) => void
   /** Opens the pages that live under Settings (bots, connected apps, point history). */
-  onGo?: (p: 'bots' | 'connected' | 'history') => void
+  onGo?: (p: 'bots' | 'connected' | 'history' | 'coach') => void
 }
 
 export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, onUpdate, onGo }: Props) {
@@ -133,6 +134,22 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [pinError, setPinError] = useState<string | null>(null)
   const [pinSuccess, setPinSuccess] = useState<string | null>(null)
   const [isUpdatingPin, setIsUpdatingPin] = useState(false)
+  // "Ask for the PIN on this device": off = this device remembers you.
+  const [noPin, setNoPin] = useState(false)
+  const [offAsk, setOffAsk] = useState(false)
+  const [offPin, setOffPin] = useState('')
+  useEffect(() => {
+    life.auth.remembered?.().then(setNoPin).catch(() => {})
+  }, [])
+  const setAskPin = async (ask: boolean) => {
+    if (!ask && !offAsk) return setOffAsk(true)
+    const ok = await act(() => life.auth.setRemembered!(!ask, ask ? undefined : offPin), ask ? 'The PIN is asked again on this device' : 'This device opens without the PIN now')
+    if (ok !== null && ok !== undefined) {
+      setNoPin(!ask)
+      setOffAsk(false)
+      setOffPin('')
+    }
+  }
 
   async function handleUpdatePin(e: React.FormEvent) {
     e.preventDefault()
@@ -140,7 +157,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
     setPinSuccess(null)
 
     if (auth.pinSet && !currentPin) {
-      setPinError('Please enter your current PIN (default is 2007)')
+      setPinError('Enter your current PIN')
       soundWarning()
       return
     }
@@ -608,55 +625,174 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
     }
   }
 
-  return (
-    <div className="settings">
-      {features.updates && <UpdatePanel status={update} onStatus={onUpdate} />}
+  const groups: SettingsGroup[] = [
+    {
+      id: 'general',
+      label: 'General',
+      icon: 'lock',
+      hint: 'PIN, this device and start-up',
+      keywords: 'pin lock security password trusted device remember start windows background tray',
+      body: (
+        <>
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="lock" /> PIN
+          </h2>
+          <span className={`chip ${noPin ? 'warn' : 'ok'}`}>{noPin ? 'Not asked on this device' : 'Asked when the app opens'}</span>
+        </header>
+        <p className="hint block">The PIN keeps your data private. The website is on the internet, so a new device always needs it once; on your own PC or phone you can skip it.</p>
+        <div className="set-row">
+          <div>
+            <b>Ask for the PIN on this device</b>
+            <small>{noPin ? 'Off: Life System opens straight away here and stays signed in.' : 'Every time Life System opens.'}</small>
+          </div>
+          {life.auth.setRemembered && (
+            <div className="seg" role="group" aria-label="Ask for the PIN on this device">
+              <button className={!noPin ? 'on' : ''} onClick={() => noPin && void setAskPin(true)}>
+                Always
+              </button>
+              <button className={noPin ? 'on' : ''} onClick={() => !noPin && void setAskPin(false)}>
+                Never
+              </button>
+            </div>
+          )}
+        </div>
+        {offAsk && !noPin && (
+          <form
+            className="set-confirm"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void setAskPin(false)
+            }}
+          >
+            <span>Enter your PIN once to stop asking for it on this device.</span>
+            <input autoFocus type="password" inputMode="numeric" value={offPin} maxLength={12} placeholder="Your PIN" onChange={(e) => setOffPin(e.target.value.replace(/\D/g, ''))} />
+            <button className="btn primary small" disabled={offPin.length < 4}>
+              Stop asking
+            </button>
+            <button type="button" className="btn ghost small" onClick={() => (setOffAsk(false), setOffPin(''))}>
+              Cancel
+            </button>
+          </form>
+        )}
 
-      <HealthPanel />
+        <details className="set-more">
+          <summary>Change PIN</summary>
+        <form onSubmit={handleUpdatePin} className="pin-settings-form">
+          <div className="grid col-3 gap" style={{ gridTemplateColumns: auth.pinSet ? 'repeat(auto-fit, minmax(180px, 1fr))' : 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            {auth.pinSet && (
+              <div className="field">
+                <span>Current PIN</span>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  placeholder="Current PIN"
+                  value={currentPin}
+                  maxLength={12}
+                  autoComplete="current-password"
+                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+            )}
+            <div className="field">
+              <span>New PIN (4–12 digits)</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="New numeric PIN"
+                value={newPin}
+                maxLength={12}
+                autoComplete="new-password"
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+            <div className="field">
+              <span>Confirm New PIN</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="Re-enter new PIN"
+                value={confirmPin}
+                maxLength={12}
+                autoComplete="new-password"
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+          </div>
 
-      <DesktopBackupPanel />
+          {pinError && (
+            <div className="err" style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}>
+              ⚠️ {pinError}
+            </div>
+          )}
+          {pinSuccess && (
+            <div className="good" style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '6px', color: 'var(--green, #22c55e)' }}>
+              ✓ {pinSuccess}
+            </div>
+          )}
 
-      <IslandSettingsPanel />
-
-      <IslandLogPanel />
-
-      <SportyPanel />
-
-      <GooglePanel />
-
-      {onGo && (
+          <div className="row" style={{ marginTop: '1rem', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              type="submit"
+              className="btn primary"
+              disabled={isUpdatingPin || newPin.length < 4 || confirmPin.length < 4}
+            >
+              {isUpdatingPin ? 'Saving PIN...' : 'Update PIN'}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={handleLockNow}
+              title="Immediately lock the application and return to the PIN screen"
+            >
+              <Icon name="lock" size={15} /> Lock App Now
+            </button>
+          </div>
+        </form>
+        </details>
+      </section>
+      {prefs && (
         <section className="panel">
           <header className="panel-head">
             <h2>
-              <Icon name="link" /> Bots & connections
+              <Icon name="bolt" /> Background
             </h2>
           </header>
-          <div className="set-links">
-            <button className="set-link" onClick={() => onGo('bots')}>
-              <Icon name="bot" size={18} />
-              <span>
-                <b>Telegram bots</b>
-                <small>Mega, Finance and Waky: status, tests, settings</small>
-              </span>
-            </button>
-            <button className="set-link" onClick={() => onGo('connected')}>
-              <Icon name="link" size={18} />
-              <span>
-                <b>Connected apps</b>
-                <small>Waky, Finance Helper, Sport Track, MAN</small>
-              </span>
-            </button>
-            <button className="set-link" onClick={() => onGo('history')}>
-              <Icon name="list" size={18} />
-              <span>
-                <b>Point history</b>
-                <small>Every point in and out, with undo</small>
-              </span>
-            </button>
-          </div>
+          <label className="check toggle-row">
+            <input type="checkbox" checked={prefs.keepInTray} onChange={(e) => changePrefs({ keepInTray: e.target.checked })} />
+            <span>
+              Keep running in the tray when the window is closed
+              <small>Needed for block reminders. Quit from the tray icon.</small>
+            </span>
+          </label>
+          <label className="check toggle-row">
+            <input type="checkbox" checked={prefs.matchAppThemes} onChange={(e) => changePrefs({ matchAppThemes: e.target.checked })} />
+            <span>
+              Match the apps to Life System's look
+              <small>Finance Helper, Waky and MAN use Life System's dark colors and fonts. Picking a theme inside an app overrides it for that app; switching this off and on brings Life System's look back.</small>
+            </span>
+          </label>
+          <label className={`check toggle-row ${prefs.canAutoStart ? '' : 'muted'}`}>
+            <input type="checkbox" disabled={!prefs.canAutoStart} checked={prefs.openAtLogin} onChange={(e) => changePrefs({ openAtLogin: e.target.checked })} />
+            <span>
+              Start with Windows
+              <small>{prefs.canAutoStart ? 'Opens quietly when you sign in.' : 'Available once the app is installed (not in dev mode).'}</small>
+            </span>
+          </label>
         </section>
       )}
-
+        </>
+      )
+    },
+    {
+      id: 'look',
+      label: 'Look',
+      icon: 'sun',
+      hint: 'Theme, colors and your Today screen',
+      keywords: 'appearance theme dark light color colour today sections layout name',
+      body: (
+        <>
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -743,93 +879,32 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         <p className="hint block">Size: Ctrl + and Ctrl − make everything bigger or smaller, Ctrl 0 resets. The apps inside keep their own dark look in the light theme.</p>
       </section>
       <LayoutEditor />
-
-      <section className="panel">
-        <header className="panel-head">
-          <h2>
-            <Icon name="lock" /> Security & App PIN Lock
-          </h2>
-          <span className={`chip ${auth.pinSet ? 'ok' : 'warn'}`}>
-            {auth.pinSet ? 'PIN Protected (Default: 2007)' : 'No PIN Set'}
-          </span>
-        </header>
-        <p className="hint block">
-          Secure your Life System cockpit against unauthorized access. The default master PIN is <strong>2007</strong>. You can change it below at any time.
-        </p>
-
-        <form onSubmit={handleUpdatePin} className="pin-settings-form">
-          <div className="grid col-3 gap" style={{ gridTemplateColumns: auth.pinSet ? 'repeat(auto-fit, minmax(180px, 1fr))' : 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-            {auth.pinSet && (
-              <div className="field">
-                <span>Current PIN</span>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  placeholder="Current PIN (e.g. 2007)"
-                  value={currentPin}
-                  maxLength={12}
-                  autoComplete="current-password"
-                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
-                />
+        </>
+      )
+    },
+    {
+      id: 'ben',
+      label: 'Ben',
+      icon: 'spark',
+      hint: 'Your coach: tone, length, daily rhythm',
+      keywords: 'coach ai tone style length nudges rhythm model angry',
+      body: (
+        <>
+          {onGo && (
+            <section className="panel">
+              <header className="panel-head">
+                <h2>
+                  <Icon name="spark" /> How Ben talks to you
+                </h2>
+              </header>
+              <p className="hint block">Tone (gentle → drill sergeant), reply length, what he knows about you and his daily rhythm live with Ben. Angry faces only at tone 5.</p>
+              <div className="row">
+                <button className="btn primary" onClick={() => onGo('coach')}>
+                  Open Ben → About you
+                </button>
               </div>
-            )}
-            <div className="field">
-              <span>New PIN (4–12 digits)</span>
-              <input
-                type="password"
-                inputMode="numeric"
-                placeholder="New numeric PIN"
-                value={newPin}
-                maxLength={12}
-                autoComplete="new-password"
-                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
-            <div className="field">
-              <span>Confirm New PIN</span>
-              <input
-                type="password"
-                inputMode="numeric"
-                placeholder="Re-enter new PIN"
-                value={confirmPin}
-                maxLength={12}
-                autoComplete="new-password"
-                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
-          </div>
-
-          {pinError && (
-            <div className="err" style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}>
-              ⚠️ {pinError}
-            </div>
+            </section>
           )}
-          {pinSuccess && (
-            <div className="good" style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '6px', color: 'var(--green, #22c55e)' }}>
-              ✓ {pinSuccess}
-            </div>
-          )}
-
-          <div className="row" style={{ marginTop: '1rem', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={isUpdatingPin || newPin.length < 4 || confirmPin.length < 4}
-            >
-              {isUpdatingPin ? 'Saving PIN...' : 'Update PIN'}
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={handleLockNow}
-              title="Immediately lock the application and return to the PIN screen"
-            >
-              <Icon name="lock" size={15} /> Lock App Now
-            </button>
-          </div>
-        </form>
-      </section>
-
       {features.aiSettings && (
       <section className="panel">
         <header className="panel-head">
@@ -950,7 +1025,51 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </div>
       </section>
       )}
-
+        </>
+      )
+    },
+    {
+      id: 'connections',
+      label: 'Connections',
+      icon: 'link',
+      hint: 'Google, Todoist, Telegram, Sporty',
+      keywords: 'google calendar todoist telegram bots bot token sporty sport connect',
+      body: (
+        <>
+      <GooglePanel />
+      {onGo && (
+        <section className="panel">
+          <header className="panel-head">
+            <h2>
+              <Icon name="link" /> Bots & connections
+            </h2>
+          </header>
+          <div className="set-links">
+            <button className="set-link" onClick={() => onGo('bots')}>
+              <Icon name="bot" size={18} />
+              <span>
+                <b>Telegram bots</b>
+                <small>Mega, Finance and Waky: status, tests, settings</small>
+              </span>
+            </button>
+            <button className="set-link" onClick={() => onGo('connected')}>
+              <Icon name="link" size={18} />
+              <span>
+                <b>Connected apps</b>
+                <small>Waky, Finance Helper, Sport Track, MAN</small>
+              </span>
+            </button>
+            <button className="set-link" onClick={() => onGo('history')}>
+              <Icon name="list" size={18} />
+              <span>
+                <b>Point history</b>
+                <small>Every point in and out, with undo</small>
+              </span>
+            </button>
+          </div>
+        </section>
+      )}
+      <SportyPanel />
       {features.calendar && (
       <section className="panel">
         <header className="panel-head">
@@ -1029,147 +1148,6 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         </div>
       </section>
       )}
-
-      
-      {features.cloudflareSync && (
-      <section className="panel">
-        <header className="panel-head">
-          <h2>
-            <Icon name="cloud" /> 24/7 Mobile Cloud Sync & Telegram Buffer
-          </h2>
-          <span className={`chip ${syncCfg.syncUrl ? 'ok' : 'ghost'}`}>
-            {syncCfg.syncUrl ? 'Buffer Connected' : 'Setup Required'}
-          </span>
-        </header>
-
-        <p className="hint block">
-          Keep your streaks alive 24/7 even when your PC is off! Log habits, tasks, workouts, and expenses from your phone via Telegram, buffered in Cloudflare KV, and auto-synced to your PC on boot.
-        </p>
-
-        <div className="field">
-          <span>Cloudflare Worker Sync URL</span>
-          <input
-            type="url"
-            placeholder="https://life-system-sync.yourname.workers.dev"
-            value={syncCfg.syncUrl}
-            onChange={(e) => setSyncCfg({ ...syncCfg, syncUrl: e.target.value })}
-          />
-          <small className="hint">
-            The public URL of your deployed 24/7 Cloudflare Worker.
-          </small>
-        </div>
-
-        <div className="field">
-          <span>Sync Secret Token</span>
-          <div className="row" style={{ gap: '0.5rem' }}>
-            <input
-              type={showSyncSecret ? 'text' : 'password'}
-              placeholder="Enter secret token"
-              value={syncCfg.syncSecret}
-              style={{ flex: 1 }}
-              onChange={(e) => setSyncCfg({ ...syncCfg, syncSecret: e.target.value })}
-            />
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setShowSyncSecret(!showSyncSecret)}
-              style={{ padding: '0.4rem 0.8rem' }}
-            >
-              {showSyncSecret ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          <small className="hint">
-            Bearer authentication token protecting your sync endpoint from unauthorized access.
-          </small>
-        </div>
-
-        <div className="row" style={{ gap: '1.5rem', flexWrap: 'wrap' }}>
-          <label className="check toggle-row" style={{ flex: 1, minWidth: '240px' }}>
-            <input
-              type="checkbox"
-              checked={syncCfg.autoSyncOnStartup}
-              onChange={(e) => setSyncCfg({ ...syncCfg, autoSyncOnStartup: e.target.checked })}
-            />
-            <span>
-              Auto-Sync On PC Startup
-              <small>Instantly pulls missed mobile logs and heals your streak whenever Life System launches.</small>
-            </span>
-          </label>
-
-          <div className="field" style={{ minWidth: '160px' }}>
-            <span>Auto-Sync Interval (minutes)</span>
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={syncCfg.syncIntervalMinutes}
-              onChange={(e) => setSyncCfg({ ...syncCfg, syncIntervalMinutes: Math.max(1, parseInt(e.target.value, 10) || 15) })}
-            />
-          </div>
-        </div>
-
-        {syncCfg.lastSyncedAt && (
-          <dl className="facts" style={{ margin: '0.75rem 0' }}>
-            <dt>Last Synced</dt>
-            <dd>{timeAgo(syncCfg.lastSyncedAt)}</dd>
-            <dt>Last Sync Volume</dt>
-            <dd>{syncCfg.lastSyncedCount} events applied</dd>
-          </dl>
-        )}
-
-        {syncTestMsg && (
-          <div
-            className={`notice ${syncTestMsg.ok ? 'ok' : 'warn'}`}
-            style={{ margin: '0.75rem 0', padding: '0.6rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem' }}
-          >
-            {syncTestMsg.ok ? '✅ ' : '❌ '} {syncTestMsg.message}
-          </div>
-        )}
-
-        <div className="row" style={{ marginTop: '0.5rem', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="btn primary" onClick={saveSyncConfig}>
-            Save Sync Settings
-          </button>
-          <button
-            className="btn ghost"
-            disabled={!syncCfg.syncUrl}
-            onClick={testSyncConnection}
-          >
-            Test Connection
-          </button>
-          <button
-            className="btn ghost"
-            disabled={!syncCfg.syncUrl || syncingNow}
-            onClick={pullSyncNow}
-          >
-            {syncingNow ? 'Syncing...' : 'Sync Now (Heal Streaks)'}
-          </button>
-        </div>
-
-        <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.75rem' }}>
-          <button
-            type="button"
-            className="btn ghost"
-            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-            onClick={() => setSyncInstructionsOpen(!syncInstructionsOpen)}
-          >
-            {syncInstructionsOpen ? '▲ Hide 3-Minute Cloudflare Setup Guide' : '▼ View 3-Minute Cloudflare Setup Guide'}
-          </button>
-
-          {syncInstructionsOpen && (
-            <div style={{ marginTop: '0.75rem', fontSize: '0.82rem', lineHeight: '1.5', background: 'rgba(0,0,0,0.3)', padding: '0.75rem', borderRadius: '6px' }}>
-              <p style={{ margin: '0 0 0.5rem 0' }}><b>Quick 3-step setup (100% Free forever):</b></p>
-              <ol style={{ paddingLeft: '1.2rem', margin: 0 }}>
-                <li>In project folder <code>cloud/</code>, deploy the worker using <code>npx wrangler deploy</code> (or paste <code>cloud/worker.ts</code> into your Cloudflare dashboard).</li>
-                <li>Link your Telegram Bot Webhook: open <code>https://api.telegram.org/bot&lt;BOT_TOKEN&gt;/setWebhook?url=&lt;WORKER_URL&gt;/webhook</code> in your browser.</li>
-                <li>Copy the Worker URL &amp; Secret into this panel, click <b>Test Connection</b>, and you are ready! You can now message <code>/checkin</code>, <code>35 coffee</code>, or <code>/done 1</code> from your phone anytime.</li>
-              </ol>
-            </div>
-          )}
-        </div>
-      </section>
-      )}
-
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -1345,7 +1323,34 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </button>
         </div>
       </section>
-
+        </>
+      )
+    },
+    ...(window.desktop
+      ? [
+    {
+      id: 'desktop',
+      label: 'Desktop & island',
+      icon: 'expand',
+      hint: 'The island at the edge of your screen',
+      keywords: 'island dynamic size look see-through shortcut sound sections tray',
+      body: (
+        <>
+      <IslandSettingsPanel />
+        </>
+      )
+    },
+        ]
+      : []),
+    {
+      id: 'backups',
+      label: 'Backups & data',
+      icon: 'shield',
+      hint: 'Daily backups, restore, export',
+      keywords: 'backup restore export import google drive folder snapshot data',
+      body: (
+        <>
+      <DesktopBackupPanel />
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -1453,7 +1458,181 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </div>
         )}
       </section>
+      {features.cloudflareSync && (
+      <section className="panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="cloud" /> 24/7 Mobile Cloud Sync & Telegram Buffer
+          </h2>
+          <span className={`chip ${syncCfg.syncUrl ? 'ok' : 'ghost'}`}>
+            {syncCfg.syncUrl ? 'Buffer Connected' : 'Setup Required'}
+          </span>
+        </header>
 
+        <p className="hint block">
+          Keep your streaks alive 24/7 even when your PC is off! Log habits, tasks, workouts, and expenses from your phone via Telegram, buffered in Cloudflare KV, and auto-synced to your PC on boot.
+        </p>
+
+        <div className="field">
+          <span>Cloudflare Worker Sync URL</span>
+          <input
+            type="url"
+            placeholder="https://life-system-sync.yourname.workers.dev"
+            value={syncCfg.syncUrl}
+            onChange={(e) => setSyncCfg({ ...syncCfg, syncUrl: e.target.value })}
+          />
+          <small className="hint">
+            The public URL of your deployed 24/7 Cloudflare Worker.
+          </small>
+        </div>
+
+        <div className="field">
+          <span>Sync Secret Token</span>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <input
+              type={showSyncSecret ? 'text' : 'password'}
+              placeholder="Enter secret token"
+              value={syncCfg.syncSecret}
+              style={{ flex: 1 }}
+              onChange={(e) => setSyncCfg({ ...syncCfg, syncSecret: e.target.value })}
+            />
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setShowSyncSecret(!showSyncSecret)}
+              style={{ padding: '0.4rem 0.8rem' }}
+            >
+              {showSyncSecret ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <small className="hint">
+            Bearer authentication token protecting your sync endpoint from unauthorized access.
+          </small>
+        </div>
+
+        <div className="row" style={{ gap: '1.5rem', flexWrap: 'wrap' }}>
+          <label className="check toggle-row" style={{ flex: 1, minWidth: '240px' }}>
+            <input
+              type="checkbox"
+              checked={syncCfg.autoSyncOnStartup}
+              onChange={(e) => setSyncCfg({ ...syncCfg, autoSyncOnStartup: e.target.checked })}
+            />
+            <span>
+              Auto-Sync On PC Startup
+              <small>Instantly pulls missed mobile logs and heals your streak whenever Life System launches.</small>
+            </span>
+          </label>
+
+          <div className="field" style={{ minWidth: '160px' }}>
+            <span>Auto-Sync Interval (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              max={120}
+              value={syncCfg.syncIntervalMinutes}
+              onChange={(e) => setSyncCfg({ ...syncCfg, syncIntervalMinutes: Math.max(1, parseInt(e.target.value, 10) || 15) })}
+            />
+          </div>
+        </div>
+
+        {syncCfg.lastSyncedAt && (
+          <dl className="facts" style={{ margin: '0.75rem 0' }}>
+            <dt>Last Synced</dt>
+            <dd>{timeAgo(syncCfg.lastSyncedAt)}</dd>
+            <dt>Last Sync Volume</dt>
+            <dd>{syncCfg.lastSyncedCount} events applied</dd>
+          </dl>
+        )}
+
+        {syncTestMsg && (
+          <div
+            className={`notice ${syncTestMsg.ok ? 'ok' : 'warn'}`}
+            style={{ margin: '0.75rem 0', padding: '0.6rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem' }}
+          >
+            {syncTestMsg.ok ? '✅ ' : '❌ '} {syncTestMsg.message}
+          </div>
+        )}
+
+        <div className="row" style={{ marginTop: '0.5rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="btn primary" onClick={saveSyncConfig}>
+            Save Sync Settings
+          </button>
+          <button
+            className="btn ghost"
+            disabled={!syncCfg.syncUrl}
+            onClick={testSyncConnection}
+          >
+            Test Connection
+          </button>
+          <button
+            className="btn ghost"
+            disabled={!syncCfg.syncUrl || syncingNow}
+            onClick={pullSyncNow}
+          >
+            {syncingNow ? 'Syncing...' : 'Sync Now (Heal Streaks)'}
+          </button>
+        </div>
+
+        <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.75rem' }}>
+          <button
+            type="button"
+            className="btn ghost"
+            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+            onClick={() => setSyncInstructionsOpen(!syncInstructionsOpen)}
+          >
+            {syncInstructionsOpen ? '▲ Hide 3-Minute Cloudflare Setup Guide' : '▼ View 3-Minute Cloudflare Setup Guide'}
+          </button>
+
+          {syncInstructionsOpen && (
+            <div style={{ marginTop: '0.75rem', fontSize: '0.82rem', lineHeight: '1.5', background: 'rgba(0,0,0,0.3)', padding: '0.75rem', borderRadius: '6px' }}>
+              <p style={{ margin: '0 0 0.5rem 0' }}><b>Quick 3-step setup (100% Free forever):</b></p>
+              <ol style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                <li>In project folder <code>cloud/</code>, deploy the worker using <code>npx wrangler deploy</code> (or paste <code>cloud/worker.ts</code> into your Cloudflare dashboard).</li>
+                <li>Link your Telegram Bot Webhook: open <code>https://api.telegram.org/bot&lt;BOT_TOKEN&gt;/setWebhook?url=&lt;WORKER_URL&gt;/webhook</code> in your browser.</li>
+                <li>Copy the Worker URL &amp; Secret into this panel, click <b>Test Connection</b>, and you are ready! You can now message <code>/checkin</code>, <code>35 coffee</code>, or <code>/done 1</code> from your phone anytime.</li>
+              </ol>
+            </div>
+          )}
+        </div>
+      </section>
+      )}
+        </>
+      )
+    },
+    ...(features.updates
+      ? [
+          {
+            id: 'updates',
+            label: 'Updates',
+            icon: 'refresh',
+            hint: 'Version and new releases',
+            keywords: 'update version release restart new',
+            body: <UpdatePanel status={update} onStatus={onUpdate} />
+          }
+        ]
+      : []),
+    {
+      id: 'health',
+      label: 'System health',
+      icon: 'chart',
+      hint: 'Is every part working',
+      keywords: 'health status errors working broken keys',
+      body: (
+        <>
+      <HealthPanel />
+        </>
+      )
+    },
+    {
+      id: 'diagnostics',
+      label: 'Diagnostics',
+      icon: 'list',
+      hint: 'Island taps and logs',
+      keywords: 'logs diagnostics island tap debug',
+      advanced: true,
+      body: (
+        <>
+      <IslandLogPanel />
       <section className="panel">
         <header className="panel-head">
           <h2>
@@ -1499,39 +1678,14 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           )}
         </div>
       </section>
+        </>
+      )
+    },
+  ]
 
-      {prefs && (
-        <section className="panel">
-          <header className="panel-head">
-            <h2>
-              <Icon name="bolt" /> Background
-            </h2>
-          </header>
-          <label className="check toggle-row">
-            <input type="checkbox" checked={prefs.keepInTray} onChange={(e) => changePrefs({ keepInTray: e.target.checked })} />
-            <span>
-              Keep running in the tray when the window is closed
-              <small>Needed for block reminders. Quit from the tray icon.</small>
-            </span>
-          </label>
-          <label className="check toggle-row">
-            <input type="checkbox" checked={prefs.matchAppThemes} onChange={(e) => changePrefs({ matchAppThemes: e.target.checked })} />
-            <span>
-              Match the apps to Life System's look
-              <small>Finance Helper, Waky and MAN use Life System's dark colors and fonts. Picking a theme inside an app overrides it for that app; switching this off and on brings Life System's look back.</small>
-            </span>
-          </label>
-          <label className={`check toggle-row ${prefs.canAutoStart ? '' : 'muted'}`}>
-            <input type="checkbox" disabled={!prefs.canAutoStart} checked={prefs.openAtLogin} onChange={(e) => changePrefs({ openAtLogin: e.target.checked })} />
-            <span>
-              Start with Windows
-              <small>{prefs.canAutoStart ? 'Opens quietly when you sign in.' : 'Available once the app is installed (not in dev mode).'}</small>
-            </span>
-          </label>
-        </section>
-      )}
-
-
+  return (
+    <div className="settings">
+      <SettingsShell groups={groups} />
     </div>
   )
 }

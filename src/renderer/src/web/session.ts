@@ -59,3 +59,39 @@ export async function serverLogin(pin: string): Promise<void> {
 // Fallback when localStorage can't keep it.
 let memory = ''
 export const currentSession = () => getSession() || memory
+
+// ---- "Don't ask for the PIN on this device" -------------------------------
+const TRUST = 'life_no_pin'
+export const remembered = (): boolean => {
+  try {
+    return store()?.getItem(TRUST) === '1'
+  } catch {
+    return false
+  }
+}
+export const setRememberedFlag = (on: boolean) => {
+  try {
+    if (on) store()?.setItem(TRUST, '1')
+    else store()?.removeItem(TRUST)
+  } catch {
+    /* private window: the PIN is asked */
+  }
+}
+
+/** A remembered device swaps its session for a fresh 30-day one when it has under 20 days left. */
+export async function renewSession(now = Date.now()): Promise<void> {
+  const token = currentSession()
+  if (!sessionValid(token, now)) return
+  try {
+    const exp = JSON.parse(atob(token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))).exp
+    if (exp - now > 20 * 86400_000) return
+    const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ renew: token }) })
+    const body = await res.json().catch(() => ({}))
+    if (res.ok && body.session) {
+      store()?.setItem(KEY, body.session)
+      memory = body.session
+    }
+  } catch {
+    /* offline: next start tries again */
+  }
+}

@@ -364,6 +364,10 @@ export interface LifeApi {
     setPin(pin: string, currentPin?: string): Promise<AuthStatus>
     unlock(pin: string): Promise<AuthStatus>
     lock(): Promise<AuthStatus>
+    /** This device opens without the PIN (it remembers you). */
+    remembered?(): Promise<boolean>
+    /** Turn "ask for the PIN on this device" off (needs the PIN once) or back on. */
+    setRemembered?(on: boolean, pin?: string): Promise<boolean>
   }
   wallet: {
     summary(): Promise<Summary>

@@ -56,9 +56,20 @@ try {
       if (text.length < 40) throw new Error(`frame looks empty (${text.length} chars)`)
     })
   }
-  await step('Settings opens (health, backups)', async () => {
+  await step('Settings: every section opens with content', async () => {
     await open('settings')
-    await pg.waitForSelector('text=Appearance', { timeout: 10000 })
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    const names = await pg.locator('.st-item b').allInnerTexts()
+    if (names.length < 5) throw new Error(`only ${names.length} sections`)
+    for (const name of names) {
+      await pg.locator('.st-item', { hasText: name }).first().click()
+      await pg.waitForFunction((n) => document.querySelector('.st-head h1')?.textContent === n, name, { timeout: 5000 })
+      const ok = await pg
+        .waitForFunction(() => (document.querySelector('.st-grid')?.textContent ?? '').trim().length >= 20, null, { timeout: 8000 })
+        .then(() => true)
+        .catch(() => false)
+      if (!ok) throw new Error(`${name} looks empty`)
+    }
   })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))

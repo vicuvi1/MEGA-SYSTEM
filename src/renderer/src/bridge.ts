@@ -130,7 +130,7 @@ export const features = {
   calendar: !!window.life,
   cloudflareSync: !!window.life,
   logFolder: !!window.life,
-  updates: !!window.life
+  updates: !!window.life || !!window.desktop
 }
 
 // Always use Turso Cloud as the data source — same DB on web and desktop.

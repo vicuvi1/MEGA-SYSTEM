@@ -17,7 +17,18 @@ export function HealthPanel() {
     const t = setInterval(load, 60_000)
     return () => clearInterval(t)
   }, [load])
-  if (!life.system || !h) return null
+  if (!life.system) return null
+  if (!h)
+    return (
+      <section className="panel hp-panel">
+        <header className="panel-head">
+          <h2>
+            <Icon name="shield" /> System health
+          </h2>
+        </header>
+        <p className="muted bk-note">Checking every part…</p>
+      </section>
+    )
   const bad = h.checks.filter((c) => !c.ok)
   return (
     <section className="panel hp-panel">
