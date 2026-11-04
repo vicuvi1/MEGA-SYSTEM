@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { bookMinutes, bookTask } from '../booking'
 import { motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
 import type { BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
@@ -233,12 +234,10 @@ function TodayStrip() {
   const book = async (t: TodoTask, startMin: number) => {
     if (!t) return
     const day = calendarToday()
-    const minutes = t.duration && t.duration >= 10 ? Math.min(t.duration, 240) : 50
-    const at = (m: number) => new Date(`${day}T${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00`).toISOString()
-    const hm = `${String(Math.floor(startMin / 60)).padStart(2, '0')}:${String(startMin % 60).padStart(2, '0')}`
+    const hmOf = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+    const hm = hmOf(startMin)
     const ok = await act(async () => {
-      await life.google!.create({ title: t.content, start: at(startMin), end: at(Math.min(24 * 60 - 1, startMin + minutes)), description: 'Todoist task · planned in Life System' })
-      await life.todoist?.update?.(t.id, { due: `${day} ${hm}` })
+      await bookTask(t, day, hm, hmOf(Math.min(24 * 60 - 1, startMin + bookMinutes(t))))
       return true
     }, `Booked ${hm}: ${t.content}`)
     if (ok) {

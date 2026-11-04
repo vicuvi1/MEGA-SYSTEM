@@ -1,6 +1,7 @@
 // Today's core: the morning plan / evening shut-down cards, the "Now" card
 // (one next step, a live timer while focusing), habit chips, and one list:
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
+import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
 import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, plainName, sortToday, whenText, type Area, type TodoTask } from '@core/todoist'
@@ -467,17 +468,16 @@ export function DayFlow(props: Props) {
   }
   /** 📅 Book: the task goes into your next free time today (calendar block + its time in Todoist). */
   const bookTask = async (t: TodoTask) => {
-    const minutes = t.duration && t.duration >= 10 ? Math.min(t.duration, 240) : 30
+    if (!life.google) return toast('Connect Google Calendar in Settings to book tasks', 'bad')
+    const minutes = bookMinutes(t)
+    const day = calendarToday()
     const n = new Date()
     const hm = `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`
-    const slot = nextSlot(calEvents, today, hm, minutes)
+    const slot = nextSlot(calEvents, day, hm, minutes)
     if (!slot) return toast(`No free ${minutes} min left today. Pick a day with the date chip.`, 'bad')
-    if (!life.google) return toast('Connect Google Calendar in Settings to book tasks', 'bad')
-    const at = (h: string) => new Date(`${today}T${h}:00`).toISOString()
-    setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, due: today, dueTime: slot.start, duration: minutes } : x)))
+    setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, due: day, dueTime: slot.start, duration: minutes } : x)))
     const ok = await act(async () => {
-      await life.google!.create({ title: t.content, start: at(slot.start), end: at(slot.end), description: 'Booked from Todoist with Life System' })
-      await life.todoist!.update!(t.id, { due: `${today} ${slot.start}`, duration: minutes })
+      await bookIntoCalendar(t, day, slot.start, slot.end, 'Booked from Todoist with Life System')
       return true
     }, `Booked ${slot.start}–${slot.end}: ${t.content}`)
     if (ok) soundSuccess()
