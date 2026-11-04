@@ -1462,7 +1462,7 @@ async function sendPending(turso, write, info) {
 // src/renderer/src/web/mirror.ts
 var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/;
 var MirrorError = class extends Error {};
-var Mirror = class {
+var Mirror = class Mirror {
 	SQL;
 	turso;
 	store;
@@ -1490,6 +1490,7 @@ var Mirror = class {
 		this.store = store;
 		this.desktop = desktop;
 		this.ready = this.start();
+		if (typeof window !== "undefined" && !this.desktop) window.addEventListener("online", () => void this.refresh().catch(() => {}));
 		if (desktop && typeof window !== "undefined") {
 			window.addEventListener("life-desktop-retry", () => {
 				this.refresh().catch(() => {});
@@ -1588,6 +1589,16 @@ var Mirror = class {
 					}
 					this.lastError = null;
 				} catch (e) {
+					if (isOffline(e)) {
+						this.queueOffline([
+							...changes,
+							...trackStatements(touched, version),
+							mark
+						]);
+						this.persist();
+						this.emit();
+						return result;
+					}
 					this.lastError = e.message;
 					await this.rebuild().catch(() => {});
 					this.emit();
@@ -1609,6 +1620,7 @@ var Mirror = class {
 		if (this.refreshing) return this.refreshing;
 		this.refreshing = this.lock(async () => {
 			if (this.desktop && this.db) await this.flushDesktop();
+			if (!this.desktop) await this.flushOffline();
 			return this.catchUp();
 		}).then((changed) => {
 			if (changed) this.emit();
@@ -1618,6 +1630,46 @@ var Mirror = class {
 			if (this.desktop) this.desktopStatus();
 		});
 		return this.refreshing;
+	}
+	static OUTBOX = "life_offline_writes";
+	outbox() {
+		try {
+			const v = typeof localStorage !== "undefined" ? JSON.parse(localStorage.getItem(Mirror.OUTBOX) || "[]") : [];
+			return Array.isArray(v) ? v : [];
+		} catch {
+			return [];
+		}
+	}
+	saveOutbox(list) {
+		try {
+			if (typeof localStorage === "undefined") return;
+			if (list.length) localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list));
+			else localStorage.removeItem(Mirror.OUTBOX);
+		} catch {}
+	}
+	queueOffline(batch) {
+		const list = [...this.outbox(), batch].slice(-500);
+		this.saveOutbox(list);
+		this.lastError = `Offline: ${list.length} change${list.length === 1 ? "" : "s"} waiting to sync`;
+	}
+	/** Changes made offline and not yet in Turso. */
+	get pendingOffline() {
+		return this.outbox().length;
+	}
+	/** Sends the offline changes, oldest first; stops at the first that fails. */
+	async flushOffline() {
+		const list = this.outbox();
+		if (!list.length) return;
+		let sent = 0;
+		for (const batch of list) try {
+			await this.turso.writeAtomic(batch);
+			sent++;
+		} catch (e) {
+			if (isOffline(e)) break;
+			sent++;
+		}
+		this.saveOutbox(list.slice(sent));
+		if (sent) this.lastError = list.length - sent ? `Offline: ${list.length - sent} changes waiting to sync` : null;
 	}
 	/**
 	* Brings the copy up to Turso: nothing when nothing changed (one tiny
@@ -1973,6 +2025,8 @@ function rowCasStatements(rows, haveTable) {
 		args: [r.id, r.value]
 	}))];
 }
+/** A failure because there's no connection (not a refusal by the database). */
+var isOffline = (e) => typeof window !== "undefined" && (navigator.onLine === false || e instanceof TypeError || /failed to fetch|network|load failed/i.test(String(e?.message ?? "")));
 // src/renderer/src/web/tursoHttp.ts
 var toHrana$1 = (v) => {
 	if (v === null) return { type: "null" };

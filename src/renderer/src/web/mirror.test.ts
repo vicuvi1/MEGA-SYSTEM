@@ -180,3 +180,26 @@ describe('records edited on two devices', () => {
     expect(remote.exec('SELECT title, priority FROM tasks WHERE id = 1')[0].values[0]).toEqual(['Lab report', 1])
   })
 })
+
+describe('offline on the phone', () => {
+  it('a change made offline stays and reaches Turso when back online', async () => {
+    const remote = fakeTurso()
+    const realFetch = globalThis.fetch
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) })
+    vi.stubGlobal('window', { addEventListener: () => {}, dispatchEvent: () => true })
+    vi.stubGlobal('navigator', { onLine: true })
+    const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await m.ready
+    vi.stubGlobal('fetch', async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('offline_test', 'yes') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run())
+    expect(m.pendingOffline).toBe(1)
+    expect(await m.read((db) => (db.prepare("SELECT value FROM settings WHERE key = 'offline_test'").get() as any)?.value)).toBe('yes')
+    vi.stubGlobal('fetch', realFetch)
+    await m.refresh()
+    expect(m.pendingOffline).toBe(0)
+    expect(remote.exec("SELECT value FROM settings WHERE key = 'offline_test'")[0].values[0][0]).toBe('yes')
+  })
+})

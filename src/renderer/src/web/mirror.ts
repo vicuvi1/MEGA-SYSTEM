@@ -83,6 +83,7 @@ export class Mirror {
 
   constructor(private SQL: SqlJsStatic, private turso: TursoHttp, private store: MirrorStore | null = null, private desktop = false) {
     this.ready = this.start()
+    if (typeof window !== 'undefined' && !this.desktop) window.addEventListener('online', () => void this.refresh().catch(() => {}))
     if (desktop && typeof window !== 'undefined') {
       window.addEventListener('life-desktop-retry', () => { void this.refresh().catch(() => {}) })
       window.addEventListener('life-desktop-use-server', () => {
@@ -185,6 +186,13 @@ export class Mirror {
         }
         this.lastError = null
       } catch (e) {
+        // Offline (the phone in a tunnel): keep the change here and send it when back online.
+        if (isOffline(e)) {
+          this.queueOffline([...changes, ...trackStatements(touched, version), mark])
+          this.persist()
+          this.emit()
+          return result
+        }
         this.lastError = (e as Error).message
         // Put the copy back the way Turso has it.
         await this.rebuild().catch(() => {})
@@ -212,6 +220,8 @@ export class Mirror {
     if (this.refreshing) return this.refreshing
     this.refreshing = this.lock(async () => {
       if (this.desktop && this.db) await this.flushDesktop()
+      // Changes made offline go first, so the fresh copy has them.
+      if (!this.desktop) await this.flushOffline()
       return this.catchUp()
     })
       .then((changed) => {
@@ -223,6 +233,52 @@ export class Mirror {
         if (this.desktop) this.desktopStatus()
       })
     return this.refreshing
+  }
+
+  // ---- Offline queue (web): changes made without a connection --------------
+  private static OUTBOX = 'life_offline_writes'
+  private outbox(): Change[][] {
+    try {
+      const v = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem(Mirror.OUTBOX) || '[]') : []
+      return Array.isArray(v) ? v : []
+    } catch {
+      return []
+    }
+  }
+  private saveOutbox(list: Change[][]): void {
+    try {
+      if (typeof localStorage === 'undefined') return
+      if (list.length) localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list))
+      else localStorage.removeItem(Mirror.OUTBOX)
+    } catch {
+      /* full or blocked: the change stays on this copy only */
+    }
+  }
+  private queueOffline(batch: Change[]): void {
+    const list = [...this.outbox(), batch].slice(-500)
+    this.saveOutbox(list)
+    this.lastError = `Offline: ${list.length} change${list.length === 1 ? '' : 's'} waiting to sync`
+  }
+  /** Changes made offline and not yet in Turso. */
+  get pendingOffline(): number {
+    return this.outbox().length
+  }
+  /** Sends the offline changes, oldest first; stops at the first that fails. */
+  private async flushOffline(): Promise<void> {
+    const list = this.outbox()
+    if (!list.length) return
+    let sent = 0
+    for (const batch of list) {
+      try {
+        await this.turso.writeAtomic(batch)
+        sent++
+      } catch (e) {
+        if (isOffline(e)) break
+        sent++ // refused for good (e.g. a row deleted elsewhere): drop it, keep going
+      }
+    }
+    this.saveOutbox(list.slice(sent))
+    if (sent) this.lastError = list.length - sent ? `Offline: ${list.length - sent} changes waiting to sync` : null
   }
 
   /**
@@ -587,3 +643,7 @@ export function rowCasStatements(rows: { table: string; id: unknown; cols: strin
     ...rows.map((r) => ({ sql: `INSERT INTO sys_cas (ok) VALUES ((SELECT ${r.cols.map((c) => `quote("${c}")`).join(" || '|' || ")} FROM "${r.table}" WHERE id = ?) IS ?)`, args: [r.id, r.value] as Param[] }))
   ]
 }
+
+/** A failure because there's no connection (not a refusal by the database). */
+const isOffline = (e: unknown) =>
+  typeof window !== 'undefined' && (navigator.onLine === false || e instanceof TypeError || /failed to fetch|network|load failed/i.test(String((e as Error)?.message ?? '')))
