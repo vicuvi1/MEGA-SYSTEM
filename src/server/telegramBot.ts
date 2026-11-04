@@ -86,6 +86,22 @@ function calendarFor(env: BotEnv, mirror: Mirror): CalendarLike | null {
   }
 }
 
+/** Todoist calls leave a health beat: Ben tells you when the Todoist key stops working. */
+const todoistFetch = (env: BotEnv): typeof fetch => {
+  const t = new TursoHttp(env.tursoUrl, env.tursoToken)
+  return (async (url: any, init?: any) => {
+    try {
+      const res = await fetch(url, init)
+      if (res.ok) void beat(t, 'todoist', true)
+      else if (res.status === 401 || res.status === 403 || res.status >= 500) void beat(t, 'todoist', false, `HTTP ${res.status}`)
+      return res
+    } catch (e) {
+      void beat(t, 'todoist', false, (e as Error).message)
+      throw e
+    }
+  }) as typeof fetch
+}
+
 let warm: { key: string; SQL: SqlJsStatic; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null } | null = null
 
 async function botsFor(env: BotEnv) {
@@ -121,7 +137,7 @@ async function botsFor(env: BotEnv) {
         return /^none$/i.test(r) ? null : r
       }
     : undefined
-  const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null
+  const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, todoistFetch(env), { pickArea }) : null
   const calendar = calendarFor(env, mirror)
   const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar })
   warm = { key, SQL, bots, mirror, services, calendar }
@@ -143,7 +159,7 @@ export async function payTodoistDone(env: BotEnv, opts: { since?: Date; minGapMs
   todoistCheckedAt = Date.now()
   const { mirror, services } = await botsFor(env)
   const since = opts.since ?? localMidnight(0)
-  const items = await createTodoistApi(env.todoistToken).completedSince(since.toISOString())
+  const items = await createTodoistApi(env.todoistToken, todoistFetch(env)).completedSince(since.toISOString())
   if (!items.length) return { paid: 0, done: 0 }
   const paid = await mirror.write((db) => payTodoist(services.services(db), items))
   return { paid, done: items.length }
@@ -222,7 +238,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
   // the app: the morning picks up last evening's, the others today's.
   const todo = await payTodoistDone(env, { since: localMidnight(job === 'morning' ? 1 : 0) }).catch(() => null)
   const st = await services.focus.state()
-  const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null) : null
+  const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((t) => t.length).catch(() => null) : null
   // Same numbers as the Progress page (spending from Finance Helper's synced copy).
   const { input, report, weekPlan, savedPlan } = await mirror.read((db) => {
     const svc = services.services(db)
@@ -238,7 +254,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
   })
   const weekFact = weekFocusFact(weekPlan, report)
   // Deadline radar: important Todoist tasks due in the next 3 days (morning and midday).
-  const radar = env.todoistToken && job !== 'evening' && job !== 'night' ? deadlineRadar(await createTodoistApi(env.todoistToken).upcoming(7).catch(() => []), input.today) : []
+  const radar = env.todoistToken && job !== 'evening' && job !== 'night' ? deadlineRadar(await createTodoistApi(env.todoistToken, todoistFetch(env)).upcoming(7).catch(() => []), input.today) : []
   const facts = [...deadlineFacts(radar), ...(weekFact ? [weekFact] : []), ...coachFacts(input, report)].sort((a, b) => b.weight - a.weight)
   /** Gemini says it in its own words; the plain text when there's no key or it fails. */
   const coach = async (when: DailyJob, fallback: string) => {
@@ -295,7 +311,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       })
       let first: string | null = null
       if (env.todoistToken) {
-        const tom = await createTodoistApi(env.todoistToken).tomorrow().catch(() => [])
+        const tom = await createTodoistApi(env.todoistToken, todoistFetch(env)).tomorrow().catch(() => [])
         first = tom.sort((a, b) => b.priority - a.priority || String(a.dueTime ?? '99').localeCompare(String(b.dueTime ?? '99')))[0]?.content ?? null
       }
       first ??= st.plan.items.find((x) => !x.done)?.text ?? null

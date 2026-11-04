@@ -41,6 +41,14 @@ describe('system health', () => {
     expect(alertDecisions(healthChecks({ ...base, beats: { ...base.beats, ai: { err: { at: min(10), msg: 'blip' } } } }), {}, now).warn).toEqual([])
   })
 
+  it('a refused key says where to fix it', () => {
+    const c = byId({ ...base, beats: { ...base.beats, telegram: { err: { at: min(40), msg: 'Unauthorized' } }, todoist: { ok: min(90), err: { at: min(35), msg: 'HTTP 401' } }, ai: { err: { at: min(40), msg: 'timeout' } } } })
+    expect(c.telegram.detail).toContain('@BotFather')
+    expect(c.todoist.detail).toContain('TODOIST_TOKEN')
+    expect(c.ai.detail).toContain('timeout')
+    expect(c.ai.detail).not.toContain('Vercel')
+  })
+
   it('weekly report', () => {
     const t = weeklyReport(healthChecks(base), [{ at: min(100), source: 'desktop', msg: 'x' }], now)
     expect(t).toContain('Everything is working')

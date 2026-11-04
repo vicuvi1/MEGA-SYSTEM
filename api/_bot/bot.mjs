@@ -15248,6 +15248,18 @@ var addDaysISO = (day, n) => {
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
 };
+/** Where to fix a key that was refused (revoked, expired, wrong). */
+var KEY_FIX = {
+	telegram: "Ben's bot token was refused: make a new one in @BotFather (/revoke), then update TELEGRAM_BOT_TOKEN in Vercel",
+	ai: "The AI key was refused or ran out: check OPENROUTER_API_KEY / GEMINI_API_KEY in Vercel",
+	calendar: "Google access was revoked or expired: Settings → Google Calendar → connect again",
+	todoist: "The Todoist key was refused: Todoist → Settings → Integrations → Developer, copy the token into TODOIST_TOKEN in Vercel"
+};
+var REFUSED = /\b(401|403)\b|unauthori[sz]ed|forbidden|invalid_grant|invalid api key|api key not valid|revoked|expired/i;
+/** The fix for a refused key, or null when the error is something else. */
+function keyHint(id, msg) {
+	return KEY_FIX[id] && REFUSED.test(msg) ? KEY_FIX[id] : null;
+}
 /** A part that reports OK/errors: broken when its last error is newer than its last OK. */
 function okErr(id, label, b, now, never) {
 	if (!b || !b.ok && !b.err) return {
@@ -15256,11 +15268,13 @@ function okErr(id, label, b, now, never) {
 		ok: true,
 		detail: never
 	};
-	if (!!b.err && (!b.ok || b.err.at > b.ok)) return {
+	const errNewer = !!b.err && (!b.ok || b.err.at > b.ok);
+	const hint = errNewer ? keyHint(id, b.err.msg) : null;
+	if (errNewer) return {
 		id,
 		label,
 		ok: false,
-		detail: `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
+		detail: hint ? `${hint} (since ${ago(now, b.err.at)})` : `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
 		since: b.err.at
 	};
 	return {
@@ -15294,6 +15308,7 @@ function healthChecks(i) {
 	out.push(okErr("telegram", "Telegram", beats.telegram, now, "No messages sent yet"));
 	out.push(okErr("ai", "Ben's AI", beats.ai, now, "Not used yet"));
 	out.push(okErr("calendar", "Google Calendar", beats.calendar, now, "Not used yet"));
+	if (beats.todoist) out.push(okErr("todoist", "Todoist", beats.todoist, now, ""));
 	if (i.sportySeen) {
 		const off = now.getTime() - Date.parse(i.sportySeen) > 936e5;
 		out.push({
@@ -15821,6 +15836,21 @@ function calendarFor(env, mirror) {
 		}
 	};
 }
+/** Todoist calls leave a health beat: Ben tells you when the Todoist key stops working. */
+var todoistFetch = (env) => {
+	const t = new TursoHttp(env.tursoUrl, env.tursoToken);
+	return (async (url, init) => {
+		try {
+			const res = await fetch(url, init);
+			if (res.ok) beat(t, "todoist", true);
+			else if (res.status === 401 || res.status === 403 || res.status >= 500) beat(t, "todoist", false, `HTTP ${res.status}`);
+			return res;
+		} catch (e) {
+			beat(t, "todoist", false, e.message);
+			throw e;
+		}
+	});
+};
 var warm = null;
 async function botsFor(env) {
 	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "") + "|" + (env.google ? "g" : "");
@@ -15855,7 +15885,7 @@ async function botsFor(env) {
 		const r = (await model(`Which ONE of these life areas does this task belong to? Areas: ${names.join(", ")}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, "");
 		return /^none$/i.test(r) ? null : r;
 	} : void 0;
-	const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null;
+	const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, todoistFetch(env), { pickArea }) : null;
 	const calendar = calendarFor(env, mirror);
 	warm = {
 		key,
@@ -15895,7 +15925,7 @@ async function payTodoistDone(env, opts = {}) {
 	todoistCheckedAt = Date.now();
 	const { mirror, services } = await botsFor(env);
 	const since = opts.since ?? localMidnight(0);
-	const items = await createTodoistApi(env.todoistToken).completedSince(since.toISOString());
+	const items = await createTodoistApi(env.todoistToken, todoistFetch(env)).completedSince(since.toISOString());
 	if (!items.length) return {
 		paid: 0,
 		done: 0
@@ -15982,7 +16012,7 @@ async function runDaily(env, job) {
 	};
 	const todo = await payTodoistDone(env, { since: localMidnight(job === "morning" ? 1 : 0) }).catch(() => null);
 	const st = await services.focus.state();
-	const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken).today().then((t) => t.length).catch(() => null) : null;
+	const todoistToday = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((t) => t.length).catch(() => null) : null;
 	const { input, report, weekPlan, savedPlan } = await mirror.read((db) => {
 		const svc = services.services(db);
 		const fin = getSetting(db, "app_sync_finance");
@@ -16002,7 +16032,7 @@ async function runDaily(env, job) {
 	});
 	const weekFact = weekFocusFact(weekPlan, report);
 	const facts = [
-		...deadlineFacts(env.todoistToken && job !== "evening" && job !== "night" ? deadlineRadar(await createTodoistApi(env.todoistToken).upcoming(7).catch(() => []), input.today) : []),
+		...deadlineFacts(env.todoistToken && job !== "evening" && job !== "night" ? deadlineRadar(await createTodoistApi(env.todoistToken, todoistFetch(env)).upcoming(7).catch(() => []), input.today) : []),
 		...weekFact ? [weekFact] : [],
 		...coachFacts(input, report)
 	].sort((a, b) => b.weight - a.weight);
@@ -16076,7 +16106,7 @@ async function runDaily(env, job) {
 				};
 			});
 			let first = null;
-			if (env.todoistToken) first = (await createTodoistApi(env.todoistToken).tomorrow().catch(() => [])).sort((a, b) => b.priority - a.priority || String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99")))[0]?.content ?? null;
+			if (env.todoistToken) first = (await createTodoistApi(env.todoistToken, todoistFetch(env)).tomorrow().catch(() => [])).sort((a, b) => b.priority - a.priority || String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99")))[0]?.content ?? null;
 			first ??= st.plan.items.find((x) => !x.done)?.text ?? null;
 			await send(windDownText({
 				bedTarget: bed,

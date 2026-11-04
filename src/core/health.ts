@@ -38,11 +38,26 @@ const addDaysISO = (day: string, n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
+/** Where to fix a key that was refused (revoked, expired, wrong). */
+const KEY_FIX: Record<string, string> = {
+  telegram: 'Ben\'s bot token was refused: make a new one in @BotFather (/revoke), then update TELEGRAM_BOT_TOKEN in Vercel',
+  ai: 'The AI key was refused or ran out: check OPENROUTER_API_KEY / GEMINI_API_KEY in Vercel',
+  calendar: 'Google access was revoked or expired: Settings → Google Calendar → connect again',
+  todoist: 'The Todoist key was refused: Todoist → Settings → Integrations → Developer, copy the token into TODOIST_TOKEN in Vercel'
+}
+const REFUSED = /\b(401|403)\b|unauthori[sz]ed|forbidden|invalid_grant|invalid api key|api key not valid|revoked|expired/i
+
+/** The fix for a refused key, or null when the error is something else. */
+export function keyHint(id: string, msg: string): string | null {
+  return KEY_FIX[id] && REFUSED.test(msg) ? KEY_FIX[id] : null
+}
+
 /** A part that reports OK/errors: broken when its last error is newer than its last OK. */
 function okErr(id: string, label: string, b: Beat | undefined, now: Date, never: string): Check | null {
   if (!b || (!b.ok && !b.err)) return { id, label, ok: true, detail: never }
   const errNewer = !!b.err && (!b.ok || b.err.at > b.ok)
-  if (errNewer) return { id, label, ok: false, detail: `Failing since ${ago(now, b.err!.at)}: ${b.err!.msg.slice(0, 140)}`, since: b.err!.at }
+  const hint = errNewer ? keyHint(id, b.err!.msg) : null
+  if (errNewer) return { id, label, ok: false, detail: hint ? `${hint} (since ${ago(now, b.err!.at)})` : `Failing since ${ago(now, b.err!.at)}: ${b.err!.msg.slice(0, 140)}`, since: b.err!.at }
   return { id, label, ok: true, detail: `OK, last ${ago(now, b.ok!)}` }
 }
 
@@ -59,6 +74,7 @@ export function healthChecks(i: HealthInput): Check[] {
   out.push(okErr('telegram', 'Telegram', beats.telegram, now, 'No messages sent yet')!)
   out.push(okErr('ai', "Ben's AI", beats.ai, now, 'Not used yet')!)
   out.push(okErr('calendar', 'Google Calendar', beats.calendar, now, 'Not used yet')!)
+  if (beats.todoist) out.push(okErr('todoist', 'Todoist', beats.todoist, now, '')!)
   if (i.sportySeen) {
     const off = now.getTime() - Date.parse(i.sportySeen) > 26 * 3600000
     out.push({ id: 'sporty', label: 'Sporty', ok: !off, detail: off ? `Not heard from since ${ago(now, i.sportySeen)}` : `Seen ${ago(now, i.sportySeen)}`, ...(off ? { since: new Date(Date.parse(i.sportySeen) + 26 * 3600000).toISOString() } : {}) })
