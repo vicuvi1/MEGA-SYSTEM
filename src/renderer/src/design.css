@@ -1472,3 +1472,26 @@
 @media (max-width: 600px) { .nt-stack { top: calc(var(--desk-bar, 0px) + 12px); right: 12px; left: 12px; width: auto; } }
 .nq-times { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .nq-times input { padding: 5px 8px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; }
+
+/* ---- Calendar: room to breathe ---- */
+.cal-item { border-radius: 8px; padding: 4px 8px; gap: 2px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent), 0 2px 6px rgb(0 0 0 / .25); }
+.cal-item b { font-size: 12.5px; line-height: 1.25; }
+.cal-item small { font-size: 11px; }
+.cal-item.tiny { padding: 2px 7px; justify-content: center; }
+.cal-item.tiny b { display: block; font-size: 11.5px; }
+.cal-item.tiny b small { font-weight: 500; margin-left: 4px; color: var(--muted); }
+/* A long "window" (calls + work, a study evening) is a faint band behind what happens in it. */
+.cal-item.band { z-index: 1; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 10%, transparent) 0 8px, color-mix(in srgb, var(--c) 6%, transparent) 8px 16px); border-left: 3px solid color-mix(in srgb, var(--c) 70%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 18%, transparent); }
+.cal-item.band b { color: color-mix(in srgb, var(--c) 55%, var(--text)); font-size: 11.5px; }
+.cal-item.band small { opacity: .8; }
+.cal-item.band:hover { transform: none; filter: brightness(1.2); }
+.cal-item:not(.band) { z-index: 3; }
+.cal-more { position: absolute; z-index: 4; height: 22px; border: 0; border-radius: 8px; background: rgb(var(--ink) / 0.1); color: var(--text); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.cal-more:hover { background: var(--lime); color: var(--lime-ink); }
+.cal-more-pop { position: absolute; z-index: 20; right: 4px; width: min(260px, 90vw); padding: 6px; border-radius: 14px; background: var(--surface); box-shadow: 0 18px 50px rgb(0 0 0 / .5), 0 0 0 1px rgb(var(--ink) / 0.1); display: flex; flex-direction: column; gap: 2px; animation: dbar-in .18s ease; }
+.cal-more-pop button { display: grid; grid-template-columns: 4px 1fr auto; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.cal-more-pop button:hover { background: rgb(var(--ink) / 0.06); }
+.cal-more-pop i { width: 4px; height: 18px; border-radius: 2px; background: var(--c); }
+.cal-more-pop span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-more-pop small { color: var(--muted); }
+.cal-item.tiny { align-items: stretch; text-align: left; } .cal-item.tiny b { text-align: left; }

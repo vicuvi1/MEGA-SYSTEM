@@ -10,7 +10,8 @@
 //   ("Study day") to drop onto any other day.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { localDay, localHM, type CalEvent } from '@core/dayTime'
-import { blocksToApply, layoutColumns, repeatRule, templateFromDay, type DayTemplate, type Repeat } from '@core/calTemplates'
+import { layoutDay } from '@core/calLayout'
+import { blocksToApply, repeatRule, templateFromDay, type DayTemplate, type Repeat } from '@core/calTemplates'
 import { defaultAreaColor, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life, type GoogleStatus } from '../bridge'
 import { Icon } from '../Icon'
@@ -22,7 +23,7 @@ import { soundSuccess } from '../sound'
 type View = 'day' | '3day' | 'week' | 'month' | 'agenda'
 const START_H = 6
 const END_H = 24
-const ZOOMS = [32, 44, 56, 72]
+const ZOOMS = [32, 44, 56, 72, 96]
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const addDays = (day: string, n: number) => {
@@ -82,12 +83,14 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     setViewRaw(v)
     store.set('ls.calView', v)
   }
-  const [zoom, setZoomRaw] = useState<number>(() => store.get('ls.calZoom', 1))
+  // Roomier by default (56 px an hour); your zoom is remembered.
+  const [zoom, setZoomRaw] = useState<number>(() => store.get('ls.calZoom2', 2))
   const setZoom = (z: number) => {
     const n = Math.max(0, Math.min(ZOOMS.length - 1, z))
     setZoomRaw(n)
-    store.set('ls.calZoom', n)
+    store.set('ls.calZoom2', n)
   }
+  const [moreOpen, setMoreOpen] = useState<{ day: string; top: number; left: number; items: Item[] } | null>(null)
   const hourPx = ZOOMS[zoom] ?? 44
   const [hidden, setHidden] = useState<string[]>(() => store.get('ls.calHidden', []))
   const [dimmed, setDimmed] = useState<string[]>(() => store.get('ls.calDim', []))
@@ -323,6 +326,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const gridDays = view === 'day' || view === '3day' || view === 'week' ? days : []
   const closeMenus = (e: React.PointerEvent) => {
     if (menu && !(e.target as HTMLElement).closest('.cal-pop-wrap')) setMenu(null)
+    if (moreOpen && !(e.target as HTMLElement).closest('.cal-more-pop, .cal-more')) setMoreOpen(null)
   }
   const cols = `52px repeat(${gridDays.length}, minmax(0, 1fr))`
 
@@ -496,7 +500,9 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                     ))}
                   </div>
                   {gridDays.map((d) => {
-                    const dayItems = layoutColumns(items.filter((x) => x.day === d && x.end > START_H * 60))
+                    const lay = layoutDay(items.filter((x) => x.day === d && x.end > START_H * 60))
+                    const bands = lay.placed.filter((p) => p.backdrop).map((p) => p.it)
+                    const yOf = (m: number) => ((Math.max(m, START_H * 60) - START_H * 60) / 60) * hourPx
                     return (
                       <div
                         key={d}
@@ -514,32 +520,67 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                           <i key={i} className="cal-line" style={{ top: i * hourPx }} />
                         ))}
                         {d === today && nowMin >= START_H * 60 && <i className="cal-now" style={{ top: ((nowMin - START_H * 60) / 60) * hourPx }} />}
-                        {dayItems.map((it) => {
-                          const top = ((Math.max(it.start, START_H * 60) - START_H * 60) / 60) * hourPx
-                          const h = Math.max(16, ((Math.min(it.end, END_H * 60) - Math.max(it.start, START_H * 60)) / 60) * hourPx - 2)
-                          const tiny = h < 30
+                        {lay.placed.map(({ it, left, width, backdrop }) => {
+                          const top = yOf(it.start)
+                          const h = Math.max(18, ((Math.min(it.end, END_H * 60) - Math.max(it.start, START_H * 60)) / 60) * hourPx - 2)
+                          const tiny = h < 34
+                          // Events inside a long "window" sit a little in, so the window's name stays visible.
+                          const inset = !backdrop && bands.some((b) => b.start < it.end && it.start < b.end) ? 12 : 0
+                          const l = inset + (left * (100 - inset)) / 100
+                          const w = (width * (100 - inset)) / 100
                           return (
                             <div
                               key={it.key}
                               role="button"
                               tabIndex={0}
-                              className={`cal-item ${it.kind} ${tiny ? 'tiny' : ''} ${it.dim ? 'dim' : ''} ${ghost?.key === it.key ? 'dragging' : ''}`}
-                              style={{ top, height: h, left: `calc(${(it.col / it.cols) * 100}% + 2px)`, width: `calc(${100 / it.cols}% - 4px)`, ['--c' as string]: it.color }}
+                              className={`cal-item ${it.kind} ${tiny ? 'tiny' : ''} ${backdrop ? 'band' : ''} ${it.dim ? 'dim' : ''} ${ghost?.key === it.key ? 'dragging' : ''}`}
+                              style={{ top, height: h, left: `calc(${l}% + 2px)`, width: `calc(${w}% - 4px)`, ['--c' as string]: it.color }}
                               onPointerDown={(e) => startItemDrag(e, it)}
                               onKeyDown={(e) => e.key === 'Enter' && setEditing(it)}
                               title={`${it.title} · ${hmOf(it.start)}–${hmOf(it.end)}`}
                             >
-                              <b>{it.title}</b>
-                              {!tiny && (
-                                <small>
-                                  {hmOf(it.start)}–{hmOf(it.end)}
-                                  {it.kind === 'task' ? ' · Todoist' : ''}
-                                </small>
+                              {tiny ? (
+                                <b>
+                                  {it.title} <small>{hmOf(it.start)}</small>
+                                </b>
+                              ) : (
+                                <>
+                                  <b>{it.title}</b>
+                                  <small>
+                                    {hmOf(it.start)}–{hmOf(it.end)}
+                                    {it.kind === 'task' ? ' · Todoist' : ''}
+                                  </small>
+                                </>
                               )}
                               {it.kind === 'event' && connected && writable(it.event!.calendarId) && <span className="cal-resize" onPointerDown={(e) => startItemDrag(e, it, true)} title="Drag to resize" />}
                             </div>
                           )
                         })}
+                        {lay.more.map((m) => (
+                          <button
+                            key={`more-${m.start}`}
+                            className="cal-more"
+                            style={{ top: yOf(m.start), left: `calc(${m.left}% + 2px)`, width: `calc(${m.width}% - 4px)` }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => setMoreOpen({ day: d, top: yOf(m.start), left: m.left, items: m.items })}
+                            title={m.items.map((x) => x.title).join(', ')}
+                          >
+                            +{m.items.length} more
+                          </button>
+                        ))}
+                        {moreOpen?.day === d && (
+                          <div className="cal-more-pop" style={{ top: moreOpen.top + 26 }} onPointerDown={(e) => e.stopPropagation()}>
+                            {moreOpen.items.map((x) => (
+                              <button key={x.key} style={{ ['--c' as string]: x.color }} onClick={() => (setMoreOpen(null), setEditing(x))}>
+                                <i />
+                                <span>{x.title}</span>
+                                <small>
+                                  {hmOf(x.start)}–{hmOf(x.end)}
+                                </small>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {ghost?.day === d && (
                           <div className="cal-ghost" style={{ top: ((ghost.start - START_H * 60) / 60) * hourPx, height: Math.max(14, ((ghost.end - ghost.start) / 60) * hourPx - 2), ['--c' as string]: ghost.color }}>
                             <b>{ghost.title}</b>

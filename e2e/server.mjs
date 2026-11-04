@@ -67,6 +67,50 @@ function pipeline(body) {
   return { results }
 }
 
+// A fake Google Calendar (made-up events this week), so the calendar can be tested.
+const gcal = (() => {
+  const at = (dayOffset, hm) => {
+    const d = new Date()
+    d.setDate(d.getDate() + dayOffset)
+    const [h, m] = hm.split(':').map(Number)
+    d.setHours(h, m, 0, 0)
+    return d.toISOString()
+  }
+  let n = 0
+  const ev = (dayOffset, s, e, title, color) => ({ id: `ev${++n}`, calendarId: 'primary', title, start: at(dayOffset, s), end: at(dayOffset, e), allDay: false, color, ours: false })
+  const events = [
+    ev(0, '07:00', '09:00', 'Deep block 1', '#c084fc'),
+    ev(0, '09:45', '11:15', 'Lecture: Algorithms', '#7cc4ff'),
+    ev(0, '13:30', '15:00', 'Lab: Programming', '#7cc4ff'),
+    ev(0, '18:05', '22:00', 'Calls + work window', '#5eead4'),
+    ev(0, '18:30', '19:00', 'Stand-up', '#fbbf24'),
+    ev(0, '18:30', '19:15', 'Client call', '#f87171'),
+    ev(0, '19:00', '20:00', 'Downstream review', '#f87171'),
+    ev(0, '19:00', '19:30', 'Quick sync', '#fbbf24'),
+    ev(0, '19:10', '19:40', 'Mentor chat', '#a3e635'),
+    ev(0, '20:00', '21:00', 'Interview prep', '#a3e635'),
+    ev(1, '07:00', '09:00', 'Deep block 1', '#c084fc'),
+    ev(1, '12:00', '13:30', 'Lecture: Math', '#7cc4ff'),
+    ev(1, '17:00', '17:30', 'Sport (20 min)', '#fbbf24')
+  ]
+  return (q, r) => {
+    const b = q.body || {}
+    const send = (j) => (r.setHeader('Content-Type', 'application/json'), r.end(JSON.stringify(j)))
+    if (b.op === 'status') return send({ configured: true, connected: true, calendars: [{ id: 'primary', name: 'Test calendar', color: '#7cc4ff', canWrite: true, on: true }] })
+    if (b.op === 'events') return send({ events: events.filter((e) => e.end > b.from && e.start < b.to) })
+    if (b.op === 'create') {
+      const e = { id: `ev${++n}`, calendarId: 'primary', title: b.title, start: b.start, end: b.end, allDay: false, ours: true }
+      events.push(e)
+      return send({ event: e })
+    }
+    const e = events.find((x) => x.id === b.id)
+    if (b.op === 'move' && e) return (Object.assign(e, { start: b.start, end: b.end }), send({ ok: true }))
+    if (b.op === 'update' && e) return (Object.assign(e, Object.fromEntries(Object.entries({ title: b.title, start: b.start, end: b.end, description: b.description, color: b.color }).filter(([, v]) => v !== undefined))), send({ ok: true }))
+    if (b.op === 'remove' && e) return (events.splice(events.indexOf(e), 1), send({ ok: true }))
+    return send({ ok: true })
+  }
+})()
+
 const dist = join(repo, 'dist')
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }
 http
@@ -78,6 +122,7 @@ http
       if (url.pathname.startsWith('/api/')) {
         const n = url.pathname.slice(5)
         q.body = body ? JSON.parse(body) : {}
+        if (n === 'google') return gcal(q, r)
         return api[n] ? api[n](q, r) : ((r.statusCode = 404), r.end('{}'))
       }
       if (url.pathname === '/v2/pipeline') {
