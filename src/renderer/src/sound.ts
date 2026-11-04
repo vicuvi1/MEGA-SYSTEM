@@ -220,3 +220,23 @@ export const soundTick = () =>
   play((c, master) => {
     synthTone(c, 1800, 0, 0.035, 0.035, 'square', master)
   })
+
+/**
+ * 🔔 A new notification: a soft, warm two-note chime (like a message
+ * arriving). It has its own switch (Settings → Notifications), so it plays
+ * even when the other sound effects are off.
+ */
+export function soundNotify(): void {
+  const prefs = getUiPrefs()
+  const master = (typeof prefs.volume === 'number' ? Math.max(0, Math.min(100, prefs.volume)) : 80) / 100
+  if (master <= 0) return
+  try {
+    const c = getAudioContext()
+    synthTone(c, 880, 0, 0.32, 0.12, 'sine', master)
+    synthTone(c, 1760, 0, 0.18, 0.025, 'sine', master)
+    synthTone(c, 1174.66, 0.13, 0.5, 0.12, 'sine', master)
+    synthTone(c, 2349.32, 0.13, 0.25, 0.022, 'sine', master)
+  } catch {
+    /* no audio device */
+  }
+}

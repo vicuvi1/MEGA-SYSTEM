@@ -13,6 +13,10 @@ export interface DesktopApi {
   updateStatus(): Promise<UpdateStatus>
   checkUpdates(): Promise<UpdateStatus>
   installUpdate(): Promise<UpdateStatus>
+  /** A Windows notification (silent: the page plays its own chime). */
+  notify?(n: { id: string; title: string; body?: string | null }): Promise<boolean>
+  /** You clicked one: the app is in front, run its action. */
+  onNotifClick?(cb: (id: string) => void): void
   /** The update status, pushed whenever it changes. */
   onUpdateStatus?(cb: (s: UpdateStatus) => void): void
   loginGithub(): Promise<void>

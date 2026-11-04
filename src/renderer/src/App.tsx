@@ -12,6 +12,7 @@ import { EMBED_LABEL, EmbedHost, type EmbedKind } from './EmbedHost'
 import { UpdateChip, useUpdates } from './updates'
 import { buildCommands, Palette, type Command } from './Palette'
 import { Notifications, type Alert } from './Notifications'
+import { NotifToasts } from './NotifToasts'
 import { Sidebar } from './Sidebar'
 import { MobileBottomBar } from './MobileBottomBar'
 import { PwaInstallBanner } from './PwaInstallBanner'
@@ -584,6 +585,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <Icon name="refresh" size={16} />
           </button>
           <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
+          <NotifToasts onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
           {!window.desktop && <UpdateChip status={update} onClick={() => setPage('settings')} />}
           {backup && !isDemo && (
             <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>

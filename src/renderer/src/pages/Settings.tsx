@@ -25,6 +25,7 @@ import { IslandLogPanel } from '../IslandLogPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
 import { ConnectionsOverview } from '../ConnectionsOverview'
+import { NotifSettings } from '../NotifSettings'
 import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
@@ -776,6 +777,14 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       )}
         </>
       )
+    },
+    {
+      id: 'notifications',
+      label: 'Notifications',
+      icon: 'bell',
+      hint: 'Pop-ups, sound, quiet hours',
+      keywords: 'notification notifications popup pop-up windows sound chime quiet hours focus disturb alert',
+      body: <NotifSettings />
     },
     {
       id: 'look',

@@ -1448,3 +1448,27 @@
 .nc-empty b { color: var(--text); }
 .nc-history { display: block; margin: 10px auto 0; }
 .nc-item .ni-body b { white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-overflow: clip; }
+
+/* ---- New notifications: cards slide in at the top right, the bell rings ---- */
+.nt-stack { position: fixed; top: calc(var(--desk-bar, 0px) + 72px); right: 16px; z-index: 70; display: flex; flex-direction: column; gap: 10px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.nt-card { position: relative; overflow: hidden; pointer-events: auto; display: flex; gap: 12px; padding: 14px 14px 16px; border-radius: 18px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 18px 50px rgb(0 0 0 / .5), 0 0 0 1px rgb(var(--ink) / 0.1), 0 0 30px -12px var(--lime); }
+.nt-icon { flex: none; width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--lime) 16%, transparent); color: var(--lime); animation: nt-pop .5s cubic-bezier(.3, 1.6, .5, 1) .1s both; }
+.nt-card.k-health .nt-icon { background: color-mix(in srgb, #f5a524 18%, transparent); color: #f5a524; }
+.nt-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.nt-body b { font-weight: 650; line-height: 1.35; }
+.nt-body small { color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.nt-act { align-self: flex-start; margin-top: 4px; border: 0; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12.5px; font-weight: 700; background: var(--lime); color: var(--lime-ink); cursor: pointer; transition: transform .15s; }
+.nt-act:hover { transform: translateY(-1px); }
+.nt-x { align-self: flex-start; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.nt-x:hover { color: var(--text); background: rgb(var(--ink) / 0.08); }
+.nt-timer { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--lime); transform-origin: left; animation: nt-timer 8s linear forwards; opacity: .7; }
+@keyframes nt-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes nt-pop { from { transform: scale(.4) rotate(-20deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.bell.ring svg { animation: bell-ring 1.1s ease-in-out; transform-origin: 50% 10%; }
+.bell.ring { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lime) 60%, transparent); animation: bell-pulse 1.2s ease-out; }
+@keyframes bell-ring { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(18deg); } 25% { transform: rotate(-16deg); } 40% { transform: rotate(12deg); } 55% { transform: rotate(-8deg); } 70% { transform: rotate(4deg); } }
+@keyframes bell-pulse { to { box-shadow: 0 0 0 12px transparent; } }
+@media (prefers-reduced-motion: reduce) { .nt-icon, .bell.ring svg, .bell.ring, .nt-timer { animation: none; } }
+@media (max-width: 600px) { .nt-stack { top: calc(var(--desk-bar, 0px) + 12px); right: 12px; left: 12px; width: auto; } }
+.nq-times { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.nq-times input { padding: 5px 8px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; }

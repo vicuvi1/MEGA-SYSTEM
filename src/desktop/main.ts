@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notification, protocol, shell, Tray } from 'electron'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
@@ -14,6 +14,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'life-system', privileges: { sta
 // A separate folder preserves all data from the older Electron app.
 app.setPath('userData', app.commandLine.getSwitchValue('user-data-dir') || join(app.getPath('appData'), 'LifeSystem-CloudDesktop'))
 if (!app.requestSingleInstanceLock()) app.quit()
+// Windows shows notifications only for an app with this id (the installer's appId).
+if (process.platform === 'win32') app.setAppUserModelId('com.vicuvi1.lifesystem')
 else void app.whenReady().then(async () => {
   const dir = app.getPath('userData')
   await mkdir(dir, { recursive: true })
@@ -104,6 +106,22 @@ else void app.whenReady().then(async () => {
     if (page) win.webContents.send('app:navigate', page)
   }
   app.on('second-instance', () => showApp())
+
+  // Windows notifications: the page decides when (quiet hours, focus) and
+  // plays its own chime; a click opens Life System and runs the action.
+  const shown = new Map<string, Notification>()
+  handle('desktop:notify', (n: { id: string; title: string; body?: string | null }) => {
+    if (!Notification.isSupported() || typeof n?.id !== 'string') return false
+    const note = new Notification({ title: String(n.title).slice(0, 120), body: String(n.body ?? '').slice(0, 240), icon: join(ui, 'icon.png'), silent: true })
+    note.on('click', () => {
+      showApp()
+      win.webContents.send('desktop:notif-click', n.id)
+    })
+    note.on('close', () => shown.delete(n.id))
+    shown.set(n.id, note)
+    note.show()
+    return true
+  })
 
   // Closing the window keeps Life System running in the tray (the island and
   // reminders keep working); Quit in the tray menu really quits.

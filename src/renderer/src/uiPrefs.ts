@@ -20,7 +20,23 @@ export interface UiPrefs {
   textSize: number
   /** Which one-time layout clean-up this device has had (see load). */
   layoutV?: number
+  /** How new notifications reach you on this device (Settings → Notifications). */
+  notif?: NotifPrefs
 }
+
+export interface NotifPrefs {
+  /** Windows pop-ups (desktop) / a card sliding in (website). */
+  popups: boolean
+  /** A soft chime, even when other sound effects are off. */
+  sound: boolean
+  /** Quiet hours: nothing pops or rings, it all waits in the inbox. */
+  quiet: boolean
+  quietFrom: string
+  quietTo: string
+  /** Nothing pops up while a focus timer runs. */
+  focusQuiet: boolean
+}
+export const DEFAULT_NOTIF: NotifPrefs = { popups: true, sound: true, quiet: true, quietFrom: '23:00', quietTo: '07:30', focusQuiet: true }
 
 export type TodaySectionId = 'timeline' | 'day' | 'progress' | 'fun' | 'reps' | 'quicklog'
 

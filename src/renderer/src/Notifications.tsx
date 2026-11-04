@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { groupNotifs, type Notif } from '@core/notify'
 import { useLive } from './live'
+import { runNotif } from './NotifToasts'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LedgerEntry, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
@@ -58,6 +59,23 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
   }, [summary])
   useEffect(() => loadInbox(), [loadInbox])
   useLive(loadInbox)
+  // Something new arrived: the bell rings for a moment.
+  const [ring, setRing] = useState(false)
+  useEffect(() => {
+    let t: number | undefined
+    const on = () => {
+      loadInbox()
+      setRing(false)
+      requestAnimationFrame(() => setRing(true))
+      clearTimeout(t)
+      t = window.setTimeout(() => setRing(false), 1400)
+    }
+    window.addEventListener('life-notif-new', on)
+    return () => {
+      window.removeEventListener('life-notif-new', on)
+      clearTimeout(t)
+    }
+  }, [loadInbox])
 
   useEffect(() => {
     if (!open) return
@@ -108,17 +126,12 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
   }
   const run = async (n: Notif) => {
     void markRead([n.id])
-    const a = n.action
-    if (!a) return
-    if (a.kind === 'focus') {
-      await life.focus.start(a.subject, a.minutes).catch(() => null)
-      go('today' as PageId)
-    } else go(a.page as PageId)
+    await runNotif(n, go)
   }
 
   return (
     <div className="notif" ref={box}>
-      <button className={`icon-btn bell ${unread ? 'has' : ''}`} aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} title="Notifications" onClick={toggle}>
+      <button className={`icon-btn bell ${unread ? 'has' : ''} ${ring ? 'ring' : ''}`} aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} title="Notifications" onClick={toggle}>
         <Icon name="bell" size={16} duo={open} />
         {unread > 0 && <span className="bell-count">{unread > 9 ? '9+' : unread}</span>}
       </button>
