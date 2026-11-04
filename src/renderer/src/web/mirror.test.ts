@@ -159,3 +159,24 @@ describe('no lost updates between copies', () => {
     expect(count(remote, 'SELECT COUNT(*) FROM sys_cas')).toBe(0)
   })
 })
+
+describe('records edited on two devices', () => {
+  it('an edit made on a stale copy is redone on fresh data instead of erasing the other edit', async () => {
+    const remote = fakeTurso()
+    const cat = String(remote.exec('SELECT id FROM categories LIMIT 1')[0]?.values[0]?.[0] ?? 'study')
+    if (!remote.exec('SELECT id FROM categories LIMIT 1')[0]) remote.run("INSERT INTO categories (id, name) VALUES ('study', 'Study')")
+    remote.run("INSERT INTO tasks (id, title, category, priority, coins, xp, repeat, created_day) VALUES (1, 'Lab', ?, 2, 5, 10, 'none', '2026-11-04')", [cat])
+    const a = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    const b = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await a.ready
+    await b.ready
+    await a.write((db) => db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run('Lab report', 1))
+    let seen = ''
+    await b.write((db) => {
+      seen = String((db.prepare('SELECT title FROM tasks WHERE id = 1').get() as any).title)
+      db.prepare('UPDATE tasks SET priority = ? WHERE id = ?').run(1, 1)
+    })
+    expect(seen).toBe('Lab report') // b ran again on fresh data
+    expect(remote.exec('SELECT title, priority FROM tasks WHERE id = 1')[0].values[0]).toEqual(['Lab report', 1])
+  })
+})

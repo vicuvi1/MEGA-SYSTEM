@@ -77,6 +77,7 @@ export class BrowserDb {
   dropChanges(): void {
     this.changes = []
     this.expected.clear()
+    this.rowsBefore.clear()
   }
 
   /**
@@ -90,6 +91,14 @@ export class BrowserDb {
     this.expected.clear()
     return e
   }
+  /** Rows this change edits or deletes by id: table → id → their columns as SQLite quotes them. */
+  private rowsBefore = new Map<string, { table: string; id: unknown; cols: string[]; value: string | null }>()
+  takeRowChecks(): { table: string; id: unknown; cols: string[]; value: string | null }[] {
+    const r = [...this.rowsBefore.values()]
+    this.rowsBefore.clear()
+    return r
+  }
+  private static ROW_EDIT = /^\s*(?:UPDATE\s+["`]?(\w+)["`]?\s+SET[\s\S]+?|DELETE\s+FROM\s+["`]?(\w+)["`]?\s+)WHERE\s+id\s*=\s*\?\s*$/i
   private static SET_SETTING = /^\s*INSERT\s+INTO\s+settings\s*\(\s*key\s*,\s*value\s*\)\s*VALUES\s*\(\s*\?\s*,\s*\?\s*\)/i
 
   private rows(sql: string, args: Param[]): Record<string, unknown>[] {
@@ -136,6 +145,20 @@ export class BrowserDb {
 
   private run(sql: string, raw: unknown[]): { changes: number; lastInsertRowid: number } {
     const change = normalize(sql, raw)
+    const edit = BrowserDb.ROW_EDIT.exec(change.sql)
+    if (edit) {
+      const table = edit[1] ?? edit[2]
+      const id = change.args[change.args.length - 1]
+      const k = `${table}:${String(id)}`
+      if (table !== 'settings' && !this.rowsBefore.has(k)) {
+        const cols = this.rows(`PRAGMA table_info(${JSON.stringify(table)})`, []).map((c) => String(c.name))
+        if (cols.length) {
+          const expr = cols.map((c) => `quote("${c}")`).join(" || '|' || ")
+          const row = this.rows(`SELECT ${expr} AS v FROM "${table}" WHERE id = ?`, [id as Param])[0]
+          this.rowsBefore.set(k, { table, id, cols, value: row ? String(row.v) : null })
+        }
+      }
+    }
     if (BrowserDb.SET_SETTING.test(change.sql)) {
       const key = String(change.args[0])
       if (key !== 'data_version' && !this.expected.has(key)) {

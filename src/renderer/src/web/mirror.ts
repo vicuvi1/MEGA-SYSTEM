@@ -167,11 +167,14 @@ export class Mirror {
       const result = db.transaction(() => fn(db))()
       const changes = db.takeChanges()
       const expected = db.takeExpected()
+      // Records edited or deleted by id must still be as we read them (after 2
+      // conflicts in a row, the change goes through anyway: newest wins).
+      const rowChecks = attempt < 2 ? db.takeRowChecks() : (db.takeRowChecks(), [])
       if (!changes.length) return result
       const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
       const mark = { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [version] }
       const touched = touchedTables(changes)
-      const checks = casStatements(expected)
+      const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)]
       try {
         await this.turso.writeAtomic([...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
         // Our tables are up to date; this.version stays, so the next refresh
@@ -575,3 +578,12 @@ export function casStatements(expected: Map<string, string | null>): Change[] {
   ]
 }
 const isCasConflict = (e: unknown) => /sys_cas|CHECK constraint failed: ok = 1|ok = 1/i.test(String((e as Error)?.message ?? e))
+
+/** The same check for records edited or deleted by id (their columns, quoted by SQLite). */
+export function rowCasStatements(rows: { table: string; id: unknown; cols: string[]; value: string | null }[], haveTable: boolean): Change[] {
+  if (!rows.length) return []
+  return [
+    ...(haveTable ? [] : [{ sql: 'CREATE TABLE IF NOT EXISTS sys_cas (ok INTEGER NOT NULL CHECK (ok = 1))', args: [] as Param[] }]),
+    ...rows.map((r) => ({ sql: `INSERT INTO sys_cas (ok) VALUES ((SELECT ${r.cols.map((c) => `quote("${c}")`).join(" || '|' || ")} FROM "${r.table}" WHERE id = ?) IS ?)`, args: [r.id, r.value] as Param[] }))
+  ]
+}
