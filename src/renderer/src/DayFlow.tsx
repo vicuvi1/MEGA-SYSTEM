@@ -204,7 +204,8 @@ export function DayFlow(props: Props) {
     window.addEventListener('life-close-day', on)
     return () => window.removeEventListener('life-close-day', on)
   }, [])
-  const tick = useTicker(!!st?.running)
+  // Only the clock redraws every second (RunningClock below); the list needs a slow tick.
+  const tick = useSlowTick(!!st?.running)
   // A deep-work block in your calendar that's on right now becomes the Now card.
   const { events: calEvents } = useTodayEvents()
   const blockNow = useMemo(() => {
@@ -608,8 +609,6 @@ export function DayFlow(props: Props) {
   const restOpen = restPref ?? true
   const total = planOnly.length + starred.length + bigOpen.length + loose.length
   const running = st.running
-  const elapsed = running ? tick - new Date(running.startedAt).getTime() : 0
-  const leftMs = running ? running.planned * 60000 - elapsed : 0
   const playBtn = (label: string, subject: string, task: FocusTask | null) =>
     !running && (
       <button className="dl-play" aria-label={`Focus 50 minutes on ${label}`} title="Focus 50 min on this" onClick={() => void startFocus(subject, task)}>
@@ -767,11 +766,11 @@ export function DayFlow(props: Props) {
           <div className="now-main">
             <div>
               <h2>{running ? running.task?.title ?? running.subject : now.title}</h2>
-              <p>{running ? (leftMs > 0 ? `${clock(leftMs)} left of ${running.planned} min` : `${running.planned} min done — stop to log it`) : now.detail}</p>
+              <p>{running ? <RunningClock run={running} part="left" /> : now.detail}</p>
             </div>
-            {running && <span className="now-clock">{clock(elapsed)}</span>}
+            {running && <RunningClock run={running} part="clock" />}
           </div>
-          {running && <div className="now-bar"><i style={{ width: `${Math.min(100, (elapsed / (running.planned * 60000)) * 100)}%` }} /></div>}
+          {running && <RunningClock run={running} part="bar" />}
           <div className="row">
             <button className="btn primary now-go" onClick={() => void runNow(now)}>
               {BUTTON[now.kind]}
@@ -1161,4 +1160,30 @@ function TabList({ tasks, empty, groupOf, row, quick }: { tasks: TodoTask[]; emp
       ))}
     </div>
   )
+}
+
+/** The running timer's moving parts, each redrawing itself every second (the list around them doesn't). */
+function RunningClock({ run, part }: { run: { startedAt: string; planned: number }; part: 'left' | 'clock' | 'bar' }) {
+  const tick = useTicker(true)
+  const elapsed = tick - new Date(run.startedAt).getTime()
+  const leftMs = run.planned * 60000 - elapsed
+  if (part === 'clock') return <span className="now-clock">{clock(elapsed)}</span>
+  if (part === 'bar')
+    return (
+      <div className="now-bar">
+        <i style={{ width: `${Math.min(100, (elapsed / (run.planned * 60000)) * 100)}%` }} />
+      </div>
+    )
+  return <>{leftMs > 0 ? `${clock(leftMs)} left of ${run.planned} min` : `${run.planned} min done — stop to log it`}</>
+}
+
+/** A tick every 30 s while `on` (enough for "which block is on now"). */
+function useSlowTick(on: boolean): number {
+  const [t, setT] = useState(Date.now())
+  useEffect(() => {
+    if (!on) return
+    const id = setInterval(() => setT(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [on])
+  return t
 }
