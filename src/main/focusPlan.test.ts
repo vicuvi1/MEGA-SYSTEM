@@ -22,3 +22,16 @@ describe('must-do points', () => {
     expect(f.togglePlan(2, now).coins).toBe(0) // 4th today: over the cap
   })
 })
+
+describe('one focus session, one payout', () => {
+  it('stopping the same timer twice logs it once', () => {
+    const db = openDb(join(mkdtempSync(join(tmpdir(), 'fs-')), 'life.db'))
+    const f = new FocusService(db, new Wallet(db))
+    const t0 = new Date(2026, 10, 4, 10)
+    f.start('Algebra', 50, t0)
+    const first = f.stop(new Date(2026, 10, 4, 10, 50))
+    expect(first.coins).toBeGreaterThan(0)
+    expect(() => f.stop(new Date(2026, 10, 4, 10, 51))).toThrow('No focus session')
+    expect((db.prepare('SELECT COUNT(*) AS n FROM focus_sessions').get() as { n: number }).n).toBe(1)
+  })
+})

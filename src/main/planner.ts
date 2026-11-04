@@ -150,7 +150,8 @@ export class Tasks {
       let { coins, xp } = planTaskComplete(t, today, days, this.coinsToday(today))
       if (this.economy?.isBuffActive('multiplier_boost', now)) {
         const mult = this.economy.getBuffMultiplier('multiplier_boost', now) || 2.0
-        coins = Math.round(coins * mult)
+        // The boost multiplies, but never past the day's cap for tasks.
+        coins = Math.min(Math.round(coins * mult), Math.max(0, TASKS_DAILY_COIN_CAP - this.coinsToday(today)))
       }
       if (this.economy?.isBuffActive('xp_boost', now)) {
         const xpMult = this.economy.getBuffMultiplier('xp_boost', now) || 1.5
@@ -250,10 +251,14 @@ export class Schedule {
   /** Closes study blocks from past days that were left open, with the skip penalty. */
   closeMissed(now = new Date()): number {
     const today = this.wallet.today(now)
+    // Once a day, and only yesterday: editing a block's days later can never
+    // charge older days; a block left running overnight is not a miss.
+    if (getSetting(this.db, 'blocks_settled_day') === today) return 0
+    setSetting(this.db, 'blocks_settled_day', today)
     const closed = new Set(
-      (this.db.prepare("SELECT block_id, day FROM block_log WHERE status != 'running'").all() as { block_id: number; day: string }[]).map((r) => `${r.block_id}:${r.day}`)
+      (this.db.prepare('SELECT block_id, day FROM block_log').all() as { block_id: number; day: string }[]).map((r) => `${r.block_id}:${r.day}`)
     )
-    const misses = blocksToMiss(this.blocks(), closed, today)
+    const misses = blocksToMiss(this.blocks(), closed, today, 1)
     this.db.transaction(() => {
       for (const { block, day } of misses) {
         const ledgerId = this.payout(BLOCK_RULES[block.kind].skipped, block, day, now)

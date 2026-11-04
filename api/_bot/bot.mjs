@@ -3062,7 +3062,7 @@ var Tasks = class {
 			let { coins, xp } = planTaskComplete(t, today, this.doneDays(this.liveLedgerIds()).get(id) ?? /* @__PURE__ */ new Set(), this.coinsToday(today));
 			if (this.economy?.isBuffActive("multiplier_boost", now)) {
 				const mult = this.economy.getBuffMultiplier("multiplier_boost", now) || 2;
-				coins = Math.round(coins * mult);
+				coins = Math.min(Math.round(coins * mult), Math.max(0, 150 - this.coinsToday(today)));
 			}
 			if (this.economy?.isBuffActive("xp_boost", now)) {
 				const xpMult = this.economy.getBuffMultiplier("xp_boost", now) || 1.5;
@@ -3154,8 +3154,10 @@ var Schedule = class {
 	/** Closes study blocks from past days that were left open, with the skip penalty. */
 	closeMissed(now = /* @__PURE__ */ new Date()) {
 		const today = this.wallet.today(now);
-		const closed = new Set(this.db.prepare("SELECT block_id, day FROM block_log WHERE status != 'running'").all().map((r) => `${r.block_id}:${r.day}`));
-		const misses = blocksToMiss(this.blocks(), closed, today);
+		if (getSetting(this.db, "blocks_settled_day") === today) return 0;
+		setSetting(this.db, "blocks_settled_day", today);
+		const closed = new Set(this.db.prepare("SELECT block_id, day FROM block_log").all().map((r) => `${r.block_id}:${r.day}`));
+		const misses = blocksToMiss(this.blocks(), closed, today, 1);
 		this.db.transaction(() => {
 			for (const { block, day } of misses) {
 				const ledgerId = this.payout(BLOCK_RULES[block.kind].skipped, block, day, now);
@@ -4495,10 +4497,10 @@ var FocusService = class {
 	}
 	/** Stops the timer and logs the minutes; coins for them (up to the daily limit). */
 	stop(now = /* @__PURE__ */ new Date()) {
-		const run = this.running();
-		if (!run) throw new LedgerError("No focus session is running");
-		const minutes = sessionMinutes(run.startedAt, run.planned, now);
 		return this.db.transaction(() => {
+			const run = this.running();
+			if (!run) throw new LedgerError("No focus session is running");
+			const minutes = sessionMinutes(run.startedAt, run.planned, now);
 			setSetting(this.db, RUNNING, "null");
 			return {
 				...this.log(run.subject, minutes, now, run.startedAt),
@@ -4539,6 +4541,14 @@ var FocusService = class {
 		const coins = d === today ? Math.max(0, Math.min(focusCoins(minutes), 80 - earned)) : 0;
 		const end = now.toISOString();
 		const start = startedAt ?? (/* @__PURE__ */ new Date(now.getTime() - minutes * 6e4)).toISOString();
+		if (startedAt) {
+			const dup = this.db.prepare("SELECT id, day, subject, minutes, coins FROM focus_sessions WHERE started_at = ?").get(startedAt);
+			if (dup) return {
+				session: dup,
+				coins: 0,
+				state: this.state(now)
+			};
+		}
 		const id = Number(this.db.prepare("INSERT INTO focus_sessions (day, subject, minutes, started_at, ended_at, coins) VALUES (?, ?, ?, ?, ?, ?)").run(d, subject, minutes, start, end, coins).lastInsertRowid);
 		if (coins > 0 || minutes > 0) this.wallet.append({
 			ts: end,

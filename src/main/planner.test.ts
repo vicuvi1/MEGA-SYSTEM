@@ -130,10 +130,11 @@ describe('schedule service', () => {
     const wed = at('2026-10-28T10:00:00Z')
     schedule.state(undefined, wed)
     const missed = db.prepare("SELECT day FROM block_log WHERE status = 'missed' ORDER BY day").all() as { day: string }[]
-    expect(missed.map((m) => m.day)).toEqual(['2026-10-26', '2026-10-27'])
-    expect(wallet.summary(wed).balance).toBe(0) // 10 - 5 - 5
+    // Only yesterday is checked (once a day), and Monday's block left running is not a miss.
+    expect(missed.map((m) => m.day)).toEqual(['2026-10-27'])
+    expect(wallet.summary(wed).balance).toBe(5) // 10 - 5
     schedule.state(undefined, wed) // idempotent
-    expect(db.prepare("SELECT COUNT(*) n FROM block_log WHERE status = 'missed'").get()).toEqual({ n: 2 })
+    expect(db.prepare("SELECT COUNT(*) n FROM block_log WHERE status = 'missed'").get()).toEqual({ n: 1 })
   })
 
   it('only shows blocks on their days and validates input', () => {

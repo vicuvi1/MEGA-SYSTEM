@@ -154,10 +154,11 @@ export class FocusService {
 
   /** Stops the timer and logs the minutes; coins for them (up to the daily limit). */
   stop(now = new Date()): { session: FocusSession; coins: number; state: FocusState; task: FocusTask | null } {
-    const run = this.running()
-    if (!run) throw new LedgerError('No focus session is running')
-    const minutes = sessionMinutes(run.startedAt, run.planned, now)
     return this.db.transaction(() => {
+      // Read inside the change: a second stop (another device, the bot) finds nothing running.
+      const run = this.running()
+      if (!run) throw new LedgerError('No focus session is running')
+      const minutes = sessionMinutes(run.startedAt, run.planned, now)
       setSetting(this.db, RUNNING, 'null')
       return { ...this.log(run.subject, minutes, now, run.startedAt), task: run.task ?? null }
     })()
@@ -196,6 +197,11 @@ export class FocusService {
     const coins = d === today ? Math.max(0, Math.min(focusCoins(minutes), FOCUS_DAILY_COINS - earned)) : 0
     const end = now.toISOString()
     const start = startedAt ?? new Date(now.getTime() - minutes * 60000).toISOString()
+    // The same timer logged twice (two devices stopping it): keep the first.
+    if (startedAt) {
+      const dup = this.db.prepare('SELECT id, day, subject, minutes, coins FROM focus_sessions WHERE started_at = ?').get(startedAt) as { id: number; day: string; subject: string; minutes: number; coins: number } | undefined
+      if (dup) return { session: dup, coins: 0, state: this.state(now) }
+    }
     const id = Number(
       this.db.prepare('INSERT INTO focus_sessions (day, subject, minutes, started_at, ended_at, coins) VALUES (?, ?, ?, ?, ?, ?)').run(d, subject, minutes, start, end, coins).lastInsertRowid
     )
