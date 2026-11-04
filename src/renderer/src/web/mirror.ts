@@ -159,16 +159,21 @@ export class Mirror {
     await this.ready
     if (this.desktop) return this.writeDesktop(fn)
     return this.lock(async () => {
+     // A setting changed elsewhere since our copy (another device, the server's tick):
+     // Turso refuses the write, we reload and run the change again on fresh data.
+     for (let attempt = 0; ; attempt++) {
       const db = this.current
       db.dropChanges()
       const result = db.transaction(() => fn(db))()
       const changes = db.takeChanges()
+      const expected = db.takeExpected()
       if (!changes.length) return result
       const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
       const mark = { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [version] }
       const touched = touchedTables(changes)
+      const checks = casStatements(expected)
       try {
-        await this.turso.writeAtomic([...changes, ...trackStatements(touched, version), mark])
+        await this.turso.writeAtomic([...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
         // Our tables are up to date; this.version stays, so the next refresh
         // still picks up what others changed just before us.
         if (this.tv) {
@@ -181,6 +186,7 @@ export class Mirror {
         // Put the copy back the way Turso has it.
         await this.rebuild().catch(() => {})
         this.emit()
+        if (isCasConflict(e) && attempt < 3) continue
         throw new MirrorError(
           navigator.onLine === false
             ? 'You are offline, so this was not saved. Try again when you are back online.'
@@ -190,6 +196,7 @@ export class Mirror {
       this.persist()
       this.emit()
       return result
+     }
     })
   }
 
@@ -558,3 +565,13 @@ export class Mirror {
     await this.turso.writeAtomic(db.takeChanges()).catch(() => {})
   }
 }
+
+/** The checks that go first in a write: each overwritten setting must still hold what we read. */
+export function casStatements(expected: Map<string, string | null>): Change[] {
+  if (!expected.size) return []
+  return [
+    { sql: 'CREATE TABLE IF NOT EXISTS sys_cas (ok INTEGER NOT NULL CHECK (ok = 1))', args: [] },
+    ...[...expected].map(([key, value]) => ({ sql: 'INSERT INTO sys_cas (ok) VALUES ((SELECT value FROM settings WHERE key = ?) IS ?)', args: [key, value] as Param[] }))
+  ]
+}
+const isCasConflict = (e: unknown) => /sys_cas|CHECK constraint failed: ok = 1|ok = 1/i.test(String((e as Error)?.message ?? e))

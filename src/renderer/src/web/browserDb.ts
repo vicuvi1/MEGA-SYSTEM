@@ -76,7 +76,21 @@ export class BrowserDb {
 
   dropChanges(): void {
     this.changes = []
+    this.expected.clear()
   }
+
+  /**
+   * Settings this change overwrote, with the value they had before (null =
+   * no row). The mirror sends them as a check: if another device or the server
+   * changed one meanwhile, the write is refused and redone on fresh data.
+   */
+  private expected = new Map<string, string | null>()
+  takeExpected(): Map<string, string | null> {
+    const e = new Map(this.expected)
+    this.expected.clear()
+    return e
+  }
+  private static SET_SETTING = /^\s*INSERT\s+INTO\s+settings\s*\(\s*key\s*,\s*value\s*\)\s*VALUES\s*\(\s*\?\s*,\s*\?\s*\)/i
 
   private rows(sql: string, args: Param[]): Record<string, unknown>[] {
     const stmt = this.raw.prepare(sql)
@@ -122,6 +136,13 @@ export class BrowserDb {
 
   private run(sql: string, raw: unknown[]): { changes: number; lastInsertRowid: number } {
     const change = normalize(sql, raw)
+    if (BrowserDb.SET_SETTING.test(change.sql)) {
+      const key = String(change.args[0])
+      if (key !== 'data_version' && !this.expected.has(key)) {
+        const row = this.rows('SELECT value FROM settings WHERE key = ?', [key])[0]
+        this.expected.set(key, row ? (row.value == null ? null : String(row.value)) : null)
+      }
+    }
     const before = this.scalar('SELECT last_insert_rowid()')
     this.raw.run(change.sql, change.args as SqlValue[])
     const changes = this.raw.getRowsModified()

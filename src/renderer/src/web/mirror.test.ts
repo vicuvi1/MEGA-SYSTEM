@@ -138,3 +138,24 @@ describe('Mirror', () => {
     expect(balance).toBe(count(remote, 'SELECT COALESCE(SUM(coins), 0) FROM ledger'))
   })
 })
+
+describe('no lost updates between copies', () => {
+  it('a setting changed by another copy is not overwritten: the change is redone on fresh data', async () => {
+    const remote = fakeTurso()
+    const a = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    const b = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await a.ready
+    await b.ready
+    const add = (m: Mirror, item: string) =>
+      m.write((db) => {
+        const cur = JSON.parse((db.prepare("SELECT value FROM settings WHERE key = 'list'").get() as any)?.value ?? '[]')
+        db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run('list', JSON.stringify([...cur, item]))
+        return cur.length
+      })
+    await add(a, 'from A')
+    await add(b, 'from B') // b's copy didn't have "from A" yet: it must not drop it
+    const saved = JSON.parse(String(remote.exec("SELECT value FROM settings WHERE key = 'list'")[0].values[0][0]))
+    expect(saved.sort()).toEqual(['from A', 'from B'])
+    expect(count(remote, 'SELECT COUNT(*) FROM sys_cas')).toBe(0)
+  })
+})

@@ -828,7 +828,7 @@ function normalize(sql, raw) {
 	};
 }
 var isWrite = (sql) => !/^\s*(SELECT|WITH\s[\s\S]*SELECT|PRAGMA\s+\w+\s*$|EXPLAIN)/i.test(sql);
-var BrowserDb = class {
+var BrowserDb = class BrowserDb {
 	raw;
 	depth = 0;
 	sp = 0;
@@ -845,7 +845,20 @@ var BrowserDb = class {
 	}
 	dropChanges() {
 		this.changes = [];
+		this.expected.clear();
 	}
+	/**
+	* Settings this change overwrote, with the value they had before (null =
+	* no row). The mirror sends them as a check: if another device or the server
+	* changed one meanwhile, the write is refused and redone on fresh data.
+	*/
+	expected = /* @__PURE__ */ new Map();
+	takeExpected() {
+		const e = new Map(this.expected);
+		this.expected.clear();
+		return e;
+	}
+	static SET_SETTING = /^\s*INSERT\s+INTO\s+settings\s*\(\s*key\s*,\s*value\s*\)\s*VALUES\s*\(\s*\?\s*,\s*\?\s*\)/i;
 	rows(sql, args) {
 		const stmt = this.raw.prepare(sql);
 		try {
@@ -886,6 +899,13 @@ var BrowserDb = class {
 	}
 	run(sql, raw) {
 		const change = normalize(sql, raw);
+		if (BrowserDb.SET_SETTING.test(change.sql)) {
+			const key = String(change.args[0]);
+			if (key !== "data_version" && !this.expected.has(key)) {
+				const row = this.rows("SELECT value FROM settings WHERE key = ?", [key])[0];
+				this.expected.set(key, row ? row.value == null ? null : String(row.value) : null);
+			}
+		}
 		const before = this.scalar("SELECT last_insert_rowid()");
 		this.raw.run(change.sql, change.args);
 		const changes = this.raw.getRowsModified();
@@ -1508,37 +1528,47 @@ var Mirror = class {
 		await this.ready;
 		if (this.desktop) return this.writeDesktop(fn);
 		return this.lock(async () => {
-			const db = this.current;
-			db.dropChanges();
-			const result = db.transaction(() => fn(db))();
-			const changes = db.takeChanges();
-			if (!changes.length) return result;
-			const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-			const mark = {
-				sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-				args: [version]
-			};
-			const touched = touchedTables(changes);
-			try {
-				await this.turso.writeAtomic([
-					...changes,
-					...trackStatements(touched, version),
-					mark
-				]);
-				if (this.tv) {
-					for (const t of touched) this.tv[t] = version;
-					this.saveTv();
+			for (let attempt = 0;; attempt++) {
+				const db = this.current;
+				db.dropChanges();
+				const result = db.transaction(() => fn(db))();
+				const changes = db.takeChanges();
+				const expected = db.takeExpected();
+				if (!changes.length) return result;
+				const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+				const mark = {
+					sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+					args: [version]
+				};
+				const touched = touchedTables(changes);
+				const checks = casStatements(expected);
+				try {
+					await this.turso.writeAtomic([
+						...checks,
+						...changes,
+						...trackStatements(touched, version),
+						mark,
+						...checks.length ? [{
+							sql: "DELETE FROM sys_cas",
+							args: []
+						}] : []
+					]);
+					if (this.tv) {
+						for (const t of touched) this.tv[t] = version;
+						this.saveTv();
+					}
+					this.lastError = null;
+				} catch (e) {
+					this.lastError = e.message;
+					await this.rebuild().catch(() => {});
+					this.emit();
+					if (isCasConflict(e) && attempt < 3) continue;
+					throw new MirrorError(navigator.onLine === false ? "You are offline, so this was not saved. Try again when you are back online." : `Not saved: ${e.message}`);
 				}
-				this.lastError = null;
-			} catch (e) {
-				this.lastError = e.message;
-				await this.rebuild().catch(() => {});
+				this.persist();
 				this.emit();
-				throw new MirrorError(navigator.onLine === false ? "You are offline, so this was not saved. Try again when you are back online." : `Not saved: ${e.message}`);
+				return result;
 			}
-			this.persist();
-			this.emit();
-			return result;
 		});
 	}
 	/**
@@ -1891,6 +1921,18 @@ var Mirror = class {
 		await this.turso.writeAtomic(db.takeChanges()).catch(() => {});
 	}
 };
+/** The checks that go first in a write: each overwritten setting must still hold what we read. */
+function casStatements(expected) {
+	if (!expected.size) return [];
+	return [{
+		sql: "CREATE TABLE IF NOT EXISTS sys_cas (ok INTEGER NOT NULL CHECK (ok = 1))",
+		args: []
+	}, ...[...expected].map(([key, value]) => ({
+		sql: "INSERT INTO sys_cas (ok) VALUES ((SELECT value FROM settings WHERE key = ?) IS ?)",
+		args: [key, value]
+	}))];
+}
+var isCasConflict = (e) => /sys_cas|CHECK constraint failed: ok = 1|ok = 1/i.test(String(e?.message ?? e));
 // src/renderer/src/web/tursoHttp.ts
 var toHrana$1 = (v) => {
 	if (v === null) return { type: "null" };
