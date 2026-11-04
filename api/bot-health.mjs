@@ -4,7 +4,7 @@
 // the CRON_SECRET) may ask.
 import { bearer, config, cronSecretOk, send, sessionOk } from './_lib.mjs'
 
-const BOTS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN']
+const BOTS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN', 'WAKY_BOT_TOKEN']
 
 async function check(token) {
   const call = async (method) => {

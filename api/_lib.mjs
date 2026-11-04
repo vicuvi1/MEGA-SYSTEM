@@ -199,6 +199,7 @@ export function botDefaults(env = process.env) {
     financeBotToken: env.FINANCE_BOT_TOKEN || '',
     financeBotChatId: chat,
     manBotToken: env.MAN_BOT_TOKEN || '',
+    wakyBotToken: env.WAKY_BOT_TOKEN || '',
     manBotChatId: chat
   }
 }
@@ -220,7 +221,7 @@ export function send(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
-const BOT_VARS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN']
+const BOT_VARS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN', 'WAKY_BOT_TOKEN']
 
 /** Bots run by their own program (e.g. Sporty's Python bot): BOTS_NOT_ON_SERVER=TELEGRAM_BOT_TOKEN,… */
 export function leftBots(env = process.env) {

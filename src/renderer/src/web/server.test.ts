@@ -95,6 +95,12 @@ describe('web server', () => {
     expect(botDefaults(env).skipBotIds).toEqual(['1'])
   })
 
+  it('knows the Waky bot (sleep messages come from it, not a fallback)', () => {
+    const env = { MEGA_BOT_TOKEN: '3:c', WAKY_BOT_TOKEN: '7:w' }
+    expect(serverBots(env).find((b: any) => b.name === 'WAKY_BOT_TOKEN')?.id).toBe('7')
+    expect(botDefaults(env).wakyBotToken).toBe('7:w')
+  })
+
   it('gives the bot tokens from its own settings', () => {
     const bots = botDefaults({ TELEGRAM_BOT_TOKEN: '1:a', TELEGRAM_CHAT_ID: '42', FINANCE_BOT_TOKEN: '2:b', MEGA_BOT_TOKEN: '3:c' })
     expect(bots).toMatchObject({ botToken: '1:a', sportBotToken: '1:a', financeBotToken: '2:b', chatId: '42', megaBotToken: '3:c' })
