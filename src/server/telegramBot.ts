@@ -409,29 +409,49 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // ("Last check on…" twice is the point), so the once-a-day rule never drops them.
   const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean } = {}): Promise<any> => {
     // Each kind of message at most once a day (not the same water nudge 4 times).
-    const ok = opts.always || await mirror.write((db) => {
-      let prev: SentToday | null = null
-      try {
-        prev = JSON.parse(getSetting(db as any, BEN_SENT) || 'null')
-      } catch {
-        /* start fresh */
-      }
-      const r = sendOnce(prev, text, now.toLocaleDateString('sv-SE'))
-      if (r.send) setSetting(db as any, BEN_SENT, JSON.stringify(r.next))
-      return r.send
-    })
-    if (!ok) return false
+    // Each kind of message at most once a day (not the same water nudge 4 times).
+    // Checked now, but marked as sent only once Telegram says ok (a failed send
+    // is tried again on the next tick instead of counting as sent).
+    const original = text
+    const once = opts.always
+      ? null
+      : await mirror.read((db) => {
+          let prev: SentToday | null = null
+          try {
+            prev = JSON.parse(getSetting(db as any, BEN_SENT) || 'null')
+          } catch {
+            /* start fresh */
+          }
+          return sendOnce(prev, text, now.toLocaleDateString('sv-SE'))
+        })
+    if (once && !once.send) return false
     // Nudges in Ben's own words for this moment of your day (the fixed line if that fails).
     text = await voiced(text)
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: env.chatId, text, parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) })
-    })
+    }).catch((e) => ({ status: 0, json: async () => ({ ok: false, description: (e as Error).message }) }) as any)
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
     if (!j.ok) {
       void beat(healthDb, 'telegram', false, j.description ?? `HTTP ${res.status}`)
+      // Kept for the next ticks (up to 6 hours), so nothing is lost when Telegram hiccups.
+      if (!opts.always) await mirror.write((db) => setSetting(db as any, OUTBOX, JSON.stringify(outboxAdd(readOutbox(db), { text: original, markup: reply_markup ?? null, at: now.getTime() })))).catch(() => null)
       throw new Error(`Telegram: ${j.description ?? res.status}`)
+    }
+    if (once) {
+      await mirror
+        .write((db) => {
+          let prev: SentToday | null = null
+          try {
+            prev = JSON.parse(getSetting(db as any, BEN_SENT) || 'null')
+          } catch {
+            prev = null
+          }
+          const r = sendOnce(prev, original, now.toLocaleDateString('sv-SE'))
+          if (r.send) setSetting(db as any, BEN_SENT, JSON.stringify(r.next))
+        })
+        .catch(() => null)
     }
     void beat(healthDb, 'telegram', true)
     sent.push(text)
@@ -453,6 +473,13 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     { text: '😴 30 min', callback_data: 'ns|' },
     { text: '⏸ Pause today', callback_data: 'np|' }
   ]
+
+  // 0) Messages Telegram refused on an earlier tick: try them again (newest 6 hours only).
+  const box = await mirror.read((db) => readOutbox(db))
+  if (box.length) {
+    await mirror.write((db) => setSetting(db as any, OUTBOX, '[]')).catch(() => null)
+    for (const m of box.filter((x) => now.getTime() - x.at < 6 * 3600_000)) await send(m.text, m.markup ?? undefined).catch(() => null)
+  }
 
   const today0 = await mirror.read((db) => services.services(db).wallet.today(now))
   const tone = await mirror.read((db) => loadStyle(db).tone)
@@ -576,6 +603,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   }
   return sent
 }
+
+const OUTBOX = 'ben_outbox'
+type OutMsg = { text: string; markup: unknown; at: number }
+const readOutbox = (db: any): OutMsg[] => {
+  try {
+    const v = JSON.parse(getSetting(db, OUTBOX) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+/** A message for the outbox (no duplicates, at most 20). */
+export const outboxAdd = (list: OutMsg[], m: OutMsg): OutMsg[] => [...list.filter((x) => x.text !== m.text), m].slice(-20)
 
 /** Stakes (points taken when time is up, a reminder an hour before), study reviews, mood, the Sunday call. */
 async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: string, markup?: unknown) => Promise<void>, esc: (s: string) => string): Promise<void> {
