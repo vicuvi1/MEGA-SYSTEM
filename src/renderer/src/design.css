@@ -1636,3 +1636,39 @@
 @keyframes hb-ring { from { opacity: 1; transform: scale(.9); } to { opacity: 0; transform: scale(1.35); } }
 .dl-bigdone { margin: 6px 0 10px; padding: 10px 14px; border-radius: 12px; font-weight: 700; color: var(--gold, #f5c451); background: color-mix(in srgb, var(--gold, #f5c451) 10%, transparent); }
 @media (prefers-reduced-motion: reduce) { .hb-ring.pulse, .chip.habit.burst, .chip.habit.burst::after { animation: none; } }
+
+/* Today: quick capture, deep work, week strip */
+.qc { display: flex; align-items: center; gap: 10px; margin: 0 0 var(--s-4, 16px); padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.06); transition: box-shadow 0.15s; }
+.qc:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+.qc.busy { opacity: 0.7; }
+.qc-plus { color: var(--accent-text); font-weight: 700; font-size: 18px; line-height: 1; }
+:root .qc input, :root .qc input:focus { flex: 1; min-width: 0; border: 0 !important; box-shadow: none !important; background: transparent !important; color: var(--text); font: inherit; padding: 8px 0; outline: none; }
+.qc input::placeholder { color: var(--muted); }
+
+.dw { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 96%, transparent); backdrop-filter: blur(10px); }
+.dw-inner { width: min(560px, calc(100vw - 32px)); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.dw-label { text-transform: none; color: var(--muted); letter-spacing: 0.02em; }
+.dw h1 { margin: 0; font-size: clamp(24px, 4vw, 36px); line-height: 1.15; }
+.dw-timer { --p: 0%; width: 200px; height: 200px; border-radius: 50%; display: grid; place-content: center; gap: 2px; background: radial-gradient(closest-side, var(--surface) 88%, transparent 89%), conic-gradient(var(--accent) var(--p), rgb(var(--ink) / 0.08) 0); }
+.dw-timer b { font-size: 46px; font-variant-numeric: tabular-nums; font-weight: 700; }
+.dw-timer small { color: var(--muted); }
+.dw-timer.over b { color: var(--warn, #f5a524); }
+.dw-tasks { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 6px; text-align: left; }
+.dw-tasks li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.dw-tasks li.done span { color: var(--muted); text-decoration: line-through; }
+.dw-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.dw-hint { margin: 0; color: var(--muted); font-size: var(--t-sm, 13px); }
+
+.ws { margin: 0 0 var(--s-4, 16px); padding: 12px 14px; border-radius: 18px; background: var(--surface); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.06); }
+.ws header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ws header span { font-size: var(--t-sm, 13px); color: var(--muted); }
+.ws header span.up { color: var(--accent-text); }
+.ws-plot { position: relative; height: 64px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; }
+.ws-day { height: 100%; display: flex; align-items: flex-end; }
+.ws-day i { display: block; width: 100%; border-radius: 4px 4px 0 0; background: rgb(var(--ink) / 0.14); transition: height 0.3s; }
+.ws-day.hit i { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+.ws-day.today i { background: var(--accent); }
+.ws-goal { position: absolute; left: 0; right: 0; border-top: 1px dashed rgb(var(--ink) / 0.3); pointer-events: none; }
+.ws-labels { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 4px; text-align: center; }
+.ws-labels small { color: var(--muted); }
+.ws-labels small.today { color: var(--text); font-weight: 600; }

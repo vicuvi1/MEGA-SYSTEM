@@ -22,6 +22,8 @@ export interface CoachStatus {
   today: { focusMin: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; workoutDone: boolean }
   /** Focus minutes per day, the last 7 days (oldest first). */
   week: { day: string; min: number }[]
+  /** Focus minutes the 7 days before that (to compare weeks). */
+  prevWeekMin: number
   mustdos: { i: number; text: string; done: boolean }[]
 }
 
@@ -88,6 +90,12 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
       return { id: p.goalId, title: p.title, subject: p.subject, pct: Math.min(100, Math.round((g.doneMin / 60 / Math.max(0.1, g.hours)) * 100)), perDayMin: p.perDayMin, todayLeftMin: p.todayLeftMin, status: p.status, daysLeft: p.daysLeft }
     }),
     today: { focusMin: f.todayMin, mustDone: f.plan.items.length - open.length, mustTotal: f.plan.items.length, waterMl: water.ml, waterTarget: water.target, workoutDone: (s.wallet.summary(now).todayRules ?? []).includes('body.workout_done') },
+    prevWeekMin: (() => {
+      const focus = s.progress.input(null, now, 8).focus
+      const from = addDays(today, -13)
+      const to = addDays(today, -7)
+      return focus.filter((x) => x.day >= from && x.day <= to).reduce((t, x) => t + x.minutes, 0)
+    })(),
     week: (() => {
       const focus = s.progress.input(null, now, 8).focus
       return Array.from({ length: 7 }, (_, k) => {

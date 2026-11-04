@@ -11435,6 +11435,12 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 			waterTarget: water.target,
 			workoutDone: (s.wallet.summary(now).todayRules ?? []).includes("body.workout_done")
 		},
+		prevWeekMin: (() => {
+			const focus = s.progress.input(null, now, 8).focus;
+			const from = addDays$1(today, -13);
+			const to = addDays$1(today, -7);
+			return focus.filter((x) => x.day >= from && x.day <= to).reduce((t, x) => t + x.minutes, 0);
+		})(),
 		week: (() => {
 			const focus = s.progress.input(null, now, 8).focus;
 			return Array.from({ length: 7 }, (_, k) => {

@@ -189,6 +189,11 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
           <span>{m.sub}</span>
         </div>
         <div className="th-move-actions">
+          {m.kind === 'running' && (
+            <button className="btn ghost" onClick={() => window.dispatchEvent(new CustomEvent('life-deep-work'))}>
+              ⛶ Deep work
+            </button>
+          )}
           {m.kind === 'answer' && (
             <button className="btn ghost" disabled={busy} onClick={() => onGo('coach')}>
               Not yet
