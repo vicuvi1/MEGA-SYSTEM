@@ -665,3 +665,9 @@ export function parseTaskDecomposition(text: string, modelUsed = 'AI'): TaskDeco
     }
   }
 }
+
+/** A promise that gives up after `ms` (the server has 60 s per request: never wait past it). */
+export function withTimeout<T>(p: Promise<T>, ms: number, what = 'The AI'): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([p, new Promise<never>((_, no) => (t = setTimeout(() => no(new Error(`${what} took too long`)), ms)))]).finally(() => t && clearTimeout(t))
+}

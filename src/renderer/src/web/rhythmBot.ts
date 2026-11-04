@@ -2,6 +2,7 @@
 // the day, puts an approved plan into your calendar and Todoist, writes the
 // evening and Sunday reviews, and the water and training nudges. Used by the
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
+import { withTimeout } from '@core/ai'
 import { addDays } from '@core/dates'
 import { progressReport, financeSpending } from '@core/progress'
 import { sharedView, sportToday } from '@core/sportShared'
@@ -212,7 +213,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         ]
           .filter(Boolean)
           .join('\n')
-        const raw = await ai(prompt, { json: true, think: true, strong: true })
+        const raw = await withTimeout(ai(prompt, { json: true, think: true, strong: true }), 35_000)
         const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
         plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now))
       } catch {
@@ -323,7 +324,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     if (ai) {
       try {
         const context = await contextFor(null, null, tomorrowTasks)
-        const raw = await ai(
+        const raw = await withTimeout(ai(
           [
             "You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
             `Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join('; ') || 'none'}. Due tomorrow in Todoist: ${nextUp.join('; ') || 'nothing'}.`,
@@ -334,7 +335,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
             context
           ].join('\n'),
           { json: true, think: true, strong: true }
-        )
+        ), 35_000)
         const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
         if (typeof j.lesson === 'string' && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240)
         const t = (Array.isArray(j.top3) ? j.top3 : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)
@@ -406,7 +407,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     if (ai) {
       try {
         const context = await contextFor(null, null, upcoming)
-        const raw = await ai(
+        const raw = await withTimeout(ai(
           [
             "You are BEN, Victor's best friend and coach. Sunday review of his week. Honest, short, numbers.",
             `Week score ${report.score}/100 (last week ${report.prevScore}). ${lines.join('; ')}.`,
@@ -416,7 +417,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
             context
           ].join('\n'),
           { json: true, think: true, strong: true }
-        )
+        ), 35_000)
         const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
         const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)
         out = {
@@ -452,7 +453,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       return rows.map((r) => `week of ${r.week}: promises kept ${r.keptPct ?? '—'}%, day score ${r.avgScore ?? '—'}, focus ${(r.focusMin / 60).toFixed(1)}h, plans approved ${r.plansApproved}/${r.plansProposed}`).join('\n')
     })
     try {
-      const raw = await ai(
+      const raw = await withTimeout(ai(
         [
           "You are BEN, Victor's best friend and coach. Write him this week's letter.",
           'Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it "— Ben". Plain text, no markdown, at most 2 emoji. Write in English.',
@@ -464,7 +465,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           context
         ].join('\n'),
         { json: true, think: true, strong: true }
-      )
+      ), 35_000)
       const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
       const text = String(j.letter ?? '').trim().slice(0, 2000)
       if (!text) return null
@@ -496,7 +497,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
     if (!data.chat) return null
     try {
-      const raw = await ai(
+      const raw = await withTimeout(ai(
         [
           "You are BEN, Victor's coach, reviewing YOUR OWN coaching today, honestly. What helped him act? What did he ignore? Where were you too long, too generic, wrong, or too soft/hard? What should you do differently tomorrow?",
           'Answer ONLY with JSON: {"notes": string[] (2–4 short concrete notes to yourself for tomorrow, e.g. "Ask about the lab report before 10:00, he ignored it after lunch"), "works": string (one thing that worked with him, or ""), "fails": string (one thing that did not, or "")}',
@@ -506,7 +507,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           data.feedback ? `\n== His feedback today ==\n${data.feedback}` : ''
         ].join('\n'),
         { json: true, think: true }
-      )
+      ), 35_000)
       const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
       const notes = (Array.isArray(j.notes) ? j.notes : []).map((x: any) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 4)
       if (!notes.length) return null

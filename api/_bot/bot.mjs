@@ -7056,6 +7056,12 @@ syncFinance: (recordDays) => write((s) => {
 		}
 	};
 }
+// src/core/ai.ts
+/** A promise that gives up after `ms` (the server has 60 s per request: never wait past it). */
+function withTimeout(p, ms, what = "The AI") {
+	let t;
+	return Promise.race([p, new Promise((_, no) => t = setTimeout(() => no(/* @__PURE__ */ new Error(`${what} took too long`)), ms))]).finally(() => t && clearTimeout(t));
+}
 // src/core/botCommands.ts
 function parseAmountAndUnit(str, defaultUnit = "reps") {
 	if (!str) return {
@@ -13563,7 +13569,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		if (ai) try {
 			const context = await contextFor(events, tasks, upcoming);
 			const prev = base.st.briefing?.plan;
-			const raw = await ai([
+			const raw = await withTimeout(ai([
 				"You are BEN, Victor's best friend and coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
 				`It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
 				"Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits (\"Algebra set (exam 15 Dec)\").",
@@ -13579,7 +13585,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				json: true,
 				think: true,
 				strong: true
-			});
+			}), 35e3);
 			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
 			plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now));
 		} catch {
@@ -13720,7 +13726,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		let top3 = [.../* @__PURE__ */ new Set([...open, ...nextUp])].slice(0, 3);
 		if (ai) try {
 			const context = await contextFor(null, null, tomorrowTasks);
-			const raw = await ai([
+			const raw = await withTimeout(ai([
 				"You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
 				`Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join("; ") || "none"}. Due tomorrow in Todoist: ${nextUp.join("; ") || "nothing"}.`,
 				islandLine ? `From the desktop island: ${islandLine}.` : "",
@@ -13732,7 +13738,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				json: true,
 				think: true,
 				strong: true
-			});
+			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			if (typeof j.lesson === "string" && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240);
 			const t = (Array.isArray(j.top3) ? j.top3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
@@ -13834,7 +13840,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		};
 		if (ai) try {
 			const context = await contextFor(null, null, upcoming);
-			const raw = await ai([
+			const raw = await withTimeout(ai([
 				"You are BEN, Victor's best friend and coach. Sunday review of his week. Honest, short, numbers.",
 				`Week score ${report.score}/100 (last week ${report.prevScore}). ${lines.join("; ")}.`,
 				"win: the best thing this week (with its number). leak: the biggest leak (with its number). focus: next week's ONE area, one of focus|wake|sport|clean|todoist|spend|mustdo. note: his target in a few words (\"up at 7:00 every day\"). big3: the 3 big tasks for next week (from his deadlines and goals).",
@@ -13845,7 +13851,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				json: true,
 				think: true,
 				strong: true
-			});
+			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
 			out = {
@@ -13892,7 +13898,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			return scorecard(cleanHistory(readJson(db, COACH_HISTORY, null)), services.services(db).progress.input(null, /* @__PURE__ */ new Date(), 70).focus, today, 4).map((r) => `week of ${r.week}: promises kept ${r.keptPct ?? "—"}%, day score ${r.avgScore ?? "—"}, focus ${(r.focusMin / 60).toFixed(1)}h, plans approved ${r.plansApproved}/${r.plansProposed}`).join("\n");
 		});
 		try {
-			const raw = await ai([
+			const raw = await withTimeout(ai([
 				"You are BEN, Victor's best friend and coach. Write him this week's letter.",
 				"Like a real friend who watched his whole week: warm, honest, specific, a bit of humour, and tough where it is earned. Use his real numbers, names and things he told you. 120–180 words, 3 short paragraphs: (1) what you noticed this week, (2) what you are proud of and what worries you, (3) the one thing you want from him next week, concrete. Sign it \"— Ben\". Plain text, no markdown, at most 2 emoji. Write in English.",
 				"Answer ONLY with JSON: {\"letter\": string}",
@@ -13905,7 +13911,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				json: true,
 				think: true,
 				strong: true
-			});
+			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			const text = String(j.letter ?? "").trim().slice(0, 2e3);
 			if (!text) return null;
@@ -13940,7 +13946,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		});
 		if (!data.chat) return null;
 		try {
-			const raw = await ai([
+			const raw = await withTimeout(ai([
 				"You are BEN, Victor's coach, reviewing YOUR OWN coaching today, honestly. What helped him act? What did he ignore? Where were you too long, too generic, wrong, or too soft/hard? What should you do differently tomorrow?",
 				"Answer ONLY with JSON: {\"notes\": string[] (2–4 short concrete notes to yourself for tomorrow, e.g. \"Ask about the lab report before 10:00, he ignored it after lunch\"), \"works\": string (one thing that worked with him, or \"\"), \"fails\": string (one thing that did not, or \"\")}",
 				"",
@@ -13950,7 +13956,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			].join("\n"), {
 				json: true,
 				think: true
-			});
+			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			const notes = (Array.isArray(j.notes) ? j.notes : []).map((x) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 4);
 			if (!notes.length) return null;
@@ -15767,7 +15773,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const correcting = isCorrection(text);
 		const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text);
 		if (big) step("Thinking it through");
-		const ask = (found, extraNote = "") => ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
+		const deadline = Date.now() + 45e3;
+		const ask = (found, extraNote = "") => withTimeout(ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
 			refs: [
 				made.lines,
 				moneyLines,
@@ -15790,7 +15797,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				mime: media.mime,
 				data: media.data
 			}] : void 0
-		});
+		}), Math.max(4e3, deadline - Date.now()));
 		let out;
 		try {
 			out = parseBrain(await ask());
