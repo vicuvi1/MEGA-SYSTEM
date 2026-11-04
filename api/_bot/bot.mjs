@@ -11432,7 +11432,8 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 			mustDone: f.plan.items.length - open.length,
 			mustTotal: f.plan.items.length,
 			waterMl: water.ml,
-			waterTarget: water.target
+			waterTarget: water.target,
+			workoutDone: (s.wallet.summary(now).todayRules ?? []).includes("body.workout_done")
 		},
 		week: (() => {
 			const focus = s.progress.input(null, now, 8).focus;

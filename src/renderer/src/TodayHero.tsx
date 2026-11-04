@@ -8,6 +8,7 @@ import { useAction } from './ui'
 import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
 import { blockSubject, localDay } from '@core/dayTime'
+import { focusStreak, liveScore } from '@core/liveScore'
 
 /** A number that counts up to its value (calm, quick). */
 export function useCountUp(value: number, ms = 700): number {
@@ -199,8 +200,48 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
         </div>
       </div>
       )}
+      {(() => {
+        const live = liveScore({
+          mustDone: st.today.mustDone,
+          openMustDos: st.mustdos.filter((x) => !x.done).map((x) => x.text),
+          focusMin: st.today.focusMin,
+          focusGoal: Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0)),
+          waterMl: st.today.waterMl,
+          waterTarget: st.today.waterTarget,
+          workoutDone: !!st.today.workoutDone
+        })
+        return (
+          <div className="th-score">
+            <div className={`th-score-ring ${live.score >= 70 ? 'good' : ''}`} style={{ ['--p' as string]: `${live.score}%` }} title="Today's score: the same one Ben uses in the evening review">
+              <b>{live.score}</b>
+              <small>today</small>
+            </div>
+            {live.gains.length ? (
+              <div className="th-gains">
+                <span className="th-gains-lead">Raise it:</span>
+                {live.gains.slice(0, 4).map((g) => (
+                  <button
+                    key={g.kind + g.label}
+                    className={`th-gain k-${g.kind}`}
+                    onClick={() =>
+                      g.kind === 'mustdo' || g.kind === 'focus'
+                        ? void act(() => life.focus.start(g.kind === 'mustdo' ? g.label.split(/\s+/).slice(0, 4).join(' ').slice(0, 40) : 'Focus', 25, null), `Focus started · 25 min`).then(load)
+                        : onGo('coach')
+                    }
+                    title={g.kind === 'mustdo' || g.kind === 'focus' ? 'Start 25 minutes on it' : 'Log it with Ben'}
+                  >
+                    {g.label} <em>+{g.points}</em>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="th-gains-lead">A perfect day. 🔥</span>
+            )}
+          </div>
+        )
+      })()}
       <div className="th-stats">
-        <Stat label="Focus" value={`${Math.floor(focusMin / 60) ? `${Math.floor(focusMin / 60)}h ` : ''}${Math.round(focusMin % 60)}m`} sub={st.goals.length ? `${st.goals.reduce((t, g) => t + g.todayLeftMin, 0)} min still for your goals` : 'goal: 50 min a day'} pct={(st.today.focusMin / Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0) || 50)) * 100} tone="ok" />
+        <Stat label={focusStreak(st.week) >= 2 ? `Focus · 🔥 ${focusStreak(st.week)} days` : 'Focus'} value={`${Math.floor(focusMin / 60) ? `${Math.floor(focusMin / 60)}h ` : ''}${Math.round(focusMin % 60)}m`} sub={st.goals.length ? `${st.goals.reduce((t, g) => t + g.todayLeftMin, 0)} min still for your goals` : 'goal: 50 min a day'} pct={(st.today.focusMin / Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0) || 50)) * 100} tone="ok" />
         <Stat label="Water" value={st.today.waterTarget ? `${(st.today.waterMl / 1000).toFixed(1)} L` : '—'} sub={st.today.waterTarget ? `of ${(st.today.waterTarget / 1000).toFixed(1)} L` : 'log with Ben: water 250'} pct={water * 100} tone="water" />
         <Stat label="Must-dos" value={st.today.mustTotal ? `${st.today.mustDone}/${st.today.mustTotal}` : '—'} sub={st.today.mustTotal ? (st.today.mustDone === st.today.mustTotal ? 'all done 🔥' : `${st.today.mustTotal - st.today.mustDone} to go`) : 'none set yet'} pct={st.today.mustTotal ? (st.today.mustDone / st.today.mustTotal) * 100 : 0} />
       </div>

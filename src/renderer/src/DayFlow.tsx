@@ -177,6 +177,8 @@ export function DayFlow(props: Props) {
   const [skipped, setSkipped] = useState<string[]>([])
   const [adding, setAdding] = useState('')
   const [showAll, setShowAll] = useState(false)
+  // A habit just ticked: the chip bursts and the ring pulses.
+  const [burst, setBurst] = useState<string | null>(null)
   const [restPref, setRestPrefState] = useState<boolean | null>(() => {
     const v = storeGet('ls.todayRest')
     return v === '1' ? true : v === '0' ? false : null
@@ -784,8 +786,27 @@ export function DayFlow(props: Props) {
         </header>
 
         <div className="habit-chips" aria-label="Habits">
+          {habits.length > 0 && (
+            <span className={`hb-ring ${burst ? 'pulse' : ''} ${habits.every((h) => h.done) ? 'all' : ''}`} style={{ ['--p' as string]: `${(habits.filter((h) => h.done).length / habits.length) * 100}%` }} title="Habits done today">
+              <b>
+                {habits.filter((h) => h.done).length}/{habits.length}
+              </b>
+            </span>
+          )}
           {habits.map((h) => (
-            <button key={h.id} type="button" className={`chip habit ${h.done ? 'on' : ''}`} disabled={h.done} onClick={() => void h.run()} title={h.done ? `${h.label}: done` : `${h.label} · ${h.hint}`}>
+            <button
+              key={h.id}
+              type="button"
+              className={`chip habit ${h.done ? 'on' : ''} ${burst === h.id ? 'burst' : ''}`}
+              disabled={h.done}
+              onClick={() =>
+                void Promise.resolve(h.run()).then(() => {
+                  setBurst(h.id)
+                  setTimeout(() => setBurst(null), 1200)
+                })
+              }
+              title={h.done ? `${h.label}: done` : `${h.label} · ${h.hint}`}
+            >
               <span className="hc-check">{h.done ? '✓' : ''}</span>
               {h.label}
               {!h.done && <small>{h.hint}</small>}
@@ -855,7 +876,10 @@ export function DayFlow(props: Props) {
           )}
         </div>
 
-        {bigOpen.length > 0 && (
+        {bigOpen.length > 0 && bigOpen.every((b) => b.done) && (
+          <p className="dl-bigdone">✓ This week's big 3 are done 🎉</p>
+        )}
+        {bigOpen.length > 0 && !bigOpen.every((b) => b.done) && (
           <div className="dl-group" style={{ ['--c' as string]: 'var(--gold)' }}>
             <h3 className="dl-head">
               <i /> This week's big 3 <small>+25 each</small>
