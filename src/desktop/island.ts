@@ -9,8 +9,8 @@ import { app, BrowserWindow, globalShortcut, ipcMain, screen } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IslandMode, IslandPlacement } from '../shared/desktop'
+import { cleanIslandPrefs, ISLAND_ZOOM, type IslandPrefs } from '../core/islandModel'
 
-const SHORTCUT = 'Control+Alt+Space'
 const OPEN_W = 490
 const OPEN_MAX_H = 680
 
@@ -28,6 +28,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let place: IslandPlacement = 'top'
   // top: center share of the width; free: center share + px from the top; sides: center share of the height.
   let pos = { cx: 0.5, top: 0, cy: 0.5 }
+  // Your settings (Settings → Desktop island): size, look, sections, sound, hide speed, shortcut.
+  let prefs: IslandPrefs = cleanIslandPrefs(null)
   try {
     if (existsSync(prefFile)) {
       const p = JSON.parse(readFileSync(prefFile, 'utf8'))
@@ -38,9 +40,16 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       if (Number.isFinite(p.cy)) pos.cy = Math.min(1, Math.max(0, p.cy))
       // Older versions saved a dragged spot without a placement: that was "free".
       if (!p.place && p.top > 0) place = 'free'
+      prefs = cleanIslandPrefs(p.prefs)
     }
   } catch { /* defaults */ }
-  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, place, ...pos })) } catch { /* fine */ } }
+  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, place, ...pos, prefs })) } catch { /* fine */ } }
+  /** Size setting: the page is zoomed, so the window and its click areas scale too. */
+  const zoom = () => ISLAND_ZOOM[prefs.size]
+  const scaled = (m: IslandMode) => {
+    const s = size(place, m, openHeight)
+    return { width: Math.round(s.width * zoom()), height: Math.round(s.height * zoom()) }
+  }
 
   let win: BrowserWindow | null = null
   let mode: IslandMode = 'hidden'
@@ -60,7 +69,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const d = display()
     displayId = d.id
     const wa = d.workArea
-    const { width, height } = size(place, mode, openHeight)
+    const { width, height } = scaled(mode)
     const clampX = (x: number) => Math.round(Math.min(wa.x + wa.width - width, Math.max(wa.x, x)))
     const clampY = (y: number) => Math.round(Math.min(wa.y + wa.height - height, Math.max(wa.y, y)))
     let x: number
@@ -84,7 +93,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const open = () => {
     if (win && !win.isDestroyed()) return
     win = new BrowserWindow({
-      ...size(place, 'hidden', openHeight), frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
+      ...scaled('hidden'), frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
       fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true, backgroundColor: '#00000000',
       type: process.platform === 'win32' ? 'toolbar' : undefined, title: 'Life System island',
       webPreferences: { preload: o.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false }
@@ -95,6 +104,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     win.webContents.on('will-navigate', (e) => e.preventDefault())
     win.webContents.on('did-finish-load', () => {
+      win?.webContents.setZoomFactor(zoom())
+      win?.webContents.send('island:prefs', prefs)
       sendPlacement()
       if (last) win?.webContents.send('island:state', last)
     })
@@ -114,6 +125,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   // The island page is ready (it loads a moment after the window): tell it where it lives and what to show.
   ipcMain.on('island:ready', (e) => {
     if (!fromIsland(e)) return
+    win?.webContents.send('island:prefs', prefs)
     sendPlacement()
     if (last) win?.webContents.send('island:state', last)
   })
@@ -217,7 +229,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const b = win.getBounds()
     const x = c.x - b.x
     const y = c.y - b.y
-    const now = hot.width > 0 && x >= hot.x - 4 && x <= hot.x + hot.width + 4 && y >= hot.y - 4 && y <= hot.y + hot.height + 6
+    const z = zoom()
+    const now = hot.width > 0 && x >= hot.x * z - 4 && x <= (hot.x + hot.width) * z + 4 && y >= hot.y * z - 4 && y <= (hot.y + hot.height) * z + 6
     if (now === inside) return
     inside = now
     win.setIgnoreMouseEvents(!now, { forward: true })
@@ -241,14 +254,41 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     showWin()
     win?.webContents.send('island:toggle')
   }
-  try { globalShortcut.register(SHORTCUT, toggle) } catch { /* taken by another app */ }
+  let bound = ''
+  /** Registers your shortcut; false when another app already uses it. */
+  const bindShortcut = (): boolean => {
+    if (bound) { try { globalShortcut.unregister(bound) } catch { /* fine */ } }
+    bound = ''
+    if (!prefs.shortcut) return true
+    try {
+      if (globalShortcut.register(prefs.shortcut, toggle)) { bound = prefs.shortcut; return true }
+    } catch { /* invalid */ }
+    return false
+  }
+  bindShortcut()
+  // Settings → Desktop island (from the app window).
+  ipcMain.handle('island:getPrefs', (e) => (e.sender === o.appWindow.webContents ? prefs : null))
+  ipcMain.handle('island:setPrefs', (e, p: Partial<IslandPrefs>) => {
+    if (e.sender !== o.appWindow.webContents) return null
+    const before = prefs
+    prefs = cleanIslandPrefs({ ...prefs, ...p })
+    const shortcutOk = prefs.shortcut === before.shortcut ? true : bindShortcut()
+    savePrefs()
+    if (win && !win.isDestroyed()) {
+      win.webContents.setZoomFactor(zoom())
+      win.webContents.send('island:prefs', prefs)
+      placeWin()
+    }
+    o.onChange?.()
+    return { prefs, shortcutOk }
+  })
   app.on('will-quit', () => globalShortcut.unregisterAll())
 
   if (enabled) open()
   return {
     enabled: () => enabled,
     placement: () => place,
-    shortcut: SHORTCUT,
+    get shortcut() { return prefs.shortcut || 'no shortcut' },
     setPlacement(p: IslandPlacement) {
       place = p
       if (p === 'top') pos.cx = 0.5

@@ -3,12 +3,35 @@
 // your plan now & next, must-dos, quick logs and Ben. While a timer runs (or
 // a block is coming up) the collapsed pill shows it. New things from Ben, a
 // block starting, or time up drop it down for a few seconds by themselves.
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { EMPTY_ISLAND, clock, pill, type IslandAction, type IslandSnapshot } from '@core/islandModel'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, HIDE_MS, clock, pill, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot } from '@core/islandModel'
 import type { IslandPlacement } from '../../shared/desktop'
 import './island.css'
 
 const desk = () => window.desktop
+
+/** A soft two-note chime (no files): when the island drops down by itself. */
+function chime() {
+  try {
+    const ctx = new AudioContext()
+    ;[660, 880].forEach((f, i) => {
+      const o = ctx.createOscillator()
+      const g = ctx.createGain()
+      o.type = 'sine'
+      o.frequency.value = f
+      const t = ctx.currentTime + i * 0.12
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(0.08, t + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35)
+      o.connect(g).connect(ctx.destination)
+      o.start(t)
+      o.stop(t + 0.4)
+    })
+    setTimeout(() => void ctx.close(), 900)
+  } catch {
+    /* no audio */
+  }
+}
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
 const minsText = (ms: number) => {
   const m = Math.max(1, Math.round(ms / 60000))
@@ -44,12 +67,16 @@ export function DesktopIsland() {
   const revealRef = useRef<() => void>(() => {})
   const toggleRef = useRef<() => void>(() => {})
   const [place, setPlace] = useState<IslandPlacement>('top')
+  const [prefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
+  const prefsRef = useRef(prefs)
+  prefsRef.current = prefs
   useEffect(() => {
     document.documentElement.classList.add('di-root')
     desk()?.onIslandState?.(setS)
     // The desktop watches the real pointer and says when it is over the island.
     desk()?.onIslandHover?.((on) => hoverRef.current(on))
     desk()?.onIslandPlacement?.(setPlace)
+    desk()?.onIslandPrefs?.(setPrefs)
     // You touched its screen edge / pressed Ctrl+Alt+Space.
     desk()?.onIslandReveal?.(() => revealRef.current())
     desk()?.onIslandToggle?.(() => toggleRef.current())
@@ -150,7 +177,7 @@ export function DesktopIsland() {
     if (closeT.current) clearTimeout(closeT.current)
     if (on) {
       if (!st.current.open) closeT.current = window.setTimeout(() => show(false), 140)
-    } else if (st.current.open) scheduleHide(st.current.alertOnly ? 1500 : 450)
+    } else if (st.current.open) scheduleHide(st.current.alertOnly ? 1500 : HIDE_MS[prefsRef.current.hide])
   }
 
   // Something new: drop down for 8 seconds (stays while the mouse is on it).
@@ -160,6 +187,7 @@ export function DesktopIsland() {
     seenAlert.current = a.id
     if (open && !alertOnly) return
     show(true)
+    if (prefsRef.current.sound) chime()
     if (alertT.current) clearTimeout(alertT.current)
     alertT.current = window.setTimeout(() => {
       if (!over.current && !st.current.pinned) hide()
@@ -271,10 +299,117 @@ export function DesktopIsland() {
   const water = s.water
   const mustOpen = s.mustdos.filter((m) => !m.done).length
 
+  // The card's sections, in your order (Settings → Desktop island).
+  const blocks: Record<IslandSection, ReactNode> = {
+    timer: run ? (<section className="di-timer">
+                  <Ring pct={runPct} over={runOver} size={58} stroke={4} />
+                  <div className="di-timer-mid">
+                    <span className={`di-clock ${runOver ? 'over' : ''}`}>{runOver ? '+' : ''}{clock(left)}</span>
+                    <small>{run.subject}</small>
+                  </div>
+                  <div className="di-actions col">
+                    <button className="primary" onClick={() => tap({ kind: 'stop' })}>Stop & log</button>
+                    <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>
+                  </div>
+                </section>) : null,
+    plan: (<section className="di-plan">
+                <div className="di-row">
+                  <span className="di-label">Now</span>
+                  {s.now ? (
+                    <div className="di-block">
+                      <b>{s.now.title}</b>
+                      <small>
+                        {hhmm(s.now.start)}–{hhmm(s.now.end)} · {minsText(s.now.end - now)} left
+                      </small>
+                      <div className="di-bar"><i style={{ width: `${Math.min(100, ((now - s.now.start) / (s.now.end - s.now.start)) * 100)}%` }} /></div>
+                    </div>
+                  ) : (
+                    <div className="di-block muted">
+                      <b>{s.ben.move?.title ?? 'Free time'}</b>
+                      <small>{s.ben.move?.sub ?? 'Nothing planned right now.'}</small>
+                    </div>
+                  )}
+                  {!run && s.now && (
+                    <button className="di-go" onClick={() => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) })}>
+                      Start
+                    </button>
+                  )}
+                </div>
+                {s.next && (
+                  <div className="di-row">
+                    <span className="di-label">Next</span>
+                    <div className="di-block">
+                      <b>{s.next.title}</b>
+                      <small>
+                        {hhmm(s.next.start)} · in {minsText(s.next.start - now)}
+                      </small>
+                    </div>
+                  </div>
+                )}
+              </section>),
+    mustdos: s.mustdos.length ? (<section className="di-must">
+                  <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>
+                  {s.mustdos.map((m) => (
+                    <button key={m.i} className={`di-check ${m.done ? 'done' : ''}`} onClick={() => tap({ kind: 'mustdo', i: m.i })}>
+                      <i>{m.done ? '✓' : ''}</i>
+                      <span>{m.text}</span>
+                    </button>
+                  ))}
+                </section>) : null,
+    logs: (<section className="di-logs">
+                <div className="di-water">
+                  <span>💧</span>
+                  <div className="di-water-mid">
+                    <small>
+                      {(water.ml / 1000).toFixed(1)} / {(water.target / 1000).toFixed(1)} L
+                    </small>
+                    <div className="di-bar water"><i style={{ width: `${water.target ? Math.min(100, (water.ml / water.target) * 100) : 0}%` }} /></div>
+                  </div>
+                  <button onClick={() => tap({ kind: 'water', ml: 250 })}>+250</button>
+                  <button onClick={() => tap({ kind: 'water', ml: 500 })}>+500</button>
+                </div>
+                {!!s.reps.length && (
+                  <div className="di-reps">
+                    {s.reps.map((r) => (
+                      <button key={r.id} onClick={() => tap({ kind: 'reps', id: r.id, name: r.name, n: 10 })} title={`${r.done}/${r.target}`}>
+                        <span>{r.name}</span>
+                        <small>
+                          {r.done}/{r.target}
+                        </small>
+                        <b>+10</b>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>),
+    ben: (<section className="di-ben">
+                {s.ben.busy ? (
+                  <p className="di-typing">
+                    <i />
+                    <i />
+                    <i />
+                    <em>{s.ben.steps[s.ben.steps.length - 1] ?? 'thinking'}…</em>
+                  </p>
+                ) : (
+                  s.ben.last && <p className="di-last">{s.ben.last.text.replace(/<[^>]+>/g, '')}</p>
+                )}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    chat()
+                  }}
+                >
+                  <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message Ben…" onPointerDown={() => desk()?.islandFocus?.()} onFocus={() => { setPinned(true); desk()?.islandFocus?.() }} />
+                  <button disabled={!text.trim() || s.ben.busy} aria-label="Send">↑</button>
+                </form>
+              </section>)
+  }
+
   return (
     <div
       ref={root}
-      className={`di at-${place} ${mode} ${alertOnly ? 'alert-only' : ''} mood-${s.ben.mood} ${runOver ? 'is-over' : ''}`}
+      style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
+      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? 'alert-only' : ''} mood-${s.ben.mood} ${runOver ? 'is-over' : ''}`}
     >
       {/* Collapsed: a thin line, or the smart pill */}
       {!open && (
@@ -340,120 +475,10 @@ export function DesktopIsland() {
             </section>
           )}
 
-          {!alertOnly && (
-            <>
-              {run && (
-                <section className="di-timer">
-                  <Ring pct={runPct} over={runOver} size={58} stroke={4} />
-                  <div className="di-timer-mid">
-                    <span className={`di-clock ${runOver ? 'over' : ''}`}>{runOver ? '+' : ''}{clock(left)}</span>
-                    <small>{run.subject}</small>
-                  </div>
-                  <div className="di-actions col">
-                    <button className="primary" onClick={() => tap({ kind: 'stop' })}>Stop & log</button>
-                    <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>
-                  </div>
-                </section>
-              )}
-
-              <section className="di-plan">
-                <div className="di-row">
-                  <span className="di-label">Now</span>
-                  {s.now ? (
-                    <div className="di-block">
-                      <b>{s.now.title}</b>
-                      <small>
-                        {hhmm(s.now.start)}–{hhmm(s.now.end)} · {minsText(s.now.end - now)} left
-                      </small>
-                      <div className="di-bar"><i style={{ width: `${Math.min(100, ((now - s.now.start) / (s.now.end - s.now.start)) * 100)}%` }} /></div>
-                    </div>
-                  ) : (
-                    <div className="di-block muted">
-                      <b>{s.ben.move?.title ?? 'Free time'}</b>
-                      <small>{s.ben.move?.sub ?? 'Nothing planned right now.'}</small>
-                    </div>
-                  )}
-                  {!run && s.now && (
-                    <button className="di-go" onClick={() => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) })}>
-                      Start
-                    </button>
-                  )}
-                </div>
-                {s.next && (
-                  <div className="di-row">
-                    <span className="di-label">Next</span>
-                    <div className="di-block">
-                      <b>{s.next.title}</b>
-                      <small>
-                        {hhmm(s.next.start)} · in {minsText(s.next.start - now)}
-                      </small>
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              {!!s.mustdos.length && (
-                <section className="di-must">
-                  <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>
-                  {s.mustdos.map((m) => (
-                    <button key={m.i} className={`di-check ${m.done ? 'done' : ''}`} onClick={() => tap({ kind: 'mustdo', i: m.i })}>
-                      <i>{m.done ? '✓' : ''}</i>
-                      <span>{m.text}</span>
-                    </button>
-                  ))}
-                </section>
-              )}
-
-              <section className="di-logs">
-                <div className="di-water">
-                  <span>💧</span>
-                  <div className="di-water-mid">
-                    <small>
-                      {(water.ml / 1000).toFixed(1)} / {(water.target / 1000).toFixed(1)} L
-                    </small>
-                    <div className="di-bar water"><i style={{ width: `${water.target ? Math.min(100, (water.ml / water.target) * 100) : 0}%` }} /></div>
-                  </div>
-                  <button onClick={() => tap({ kind: 'water', ml: 250 })}>+250</button>
-                  <button onClick={() => tap({ kind: 'water', ml: 500 })}>+500</button>
-                </div>
-                {!!s.reps.length && (
-                  <div className="di-reps">
-                    {s.reps.map((r) => (
-                      <button key={r.id} onClick={() => tap({ kind: 'reps', id: r.id, name: r.name, n: 10 })} title={`${r.done}/${r.target}`}>
-                        <span>{r.name}</span>
-                        <small>
-                          {r.done}/{r.target}
-                        </small>
-                        <b>+10</b>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section className="di-ben">
-                {s.ben.busy ? (
-                  <p className="di-typing">
-                    <i />
-                    <i />
-                    <i />
-                    <em>{s.ben.steps[s.ben.steps.length - 1] ?? 'thinking'}…</em>
-                  </p>
-                ) : (
-                  s.ben.last && <p className="di-last">{s.ben.last.text.replace(/<[^>]+>/g, '')}</p>
-                )}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    chat()
-                  }}
-                >
-                  <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message Ben…" onPointerDown={() => desk()?.islandFocus?.()} onFocus={() => { setPinned(true); desk()?.islandFocus?.() }} />
-                  <button disabled={!text.trim() || s.ben.busy} aria-label="Send">↑</button>
-                </form>
-              </section>
-            </>
-          )}
+          {!alertOnly &&
+            prefs.sections
+              .filter((x) => x.on)
+              .map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
           {toast && <div className={`di-toast ${toast.state}`} role="status">{toast.state === 'busy' ? `${toast.text}…` : toast.text}</div>}
         </div>
       )}

@@ -1258,3 +1258,15 @@
 .dm-wait { color: var(--muted); font-style: italic; }
 .dm-plan { text-align: left; white-space: pre-wrap; line-height: 1.55; background: rgb(var(--ink) / 0.04); border-radius: 14px; padding: 14px 16px; margin: 4px 0 14px; }
 .dm-actions { display: flex; gap: 8px; justify-content: center; }
+
+/* Settings → Desktop island */
+.is-grid { display: grid; grid-template-columns: 120px 1fr; gap: 12px 16px; align-items: center; }
+.is-grid > label { color: var(--muted); font-size: var(--t-sm); align-self: start; padding-top: 6px; }
+.seg-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.is-range { display: flex; align-items: center; gap: 10px; }
+.is-range input { flex: 1; max-width: 260px; accent-color: var(--lime); }
+.is-sections { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-width: 360px; }
+.is-sections li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; background: var(--surface-2); }
+.is-sections li.off { opacity: 0.55; }
+.is-sections li label { flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+@media (max-width: 620px) { .is-grid { grid-template-columns: 1fr; } }

@@ -186,3 +186,52 @@ export function pill(s: IslandSnapshot, now: number): Pill {
   if (s.next && s.next.start - now <= 60 * 60_000) return { kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot }
   return { kind: 'idle', text: '', sub: '', pct: 0, over: false, dot }
 }
+
+// ---- Your island: how it looks and behaves (Settings → Desktop island) ----
+
+export type IslandSection = 'timer' | 'plan' | 'mustdos' | 'logs' | 'ben'
+export interface IslandPrefs {
+  size: 'compact' | 'normal' | 'large'
+  /** Background opacity, 0.55 (see-through) … 1 (solid). */
+  opacity: number
+  look: 'black' | 'glass' | 'mood'
+  /** The open card's sections, in your order. */
+  sections: { id: IslandSection; on: boolean }[]
+  /** A soft chime when it drops down by itself. */
+  sound: boolean
+  /** How long it waits before tucking away after the mouse leaves. */
+  hide: 'fast' | 'normal' | 'slow'
+  /** Electron accelerator, or '' for none. */
+  shortcut: string
+}
+
+export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', plan: 'Now & next', mustdos: 'Must-dos', logs: 'Water & reps', ben: 'Ben' }
+export const SHORTCUTS = ['Control+Alt+Space', 'Control+Shift+Space', 'Alt+Q', 'Control+Alt+L', ''] as const
+export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
+  size: 'normal',
+  opacity: 1,
+  look: 'black',
+  sections: (['timer', 'plan', 'mustdos', 'logs', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
+  sound: true,
+  hide: 'normal',
+  shortcut: 'Control+Alt+Space'
+}
+export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { compact: 0.88, normal: 1, large: 1.15 }
+export const HIDE_MS: Record<IslandPrefs['hide'], number> = { fast: 250, normal: 450, slow: 1200 }
+
+/** Any saved value → valid prefs (unknown sections dropped, missing ones added at the end). */
+export function cleanIslandPrefs(p: any): IslandPrefs {
+  const d = DEFAULT_ISLAND_PREFS
+  const ids = d.sections.map((s) => s.id)
+  const saved = Array.isArray(p?.sections) ? p.sections.filter((s: any) => ids.includes(s?.id)).map((s: any) => ({ id: s.id as IslandSection, on: s.on !== false })) : []
+  const sections = [...saved.filter((s: any, i: number) => saved.findIndex((x: any) => x.id === s.id) === i), ...d.sections.filter((s) => !saved.some((x: any) => x.id === s.id))]
+  return {
+    size: ['compact', 'normal', 'large'].includes(p?.size) ? p.size : d.size,
+    opacity: Number.isFinite(p?.opacity) ? Math.min(1, Math.max(0.55, Number(p.opacity))) : d.opacity,
+    look: ['black', 'glass', 'mood'].includes(p?.look) ? p.look : d.look,
+    sections,
+    sound: p?.sound !== false,
+    hide: ['fast', 'normal', 'slow'].includes(p?.hide) ? p.hide : d.hide,
+    shortcut: typeof p?.shortcut === 'string' && (SHORTCUTS as readonly string[]).includes(p.shortcut) ? p.shortcut : d.shortcut
+  }
+}

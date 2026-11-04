@@ -39,3 +39,17 @@ describe('desktop island', () => {
     expect(pill({ ...s, ben: { ...s.ben, unread: 2 } }, at(8)).dot).toBe(true)
   })
 })
+
+describe('island prefs', () => {
+  it('cleans saved prefs: keeps your order, adds missing sections, clamps values', async () => {
+    const { cleanIslandPrefs } = await import('./islandModel')
+    const p = cleanIslandPrefs({ size: 'large', opacity: 0.2, look: 'neon', sections: [{ id: 'ben', on: true }, { id: 'logs', on: false }, { id: 'nope' }], shortcut: 'Ctrl+Hack' })
+    expect(p.size).toBe('large')
+    expect(p.opacity).toBe(0.55)
+    expect(p.look).toBe('black')
+    expect(p.sections.map((s) => s.id)).toEqual(['ben', 'logs', 'timer', 'plan', 'mustdos'])
+    expect(p.sections[1].on).toBe(false)
+    expect(p.shortcut).toBe('Control+Alt+Space')
+    expect(cleanIslandPrefs(null).sections).toHaveLength(5)
+  })
+})

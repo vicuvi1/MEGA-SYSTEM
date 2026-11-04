@@ -1,5 +1,5 @@
 import type { UpdateStatus } from './api'
-import type { IslandAck, IslandAction, IslandSnapshot } from '../core/islandModel'
+import type { IslandAck, IslandAction, IslandPrefs, IslandSnapshot } from '../core/islandModel'
 import type { BackupStatus, BackupWhere } from '../desktop/backups'
 
 export type IslandMode = 'hidden' | 'pill' | 'open'
@@ -33,6 +33,11 @@ export interface DesktopApi {
   onIslandAck?(cb: (ack: IslandAck) => void): void
   /** Island window: give it the keyboard (typing to Ben). */
   islandFocus?(): void
+  /** App window: your island settings (Settings → Desktop island). */
+  getIslandPrefs?(): Promise<IslandPrefs | null>
+  setIslandPrefs?(p: Partial<IslandPrefs>): Promise<{ prefs: IslandPrefs; shortcutOk: boolean } | null>
+  /** Island window: settings changed. */
+  onIslandPrefs?(cb: (p: IslandPrefs) => void): void
   /** App window: open a page when the island asks. */
   onNavigate?(cb: (page: string) => void): void
   /** Island window: new snapshots. */

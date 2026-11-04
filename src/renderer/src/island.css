@@ -169,3 +169,10 @@ html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(
 .di-toast { position: sticky; bottom: 0; margin: 0 -2px -2px; padding: 9px 14px; border-radius: 16px; font-size: 12.5px; font-weight: 600; background: rgb(255 255 255 / 0.08); color: var(--fg); animation: di-in 0.25s; }
 .di-toast.ok { background: rgb(212 255 63 / 0.14); color: var(--lime); }
 .di-toast.err { background: rgb(255 90 95 / 0.16); color: #ff9a9d; font-weight: 500; }
+
+/* ---- Your settings: see-through, glass, mood glow ---- */
+.di { --bg: rgb(4 4 5 / var(--di-alpha, 1)); }
+.di.look-glass { --bg: rgb(24 27 36 / calc(var(--di-alpha, 1) * 0.78)); --line: rgb(255 255 255 / 0.16); }
+.di.look-glass .di-pill, .di.look-glass .di-card { backdrop-filter: blur(18px) saturate(1.4); }
+.di.look-mood .di-pill, .di.look-mood .di-card { box-shadow: 0 18px 60px rgb(0 0 0 / 0.55), 0 0 0 1.5px var(--glow), 0 0 46px -6px var(--glow); }
+.di.look-mood .di-face { box-shadow: 0 0 0 2px var(--glow), 0 0 22px -2px var(--glow); }
