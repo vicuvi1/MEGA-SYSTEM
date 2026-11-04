@@ -1168,7 +1168,12 @@ export function createTursoWebBridge(): Bridge {
       status: async () => (await botsP).status(),
       logs: async () => (await botsP).logs(),
       clearLogs: async () => (await botsP).clearLogs(),
-      test: async (k?: string) => (await botsP).test(k),
+      // The test message goes out from the server (tokens never reach this page).
+      test: async (k?: string) => {
+        if (direct) return (await botsP).test(k)
+        const r = await fetch('/api/bot-setup', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: '{"test":true}' }).catch(() => null)
+        return r?.ok ? r.json() : { ok: false, error: 'Server not reachable' }
+      },
       startPolling: async () => (await botsP).startPolling(),
       stopPolling: async () => (await botsP).stopPolling(),
       pollOnce: async () => (await botsP).pollOnce()

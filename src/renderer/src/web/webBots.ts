@@ -263,6 +263,14 @@ function stoppedReply(r: { session: { minutes: number; subject: string }; coins:
 
 
 
+/** Bot settings without any token (what may be synced, saved or shown). */
+export function stripTokens<T extends Record<string, any>>(cfg: T): T {
+  const out: any = {}
+  for (const [k, v] of Object.entries(cfg ?? {})) if (!/Token$/.test(k)) out[k] = v
+  return out
+}
+const hasTokens = (cfg: Record<string, any>) => Object.entries(cfg ?? {}).some(([k, v]) => /Token$/.test(k) && !!v && v !== 'on-server')
+
 export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
@@ -273,15 +281,32 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   let pruned = false
 
   // Saved settings win, but an empty token or chat never hides the server's one.
+  // Tokens are never read from (or written to) the synced settings: they live
+  // only in the server's environment (and the desktop's safeStorage).
   const merge = (saved: Partial<BotBridgeConfig>): BotBridgeConfig => {
     const out: any = { ...defaults }
-    for (const [k, v] of Object.entries(saved ?? {})) if (v !== '' && v != null) out[k] = v
+    for (const [k, v] of Object.entries(stripTokens(saved ?? {}))) if (v !== '' && v != null) out[k] = v
     return out
   }
+  let cleaned = false
   const config = (): Promise<BotBridgeConfig> =>
     mirror
       .read((db) => getSetting(db as any, 'bot_bridge_config'))
-      .then((raw) => merge(raw ? JSON.parse(raw) : {}))
+      .then((raw) => {
+        const saved = raw ? JSON.parse(raw) : {}
+        // Old copies kept tokens in the synced settings (and so in every backup): remove them once.
+        if (!cleaned && hasTokens(saved)) {
+          cleaned = true
+          void mirror.write((db) => setSetting(db as any, 'bot_bridge_config', JSON.stringify(stripTokens(saved)))).catch(() => null)
+          try {
+            const local = store?.getItem('bot_bridge_config')
+            if (local) store?.setItem('bot_bridge_config', JSON.stringify(stripTokens(JSON.parse(local))))
+          } catch {
+            /* fine */
+          }
+        }
+        return merge(saved)
+      })
       .catch(() => {
         try {
           const local = store?.getItem('bot_bridge_config')
@@ -2131,9 +2156,10 @@ His note: ${note}`,
       const next: BotBridgeConfig = { ...(await config()), ...patch }
       delete next.serverBots // comes from the server each time, never saved
       delete next.skipBotIds
-      await mirror.write((db) => setSetting(db as any, 'bot_bridge_config', JSON.stringify(next)))
+      const kept = stripTokens(next)
+      await mirror.write((db) => setSetting(db as any, 'bot_bridge_config', JSON.stringify(kept)))
       try {
-        store?.setItem('bot_bridge_config', JSON.stringify(next))
+        store?.setItem('bot_bridge_config', JSON.stringify(kept))
       } catch {
         /* fine */
       }

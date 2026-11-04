@@ -14348,6 +14348,13 @@ function stoppedReply(r, plan) {
 		keyboard: { inline_keyboard: [rate] }
 	};
 }
+/** Bot settings without any token (what may be synced, saved or shown). */
+function stripTokens(cfg) {
+	const out = {};
+	for (const [k, v] of Object.entries(cfg ?? {})) if (!/Token$/.test(k)) out[k] = v;
+	return out;
+}
+var hasTokens = (cfg) => Object.entries(cfg ?? {}).some(([k, v]) => /Token$/.test(k) && !!v && v !== "on-server");
 function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null }) {
 	let polling = false;
 	let timer = null;
@@ -14358,10 +14365,22 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	let pruned = false;
 	const merge = (saved) => {
 		const out = { ...defaults };
-		for (const [k, v] of Object.entries(saved ?? {})) if (v !== "" && v != null) out[k] = v;
+		for (const [k, v] of Object.entries(stripTokens(saved ?? {}))) if (v !== "" && v != null) out[k] = v;
 		return out;
 	};
-	const config = () => mirror.read((db) => getSetting(db, "bot_bridge_config")).then((raw) => merge(raw ? JSON.parse(raw) : {})).catch(() => {
+	let cleaned = false;
+	const config = () => mirror.read((db) => getSetting(db, "bot_bridge_config")).then((raw) => {
+		const saved = raw ? JSON.parse(raw) : {};
+		if (!cleaned && hasTokens(saved)) {
+			cleaned = true;
+			mirror.write((db) => setSetting(db, "bot_bridge_config", JSON.stringify(stripTokens(saved)))).catch(() => null);
+			try {
+				const local = store?.getItem("bot_bridge_config");
+				if (local) store?.setItem("bot_bridge_config", JSON.stringify(stripTokens(JSON.parse(local))));
+			} catch {}
+		}
+		return merge(saved);
+	}).catch(() => {
 		try {
 			const local = store?.getItem("bot_bridge_config");
 			return merge(local ? JSON.parse(local) : {});
@@ -16596,9 +16615,10 @@ His note: ${note}`, { json: true }));
 			};
 			delete next.serverBots;
 			delete next.skipBotIds;
-			await mirror.write((db) => setSetting(db, "bot_bridge_config", JSON.stringify(next)));
+			const kept = stripTokens(next);
+			await mirror.write((db) => setSetting(db, "bot_bridge_config", JSON.stringify(kept)));
 			try {
-				store?.setItem("bot_bridge_config", JSON.stringify(next));
+				store?.setItem("bot_bridge_config", JSON.stringify(kept));
 			} catch {}
 			return next;
 		},

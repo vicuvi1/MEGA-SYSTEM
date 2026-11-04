@@ -2,7 +2,7 @@
 // settings at /api/telegram, so they answer 24/7. Safe to call often: a bot
 // already pointed here is left as it is. Production only (a preview must not
 // take the bots away from the live site).
-import { bearer, config, leftBots, send, serverBots, sessionOk, webhookSecret } from './_lib.mjs'
+import { bearer, config, leftBots, readBody, send, serverBots, sessionOk, webhookSecret } from './_lib.mjs'
 
 async function tg(token, method, body) {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
@@ -18,6 +18,26 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
   if (!sessionOk(cfg, bearer(req))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  // {test: true}: a test message from the server's main bot (tokens never reach the page).
+  if (req.headers['content-type']?.includes('json')) {
+    let body = {}
+    try {
+      body = await readBody(req)
+    } catch {
+      body = {}
+    }
+    if (body?.test) {
+      const bot = serverBots().find((b) => b.name === 'MEGA_BOT_TOKEN') ?? serverBots()[0]
+      const chat = process.env.TELEGRAM_CHAT_ID || ''
+      if (!bot || !chat) return send(res, 200, { ok: false, error: 'No bot or chat set up on the server' })
+      try {
+        const r = await tg(bot.token, 'sendMessage', { chat_id: chat, text: '✅ Test from Life System: the server bot works.' })
+        return send(res, 200, r?.ok ? { ok: true } : { ok: false, error: r?.description || 'Telegram refused' })
+      } catch (e) {
+        return send(res, 200, { ok: false, error: e.message })
+      }
+    }
+  }
   if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') return send(res, 200, { ok: false, reason: 'not production' })
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || req.headers['x-forwarded-host'] || req.headers.host
   const bots = serverBots()
