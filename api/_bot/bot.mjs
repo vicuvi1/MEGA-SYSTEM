@@ -2214,6 +2214,73 @@ var Body = class {
 		return this.state(now);
 	}
 };
+// src/core/backupPlan.ts
+/** Tables that are only plumbing (or backups themselves): never in a backup, never restored. */
+var NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/;
+/** Append-only history: a restore only adds rows that are missing. */
+var APPEND_ONLY = /* @__PURE__ */ new Set(["ledger", "discipline_events"]);
+/** Settings a restore never overwrites (your current PIN and bot setup). */
+var KEEP_SETTINGS = /* @__PURE__ */ new Set([
+	"pin_hash",
+	"bot_bridge_config",
+	"data_version"
+]);
+/**
+* Settings that never go into a backup (or a data export): the PIN hash, the
+* sign-out counter, the login guard, the sealed Google sign-in, the bot setup
+* and anything that looks like a key or token. A restore keeps the current ones.
+*/
+var SECRET_SETTING = /^(pin_hash|session_epoch|web_login_guard|bot_bridge_config|google_oauth)$|token|secret|password|api_?key|oauth/i;
+/** A table's rows, minus secret settings. */
+function redactRows(table, rows) {
+	return table === "settings" ? rows.filter((r) => !SECRET_SETTING.test(String(r.key ?? ""))) : rows;
+}
+function backupTables(all) {
+	return all.filter((t) => !NOT_BACKED_UP.test(t)).sort();
+}
+/**
+* The statements that put a snapshot back, in one transaction: each table is
+* replaced (append-only history only gets its missing rows back), settings
+* are upserted except the kept ones, and the data marker moves so every
+* device reloads. `columns` = the current columns of each existing table.
+*/
+function restoreStatements(snap, columns, version) {
+	if (!snap || typeof snap !== "object" || !snap.tables || typeof snap.tables !== "object") throw new Error("This file is not a Life System backup");
+	const out = [];
+	for (const t of Object.keys(snap.tables).sort()) {
+		const rows = snap.tables[t];
+		const cols = columns[t];
+		if (!Array.isArray(rows) || !cols || NOT_BACKED_UP.test(t)) continue;
+		const have = new Set(cols);
+		if (t === "settings") {
+			for (const r of rows) {
+				if (!r || typeof r.key !== "string" || KEEP_SETTINGS.has(r.key) || typeof r.value !== "string") continue;
+				out.push({
+					sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+					args: [r.key, r.value]
+				});
+			}
+			continue;
+		}
+		if (!APPEND_ONLY.has(t)) out.push({
+			sql: `DELETE FROM "${t}"`,
+			args: []
+		});
+		for (const r of rows) {
+			const keys = Object.keys(r ?? {}).filter((k) => have.has(k));
+			if (!keys.length) continue;
+			out.push({
+				sql: `INSERT ${APPEND_ONLY.has(t) ? "OR IGNORE " : ""}INTO "${t}" (${keys.map((k) => `"${k}"`).join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
+				args: keys.map((k) => r[k] === void 0 ? null : r[k])
+			});
+		}
+	}
+	out.push({
+		sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+		args: [version]
+	});
+	return out;
+}
 // src/core/dataExport.ts
 function toWorkoutsCsv(workouts) {
 	return ["Date,Title,Notes,Exercises", ...workouts.map((w) => {
@@ -2254,7 +2321,7 @@ var DataExportService = class {
 			disciplineEvents: this.db.prepare("SELECT * FROM discipline_events ORDER BY id ASC").all(),
 			tasks: this.db.prepare("SELECT * FROM tasks ORDER BY id ASC").all(),
 			blocks: this.db.prepare("SELECT * FROM blocks ORDER BY id ASC").all(),
-			settings: this.db.prepare("SELECT * FROM settings").all()
+			settings: redactRows("settings", this.db.prepare("SELECT * FROM settings").all())
 		};
 		return JSON.stringify(payload, null, 2);
 	}
@@ -17751,69 +17818,12 @@ async function readHealth(t) {
 		latestSnapshot: s instanceof Error ? null : s.rows[0]?.[0] ?? null
 	};
 }
-// src/core/backupPlan.ts
-/** Tables that are only plumbing (or backups themselves): never in a backup, never restored. */
-var NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/;
-/** Append-only history: a restore only adds rows that are missing. */
-var APPEND_ONLY = /* @__PURE__ */ new Set(["ledger", "discipline_events"]);
-/** Settings a restore never overwrites (your current PIN and bot setup). */
-var KEEP_SETTINGS = /* @__PURE__ */ new Set([
-	"pin_hash",
-	"bot_bridge_config",
-	"data_version"
-]);
-function backupTables(all) {
-	return all.filter((t) => !NOT_BACKED_UP.test(t)).sort();
-}
-/**
-* The statements that put a snapshot back, in one transaction: each table is
-* replaced (append-only history only gets its missing rows back), settings
-* are upserted except the kept ones, and the data marker moves so every
-* device reloads. `columns` = the current columns of each existing table.
-*/
-function restoreStatements(snap, columns, version) {
-	if (!snap || typeof snap !== "object" || !snap.tables || typeof snap.tables !== "object") throw new Error("This file is not a Life System backup");
-	const out = [];
-	for (const t of Object.keys(snap.tables).sort()) {
-		const rows = snap.tables[t];
-		const cols = columns[t];
-		if (!Array.isArray(rows) || !cols || NOT_BACKED_UP.test(t)) continue;
-		const have = new Set(cols);
-		if (t === "settings") {
-			for (const r of rows) {
-				if (!r || typeof r.key !== "string" || KEEP_SETTINGS.has(r.key) || typeof r.value !== "string") continue;
-				out.push({
-					sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-					args: [r.key, r.value]
-				});
-			}
-			continue;
-		}
-		if (!APPEND_ONLY.has(t)) out.push({
-			sql: `DELETE FROM "${t}"`,
-			args: []
-		});
-		for (const r of rows) {
-			const keys = Object.keys(r ?? {}).filter((k) => have.has(k));
-			if (!keys.length) continue;
-			out.push({
-				sql: `INSERT ${APPEND_ONLY.has(t) ? "OR IGNORE " : ""}INTO "${t}" (${keys.map((k) => `"${k}"`).join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
-				args: keys.map((k) => r[k] === void 0 ? null : r[k])
-			});
-		}
-	}
-	out.push({
-		sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		args: [version]
-	});
-	return out;
-}
 // src/renderer/src/web/restoreDrill.ts
 /** Every data table of a database, as a backup (same shape as the apps' export). */
 function snapshotOf(db, source, now = /* @__PURE__ */ new Date()) {
 	const tables = {};
 	const all = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => String(r.name));
-	for (const t of backupTables(all)) tables[t] = db.prepare(`SELECT * FROM "${t}"`).all();
+	for (const t of backupTables(all)) tables[t] = redactRows(t, db.prepare(`SELECT * FROM "${t}"`).all());
 	return {
 		version: 2,
 		exportedAt: now.toISOString(),

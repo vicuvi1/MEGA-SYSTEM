@@ -35,7 +35,7 @@ import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus } from './web/coachStatus'
-import { backupTables, restoreStatements } from '@core/backupPlan'
+import { backupTables, redactRows, restoreStatements } from '@core/backupPlan'
 import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
 import { healthChecks } from '@core/health'
 import { beat, logError, readHealth } from './web/systemHealth'
@@ -420,7 +420,7 @@ export function createTursoWebBridge(): Bridge {
       const all = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r: any) => String(r.name))
       for (const t of backupTables([...new Set([...SNAPSHOT_TABLES, ...all])])) {
         try {
-          out[t] = db.prepare(`SELECT * FROM "${t}"`).all()
+          out[t] = redactRows(t, db.prepare(`SELECT * FROM "${t}"`).all() as Record<string, unknown>[])
         } catch {
           /* a table this database doesn't have */
         }

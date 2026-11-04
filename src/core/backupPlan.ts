@@ -9,6 +9,18 @@ export const APPEND_ONLY = new Set(['ledger', 'discipline_events'])
 /** Settings a restore never overwrites (your current PIN and bot setup). */
 export const KEEP_SETTINGS = new Set(['pin_hash', 'bot_bridge_config', 'data_version'])
 
+/**
+ * Settings that never go into a backup (or a data export): the PIN hash, the
+ * sign-out counter, the login guard, the sealed Google sign-in, the bot setup
+ * and anything that looks like a key or token. A restore keeps the current ones.
+ */
+export const SECRET_SETTING = /^(pin_hash|session_epoch|web_login_guard|bot_bridge_config|google_oauth)$|token|secret|password|api_?key|oauth/i
+
+/** A table's rows, minus secret settings. */
+export function redactRows<T extends Record<string, unknown>>(table: string, rows: T[]): T[] {
+  return table === 'settings' ? rows.filter((r) => !SECRET_SETTING.test(String(r.key ?? ''))) : rows
+}
+
 export function backupTables(all: string[]): string[] {
   return all.filter((t) => !NOT_BACKED_UP.test(t)).sort()
 }

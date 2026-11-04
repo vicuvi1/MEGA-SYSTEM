@@ -37,3 +37,12 @@ describe('backups', () => {
     expect(backupsToDelete(names, '2026-11-04')).toEqual(['life-system-2025-10-15.json', 'life-system-2026-03-09.json', 'life-system-2026-10-04.json'])
   })
 })
+
+import { redactRows as redact } from './backupPlan'
+describe('no secrets in backups', () => {
+  it('drops the PIN hash, tokens, Google sign-in and bot setup from settings', () => {
+    const rows = ['pin_hash', 'google_oauth', 'bot_bridge_config', 'session_epoch', 'todoist_token', 'theme', 'coach_memory'].map((key) => ({ key, value: 'x' }))
+    expect(redact('settings', rows).map((r) => r.key)).toEqual(['theme', 'coach_memory'])
+    expect(redact('ledger', [{ key: 'pin_hash' }])).toHaveLength(1)
+  })
+})

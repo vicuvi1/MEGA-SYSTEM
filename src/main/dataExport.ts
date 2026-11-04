@@ -1,3 +1,4 @@
+import { redactRows } from '../core/backupPlan'
 import { toExpensesCsv, toWorkoutsCsv } from '@core/dataExport'
 import type { Body } from './body'
 import type { DB } from './db'
@@ -20,7 +21,7 @@ export class DataExportService {
       disciplineEvents: this.db.prepare('SELECT * FROM discipline_events ORDER BY id ASC').all(),
       tasks: this.db.prepare('SELECT * FROM tasks ORDER BY id ASC').all(),
       blocks: this.db.prepare('SELECT * FROM blocks ORDER BY id ASC').all(),
-      settings: this.db.prepare('SELECT * FROM settings').all()
+      settings: redactRows('settings', this.db.prepare('SELECT * FROM settings').all() as Record<string, unknown>[])
     }
     return JSON.stringify(payload, null, 2)
   }

@@ -3,7 +3,7 @@
 // newest one back into a throwaway database and checks every row came back.
 import type { SqlJsStatic } from 'sql.js'
 import { MIGRATIONS } from '@core/schema'
-import { APPEND_ONLY, backupTables, KEEP_SETTINGS, NOT_BACKED_UP, restoreStatements, type Snapshot } from '@core/backupPlan'
+import { APPEND_ONLY, backupTables, KEEP_SETTINGS, NOT_BACKED_UP, redactRows, restoreStatements, type Snapshot } from '@core/backupPlan'
 
 interface RowsDb {
   prepare(sql: string): { all(...args: unknown[]): unknown[] }
@@ -13,7 +13,7 @@ interface RowsDb {
 export function snapshotOf(db: RowsDb, source: string, now = new Date()): Snapshot {
   const tables: Record<string, Record<string, unknown>[]> = {}
   const all = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r: any) => String(r.name))
-  for (const t of backupTables(all)) tables[t] = db.prepare(`SELECT * FROM "${t}"`).all() as Record<string, unknown>[]
+  for (const t of backupTables(all)) tables[t] = redactRows(t, db.prepare(`SELECT * FROM "${t}"`).all() as Record<string, unknown>[])
   return { version: 2, exportedAt: now.toISOString(), source, tables }
 }
 
