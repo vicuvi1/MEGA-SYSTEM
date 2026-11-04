@@ -106,7 +106,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     ),
     day: () => (
       <>
-      <CoachPlan onChange={() => onChange()} />
+      <CoachPlan oneApprove onChange={() => onChange()} />
       <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} />
       </>
     ),

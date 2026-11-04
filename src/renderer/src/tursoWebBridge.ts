@@ -248,7 +248,8 @@ export function createTursoWebBridge(): Bridge {
   // Google Calendar through the server (the sign-in stays sealed there).
   const googleCall = async (op: string, extra: Record<string, unknown> = {}): Promise<any> => {
     if (direct) return { connected: false, configured: false, events: [] }
-    const r = await fetch('/api/google', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op, ...extra }) })
+    // 25 s at most: a stuck request must never leave "Loading your day…" up forever.
+    const r = await fetch('/api/google', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op, ...extra }), signal: AbortSignal.timeout(25_000) })
     const j = await r.json().catch(() => ({}))
     if (!r.ok || j.error) throw new Error(j.error || `Google ${r.status}`)
     return j

@@ -16,18 +16,38 @@ interface Snapshot {
   day: string
   connected: boolean | null
   events: CalEvent[]
+  /** The calendar didn't answer (slow or offline): shown with a Retry. */
+  error?: string | null
 }
-let snap: Snapshot = { day: '', connected: null, events: [] }
+let snap: Snapshot = { day: '', connected: null, events: [], error: null }
 let inflight: Promise<void> | null = null
 const subs = new Set<(s: Snapshot) => void>()
 
 export function reloadToday(): Promise<void> {
   if (inflight) return inflight
+  // Never wait forever: a calendar that doesn't answer in 20 s counts as
+  // "didn't answer" (the last events stay; the next reload tries again).
+  const limit = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error('Your calendar did not answer')), ms))])
   inflight = (async () => {
     const day = localToday()
-    const on = !!(await life.google?.status().catch(() => null))?.connected
-    const events = on ? await life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => snap.events) : []
-    snap = { day, connected: on, events }
+    let status: { connected?: boolean } | null = null
+    let error: string | null = null
+    try {
+      status = (await limit<{ connected?: boolean } | null>(life.google ? life.google.status() : Promise.resolve({ connected: false }), 20_000)) as { connected?: boolean } | null
+    } catch (e) {
+      error = (e as Error).message
+    }
+    // No answer: keep what we knew (never claim "not connected" because it was slow).
+    const on = status ? !!status.connected : snap.connected ?? true
+    let events = snap.day === day ? snap.events : []
+    if (on && !error) {
+      try {
+        events = await limit(life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()), 20_000)
+      } catch (e) {
+        error = (e as Error).message
+      }
+    } else if (!on) events = []
+    snap = { day, connected: on, events, error }
     subs.forEach((f) => f(snap))
   })().finally(() => {
     inflight = null

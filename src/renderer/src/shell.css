@@ -85,7 +85,11 @@
 .sidebar::-webkit-scrollbar { display: none; }
 
 /* The header lines up with the centered content below it. */
-.topbar:not(.compact) { padding-inline: max(28px, calc((100% - 1440px) / 2)); }
+/* The header lines up with the page below it (same width as its column). */
+.main { --page-max: 1440px; }
+.main:has(.content > .pg), .main:has(.content > .sk-page) { --page-max: 1280px; }
+.topbar:not(.compact) { padding-inline: max(28px, calc((100% - var(--page-max)) / 2)); }
+@media (min-width: 1700px) { .main { --page-max: 1760px; } .main:has(.content > .pg), .main:has(.content > .sk-page) { --page-max: 1600px; } }
 
 /* Daily Rituals */
 .rituals-panel { margin-top: 14px; }

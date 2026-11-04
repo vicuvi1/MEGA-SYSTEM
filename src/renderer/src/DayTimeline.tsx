@@ -53,7 +53,7 @@ const STATE_TITLE: Record<BlockState, string> = { upcoming: 'Coming up', now: 'N
 export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
   const act = useAction()
   const today = localToday()
-  const { events, connected, reload } = useTodayEvents()
+  const { events, connected, reload, error: calError } = useTodayEvents()
   const [todo, setTodo] = useState<TodoTask[]>([])
   const [marks, setMarks] = useState<Record<string, 'done' | 'skip'>>({})
   const [open, setOpen] = useState<string | null>(null)
@@ -259,6 +259,11 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
         </div>
       )}
 
+      {calError && connected !== false && (
+        <p className="hint tl-calerr">
+          {calError}. <button className="btn small ghost" onClick={() => void reload()}>Retry</button>
+        </p>
+      )}
       {connected === null ? (
         <p className="hint">Loading your day…</p>
       ) : (

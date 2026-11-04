@@ -8,15 +8,18 @@ import { Icon } from './Icon'
 import { useAction } from './ui'
 import { useLive } from './live'
 
-export function CoachPlan({ onChange }: { onChange?: () => void }) {
+/** `oneApprove`: on Today, where "Do this now" already shows Approve, the card doesn't repeat it. */
+export function CoachPlan({ onChange, oneApprove = false }: { onChange?: () => void; oneApprove?: boolean }) {
   const act = useAction()
   const [data, setData] = useState<{ state: RhythmState; prefs: RhythmPrefs } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState('')
+  const [heroApproves, setHeroApproves] = useState(false)
   const load = useCallback(() => {
     life.coach?.rhythm?.('state').then(setData).catch(() => {})
-  }, [])
+    if (oneApprove) life.coach?.status?.().then((st) => setHeroApproves(st.move.kind === 'approve')).catch(() => {})
+  }, [oneApprove])
   useEffect(load, [load])
   useLive(load)
 
@@ -140,9 +143,11 @@ export function CoachPlan({ onChange }: { onChange?: () => void }) {
             </form>
           ) : (
             <div className="cp-actions">
-              <button className="btn primary" disabled={!!busy} onClick={() => void run('approve', undefined, 'Approving…')}>
-                {busy === 'Approving…' ? busy : '✓ Approve'}
-              </button>
+              {!(oneApprove && heroApproves) && (
+                <button className="btn primary" disabled={!!busy} onClick={() => void run('approve', undefined, 'Approving…')}>
+                  {busy === 'Approving…' ? busy : '✓ Approve'}
+                </button>
+              )}
               <button className="btn ghost" disabled={!!busy} onClick={() => setEditing(true)}>
                 Change
               </button>
