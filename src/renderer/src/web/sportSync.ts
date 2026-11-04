@@ -70,7 +70,8 @@ export const SPORT: AppSyncSpec = {
   localKey: SPORT_KEY,
   setting: SETTING,
   event: 'life-sport-changed',
-  merge: mergeSport
+  merge: mergeSport,
+  lists: [{ path: 'history', key: (h) => JSON.stringify([h?.id, h?.title]) }]
 }
 
 export function createSportSync(mirror: Mirror, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null) {

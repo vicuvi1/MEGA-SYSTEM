@@ -24,6 +24,8 @@ export interface AppSyncSpec {
   merge: (mine: any, theirs: any, mineIsNewer: boolean) => any
   /** Skip this round (e.g. Finance Helper locked with a PIN on this device). */
   skip?: (store: Storage) => boolean
+  /** Lists where a deletion must stick: an item gone on either side since the last sync stays gone. */
+  lists?: { path: string; key: (x: any) => string }[]
 }
 
 const parse = (raw: string | null): any => {
@@ -90,13 +92,13 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
         // Read again inside the change: another device may have just saved.
         const remote = remoteOf(db)
         const mine = parse(localRaw)
-        const out = remote?.data && JSON.stringify(remote.data) !== synced ? spec.merge(mine, remote.data, edited >= (remote.savedAt || 0)) : mine
+        const out = remote?.data && JSON.stringify(remote.data) !== synced ? pruneDeleted(spec, spec.merge(mine, remote.data, edited >= (remote.savedAt || 0)), parse(synced), share(mine), remote.data) : mine
         setSetting(db as any, spec.setting, JSON.stringify({ savedAt: Date.now(), data: share(out) }))
         return out
       })
     } else {
       const mine = parse(localRaw)
-      merged = mine ? spec.merge(mine, remoteNow!.data, false) : fromShared(remoteNow!.data)
+      merged = mine ? pruneDeleted(spec, spec.merge(mine, remoteNow!.data, false), parse(synced), share(mine), remoteNow!.data) : fromShared(remoteNow!.data)
     }
     set(SYNCED, JSON.stringify(share(merged)))
     const next = JSON.stringify(merged)
@@ -124,6 +126,30 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
   }
 
   return { sync, soon, spec }
+}
+
+/**
+ * Three-way delete check: an item that was in the last synced copy (`base`)
+ * but is missing now on this device or on the other one was deleted there,
+ * so it doesn't come back from the side that still has it.
+ */
+export function pruneDeleted(spec: Pick<AppSyncSpec, 'lists'>, merged: any, base: any, mine: any, theirs: any): any {
+  if (!merged || !base || !spec.lists?.length) return merged
+  const out = { ...merged }
+  for (const { path, key } of spec.lists) {
+    const list = (o: any) => (Array.isArray(o?.[path]) ? (o[path] as any[]) : null)
+    const b = list(base)
+    const m = list(mine)
+    const t = list(theirs)
+    const cur = list(out)
+    if (!b || !cur) continue
+    const has = (l: any[] | null) => (l ? new Set(l.map(key)) : null)
+    const inMine = has(m)
+    const inTheirs = has(t)
+    const gone = new Set(b.map(key).filter((k) => (inMine && !inMine.has(k)) || (inTheirs && !inTheirs.has(k))))
+    if (gone.size) out[path] = cur.filter((x) => !gone.has(key(x)))
+  }
+  return out
 }
 
 // ---- The apps -------------------------------------------------------------
@@ -185,7 +211,11 @@ export const WAKY: AppSyncSpec = {
   setting: 'app_sync_waky',
   legacySetting: 'waky_backup_json',
   event: 'life-waky-changed',
-  merge: mergeWaky
+  merge: mergeWaky,
+  lists: [
+    { path: 'spent', key: (x) => JSON.stringify(x) },
+    { path: 'shielded', key: (x) => JSON.stringify(x) }
+  ]
 }
 
 export const MAN: AppSyncSpec = {
@@ -193,5 +223,9 @@ export const MAN: AppSyncSpec = {
   setting: 'app_sync_man',
   legacySetting: 'man_spartan_data',
   event: 'life-man-changed',
-  merge: mergeMan
+  merge: mergeMan,
+  lists: [
+    { path: 'diary', key: (d) => String(d?.id ?? JSON.stringify(d)) },
+    { path: 'customRewards', key: (r) => String(r?.id ?? JSON.stringify(r)) }
+  ]
 }

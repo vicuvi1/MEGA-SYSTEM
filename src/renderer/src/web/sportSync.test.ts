@@ -101,3 +101,17 @@ describe('the day log (training calendar) syncs too', () => {
     expect(m.days['2026-11-04']).toEqual({ a: 30, b: 5 })
   })
 })
+
+describe('deletions stick across devices', () => {
+  it('a session deleted on this device does not come back from the other one', async () => {
+    const { pruneDeleted } = await import('./appSync')
+    const { SPORT, mergeSport } = await import('./sportSync')
+    const a = { id: 1, title: 'Run' }
+    const b = { id: 2, title: 'Gym' }
+    const base = { lastDate: '2026-11-04', history: [a, b] }
+    const mine = { lastDate: '2026-11-04', history: [b] } // deleted "Run" here
+    const theirs = { lastDate: '2026-11-04', history: [{ id: 3, title: 'Swim' }, a, b] } // added "Swim" there
+    const out = pruneDeleted(SPORT, mergeSport(mine, theirs, true), base, mine, theirs)
+    expect(out.history.map((h: any) => h.title).sort()).toEqual(['Gym', 'Swim'])
+  })
+})
