@@ -11802,6 +11802,35 @@ function impactVerdict(rows) {
 		lines
 	};
 }
+var read = (db) => {
+	try {
+		const v = JSON.parse(getSetting(db, "island_day_log") || "{}");
+		return v && typeof v === "object" ? v : {};
+	} catch {
+		return {};
+	}
+};
+var empty = () => ({
+	focus: [],
+	blocks: []
+});
+function dayLog(db, day) {
+	return read(db)[day] ?? empty();
+}
+/** One line for Ben: "Focus quality 82% (3 sessions). Blocks: 2 done, 1 half, 1 not done." */
+function dayLogLine(d) {
+	const parts = [];
+	if (d.focus.length) {
+		const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1;
+		const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins);
+		parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? "" : "s"} (share of the time he was really at the PC)`);
+	}
+	if (d.blocks.length) {
+		const n = (r) => d.blocks.filter((x) => x.result === r).length;
+		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
+	}
+	return parts.join(". ");
+}
 // src/renderer/src/web/rhythmBot.ts
 var pad = (n) => String(n).padStart(2, "0");
 var hmNow = (d = /* @__PURE__ */ new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -12132,6 +12161,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		const today = await mirror.read((db) => services.services(db).wallet.today());
 		const tomorrow = addDays$1(today, 1);
 		const nextUp = tomorrowTasks.filter((t) => t.due && t.due <= tomorrow).sort((a, b) => b.priority - a.priority).map((t) => t.content);
+		const islandLine = await mirror.read((db) => dayLogLine(dayLog(db, today))).catch(() => "");
 		let lesson = weakest(result);
 		let top3 = [.../* @__PURE__ */ new Set([...open, ...nextUp])].slice(0, 3);
 		if (ai) try {
@@ -12139,6 +12169,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const raw = await ai([
 				"You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
 				`Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join("; ") || "none"}. Due tomorrow in Todoist: ${nextUp.join("; ") || "nothing"}.`,
+				islandLine ? `From the desktop island: ${islandLine}.` : "",
 				"lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow's 3 most important things (short, as tasks).",
 				"Answer ONLY with JSON: {\"lesson\": string, \"top3\": string[]}",
 				"",

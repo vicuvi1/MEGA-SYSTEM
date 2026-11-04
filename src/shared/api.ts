@@ -370,6 +370,11 @@ export interface LifeApi {
     setRemembered?(on: boolean, pin?: string): Promise<boolean>
   }
   /** The notification center (synced across devices). */
+  /** What the desktop island learns about your day (focus quality, blocks checked off). */
+  dayLog?: {
+    addFocus(day: string, e: { at: string; subject: string; minutes: number; pct: number }): Promise<void>
+    addBlock(day: string, e: { at: string; title: string; result: 'done' | 'half' | 'no' }): Promise<void>
+  }
   /** The notebook (Obsidian-like): your notes and Ben's. */
   notes?: {
     list(): Promise<import('@core/notebook').Note[]>

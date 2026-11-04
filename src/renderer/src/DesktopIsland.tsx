@@ -212,6 +212,8 @@ export function DesktopIsland() {
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
+    // In a call the island stays quiet (only time-up drops it down).
+    if (s.call && a.kind !== 'over') return
     seenAlert.current = a.id
     if (open && !alertOnly) return
     show(true)
@@ -220,7 +222,7 @@ export function DesktopIsland() {
     alertT.current = window.setTimeout(() => {
       if (!over.current && !st.current.pinned) hide()
     }, 8000)
-  }, [s.alert]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s.alert, s.call]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Press and drag (pill or the open card's header) to move the island anywhere;
   // a plain click still opens it.
@@ -274,6 +276,9 @@ export function DesktopIsland() {
     : a.kind === 'extend' ? `+${a.minutes} min`
     : a.kind === 'bed' ? (a.time ? `Bed at ${a.time} · Waky` : 'Good night 🌙 · logged in Waky')
     : a.kind === 'wake' ? 'Good morning ☀️ · wake-up logged'
+    : a.kind === 'push' ? `${a.block.title}: moved ${a.minutes} min later`
+    : a.kind === 'blockResult' ? (a.result === 'done' ? `✓ ${a.block.title}: done` : a.result === 'half' ? `½ ${a.block.title}: half done` : `${a.block.title}: not done, noted`)
+    : a.kind === 'autoFocus' ? (a.on ? 'Focus starts by itself with each block' : 'Auto-start off')
     : null
   const clearToastLater = (ms: number) => {
     if (toastT.current) clearTimeout(toastT.current)
@@ -311,7 +316,7 @@ export function DesktopIsland() {
       desk()?.showApp?.(a.page)
       hide()
     }
-    if (a.kind === 'dismiss' || a.kind === 'start' || a.kind === 'stop') {
+    if (a.kind === 'dismiss' || a.kind === 'start' || a.kind === 'stop' || a.kind === 'push' || a.kind === 'blockResult') {
       if (alertOnly) hide()
     }
   }
@@ -377,6 +382,11 @@ export function DesktopIsland() {
                   <div className="di-timer-mid">
                     <span className={`di-clock ${runOver ? 'over' : ''}`}>{runOver ? '+' : ''}{clock(left)}</span>
                     <small>{run.subject}</small>
+                    {s.focusGuard && (
+                      <small className={`di-guard ${s.focusGuard.pct >= 85 ? 'good' : s.focusGuard.pct < 60 ? 'low' : ''}`} title="How much of this session you've been at the PC (no mouse/keys for 2+ min counts as away)">
+                        🎯 {s.focusGuard.pct}% at the PC{s.focusGuard.idleMin ? ` · away ${s.focusGuard.idleMin} min` : ''}
+                      </small>
+                    )}
                   </div>
                   <div className="di-actions col">
                     <button className="primary" onClick={() => tap({ kind: 'stop' })}>Stop & log</button>
@@ -417,6 +427,10 @@ export function DesktopIsland() {
                     </div>
                   </div>
                 )}
+                <label className="di-auto" title="When a block from your calendar begins, its focus timer starts by itself (not for calls)">
+                  <input type="checkbox" checked={!!s.autoFocus} onChange={(e) => send({ kind: 'autoFocus', on: e.target.checked })} />
+                  <span>⚡ Start focus by itself when a block begins</span>
+                </label>
               </section>),
     mustdos: s.mustdos.length ? (<section className="di-must">
                   <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>
@@ -480,7 +494,7 @@ export function DesktopIsland() {
     <div
       ref={root}
       style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
-      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""}`}
+      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""}`}
     >
       {/* Collapsed: a thin line, or the live pill (main activity + a bubble for the next one) */}
       {!open && (
@@ -574,7 +588,7 @@ export function DesktopIsland() {
           {s.alert && (
             <section className={`di-alert kind-${s.alert.kind}`}>
               <div className="di-alert-top">
-                <span>{s.alert.kind === 'ben' || s.alert.kind === 'sleep' ? s.alert.face ?? s.ben.face : s.alert.kind === 'over' ? '⏰' : '▶'}</span>
+                <span>{s.alert.face ?? (s.alert.kind === 'ben' ? s.ben.face : s.alert.kind === 'over' ? '⏰' : '▶')}</span>
                 <b>{s.alert.title}</b>
               </div>
               <p>{s.alert.text}</p>

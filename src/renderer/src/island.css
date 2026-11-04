@@ -277,3 +277,16 @@ html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(
 /* The good-morning note after a night away. */
 .di-alert.kind-sleep { background: linear-gradient(135deg, rgb(255 190 80 / 0.22), rgb(110 90 220 / 0.25)); }
 @media (prefers-reduced-motion: reduce) { .di *, .di-pill { animation: none !important; } }
+
+/* ---- phase 1: drift, end-of-block, focus guard, call mode ---- */
+.di-guard { display: block; margin-top: 2px; font-size: 11px; color: var(--sub); }
+.di-guard.good { color: var(--lime); }
+.di-guard.low { color: #ffb15a; }
+.di-auto { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--sub); cursor: pointer; }
+.di-auto input { accent-color: var(--lime); }
+.di-alert.kind-drift { background: linear-gradient(135deg, rgb(255 170 60 / 0.22), rgb(255 90 95 / 0.12)); animation: di-sec 0.42s cubic-bezier(0.32, 0.72, 0, 1) both, di-nudge 1.6s ease-in-out 0.5s 2; }
+@keyframes di-nudge { 0%, 100% { transform: none; } 20% { transform: translateX(-3px); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+.di-alert.kind-end { background: linear-gradient(135deg, rgb(212 255 63 / 0.16), rgb(70 180 255 / 0.12)); }
+.di-alert.kind-quality { background: linear-gradient(135deg, rgb(212 255 63 / 0.2), rgb(0 0 0 / 0)); }
+/* A drift alert makes the pill pulse amber. */
+.di:has(.di-alert.kind-drift) .di-pill, .di.has-drift .di-pill { box-shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 22px -2px rgb(255 170 60 / 0.6); }

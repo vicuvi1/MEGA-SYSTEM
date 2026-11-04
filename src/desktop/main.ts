@@ -246,6 +246,8 @@ if (firstCopy) void app.whenReady().then(async () => {
       }
     }
     setInterval(tick, 60_000)
+    // Seconds since the last mouse/keys, for the island (drift, focus quality).
+    setInterval(() => win.webContents.send('desktop:idle', powerMonitor.getSystemIdleTime()), 15_000)
     const leaving = () => {
       lastActive = Date.now() - powerMonitor.getSystemIdleTime() * 1000
       save()

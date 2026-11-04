@@ -33,6 +33,7 @@ import type { Mirror } from './mirror'
 import type { AskModel, CalendarLike, TodoistLike } from './webBots'
 import type { WebServices } from './webServices'
 import { writeJournal } from './notes'
+import { dayLog, dayLogLine } from './dayLog'
 
 export interface RhythmDeps {
   mirror: Mirror
@@ -316,6 +317,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const today = await mirror.read((db) => services.services(db).wallet.today())
     const tomorrow = addDays(today, 1)
     const nextUp = tomorrowTasks.filter((t) => t.due && t.due <= tomorrow).sort((a, b) => b.priority - a.priority).map((t) => t.content)
+    const islandLine = await mirror.read((db) => dayLogLine(dayLog(db, today))).catch(() => '')
     let lesson = weakest(result)
     let top3 = [...new Set([...open, ...nextUp])].slice(0, 3)
     if (ai) {
@@ -325,6 +327,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           [
             "You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
             `Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join('; ') || 'none'}. Due tomorrow in Todoist: ${nextUp.join('; ') || 'nothing'}.`,
+            islandLine ? `From the desktop island: ${islandLine}.` : '',
             'lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow\'s 3 most important things (short, as tasks).',
             'Answer ONLY with JSON: {"lesson": string, "top3": string[]}',
             '',

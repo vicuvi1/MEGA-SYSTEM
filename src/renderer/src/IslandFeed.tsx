@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
+import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
 import { life } from './bridge'
 import { useLive } from './live'
 import { findExercise, readSport, updateSport } from './sportTrack'
@@ -13,6 +14,53 @@ const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
 /** The bedtime logged by itself after a night away from the PC (shown once on the island). */
 const BED_AUTO = 'ls.bedAuto'
+/** Island phase 1: focus guard, what you said when blocks ended, auto-start. */
+const GUARD = 'ls.focusGuard'
+const QUALITY = 'ls.focusQualityNote'
+const ANSWERED = 'ls.blockAnswers'
+const AUTO = 'ls.autoFocus'
+const AUTO_DONE = 'ls.autoStarted'
+/** Seconds since the last mouse/keys on the PC (from the desktop, every 15 s). */
+let idleSec: number | null = null
+const localDayOf = (t: number) => {
+  const d = new Date(t)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+interface Guard { startedAt: number; endsAt: number; subject: string; idle: number; last: number }
+
+/** While a focus timer runs: time away from the PC counts against its quality. */
+function guardTick(sec: number) {
+  idleSec = sec
+  const g = get<Guard | null>(GUARD, null)
+  if (!g) return
+  if (sec >= GUARD_IDLE_SEC) g.idle += 15
+  g.last = Date.now()
+  put(GUARD, g)
+}
+
+/** A focus session ended: its quality goes to the day log (Ben reads it) and a note to the island. */
+async function finishGuard(g: Guard) {
+  put(GUARD, null)
+  const elapsed = Math.max(0, (Math.min(g.last || Date.now(), Date.now()) - g.startedAt) / 1000)
+  if (elapsed < 5 * 60) return
+  const pct = focusQuality(elapsed, g.idle)
+  const idleMin = Math.round(g.idle / 60)
+  put(QUALITY, { id: `q:${g.startedAt}`, pct, idleMin, subject: g.subject, at: Date.now() })
+  await life.dayLog?.addFocus(localDayOf(g.startedAt), { at: new Date(g.startedAt).toISOString(), subject: g.subject, minutes: Math.round(elapsed / 60), pct }).catch(() => {})
+}
+
+function qualityAlert(dismissed: Record<string, number>, now: number): IslandAlert | null {
+  const q = get<{ id: string; pct: number; idleMin: number; subject: string; at: number } | null>(QUALITY, null)
+  if (!q || now - q.at > 30 * 60_000 || (dismissed[q.id] ?? 0) > now) return null
+  return {
+    id: q.id,
+    kind: 'quality',
+    title: `Focus done · ${q.pct}% quality`,
+    text: q.pct >= 85 ? `${q.subject}: you were there the whole time. 🔥` : `${q.subject}: away ${q.idleMin} min of it. Next one: phone in another room?`,
+    face: q.pct >= 85 ? '🎯' : '🤏',
+    actions: [{ label: 'Got it', action: { kind: 'dismiss', id: q.id }, primary: true }]
+  }
+}
 const get = <T,>(k: string, d: T): T => {
   try {
     const v = localStorage.getItem(k)
@@ -35,7 +83,7 @@ async function todayBlocks(): Promise<IslandBlock[]> {
   const on = !!(await life.google?.status().catch(() => null))?.connected
   if (on) {
     const events = await life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => [])
-    const blocks = events.filter((e) => !e.allDay).map((e) => ({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end) })).filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end))
+    const blocks = events.filter((e) => !e.allDay).map((e) => ({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), id: e.id, calendarId: e.calendarId })).filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end))
     if (blocks.length) return blocks
   }
   const rh = await life.coach?.rhythm?.('state').catch(() => null)
@@ -101,7 +149,26 @@ export function IslandFeed() {
     const [status, focus, log, sleep, shop] = await Promise.all([life.coach.status(), life.focus.state(), life.coach.log().catch(() => []), life.sleep.state().catch(() => null), life.shop?.state().catch(() => null) ?? Promise.resolve(null)])
     if (now - blocks.current.at > 60_000) blocks.current = { at: now, list: await todayBlocks().catch(() => blocks.current.list) }
     const run = focus.running
-    const running = run ? { subject: run.subject, startedAt: Date.parse(run.startedAt), endsAt: Date.parse(run.startedAt) + run.planned * 60000 } : null
+    let running = run ? { subject: run.subject, startedAt: Date.parse(run.startedAt), endsAt: Date.parse(run.startedAt) + run.planned * 60000 } : null
+    // Focus guard: start watching a new session; a finished one gets its quality.
+    const g = get<Guard | null>(GUARD, null)
+    if (g && (!running || running.startedAt !== g.startedAt)) await finishGuard(g)
+    if (running && (!g || g.startedAt !== running.startedAt)) put(GUARD, { startedAt: running.startedAt, endsAt: running.endsAt, subject: running.subject, idle: 0, last: now })
+    // Auto-start (if you turned it on): a work block begins → its focus timer starts.
+    if (get<boolean>(AUTO, false)) {
+      const started = get<Record<string, true>>(AUTO_DONE, {})
+      const b = autoStartBlock(blocks.current.list, now, !!running, started)
+      if (b) {
+        put(AUTO_DONE, { ...Object.fromEntries(Object.entries(started).slice(-40)), [blockKey(b)]: true })
+        const minutes = Math.max(5, Math.min(180, Math.round((b.end - now) / 60000)))
+        const f = await life.focus.start(b.title, minutes, null).catch(() => null)
+        if (f?.running) {
+          running = { subject: f.running.subject, startedAt: Date.parse(f.running.startedAt), endsAt: Date.parse(f.running.startedAt) + f.running.planned * 60000 }
+          put(GUARD, { startedAt: running.startedAt, endsAt: running.endsAt, subject: running.subject, idle: 0, last: now })
+          window.dispatchEvent(new Event('life-focus-changed'))
+        }
+      }
+    }
     const seen = get<number>(SEEN, 0) || now
     const faceOf = (m?: string) => (m && MOOD_FACE[m as Mood]) || status.face
     const coach = log.filter((e) => e.role === 'coach')
@@ -134,7 +201,24 @@ export function IslandFeed() {
       mustdos: status.mustdos,
       water: { ml: Math.max(status.today.waterMl, localWater), target: status.today.waterTarget || Number(sport?.water?.targetMl) || 2700 },
       reps,
-      alert: bedAlert(dismissed, now, !!running) ?? pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed }),
+      alert: (() => {
+        const pick = pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
+        if (pick?.kind === 'over') return pick
+        const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered: get<Record<string, string>>(ANSWERED, {}) })
+        // In a call: only what you must see (time up); the rest waits.
+        const call = callNow(blocks.current.list, now)
+        return bedAlert(dismissed, now, !!running) ?? qualityAlert(dismissed, now) ?? smart ?? (call ? null : pick)
+      })(),
+      call: (() => {
+        const c = running ? null : callNow(blocks.current.list, now)
+        return c ? { title: c.title, end: c.end } : null
+      })(),
+      autoFocus: get<boolean>(AUTO, false),
+      focusGuard: (() => {
+        const gg = get<Guard | null>(GUARD, null)
+        if (!running || !gg || gg.startedAt !== running.startedAt) return null
+        return { pct: focusQuality((now - gg.startedAt) / 1000, gg.idle), idleMin: Math.round(gg.idle / 60) }
+      })(),
       sleep: (() => {
         const d = new Date(now)
         const logs = sleep?.recentLogs ?? []
@@ -218,6 +302,31 @@ export function IslandFeed() {
             void r
             break
           }
+          case 'push': {
+            const b = a.block
+            if (!b.id || !b.calendarId || !life.google?.move) throw new Error('Only blocks from Google Calendar can be moved')
+            await life.google.move(b.calendarId, b.id, new Date(b.start + a.minutes * 60000).toISOString(), new Date(b.end + a.minutes * 60000).toISOString())
+            blocks.current = { at: 0, list: blocks.current.list }
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[`drift:${blockKey(b)}`] = Date.now() + 15 * 60000
+            put(DISMISSED, d)
+            window.dispatchEvent(new CustomEvent('life-external-changed'))
+            break
+          }
+          case 'blockResult': {
+            const k = blockKey(a.block)
+            put(ANSWERED, { ...Object.fromEntries(Object.entries(get<Record<string, string>>(ANSWERED, {})).slice(-60)), [k]: a.result })
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[a.alertId] = Date.now() + 7 * 864e5
+            put(DISMISSED, d)
+            const day = localDayOf(a.block.start)
+            await life.dayLog?.addBlock(day, { at: new Date().toISOString(), title: a.block.title, result: a.result }).catch(() => {})
+            if (a.block.id) await life.timeline?.mark(day, a.block.id, a.result === 'no' ? 'skip' : 'done').catch(() => {})
+            break
+          }
+          case 'autoFocus':
+            put(AUTO, a.on)
+            break
           case 'wake':
             await life.sleep.logWake()
             window.dispatchEvent(new CustomEvent('life-sleep-changed'))
@@ -268,6 +377,13 @@ export function IslandFeed() {
       desk.onNavigate?.((page) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: page })))
       // Back after a night away from the PC: that's when you went to bed.
       desk.onAway?.((w) => void onAway(w).then(() => void sendRef.current()))
+      // Every 15 s from the desktop: how long since your last mouse/keys.
+      desk.onIdle?.((sec) => {
+        const before = idleSec
+        guardTick(sec)
+        // Crossing the drift line (or coming back) updates the island at once.
+        if (before == null || (before < 480) !== (sec < 480)) void sendRef.current()
+      })
     }
     void send()
     const t = setInterval(() => void send(), 15_000)

@@ -3,7 +3,7 @@
 // the tray) sends it a snapshot of your moment; the island sends back taps.
 // This file is the pure part: what it shows, and when it drops down.
 
-export interface IslandBlock { title: string; start: number; end: number }
+export interface IslandBlock { title: string; start: number; end: number; id?: string; calendarId?: string }
 
 /** Every tap gets an answer from the app window: done, or why not. */
 export interface IslandAck { id: string; ok: boolean; error?: string }
@@ -20,11 +20,14 @@ export type IslandAction = { id?: string } & (
   | { kind: 'open'; page?: string }
   | { kind: 'bed'; time?: string }
   | { kind: 'wake' }
+  | { kind: 'push'; block: IslandBlock; minutes: number }
+  | { kind: 'blockResult'; block: IslandBlock; result: 'done' | 'half' | 'no'; alertId: string }
+  | { kind: 'autoFocus'; on: boolean }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality'
   title: string
   text: string
   face?: string
@@ -45,6 +48,12 @@ export interface IslandSnapshot {
   alert: IslandAlert | null
   /** The bedtime buttons: Going to bed (evening/night), I'm up (morning). */
   sleep?: { bed: boolean; wake: boolean; target: string | null }
+  /** In a call/meeting from your calendar: the island stays quiet. */
+  call?: { title: string; end: number } | null
+  /** Start focus by itself when a calendar block begins. */
+  autoFocus?: boolean
+  /** The running focus so far: how much of it you were actually at the PC. */
+  focusGuard?: { pct: number; idleMin: number } | null
   /** Your points and the reward you're working toward. */
   points?: { balance: number; goal: { title: string; price: number } | null }
 }
@@ -267,7 +276,7 @@ export function activities(s: IslandSnapshot, now: number): Activity[] {
     const left = (s.running.endsAt - now) / 1000
     out.push({ key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot })
   }
-  if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: s.now.title, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
+  if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: `${s.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
   if (s.next && s.next.start - now <= 3 * 3600_000) out.push({ key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot })
   if (s.ben.unread > 0 && s.ben.last) out.push({ key: `ben:${s.ben.last.at}`, kind: 'ben', text: s.ben.last.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 60), sub: 'Ben', pct: 0, over: false, dot })
   if (s.sleep?.bed && !s.running) out.push({ key: 'bed', kind: 'bed', text: 'Going to bed?', sub: 'Tap to log it in Waky', pct: 0, over: false, dot })

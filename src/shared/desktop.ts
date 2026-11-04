@@ -50,6 +50,8 @@ export interface DesktopApi {
   onNavigate?(cb: (page: string) => void): void
   /** You came back after a long time away from the PC (asleep?): when you were last active, and when you came back. */
   onAway?(cb: (a: { from: string; to: string }) => void): void
+  /** Every 15 s: seconds since the last mouse/keyboard input on the PC. */
+  onIdle?(cb: (idleSec: number) => void): void
   /** Island window: new snapshots. */
   onIslandState?(cb: (s: IslandSnapshot) => void): void
   /** Island window: send a tap. */

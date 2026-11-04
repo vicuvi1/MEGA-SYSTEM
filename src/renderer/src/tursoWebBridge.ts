@@ -47,6 +47,7 @@ const sportyViewOf = (db: any) => sportyView(parseJson<SportyStatus>(getSetting(
 import { profileView } from './web/coachProfile'
 import { dismissNotif, listNotifs, readNotifs } from './web/notifications'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
+import { addBlockResult, addFocusQuality } from './web/dayLog'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag } from './web/session'
 
 /**
@@ -903,6 +904,14 @@ export function createTursoWebBridge(): Bridge {
         unlocked = false
         lockedOnPurpose = true
         return (await authP).lock()
+      }
+    },
+    dayLog: {
+      addFocus: async (day: string, e: { at: string; subject: string; minutes: number; pct: number }) => {
+        await (await mirrorP).write((db) => addFocusQuality(db as any, day, e))
+      },
+      addBlock: async (day: string, e: { at: string; title: string; result: 'done' | 'half' | 'no' }) => {
+        await (await mirrorP).write((db) => addBlockResult(db as any, day, e))
       }
     },
     notes: {
