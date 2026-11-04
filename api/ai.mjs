@@ -198,7 +198,7 @@ export async function askModel(prompt, opts = {}, env = process.env, fetchImpl =
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
-  if (!sessionOk(config(), bearer(req))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await sessionOk(config(), bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
   const key = (process.env.GEMINI_API_KEY || '').trim()
   let body
   try {

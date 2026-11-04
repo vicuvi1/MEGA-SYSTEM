@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { beforeAll, describe, expect, it } from 'vitest'
 import initSqlJs, { type SqlJsStatic, type Database as SqlJsDatabase } from 'sql.js'
 // @ts-expect-error plain JS module without types
-import { config, login, makeSession, sessionOk, pinMatches, botDefaults, serverBots } from '../../../../api/_lib.mjs'
+import { config, login, makeSession, sessionOk, sessionSigned, signOutAll, forgetEpoch, pinMatches, botDefaults, serverBots } from '../../../../api/_lib.mjs'
 import { handlePipeline } from './fakeTurso'
 import { hashPin } from './webAuth'
 
@@ -33,7 +33,7 @@ describe('web server', () => {
     const { fetchImpl } = fake(await hashPin('4821'))
     const ok = await login(cfg, '4821', Date.now(), fetchImpl)
     expect(ok.status).toBe(200)
-    expect(sessionOk(cfg, ok.body.session)).toBe(true)
+    expect(await sessionOk(cfg, ok.body.session, Date.now(), fetchImpl)).toBe(true)
     expect((await login(cfg, '2007', Date.now(), fetchImpl)).status).toBe(401)
   })
 
@@ -56,12 +56,27 @@ describe('web server', () => {
 
   it('sessions expire and cannot be forged', () => {
     const s = makeSession(cfg, Date.now())
-    expect(sessionOk(cfg, s)).toBe(true)
-    expect(sessionOk(cfg, s, Date.now() + 31 * 86400_000)).toBe(false)
-    expect(sessionOk(config({ TURSO_URL: 'x', TURSO_TOKEN: 'other' }), s)).toBe(false)
+    expect(sessionSigned(cfg, s)).toBeTruthy()
+    expect(sessionSigned(cfg, s, Date.now() + 31 * 86400_000)).toBeNull()
+    expect(sessionSigned(config({ TURSO_URL: 'x', TURSO_TOKEN: 'other' }), s)).toBeNull()
     const [data] = s.split('.')
-    expect(sessionOk(cfg, `${data}.forged`)).toBe(false)
-    expect(sessionOk(cfg, '')).toBe(false)
+    expect(sessionSigned(cfg, `${data}.forged`)).toBeNull()
+    expect(sessionSigned(cfg, '')).toBeNull()
+  })
+
+  it('a PIN change or "sign out all devices" ends every older session', async () => {
+    const { db, fetchImpl } = fake(await hashPin('4821'))
+    forgetEpoch()
+    const a = (await login(cfg, '4821', Date.now(), fetchImpl)).body.session
+    expect(await sessionOk(cfg, a, Date.now(), fetchImpl)).toBe(true)
+    const b = await signOutAll(cfg, Date.now(), fetchImpl)
+    expect(await sessionOk(cfg, a, Date.now(), fetchImpl)).toBe(false)
+    expect(await sessionOk(cfg, b, Date.now(), fetchImpl)).toBe(true)
+    db.run("UPDATE settings SET value = ? WHERE key = 'pin_hash'", [await hashPin('9999')])
+    forgetEpoch()
+    expect(await sessionOk(cfg, b, Date.now(), fetchImpl)).toBe(false)
+    // An old session made before epochs existed is refused too.
+    expect(await sessionOk(cfg, makeSession(cfg, Date.now()), Date.now(), fetchImpl)).toBe(false)
   })
 
   it('leaves bots run by their own program alone', () => {

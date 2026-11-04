@@ -362,6 +362,8 @@ export interface LifeApi {
   auth: {
     status(): Promise<AuthStatus>
     setPin(pin: string, currentPin?: string): Promise<AuthStatus>
+    /** End every other device's session (they must enter the PIN again). */
+    signOutOthers?(): Promise<void>
     unlock(pin: string): Promise<AuthStatus>
     lock(): Promise<AuthStatus>
     /** This device opens without the PIN (it remembers you). */

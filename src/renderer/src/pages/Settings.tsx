@@ -672,6 +672,26 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           </form>
         )}
 
+        {life.auth.signOutOthers && (
+          <div className="row" style={{ gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', margin: '0.5rem 0 1rem' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={async () => {
+                try {
+                  await life.auth.signOutOthers!()
+                  setPinSuccess('Signed out everywhere else: other devices need the PIN again.')
+                } catch (err: any) {
+                  setPinError(err.message || 'Sign-out failed')
+                }
+              }}
+            >
+              Sign out all other devices
+            </button>
+            <span className="hint small">A lost phone or an old browser? This ends their access. Changing the PIN does it too.</span>
+          </div>
+        )}
+
         <details className="set-more">
           <summary>Change PIN</summary>
         <form onSubmit={handleUpdatePin} className="pin-settings-form">

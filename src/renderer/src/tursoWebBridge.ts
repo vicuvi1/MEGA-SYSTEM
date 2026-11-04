@@ -49,7 +49,7 @@ import { profileView } from './web/coachProfile'
 import { dismissNotif, listNotifs, readNotifs } from './web/notifications'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { addBlockResult, addFocusQuality } from './web/dayLog'
-import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag } from './web/session'
+import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag, signOutOthers } from './web/session'
 
 /**
  * A direct Turso connection, only for development and tests (set turso_url
@@ -908,7 +908,15 @@ export function createTursoWebBridge(): Bridge {
         if (unlocked) lockedOnPurpose = false
         return s
       },
-      setPin: async (pin: string, current?: string) => (await authP).setPin(pin, current),
+      // A new PIN ends every session (all devices); this one logs in again with it.
+      setPin: async (pin: string, current?: string) => {
+        const r = await (await authP).setPin(pin, current)
+        if (!direct) await serverLogin(pin).catch(() => null)
+        return r
+      },
+      signOutOthers: async () => {
+        if (!direct) await signOutOthers()
+      },
       lock: async () => {
         unlocked = false
         lockedOnPurpose = true

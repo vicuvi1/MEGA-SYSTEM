@@ -71,23 +71,61 @@ export async function pinMatches(stored, pin) {
 const b64 = (s) => Buffer.from(s).toString('base64url')
 export const sign = (secret, data) => createHmac('sha256', secret).update(data).digest('base64url')
 
-export function makeSession(cfg, now = Date.now()) {
-  const data = b64(JSON.stringify({ exp: now + SESSION_DAYS * 86400_000 }))
+/**
+ * A session carries the "epoch" it was made in: a short hash of the PIN hash
+ * and the sign-out counter. Changing the PIN or "Sign out all devices"
+ * changes the epoch, and every older session stops working.
+ */
+export function makeSession(cfg, now = Date.now(), ep = '') {
+  const data = b64(JSON.stringify({ exp: now + SESSION_DAYS * 86400_000, ep }))
   return `${data}.${sign(cfg.secret, data)}`
 }
 
-export function sessionOk(cfg, token, now = Date.now()) {
-  if (!cfg.secret || typeof token !== 'string') return false
+/** Signed by us and not expired: its payload, else null (no database read). */
+export function sessionSigned(cfg, token, now = Date.now()) {
+  if (!cfg.secret || typeof token !== 'string') return null
   const [data, sig] = token.split('.')
-  if (!data || !sig) return false
+  if (!data || !sig) return null
   const want = Buffer.from(sign(cfg.secret, data))
   const got = Buffer.from(sig)
-  if (want.length !== got.length || !timingSafeEqual(want, got)) return false
+  if (want.length !== got.length || !timingSafeEqual(want, got)) return null
   try {
-    return JSON.parse(Buffer.from(data, 'base64url').toString()).exp > now
+    const p = JSON.parse(Buffer.from(data, 'base64url').toString())
+    return p.exp > now ? p : null
+  } catch {
+    return null
+  }
+}
+
+const EPOCH_KEY = 'session_epoch'
+let epochCache = { at: 0, value: '' }
+/** The current epoch (cached 30 s per server instance). */
+export async function liveEpoch(cfg, fetchImpl = fetch, now = Date.now()) {
+  if (epochCache.value && now - epochCache.at < 30_000) return epochCache.value
+  const [pin, counter] = await Promise.all([getSetting(cfg, 'pin_hash', fetchImpl), getSetting(cfg, EPOCH_KEY, fetchImpl)])
+  const value = createHash('sha256').update(`${pin ?? ''}|${counter ?? '0'}`).digest('base64url').slice(0, 16)
+  epochCache = { at: now, value }
+  return value
+}
+export const forgetEpoch = () => (epochCache = { at: 0, value: '' })
+
+/** A valid session: signed, not expired, and from the current epoch. */
+export async function sessionOk(cfg, token, now = Date.now(), fetchImpl = fetch) {
+  const p = sessionSigned(cfg, token, now)
+  if (!p) return false
+  try {
+    return p.ep === (await liveEpoch(cfg, fetchImpl, now))
   } catch {
     return false
   }
+}
+
+/** "Sign out all devices": a new epoch; returns a fresh session for the device that asked. */
+export async function signOutAll(cfg, now = Date.now(), fetchImpl = fetch) {
+  const n = Number((await getSetting(cfg, EPOCH_KEY, fetchImpl)) || 0) + 1
+  await setSetting(cfg, EPOCH_KEY, String(n), fetchImpl)
+  forgetEpoch()
+  return makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now))
 }
 
 /**
@@ -111,7 +149,8 @@ export async function login(cfg, pin, now = Date.now(), fetchImpl = fetch) {
     return { status: 401, body: { error: until ? `Too many tries. Wait ${Math.ceil((until - now) / 1000)} s` : 'Wrong PIN' } }
   }
   if (guard.fails) await setSetting(cfg, GUARD_KEY, JSON.stringify({ fails: 0, until: 0 }), fetchImpl)
-  return { status: 200, body: { session: makeSession(cfg, now) } }
+  forgetEpoch()
+  return { status: 200, body: { session: makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now)) } }
 }
 
 /** The bot settings the app starts from (tokens live in the server's settings). */

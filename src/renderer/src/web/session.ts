@@ -95,3 +95,16 @@ export async function renewSession(now = Date.now()): Promise<void> {
     /* offline: next start tries again */
   }
 }
+
+/** "Sign out all other devices": every other session ends; this device gets a fresh one. */
+export async function signOutOthers(): Promise<void> {
+  const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signOutAll: currentSession() }) })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok || !body.session) throw new Error(body.error || `Sign-out failed (${res.status})`)
+  try {
+    store()?.setItem(KEY, body.session)
+  } catch {
+    /* private window */
+  }
+  memory = body.session
+}

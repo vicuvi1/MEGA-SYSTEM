@@ -13,6 +13,6 @@ export function publicBots(bots) {
 
 export default async function handler(req, res) {
   const cfg = config()
-  if (!sessionOk(cfg, bearer(req))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await sessionOk(cfg, bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
   send(res, 200, { bots: publicBots(botDefaults()) })
 }

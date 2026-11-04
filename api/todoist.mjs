@@ -29,7 +29,7 @@ export function geminiAreaPicker(key) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
-  if (!sessionOk(config(), bearer(req))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await sessionOk(config(), bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
   const token = (process.env.TODOIST_TOKEN || '').trim()
   let body
   try {

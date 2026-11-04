@@ -17,7 +17,7 @@ async function tg(token, method, body) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
-  if (!sessionOk(cfg, bearer(req))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await sessionOk(cfg, bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
   // {test: true}: a test message from the server's main bot (tokens never reach the page).
   if (req.headers['content-type']?.includes('json')) {
     let body = {}
