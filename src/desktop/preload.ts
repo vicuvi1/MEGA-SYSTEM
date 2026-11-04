@@ -24,6 +24,10 @@ const api: DesktopApi = {
   islandHot: (rect) => ipcRenderer.send('island:hot', rect),
   islandDrag: (on) => ipcRenderer.send(on ? 'island:dragStart' : 'island:dragEnd'),
   onIslandHover: (cb) => void ipcRenderer.on('island:hover', (_e, over) => cb(!!over)),
+  onIslandPlacement: (cb) => void ipcRenderer.on('island:placement', (_e, p) => cb(p)),
+  onIslandReveal: (cb) => void ipcRenderer.on('island:reveal', () => cb()),
+  onIslandToggle: (cb) => void ipcRenderer.on('island:toggle', () => cb()),
+  islandReady: () => ipcRenderer.send('island:ready'),
   showApp: (page) => ipcRenderer.send('island:showApp', page)
 }
 contextBridge.exposeInMainWorld('desktop', api)

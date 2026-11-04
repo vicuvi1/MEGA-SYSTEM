@@ -112,7 +112,8 @@ else void app.whenReady().then(async () => {
     win.hide()
   })
 
-  const island = createIsland({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, showApp, dir })
+  let refreshTray = () => {}
+  const island = createIsland({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, showApp, dir, onChange: () => refreshTray() })
 
   // Tray: open, island on/off, start with Windows, quit.
   const icon = nativeImage.createFromPath(join(ui, 'icon.png')).resize({ width: 16, height: 16 })
@@ -121,13 +122,15 @@ else void app.whenReady().then(async () => {
   const startsWithWindows = () => app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin
   const menu = () => Menu.buildFromTemplate([
     { label: 'Open Life System', click: () => showApp() },
-    { label: 'Show the island', type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
-    { label: 'Reset island position', click: () => island.resetPosition() },
+    { label: `Show the island (${island.shortcut.replace('Control', 'Ctrl')})`, type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
+    { label: 'Island position', submenu: ([['top', 'Top of the screen'], ['left', 'Left side'], ['right', 'Right side'], ['free', 'Floating (where you drop it)']] as const).map(([p, label]) => ({ label, type: 'radio' as const, checked: island.placement() === p, click: () => { island.setPlacement(p); tray.setContextMenu(menu()) } })) },
+    { label: 'Reset island position', click: () => { island.resetPosition(); tray.setContextMenu(menu()) } },
     { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); tray.setContextMenu(menu()) } },
     { type: 'separator' },
     { label: 'Quit Life System', click: () => { quitting = true; app.quit() } }
   ])
   tray.setContextMenu(menu())
+  refreshTray = () => tray.setContextMenu(menu())
   tray.on('click', () => showApp())
   // First run of an installed copy: start with Windows (you can turn it off in the tray).
   if (app.isPackaged && !existsSync(join(dir, 'login-item.json'))) {

@@ -5,6 +5,7 @@
 // block starting, or time up drop it down for a few seconds by themselves.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EMPTY_ISLAND, clock, pill, type IslandAction, type IslandSnapshot } from '@core/islandModel'
+import type { IslandPlacement } from '../../shared/desktop'
 import './island.css'
 
 const desk = () => window.desktop
@@ -40,11 +41,19 @@ export function DesktopIsland() {
   const root = useRef<HTMLDivElement>(null)
 
   const hoverRef = useRef<(on: boolean) => void>(() => {})
+  const revealRef = useRef<() => void>(() => {})
+  const toggleRef = useRef<() => void>(() => {})
+  const [place, setPlace] = useState<IslandPlacement>('top')
   useEffect(() => {
     document.documentElement.classList.add('di-root')
     desk()?.onIslandState?.(setS)
     // The desktop watches the real pointer and says when it is over the island.
     desk()?.onIslandHover?.((on) => hoverRef.current(on))
+    desk()?.onIslandPlacement?.(setPlace)
+    // You touched its screen edge / pressed Ctrl+Alt+Space.
+    desk()?.onIslandReveal?.(() => revealRef.current())
+    desk()?.onIslandToggle?.(() => toggleRef.current())
+    desk()?.islandReady?.()
   }, [])
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), s.running ? 1000 : 15_000)
@@ -84,7 +93,8 @@ export function DesktopIsland() {
       const el = root.current?.firstElementChild as HTMLElement | null
       if (!el) return
       const r = el.getBoundingClientRect()
-      desk()?.islandHot?.({ x: Math.round(r.left), y: 0, width: Math.round(r.width), height: Math.round(r.bottom) })
+      const fromTop = place === 'top'
+      desk()?.islandHot?.({ x: Math.round(r.left), y: fromTop ? 0 : Math.round(r.top), width: Math.round(r.width), height: Math.round(fromTop ? r.bottom : r.height) })
     }
     report()
     const t1 = window.setTimeout(report, 120)
@@ -114,6 +124,20 @@ export function DesktopIsland() {
       if (st.current.pinned || over.current || document.activeElement === input.current) return
       hide()
     }, ms)
+  }
+  revealRef.current = () => {
+    show(false)
+    // Came out at the edge but you didn't move onto it: tuck it away again.
+    window.setTimeout(() => {
+      if (!over.current && !st.current.pinned && document.activeElement !== input.current) hide()
+    }, 1800)
+  }
+  toggleRef.current = () => {
+    if (st.current.open) hide()
+    else {
+      show(false)
+      setPinned(true)
+    }
   }
   hoverRef.current = (on: boolean) => {
     over.current = on
@@ -204,7 +228,7 @@ export function DesktopIsland() {
   return (
     <div
       ref={root}
-      className={`di ${mode} ${alertOnly ? 'alert-only' : ''} mood-${s.ben.mood} ${runOver ? 'is-over' : ''}`}
+      className={`di at-${place} ${mode} ${alertOnly ? 'alert-only' : ''} mood-${s.ben.mood} ${runOver ? 'is-over' : ''}`}
     >
       {/* Collapsed: a thin line, or the smart pill */}
       {!open && (

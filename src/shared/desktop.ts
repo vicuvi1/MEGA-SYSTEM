@@ -3,6 +3,8 @@ import type { IslandAction, IslandSnapshot } from '../core/islandModel'
 import type { BackupStatus, BackupWhere } from '../desktop/backups'
 
 export type IslandMode = 'hidden' | 'pill' | 'open'
+/** Where the island lives: top of the screen, docked on a side, or floating. */
+export type IslandPlacement = 'top' | 'left' | 'right' | 'free'
 
 export interface DesktopApi {
   load(): Promise<Uint8Array | null>
@@ -37,6 +39,13 @@ export interface DesktopApi {
   islandHot?(rect: { x: number; y: number; width: number; height: number }): void
   /** Island window: start / stop dragging it (the desktop moves the window with the pointer). */
   islandDrag?(on: boolean): void
+  /** Island window: where it lives now (changes when you drop it on an edge). */
+  onIslandPlacement?(cb: (p: IslandPlacement) => void): void
+  /** Island window: the screen edge was touched (or the shortcut pressed): come out. */
+  onIslandReveal?(cb: () => void): void
+  onIslandToggle?(cb: () => void): void
+  /** Island window: listening now (send placement + latest snapshot). */
+  islandReady?(): void
   /** Island window: the real mouse pointer entered / left the pill. */
   onIslandHover?(cb: (over: boolean) => void): void
   /** Island window: bring the app window up. */

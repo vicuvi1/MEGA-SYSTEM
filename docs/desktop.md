@@ -98,6 +98,11 @@ its buttons ask, so there is one owner of the local database. The main process
 polls the real pointer: over the pill/card the window takes clicks, elsewhere
 clicks pass through to the apps below.
 
+Placement (tray → Island position, or drag-and-drop it): top of the screen,
+docked on the left or right edge (a small vertical tab that slides out), or
+floating where you dropped it. Idle at an edge it is fully hidden: touch that
+screen edge with the mouse, or press Ctrl+Alt+Space anywhere, to bring it out.
+
 Life System starts with Windows (`--hidden`, tray only) from the first run of
 an installed copy; the tray menu turns that and the island off, and Quit ends
 it for real.

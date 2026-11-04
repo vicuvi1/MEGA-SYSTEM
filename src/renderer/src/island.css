@@ -139,3 +139,28 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di-head { cursor: grab; }
 html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(0 0 0 / 0.6), 0 0 0 1px var(--line), 0 0 26px -6px var(--glow); }
+
+/* ---- Placements: top (default), docked left / right, floating ---- */
+.di.at-left, .di.at-right { top: 0; transform: none; }
+.di.at-left { left: 0; align-items: flex-start; }
+.di.at-right { left: auto; right: 0; align-items: flex-end; }
+.di.at-free { align-items: center; }
+
+/* Docked on a side: the collapsed pill is a small vertical tab against the edge. */
+.di.at-left .di-pill, .di.at-right .di-pill {
+  flex-direction: column; justify-content: center; gap: 4px; width: 84px; min-width: 0; height: auto; min-height: 76px;
+  margin: 10px 6px; padding: 10px 6px; border-radius: 22px; text-align: center;
+}
+.di.at-left .di-pill-text, .di.at-right .di-pill-text { flex: none; width: 100%; text-align: center; font-size: 11px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+.di.at-left .di-pill-time, .di.at-right .di-pill-time { font-size: 12px; }
+.di.at-left .di-dot, .di.at-right .di-dot { top: 6px; right: 8px; }
+.di.at-left .di-card, .di.at-right .di-card { margin: 6px; transform-origin: center left; animation-name: di-slide-l; }
+.di.at-right .di-card { transform-origin: center right; animation-name: di-slide-r; }
+@keyframes di-slide-l { from { transform: translateX(-40px) scale(0.92); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes di-slide-r { from { transform: translateX(40px) scale(0.92); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Floating: a pill (or, when idle, a small glowing dot) wherever you dropped it. */
+.di.at-free .di-pill { margin-top: 4px; }
+.di.at-free.hidden .di-pill { width: 40px; height: 30px; }
+.di.at-free .di-line { width: 14px; height: 14px; margin-top: 6px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line), 0 0 12px -2px var(--glow), 0 4px 12px rgb(0 0 0 / 0.5); }
+.di.at-free .di-card { margin-top: 4px; }
