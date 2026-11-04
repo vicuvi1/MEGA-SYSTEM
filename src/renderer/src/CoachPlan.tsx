@@ -82,6 +82,9 @@ export function CoachPlan({ onChange, oneApprove = false }: { onChange?: () => v
   }
 
   const p = b.plan
+  // A waiting plan with nothing in it (only the water goal) or one left over
+  // in the evening isn't worth a card: Ben approves or replans on his own.
+  if (b.status !== 'approved' && ((!p.mustdos.length && !p.blocks.length && !p.training) || hour >= 18)) return null
   const timed = [...p.blocks.map((x) => ({ s: x.start, e: fromMin(toMin(x.start) + x.minutes), t: x.title, train: false })), ...(p.training ? [{ s: p.training.time, e: '', t: p.training.what, train: true }] : [])].sort((a, c) => a.s.localeCompare(c.s))
   const approved = b.status === 'approved'
   return (

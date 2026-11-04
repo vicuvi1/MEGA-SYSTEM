@@ -70,7 +70,7 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
         .sort((a, b) => a.daysLeft - b.daysLeft)
         .map((p) => ({ title: p.title, subject: p.subject, todayLeftMin: p.todayLeftMin, behind: p.status === 'behind' })),
       openMustDos: open.map((x) => x.text),
-      evening: now.getHours() >= 21
+      evening: now.getHours() >= 19
     },
     now.getTime()
   )

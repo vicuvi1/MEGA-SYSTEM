@@ -1291,3 +1291,12 @@
 .co-avatar.mood-focused { background: color-mix(in srgb, var(--lime) 14%, transparent); }
 .cx-dot.mood-focused { background: var(--lime); }
 .bb-bubble.mood-focused { box-shadow: 0 14px 40px rgb(0 0 0 / 0.5), 0 0 0 2px color-mix(in srgb, var(--lime) 55%, transparent); }
+
+/* Today: the rest of today's tasks fold under one line while you have must-dos. */
+.dl-rest { margin-top: var(--s-3); }
+.dl-rest > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--s-2); padding: 10px 2px; color: var(--muted); font-weight: 600; font-size: var(--t-sm); border-top: 1px solid rgb(var(--ink) / 0.06); }
+.dl-rest > summary::-webkit-details-marker { display: none; }
+.dl-rest > summary::before { content: '›'; transition: transform 0.2s; }
+.dl-rest[open] > summary::before { transform: rotate(90deg); }
+.dl-rest > summary small { margin-left: auto; font-weight: 500; }
+.dl-rest > summary:hover { color: var(--text); }

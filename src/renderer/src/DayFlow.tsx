@@ -118,7 +118,7 @@ type Mode = 'morning' | 'evening' | null
 export function autoMode(hour: number, hasPlan: boolean, reviewed: boolean, closed: string | null, today: string): Mode {
   if (closed === today) return null
   if (hour >= 5 && hour < 12 && !hasPlan) return 'morning'
-  if (hour >= 20 && !reviewed) return 'evening'
+  if (hour >= 19 && !reviewed) return 'evening'
   return null
 }
 
@@ -152,6 +152,14 @@ export function DayFlow(props: Props) {
   const [skipped, setSkipped] = useState<string[]>([])
   const [adding, setAdding] = useState('')
   const [showAll, setShowAll] = useState(false)
+  const [restPref, setRestPrefState] = useState<boolean | null>(() => {
+    const v = storeGet('ls.todayRest')
+    return v === '1' ? true : v === '0' ? false : null
+  })
+  const setRestOpen = (v: boolean) => {
+    setRestPrefState(v)
+    storeSet('ls.todayRest', v ? '1' : '0')
+  }
   const [closed, setClosed] = useState(() => storeGet('ls.modeClosed'))
   const [forced, setForced] = useState<Mode | undefined>(undefined)
   const tick = useTicker(!!st?.running)
@@ -530,6 +538,12 @@ export function DayFlow(props: Props) {
   const doneCount = plan.filter((p) => p.done).length + bigOpen.filter((b) => b.done).length
   // Plan items shown on their own: those without a starred Todoist task.
   const planOnly = plan.map((p, i) => ({ p, i })).filter((x) => !starred.some((t) => same(t.content, x.p.text)))
+  // One number that matters: must-dos (starred tasks + plan items not starred).
+  const mustTotal = starred.length + planOnly.length
+  const mustDone = planOnly.filter((x) => x.p.done).length
+  const lateCount = loose.filter((t) => t.due && t.due < today).length
+  // The rest of today's tasks fold away while you have must-dos (your choice is remembered).
+  const restOpen = restPref ?? mustTotal === 0
   const total = planOnly.length + starred.length + bigOpen.length + loose.length
   const running = st.running
   const elapsed = running ? tick - new Date(running.startedAt).getTime() : 0
@@ -703,8 +717,8 @@ export function DayFlow(props: Props) {
         <header className="card-head">
           <h2>Today</h2>
           <div className="actions">
-            <span className="hint">
-              {doneCount}/{total} done
+            <span className="hint" title={`${doneCount} of ${total} things on today's list done`}>
+              {mustTotal ? `${mustDone}/${mustTotal} must-dos` : `${doneCount} done`}
             </span>
             {mode !== 'morning' && (
               <button className="btn small ghost" onClick={() => setForced('morning')} title="Plan your day in 2 minutes">
@@ -779,6 +793,19 @@ export function DayFlow(props: Props) {
           </div>
         )}
 
+        {loose.length > 0 && (
+          <details className="dl-rest" open={restOpen} onToggle={(e) => {
+            // Only a real click counts (React also fires this when it sets `open`).
+            const v = (e.target as HTMLDetailsElement).open
+            if (v !== restOpen) setRestOpen(v)
+          }}>
+            <summary>
+              <span>Everything else today</span>
+              <small>
+                {loose.length} task{loose.length === 1 ? '' : 's'}
+                {lateCount ? ` · ${lateCount} late` : ''}
+              </small>
+            </summary>
         {groups.map((g) => {
           const items = showAll ? g.items : g.items.filter(() => shown_++ < LIMIT)
           if (!items.length) return null
@@ -807,6 +834,8 @@ export function DayFlow(props: Props) {
           <button className="btn ghost dl-more" onClick={() => setShowAll(!showAll)}>
             {showAll ? 'Show fewer' : `Show all ${loose.length} (the most urgent are on top)`}
           </button>
+        )}
+          </details>
         )}
         {todoList && todoList.length === 0 && <p className="hint dl-empty">Nothing due in Todoist today.</p>}
 
