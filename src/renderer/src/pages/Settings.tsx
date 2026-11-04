@@ -24,6 +24,7 @@ import { HealthPanel } from '../HealthPanel'
 import { IslandLogPanel } from '../IslandLogPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
+import { ConnectionsOverview } from '../ConnectionsOverview'
 import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
@@ -982,6 +983,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       keywords: 'google calendar todoist telegram bots bot token sporty sport connect',
       body: (
         <>
+          <ConnectionsOverview onGo={onGo} />
+          <h3 className="st-sub">Details</h3>
       <GooglePanel />
       {onGo && (
         <section className="panel">

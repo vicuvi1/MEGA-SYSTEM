@@ -1392,3 +1392,28 @@
   .sx-range, .sx-select, .sx-input { width: 100%; min-width: 0; }
   .sx-seg { flex-wrap: wrap; }
 }
+
+/* ---- Settings → Connections at a glance ---- */
+.cn, .cx-loading { grid-column: 1 / -1; }
+.cn-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cn-head b { color: var(--muted); font-weight: 600; }
+.cn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 12px; }
+.cn-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.06); }
+.cn-card.needs { box-shadow: 0 0 0 1px color-mix(in srgb, #f5a524 45%, transparent); }
+.cn-top { display: flex; align-items: center; gap: 10px; }
+.cn-top > div { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.cn-top small { color: var(--muted); font-size: 12px; }
+.cn-mark { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; font-weight: 800; font-size: 14px; }
+.cn-mark.ok { background: color-mix(in srgb, var(--lime) 18%, transparent); color: var(--lime); }
+.cn-mark.needs { background: color-mix(in srgb, #f5a524 20%, transparent); color: #f5a524; }
+.cn-mark.off { background: rgb(var(--ink) / 0.08); color: var(--muted); }
+.cn-state { font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.cn-state.ok { color: var(--lime); background: color-mix(in srgb, var(--lime) 12%, transparent); }
+.cn-state.needs { color: #f5a524; background: color-mix(in srgb, #f5a524 14%, transparent); }
+.cn-state.off { color: var(--muted); background: rgb(var(--ink) / 0.06); }
+.cn-line { margin: 0; color: var(--text); font-size: 13.5px; line-height: 1.45; }
+.cn-steps { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.cn-steps li + li { margin-top: 3px; }
+.cn-actions { margin-top: auto; display: flex; gap: 8px; }
+.cn-actions:empty { display: none; }
+.st-sub { grid-column: 1 / -1; margin: 10px 0 -4px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
