@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EmbeddedApps } from '@shared/api'
-import { isDemo, life } from './bridge'
+import { life } from './bridge'
+
+// The apps load in a normal same-origin <iframe> (website and this desktop app);
+// only the old desktop (window.life) had Electron's <webview> switched on.
+// (Using <webview> anywhere else leaves the app blank.)
+const isDemo = !window.life
 import { addDays } from '@core/dates'
 import { Icon } from './Icon'
 
