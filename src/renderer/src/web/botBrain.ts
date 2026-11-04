@@ -23,6 +23,7 @@ import { patternLines } from '@core/urgePatterns'
 import { loadTriggers, urgeEvents } from './disciplinePatterns'
 import { DESK_ACTIONS, minutesUntil } from '@core/benStakes'
 import { readPurchase } from '@core/benMoney'
+import { UNTRUSTED_NOTE } from '@core/benSafety'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -590,6 +591,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
   return [
     PERSONA[persona],
     'Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks "why"/"how come" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.',
+    UNTRUSTED_NOTE,
     'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
     (extra.tone ?? 4) >= 5

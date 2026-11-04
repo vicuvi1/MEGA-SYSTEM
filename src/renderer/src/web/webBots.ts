@@ -33,6 +33,7 @@ import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FAC
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
+import { askedFor, confirmButton, riskOf } from '@core/benSafety'
 import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
 import { moodFace } from '@core/benKnows'
@@ -1394,6 +1395,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
       acts = acts.filter((a) => a.kind !== 'focus')
     }
+    // Deletes, big moves, rewards and habit ticks run only when HIS message asked for
+    // that kind of thing; otherwise a one-tap "Yes, …" button (text in his calendar or
+    // Todoist can't make Ben delete or pay anything).
+    acts = acts.filter((a) => {
+      const risk = riskOf(a as any)
+      if (!risk || askedFor(text, risk)) return true
+      const what =
+        a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : ''
+      out.buttons = [...(out.buttons ?? []), confirmButton(risk, what)].slice(0, 3)
+      return false
+    })
     // Its notebook: a dated line under the right note.
     const noteOps = out.actions.map(readNoteOp).filter((x): x is { title: string; line: string } => !!x)
     if (noteOps.length) {
