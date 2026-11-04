@@ -132,6 +132,14 @@ Known limits:
 - Max 12 functions (put new endpoints inside existing ones).
 - The Sport Track day is the UTC date.
 
+### Reliability (how the system protects itself)
+- **Checks before shipping:** `.github/workflows/ci.yml` (every push: tsc, vitest, server bundle up to date, build, `e2e/smoke.mjs` in a real browser against `e2e/server.mjs`, a fake Turso). The Windows release runs the same smoke test; Vercel's `vercel-build` runs tests + tsc, so a red commit never goes live. CI runs on `ubuntu-24.04` (Playwright can't install on 26.04 yet). Always commit `api/_bot/bot.mjs` after `npm run build:bot`.
+- **System health:** beats in `sys_health`, errors in `sys_errors` (`src/renderer/src/web/systemHealth.ts`), checks in `src/core/health.ts` (a refused key names where to fix it: `keyHint`). Ben warns on Telegram after 30 min broken, says when fixed, Sunday report. Settings → System health.
+- **Backups:** the server makes the daily `cloud_snapshots` row (30 kept) and once a week test-restores the newest into a throwaway DB (`restoreDrill.ts`, beat `restoreDrill`). Desktop also writes daily files to the PC and Google Drive.
+- **Sync of only what changed:** `src/renderer/src/web/tableVersions.ts`. Tracked writes record their tables in `sys_table_versions`; `'*'` follows `data_version` while every write is tracked. An untracked write (old app, restore, a direct SQL write) breaks the chain, so devices do a full download once and repair it. Any new code that writes data straight to Turso and bumps `data_version` is therefore safe without tracking, but add `trackStatements` to keep it cheap.
+- **Desktop crash net:** two crashes or failed loads in 3 min offer reload / save a backup / previous version (`src/desktop/main.ts`).
+- **Dependencies:** `.github/dependabot.yml`, monthly grouped PRs; CI tests them.
+
 ## 7. Rules for you
 
 - Small, focused commits; plain-English messages; one feature at a time.
