@@ -71,6 +71,7 @@ export function RestDayCard() {
           Mark day
         </button>
       </form>
+      <ShieldYesterday st={st} onDone={() => window.dispatchEvent(new CustomEvent('life-body-changed'))} />
       {recent.length > 0 && (
         <small className="rest-list">
           Rest days:{' '}
@@ -82,5 +83,33 @@ export function RestDayCard() {
         </small>
       )}
     </div>
+  )
+}
+
+/** Missed yesterday? A streak shield turns it into a rest day (the streak lives on). */
+function ShieldYesterday({ st, onDone }: { st: BodyState; onDone: () => void }) {
+  const toast = useToast()
+  const [n, setN] = useState<number | null>(null)
+  useEffect(() => void life.shields.count().then(setN).catch(() => setN(0)), [])
+  const y = new Date(Date.parse(`${st.today}T12:00:00Z`) - 86400000).toISOString().slice(0, 10)
+  const covered = (st.restDays ?? []).includes(y) || (st.recentWorkouts ?? []).some((w) => w.day === y)
+  if (covered || !n || !life.shields.protect) return null
+  return (
+    <button
+      className="btn small ghost"
+      title="Spend a streak shield: yesterday counts as a rest day"
+      onClick={async () => {
+        try {
+          await life.shields.protect!(y)
+          setN((x) => (x ?? 1) - 1)
+          toast(`🛡 Shield used: yesterday counts as a rest day (${n - 1} left)`, 'good')
+          onDone()
+        } catch (e) {
+          toast((e as Error).message, 'bad')
+        }
+      }}
+    >
+      🛡 Save yesterday ({n} shield{n === 1 ? '' : 's'})
+    </button>
   )
 }

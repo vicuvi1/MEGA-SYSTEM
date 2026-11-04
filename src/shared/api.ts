@@ -528,6 +528,8 @@ export interface LifeApi {
   shields: {
     count(): Promise<number>
     buy(): Promise<{ shields: number; balance: number }>
+    /** Spend a shield on a missed day: it counts as a rest day for the workout streak. */
+    protect?(day: string): Promise<BodyState>
   }
   data: {
     exportJson(): Promise<string>

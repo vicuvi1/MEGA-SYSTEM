@@ -3298,6 +3298,9 @@ var ShieldService = class {
 		return val ? parseInt(val, 10) : 0;
 	}
 	buy(now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => this.buyNow(now))();
+	}
+	buyNow(now) {
 		const summary = this.wallet.summary(now);
 		const current = this.count();
 		const plan = planBuyShield(summary.balance, current);
@@ -3319,7 +3322,8 @@ var ShieldService = class {
 		};
 	}
 	awardFreeShield(reason = "Bonus") {
-		const next = this.count() + 1;
+		const current = this.count();
+		const next = Math.min(5, current + 1);
 		setSetting(this.db, "streak_shields", String(next));
 		return next;
 	}
@@ -7025,7 +7029,12 @@ syncFinance: (recordDays) => write((s) => {
 		},
 		shields: {
 			count: () => read((s) => s.shields.count()),
-			buy: () => write((s) => s.shields.buy(), W)
+			buy: () => write((s) => s.shields.buy(), W),
+			/** Spends a shield to save the workout streak for a missed day (it becomes a rest day). */
+			protect: (day) => write((s) => {
+				if (!s.shields.consume()) throw new Error("No shields left: buy one in the shop");
+				return s.body.setRest(day, true);
+			}, W)
 		},
 		exporter: {
 			exportCsv: (kind) => read((s) => s.exporter.exportCsv(kind)),

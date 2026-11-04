@@ -238,7 +238,13 @@ export function createWebServices(mirror: Mirror) {
     },
     shields: {
       count: () => read((s) => s.shields.count()),
-      buy: () => write((s) => s.shields.buy(), W)
+      buy: () => write((s) => s.shields.buy(), W),
+      /** Spends a shield to save the workout streak for a missed day (it becomes a rest day). */
+      protect: (day: string) =>
+        write((s) => {
+          if (!s.shields.consume()) throw new Error('No shields left: buy one in the shop')
+          return s.body.setRest(day, true)
+        }, W)
     },
     exporter: {
       exportCsv: (kind: 'workouts' | 'expenses') => read((s) => s.exporter.exportCsv(kind)),
