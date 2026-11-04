@@ -3,13 +3,16 @@
 // island window itself never opens your data, so there is one owner of it.
 import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
-import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
+import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
+import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { life } from './bridge'
 import { useLive } from './live'
 import { findExercise, readSport, updateSport } from './sportTrack'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
+/** The bedtime logged by itself after a night away from the PC (shown once on the island). */
+const BED_AUTO = 'ls.bedAuto'
 const get = <T,>(k: string, d: T): T => {
   try {
     const v = localStorage.getItem(k)
@@ -53,6 +56,39 @@ function logIsland(e: IslandLogEntry) {
   }
 }
 
+/** Logs the bedtime by itself (once a night), and leaves a note for the island. */
+async function onAway(w: { from: string; to: string }): Promise<void> {
+  const st = await life.sleep.state().catch(() => null)
+  if (!st) return
+  const from = new Date(w.from)
+  const to = new Date(w.to)
+  const time = bedFromAway(from, to, bedLoggedTonight(st.recentLogs, to))
+  if (!time) return
+  await life.sleep.logBed(time)
+  put(BED_AUTO, { time, at: w.to })
+  window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+}
+
+/** "You went to bed at 00:40": once, until you confirm or fix it (not over a time-up). */
+function bedAlert(dismissed: Record<string, number>, now: number, running: boolean): IslandAlert | null {
+  const b = get<{ time: string; at: string } | null>(BED_AUTO, null)
+  if (!b || running || now - Date.parse(b.at) > 6 * 3600_000) return null
+  const id = `sleep:${b.at}`
+  if (dismissed[id] && dismissed[id] > now) return null
+  return {
+    id,
+    kind: 'sleep',
+    title: 'Good morning ☀️',
+    text: `You went to bed at ${b.time}: that's when the PC was last used. It's in Waky now.`,
+    face: '😴',
+    actions: [
+      { label: '✓ Right', action: { kind: 'dismiss', id }, primary: true },
+      { label: 'Fix the time', action: { kind: 'open', page: 'sleep' } },
+      { label: "☀️ I'm up", action: { kind: 'wake' } }
+    ]
+  }
+}
+
 export function IslandFeed() {
   const desk = window.desktop
   const busy = useRef<{ on: boolean; steps: string[] }>({ on: false, steps: [] })
@@ -62,7 +98,7 @@ export function IslandFeed() {
   const build = useCallback(async (): Promise<IslandSnapshot> => {
     const now = Date.now()
     if (!life.coach?.status) return { ...EMPTY_ISLAND, at: now }
-    const [status, focus, log] = await Promise.all([life.coach.status(), life.focus.state(), life.coach.log().catch(() => [])])
+    const [status, focus, log, sleep, shop] = await Promise.all([life.coach.status(), life.focus.state(), life.coach.log().catch(() => []), life.sleep.state().catch(() => null), life.shop?.state().catch(() => null) ?? Promise.resolve(null)])
     if (now - blocks.current.at > 60_000) blocks.current = { at: now, list: await todayBlocks().catch(() => blocks.current.list) }
     const run = focus.running
     const running = run ? { subject: run.subject, startedAt: Date.parse(run.startedAt), endsAt: Date.parse(run.startedAt) + run.planned * 60000 } : null
@@ -98,7 +134,20 @@ export function IslandFeed() {
       mustdos: status.mustdos,
       water: { ml: Math.max(status.today.waterMl, localWater), target: status.today.waterTarget || Number(sport?.water?.targetMl) || 2700 },
       reps,
-      alert: pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
+      alert: bedAlert(dismissed, now, !!running) ?? pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed }),
+      sleep: (() => {
+        const d = new Date(now)
+        const logs = sleep?.recentLogs ?? []
+        const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
+        const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
+        return { bed: showBedButton(d, target, bedLoggedTonight(logs, d)), wake: showWakeButton(d, wakeLogged), target }
+      })(),
+      points: (() => {
+        if (!shop) return undefined
+        const rewards = shop.rewards.filter((r) => !r.archived && r.price > 0)
+        const goal = rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b) => a.price - b.price).find((r) => r.price > shop.balance) ?? null
+        return { balance: shop.balance, goal: goal ? { title: goal.title, price: goal.price } : null }
+      })()
     }
   }, [])
 
@@ -162,6 +211,17 @@ export function IslandFeed() {
             if (a.id.startsWith('ben:')) put(SEEN, Math.max(get<number>(SEEN, 0), Date.parse(a.id.slice(4)) || now))
             break
           }
+          case 'bed': {
+            const r = await life.sleep.logBed(a.time)
+            window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+            if (!a.time) put(BED_AUTO, null)
+            void r
+            break
+          }
+          case 'wake':
+            await life.sleep.logWake()
+            window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+            break
           case 'open':
             if (a.page === 'coach') put(SEEN, Date.now())
             if (a.page) window.dispatchEvent(new CustomEvent('life-open-page', { detail: a.page }))
@@ -195,6 +255,8 @@ export function IslandFeed() {
     [send]
   )
 
+  const sendRef = useRef(send)
+  sendRef.current = send
   const actRef = useRef(act)
   actRef.current = act
   useEffect(() => {
@@ -204,6 +266,8 @@ export function IslandFeed() {
       listening = true
       desk.onIslandAction?.((a) => void actRef.current(a))
       desk.onNavigate?.((page) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: page })))
+      // Back after a night away from the PC: that's when you went to bed.
+      desk.onAway?.((w) => void onAway(w).then(() => void sendRef.current()))
     }
     void send()
     const t = setInterval(() => void send(), 15_000)

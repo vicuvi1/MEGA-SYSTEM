@@ -22,6 +22,7 @@ const api: DesktopApi = {
   islandState: (s) => ipcRenderer.send('island:state', s),
   onIslandAction: (cb) => void ipcRenderer.on('island:action', (_e, a) => cb(a)),
   onNavigate: (cb) => void ipcRenderer.on('app:navigate', (_e, page) => cb(page)),
+  onAway: (cb) => void ipcRenderer.on('desktop:away', (_e, a) => cb(a)),
   onIslandState: (cb) => void ipcRenderer.on('island:state', (_e, s) => cb(s)),
   islandAction: (a) => ipcRenderer.send('island:action', a),
   islandAck: (ack) => ipcRenderer.send('island:ack', ack),

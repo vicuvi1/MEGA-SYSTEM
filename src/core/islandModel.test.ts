@@ -47,10 +47,10 @@ describe('island prefs', () => {
     expect(p.size).toBe('large')
     expect(p.opacity).toBe(0.55)
     expect(p.look).toBe('black')
-    expect(p.sections.map((s) => s.id)).toEqual(['ben', 'logs', 'timer', 'plan', 'mustdos'])
+    expect(p.sections.map((s) => s.id)).toEqual(['ben', 'logs', 'timer', 'sleep', 'plan', 'mustdos', 'points'])
     expect(p.sections[1].on).toBe(false)
     expect(p.shortcut).toBe('Control+Alt+Space')
-    expect(cleanIslandPrefs(null).sections).toHaveLength(5)
+    expect(cleanIslandPrefs(null).sections).toHaveLength(7)
   })
 })
 

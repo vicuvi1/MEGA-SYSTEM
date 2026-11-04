@@ -53,6 +53,7 @@ function ActIcon({ a, face, small = false }: { a: Activity; face: string; small?
   const size = small ? 20 : 22
   if (a.kind === 'timer' || a.kind === 'now') return <Ring pct={a.pct} over={a.over} size={size} />
   if (a.kind === 'water') return <span className="di-act-ico">💧</span>
+  if (a.kind === 'bed') return <span className="di-act-ico di-moon-sm">🌙</span>
   if (a.kind === 'next') return <span className="di-act-ico">⏭</span>
   return <span className="di-face-sm">{face}</span>
 }
@@ -271,6 +272,8 @@ export function DesktopIsland() {
     : a.kind === 'start' ? `Timer: ${a.subject}`
     : a.kind === 'stop' ? 'Logged'
     : a.kind === 'extend' ? `+${a.minutes} min`
+    : a.kind === 'bed' ? (a.time ? `Bed at ${a.time} · Waky` : 'Good night 🌙 · logged in Waky')
+    : a.kind === 'wake' ? 'Good morning ☀️ · wake-up logged'
     : null
   const clearToastLater = (ms: number) => {
     if (toastT.current) clearTimeout(toastT.current)
@@ -327,7 +330,48 @@ export function DesktopIsland() {
   const mustOpen = s.mustdos.filter((m) => !m.done).length
 
   // The card's sections, in your order (Settings → Desktop island).
+  const [moon, setMoon] = useState(false)
+  const goToBed = () => {
+    setMoon(true)
+    send({ kind: 'bed' })
+    window.setTimeout(() => (setMoon(false), hide()), 2600)
+  }
+  const pts = s.points
   const blocks: Record<IslandSection, ReactNode> = {
+    sleep: s.sleep?.bed || s.sleep?.wake ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
+                  {s.sleep?.bed ? (
+                    <>
+                      <span className="di-moon" aria-hidden>🌙<i>✦</i><i>✦</i><i>✦</i></span>
+                      <div className="di-sleep-mid">
+                        <b>{moon ? 'Sleep well' : 'Bedtime'}</b>
+                        <small>{moon ? 'Logged in Waky. See you tomorrow.' : `Target ${s.sleep.target ?? '23:00'} · one tap logs it in Waky`}</small>
+                      </div>
+                      <button className="primary" onClick={goToBed} disabled={moon}>🌙 Going to bed</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="di-sun" aria-hidden>☀️</span>
+                      <div className="di-sleep-mid">
+                        <b>Good morning</b>
+                        <small>Log your wake-up in Waky</small>
+                      </div>
+                      <button className="primary" onClick={() => tap({ kind: 'wake' })}>☀️ I'm up</button>
+                    </>
+                  )}
+                </section>) : null,
+    points: pts ? (<section className="di-points">
+                  <span className="di-pts">⭐ {pts.balance}</span>
+                  {pts.goal ? (
+                    <div className="di-pts-mid">
+                      <div className="di-bar gold"><i style={{ width: `${Math.min(100, (pts.balance / pts.goal.price) * 100)}%` }} /></div>
+                      <small>{pts.balance >= pts.goal.price ? `Ready: ${pts.goal.title} 🎉` : `${pts.goal.price - pts.balance} to ${pts.goal.title}`}</small>
+                    </div>
+                  ) : (
+                    <small className="di-pts-mid">Add a reward to work toward</small>
+                  )}
+                  <button onClick={() => tap({ kind: 'open', page: 'shop' })}>Rewards</button>
+                </section>) : null,
+
     timer: run ? (<section className="di-timer">
                   <Ring pct={runPct} over={runOver} size={58} stroke={4} />
                   <div className="di-timer-mid">
@@ -436,7 +480,7 @@ export function DesktopIsland() {
     <div
       ref={root}
       style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
-      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? 'alert-only' : ''} mood-${s.ben.mood} ${runOver ? 'is-over' : ''}`}
+      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""}`}
     >
       {/* Collapsed: a thin line, or the live pill (main activity + a bubble for the next one) */}
       {!open && (
@@ -530,7 +574,7 @@ export function DesktopIsland() {
           {s.alert && (
             <section className={`di-alert kind-${s.alert.kind}`}>
               <div className="di-alert-top">
-                <span>{s.alert.kind === 'ben' ? s.alert.face ?? s.ben.face : s.alert.kind === 'over' ? '⏰' : '▶'}</span>
+                <span>{s.alert.kind === 'ben' || s.alert.kind === 'sleep' ? s.alert.face ?? s.ben.face : s.alert.kind === 'over' ? '⏰' : '▶'}</span>
                 <b>{s.alert.title}</b>
               </div>
               <p>{s.alert.text}</p>

@@ -18,11 +18,13 @@ export type IslandAction = { id?: string } & (
   | { kind: 'extend'; minutes: number }
   | { kind: 'dismiss'; id: string; snoozeMin?: number }
   | { kind: 'open'; page?: string }
+  | { kind: 'bed'; time?: string }
+  | { kind: 'wake' }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over'
+  kind: 'ben' | 'block' | 'over' | 'sleep'
   title: string
   text: string
   face?: string
@@ -41,6 +43,10 @@ export interface IslandSnapshot {
   water: { ml: number; target: number }
   reps: { id: string; name: string; done: number; target: number }[]
   alert: IslandAlert | null
+  /** The bedtime buttons: Going to bed (evening/night), I'm up (morning). */
+  sleep?: { bed: boolean; wake: boolean; target: string | null }
+  /** Your points and the reward you're working toward. */
+  points?: { balance: number; goal: { title: string; price: number } | null }
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {
@@ -189,7 +195,7 @@ export function pill(s: IslandSnapshot, now: number): Pill {
 
 // ---- Your island: how it looks and behaves (Settings → Desktop island) ----
 
-export type IslandSection = 'timer' | 'plan' | 'mustdos' | 'logs' | 'ben'
+export type IslandSection = 'timer' | 'sleep' | 'plan' | 'mustdos' | 'logs' | 'points' | 'ben'
 export interface IslandPrefs {
   size: 'compact' | 'normal' | 'large'
   /** Background opacity, 0.55 (see-through) … 1 (solid). */
@@ -205,13 +211,13 @@ export interface IslandPrefs {
   shortcut: string
 }
 
-export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', plan: 'Now & next', mustdos: 'Must-dos', logs: 'Water & reps', ben: 'Ben' }
+export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', sleep: 'Bedtime', plan: 'Now & next', mustdos: 'Must-dos', logs: 'Water & reps', points: 'Points & reward', ben: 'Ben' }
 export const SHORTCUTS = ['Control+Alt+Space', 'Control+Shift+Space', 'Alt+Q', 'Control+Alt+L', ''] as const
 export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   size: 'normal',
   opacity: 1,
   look: 'black',
-  sections: (['timer', 'plan', 'mustdos', 'logs', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
+  sections: (['timer', 'sleep', 'plan', 'mustdos', 'logs', 'points', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
   sound: true,
   hide: 'normal',
   shortcut: 'Control+Alt+Space'
@@ -224,7 +230,11 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
   const d = DEFAULT_ISLAND_PREFS
   const ids = d.sections.map((s) => s.id)
   const saved = Array.isArray(p?.sections) ? p.sections.filter((s: any) => ids.includes(s?.id)).map((s: any) => ({ id: s.id as IslandSection, on: s.on !== false })) : []
-  const sections = [...saved.filter((s: any, i: number) => saved.findIndex((x: any) => x.id === s.id) === i), ...d.sections.filter((s) => !saved.some((x: any) => x.id === s.id))]
+  const sections: { id: IslandSection; on: boolean }[] = [...saved.filter((s: any, i: number) => saved.findIndex((x: any) => x.id === s.id) === i), ...d.sections.filter((s) => !saved.some((x: any) => x.id === s.id))]
+  // Bedtime belongs right under the timer (also when it's new since you last saved).
+  const bed = sections.findIndex((x) => x.id === 'sleep')
+  const timer = sections.findIndex((x) => x.id === 'timer')
+  if (!saved.some((x: any) => x.id === 'sleep') && bed > timer + 1) sections.splice(timer + 1, 0, ...sections.splice(bed, 1))
   return {
     size: ['compact', 'normal', 'large'].includes(p?.size) ? p.size : d.size,
     opacity: Number.isFinite(p?.opacity) ? Math.min(1, Math.max(0.55, Number(p.opacity))) : d.opacity,
@@ -239,7 +249,7 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
 // ---- Live activities: everything worth showing in the pill right now ----
 
 export interface Activity extends Omit<Pill, 'kind'> {
-  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water'
+  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed'
   /** Stable id, so a chosen activity stays chosen as numbers tick. */
   key: string
 }
@@ -260,6 +270,7 @@ export function activities(s: IslandSnapshot, now: number): Activity[] {
   if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: s.now.title, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
   if (s.next && s.next.start - now <= 3 * 3600_000) out.push({ key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot })
   if (s.ben.unread > 0 && s.ben.last) out.push({ key: `ben:${s.ben.last.at}`, kind: 'ben', text: s.ben.last.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 60), sub: 'Ben', pct: 0, over: false, dot })
+  if (s.sleep?.bed && !s.running) out.push({ key: 'bed', kind: 'bed', text: 'Going to bed?', sub: 'Tap to log it in Waky', pct: 0, over: false, dot })
   if (s.water.target > 0 && s.water.ml < s.water.target && out.length) out.push({ key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot })
   return out
 }

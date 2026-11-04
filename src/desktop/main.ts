@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notification, protocol, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, shell, Tray } from 'electron'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
@@ -221,6 +221,41 @@ if (firstCopy) void app.whenReady().then(async () => {
   })
 
   await win.loadURL(origin + '/')
+  // When you go to bed, without watching the screen: the last moment you used
+  // the PC (mouse/keys; before it locked, slept or shut down) is kept on disk.
+  // Coming back hours later tells the app, which logs the bedtime in Waky.
+  if (!smoke) {
+    const activeFile = join(dir, 'last-active.json')
+    let lastActive = Date.now()
+    const save = () => void writeFile(activeFile, JSON.stringify({ at: lastActive })).catch(() => {})
+    const away = (from: number, to: number) => win.webContents.send('desktop:away', { from: new Date(from).toISOString(), to: new Date(to).toISOString() })
+    try {
+      const before = Number(JSON.parse(await readFile(activeFile, 'utf8')).at)
+      // The PC was off (or the app closed) since then.
+      if (before && Date.now() - before >= 3 * 3600_000) setTimeout(() => away(before, Date.now()), 8000)
+    } catch {
+      /* first run */
+    }
+    const tick = () => {
+      const idle = powerMonitor.getSystemIdleTime()
+      const now = Date.now()
+      if (idle < 90) {
+        if (now - lastActive >= 3 * 3600_000) away(lastActive, now)
+        lastActive = now
+        save()
+      }
+    }
+    setInterval(tick, 60_000)
+    const leaving = () => {
+      lastActive = Date.now() - powerMonitor.getSystemIdleTime() * 1000
+      save()
+    }
+    powerMonitor.on('lock-screen', leaving)
+    powerMonitor.on('suspend', leaving)
+    powerMonitor.on('shutdown', leaving)
+    powerMonitor.on('unlock-screen', () => setTimeout(tick, 1500))
+    powerMonitor.on('resume', () => setTimeout(tick, 3000))
+  }
   // Look for a new version shortly after start, every 30 minutes and when the
   // window comes back to the front; a failed look is tried again in 3 minutes.
   // A new version downloads quietly, then the top bar shows "Restart to update".

@@ -48,6 +48,8 @@ export interface DesktopApi {
   onIslandPrefs?(cb: (p: IslandPrefs) => void): void
   /** App window: open a page when the island asks. */
   onNavigate?(cb: (page: string) => void): void
+  /** You came back after a long time away from the PC (asleep?): when you were last active, and when you came back. */
+  onAway?(cb: (a: { from: string; to: string }) => void): void
   /** Island window: new snapshots. */
   onIslandState?(cb: (s: IslandSnapshot) => void): void
   /** Island window: send a tap. */
