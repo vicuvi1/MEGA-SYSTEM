@@ -22,6 +22,7 @@ const api: DesktopApi = {
   islandAction: (a) => ipcRenderer.send('island:action', a),
   islandMode: (mode, height) => ipcRenderer.send('island:mode', mode, height),
   islandHot: (rect) => ipcRenderer.send('island:hot', rect),
+  islandDrag: (on) => ipcRenderer.send(on ? 'island:dragStart' : 'island:dragEnd'),
   onIslandHover: (cb) => void ipcRenderer.on('island:hover', (_e, over) => cb(!!over)),
   showApp: (page) => ipcRenderer.send('island:showApp', page)
 }

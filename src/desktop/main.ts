@@ -122,6 +122,7 @@ else void app.whenReady().then(async () => {
   const menu = () => Menu.buildFromTemplate([
     { label: 'Open Life System', click: () => showApp() },
     { label: 'Show the island', type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
+    { label: 'Reset island position', click: () => island.resetPosition() },
     { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); tray.setContextMenu(menu()) } },
     { type: 'separator' },
     { label: 'Quit Life System', click: () => { quitting = true; app.quit() } }

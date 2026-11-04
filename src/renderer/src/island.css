@@ -133,3 +133,9 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 @keyframes di-bounce { 0%, 60%, 100% { transform: none; opacity: 0.5; } 30% { transform: translateY(-3px); opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) { .di-card, .di-pill, .di-alert { animation: none; } .di-dot { animation: none; } }
+
+/* Drag to move */
+.di-pill, .di-head { touch-action: none; }
+.di-head { cursor: grab; }
+html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
+html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(0 0 0 / 0.6), 0 0 0 1px var(--line), 0 0 26px -6px var(--glow); }

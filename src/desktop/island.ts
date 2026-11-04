@@ -16,9 +16,17 @@ const SIZES: Record<IslandMode, { width: number; height: number }> = {
 export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string }) {
   const prefFile = join(o.dir, 'island.json')
   let enabled = true
+  // Where you put it: the center as a share of the screen width, and pixels from the top.
+  let pos = { cx: 0.5, top: 0 }
   try {
-    if (existsSync(prefFile)) enabled = JSON.parse(readFileSync(prefFile, 'utf8')).enabled !== false
+    if (existsSync(prefFile)) {
+      const p = JSON.parse(readFileSync(prefFile, 'utf8'))
+      enabled = p.enabled !== false
+      if (Number.isFinite(p.cx) && Number.isFinite(p.top)) pos = { cx: Math.min(1, Math.max(0, p.cx)), top: Math.max(0, p.top) }
+    }
   } catch { /* defaults */ }
+  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, ...pos })) } catch { /* fine */ } }
+  let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number } | null = null
   let win: BrowserWindow | null = null
   let mode: IslandMode = 'hidden'
   let last: unknown = null
@@ -34,7 +42,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const { width } = SIZES[mode]
     const height = mode === 'open' ? openHeight : SIZES[mode].height
     const wa = d.workArea
-    win.setBounds({ x: Math.round(wa.x + (wa.width - width) / 2), y: wa.y, width, height })
+    // Your spot, kept fully on screen (opening near the bottom grows upward).
+    const x = Math.round(Math.min(wa.x + wa.width - width, Math.max(wa.x, wa.x + pos.cx * wa.width - width / 2)))
+    const y = Math.round(Math.min(wa.y + wa.height - height, Math.max(wa.y, wa.y + pos.top)))
+    win.setBounds({ x, y, width, height })
   }
 
   const open = () => {
@@ -66,6 +77,35 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   })
   ipcMain.on('island:action', (e, a) => { if (fromIsland(e)) o.appWindow.webContents.send('island:action', a) })
   ipcMain.on('island:showApp', (e, page) => { if (fromIsland(e)) o.showApp(typeof page === 'string' ? page : undefined) })
+  // Drag it anywhere: the window follows the pointer until you let go; the spot is remembered.
+  ipcMain.on('island:dragStart', (e) => {
+    if (!fromIsland(e) || !win || drag) return
+    const c = screen.getCursorScreenPoint()
+    const b = win.getBounds()
+    win.setIgnoreMouseEvents(false)
+    drag = {
+      offX: c.x - b.x,
+      offY: c.y - b.y,
+      timer: setInterval(() => {
+        if (!win || win.isDestroyed()) return
+        const p = screen.getCursorScreenPoint()
+        const nb = win.getBounds()
+        win.setBounds({ x: p.x - drag!.offX, y: p.y - drag!.offY, width: nb.width, height: nb.height })
+      }, 16)
+    }
+  })
+  ipcMain.on('island:dragEnd', (e) => {
+    if (!fromIsland(e) || !win || !drag) return
+    clearInterval(drag.timer)
+    drag = null
+    const b = win.getBounds()
+    const d = screen.getDisplayMatching(b)
+    displayId = d.id
+    const wa = d.workArea
+    pos = { cx: Math.min(1, Math.max(0, (b.x + b.width / 2 - wa.x) / wa.width)), top: Math.max(0, b.y - wa.y) }
+    savePrefs()
+    place()
+  })
   ipcMain.on('island:hot', (e, r) => {
     if (fromIsland(e) && r && [r.x, r.y, r.width, r.height].every(Number.isFinite)) hot = r
   })
@@ -84,7 +124,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   // anywhere else clicks pass through to the apps below. Polling the cursor
   // avoids the browser's false mouse-leave events when click-through toggles.
   setInterval(() => {
-    if (!win || win.isDestroyed() || !win.isVisible()) return
+    if (!win || win.isDestroyed() || !win.isVisible() || drag) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
     const x = c.x - b.x
@@ -98,7 +138,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
 
   // Follow the mouse to another screen (only while collapsed).
   setInterval(() => {
-    if (!win || win.isDestroyed() || mode === 'open') return
+    if (!win || win.isDestroyed() || mode === 'open' || drag) return
     if (screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id !== displayId) place()
   }, 1500)
   screen.on('display-metrics-changed', place)
@@ -106,9 +146,15 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   if (enabled) open()
   return {
     enabled: () => enabled,
+    /** Back to the top center. */
+    resetPosition() {
+      pos = { cx: 0.5, top: 0 }
+      savePrefs()
+      place()
+    },
     setEnabled(on: boolean) {
       enabled = on
-      try { writeFileSync(prefFile, JSON.stringify({ enabled: on })) } catch { /* fine */ }
+      savePrefs()
       if (on) open()
       else close()
     }

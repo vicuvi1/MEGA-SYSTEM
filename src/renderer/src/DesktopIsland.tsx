@@ -136,6 +136,40 @@ export function DesktopIsland() {
     }, 8000)
   }, [s.alert]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Press and drag (pill or the open card's header) to move the island anywhere;
+  // a plain click still opens it.
+  const dragged = useRef(false)
+  const dragProps = {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if (e.button !== 0 || !desk()?.islandDrag) return
+      const el = e.currentTarget
+      const sx = e.screenX
+      const sy = e.screenY
+      let started = false
+      dragged.current = false
+      try { el.setPointerCapture(e.pointerId) } catch { /* fine */ }
+      const move = (ev: PointerEvent) => {
+        if (started || Math.hypot(ev.screenX - sx, ev.screenY - sy) < 5) return
+        started = true
+        dragged.current = true
+        document.documentElement.classList.add('di-dragging')
+        desk()?.islandDrag?.(true)
+      }
+      const up = () => {
+        el.removeEventListener('pointermove', move)
+        el.removeEventListener('pointerup', up)
+        el.removeEventListener('pointercancel', up)
+        if (started) {
+          document.documentElement.classList.remove('di-dragging')
+          desk()?.islandDrag?.(false)
+        }
+      }
+      el.addEventListener('pointermove', move)
+      el.addEventListener('pointerup', up)
+      el.addEventListener('pointercancel', up)
+    }
+  }
+
   const send = (a: IslandAction) => desk()?.islandAction?.(a)
   const tap = (a: IslandAction, label?: string) => {
     send(a)
@@ -174,7 +208,17 @@ export function DesktopIsland() {
     >
       {/* Collapsed: a thin line, or the smart pill */}
       {!open && (
-        <button className={`di-pill kind-${s.locked ? 'locked' : p.kind}`} onClick={() => (s.locked ? desk()?.showApp?.() : (show(false), setPinned(true)))} aria-label="Open the island">
+        <button
+          className={`di-pill kind-${s.locked ? 'locked' : p.kind}`}
+          {...dragProps}
+          onClick={() => {
+            if (dragged.current) return void (dragged.current = false)
+            if (s.locked) desk()?.showApp?.()
+            else (show(false), setPinned(true))
+          }}
+          aria-label="Open the island (drag to move it)"
+          title="Click to open · drag to move"
+        >
           {s.locked ? (
             <span className="di-pill-text">🔒 Open Life System</span>
           ) : p.kind === 'idle' ? (
@@ -192,7 +236,7 @@ export function DesktopIsland() {
 
       {open && (
         <div ref={card} className="di-card" role="dialog" aria-label="Life System island">
-          <header className="di-head">
+          <header className="di-head" {...dragProps}>
             <span className={`di-face mood-${s.ben.mood}`}>{s.ben.face}</span>
             <div className="di-who">
               <b>Ben</b>

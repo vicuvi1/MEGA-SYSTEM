@@ -35,6 +35,8 @@ export interface DesktopApi {
   islandMode?(mode: IslandMode, height?: number): void
   /** Island window: where the visible pill/card is (window pixels); clicks pass through elsewhere. */
   islandHot?(rect: { x: number; y: number; width: number; height: number }): void
+  /** Island window: start / stop dragging it (the desktop moves the window with the pointer). */
+  islandDrag?(on: boolean): void
   /** Island window: the real mouse pointer entered / left the pill. */
   onIslandHover?(cb: (over: boolean) => void): void
   /** Island window: bring the app window up. */
