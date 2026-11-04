@@ -14,7 +14,7 @@ import type { TursoHttp } from './tursoHttp'
 import { decodePending, diffRows, encodePending, schemaInfo, sendPending, touchedTables, type Remap } from './desktopSync'
 
 // cloud_snapshots: 30 full backups, read straight from Turso when needed, never copied to every device.
-const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|cloud_snapshots$)/
+const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/
 
 export interface MirrorStore {
   load(): Promise<Uint8Array | null>

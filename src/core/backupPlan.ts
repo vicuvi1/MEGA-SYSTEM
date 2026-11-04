@@ -2,7 +2,7 @@
 // keep. Pure and tested; the desktop writes the files, the bridge runs the SQL.
 
 /** Tables that are only plumbing (or backups themselves): never in a backup, never restored. */
-export const NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/
+export const NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/
 
 /** Append-only history: a restore only adds rows that are missing. */
 export const APPEND_ONLY = new Set(['ledger', 'discipline_events'])

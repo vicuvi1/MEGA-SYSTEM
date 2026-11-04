@@ -1307,7 +1307,7 @@ async function sendPending(turso, write, info) {
 	throw new Error(`Sync conflict: could not merge a change made offline (${String(last?.message ?? last).slice(0, 160)}). Your local changes are kept. Save a backup before resolving this.`);
 }
 // src/renderer/src/web/mirror.ts
-var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|cloud_snapshots$)/;
+var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/;
 var MirrorError = class extends Error {};
 var Mirror = class {
 	SQL;
@@ -15238,6 +15238,238 @@ function deadlineFacts(items) {
 		};
 	});
 }
+// src/core/health.ts
+var ago = (now, iso) => {
+	const m = Math.round((now.getTime() - Date.parse(iso)) / 6e4);
+	return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+};
+var addDaysISO = (day, n) => {
+	const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+};
+/** A part that reports OK/errors: broken when its last error is newer than its last OK. */
+function okErr(id, label, b, now, never) {
+	if (!b || !b.ok && !b.err) return {
+		id,
+		label,
+		ok: true,
+		detail: never
+	};
+	if (!!b.err && (!b.ok || b.err.at > b.ok)) return {
+		id,
+		label,
+		ok: false,
+		detail: `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
+		since: b.err.at
+	};
+	return {
+		id,
+		label,
+		ok: true,
+		detail: `OK, last ${ago(now, b.ok)}`
+	};
+}
+function healthChecks(i) {
+	const { now, beats } = i;
+	const out = [];
+	const tick = beats.tick?.ok;
+	if (!tick) out.push({
+		id: "tick",
+		label: "Ben's server",
+		ok: false,
+		detail: "Has not run yet",
+		since: now.toISOString()
+	});
+	else {
+		const late = now.getTime() - Date.parse(tick) > 18e5;
+		out.push({
+			id: "tick",
+			label: "Ben's server",
+			ok: !late,
+			detail: late ? `Last ran ${ago(now, tick)} (should be every 10 min)` : `Ran ${ago(now, tick)}`,
+			...late ? { since: new Date(Date.parse(tick) + 6e5).toISOString() } : {}
+		});
+	}
+	out.push(okErr("telegram", "Telegram", beats.telegram, now, "No messages sent yet"));
+	out.push(okErr("ai", "Ben's AI", beats.ai, now, "Not used yet"));
+	out.push(okErr("calendar", "Google Calendar", beats.calendar, now, "Not used yet"));
+	if (i.sportySeen) {
+		const off = now.getTime() - Date.parse(i.sportySeen) > 936e5;
+		out.push({
+			id: "sporty",
+			label: "Sporty",
+			ok: !off,
+			detail: off ? `Not heard from since ${ago(now, i.sportySeen)}` : `Seen ${ago(now, i.sportySeen)}`,
+			...off ? { since: new Date(Date.parse(i.sportySeen) + 936e5).toISOString() } : {}
+		});
+	}
+	if (i.latestSnapshot) {
+		const old = i.latestSnapshot < addDaysISO(i.today, -1);
+		out.push({
+			id: "snapshot",
+			label: "Cloud backup",
+			ok: !old,
+			detail: old ? `Newest daily snapshot is from ${i.latestSnapshot}` : `Snapshot ${i.latestSnapshot}`,
+			...old ? { since: `${addDaysISO(i.latestSnapshot, 2)}T00:00:00.000Z` } : {}
+		});
+	}
+	const pc = beats.desktopBackup?.ok;
+	if (pc) {
+		const old = now.getTime() - Date.parse(pc) > 2592e5;
+		out.push({
+			id: "desktopBackup",
+			label: "PC / Drive backup",
+			ok: !old,
+			detail: old ? `Last backup file ${ago(now, pc)}` : `Backup file ${ago(now, pc)}`,
+			...old ? { since: new Date(Date.parse(pc) + 2592e5).toISOString() } : {}
+		});
+	}
+	const drill = beats.restoreDrill;
+	if (drill?.ok || drill?.err) out.push(okErr("restoreDrill", "Restore drill", drill, now, ""));
+	const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 864e5);
+	out.push({
+		id: "errors",
+		label: "Errors (24 h)",
+		ok: day.length < 20,
+		detail: day.length ? `${day.length} in the last 24 h, last: ${day[day.length - 1].msg.slice(0, 100)}` : "None",
+		...day.length >= 20 ? { since: day[day.length - 20].at } : {}
+	});
+	return out;
+}
+/**
+* What Ben says now: parts broken for 30+ minutes he hasn't warned about yet,
+* and parts he warned about that work again. `alerted` = id → when he warned.
+*/
+function alertDecisions(checks, alerted, now) {
+	const next = { ...alerted };
+	const warn = [];
+	const fixed = [];
+	for (const c of checks) if (!c.ok && c.since && now.getTime() - Date.parse(c.since) >= 18e5 && !alerted[c.id]) {
+		warn.push(c);
+		next[c.id] = now.toISOString();
+	} else if (c.ok && alerted[c.id]) {
+		fixed.push(c);
+		delete next[c.id];
+	}
+	return {
+		warn,
+		fixed,
+		next
+	};
+}
+function alertText(warn, fixed) {
+	const lines = [];
+	if (warn.length) lines.push(`🔧 <b>Something needs a look</b>\n${warn.map((c) => `• ${c.label}: ${c.detail}`).join("\n")}\nSettings → System health has the details.`);
+	if (fixed.length) lines.push(`✅ Working again: ${fixed.map((c) => c.label).join(", ")}.`);
+	return lines.join("\n\n");
+}
+function weeklyReport(checks, errors, now) {
+	const week = errors.filter((e) => now.getTime() - Date.parse(e.at) < 6048e5);
+	const bad = checks.filter((c) => !c.ok);
+	const bySource = /* @__PURE__ */ new Map();
+	for (const e of week) bySource.set(e.source, (bySource.get(e.source) ?? 0) + 1);
+	return [
+		`🩺 <b>Weekly system check</b>`,
+		bad.length ? `Needs a look: ${bad.map((c) => `${c.label} (${c.detail})`).join("; ")}.` : "Everything is working.",
+		week.length ? `Errors this week: ${week.length} (${[...bySource].map(([s, n]) => `${s} ${n}`).join(", ")}).` : "No errors this week.",
+		checks.filter((c) => [
+			"snapshot",
+			"desktopBackup",
+			"restoreDrill"
+		].includes(c.id)).map((c) => `${c.label}: ${c.detail}`).join(" · ")
+	].filter(Boolean).join("\n");
+}
+// src/renderer/src/web/systemHealth.ts
+var ENSURE = [{
+	sql: "CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)",
+	args: []
+}, {
+	sql: "CREATE TABLE IF NOT EXISTS sys_errors (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, source TEXT, msg TEXT)",
+	args: []
+}];
+var put = (key, at, msg) => ({
+	sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = excluded.msg",
+	args: [
+		key,
+		at,
+		msg
+	]
+});
+var lastOk = /* @__PURE__ */ new Map();
+/** A part worked (ok) or failed (with why). Never throws. OKs are written at most every 5 minutes. */
+async function beat(t, key, ok, msg, now = /* @__PURE__ */ new Date()) {
+	if (ok) {
+		if (now.getTime() - (lastOk.get(key) ?? 0) < 3e5) return;
+		lastOk.set(key, now.getTime());
+	} else lastOk.delete(key);
+	await t.writeAtomic([...ENSURE, put(`${key}:${ok ? "ok" : "err"}`, now.toISOString(), ok ? null : String(msg ?? "failed").slice(0, 300))]).catch(() => {});
+}
+/** One line in the shared error log (last 500 kept). Never throws. */
+async function logError(t, source, msg, now = /* @__PURE__ */ new Date()) {
+	await t.writeAtomic([
+		...ENSURE,
+		{
+			sql: "INSERT INTO sys_errors (at, source, msg) VALUES (?, ?, ?)",
+			args: [
+				now.toISOString(),
+				source.slice(0, 20),
+				String(msg).slice(0, 400)
+			]
+		},
+		{
+			sql: "DELETE FROM sys_errors WHERE id <= (SELECT MAX(id) FROM sys_errors) - 500",
+			args: []
+		}
+	]).catch(() => {});
+}
+/** Small JSON values (Ben's alert state, weekly report date…). */
+async function setNote(t, key, value) {
+	await t.writeAtomic([...ENSURE, put(`note:${key}`, (/* @__PURE__ */ new Date()).toISOString(), JSON.stringify(value))]).catch(() => {});
+}
+async function readHealth(t) {
+	const [h, e, s] = await t.readMany([
+		{
+			sql: "SELECT key, at, msg FROM sys_health",
+			args: []
+		},
+		{
+			sql: "SELECT at, source, msg FROM sys_errors ORDER BY id DESC LIMIT 200",
+			args: []
+		},
+		{
+			sql: "SELECT MAX(day) FROM cloud_snapshots",
+			args: []
+		}
+	]);
+	const beats = {};
+	const notes = {};
+	if (!(h instanceof Error)) for (const [k, at, msg] of h.rows) {
+		if (String(k).startsWith("note:")) {
+			try {
+				notes[String(k).slice(5)] = JSON.parse(String(msg));
+			} catch {}
+			continue;
+		}
+		const [part, kind] = String(k).split(":");
+		const b = beats[part] ??= {};
+		if (kind === "ok") b.ok = String(at);
+		else b.err = {
+			at: String(at),
+			msg: String(msg ?? "")
+		};
+	}
+	return {
+		beats,
+		errors: e instanceof Error ? [] : e.rows.map(([at, source, msg]) => ({
+			at: String(at),
+			source: String(source),
+			msg: String(msg)
+		})).reverse(),
+		notes,
+		latestSnapshot: s instanceof Error ? null : s.rows[0]?.[0] ?? null
+	};
+}
 // src/core/sportyUpdate.ts
 var SPORTY_STATUS = "sporty_status";
 var SPORTY_REQUEST = "sporty_update_request";
@@ -15466,8 +15698,19 @@ async function botsFor(env) {
 		eveningNudge: true,
 		...env.defaults
 	};
-	const pickArea = env.model ? async (text, names) => {
-		const r = (await env.model(`Which ONE of these life areas does this task belong to? Areas: ${names.join(", ")}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, "");
+	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
+	const model = env.model ? async (prompt, opts) => {
+		try {
+			const r = await env.model(prompt, opts);
+			beat(healthDb, "ai", true);
+			return r;
+		} catch (e) {
+			beat(healthDb, "ai", false, e.message);
+			throw e;
+		}
+	} : void 0;
+	const pickArea = model ? async (text, names) => {
+		const r = (await model(`Which ONE of these life areas does this task belong to? Areas: ${names.join(", ")}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, "");
 		return /^none$/i.test(r) ? null : r;
 	} : void 0;
 	const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null;
@@ -15480,7 +15723,7 @@ async function botsFor(env) {
 			defaults,
 			server: true,
 			todoist,
-			ai: env.model ?? null,
+			ai: model ?? null,
 			calendar
 		}),
 		mirror,
@@ -15736,6 +15979,8 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		setSetting(db, TICK_AT, String(now.getTime()));
 		return true;
 	})) return [];
+	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
+	await beat(healthDb, "tick", true, void 0, now);
 	const sent = [];
 	const send = async (text, reply_markup) => {
 		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
@@ -15749,7 +15994,11 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			})
 		});
 		const j = await res.json().catch(() => ({}));
-		if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`);
+		if (!j.ok) {
+			beat(healthDb, "telegram", false, j.description ?? `HTTP ${res.status}`);
+			throw new Error(`Telegram: ${j.description ?? res.status}`);
+		}
+		beat(healthDb, "telegram", true);
 		sent.push(text);
 		await mirror.write((db) => {
 			const plain = text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -15795,6 +16044,12 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		await rhythmTick(env, now, send);
 	} catch (e) {
 		console.error("rhythm:", e);
+		logError(healthDb, "server", `rhythm: ${e.message}`);
+	}
+	try {
+		await healthTick(healthDb, mirror, now, send);
+	} catch (e) {
+		console.error("health:", e);
 	}
 	const st = await mirror.read((db) => {
 		let nudge = {};
@@ -15871,6 +16126,37 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	return sent;
 }
 /** What the rhythm sends now (each thing once a day; state in settings.coach_rhythm). */
+async function healthTick(t, mirror, now, send) {
+	const h = await readHealth(t);
+	const local = await mirror.read((db) => ({
+		sporty: (() => {
+			try {
+				return JSON.parse(getSetting(db, "sport_sync_seen") || "null")?.at ?? null;
+			} catch {
+				return null;
+			}
+		})(),
+		today: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+	}));
+	const checks = healthChecks({
+		now,
+		beats: h.beats,
+		sportySeen: local.sporty,
+		latestSnapshot: h.latestSnapshot,
+		today: local.today,
+		errors: h.errors
+	});
+	const d = alertDecisions(checks, h.notes.alerted ?? {}, now);
+	if (d.warn.length || d.fixed.length) {
+		await setNote(t, "alerted", d.next);
+		await send(alertText(d.warn, d.fixed)).catch(() => null);
+	}
+	const week = `${local.today}`;
+	if (now.getDay() === 0 && now.getHours() === 18 && h.notes.weekly !== week) {
+		await setNote(t, "weekly", week);
+		await send(weeklyReport(checks, h.errors, now)).catch(() => null);
+	}
+}
 async function rhythmTick(env, now, send) {
 	const { bots, services, mirror } = await botsFor(env);
 	const f = await mirror.read((db) => {

@@ -14,8 +14,15 @@ const localDay = () => {
 async function backupNow(): Promise<BackupStatus | null> {
   const desk = window.desktop
   if (!desk?.writeBackup) return null
-  const text = await life.data.exportJson()
-  return desk.writeBackup(text, localDay())
+  try {
+    const text = await life.data.exportJson()
+    const s = await desk.writeBackup(text, localDay())
+    void life.system?.beat('desktopBackup', !s.lastError, s.lastError ?? undefined).catch(() => {})
+    return s
+  } catch (e) {
+    void life.system?.beat('desktopBackup', false, (e as Error).message).catch(() => {})
+    throw e
+  }
 }
 
 /** Headless: today's backup once the data is there, then checks every hour. */

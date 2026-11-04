@@ -48,6 +48,8 @@ export function reloadToday(): Promise<void> {
       }
     } else if (!on) events = []
     snap = { day, connected: on, events, error }
+    // Health: Ben tells you when the calendar keeps failing.
+    if (on) void life.system?.beat('calendar', !error, error ?? undefined).catch(() => {})
     subs.forEach((f) => f(snap))
   })().finally(() => {
     inflight = null

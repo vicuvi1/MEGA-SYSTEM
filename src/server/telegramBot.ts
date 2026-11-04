@@ -23,6 +23,8 @@ import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
+import { alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
+import { beat, logError, readHealth, setNote } from '../renderer/src/web/systemHealth'
 import { loadTriggers, urgeEvents } from '../renderer/src/web/disciplinePatterns'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, pollSporty, sportyUpdated, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
@@ -97,15 +99,29 @@ async function botsFor(env: BotEnv) {
   const services = createWebServices(mirror)
   const defaults = { enabled: true, pollingEnabled: true, morningBriefing: true, eveningNudge: true, ...env.defaults } as BotBridgeConfig
   // New tasks from the bots go to their area too (words first, then Gemini).
-  const pickArea = env.model
+  // Every AI answer (or failure) is a health beat: Ben tells you when his AI stops working.
+  const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
+  const model: BotEnv['model'] = env.model
+    ? async (prompt, opts) => {
+        try {
+          const r = await env.model!(prompt, opts)
+          void beat(healthDb, 'ai', true)
+          return r
+        } catch (e) {
+          void beat(healthDb, 'ai', false, (e as Error).message)
+          throw e
+        }
+      }
+    : undefined
+  const pickArea = model
     ? async (text: string, names: string[]) => {
-        const r = (await env.model!(`Which ONE of these life areas does this task belong to? Areas: ${names.join(', ')}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, '')
+        const r = (await model!(`Which ONE of these life areas does this task belong to? Areas: ${names.join(', ')}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, '')
         return /^none$/i.test(r) ? null : r
       }
     : undefined
   const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null
   const calendar = calendarFor(env, mirror)
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: env.model ?? null, calendar })
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar })
   warm = { key, bots, mirror, services, calendar }
   return warm
 }
@@ -334,6 +350,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     return true
   })
   if (!fresh) return []
+  const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
+  await beat(healthDb, 'tick', true, undefined, now)
   const sent: string[] = []
   const send = async (text: string, reply_markup?: unknown) => {
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
@@ -342,7 +360,11 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
       body: JSON.stringify({ chat_id: env.chatId, text, parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) })
     })
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
-    if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`)
+    if (!j.ok) {
+      void beat(healthDb, 'telegram', false, j.description ?? `HTTP ${res.status}`)
+      throw new Error(`Telegram: ${j.description ?? res.status}`)
+    }
+    void beat(healthDb, 'telegram', true)
     sent.push(text)
     // What the coach says on its own shows in the app's chat too (live).
     await mirror
@@ -387,6 +409,15 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     await rhythmTick(env, now, send)
   } catch (e) {
     console.error('rhythm:', e)
+    void logError(healthDb, 'server', `rhythm: ${(e as Error).message}`)
+  }
+
+  // System health: Ben warns you when a part has been broken for 30+ minutes,
+  // says when it works again, and sends a short report on Sunday evenings.
+  try {
+    await healthTick(healthDb, mirror, now, send)
+  } catch (e) {
+    console.error('health:', e)
   }
 
   // 2) A study block in your calendar starts now, and 3) follow-ups when slipping.
@@ -452,6 +483,32 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
 }
 
 /** What the rhythm sends now (each thing once a day; state in settings.coach_rhythm). */
+async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: string) => Promise<void>): Promise<void> {
+  const h = await readHealth(t)
+  const local = await mirror.read((db) => ({
+    sporty: (() => {
+      try {
+        return JSON.parse(getSetting(db as any, 'sport_sync_seen') || 'null')?.at ?? null
+      } catch {
+        return null
+      }
+    })(),
+    today: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  }))
+  const checks = healthChecks({ now, beats: h.beats, sportySeen: local.sporty, latestSnapshot: h.latestSnapshot, today: local.today, errors: h.errors })
+  const d = alertDecisions(checks, h.notes.alerted ?? {}, now)
+  if (d.warn.length || d.fixed.length) {
+    await setNote(t, 'alerted', d.next)
+    await send(alertText(d.warn, d.fixed)).catch(() => null)
+  }
+  // Sunday 18:00–18:59, once a week.
+  const week = `${local.today}`
+  if (now.getDay() === 0 && now.getHours() === 18 && h.notes.weekly !== week) {
+    await setNote(t, 'weekly', week)
+    await send(weeklyReport(checks, h.errors, now)).catch(() => null)
+  }
+}
+
 async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown) => Promise<void>): Promise<void> {
   const { bots, services, mirror } = await botsFor(env)
   const f = await mirror.read((db) => {

@@ -10,7 +10,16 @@ permissions: {}
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
+      # Three tries, then the run fails (it used to always "pass"): GitHub emails
+      # you about a failed scheduled run, so you hear about it even when Ben's
+      # server is down and can't message you itself.
       - name: Wake the coach
-        run: curl -fsS -m 60 "https://mega-system-ten.vercel.app/api/cron?job=tick" || true
+        run: |
+          for i in 1 2 3; do
+            curl -fsS -m 60 "https://mega-system-ten.vercel.app/api/cron?job=tick" && exit 0
+            sleep 20
+          done
+          echo "::error::Ben's server did not answer 3 times in a row"
+          exit 1

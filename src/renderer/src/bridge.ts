@@ -78,6 +78,12 @@ export type Bridge = LifeApi & {
   /** Done / skipped marks on today's calendar blocks (web). */
   timeline?: { marks(day: string): Promise<Record<string, 'done' | 'skip'>>; mark(day: string, id: string, v: 'done' | 'skip' | null): Promise<Record<string, 'done' | 'skip'>> }
   /** The Sunday plan: one focus area and 3 big tasks for the week (web). */
+  /** System health and the shared error log (Settings → System health). */
+  system?: {
+    health(): Promise<{ checks: import('@core/health').Check[]; errors: import('@core/health').ErrorEntry[] }>
+    beat(key: string, ok: boolean, msg?: string): Promise<void>
+    logError(source: string, msg: string): Promise<void>
+  }
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
   todoist?: {

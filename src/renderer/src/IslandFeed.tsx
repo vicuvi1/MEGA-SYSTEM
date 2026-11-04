@@ -189,6 +189,7 @@ export function IslandFeed() {
       // The island shows ✓ or the reason; the log (Settings → Island log) keeps it.
       if (a.id) desk?.islandAck?.({ id: a.id, ok: !error, ...(error ? { error } : {}) })
       logIsland({ at: new Date().toISOString(), kind: a.kind, ok: !error, error: error ?? undefined })
+      if (error) void life.system?.logError('island', `${a.kind}: ${error}`).catch(() => {})
       await send()
     },
     [send]

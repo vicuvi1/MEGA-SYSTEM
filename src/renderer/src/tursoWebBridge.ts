@@ -35,6 +35,8 @@ import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coa
 import { coachStatus } from './web/coachStatus'
 import { backupTables, restoreStatements } from '@core/backupPlan'
 import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
+import { healthChecks } from '@core/health'
+import { beat, logError, readHealth } from './web/systemHealth'
 import { addTrigger, loadTriggers, urgeEvents } from './web/disciplinePatterns'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport } from '@core/sportCards'
@@ -649,6 +651,24 @@ export function createTursoWebBridge(): Bridge {
         })
     },
     weekPlan: S('weekPlan'),
+    system: {
+      health: async () => {
+        const h = await readHealth(turso)
+        const mirror = await mirrorP
+        const sporty = await mirror.read((db) => {
+          try {
+            return JSON.parse(getSetting(db as any, 'sport_sync_seen') || 'null')?.at ?? null
+          } catch {
+            return null
+          }
+        })
+        const n = new Date()
+        const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+        return { checks: healthChecks({ now: n, beats: h.beats, sportySeen: sporty, latestSnapshot: h.latestSnapshot, today, errors: h.errors }), errors: h.errors }
+      },
+      beat: (key: string, ok: boolean, msg?: string) => beat(turso, key, ok, msg),
+      logError: (source: string, msg: string) => logError(turso, source, msg)
+    },
     // Your Todoist: today's tasks, complete (+coins), quick add, and coins for
     // what you completed in Todoist itself (checked at most every 5 minutes).
     todoist: {
