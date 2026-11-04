@@ -6,6 +6,7 @@ import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
+import { eyesAlert, morningAlert, moveAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
 import { life } from './bridge'
 import { useLive } from './live'
 import { findExercise, readSport, updateSport } from './sportTrack'
@@ -22,6 +23,22 @@ const AUTO = 'ls.autoFocus'
 const AUTO_DONE = 'ls.autoStarted'
 /** Seconds since the last mouse/keys on the PC (from the desktop, every 15 s). */
 let idleSec: number | null = null
+/** Island phase 2 (your body): at the PC since (no 5-min break), first minute today, last nudges. */
+let activeSince: number | null = null
+const FIRST = 'ls.firstActive'
+const LAST_WATER = 'ls.lastWaterAt'
+const LAST_MOVE = 'ls.lastMoveAt'
+const LAST_EYES = 'ls.lastEyesAt'
+const EYES = 'ls.eyeBreaks'
+function bodyTick(sec: number) {
+  const now = Date.now()
+  if (sec >= 300) activeSince = null
+  else if (sec < 60 && !activeSince) activeSince = now - sec * 1000
+  if (sec < 60 && new Date(now).getHours() >= 5) {
+    const day = localDayOf(now)
+    if (get<{ day: string } | null>(FIRST, null)?.day !== day) put(FIRST, { day, at: now - sec * 1000 })
+  }
+}
 const localDayOf = (t: number) => {
   const d = new Date(t)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -207,13 +224,38 @@ export function IslandFeed() {
         const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered: get<Record<string, string>>(ANSWERED, {}) })
         // In a call: only what you must see (time up); the rest waits.
         const call = callNow(blocks.current.list, now)
-        return bedAlert(dismissed, now, !!running) ?? qualityAlert(dismissed, now) ?? smart ?? (call ? null : pick)
+        // Your body and your day's edges (phase 2): never during a call or a focus timer.
+        const busy = !!running || !!call
+        const logs = sleep?.recentLogs ?? []
+        const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
+        const wd = busy ? null : windDown(now, target, bedLoggedTonight(logs, new Date(now)))
+        const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
+        const first = get<{ day: string; at: number } | null>(FIRST, null)
+        const firstBlock = blocks.current.list.filter((b) => b.end > now).sort((x, y) => x.start - y.start)[0] ?? null
+        const body = { now, busy, idleSec, activeSince, water: { ml: Math.max(status.today.waterMl, localWater), target: status.today.waterTarget || 2700 }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
+        return (
+          bedAlert(dismissed, now, !!running) ??
+          qualityAlert(dismissed, now) ??
+          smart ??
+          windDownAlert(wd, now, dismissed) ??
+          (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
+          moveAlert(body) ??
+          waterAlert(body) ??
+          eyesAlert(body) ??
+          (call ? null : pick)
+        )
       })(),
       call: (() => {
         const c = running ? null : callNow(blocks.current.list, now)
         return c ? { title: c.title, end: c.end } : null
       })(),
       autoFocus: get<boolean>(AUTO, false),
+      eyeBreaks: get<boolean>(EYES, false),
+      windDown: (() => {
+        const logs = sleep?.recentLogs ?? []
+        const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
+        return windDown(now, target, bedLoggedTonight(logs, new Date(now)))
+      })(),
       focusGuard: (() => {
         const gg = get<Guard | null>(GUARD, null)
         if (!running || !gg || gg.startedAt !== running.startedAt) return null
@@ -253,6 +295,7 @@ export function IslandFeed() {
         if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss') throw new Error('Life System is locked: open it and enter your PIN')
         switch (a.kind) {
           case 'water': {
+            put(LAST_WATER, Date.now())
             // The shared log (Ben, Sporty, Telegram see it), and Sport Track's copy here.
             await life.coach?.water?.(a.ml)
             updateSport((d) => {
@@ -293,6 +336,7 @@ export function IslandFeed() {
             put(DISMISSED, d)
             // Seeing Ben's message counts as read.
             if (a.id.startsWith('ben:')) put(SEEN, Math.max(get<number>(SEEN, 0), Date.parse(a.id.slice(4)) || now))
+            if (a.id.startsWith('eyes:')) put(LAST_EYES, now)
             break
           }
           case 'bed': {
@@ -327,8 +371,34 @@ export function IslandFeed() {
           case 'autoFocus':
             put(AUTO, a.on)
             break
+          case 'eyeBreaks':
+            put(EYES, a.on)
+            break
+          case 'moveBreak': {
+            // Into Sport Track's checklist when it has that exercise, and the workout log.
+            let id = a.name.toLowerCase()
+            updateSport((d) => {
+              const ex = findExercise(d, a.name)
+              if (ex) {
+                ex.doneToday = (Number(ex.doneToday) || 0) + a.n
+                id = String(ex.id)
+              }
+            })
+            await life.body.logWorkout({ title: `${a.name} (+${a.n}) · movement break`, items: [{ exerciseId: id, name: a.name, amount: a.n, unit: 'reps' as any }], note: 'From the island' })
+            window.dispatchEvent(new CustomEvent('life-body-changed'))
+            put(LAST_MOVE, Date.now())
+            activeSince = Date.now()
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[a.alertId] = Date.now() + 864e5
+            put(DISMISSED, d)
+            break
+          }
+          case 'closeDay':
+            window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'today' }))
+            setTimeout(() => window.dispatchEvent(new CustomEvent('life-close-day')), 600)
+            break
           case 'wake':
-            await life.sleep.logWake()
+            await life.sleep.logWake(a.time)
             window.dispatchEvent(new CustomEvent('life-sleep-changed'))
             break
           case 'open':
@@ -381,6 +451,7 @@ export function IslandFeed() {
       desk.onIdle?.((sec) => {
         const before = idleSec
         guardTick(sec)
+        bodyTick(sec)
         // Crossing the drift line (or coming back) updates the island at once.
         if (before == null || (before < 480) !== (sec < 480)) void sendRef.current()
       })

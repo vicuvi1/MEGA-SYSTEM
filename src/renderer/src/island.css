@@ -290,3 +290,19 @@ html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(
 .di-alert.kind-quality { background: linear-gradient(135deg, rgb(212 255 63 / 0.2), rgb(0 0 0 / 0)); }
 /* A drift alert makes the pill pulse amber. */
 .di:has(.di-alert.kind-drift) .di-pill, .di.has-drift .di-pill { box-shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 22px -2px rgb(255 170 60 / 0.6); }
+
+/* ---- phase 2: water drop, wind-down, body nudges ---- */
+/* A small drop on the pill that fills through the day. */
+.di-drop { --p: 0%; flex: none; width: 9px; height: 12px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; transform: rotate(0deg); background: linear-gradient(0deg, #4fc3ff var(--p), rgb(255 255 255 / 0.15) var(--p)); box-shadow: 0 0 6px rgb(79 195 255 / 0.4); margin-left: 2px; transition: background 0.6s; }
+.di.hidden .di-drop { display: none; }
+/* Wind-down: the whole island turns warm amber. */
+.di.winddown { --glow: rgb(255 170 70 / 0.45); }
+.di.winddown .di-pill, .di.winddown .di-card { background: linear-gradient(135deg, #1a0f05, #0b0603); }
+.di-steps { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--sub); display: grid; gap: 2px; }
+.di-steps button { border: 0; padding: 0; background: none; color: #ffcf8a; font: inherit; text-decoration: underline; cursor: pointer; }
+.di-alert.kind-water { background: linear-gradient(135deg, rgb(79 195 255 / 0.22), rgb(0 0 0 / 0)); }
+.di-alert.kind-move { background: linear-gradient(135deg, rgb(255 120 60 / 0.2), rgb(0 0 0 / 0)); }
+.di-alert.kind-eyes { background: linear-gradient(135deg, rgb(140 120 255 / 0.2), rgb(0 0 0 / 0)); }
+.di-alert.kind-winddown { background: linear-gradient(135deg, rgb(255 160 60 / 0.25), rgb(120 60 200 / 0.15)); }
+.di-alert.kind-morning { background: linear-gradient(135deg, rgb(255 200 90 / 0.25), rgb(255 120 80 / 0.12)); }
+.di-alert.kind-water .di-alert-top span, .di-alert.kind-move .di-alert-top span { display: inline-block; animation: di-float 2.4s ease-in-out infinite; }

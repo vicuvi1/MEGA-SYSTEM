@@ -279,6 +279,9 @@ export function DesktopIsland() {
     : a.kind === 'push' ? `${a.block.title}: moved ${a.minutes} min later`
     : a.kind === 'blockResult' ? (a.result === 'done' ? `✓ ${a.block.title}: done` : a.result === 'half' ? `½ ${a.block.title}: half done` : `${a.block.title}: not done, noted`)
     : a.kind === 'autoFocus' ? (a.on ? 'Focus starts by itself with each block' : 'Auto-start off')
+    : a.kind === 'moveBreak' ? `💪 +${a.n} ${a.name} · nice break`
+    : a.kind === 'eyeBreaks' ? (a.on ? 'Eye breaks on: every 20 min' : 'Eye breaks off')
+    : a.kind === 'closeDay' ? 'Opening Close your day…'
     : null
   const clearToastLater = (ms: number) => {
     if (toastT.current) clearTimeout(toastT.current)
@@ -316,7 +319,11 @@ export function DesktopIsland() {
       desk()?.showApp?.(a.page)
       hide()
     }
-    if (a.kind === 'dismiss' || a.kind === 'start' || a.kind === 'stop' || a.kind === 'push' || a.kind === 'blockResult') {
+    if (a.kind === 'closeDay') {
+      desk()?.showApp?.('today')
+      hide()
+    }
+    if (a.kind === 'dismiss' || a.kind === 'start' || a.kind === 'stop' || a.kind === 'push' || a.kind === 'blockResult' || a.kind === 'moveBreak' || (a.kind === 'water' && s.alert?.kind === 'water')) {
       if (alertOnly) hide()
     }
   }
@@ -349,7 +356,14 @@ export function DesktopIsland() {
                       <span className="di-moon" aria-hidden>🌙<i>✦</i><i>✦</i><i>✦</i></span>
                       <div className="di-sleep-mid">
                         <b>{moon ? 'Sleep well' : 'Bedtime'}</b>
-                        <small>{moon ? 'Logged in Waky. See you tomorrow.' : `Target ${s.sleep.target ?? '23:00'} · one tap logs it in Waky`}</small>
+                        <small>{moon ? 'Logged in Waky. See you tomorrow.' : s.windDown ? `Bed at ${s.windDown.bedAt} · ${s.windDown.minutesLeft} min to wind down` : `Target ${s.sleep.target ?? '23:00'} · one tap logs it in Waky`}</small>
+                        {s.windDown && !moon && (
+                          <ol className="di-steps">
+                            <li><button onClick={() => tap({ kind: 'closeDay' })}>Tomorrow's top 3 + close the day</button></li>
+                            <li>Screens off, phone away</li>
+                            <li>Tap Going to bed</li>
+                          </ol>
+                        )}
                       </div>
                       <button className="primary" onClick={goToBed} disabled={moon}>🌙 Going to bed</button>
                     </>
@@ -466,6 +480,10 @@ export function DesktopIsland() {
                     ))}
                   </div>
                 )}
+                <label className="di-auto" title="Every 20 min at the screen: look at something 6 m away for 20 s">
+                  <input type="checkbox" checked={!!s.eyeBreaks} onChange={(e) => send({ kind: 'eyeBreaks', on: e.target.checked })} />
+                  <span>👁️ 20-20-20 eye breaks</span>
+                </label>
               </section>),
     ben: (<section className="di-ben">
                 {s.ben.busy ? (
@@ -494,7 +512,7 @@ export function DesktopIsland() {
     <div
       ref={root}
       style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
-      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""}`}
+      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""} ${s.windDown ? "winddown" : ""}`}
     >
       {/* Collapsed: a thin line, or the live pill (main activity + a bubble for the next one) */}
       {!open && (
@@ -555,6 +573,9 @@ export function DesktopIsland() {
                   </span>
                 )}
               </>
+            )}
+            {s.water.target > 0 && !s.locked && (
+              <i className="di-drop" style={{ ['--p' as string]: `${Math.min(100, (s.water.ml / s.water.target) * 100)}%` }} title={`Water ${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`} />
             )}
             {p.dot && <i className="di-dot" />}
           </div>

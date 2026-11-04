@@ -19,7 +19,10 @@ export type IslandAction = { id?: string } & (
   | { kind: 'dismiss'; id: string; snoozeMin?: number }
   | { kind: 'open'; page?: string }
   | { kind: 'bed'; time?: string }
-  | { kind: 'wake' }
+  | { kind: 'wake'; time?: string }
+  | { kind: 'moveBreak'; name: string; n: number; alertId: string }
+  | { kind: 'eyeBreaks'; on: boolean }
+  | { kind: 'closeDay' }
   | { kind: 'push'; block: IslandBlock; minutes: number }
   | { kind: 'blockResult'; block: IslandBlock; result: 'done' | 'half' | 'no'; alertId: string }
   | { kind: 'autoFocus'; on: boolean }
@@ -27,7 +30,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning'
   title: string
   text: string
   face?: string
@@ -50,6 +53,10 @@ export interface IslandSnapshot {
   sleep?: { bed: boolean; wake: boolean; target: string | null }
   /** In a call/meeting from your calendar: the island stays quiet. */
   call?: { title: string; end: number } | null
+  /** Wind-down: the hour before your bedtime target. */
+  windDown?: { bedAt: string; minutesLeft: number } | null
+  /** 20-20-20 eye breaks on? */
+  eyeBreaks?: boolean
   /** Start focus by itself when a calendar block begins. */
   autoFocus?: boolean
   /** The running focus so far: how much of it you were actually at the PC. */
