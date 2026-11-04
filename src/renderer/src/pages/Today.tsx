@@ -183,8 +183,9 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   // right, full height; the lists on the left. On a big screen each column
   // scrolls on its own, so the page never feels endless.
   const on = todayLayout(ui).filter((x) => x.on)
-  const MAIN: TodaySectionId[] = ['day']
-  const SIDE: TodaySectionId[] = ['reps']
+  // One page: the lists, reps and the week on the left; your day, big, on the right.
+  const MAIN: TodaySectionId[] = ['day', 'reps']
+  const SIDE: TodaySectionId[] = []
   const FOLDED = on.filter((x) => !MAIN.includes(x.id) && !SIDE.includes(x.id) && x.id !== 'timeline')
   return (
     <div className="today td2">
@@ -196,6 +197,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
           {on.filter((x) => MAIN.includes(x.id)).map((x) => (
             <Fragment key={x.id}>{sections[x.id]()}</Fragment>
           ))}
+          <WeekStrip />
           {FOLDED.length > 0 && (
             <details className="td-more" open={moreOpen} onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
               <summary>
@@ -212,7 +214,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         </div>
         <aside className="cmd-side">
           {on.some((x) => x.id === 'timeline') && <TodayStrip />}
-          <WeekStrip />
           {on.filter((x) => SIDE.includes(x.id)).map((x) => (
             <Fragment key={x.id}>{sections[x.id]()}</Fragment>
           ))}

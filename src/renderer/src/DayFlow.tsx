@@ -174,6 +174,8 @@ export function DayFlow(props: Props) {
   const today = summary.today
   const radar = deadlineRadar(upcoming, today)
   const habits = useHabits(props, st?.todayMin ?? 0)
+  // What one Todoist task pays (the real rule, shown on every row).
+  const taskPts = props.rules?.find((x) => x.id === 'tasks.todoist_done')?.coins ?? 5
   const [skipped, setSkipped] = useState<string[]>([])
   const [adding, setAdding] = useState('')
   const [showAll, setShowAll] = useState(false)
@@ -551,7 +553,12 @@ export function DayFlow(props: Props) {
   }, [])
   const taskRow = (t: TodoTask, isStar: boolean, group: string | null, extra?: React.ReactNode) => (
     <TodayTaskRow
-      extra={extra}
+      extra={
+        <>
+          {extra}
+          <span className="tt-pts" title={`Done = +${isStar ? 10 : taskPts} points`}>+{isStar ? 10 : taskPts} ⭐</span>
+        </>
+      }
       key={t.id}
       t={t}
       today={today}
@@ -857,6 +864,7 @@ export function DayFlow(props: Props) {
                   {p.done ? '✓' : ''}
                 </button>
                 <span className="dl-text">{p.text}</span>
+                <span className="tt-pts">+10 ⭐</span>
                 {!p.done && playBtn(p.text, subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text })}
               </li>
             ))}
@@ -891,6 +899,7 @@ export function DayFlow(props: Props) {
                     {b.done ? '✓' : ''}
                   </button>
                   <span className="dl-text">{b.text}</span>
+                  <span className="tt-pts">+25 ⭐</span>
                   {!b.done && playBtn(b.text, subjectOf(b.text), null)}
                 </li>
               ))}
@@ -928,7 +937,7 @@ export function DayFlow(props: Props) {
                   dropTask(items[0]?.id ?? null, g.key)
                 }}
               >
-                <i /> {g.name} <small>{g.items.length} · +5 each</small>
+                <i /> {g.name} <small>{g.items.length} · +{taskPts} each</small>
               </h3>
               <ul className="dl">{items.map((t) => taskRow(t, false, g.key))}</ul>
               <AreaAdd name={plainName(g.name) || g.name} onAdd={(v) => addToArea(g.key, v)} />

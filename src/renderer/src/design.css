@@ -1697,3 +1697,22 @@
 .ds-v .ds-block.short { flex-direction: row; align-items: center; gap: 6px; padding-top: 0; padding-bottom: 0; }
 .ds-v .ds-block.short b { flex: 0 1 auto; min-width: 0; }
 .ds-v .ds-block.short .ds-tick { top: 50%; transform: translateY(-50%); width: 16px; height: 16px; font-size: 9px; }
+
+/* Today, one page: the whole page scrolls as one (no two scrolling halves),
+   it uses the full width, and Your day stands on the right at the window's
+   full height (06–24 fits without its own scrolling). */
+.td2, .today.cmd { max-width: none; }
+.td2 > .cmd { grid-template-columns: minmax(0, 1fr) clamp(380px, 32%, 560px); }
+@media (min-width: 1100px) and (min-height: 700px) {
+  .content:has(> .td2) { display: block; overflow-y: auto; }
+  .td2 > .cmd { align-items: start; grid-template-rows: none; }
+  .td2 > .cmd > .cmd-main { overflow: visible; padding: 0; }
+  .td2 > .cmd > .cmd-side { position: sticky; top: 8px; overflow: visible; padding: 0; height: calc(100vh - 140px); }
+  :root:has(.dbar) .td2 > .cmd > .cmd-side { height: calc(100vh - 176px); }
+  .td2 .cmd-side > .ds-v { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .td2 .cmd-side > .ds-v .ds-scroll { flex: 1; min-height: 0; max-height: none; }
+}
+.ds-v .ds-track { background: repeating-linear-gradient(180deg, rgb(var(--ink) / 0.07) 0 1px, transparent 1px calc(var(--px, 64px) / 2), rgb(var(--ink) / 0.03) calc(var(--px, 64px) / 2) calc(var(--px, 64px) / 2 + 1px), transparent calc(var(--px, 64px) / 2 + 1px) var(--px, 64px)); }
+/* Points on every task: what ticking it pays. */
+.tt-pts { flex: none; font-size: 11px; font-weight: 700; color: var(--gold, #f5c451); background: color-mix(in srgb, var(--gold, #f5c451) 12%, transparent); padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.dl li > .tt-pts { margin-left: auto; }

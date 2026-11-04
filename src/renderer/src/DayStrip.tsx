@@ -23,13 +23,12 @@ import { useAction, useToast } from './ui'
 
 const START_H = 6
 const END_H = 24
-const PX = 64 // pixels per hour (down the column)
+const MIN_PX = 34 // pixels per hour at least; more when the column is tall (the whole day fits)
 const LANE_LEFT = 42 // right of the hour labels
 const LANE_RIGHT = 6
 const pad = (n: number) => String(n).padStart(2, '0')
 const toMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
 const hmOf = (m: number) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`
-const yOf = (m: number) => ((m - START_H * 60) / 60) * PX
 /** A left/width share (0–100) of the lanes, as CSS. */
 const lane = (pct: number) => `calc(${LANE_LEFT}px + (100% - ${LANE_LEFT + LANE_RIGHT}px) * ${pct / 100})`
 const iso = (day: string, m: number) => (m >= 24 * 60 ? new Date(`${day}T23:59:00`).toISOString() : new Date(`${day}T${hmOf(m)}:00`).toISOString())
@@ -80,6 +79,18 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   const [dropAt, setDropAt] = useState<{ key: string | null; min: number } | null>(null)
   const drag = useRef<Drag | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  // Pixels per hour: 06–24 fills the column's height (scrolls only if very short).
+  const [px, setPx] = useState(48)
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const fit = () => setPx(Math.max(MIN_PX, Math.floor((el.clientHeight - 8) / (END_H - START_H))))
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const yOf = (m: number) => ((m - START_H * 60) / 60) * px
   const ghostRef = useRef(ghost)
   ghostRef.current = ghost
   const menuRef = useRef<{ key: string } | null>(null)
@@ -204,7 +215,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     const el = scroller.current
     if (!el) return 0
     const y = clientY - el.getBoundingClientRect().top + el.scrollTop
-    return Math.max(START_H * 60, Math.min(END_H * 60, START_H * 60 + Math.round(((y / PX) * 60) / 15) * 15))
+    return Math.max(START_H * 60, Math.min(END_H * 60, START_H * 60 + Math.round(((y / px) * 60) / 15) * 15))
   }
   useEffect(() => {
     const onMove = (ev: PointerEvent) => {
@@ -253,7 +264,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     }
   }
 
-  const height = (END_H - START_H) * PX
+  const height = (END_H - START_H) * px
   const nowY = yOf(nowMin)
   return (
     <section className="ds ds-v" aria-label="Your day">
@@ -273,7 +284,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
         )}
       </header>
       {!connected && <p className="hint small">Connect Google Calendar in Settings to see and move your blocks here.</p>}
-      <div className="ds-scroll" ref={scroller}>
+      <div className="ds-scroll" ref={scroller} style={{ ['--px' as string]: `${px}px` }}>
         <div
           className={`ds-track ${dropAt ? 'dropping' : ''}`}
           style={{ height }}
@@ -298,7 +309,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
           }}
         >
           {Array.from({ length: END_H - START_H }, (_, i) => (
-            <span key={i} className="ds-hour" style={{ top: i * PX }}>
+            <span key={i} className="ds-hour" style={{ top: i * px }}>
               {pad(START_H + i)}
             </span>
           ))}
