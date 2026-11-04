@@ -1,0 +1,53 @@
+// Ben's test: messages you'd really send, each with what Ben must DO (or
+// must not do). It runs on a throwaway copy with made-up tasks and blocks,
+// never on your data. Settings → Ben's brain → "Test Ben" runs it with the
+// model you pick, so you can compare models on the same 20 questions.
+
+export interface EvalCase {
+  id: string
+  say: string
+  /** What should happen (shown when it fails). */
+  want: string
+  /** Every pattern must match the trace (actions done + calls made + reply). */
+  must: RegExp[]
+  /** None of these may match. */
+  never?: RegExp[]
+}
+
+export const EVAL_CASES: EvalCase[] = [
+  { id: 'spend', say: 'spent 50 lei on lunch', want: 'logs a 50 lei expense', must: [/Logged:[^\n]*50/i] },
+  { id: 'water', say: 'water 500', want: 'logs 500 ml of water', must: [/(Logged|💧)[^\n]*500/i] },
+  { id: 'task', say: 'add a task: call mom tomorrow', want: 'adds a Todoist task', must: [/todoist\.quickAdd[^\n]*mom/i] },
+  { id: 'event', say: 'football today at 17:00 for an hour', want: 'books 17:00–18:00 in the calendar', must: [/calendar\.create[^\n]*football[^\n]*T17:00/i] },
+  { id: 'move', say: 'move my deep block to 11', want: 'moves the Deep block to 11:00', must: [/calendar\.move g1 [^\n]*T11:00/i] },
+  { id: 'delete', say: 'delete the gym block, not going today', want: 'deletes the Gym block', must: [/calendar\.remove g3/i] },
+  { id: 'late', say: "I'm running 30 minutes late, push the rest of my day", want: 'shifts the coming blocks by 30 min', must: [/calendar\.move/i] },
+  { id: 'done', say: 'finished etica', want: 'completes the etica task', must: [/todoist\.close t1/i] },
+  { id: 'star', say: 'make laborator my must-do for today', want: 'stars it / makes it a must-do', must: [/(todoist\.update t3[^\n]*today|Must-do added[^\n]*labor)/i] },
+  { id: 'remind', say: 'remind me at 21:00 to call Ana', want: 'sets a reminder at 21:00', must: [/21:00/i, /(remind|⏰|🔔)/i] },
+  { id: 'checkin', say: "I'll study algebra in 30 minutes", want: 'holds you to it with a check-in', must: [/(check-?in|I'll ask|ask you)/i] },
+  { id: 'reps', say: 'did 30 pushups', want: 'logs 30 push-ups', must: [/(Logged|💪)[^\n]*30/i] },
+  { id: 'focus', say: 'start a 25 min focus on algebra now', want: 'starts a 25-minute focus', must: [/Focus started[^\n]*25/i] },
+  { id: 'note-person', say: 'my sister is Ana, she is 15', want: 'writes it in the notebook (People)', must: [/(Noted|person)[^\n]*Ana/i] },
+  { id: 'note-exam', say: 'etica exam is on friday, chapters 3 to 5. remember that', want: 'notes the exam date and chapters', must: [/(Noted|remember|aim|📓)/i] },
+  { id: 'plan-tomorrow', say: 'block 2 hours tomorrow at 10 for my crypto project', want: 'books tomorrow 10:00–12:00', must: [/calendar\.create[^\n]*crypto[^\n]*T10:00/i] },
+  { id: 'question', say: 'how many tasks do I have left today?', want: 'answers with the real count (3), changes nothing', must: [/REPLY:[^\n]*\b3\b/i], never: [/calendar\.(create|move|remove)|todoist\.(close|remove)/i] },
+  { id: 'lazy', say: 'I feel lazy today', want: 'pushes gently with one small step; deletes nothing', must: [/REPLY: \S/], never: [/calendar\.remove|todoist\.(close|remove)/i] },
+  { id: 'ro', say: 'am cheltuit 120 lei pe benzină', want: 'understands Romanian: logs 120 lei fuel', must: [/Logged:[^\n]*120/i] },
+  { id: 'no-invent', say: 'what did I spend yesterday?', want: "doesn't invent numbers it doesn't have", must: [/REPLY: \S/], never: [/Logged:/i] }
+]
+
+export interface EvalResult {
+  id: string
+  say: string
+  want: string
+  ok: boolean
+  trace: string
+  ms: number
+  error?: string
+}
+
+/** Pass or fail for one case, from its trace. */
+export function judge(c: EvalCase, trace: string): boolean {
+  return c.must.every((r) => r.test(trace)) && !(c.never ?? []).some((r) => r.test(trace))
+}

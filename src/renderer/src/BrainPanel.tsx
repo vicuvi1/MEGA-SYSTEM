@@ -124,6 +124,93 @@ export function ModelPicker({ value, auto, models, onPick, label }: { value: str
   )
 }
 
+interface EvalRun {
+  model: string
+  passed: number
+  total: number
+  cost: number | null
+  calls: number
+  at: string
+  results?: { id: string; say: string; want: string; ok: boolean; trace: string; ms: number; error?: string }[]
+}
+const RUNS = 'ls.benTests'
+const readRuns = (): EvalRun[] => {
+  try {
+    return JSON.parse(localStorage.getItem(RUNS) || '[]')
+  } catch {
+    return []
+  }
+}
+
+/** Test Ben: the same 20 messages with any model, on throwaway data; compare runs. */
+function TestBen({ models, current }: { models: ModelInfo[]; current: string | null }) {
+  const toast = useToast()
+  const [pick, setPick] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [runs, setRuns] = useState<EvalRun[]>(readRuns)
+  const [open, setOpen] = useState<EvalRun | null>(null)
+  const run = async () => {
+    setBusy(true)
+    try {
+      const r = await call<EvalRun>({ op: 'eval', model: pick ?? current ?? undefined })
+      const done = { ...r, at: new Date().toISOString() }
+      setOpen(done)
+      const next = [{ ...done, results: undefined }, ...runs].slice(0, 12)
+      setRuns(next)
+      try {
+        localStorage.setItem(RUNS, JSON.stringify(next))
+      } catch {
+        /* fine */
+      }
+      toast(`${shortId(r.model)}: ${r.passed}/${r.total} right · ${usd(r.cost, true)}`, r.passed >= r.total * 0.8 ? 'good' : 'info')
+    } catch (e) {
+      toast((e as Error).message, 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="bt">
+      <small className="brain-sub">🧪 Test Ben</small>
+      <p className="hint block">20 messages you'd really send (log money, book a block, move one, finish a task, remember a person…). Run on made-up data, never yours. Compare models before you pick one.</p>
+      <div className="bt-row">
+        <ModelPicker label="Model to test" value={pick} auto={current} models={models} onPick={setPick} />
+        <button className="btn primary" disabled={busy} onClick={() => void run()}>
+          {busy ? 'Testing… (up to a minute)' : '▶ Run test'}
+        </button>
+      </div>
+      {runs.length > 0 && (
+        <div className="bt-runs">
+          {runs.map((r, i) => (
+            <div key={i} className="bt-run">
+              <span>{shortId(r.model)}</span>
+              <i style={{ ['--p' as string]: `${(r.passed / r.total) * 100}%` }} />
+              <b>
+                {r.passed}/{r.total}
+              </b>
+              <em>{usd(r.cost, true)}</em>
+            </div>
+          ))}
+        </div>
+      )}
+      {open?.results && (
+        <ul className="bt-cases">
+          {open.results.map((c) => (
+            <li key={c.id} className={c.ok ? 'ok' : 'bad'}>
+              <details>
+                <summary>
+                  <span>{c.ok ? '✓' : '✗'}</span> “{c.say}” <small>{c.ok ? '' : `wanted: ${c.want}`}</small>
+                </summary>
+                <pre>{c.error ? `Error: ${c.error}\n` : ''}{c.trace || '(nothing happened)'}</pre>
+              </details>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export function BrainPanel() {
   const toast = useToast()
   const [status, setStatus] = useState<Status | null>(null)
@@ -223,6 +310,7 @@ export function BrainPanel() {
           </table>
         </details>
       )}
+      <TestBen models={models} current={chosen.chat ?? status?.auto.chat ?? null} />
       <div className="row">
         <button className="btn small ghost" onClick={load}>
           ⟳ Refresh

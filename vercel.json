@@ -12,7 +12,8 @@
       "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
     },
     "api/ai.mjs": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
     },
     "api/coach.mjs": {
       "maxDuration": 60,

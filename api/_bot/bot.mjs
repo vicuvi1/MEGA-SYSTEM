@@ -1886,7 +1886,7 @@ var Mirror = class {
 	}
 };
 // src/renderer/src/web/tursoHttp.ts
-var toHrana = (v) => {
+var toHrana$1 = (v) => {
 	if (v === null) return { type: "null" };
 	if (typeof v === "number") return Number.isInteger(v) ? {
 		type: "integer",
@@ -1908,7 +1908,7 @@ var toHrana = (v) => {
 		value: String(v)
 	};
 };
-var fromHrana = (v) => {
+var fromHrana$1 = (v) => {
 	if (!v || v.type === "null") return null;
 	if (v.type === "integer") return Number(v.value);
 	if (v.type === "float") return Number(v.value);
@@ -1922,14 +1922,16 @@ var fromHrana = (v) => {
 var UnauthorizedError = class extends Error {};
 var TursoHttp = class {
 	onUnauthorized;
+	fetchImpl;
 	url;
 	token;
 	/**
 	* `url` is a Turso database URL, or a path on this site ("/api/db") that
 	* passes the request on with the server's key.
 	*/
-	constructor(url, token, onUnauthorized) {
+	constructor(url, token, onUnauthorized, fetchImpl = (...a) => fetch(...a)) {
 		this.onUnauthorized = onUnauthorized;
+		this.fetchImpl = fetchImpl;
 		let base = (url || "").trim();
 		if (base.startsWith("/")) this.url = base;
 		else {
@@ -1940,7 +1942,7 @@ var TursoHttp = class {
 		this.token = typeof token === "function" ? token : () => token;
 	}
 	async pipeline(requests) {
-		const res = await fetch(this.url, {
+		const res = await this.fetchImpl(this.url, {
 			method: "POST",
 			headers: {
 				Authorization: `Bearer ${this.token()}`,
@@ -1962,7 +1964,7 @@ var TursoHttp = class {
 			type: "execute",
 			stmt: {
 				sql: s.sql,
-				args: s.args.map(toHrana)
+				args: s.args.map(toHrana$1)
 			}
 		})));
 		return stmts.map((_, i) => {
@@ -1971,7 +1973,7 @@ var TursoHttp = class {
 			const result = r.response?.result;
 			return {
 				cols: (result?.cols ?? []).map((c) => String(c.name)),
-				rows: (result?.rows ?? []).map((row) => row.map(fromHrana))
+				rows: (result?.rows ?? []).map((row) => row.map(fromHrana$1))
 			};
 		});
 	}
@@ -1986,7 +1988,7 @@ var TursoHttp = class {
 			},
 			stmt: {
 				sql: s.sql,
-				args: s.args.map(toHrana)
+				args: s.args.map(toHrana$1)
 			}
 		}));
 		const last = steps.length - 1;
@@ -16503,6 +16505,403 @@ function localCleanup(tasks, today) {
 	}
 	return out;
 }
+// src/core/benEval.ts
+var EVAL_CASES = [
+	{
+		id: "spend",
+		say: "spent 50 lei on lunch",
+		want: "logs a 50 lei expense",
+		must: [/Logged:[^\n]*50/i]
+	},
+	{
+		id: "water",
+		say: "water 500",
+		want: "logs 500 ml of water",
+		must: [/(Logged|💧)[^\n]*500/i]
+	},
+	{
+		id: "task",
+		say: "add a task: call mom tomorrow",
+		want: "adds a Todoist task",
+		must: [/todoist\.quickAdd[^\n]*mom/i]
+	},
+	{
+		id: "event",
+		say: "football today at 17:00 for an hour",
+		want: "books 17:00–18:00 in the calendar",
+		must: [/calendar\.create[^\n]*football[^\n]*T17:00/i]
+	},
+	{
+		id: "move",
+		say: "move my deep block to 11",
+		want: "moves the Deep block to 11:00",
+		must: [/calendar\.move g1 [^\n]*T11:00/i]
+	},
+	{
+		id: "delete",
+		say: "delete the gym block, not going today",
+		want: "deletes the Gym block",
+		must: [/calendar\.remove g3/i]
+	},
+	{
+		id: "late",
+		say: "I'm running 30 minutes late, push the rest of my day",
+		want: "shifts the coming blocks by 30 min",
+		must: [/calendar\.move/i]
+	},
+	{
+		id: "done",
+		say: "finished etica",
+		want: "completes the etica task",
+		must: [/todoist\.close t1/i]
+	},
+	{
+		id: "star",
+		say: "make laborator my must-do for today",
+		want: "stars it / makes it a must-do",
+		must: [/(todoist\.update t3[^\n]*today|Must-do added[^\n]*labor)/i]
+	},
+	{
+		id: "remind",
+		say: "remind me at 21:00 to call Ana",
+		want: "sets a reminder at 21:00",
+		must: [/21:00/i, /(remind|⏰|🔔)/i]
+	},
+	{
+		id: "checkin",
+		say: "I'll study algebra in 30 minutes",
+		want: "holds you to it with a check-in",
+		must: [/(check-?in|I'll ask|ask you)/i]
+	},
+	{
+		id: "reps",
+		say: "did 30 pushups",
+		want: "logs 30 push-ups",
+		must: [/(Logged|💪)[^\n]*30/i]
+	},
+	{
+		id: "focus",
+		say: "start a 25 min focus on algebra now",
+		want: "starts a 25-minute focus",
+		must: [/Focus started[^\n]*25/i]
+	},
+	{
+		id: "note-person",
+		say: "my sister is Ana, she is 15",
+		want: "writes it in the notebook (People)",
+		must: [/(Noted|person)[^\n]*Ana/i]
+	},
+	{
+		id: "note-exam",
+		say: "etica exam is on friday, chapters 3 to 5. remember that",
+		want: "notes the exam date and chapters",
+		must: [/(Noted|remember|aim|📓)/i]
+	},
+	{
+		id: "plan-tomorrow",
+		say: "block 2 hours tomorrow at 10 for my crypto project",
+		want: "books tomorrow 10:00–12:00",
+		must: [/calendar\.create[^\n]*crypto[^\n]*T10:00/i]
+	},
+	{
+		id: "question",
+		say: "how many tasks do I have left today?",
+		want: "answers with the real count (3), changes nothing",
+		must: [/REPLY:[^\n]*\b3\b/i],
+		never: [/calendar\.(create|move|remove)|todoist\.(close|remove)/i]
+	},
+	{
+		id: "lazy",
+		say: "I feel lazy today",
+		want: "pushes gently with one small step; deletes nothing",
+		must: [/REPLY: \S/],
+		never: [/calendar\.remove|todoist\.(close|remove)/i]
+	},
+	{
+		id: "ro",
+		say: "am cheltuit 120 lei pe benzină",
+		want: "understands Romanian: logs 120 lei fuel",
+		must: [/Logged:[^\n]*120/i]
+	},
+	{
+		id: "no-invent",
+		say: "what did I spend yesterday?",
+		want: "doesn't invent numbers it doesn't have",
+		must: [/REPLY: \S/],
+		never: [/Logged:/i]
+	}
+];
+/** Pass or fail for one case, from its trace. */
+function judge(c, trace) {
+	return c.must.every((r) => r.test(trace)) && !(c.never ?? []).some((r) => r.test(trace));
+}
+// src/renderer/src/web/fakeTurso.ts
+var fromHrana = (v) => {
+	if (!v || v.type === "null") return null;
+	if (v.type === "integer") return Number(v.value);
+	if (v.type === "float") return Number(v.value);
+	if (v.type === "blob") return Uint8Array.from(atob(v.base64 ?? ""), (c) => c.charCodeAt(0));
+	return v.value ?? "";
+};
+var toHrana = (v) => {
+	if (v === null || v === void 0) return { type: "null" };
+	if (typeof v === "number") return Number.isInteger(v) ? {
+		type: "integer",
+		value: String(v)
+	} : {
+		type: "float",
+		value: v
+	};
+	if (v instanceof Uint8Array) {
+		let s = "";
+		v.forEach((b) => s += String.fromCharCode(b));
+		return {
+			type: "blob",
+			base64: btoa(s)
+		};
+	}
+	return {
+		type: "text",
+		value: String(v)
+	};
+};
+function runStmt(db, stmt) {
+	const args = (stmt.args ?? []).map(fromHrana);
+	const s = db.prepare(stmt.sql);
+	try {
+		s.bind(args);
+		const cols = s.getColumnNames();
+		const rows = [];
+		while (s.step()) rows.push(s.get());
+		return {
+			cols: cols.map((name) => ({ name })),
+			rows: rows.map((r) => r.map(toHrana)),
+			affected_row_count: db.getRowsModified(),
+			last_insert_rowid: null
+		};
+	} finally {
+		s.free();
+	}
+}
+/** Handles one `/v2/pipeline` request body. */
+function handlePipeline(db, body) {
+	const results = [];
+	for (const req of body.requests ?? []) if (req.type === "close") results.push({
+		type: "ok",
+		response: { type: "close" }
+	});
+	else if (req.type === "execute") try {
+		results.push({
+			type: "ok",
+			response: {
+				type: "execute",
+				result: runStmt(db, req.stmt)
+			}
+		});
+	} catch (e) {
+		results.push({
+			type: "error",
+			error: { message: e.message }
+		});
+	}
+	else if (req.type === "batch") {
+		const steps = req.batch?.steps ?? [];
+		const stepResults = [];
+		const stepErrors = [];
+		const ok = (cond) => {
+			if (!cond) return true;
+			if (cond.type === "ok") return stepResults[cond.step] != null;
+			if (cond.type === "error") return stepErrors[cond.step] != null;
+			if (cond.type === "not") return !ok(cond.cond);
+			if (cond.type === "and") return (cond.conds ?? []).every(ok);
+			if (cond.type === "or") return (cond.conds ?? []).some(ok);
+			return true;
+		};
+		steps.forEach((step, i) => {
+			stepResults[i] = null;
+			stepErrors[i] = null;
+			if (!ok(step.condition)) return;
+			try {
+				stepResults[i] = runStmt(db, step.stmt);
+			} catch (e) {
+				stepErrors[i] = { message: e.message };
+			}
+		});
+		results.push({
+			type: "ok",
+			response: {
+				type: "batch",
+				result: {
+					step_results: stepResults,
+					step_errors: stepErrors
+				}
+			}
+		});
+	} else results.push({
+		type: "error",
+		error: { message: `Unsupported request ${req.type}` }
+	});
+	return {
+		baton: null,
+		base_url: null,
+		results
+	};
+}
+// src/server/benEval.ts
+async function runOne(SQL, model, c) {
+	const t0 = Date.now();
+	const log = [];
+	const remote = new SQL.Database();
+	for (const m of MIGRATIONS) remote.exec(m);
+	const fakeFetch = (async (_url, init) => {
+		const out = handlePipeline(remote, JSON.parse(String(init?.body ?? "{}")));
+		return new Response(JSON.stringify(out), {
+			status: 200,
+			headers: { "Content-Type": "application/json" }
+		});
+	});
+	const mirror = new Mirror(SQL, new TursoHttp("https://eval.local", "t", void 0, fakeFetch), null);
+	await mirror.ready;
+	const services = createWebServices(mirror);
+	const today = await services.read((s) => s.wallet.today());
+	const at = (h, m = 0) => (/* @__PURE__ */ new Date(`${today}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`)).toISOString();
+	const events = [
+		{
+			id: "g1",
+			calendarId: "cal",
+			title: "Deep block",
+			start: at(9),
+			end: at(10),
+			allDay: false
+		},
+		{
+			id: "g2",
+			calendarId: "cal",
+			title: "Lab: Programming",
+			start: at(13, 30),
+			end: at(15),
+			allDay: false
+		},
+		{
+			id: "g3",
+			calendarId: "cal",
+			title: "Gym",
+			start: at(19),
+			end: at(20),
+			allDay: false
+		},
+		{
+			id: "g4",
+			calendarId: "cal",
+			title: "Reading",
+			start: at(21),
+			end: at(21, 30),
+			allDay: false
+		}
+	];
+	const task = (id, content) => ({
+		id,
+		content,
+		priority: 1,
+		due: today,
+		dueTime: null,
+		project: "Inbox",
+		recurring: false
+	});
+	const tasks = [
+		task("t1", "etica"),
+		task("t2", "sport"),
+		task("t3", "laborator 4 PC")
+	];
+	const bots = createWebBots({
+		mirror,
+		services,
+		defaults: {
+			botToken: "1:eval",
+			chatId: "1"
+		},
+		todoist: {
+			today: async () => tasks,
+			upcoming: async () => [],
+			everything: async () => ({
+				tasks,
+				areas: [{
+					key: "p:inbox",
+					name: "Inbox"
+				}]
+			}),
+			close: async (id) => void log.push(`todoist.close ${id}`),
+			quickAdd: async (text) => (log.push(`todoist.quickAdd ${text}`), task("t9", text)),
+			update: async (id, patch) => void log.push(`todoist.update ${id} ${JSON.stringify(patch)}`),
+			move: async (id, area) => void log.push(`todoist.move ${id} ${area}`),
+			remove: async (id) => void log.push(`todoist.remove ${id}`)
+		},
+		calendar: {
+			events: async () => events,
+			create: async (e) => {
+				log.push(`calendar.create ${e.title} ${localIso$1(e.start)} → ${localIso$1(e.end)}`);
+				return {
+					...e,
+					id: "new",
+					calendarId: "cal",
+					allDay: false
+				};
+			},
+			move: async (_cal, id, start, end) => void log.push(`calendar.move ${id} ${localIso$1(start)} → ${localIso$1(end)}`),
+			remove: async (_cal, id) => void log.push(`calendar.remove ${id}`)
+		},
+		ai: model
+	});
+	try {
+		const r = await bots.think(c.say, `eval:${c.id}`);
+		const trace = [
+			...log,
+			...r.done,
+			`REPLY: ${r.reply.replace(/\s+/g, " ")}`
+		].join("\n");
+		return {
+			id: c.id,
+			say: c.say,
+			want: c.want,
+			ok: r.ok && judge(c, trace),
+			trace,
+			ms: Date.now() - t0
+		};
+	} catch (e) {
+		return {
+			id: c.id,
+			say: c.say,
+			want: c.want,
+			ok: false,
+			trace: log.join("\n"),
+			ms: Date.now() - t0,
+			error: e.message
+		};
+	}
+}
+/** Local "YYYY-MM-DDTHH:MM" (what the checks read). */
+var localIso$1 = (iso) => {
+	const d = new Date(iso);
+	const p = (n) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+/** All cases at once; what isn't done by `deadlineMs` counts as a timeout. */
+async function runBenEval(SQL, model, deadlineMs = 5e4) {
+	const results = await Promise.all(EVAL_CASES.map((c) => Promise.race([runOne(SQL, model, c), new Promise((ok) => setTimeout(() => ok({
+		id: c.id,
+		say: c.say,
+		want: c.want,
+		ok: false,
+		trace: "",
+		ms: deadlineMs,
+		error: "timed out"
+	}), deadlineMs))])));
+	return {
+		passed: results.filter((r) => r.ok).length,
+		total: results.length,
+		results
+	};
+}
 // src/server/telegramBot.ts
 /** What Ben already said today, by kind (each kind once a day). */
 var BEN_SENT = "ben_sent_today";
@@ -17442,4 +17841,4 @@ async function sportShared(env, body) {
 		error: "op must be state | water | reps | workout | poll | updated"
 	};
 }
-export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick, sportShared };
+export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runBenEval, runDaily, runTick, sportShared };

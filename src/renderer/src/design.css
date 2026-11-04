@@ -1824,3 +1824,19 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .nb-empty { margin: auto; text-align: center; color: var(--muted); }
 @media (max-width: 900px) { .nb { grid-template-columns: 1fr; } .nb-side { max-height: 320px; } }
 .nb-side-head .st-search { min-width: 0; } .nb-side-head .btn { flex: none; }
+/* Test Ben */
+.bt { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgb(var(--ink) / 0.06); display: flex; flex-direction: column; gap: 8px; }
+.bt-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.bt-row .mp { flex: 1 1 320px; }
+.bt-runs { display: flex; flex-direction: column; gap: 4px; }
+.bt-run { display: grid; grid-template-columns: minmax(120px, 220px) 1fr auto auto; gap: 10px; align-items: center; font-size: 12.5px; }
+.bt-run span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-run i { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--accent) var(--p), rgb(var(--ink) / 0.08) var(--p)); }
+.bt-run em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bt-cases { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.bt-cases summary { cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.bt-cases summary:hover { background: rgb(var(--ink) / 0.05); }
+.bt-cases li.ok summary span { color: var(--accent-text); font-weight: 800; }
+.bt-cases li.bad summary span { color: var(--red, #f87171); font-weight: 800; }
+.bt-cases small { color: var(--muted); margin-left: 6px; }
+.bt-cases pre { margin: 4px 0 8px 22px; padding: 8px 10px; border-radius: 8px; background: rgb(var(--ink) / 0.05); font-size: 11.5px; white-space: pre-wrap; color: var(--muted); }

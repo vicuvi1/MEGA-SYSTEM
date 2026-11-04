@@ -44,7 +44,7 @@ export class TursoHttp {
    * `url` is a Turso database URL, or a path on this site ("/api/db") that
    * passes the request on with the server's key.
    */
-  constructor(url: string, token: string | (() => string), private onUnauthorized?: () => void) {
+  constructor(url: string, token: string | (() => string), private onUnauthorized?: () => void, private fetchImpl: typeof fetch = (...a) => fetch(...a)) {
     let base = (url || '').trim()
     if (base.startsWith('/')) {
       this.url = base
@@ -57,7 +57,7 @@ export class TursoHttp {
   }
 
   private async pipeline(requests: unknown[]): Promise<any[]> {
-    const res = await fetch(this.url, {
+    const res = await this.fetchImpl(this.url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.token()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ requests: [...requests, { type: 'close' }] }),

@@ -864,3 +864,4 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   }
   return { ok: false, error: 'op must be state | water | reps | workout | poll | updated' }
 }
+export { runBenEval } from './benEval'

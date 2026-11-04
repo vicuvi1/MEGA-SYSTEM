@@ -129,6 +129,8 @@ export async function recordUsage(u, env = process.env, fetchImpl = fetch) {
 /** Asks OpenRouter (text only). opts.json: answer as a JSON object; opts.strong: the strong model (flash if it fails). */
 export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, env = process.env) {
   // Your pick wins: the chat model for everything, the deep one for plans and reviews.
+  // A test run (Settings → Test Ben) asks one exact model, with no fallback.
+  if (opts.model) return callOpenRouter(key, opts.model, prompt, fetchImpl, { ...opts, think: !!opts.strong }, 45_000, 'low')
   const pick = opts.noPick ? { chat: null, deep: null } : await chosenModels(env, fetchImpl)
   const mine = opts.strong ? pick.deep || pick.chat : pick.chat
   if (mine) {
@@ -215,6 +217,22 @@ export default async function handler(req, res) {
     return send(res, 200, { ok: true, chosen: v })
   }
   if (body?.op === 'usage') return send(res, 200, await usageReport(orKey))
+  // Ben's test: 20 typical messages on throwaway data, with the model you pick.
+  if (body?.op === 'eval') {
+    if (!orKey) return send(res, 503, { error: 'Add OPENROUTER_API_KEY in Vercel to test models' })
+    const model = typeof body.model === 'string' && /^[\w.\-]+\/[\w.:\-]+$/.test(body.model) ? body.model : (await chosenModels()).chat || (await openRouterModel())
+    try {
+      const [{ runBenEval }, { default: initSqlJs }, { createRequire }] = await Promise.all([import('./_bot/bot.mjs'), import('sql.js'), import('node:module')])
+      const require = createRequire(import.meta.url)
+      const SQL = await initSqlJs({ locateFile: (f) => require.resolve(`sql.js/dist/${f}`) })
+      const since = new Date().toISOString()
+      const r = await runBenEval(SQL, async (prompt, opts = {}) => (await askOpenRouter(orKey, prompt, fetch, { ...opts, media: undefined, model, kind: 'eval' })).text, 50_000)
+      const u = await usageSince(since)
+      return send(res, 200, { model, ...r, cost: u.cost, calls: u.calls })
+    } catch (e) {
+      return send(res, 500, { error: e.message || 'test failed' })
+    }
+  }
   if (!key && !orKey) return send(res, 503, { error: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use AI on the website' })
   const prompt = String(body?.prompt || '').slice(0, 60_000)
   if (!prompt.trim()) return send(res, 400, { error: 'Empty prompt' })
@@ -283,4 +301,13 @@ async function usageReport(orKey, fetchImpl = fetch) {
     }
   }
   return out
+}
+
+/** Cost and calls since a moment (the test run's own spend). */
+async function usageSince(iso, fetchImpl = fetch) {
+  const cfg = config()
+  if (!cfg.ok) return { cost: null, calls: 0 }
+  const { json } = await turso(cfg, { requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*), COALESCE(SUM(cost),0) FROM ai_usage WHERE at >= ? AND kind = ?', args: [{ type: 'text', value: iso }, { type: 'text', value: 'eval' }] } }, { type: 'close' }] }, fetchImpl).catch(() => ({ json: null }))
+  const r = json?.results?.[0]?.response?.result?.rows?.[0]
+  return r ? { calls: Number(r[0]?.value ?? 0), cost: Number(r[1]?.value ?? 0) } : { cost: null, calls: 0 }
 }
