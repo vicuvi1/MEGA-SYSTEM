@@ -91,10 +91,16 @@ export function DesktopIsland() {
   useEffect(() => {
     const report = () => {
       const el = root.current?.firstElementChild as HTMLElement | null
-      if (!el) return
-      const r = el.getBoundingClientRect()
+      if (!el || !root.current) return
+      // Layout size, not the on-screen one: while the card animates open it is
+      // drawn smaller, and clicks there used to fall through for half a second.
+      const base = root.current.getBoundingClientRect()
+      const x = base.left + el.offsetLeft
+      const y = base.top + el.offsetTop
+      const w = el.offsetWidth
+      const h = el.offsetHeight
       const fromTop = place === 'top'
-      desk()?.islandHot?.({ x: Math.round(r.left), y: fromTop ? 0 : Math.round(r.top), width: Math.round(r.width), height: Math.round(fromTop ? r.bottom : r.height) })
+      desk()?.islandHot?.({ x: Math.round(x), y: fromTop ? 0 : Math.round(y), width: Math.round(w), height: Math.round(fromTop ? y + h : h) })
     }
     report()
     const t1 = window.setTimeout(report, 120)
@@ -166,16 +172,21 @@ export function DesktopIsland() {
   const dragProps = {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
       if (e.button !== 0 || !desk()?.islandDrag) return
+      // A button or the message box inside the header is a button, not a handle.
+      // (Grabbing the pointer on press sent ✕ / ⤢ / 📌 clicks to the header.)
+      const hit = (e.target as HTMLElement).closest('button, input, textarea, a')
+      if (hit && hit !== e.currentTarget) return
       const el = e.currentTarget
+      const id = e.pointerId
       const sx = e.screenX
       const sy = e.screenY
       let started = false
       dragged.current = false
-      try { el.setPointerCapture(e.pointerId) } catch { /* fine */ }
       const move = (ev: PointerEvent) => {
         if (started || Math.hypot(ev.screenX - sx, ev.screenY - sy) < 5) return
         started = true
         dragged.current = true
+        try { el.setPointerCapture(id) } catch { /* fine */ }
         document.documentElement.classList.add('di-dragging')
         desk()?.islandDrag?.(true)
       }
@@ -194,12 +205,47 @@ export function DesktopIsland() {
     }
   }
 
-  const send = (a: IslandAction) => desk()?.islandAction?.(a)
+  // Every tap shows what happened: "Saving…", then ✓ or the reason it didn't work.
+  const [toast, setToast] = useState<{ id: string; state: 'busy' | 'ok' | 'err'; text: string } | null>(null)
+  const toastT = useRef<number | null>(null)
+  const label = (a: IslandAction): string | null =>
+    a.kind === 'water' ? `+${a.ml} ml water`
+    : a.kind === 'reps' ? `+${a.n} ${a.name}`
+    : a.kind === 'mustdo' ? 'Must-do'
+    : a.kind === 'chat' ? 'Sent to Ben'
+    : a.kind === 'start' ? `Timer: ${a.subject}`
+    : a.kind === 'stop' ? 'Logged'
+    : a.kind === 'extend' ? `+${a.minutes} min`
+    : null
+  const clearToastLater = (ms: number) => {
+    if (toastT.current) clearTimeout(toastT.current)
+    toastT.current = window.setTimeout(() => setToast(null), ms)
+  }
+  useEffect(() => {
+    desk()?.onIslandAck?.((ack) => {
+      setToast((t) => (t && t.id === ack.id ? { ...t, state: ack.ok ? 'ok' : 'err', text: ack.ok ? `✓ ${t.text}` : `⚠ ${ack.error ?? 'It did not work'}` } : t))
+      clearToastLater(ack.ok ? 2200 : 7000)
+    })
+  }, [])
+  const send = (a: IslandAction) => {
+    const text = label(a)
+    if (!text) return desk()?.islandAction?.(a)
+    const id = Math.random().toString(36).slice(2, 10)
+    setToast({ id, state: 'busy', text })
+    if (toastT.current) clearTimeout(toastT.current)
+    // No answer at all: the app window isn't running (or is stuck).
+    toastT.current = window.setTimeout(
+      () => setToast((t) => (t && t.id === id && t.state === 'busy' ? { id, state: 'err', text: "⚠ The app didn't answer. Is Life System running? Open it from the tray." } : t)),
+      a.kind === 'chat' ? 120_000 : 12_000
+    )
+    desk()?.islandAction?.({ ...a, id })
+  }
   const tap = (a: IslandAction, label?: string) => {
     send(a)
     if (label === 'Reply') {
       setAlertOnly(false)
       setPinned(true)
+      desk()?.islandFocus?.()
       setTimeout(() => input.current?.focus(), 60)
       return
     }
@@ -402,12 +448,13 @@ export function DesktopIsland() {
                     chat()
                   }}
                 >
-                  <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message Ben…" onFocus={() => setPinned(true)} />
+                  <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message Ben…" onPointerDown={() => desk()?.islandFocus?.()} onFocus={() => { setPinned(true); desk()?.islandFocus?.() }} />
                   <button disabled={!text.trim() || s.ben.busy} aria-label="Send">↑</button>
                 </form>
               </section>
             </>
           )}
+          {toast && <div className={`di-toast ${toast.state}`} role="status">{toast.state === 'busy' ? `${toast.text}…` : toast.text}</div>}
         </div>
       )}
     </div>

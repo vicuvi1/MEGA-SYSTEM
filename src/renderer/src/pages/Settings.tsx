@@ -20,6 +20,7 @@ import { features, life } from '../bridge'
 import { GooglePanel } from '../GooglePanel'
 import { SportyPanel } from '../SportyPanel'
 import { DesktopBackupPanel } from '../DesktopBackups'
+import { IslandLogPanel } from '../IslandLogPanel'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -610,6 +611,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       {features.updates && <UpdatePanel status={update} onStatus={onUpdate} />}
 
       <DesktopBackupPanel />
+
+      <IslandLogPanel />
 
       <SportyPanel />
 

@@ -5,7 +5,10 @@
 
 export interface IslandBlock { title: string; start: number; end: number }
 
-export type IslandAction =
+/** Every tap gets an answer from the app window: done, or why not. */
+export interface IslandAck { id: string; ok: boolean; error?: string }
+
+export type IslandAction = { id?: string } & (
   | { kind: 'water'; ml: number }
   | { kind: 'reps'; id: string; name: string; n: number }
   | { kind: 'mustdo'; i: number }
@@ -15,6 +18,7 @@ export type IslandAction =
   | { kind: 'extend'; minutes: number }
   | { kind: 'dismiss'; id: string; snoozeMin?: number }
   | { kind: 'open'; page?: string }
+)
 
 export interface IslandAlert {
   id: string

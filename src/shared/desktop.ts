@@ -1,5 +1,5 @@
 import type { UpdateStatus } from './api'
-import type { IslandAction, IslandSnapshot } from '../core/islandModel'
+import type { IslandAck, IslandAction, IslandSnapshot } from '../core/islandModel'
 import type { BackupStatus, BackupWhere } from '../desktop/backups'
 
 export type IslandMode = 'hidden' | 'pill' | 'open'
@@ -27,6 +27,12 @@ export interface DesktopApi {
   islandState?(s: IslandSnapshot): void
   /** App window: taps from the island. */
   onIslandAction?(cb: (a: IslandAction) => void): void
+  /** App window → island: a tap was done (or why not). */
+  islandAck?(ack: IslandAck): void
+  /** Island window: answers to its taps. */
+  onIslandAck?(cb: (ack: IslandAck) => void): void
+  /** Island window: give it the keyboard (typing to Ben). */
+  islandFocus?(): void
   /** App window: open a page when the island asks. */
   onNavigate?(cb: (page: string) => void): void
   /** Island window: new snapshots. */

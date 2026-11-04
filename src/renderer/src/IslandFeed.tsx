@@ -42,6 +42,17 @@ async function todayBlocks(): Promise<IslandBlock[]> {
 
 let listening = false
 
+export const ISLAND_LOG = 'ls.islandLog'
+export interface IslandLogEntry { at: string; kind: string; ok: boolean; error?: string }
+function logIsland(e: IslandLogEntry) {
+  try {
+    const list: IslandLogEntry[] = JSON.parse(localStorage.getItem(ISLAND_LOG) || '[]')
+    localStorage.setItem(ISLAND_LOG, JSON.stringify([...list, e].slice(-30)))
+  } catch {
+    /* fine */
+  }
+}
+
 export function IslandFeed() {
   const desk = window.desktop
   const busy = useRef<{ on: boolean; steps: string[] }>({ on: false, steps: [] })
@@ -103,7 +114,10 @@ export function IslandFeed() {
 
   const act = useCallback(
     async (a: IslandAction) => {
+      let error: string | null = null
       try {
+        // Locked (PIN) or still loading: say so instead of doing nothing.
+        if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss') throw new Error('Life System is locked: open it and enter your PIN')
         switch (a.kind) {
           case 'water': {
             // The shared log (Ben, Sporty, Telegram see it), and Sport Track's copy here.
@@ -153,7 +167,8 @@ export function IslandFeed() {
             if (a.page) window.dispatchEvent(new CustomEvent('life-open-page', { detail: a.page }))
             break
           case 'chat': {
-            if (!life.coach || busy.current.on) break
+            if (!life.coach) throw new Error('Ben is not available here')
+            if (busy.current.on) throw new Error('Ben is still answering your last message')
             busy.current = { on: true, steps: [] }
             void send()
             try {
@@ -168,9 +183,12 @@ export function IslandFeed() {
             break
           }
         }
-      } catch {
-        /* the snapshot below shows the real state */
+      } catch (e) {
+        error = (e as Error)?.message || 'It did not work'
       }
+      // The island shows ✓ or the reason; the log (Settings → Island log) keeps it.
+      if (a.id) desk?.islandAck?.({ id: a.id, ok: !error, ...(error ? { error } : {}) })
+      logIsland({ at: new Date().toISOString(), kind: a.kind, ok: !error, error: error ?? undefined })
       await send()
     },
     [send]

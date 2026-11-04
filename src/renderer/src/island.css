@@ -164,3 +164,8 @@ html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(
 .di.at-free.hidden .di-pill { width: 40px; height: 30px; }
 .di.at-free .di-line { width: 14px; height: 14px; margin-top: 6px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line), 0 0 12px -2px var(--glow), 0 4px 12px rgb(0 0 0 / 0.5); }
 .di.at-free .di-card { margin-top: 4px; }
+
+/* What happened to your tap */
+.di-toast { position: sticky; bottom: 0; margin: 0 -2px -2px; padding: 9px 14px; border-radius: 16px; font-size: 12.5px; font-weight: 600; background: rgb(255 255 255 / 0.08); color: var(--fg); animation: di-in 0.25s; }
+.di-toast.ok { background: rgb(212 255 63 / 0.14); color: var(--lime); }
+.di-toast.err { background: rgb(255 90 95 / 0.16); color: #ff9a9d; font-weight: 500; }

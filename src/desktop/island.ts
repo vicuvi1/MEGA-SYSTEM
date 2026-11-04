@@ -118,6 +118,14 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (last) win?.webContents.send('island:state', last)
   })
   ipcMain.on('island:action', (e, a) => { if (fromIsland(e)) o.appWindow.webContents.send('island:action', a) })
+  ipcMain.on('island:ack', (e, ack) => { if (fromApp(e)) win?.webContents.send('island:ack', ack) })
+  // Typing to Ben: the island takes the keyboard (it never takes it on its own).
+  ipcMain.on('island:focus', (e) => {
+    if (!fromIsland(e) || !win) return
+    win.setIgnoreMouseEvents(false)
+    win.focus()
+    win.webContents.focus()
+  })
   ipcMain.on('island:showApp', (e, page) => { if (fromIsland(e)) o.showApp(typeof page === 'string' ? page : undefined) })
 
   // Drag it anywhere. Drop it on the left/right edge → docked there; at the top →
