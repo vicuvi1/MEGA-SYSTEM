@@ -1391,7 +1391,42 @@
       transform: translateY(0);
       opacity: 1;
     }
-      .rep-custom { display: flex; gap: 6px; flex-basis: 100%; margin-top: 6px; }
+      .cal-nav { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+    .cal-nav span { min-width: 140px; text-align: center; }
+    .cal-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 4px 0 14px; }
+    .cal-stats div { padding: 10px; border-radius: 12px; background: rgba(255,255,255,0.04); text-align: center; }
+    .cal-stats b { display: block; font-size: 20px; color: #fff; }
+    .cal-stats small { color: var(--text-muted); font-size: 11px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .cal-wd { text-align: center; font-size: 11px; color: var(--text-muted); font-weight: 700; }
+    .cal-cell { height: 44px; border: 0; border-radius: 10px; color: rgba(255,255,255,0.85); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform 0.12s, box-shadow 0.15s; }
+    .cal-cell:hover:not(:disabled) { transform: scale(1.08); }
+    .cal-cell:disabled { opacity: 0.25; cursor: default; }
+    .cal-cell.l0, .cal-legend .l0 { background: rgba(255,255,255,0.05); }
+    .cal-cell.l1, .cal-legend .l1 { background: rgba(0,242,254,0.18); }
+    .cal-cell.l2, .cal-legend .l2 { background: rgba(0,242,254,0.38); }
+    .cal-cell.l3, .cal-legend .l3 { background: rgba(0,242,254,0.62); color: #021; }
+    .cal-cell.l4, .cal-legend .l4 { background: linear-gradient(135deg, #00f2fe, #4facfe); color: #021; box-shadow: 0 0 12px rgba(0,242,254,0.45); }
+    .cal-cell.today { outline: 2px solid #f9d423; outline-offset: 1px; }
+    .cal-cell.sel { box-shadow: 0 0 0 2px #fff; }
+    .cal-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
+    .cal-legend i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+    .cal-hint { margin-left: auto; }
+    .cal-day:not(:empty) { margin-top: 14px; padding: 14px; border-radius: 14px; background: rgba(0,242,254,0.05); border: 1px solid rgba(0,242,254,0.18); animation: calIn 0.25s ease; }
+    @keyframes calIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    .cal-day-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+    .cal-day-head span { color: var(--text-muted); font-size: 12px; }
+    .cal-day-head em { font-style: normal; font-weight: 700; }
+    .cal-day-head em.up { color: #3cff9e; } .cal-day-head em.down { color: #ff6b6b; }
+    .cal-ex { display: grid; grid-template-columns: minmax(90px, 1fr) 1fr auto auto 70px auto auto auto; gap: 6px; align-items: center; margin: 6px 0; }
+    .cal-ex-name { font-weight: 700; color: #fff; font-size: 13px; }
+    .cal-ex-bar { height: 6px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .cal-ex-bar i { display: block; height: 100%; background: linear-gradient(90deg, #00f2fe, #4facfe); transition: width 0.3s; }
+    .cal-ex input { width: 70px; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); color: #fff; font: inherit; text-align: center; }
+    .cal-ex small { color: var(--text-muted); font-size: 11px; }
+    .cal-note, .cal-empty { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; }
+    @media (max-width: 640px) { .cal-stats { grid-template-columns: repeat(3, 1fr); } .cal-ex { grid-template-columns: 1fr auto auto 60px auto auto; } .cal-ex-bar, .cal-ex small { display: none; } }
+    .rep-custom { display: flex; gap: 6px; flex-basis: 100%; margin-top: 6px; }
     .rep-custom input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); color: #fff; font: inherit; }
     .pr-card { position: relative; }
     .pr-del, .hist-del { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 13px; opacity: 0.4; transition: opacity 0.15s; }
@@ -1571,6 +1606,25 @@
               <span>⚡ COMPLETE & RECORD WORKOUT</span>
             </button>
           </form>
+        </section>
+
+        <!-- Training calendar: every day colored by how much you did -->
+        <section class="glass-card" id="cal-section">
+          <div class="card-header">
+            <h2 class="card-title">
+              <span class="icon">📅</span>
+              Training Calendar
+            </h2>
+            <div class="cal-nav">
+              <button class="preset-btn" id="cal-prev" aria-label="Previous month">‹</button>
+              <span id="cal-month"></span>
+              <button class="preset-btn" id="cal-next" aria-label="Next month">›</button>
+            </div>
+          </div>
+          <div class="cal-stats" id="cal-stats"></div>
+          <div class="cal-grid" id="cal-grid"></div>
+          <div class="cal-legend"><span>Less</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>More</span><span class="cal-hint">Tap a day to see it, compare it, or add sets you forgot</span></div>
+          <div class="cal-day" id="cal-day"></div>
         </section>
 
         <!-- 3. Personal Records (PR) Hall of Fame -->
@@ -1963,6 +2017,7 @@
     /** Days in a row with a workout, ending today (or yesterday, if today isn't done yet). */
     function computeStreak(history) {
       const days = new Set(history.map(entryDay).filter(Boolean));
+      for (const [d, m] of Object.entries((typeof state !== 'undefined' && state.days) || {})) if (Object.values(m).some(v => v > 0)) days.add(d);
       let cur = days.has(localDay()) ? localDay() : shiftDay(localDay(), -1);
       let n = 0;
       while (days.has(cur)) { n++; cur = shiftDay(cur, -1); }
@@ -2009,7 +2064,9 @@
       },
       // Your records and sessions only (no made-up examples).
       prs: [],
-      history: []
+      history: [],
+      // Reps per exercise, per day: { 'YYYY-MM-DD': { exerciseId: count } }
+      days: {}
     };
 
     function loadState() {
@@ -2028,7 +2085,8 @@
           water: { ...DEFAULT_STATE.water, ...(parsed.water || {}) },
           sportySettings: { ...DEFAULT_STATE.sportySettings, ...(parsed.sportySettings || {}) },
           prs,
-          history
+          history,
+          days: parsed.days && typeof parsed.days === 'object' ? parsed.days : {}
         };
       } catch (e) {
         return JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -2036,6 +2094,14 @@
     }
 
     function saveState(s) {
+      // Today's counts also go to the day log (the calendar), so a day is never lost at midnight.
+      s.days = s.days || {};
+      if (s.lastDate === localDay()) {
+        const m = {};
+        s.exercises.forEach(e => { if ((e.doneToday || 0) > 0) m[e.id] = e.doneToday; });
+        if (Object.keys(m).length) s.days[s.lastDate] = m;
+        else delete s.days[s.lastDate];
+      }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
       } catch (e) {}
@@ -2055,6 +2121,25 @@
       return true;
     }
     rollover();
+    // Days from before the day log existed: rebuilt from your sessions ("Daily routine: 20 Push-ups, 10 Squats").
+    if (!state.daysBackfilled) {
+      state.days = state.days || {};
+      const byName = new Map(state.exercises.map(e => [e.name.toLowerCase(), e.id]));
+      for (const h of state.history) {
+        const day = entryDay(h);
+        const list = /:\s*(.+)$/.exec(h.title || '')?.[1];
+        if (!day || !list || day === localDay()) continue;
+        for (const part of list.split(',')) {
+          const m = /^\s*(\d+)\s+(.+?)\s*$/.exec(part);
+          const id = m && byName.get(m[2].toLowerCase());
+          if (!id) continue;
+          state.days[day] = state.days[day] || {};
+          state.days[day][id] = Math.max(state.days[day][id] || 0, Number(m[1]));
+        }
+      }
+      state.daysBackfilled = true;
+      saveState(state);
+    }
     // Done today with an older version (before routineDay existed): don't log it twice.
     if (!state.routineDay && state.history.some(h => entryDay(h) === localDay() && /^Daily/i.test(h.title || ''))) state.routineDay = localDay();
     state.streak = computeStreak(state.history);
@@ -2280,6 +2365,7 @@
         ex.doneToday = (ex.doneToday || 0) + amt;
         audio.playClick();
         saveState(state);
+        renderCalendar();
         renderTodayRoutine();
         checkAllCompleted();
       } else if (action === 'custom') {
@@ -3022,9 +3108,134 @@
       });
     });
 
+    // --- Training calendar ---
+    let calMonth = localDay().slice(0, 7);
+    let calSel = null;
+    /** How much of your routine a day was: 0 (nothing) … 1+ (all of it or more). */
+    function dayRatio(day) {
+      const m = (state.days || {})[day];
+      if (!m) return 0;
+      const active = state.exercises.filter(e => e.active && e.target > 0);
+      const goal = active.reduce((t, e) => t + e.target, 0);
+      const done = Object.entries(m).reduce((t, [id, v]) => t + (state.exercises.some(e => e.id === id) ? v : 0), 0);
+      return goal ? done / goal : done > 0 ? 1 : 0;
+    }
+    const dayTotal = (day) => Object.values((state.days || {})[day] || {}).reduce((t, v) => t + v, 0);
+    const level = (r) => (r <= 0 ? 0 : r < 0.35 ? 1 : r < 0.7 ? 2 : r < 1 ? 3 : 4);
+    function renderCalendar() {
+      const [y, mo] = calMonth.split('-').map(Number);
+      const first = new Date(y, mo - 1, 1);
+      const daysIn = new Date(y, mo, 0).getDate();
+      const lead = (first.getDay() + 6) % 7; // Monday first
+      document.getElementById('cal-month').textContent = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      const today = localDay();
+      const cells = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => `<span class="cal-wd">${d}</span>`);
+      for (let i = 0; i < lead; i++) cells.push('<span></span>');
+      let active = 0, total = 0, best = null;
+      for (let d = 1; d <= daysIn; d++) {
+        const day = `${calMonth}-${String(d).padStart(2, '0')}`;
+        const r = dayRatio(day);
+        const t = dayTotal(day);
+        if (t > 0) { active++; total += t; if (!best || t > dayTotal(best)) best = day; }
+        const future = day > today;
+        cells.push(`<button class="cal-cell l${level(r)} ${day === today ? 'today' : ''} ${day === calSel ? 'sel' : ''}" data-day="${day}" ${future ? 'disabled' : ''} title="${day}: ${t} total (${Math.round(r * 100)}% of your routine)">${d}</button>`);
+      }
+      document.getElementById('cal-grid').innerHTML = cells.join('');
+      const prevMonth = (() => { const p = new Date(y, mo - 2, 1); return `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}`; })();
+      const prevActive = Object.keys(state.days || {}).filter(d => d.startsWith(prevMonth) && dayTotal(d) > 0).length;
+      document.getElementById('cal-stats').innerHTML = `
+        <div><b>${active}</b><small>active days</small></div>
+        <div><b>${total.toLocaleString()}</b><small>total done</small></div>
+        <div><b>${active ? Math.round(total / active) : 0}</b><small>per active day</small></div>
+        <div><b>${active - prevActive >= 0 ? '▲' : '▼'} ${Math.abs(active - prevActive)}</b><small>days vs last month</small></div>
+        <div><b>${best ? new Date(best + 'T12:00:00').getDate() : '—'}</b><small>best day</small></div>`;
+      renderCalDay();
+    }
+    function renderCalDay() {
+      const box = document.getElementById('cal-day');
+      if (!calSel) { box.innerHTML = ''; return; }
+      const m = (state.days || {})[calSel] || {};
+      const t = dayTotal(calSel);
+      // Compare with your average active day over the 4 weeks before it.
+      const prev = Object.keys(state.days || {}).filter(d => d < calSel && d >= shiftDay(calSel, -28) && dayTotal(d) > 0);
+      const avg = prev.length ? prev.reduce((s, d) => s + dayTotal(d), 0) / prev.length : 0;
+      const diff = avg ? Math.round(((t - avg) / avg) * 100) : null;
+      const exs = state.exercises.filter(e => e.active || m[e.id]);
+      box.innerHTML = `
+        <div class="cal-day-head">
+          <b>${new Date(calSel + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</b>
+          <span>${t} total · ${Math.round(dayRatio(calSel) * 100)}% of your routine${diff === null ? '' : ` · <em class="${diff >= 0 ? 'up' : 'down'}">${diff >= 0 ? '▲' : '▼'} ${Math.abs(diff)}% vs your 4-week average</em>`}</span>
+        </div>
+        ${exs.map(e => {
+          const v = m[e.id] || 0;
+          const pct = e.target ? Math.min(100, Math.round((v / e.target) * 100)) : 0;
+          return `<div class="cal-ex" data-id="${esc(e.id)}">
+            <span class="cal-ex-name">${esc(e.name)}</span>
+            <div class="cal-ex-bar"><i style="width:${pct}%"></i></div>
+            <button class="btn-rep" data-d="-10">−10</button>
+            <button class="btn-rep" data-d="-5">−5</button>
+            <input type="number" min="0" max="5000" value="${v}" aria-label="${esc(e.name)} on this day">
+            <button class="btn-rep" data-d="5">+5</button>
+            <button class="btn-rep" data-d="10">+10</button>
+            <small>/ ${e.target} ${esc(e.unit)}</small>
+          </div>`;
+        }).join('') || '<p class="cal-empty">No exercises yet.</p>'}
+        <p class="cal-note">${calSel === localDay() ? 'Today: the same numbers as your checklist above.' : 'Forgot some sets? Change the numbers: the day and your streak update at once.'}</p>`;
+    }
+    /** Sets one exercise's count on a day (today also moves the checklist). */
+    function setDayCount(day, id, value) {
+      const v = Math.max(0, Math.min(5000, Math.round(value) || 0));
+      if (day === localDay()) {
+        const ex = state.exercises.find(e => e.id === id);
+        if (ex) ex.doneToday = v;
+      } else {
+        state.days[day] = state.days[day] || {};
+        if (v > 0) state.days[day][id] = v; else delete state.days[day][id];
+        if (!Object.keys(state.days[day]).length) delete state.days[day];
+      }
+      saveState(state);
+      updateHunterStats();
+      renderTodayRoutine();
+      renderCalendar();
+    }
+    document.getElementById('cal-grid').addEventListener('click', (e) => {
+      const day = e.target.closest('[data-day]')?.dataset.day;
+      if (!day) return;
+      audio.playClick();
+      calSel = calSel === day ? null : day;
+      renderCalendar();
+      if (calSel) document.getElementById('cal-day').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    document.getElementById('cal-day').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-d]');
+      const row = e.target.closest('.cal-ex');
+      if (!btn || !row || !calSel) return;
+      audio.playClick();
+      const cur = ((state.days || {})[calSel] || {})[row.dataset.id] || 0;
+      setDayCount(calSel, row.dataset.id, cur + Number(btn.dataset.d));
+    });
+    document.getElementById('cal-day').addEventListener('change', (e) => {
+      const row = e.target.closest('.cal-ex');
+      if (!row || e.target.tagName !== 'INPUT' || !calSel) return;
+      setDayCount(calSel, row.dataset.id, Number(e.target.value));
+      showToast(`Saved for ${relDay(calSel)}`);
+    });
+    const moveMonth = (n) => {
+      const [y, mo] = calMonth.split('-').map(Number);
+      const d = new Date(y, mo - 1 + n, 1);
+      const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (next > localDay().slice(0, 7)) return;
+      calMonth = next;
+      calSel = null;
+      renderCalendar();
+    };
+    document.getElementById('cal-prev').addEventListener('click', () => moveMonth(-1));
+    document.getElementById('cal-next').addEventListener('click', () => moveMonth(1));
+
     // Life System (the island, Ben, Telegram) changes this data too: reload it
     // instead of overwriting it with an old copy on the next tap.
     function renderAll() {
+      renderCalendar();
       updateHunterStats();
       renderTodayRoutine();
       renderHydration();
@@ -3046,6 +3257,8 @@
     });
 
     // --- Initialize App ---
+    saveState(state); // today's counts into the day log right away
+    renderCalendar();
     updateHunterStats();
     updateCoachQuote();
     renderTodayRoutine();

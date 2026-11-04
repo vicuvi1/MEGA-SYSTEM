@@ -42,6 +42,19 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
     })
     .sort((x: any, y: any) => (Number(y?.id) || 0) - (Number(x?.id) || 0))
   if (typeof a.xp === 'number' || typeof b.xp === 'number') out.xp = Math.max(Number(a.xp) || 0, Number(b.xp) || 0)
+  // The day log (the calendar): every day from both; a day changed on the
+  // newer device wins, and today keeps the higher count per exercise.
+  if (a.days || b.days) {
+    const days: Record<string, Record<string, number>> = { ...(older.days ?? {}), ...(newer.days ?? {}) }
+    const today = out.lastDate
+    if (sameDay && today) {
+      const m: Record<string, number> = { ...(older.days?.[today] ?? {}) }
+      for (const [k, v] of Object.entries(newer.days?.[today] ?? {})) m[k] = Math.max(Number(m[k]) || 0, Number(v) || 0)
+      if (Object.keys(m).length) days[today] = m
+    }
+    out.days = days
+  }
+  if (a.daysBackfilled || b.daysBackfilled) out.daysBackfilled = true
   return out
 }
 

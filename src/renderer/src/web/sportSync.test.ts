@@ -88,3 +88,16 @@ describe('Sport Track sync', () => {
     expect(JSON.parse(pc.getItem(SPORT_KEY)!)).toEqual(mine)
   })
 })
+
+describe('the day log (training calendar) syncs too', () => {
+  it('keeps days from both devices; an edited past day from the newer one; today the higher count', async () => {
+    const { mergeSport } = await import('./sportSync')
+    const pc = { lastDate: '2026-11-04', exercises: [], days: { '2026-11-01': { a: 50 }, '2026-10-31': { a: 80 }, '2026-11-04': { a: 30 } } }
+    const phone = { lastDate: '2026-11-04', exercises: [], days: { '2026-11-02': { a: 40 }, '2026-10-31': { a: 20 }, '2026-11-04': { a: 10, b: 5 } } }
+    const m = mergeSport(pc, phone, true)
+    expect(m.days['2026-11-01']).toEqual({ a: 50 })
+    expect(m.days['2026-11-02']).toEqual({ a: 40 })
+    expect(m.days['2026-10-31']).toEqual({ a: 80 })
+    expect(m.days['2026-11-04']).toEqual({ a: 30, b: 5 })
+  })
+})
