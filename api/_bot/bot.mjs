@@ -18949,8 +18949,8 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			return template;
 		}
 	};
-	const send = async (text, reply_markup) => {
-		if (!await mirror.write((db) => {
+	const send = async (text, reply_markup, opts = {}) => {
+		if (!(opts.always || await mirror.write((db) => {
 			let prev = null;
 			try {
 				prev = JSON.parse(getSetting(db, BEN_SENT) || "null");
@@ -18958,7 +18958,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			const r = sendOnce(prev, text, now.toLocaleDateString("sv-SE"));
 			if (r.send) setSetting(db, BEN_SENT, JSON.stringify(r.next));
 			return r.send;
-		})) return;
+		}))) return false;
 		text = await voiced(text);
 		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
 			method: "POST",
@@ -18992,6 +18992,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			const n = notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
 			if (n) addNotif(db, n);
 		}).catch(() => null);
+		return true;
 	};
 	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	const pauseRow = [{
@@ -19012,10 +19013,10 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	});
 	let list = reminders;
 	for (const r of dueReminders(list, now)) try {
-		await send(r.kind === "checkin" ? followUpText({
+		if (!await send(r.kind === "checkin" ? followUpText({
 			...r,
 			text: esc(r.text)
-		}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0);
+		}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0, { always: true })) continue;
 		list = afterSend(list, r.id, now);
 		if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
 	} catch {}
@@ -19101,11 +19102,10 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const text = nudgeText(n, Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ""}${Math.round(st.idleMin % 60)}m` : "all day", first, st.focus.todayMin, st.tone);
 		const subject = (first ?? "Focus").split(/\s+/).slice(0, 4).join(" ").slice(0, 28);
 		try {
-			await send(text, { inline_keyboard: [[{
+			if (await send(text, { inline_keyboard: [[{
 				text: `▶ 50 min: ${subject}`,
 				callback_data: `fo|${subject}`
-			}], pauseRow] });
-			nudge = nudged(nudge, st.today, now);
+			}], pauseRow] }, { always: true })) nudge = nudged(nudge, st.today, now);
 		} catch {}
 	}
 	if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));

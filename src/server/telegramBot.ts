@@ -405,9 +405,11 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
       return template
     }
   }
-  const send = async (text: string, reply_markup?: unknown) => {
+  // true when it really went out. `always`: check-ins and nudges escalate on purpose
+  // ("Last check on…" twice is the point), so the once-a-day rule never drops them.
+  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean } = {}): Promise<any> => {
     // Each kind of message at most once a day (not the same water nudge 4 times).
-    const ok = await mirror.write((db) => {
+    const ok = opts.always || await mirror.write((db) => {
       let prev: SentToday | null = null
       try {
         prev = JSON.parse(getSetting(db as any, BEN_SENT) || 'null')
@@ -418,7 +420,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
       if (r.send) setSetting(db as any, BEN_SENT, JSON.stringify(r.next))
       return r.send
     })
-    if (!ok) return
+    if (!ok) return false
     // Nudges in Ben's own words for this moment of your day (the fixed line if that fails).
     text = await voiced(text)
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
@@ -444,6 +446,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
         if (n) addNotif(db as any, n)
       })
       .catch(() => null)
+    return true
   }
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const pauseRow = [
@@ -465,7 +468,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   for (const r of dueReminders(list, now)) {
     try {
       // Check-ins get sharper each time and name the week's missed promises.
-      await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined)
+      const went = await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined, { always: true })
+      // Only a message that really reached him moves the check-in on (and can count as ignored).
+      if (!went) continue
       list = afterSend(list, r.id, now)
       // Never answered after every follow-up: an ignored promise (the scorecard counts it).
       if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, 'ignored').catch(() => null)
@@ -546,8 +551,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     const text = nudgeText(n, idle, first, st.focus.todayMin, st.tone)
     const subject = (first ?? 'Focus').split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
     try {
-      await send(text, { inline_keyboard: [[{ text: `▶ 50 min: ${subject}`, callback_data: `fo|${subject}` }], pauseRow] })
-      nudge = nudged(nudge, st.today, now)
+      if (await send(text, { inline_keyboard: [[{ text: `▶ 50 min: ${subject}`, callback_data: `fo|${subject}` }], pauseRow] }, { always: true })) nudge = nudged(nudge, st.today, now)
     } catch {
       /* next tick */
     }
