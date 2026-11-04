@@ -1,16 +1,5 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './styles.css'
-import './plan.css'
-import './discipline.css'
-import './shell.css'
-import './extras.css'
-import './light.css'
-import './sidebar.css'
-import './bots.css'
-import './hud.css'
-import './calm.css'
-import './design.css'
 import { applyTheme } from './uiPrefs'
 
 applyTheme()
@@ -25,10 +14,10 @@ const root = createRoot(document.getElementById('root')!)
 if (isIsland) {
   void import('./DesktopIsland').then(({ DesktopIsland }) => root.render(<DesktopIsland />))
 } else if (isHud) {
-  void import('./HudBar').then(({ HudBar }) => root.render(<StrictMode><HudBar /></StrictMode>))
+  void Promise.all([import('./appStyles'), import('./HudBar')]).then(([, { HudBar }]) => root.render(<StrictMode><HudBar /></StrictMode>))
 } else {
   void import('./errorReport').then((m) => m.installErrorReport())
-  void Promise.all([import('./App'), import('./DesktopBar'), import('./IslandFeed'), import('./DesktopBackups')]).then(([{ App }, { DesktopBar }, { IslandFeed }, { DesktopAutoBackup }]) =>
+  void Promise.all([import('./App'), import('./DesktopBar'), import('./IslandFeed'), import('./DesktopBackups'), import('./appStyles')]).then(([{ App }, { DesktopBar }, { IslandFeed }, { DesktopAutoBackup }]) =>
     root.render(
       <StrictMode>
         <DesktopBar />

@@ -1,0 +1,12 @@
+// The app's global styles: loaded with the app window and the HUD, never with
+// the island (its own small window has its own stylesheet).
+import './styles.css'
+import './plan.css'
+import './discipline.css'
+import './shell.css'
+import './extras.css'
+import './light.css'
+import './sidebar.css'
+import './hud.css'
+import './calm.css'
+import './design.css'

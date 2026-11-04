@@ -1,3 +1,4 @@
+import '../bots.css'
 import { useEffect, useState, useCallback } from 'react'
 import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
 import { life } from '../bridge'
