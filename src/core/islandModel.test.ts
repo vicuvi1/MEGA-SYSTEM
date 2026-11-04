@@ -53,3 +53,21 @@ describe('island prefs', () => {
     expect(cleanIslandPrefs(null).sections).toHaveLength(5)
   })
 })
+
+describe('live activities', () => {
+  it('timer first, then now / next, Ben unread, water; nothing → empty', async () => {
+    const { activities, EMPTY_ISLAND } = await import('./islandModel')
+    const at = (h: number, m = 0) => new Date(2026, 10, 4, h, m).getTime()
+    const s = {
+      ...EMPTY_ISLAND,
+      locked: false,
+      running: { subject: 'Math', startedAt: at(10), endsAt: at(10, 25) },
+      next: { title: 'Gym', start: at(12), end: at(13) },
+      ben: { ...EMPTY_ISLAND.ben, unread: 1, last: { text: 'Drink water <b>now</b>', at: 'x', face: '😤' } },
+      water: { ml: 500, target: 2700 }
+    }
+    expect(activities(s, at(10, 5)).map((a) => a.kind)).toEqual(['timer', 'next', 'ben', 'water'])
+    expect(activities(s, at(10, 5))[2].text).toBe('Drink water now')
+    expect(activities({ ...EMPTY_ISLAND, locked: false }, at(9))).toEqual([])
+  })
+})

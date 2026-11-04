@@ -235,3 +235,31 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
     shortcut: typeof p?.shortcut === 'string' && (SHORTCUTS as readonly string[]).includes(p.shortcut) ? p.shortcut : d.shortcut
   }
 }
+
+// ---- Live activities: everything worth showing in the pill right now ----
+
+export interface Activity extends Omit<Pill, 'kind'> {
+  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water'
+  /** Stable id, so a chosen activity stays chosen as numbers tick. */
+  key: string
+}
+
+/**
+ * The pill's activities, most important first: the running timer, the block
+ * now, the next block (within 3 h), Ben's unread message, water left today.
+ * The pill shows the first (or the one you scrolled to) with the second as a
+ * small bubble beside it.
+ */
+export function activities(s: IslandSnapshot, now: number): Activity[] {
+  const out: Activity[] = []
+  const dot = s.ben.unread > 0 || !!s.alert
+  if (s.running) {
+    const left = (s.running.endsAt - now) / 1000
+    out.push({ key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot })
+  }
+  if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: s.now.title, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
+  if (s.next && s.next.start - now <= 3 * 3600_000) out.push({ key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot })
+  if (s.ben.unread > 0 && s.ben.last) out.push({ key: `ben:${s.ben.last.at}`, kind: 'ben', text: s.ben.last.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 60), sub: 'Ben', pct: 0, over: false, dot })
+  if (s.water.target > 0 && s.water.ml < s.water.target && out.length) out.push({ key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot })
+  return out
+}

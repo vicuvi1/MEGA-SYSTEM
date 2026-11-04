@@ -4,7 +4,7 @@
 // a block is coming up) the collapsed pill shows it. New things from Ben, a
 // block starting, or time up drop it down for a few seconds by themselves.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, HIDE_MS, clock, pill, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, HIDE_MS, activities, clock, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot } from '@core/islandModel'
 import type { IslandPlacement } from '../../shared/desktop'
 import './island.css'
 
@@ -49,6 +49,14 @@ function Ring({ pct, over, size = 22, stroke = 2.6 }: { pct: number; over?: bool
   )
 }
 
+function ActIcon({ a, face, small = false }: { a: Activity; face: string; small?: boolean }) {
+  const size = small ? 20 : 22
+  if (a.kind === 'timer' || a.kind === 'now') return <Ring pct={a.pct} over={a.over} size={size} />
+  if (a.kind === 'water') return <span className="di-act-ico">💧</span>
+  if (a.kind === 'next') return <span className="di-act-ico">⏭</span>
+  return <span className="di-face-sm">{face}</span>
+}
+
 export function DesktopIsland() {
   const [s, setS] = useState<IslandSnapshot>(EMPTY_ISLAND)
   const [now, setNow] = useState(Date.now())
@@ -64,6 +72,7 @@ export function DesktopIsland() {
   const root = useRef<HTMLDivElement>(null)
 
   const hoverRef = useRef<(on: boolean) => void>(() => {})
+  const timerPill = useRef(false)
   const revealRef = useRef<() => void>(() => {})
   const toggleRef = useRef<() => void>(() => {})
   const [place, setPlace] = useState<IslandPlacement>('top')
@@ -88,7 +97,18 @@ export function DesktopIsland() {
   }, [s.running])
 
   const p = useMemo(() => pill(s, now), [s, now])
-  const hasPill = s.locked || p.kind !== 'idle' || p.dot
+  // Live activities: the main one (first, or the one you scrolled/clicked to) and the next one as a bubble.
+  const acts = useMemo(() => activities(s, now), [s, now])
+  const [mainKey, setMainKey] = useState<string | null>(null)
+  const main = acts.find((a) => a.key === mainKey) ?? acts[0] ?? null
+  const second = acts.find((a) => a !== main) ?? null
+  const cycle = (d: 1 | -1) => {
+    if (acts.length < 2 || !main) return
+    const i = acts.indexOf(main)
+    setMainKey(acts[(i + d + acts.length) % acts.length].key)
+  }
+  const hasPill = s.locked || !!main || p.dot
+  timerPill.current = main?.kind === 'timer'
   const mode = open ? 'open' : hasPill ? 'pill' : 'hidden'
   const st = useRef({ open, pinned, alertOnly })
   st.current = { open, pinned, alertOnly }
@@ -146,10 +166,17 @@ export function DesktopIsland() {
     setAlertOnly(alert)
     setOpen(true)
   }
+  // The card shrinks back into the pill before it goes.
+  const [closing, setClosing] = useState(false)
   const hide = () => {
-    setOpen(false)
-    setPinned(false)
-    setAlertOnly(false)
+    if (!st.current.open) return
+    setClosing(true)
+    window.setTimeout(() => {
+      setClosing(false)
+      setOpen(false)
+      setPinned(false)
+      setAlertOnly(false)
+    }, 200)
   }
   const scheduleHide = (ms = 450) => {
     if (closeT.current) clearTimeout(closeT.current)
@@ -176,7 +203,7 @@ export function DesktopIsland() {
     over.current = on
     if (closeT.current) clearTimeout(closeT.current)
     if (on) {
-      if (!st.current.open) closeT.current = window.setTimeout(() => show(false), 140)
+      if (!st.current.open) closeT.current = window.setTimeout(() => show(false), timerPill.current ? 650 : 140)
     } else if (st.current.open) scheduleHide(st.current.alertOnly ? 1500 : HIDE_MS[prefsRef.current.hide])
   }
 
@@ -411,36 +438,74 @@ export function DesktopIsland() {
       style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
       className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? 'alert-only' : ''} mood-${s.ben.mood} ${runOver ? 'is-over' : ''}`}
     >
-      {/* Collapsed: a thin line, or the smart pill */}
+      {/* Collapsed: a thin line, or the live pill (main activity + a bubble for the next one) */}
       {!open && (
-        <button
-          className={`di-pill kind-${s.locked ? 'locked' : p.kind}`}
-          {...dragProps}
-          onClick={() => {
-            if (dragged.current) return void (dragged.current = false)
-            if (s.locked) desk()?.showApp?.()
-            else (show(false), setPinned(true))
-          }}
-          aria-label="Open the island (drag to move it)"
-          title="Click to open · drag to move"
-        >
-          {s.locked ? (
-            <span className="di-pill-text">🔒 Open Life System</span>
-          ) : p.kind === 'idle' ? (
-            <span className="di-line" />
-          ) : (
-            <>
-              {p.kind === 'timer' ? <Ring pct={p.pct} over={p.over} /> : p.kind === 'now' ? <Ring pct={p.pct} /> : <span className="di-face-sm">{s.ben.face}</span>}
-              <span className="di-pill-text">{p.kind === 'timer' ? p.sub : p.kind === 'next' ? `Next: ${p.text}` : p.text}</span>
-              <span className={`di-pill-time ${p.over ? 'over' : ''}`}>{p.kind === 'timer' ? p.text : p.sub}</span>
-            </>
+        <div className="di-pillrow">
+          <div
+            role="button"
+            tabIndex={0}
+            className={`di-pill kind-${s.locked ? 'locked' : main?.kind ?? 'idle'}`}
+            {...dragProps}
+            onClick={() => {
+              if (dragged.current) return void (dragged.current = false)
+              if (s.locked) desk()?.showApp?.()
+              else (show(false), setPinned(true))
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && (show(false), setPinned(true))}
+            onWheel={(e) => cycle(e.deltaY > 0 ? 1 : -1)}
+            aria-label="Open the island (drag to move it, scroll to switch)"
+            title={acts.length > 1 ? 'Click to open · scroll to switch · drag to move' : 'Click to open · drag to move'}
+          >
+            {s.locked ? (
+              <span className="di-pill-text">🔒 Open Life System</span>
+            ) : !main ? (
+              <span className="di-line" />
+            ) : (
+              <>
+                <ActIcon a={main} face={s.ben.face} />
+                <span key={main.key} className="di-pill-text di-fade">
+                  {main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text}
+                </span>
+                <span className={`di-pill-time ${main.over ? 'over' : ''}`}>{main.kind === 'timer' || main.kind === 'water' ? (main.kind === 'water' ? '' : main.text) : main.sub}</span>
+                {main.kind === 'timer' && (
+                  <span className="di-pill-ctl">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (closeT.current) clearTimeout(closeT.current)
+                        tap({ kind: 'extend', minutes: 5 })
+                      }}
+                      title="5 more minutes"
+                    >
+                      +5
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (closeT.current) clearTimeout(closeT.current)
+                        tap({ kind: 'stop' })
+                      }}
+                      title="Stop and log"
+                      aria-label="Stop and log"
+                    >
+                      ■
+                    </button>
+                  </span>
+                )}
+              </>
+            )}
+            {p.dot && <i className="di-dot" />}
+          </div>
+          {second && !s.locked && (
+            <button className={`di-bubble kind-${second.kind}`} onClick={() => setMainKey(second.key)} title={second.kind === 'next' ? `Next: ${second.text} ${second.sub}` : `${second.sub}: ${second.text}`} aria-label="Switch to this">
+              <ActIcon a={second} face={s.ben.face} small />
+            </button>
           )}
-          {p.dot && <i className="di-dot" />}
-        </button>
+        </div>
       )}
 
       {open && (
-        <div ref={card} className="di-card" role="dialog" aria-label="Life System island">
+        <div ref={card} className={`di-card ${closing ? 'closing' : ''}`} role="dialog" aria-label="Life System island">
           <header className="di-head" {...dragProps}>
             <span className={`di-face mood-${s.ben.mood}`}>{s.ben.face}</span>
             <div className="di-who">

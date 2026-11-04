@@ -18,7 +18,7 @@ const OPEN_MAX_H = 680
 function size(place: IslandPlacement, mode: IslandMode, openH: number): { width: number; height: number } {
   if (mode === 'open') return { width: OPEN_W, height: openH }
   if (place === 'left' || place === 'right') return { width: 100, height: 140 }
-  if (mode === 'pill') return { width: 420, height: 60 }
+  if (mode === 'pill') return { width: 500, height: 60 }
   return place === 'free' ? { width: 64, height: 40 } : { width: 320, height: 34 }
 }
 
