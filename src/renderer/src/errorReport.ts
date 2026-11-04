@@ -23,6 +23,7 @@ export function installErrorReport(): void {
   if (installed || typeof window === 'undefined') return
   installed = true
   const source = window.desktop ? 'desktop' : 'web'
+  window.desktop?.onCrashes?.((list) => list.forEach((c) => void life.system?.logError('desktop', `Crash ${c.at}: ${c.why}`).catch(() => {})))
   window.addEventListener('error', (e) => reportError(source, `${e.message}${e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno})` : ''}`))
   window.addEventListener('unhandledrejection', (e) => {
     const r = e.reason as { message?: string } | string | undefined

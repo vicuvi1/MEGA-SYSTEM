@@ -1,0 +1,36 @@
+# Checks every push and pull request: types, unit tests, the server bundle is
+# rebuilt, and a smoke test of the real app (sign in, Today, the four apps
+# show content, Settings). A red run means: don't ship this.
+name: CI
+on:
+  push:
+    branches: ['**']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Types
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Unit tests
+        run: npx vitest run
+      - name: Server bundle is up to date (run npm run build:bot and commit it)
+        run: npm run build:bot && git diff --exit-code --stat api/_bot/bot.mjs
+      - name: Build the app
+        run: npm run build:web
+      - name: Smoke test (sign in, Today, apps, Settings)
+        run: |
+          npx playwright install --with-deps chromium
+          node e2e/smoke.mjs

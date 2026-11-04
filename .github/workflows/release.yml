@@ -48,6 +48,12 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node node_modules/electron/install.js
       - run: npm test
+      # The real app must work before an installer is published.
+      - name: Smoke test
+        run: |
+          npm run build:web
+          npx playwright install chromium
+          node e2e/smoke.mjs
       - name: Version
         shell: bash
         run: |

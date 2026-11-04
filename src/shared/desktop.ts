@@ -16,6 +16,8 @@ export interface DesktopApi {
   loginGithub(): Promise<void>
   /** Colors of Windows' own minimize/maximize/close (they sit on the app's title bar). */
   titleBar?(color: string, symbol: string): void
+  /** Crashes from the last run (sent once after loading), for the error log. */
+  onCrashes?(cb: (list: { at: string; why: string }[]) => void): void
   // ---- daily backup files (optional: older desktops don't have them) ----
   backupStatus?(): Promise<BackupStatus>
   writeBackup?(text: string, day: string): Promise<BackupStatus>

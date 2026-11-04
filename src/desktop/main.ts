@@ -139,6 +139,45 @@ else void app.whenReady().then(async () => {
     tray.setContextMenu(menu())
   }
 
+  // Safety net: the window crashes or fails to load twice within 3 minutes →
+  // ask what to do (reload / save a backup / get the previous version), and
+  // put it in the shared error log once the app is up again.
+  const crashFile = join(dir, 'crashes.json')
+  let crashes: { at: string; why: string }[] = []
+  const remember = (why: string) => {
+    crashes = [...crashes.filter((c) => Date.now() - Date.parse(c.at) < 3 * 60000), { at: new Date().toISOString(), why }]
+    void writeFile(crashFile, JSON.stringify(crashes)).catch(() => {})
+    if (crashes.length >= 2) {
+      crashes = []
+      void dialog
+        .showMessageBox(win, {
+          type: 'warning',
+          title: 'Life System',
+          message: 'Life System had trouble starting.',
+          detail: `${why}\n\nYour data is safe (in the cloud and on this PC).`,
+          buttons: ['Try again', 'Save a backup', 'Get the previous version'],
+          defaultId: 0
+        })
+        .then(async ({ response }) => {
+          if (response === 1) {
+            await saves
+            const r = await dialog.showSaveDialog(win, { defaultPath: 'Life-System-backup.sqlite' })
+            if (!r.canceled && r.filePath) await copyFile(file, r.filePath).catch(() => {})
+          } else if (response === 2) void shell.openExternal('https://github.com/vicuvi1/MEGA-SYSTEM/releases')
+          win.reload()
+        })
+    } else win.reload()
+  }
+  win.webContents.on('render-process-gone', (_e, d) => remember(`The window stopped (${d.reason}).`))
+  win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => { if (isMain && code !== -3) remember(`It could not load (${desc}).`) })
+  win.webContents.on('did-finish-load', async () => {
+    try {
+      const old = JSON.parse(await readFile(crashFile, 'utf8')) as { at: string; why: string }[]
+      if (old.length) win.webContents.send('desktop:crashes', old)
+      await writeFile(crashFile, '[]')
+    } catch { /* none */ }
+  })
+
   await win.loadURL(origin + '/')
   // Look for a new version shortly after start and every 4 hours; the top bar
   // then shows "Update to …" (one tap installs it). Quiet when offline.
