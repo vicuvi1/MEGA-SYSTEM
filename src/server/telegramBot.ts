@@ -5,6 +5,7 @@
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
 import { createRequire } from 'node:module'
 import initSqlJs from 'sql.js'
+import type { SqlJsStatic } from 'sql.js'
 import type { BotBridgeConfig } from '@shared/api'
 import { Mirror } from '../renderer/src/web/mirror'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
@@ -25,6 +26,7 @@ import { getSetting, setSetting } from '../main/settings'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
 import { alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
 import { beat, logError, readHealth, setNote } from '../renderer/src/web/systemHealth'
+import { restoreDrill, snapshotOf } from '../renderer/src/web/restoreDrill'
 import { loadTriggers, urgeEvents } from '../renderer/src/web/disciplinePatterns'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, pollSporty, sportyUpdated, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
@@ -84,7 +86,7 @@ function calendarFor(env: BotEnv, mirror: Mirror): CalendarLike | null {
   }
 }
 
-let warm: { key: string; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null } | null = null
+let warm: { key: string; SQL: SqlJsStatic; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null } | null = null
 
 async function botsFor(env: BotEnv) {
   const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '')
@@ -122,7 +124,7 @@ async function botsFor(env: BotEnv) {
   const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, fetch, { pickArea }) : null
   const calendar = calendarFor(env, mirror)
   const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar })
-  warm = { key, bots, mirror, services, calendar }
+  warm = { key, SQL, bots, mirror, services, calendar }
   return warm
 }
 
@@ -341,7 +343,7 @@ const TICK_AT = 'coach_tick_at'
 
 export async function runTick(env: BotEnv & { botToken: string; chatId: string }, now = new Date()): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
-  const { services, mirror, calendar, bots } = await botsFor(env)
+  const { services, mirror, calendar, bots, SQL } = await botsFor(env)
   // At most once a minute, whoever calls.
   const fresh = await mirror.write((db) => {
     const last = Number(getSetting(db as any, TICK_AT) || 0)
@@ -415,6 +417,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   // System health: Ben warns you when a part has been broken for 30+ minutes,
   // says when it works again, and sends a short report on Sunday evenings.
   try {
+    await backupTick(healthDb, SQL, mirror, now)
     await healthTick(healthDb, mirror, now, send)
   } catch (e) {
     console.error('health:', e)
@@ -482,7 +485,44 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   return sent
 }
 
-/** What the rhythm sends now (each thing once a day; state in settings.coach_rhythm). */
+/**
+ * The daily cloud snapshot, made by the server so no device has to be open
+ * (30 kept), and once a week a test restore of the newest one into a
+ * throwaway database: Ben warns you if a backup wouldn't come back.
+ */
+async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: Date): Promise<void> {
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  await t.writeAtomic([{ sql: 'CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)', args: [] }] as any)
+  const [have, notes] = await t.readMany([
+    { sql: 'SELECT 1 FROM cloud_snapshots WHERE day = ?', args: [day] },
+    { sql: "SELECT msg FROM sys_health WHERE key = 'note:drill'", args: [] }
+  ] as any)
+  if (!(have instanceof Error) && !have.rows.length) {
+    try {
+      const data = JSON.stringify(await mirror.read((db) => snapshotOf(db as any, "Ben's server", now)))
+      const cut = new Date(now.getTime() - 30 * 86400000)
+      await t.writeAtomic([
+        { sql: 'INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING', args: [day, now.toISOString(), Buffer.byteLength(data), data] },
+        { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [`${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`] }
+      ] as any)
+    } catch (e) {
+      void logError(t, 'server', `snapshot: ${(e as Error).message}`)
+    }
+  }
+  let last: string | null = null
+  try {
+    last = notes instanceof Error ? null : JSON.parse(String(notes.rows[0]?.[0] ?? 'null'))
+  } catch {
+    last = null
+  }
+  if (last && now.getTime() - Date.parse(last) < 7 * 86400000) return
+  await setNote(t, 'drill', now.toISOString())
+  const [snap] = await t.readMany([{ sql: 'SELECT day, data FROM cloud_snapshots ORDER BY day DESC LIMIT 1', args: [] }] as any)
+  if (snap instanceof Error || !snap.rows.length) return
+  const r = restoreDrill(SQL, String(snap.rows[0][1]))
+  await beat(t, 'restoreDrill', r.ok, r.ok ? undefined : `${snap.rows[0][0]}: ${r.msg}`, now)
+}
+
 async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: string) => Promise<void>): Promise<void> {
   const h = await readHealth(t)
   const local = await mirror.read((db) => ({

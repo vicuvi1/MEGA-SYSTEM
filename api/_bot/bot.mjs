@@ -15470,6 +15470,147 @@ async function readHealth(t) {
 		latestSnapshot: s instanceof Error ? null : s.rows[0]?.[0] ?? null
 	};
 }
+// src/core/backupPlan.ts
+/** Tables that are only plumbing (or backups themselves): never in a backup, never restored. */
+var NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/;
+/** Append-only history: a restore only adds rows that are missing. */
+var APPEND_ONLY = /* @__PURE__ */ new Set(["ledger", "discipline_events"]);
+/** Settings a restore never overwrites (your current PIN and bot setup). */
+var KEEP_SETTINGS = /* @__PURE__ */ new Set([
+	"pin_hash",
+	"bot_bridge_config",
+	"data_version"
+]);
+function backupTables(all) {
+	return all.filter((t) => !NOT_BACKED_UP.test(t)).sort();
+}
+/**
+* The statements that put a snapshot back, in one transaction: each table is
+* replaced (append-only history only gets its missing rows back), settings
+* are upserted except the kept ones, and the data marker moves so every
+* device reloads. `columns` = the current columns of each existing table.
+*/
+function restoreStatements(snap, columns, version) {
+	if (!snap || typeof snap !== "object" || !snap.tables || typeof snap.tables !== "object") throw new Error("This file is not a Life System backup");
+	const out = [];
+	for (const t of Object.keys(snap.tables).sort()) {
+		const rows = snap.tables[t];
+		const cols = columns[t];
+		if (!Array.isArray(rows) || !cols || NOT_BACKED_UP.test(t)) continue;
+		const have = new Set(cols);
+		if (t === "settings") {
+			for (const r of rows) {
+				if (!r || typeof r.key !== "string" || KEEP_SETTINGS.has(r.key) || typeof r.value !== "string") continue;
+				out.push({
+					sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+					args: [r.key, r.value]
+				});
+			}
+			continue;
+		}
+		if (!APPEND_ONLY.has(t)) out.push({
+			sql: `DELETE FROM "${t}"`,
+			args: []
+		});
+		for (const r of rows) {
+			const keys = Object.keys(r ?? {}).filter((k) => have.has(k));
+			if (!keys.length) continue;
+			out.push({
+				sql: `INSERT ${APPEND_ONLY.has(t) ? "OR IGNORE " : ""}INTO "${t}" (${keys.map((k) => `"${k}"`).join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
+				args: keys.map((k) => r[k] === void 0 ? null : r[k])
+			});
+		}
+	}
+	out.push({
+		sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+		args: [version]
+	});
+	return out;
+}
+// src/renderer/src/web/restoreDrill.ts
+/** Every data table of a database, as a backup (same shape as the apps' export). */
+function snapshotOf(db, source, now = /* @__PURE__ */ new Date()) {
+	const tables = {};
+	const all = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => String(r.name));
+	for (const t of backupTables(all)) tables[t] = db.prepare(`SELECT * FROM "${t}"`).all();
+	return {
+		version: 2,
+		exportedAt: now.toISOString(),
+		source,
+		tables
+	};
+}
+/**
+* Puts a backup back into a fresh, empty database (built from the app's own
+* migrations, like a new install) and checks each table got exactly its rows.
+*/
+function restoreDrill(SQL, text) {
+	let snap;
+	try {
+		snap = JSON.parse(text);
+	} catch {
+		return {
+			ok: false,
+			msg: "The backup is not readable (broken JSON)",
+			tables: 0,
+			rows: 0
+		};
+	}
+	if (!snap?.tables || typeof snap.tables !== "object" || !Object.keys(snap.tables).length) return {
+		ok: false,
+		msg: "The backup has no tables",
+		tables: 0,
+		rows: 0
+	};
+	const db = new SQL.Database();
+	try {
+		for (const m of MIGRATIONS) db.exec(m);
+		const columns = {};
+		for (const [name] of db.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []) columns[String(name)] = (db.exec(`PRAGMA table_info("${String(name)}")`)[0]?.values ?? []).map((c) => String(c[1]));
+		const stmts = restoreStatements(snap, columns, "drill");
+		db.exec("BEGIN");
+		for (const s of stmts) db.run(s.sql, s.args);
+		db.exec("COMMIT");
+		const bad = [];
+		let tables = 0;
+		let rows = 0;
+		for (const [t, list] of Object.entries(snap.tables)) {
+			if (!Array.isArray(list) || !columns[t] || NOT_BACKED_UP.test(t)) continue;
+			let want = list.length;
+			let got;
+			if (t === "settings") {
+				const wanted = new Map(list.filter((r) => typeof r?.key === "string" && typeof r?.value === "string" && !KEEP_SETTINGS.has(r.key)).map((r) => [r.key, r.value]));
+				const have = new Map((db.exec("SELECT key, value FROM settings")[0]?.values ?? []).map(([k, v]) => [String(k), String(v)]));
+				want = wanted.size;
+				got = [...wanted].filter(([k, v]) => have.get(k) === v).length;
+			} else got = Number(db.exec(`SELECT COUNT(*) FROM "${t}"`)[0]?.values[0][0] ?? 0);
+			if (got !== want && !(APPEND_ONLY.has(t) && got < want && got > 0)) bad.push(`${t} ${got}/${want}`);
+			tables++;
+			rows += want;
+		}
+		if (bad.length) return {
+			ok: false,
+			msg: `Rows missing after a test restore: ${bad.slice(0, 5).join(", ")}`,
+			tables,
+			rows
+		};
+		return {
+			ok: true,
+			msg: `${tables} tables, ${rows} rows put back`,
+			tables,
+			rows
+		};
+	} catch (e) {
+		return {
+			ok: false,
+			msg: `A test restore failed: ${e.message}`.slice(0, 200),
+			tables: 0,
+			rows: 0
+		};
+	} finally {
+		db.close();
+	}
+}
 // src/core/sportyUpdate.ts
 var SPORTY_STATUS = "sporty_status";
 var SPORTY_REQUEST = "sporty_update_request";
@@ -15688,7 +15829,8 @@ async function botsFor(env) {
 		return warm;
 	}
 	const require = createRequire(import.meta.url);
-	const mirror = new Mirror(await initSqlJs({ locateFile: (f) => require.resolve(`sql.js/dist/${f}`) }), new TursoHttp(env.tursoUrl, env.tursoToken), null);
+	const SQL = await initSqlJs({ locateFile: (f) => require.resolve(`sql.js/dist/${f}`) });
+	const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken), null);
 	await mirror.ready;
 	const services = createWebServices(mirror);
 	const defaults = {
@@ -15717,6 +15859,7 @@ async function botsFor(env) {
 	const calendar = calendarFor(env, mirror);
 	warm = {
 		key,
+		SQL,
 		bots: createWebBots({
 			mirror,
 			services,
@@ -15972,7 +16115,7 @@ var escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/
 var TICK_AT = "coach_tick_at";
 async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
-	const { services, mirror, calendar, bots } = await botsFor(env);
+	const { services, mirror, calendar, bots, SQL } = await botsFor(env);
 	if (!await mirror.write((db) => {
 		const last = Number(getSetting(db, TICK_AT) || 0);
 		if (now.getTime() - last < 5e4) return false;
@@ -16047,6 +16190,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		logError(healthDb, "server", `rhythm: ${e.message}`);
 	}
 	try {
+		await backupTick(healthDb, SQL, mirror, now);
 		await healthTick(healthDb, mirror, now, send);
 	} catch (e) {
 		console.error("health:", e);
@@ -16125,7 +16269,58 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));
 	return sent;
 }
-/** What the rhythm sends now (each thing once a day; state in settings.coach_rhythm). */
+/**
+* The daily cloud snapshot, made by the server so no device has to be open
+* (30 kept), and once a week a test restore of the newest one into a
+* throwaway database: Ben warns you if a backup wouldn't come back.
+*/
+async function backupTick(t, SQL, mirror, now) {
+	const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+	await t.writeAtomic([{
+		sql: "CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)",
+		args: []
+	}]);
+	const [have, notes] = await t.readMany([{
+		sql: "SELECT 1 FROM cloud_snapshots WHERE day = ?",
+		args: [day]
+	}, {
+		sql: "SELECT msg FROM sys_health WHERE key = 'note:drill'",
+		args: []
+	}]);
+	if (!(have instanceof Error) && !have.rows.length) try {
+		const data = JSON.stringify(await mirror.read((db) => snapshotOf(db, "Ben's server", now)));
+		const cut = /* @__PURE__ */ new Date(now.getTime() - 2592e6);
+		await t.writeAtomic([{
+			sql: "INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING",
+			args: [
+				day,
+				now.toISOString(),
+				Buffer.byteLength(data),
+				data
+			]
+		}, {
+			sql: "DELETE FROM cloud_snapshots WHERE day < ?",
+			args: [`${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, "0")}-${String(cut.getDate()).padStart(2, "0")}`]
+		}]);
+	} catch (e) {
+		logError(t, "server", `snapshot: ${e.message}`);
+	}
+	let last = null;
+	try {
+		last = notes instanceof Error ? null : JSON.parse(String(notes.rows[0]?.[0] ?? "null"));
+	} catch {
+		last = null;
+	}
+	if (last && now.getTime() - Date.parse(last) < 6048e5) return;
+	await setNote(t, "drill", now.toISOString());
+	const [snap] = await t.readMany([{
+		sql: "SELECT day, data FROM cloud_snapshots ORDER BY day DESC LIMIT 1",
+		args: []
+	}]);
+	if (snap instanceof Error || !snap.rows.length) return;
+	const r = restoreDrill(SQL, String(snap.rows[0][1]));
+	await beat(t, "restoreDrill", r.ok, r.ok ? void 0 : `${snap.rows[0][0]}: ${r.msg}`, now);
+}
 async function healthTick(t, mirror, now, send) {
 	const h = await readHealth(t);
 	const local = await mirror.read((db) => ({
