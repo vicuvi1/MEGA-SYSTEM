@@ -13,10 +13,13 @@ const server = 'https://mega-system-ten.vercel.app'
 protocol.registerSchemesAsPrivileged([{ scheme: 'life-system', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
 // A separate folder preserves all data from the older Electron app.
 app.setPath('userData', app.commandLine.getSwitchValue('user-data-dir') || join(app.getPath('appData'), 'LifeSystem-CloudDesktop'))
-if (!app.requestSingleInstanceLock()) app.quit()
+// Only one copy runs; a second start just brings the first one forward.
+const firstCopy = app.requestSingleInstanceLock()
+if (!firstCopy) app.quit()
 // Windows shows notifications only for an app with this id (the installer's appId).
 if (process.platform === 'win32') app.setAppUserModelId('com.vicuvi1.lifesystem')
-else void app.whenReady().then(async () => {
+// Keep this on its own line (never behind an if/else): it starts the whole app.
+if (firstCopy) void app.whenReady().then(async () => {
   const dir = app.getPath('userData')
   await mkdir(dir, { recursive: true })
   const file = join(dir, 'life-local.sqlite')
