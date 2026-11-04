@@ -2437,7 +2437,9 @@
         duration: '',
         coins: earnedCoins,
         xp: earnedXp,
-        date: new Date().toLocaleDateString()
+        date: new Date().toLocaleDateString(),
+        // What Life System logs as the workout (Body, streak, points).
+        items: active.map(e => ({ exerciseId: e.id, name: e.name, unit: (e.unit && String(e.unit).trim() !== '1') ? String(e.unit).trim() : 'reps', amount: Math.max(1, Number(e.doneToday || getEffectiveTarget(e)) || 1) }))
       };
       state.history.unshift(record);
       state.xp += earnedXp;
@@ -2930,7 +2932,8 @@
         coins: 15,
         xp: 35,
         day: localDay(),
-        date: new Date().toLocaleDateString()
+        date: new Date().toLocaleDateString(),
+        items: [{ exerciseId: 'session_' + currentCat, name, unit: unit || 'reps', amount: Math.max(1, Number(amount) || Number(duration) || 1), ...(weight ? { sets: [{ reps: Number(amount) || 1, weight: Number(weight) || 0 }] } : {}) }]
       };
 
       state.history.unshift(record);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EmbeddedApps } from '@shared/api'
 import { life } from './bridge'
+import { sportItems } from '@core/sportBridge'
 import { dayNumber } from '@core/discipline'
 
 // The apps load in a normal same-origin <iframe> (website and this desktop app);
@@ -40,17 +41,15 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
     const onWindowMessage = async (e: MessageEvent) => {
       const data = e.data
       if (!data || typeof data !== 'object') return
+      // Only our own embedded apps (same origin) may log things here.
+      if (e.origin !== window.location.origin) return
 
       // Sport Track (Iron Pulse)
       if (data.type === 'SPORT_WORKOUT_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_WORKOUT_LOGGED')) {
         try {
-          const name = data.workout?.name || data.workout?.title || 'Workout completed'
+          const name = String(data.workout?.name || data.workout?.title || 'Workout completed').slice(0, 120)
           // logWorkout pays "Workout done" itself (capped); a second award paid twice.
-          await life.body.logWorkout({
-            title: name,
-            items: [],
-            note: 'Sport Track routine'
-          })
+          await life.body.logWorkout({ title: name, items: sportItems(data.workout), note: 'Sport Track' })
           window.dispatchEvent(new CustomEvent('life-body-changed'))
           window.dispatchEvent(new CustomEvent('life-wallet-changed'))
         } catch (err) {
