@@ -26,6 +26,7 @@ import { DisciplineMoments } from './DisciplineMoments'
 import { BenBubble } from './BenBubble'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
+import { reloadToday } from './todayEvents'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at once).
@@ -153,23 +154,28 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   }, [])
   const [wakeEdit, setWakeEdit] = useState(0) // "Fix wake-up" taps: opens the editor on Sleep
 
+  // The ⟳ in the top bar: a real sync of everything, not just phone events:
+  // your data (cloud database), Todoist, Google Calendar and phone events.
   const triggerMobileSync = async () => {
     if (isSyncingMobile) return
     setIsSyncingMobile(true)
     soundTick()
     try {
-      const res = await life.sync.pull()
-      if (res.errors && res.errors.length > 0) {
-        toast(`Sync notice: ${res.errors.join('; ')}`, 'bad')
-      } else if (res.eventsProcessed > 0) {
-        const streakInfo = res.restoredStreak > res.previousStreak ? ` · Streak healed: ${res.previousStreak} → ${res.restoredStreak} days!` : ''
-        toast(`⚡ Auto-Synced ${res.eventsProcessed} mobile events!${streakInfo}`, 'good')
-        soundFanfare()
-        onWallet()
-      } else {
-        toast(features.cloudflareSync ? 'Mobile Cloud Sync: Up to date! (0 pending)' : 'Synced: everything is up to date', 'good')
-        onWallet()
-        soundCoin()
+      window.dispatchEvent(new Event('life-desktop-retry'))
+      const [res, todo, cal] = await Promise.all([
+        life.sync.pull(),
+        life.todoist?.sync ? life.todoist.sync().then(() => true, () => false) : Promise.resolve(null),
+        reloadToday().then(() => true, () => false)
+      ])
+      window.dispatchEvent(new CustomEvent('life-external-changed'))
+      onWallet()
+      const failed = [todo === false && 'Todoist', cal === false && 'Google Calendar', ...(res.errors ?? [])].filter(Boolean)
+      if (failed.length) toast(`Synced, except: ${failed.join(', ')}`, 'bad')
+      else {
+        const streakInfo = res.restoredStreak > res.previousStreak ? ` · streak healed: ${res.previousStreak} → ${res.restoredStreak} days` : ''
+        toast(`Synced: data${todo ? ', Todoist' : ''}, calendar${res.eventsProcessed ? `, ${res.eventsProcessed} phone events` : ''}${streakInfo}`, 'good')
+        if (res.eventsProcessed > 0) soundFanfare()
+        else soundCoin()
       }
     } catch (e: any) {
       toast(`Sync failed: ${e?.message || 'Check connection'}`, 'bad')

@@ -13,6 +13,10 @@ const server = 'https://mega-system-ten.vercel.app'
 protocol.registerSchemesAsPrivileged([{ scheme: 'life-system', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
 // A separate folder preserves all data from the older Electron app.
 app.setPath('userData', app.commandLine.getSwitchValue('user-data-dir') || join(app.getPath('appData'), 'LifeSystem-CloudDesktop'))
+// Release check (LIFE_SMOKE=1): start, show the page, report, quit. The release
+// workflow runs this on Windows, so a version that doesn't open never ships.
+const smoke = process.env.LIFE_SMOKE === '1'
+if (smoke) setTimeout(() => app.exit(3), 90_000)
 // Only one copy runs; a second start just brings the first one forward.
 const firstCopy = app.requestSingleInstanceLock()
 if (!firstCopy) app.quit()
@@ -159,7 +163,7 @@ if (firstCopy) void app.whenReady().then(async () => {
   refreshTray = () => tray.setContextMenu(menu())
   tray.on('click', () => showApp())
   // First run of an installed copy: start with Windows (you can turn it off in the tray).
-  if (app.isPackaged && !existsSync(join(dir, 'login-item.json'))) {
+  if (app.isPackaged && !smoke && !existsSync(join(dir, 'login-item.json'))) {
     app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] })
     await writeFile(join(dir, 'login-item.json'), JSON.stringify({ setAt: new Date().toISOString() }))
     tray.setContextMenu(menu())
@@ -197,6 +201,15 @@ if (firstCopy) void app.whenReady().then(async () => {
   win.webContents.on('render-process-gone', (_e, d) => remember(`The window stopped (${d.reason}).`))
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => { if (isMain && code !== -3) remember(`It could not load (${desc}).`) })
   win.webContents.on('did-finish-load', async () => {
+    if (smoke) {
+      setTimeout(async () => {
+        const seen = await win.webContents.executeJavaScript('document.body.innerText.trim().length').catch(() => 0)
+        const ok = win.isVisible() && Number(seen) > 0
+        await writeFile(join(dir, 'smoke.txt'), `visible=${win.isVisible()} text=${seen}\n`).catch(() => {})
+        app.exit(ok ? 0 : 1)
+      }, 5000)
+      return
+    }
     try {
       const old = JSON.parse(await readFile(crashFile, 'utf8')) as { at: string; why: string }[]
       if (old.length) win.webContents.send('desktop:crashes', old)
@@ -215,7 +228,7 @@ if (firstCopy) void app.whenReady().then(async () => {
     if (retry) clearTimeout(retry)
     retry = s.state === 'error' ? setTimeout(() => void look(), 3 * 60_000) : null
   }
-  setTimeout(() => void look(), 20_000)
+  if (!smoke) setTimeout(() => void look(), 20_000)
   setInterval(() => void look(), 30 * 60_000)
   win.on('focus', () => {
     const at = updater.get().checkedAt
