@@ -1495,3 +1495,7 @@
 .cal-more-pop span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-more-pop small { color: var(--muted); }
 .cal-item.tiny { align-items: stretch; text-align: left; } .cal-item.tiny b { text-align: left; }
+.toast.has-action { display: flex; align-items: center; gap: 12px; }
+.toast-act { border: 0; border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 12.5px; font-weight: 700; background: var(--lime); color: var(--lime-ink); cursor: pointer; flex: none; }
+/* Toasts at the bottom center, above Ben's bubble (it sat on top of their buttons). */
+.toasts { right: auto; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 90; justify-items: center; width: max-content; max-width: calc(100vw - 32px); }

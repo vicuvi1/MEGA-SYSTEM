@@ -16,7 +16,7 @@ import { defaultAreaColor, sortTasks, type Area, type TodoTask } from '@core/tod
 import { life, type GoogleStatus } from '../bridge'
 import { Icon } from '../Icon'
 import type { PageId } from '../modules'
-import { useAction } from '../ui'
+import { useAction, useToast } from '../ui'
 import { useLive } from '../live'
 import { soundSuccess } from '../sound'
 
@@ -106,6 +106,8 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const [menu, setMenu] = useState<'cals' | 'templates' | null>(null)
   const [now, setNow] = useState(new Date())
   const drag = useRef<Drag | null>(null)
+  const pending = useRef(new Map<string, { start: string; end: string }>())
+  const toast = useToast()
   const gridRef = useRef<HTMLDivElement>(null)
   const ghostRef = useRef(ghost)
   ghostRef.current = ghost
@@ -126,7 +128,9 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     if (st?.connected) {
       const from = new Date(`${days[0]}T00:00:00`).toISOString()
       const to = new Date(`${addDays(days[days.length - 1], 1)}T00:00:00`).toISOString()
-      setEvents(await life.google!.events(from, to).catch(() => []))
+      const fresh = await life.google!.events(from, to).catch(() => null)
+      // Moves still on their way to Google keep their new time on screen.
+      if (fresh) setEvents(fresh.map((x) => pending.current.get(`${x.calendarId}:${x.id}`) ? { ...x, ...pending.current.get(`${x.calendarId}:${x.id}`)! } : x))
     }
     if (life.todoist?.everything && (await life.todoist.status().catch(() => ({ connected: false }))).connected) {
       setTodo(await life.todoist.everything().catch(() => null))
@@ -188,19 +192,39 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     }, `Planned: ${task.content} at ${hmOf(start)}`)
     if (ok) void load()
   }
-  const commitMove = async (it: Item, day: string, start: number, end: number) => {
+  /**
+   * Moves happen at once on screen; Google / Todoist are told in the
+   * background. A refresh meanwhile keeps showing the new time, a failure
+   * puts it back and says why, and every move can be undone.
+   */
+  const commitMove = (it: Item, day: string, start: number, end: number, undoable = true) => {
+    const wd = day === it.day ? '' : `${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })} `
+    const said = `${it.title}: ${wd}${hmOf(start)}–${hmOf(end)}`
+    const undo = undoable ? { label: 'Undo', run: () => commitMove({ ...it, day, start, end }, it.day, it.start, it.end, false) } : undefined
     if (it.kind === 'event' && it.event) {
       const e = it.event
       const s = isoAt(day, start)
       const en = isoAt(day, end)
+      const key = `${e.calendarId}:${e.id}`
+      pending.current.set(key, { start: s, end: en })
       setEvents((list) => list.map((x) => (x.id === e.id && x.calendarId === e.calendarId ? { ...x, start: s, end: en } : x)))
-      const wd = day === it.day ? '' : `${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })} `
-      const ok = await act(() => life.google!.move(e.calendarId, e.id, s, en).then(() => true), `${e.title}: ${wd}${hmOf(start)}–${hmOf(end)}`)
-      if (!ok) void load()
+      toast(undoable ? said : `Moved back: ${it.title}`, 'good', undo)
+      life.google!
+        .move(e.calendarId, e.id, s, en)
+        .catch((err: Error) => {
+          setEvents((list) => list.map((x) => (x.id === e.id && x.calendarId === e.calendarId ? { ...x, start: e.start, end: e.end } : x)))
+          toast(`Google didn't take that move (${err.message}). It's back where it was.`, 'bad')
+        })
+        .finally(() => pending.current.delete(key))
     } else if (it.task) {
-      setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === it.task!.id ? { ...x, due: day, dueTime: hmOf(start) } : x)) } : t))
-      const ok = await act(() => life.todoist!.update!(it.task!.id, { due: `${day} ${hmOf(start)}` }).then(() => true), `${it.title}: ${hmOf(start)}`)
-      if (!ok) void load()
+      const id = it.task.id
+      const before = { due: it.task.due, dueTime: it.task.dueTime }
+      setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === id ? { ...x, due: day, dueTime: hmOf(start) } : x)) } : t))
+      toast(undoable ? said : `Moved back: ${it.title}`, 'good', undo)
+      life.todoist!.update!(id, { due: `${day} ${hmOf(start)}` }).catch((err: Error) => {
+        setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === id ? { ...x, ...before } : x)) } : t))
+        toast(`Todoist didn't take that move (${err.message}). It's back where it was.`, 'bad')
+      })
     }
   }
   const createEvent = async (title: string, day: string, start: number, end: number, repeat: Repeat) => {
@@ -221,7 +245,21 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const commitRef = useRef(commitMove)
   commitRef.current = commitMove
   useEffect(() => {
-    const move = (e: PointerEvent) => {
+    let frame = 0
+    let last: PointerEvent | null = null
+    const move = (ev: PointerEvent) => {
+      last = ev
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        if (last) step(last)
+      })
+    }
+    const put = (g: NonNullable<typeof ghostRef.current>) => {
+      ghostRef.current = g
+      setGhost(g)
+    }
+    const step = (e: PointerEvent) => {
       const d = drag.current
       if (!d) return
       if (!d.moved && Math.abs(e.clientX - d.x0) + Math.abs(e.clientY - d.y0) < 5) return
@@ -232,14 +270,18 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       const m = minuteAt(e.clientY, col)
       if (d.kind === 'move') {
         const start = Math.max(START_H * 60, Math.min(END_H * 60 - d.len, m - d.offset))
-        setGhost({ day, start, end: start + d.len, title: d.item.title, color: d.item.color, key: d.item.key })
+        put({ day, start, end: start + d.len, title: d.item.title, color: d.item.color, key: d.item.key })
       } else if (d.kind === 'resize') {
-        setGhost({ day: d.item.day, start: d.item.start, end: Math.max(d.item.start + 15, m), title: d.item.title, color: d.item.color, key: d.item.key })
+        put({ day: d.item.day, start: d.item.start, end: Math.max(d.item.start + 15, m), title: d.item.title, color: d.item.color, key: d.item.key })
       } else {
-        setGhost({ day: d.day, start: Math.min(d.from, m), end: Math.max(d.from + 15, m), title: 'New event', color: 'var(--accent)' })
+        put({ day: d.day, start: Math.min(d.from, m), end: Math.max(d.from + 15, m), title: 'New event', color: 'var(--accent)' })
       }
     }
     const up = () => {
+      if (frame) cancelAnimationFrame(frame)
+      frame = 0
+      if (last && drag.current?.moved) step(last)
+      last = null
       const d = drag.current
       drag.current = null
       if (!d) return

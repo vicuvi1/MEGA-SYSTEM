@@ -2,15 +2,17 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LedgerEntry } from '@shared/api'
 
-type Toast = { id: number; text: string; tone: 'good' | 'bad' | 'info' }
-const ToastCtx = createContext<(text: string, tone?: Toast['tone']) => void>(() => {})
+/** A toast may carry one action (e.g. Undo); it then stays a little longer. */
+export type ToastAction = { label: string; run: () => void }
+type Toast = { id: number; text: string; tone: 'good' | 'bad' | 'info'; action?: ToastAction }
+const ToastCtx = createContext<(text: string, tone?: Toast['tone'], action?: ToastAction) => void>(() => {})
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
-  const push = useCallback((text: string, tone: Toast['tone'] = 'info') => {
+  const push = useCallback((text: string, tone: Toast['tone'] = 'info', action?: ToastAction) => {
     const id = Date.now() + Math.random()
-    setToasts((t) => [...t, { id, text, tone }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200)
+    setToasts((t) => [...t, { id, text, tone, action }])
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 6500 : 3200)
   }, [])
   return (
     <ToastCtx.Provider value={push}>
@@ -18,8 +20,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="toasts" role="status" aria-live="polite">
         <AnimatePresence>
           {toasts.map((t) => (
-            <motion.div key={t.id} className={`toast ${t.tone}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}>
+            <motion.div key={t.id} className={`toast ${t.tone} ${t.action ? 'has-action' : ''}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}>
               {t.text}
+              {t.action && (
+                <button
+                  className="toast-act"
+                  onClick={() => {
+                    t.action!.run()
+                    setToasts((x) => x.filter((y) => y.id !== t.id))
+                  }}
+                >
+                  {t.action.label}
+                </button>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
