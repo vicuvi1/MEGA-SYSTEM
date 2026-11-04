@@ -24,6 +24,7 @@ import { useAction, useToast } from './ui'
 import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
 import { PLAN_ITEM_COINS } from '@core/focus'
+import { BIG3_POINTS } from '../../main/points'
 
 interface Props {
   summary: Summary
@@ -271,7 +272,7 @@ export function DayFlow(props: Props) {
     setAllTasks((cur) => (cur ? cur.filter((x) => x.id !== t.id) : cur))
     setLeaving((l) => l.filter((x) => x !== t.id))
     const r = await act(() => life.todoist!.complete(t))
-    if (r) toast(`Done: ${t.content}${r.paid ? ' · +5 points' : ''}`, 'good')
+    if (r) toast(`Done: ${t.content}${r.paid ? ` · +${taskPts} points` : ''}`, 'good')
     if (r?.paid) soundCoin()
     refresh()
   }
@@ -886,7 +887,7 @@ export function DayFlow(props: Props) {
                   {p.done ? '✓' : ''}
                 </button>
                 <span className="dl-text">{p.text}</span>
-                <span className="tt-pts">+10 ⭐</span>
+                <span className="tt-pts">+{PLAN_ITEM_COINS} ⭐</span>
                 {!p.done && playBtn(p.text, subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text })}
               </li>
             ))}
@@ -921,7 +922,7 @@ export function DayFlow(props: Props) {
                     {b.done ? '✓' : ''}
                   </button>
                   <span className="dl-text">{b.text}</span>
-                  <span className="tt-pts">+25 ⭐</span>
+                  <span className="tt-pts">+{BIG3_POINTS} ⭐</span>
                   {!b.done && playBtn(b.text, subjectOf(b.text), null)}
                 </li>
               ))}

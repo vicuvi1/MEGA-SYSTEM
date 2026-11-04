@@ -1,4 +1,5 @@
 import { RestDayCard } from '../RestDay'
+import { usePoints } from '../usePoints'
 import { dayKey } from '@core/dates'
 import { useState } from 'react'
 import type { BodyMetricInput, BodyState, Exercise, WorkoutExerciseItem, WorkoutInput } from '@shared/api'
@@ -20,6 +21,7 @@ export function Body({
   onOpenSportApp?: () => void
 }) {
   const act = useAction()
+  const pts = usePoints()
   const [workoutOpen, setWorkoutOpen] = useState(false)
   const [metricOpen, setMetricOpen] = useState(false)
   const [exerciseOpen, setExerciseOpen] = useState(false)
@@ -148,7 +150,7 @@ export function Body({
           <div className="big">{state.streak} {state.streak === 1 ? 'day' : 'days'}</div>
           <span className="sub">
             {state.workoutDoneToday
-              ? 'Completed today (+10 coins paid)'
+              ? `Completed today (+${pts('body.workout_done', 10)} points paid)`
               : state.restToday
                 ? `😴 Rest day · streak kept · best ${state.bestStreak}`
                 : `Best streak: ${state.bestStreak} days · Ready for today`}
@@ -255,7 +257,7 @@ export function Body({
               style={{ background: 'linear-gradient(135deg, #f9d423, #ff4b1f)', color: '#050811', fontWeight: 800, padding: '7px 14px', fontSize: '12px' }}
               onClick={handleCompleteAllRoutine}
             >
-              ⚡ Complete all (+15 🪙 / +35 XP)
+              ⚡ Complete all (+{pts('body.workout_done', 10)} points)
             </button>
             {state.recentWorkouts.length > 0 && (
               <button

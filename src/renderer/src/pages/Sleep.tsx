@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { usePoints } from '../usePoints'
 import { motion } from 'framer-motion'
 import type { ConnectionsState, SleepLog, SleepSummary } from '@shared/api'
 import { life } from '../bridge'
@@ -229,6 +230,7 @@ function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
 }
 
 function NativeSleepView({ onWallet }: { onWallet: () => void }) {
+  const pts = usePoints()
   const [summary, setSummary] = useState<SleepSummary | null>(null)
   const [wakeTime, setWakeTime] = useState('')
   const [quality, setQuality] = useState(5)
@@ -303,7 +305,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
           <span className="label">This morning</span>
           <div className="big">{todayLog ? todayLog.wakeTime : '–'}</div>
           <span className="sub">
-            {todayLog ? (todayLog.onTime ? `On time (target ${todayLog.wakeTarget}) · +10 coins` : `Late (target ${todayLog.wakeTarget})`) : 'Not logged yet today'}
+            {todayLog ? (todayLog.onTime ? `On time (target ${todayLog.wakeTarget}) · +${pts('sleep.up_on_time', 10)} points` : `Late (target ${todayLog.wakeTarget})`) : 'Not logged yet today'}
           </span>
         </div>
         <div className="stat">
@@ -331,7 +333,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
             <h2>
               <Icon name="sun" /> Morning check-in
             </h2>
-            <span className="hint">Wake up by {summary.weekdayTarget} to earn +10 coins and +20 XP</span>
+            <span className="hint">Wake up by {summary.weekdayTarget} to earn +{pts('sleep.up_on_time', 10)} points</span>
           </header>
           {todayLog ? (
             <div className="empty small-empty">
@@ -371,7 +373,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
             <h2>
               <Icon name="moon" /> Bedtime check-in
             </h2>
-            <span className="hint">In bed on time earns +5 coins and +10 XP</span>
+            <span className="hint">In bed on time earns +{pts('sleep.bed_on_time', 5)} points</span>
           </header>
           {todayLog?.bedTime ? (
             <div className="empty small-empty">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { usePoints } from '../usePoints'
 import { motion } from 'framer-motion'
 import type { ConnectionsState, Expense, NativeMoneySummary } from '@shared/api'
 import { life } from '../bridge'
@@ -152,6 +153,7 @@ function FinanceHelperView({ f, onState }: { f: ConnectionsState['finance']; onS
 }
 
 function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
+  const pts = usePoints()
   const [summary, setSummary] = useState<NativeMoneySummary | null>(null)
   const [amountStr, setAmountStr] = useState('')
   const [category, setCategory] = useState('food')
@@ -258,7 +260,7 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
           <div className="big small-big">
             {today.underBudget ? 'Under' : today.everydaySpent > budget ? 'Over' : '–'}
           </div>
-          <span className="sub">{today.underBudget ? 'On track for +5 coins bonus' : 'Stay under budget'}</span>
+          <span className="sub">{today.underBudget ? `On track for +${pts('money.under_budget', 5)} points` : 'Stay under budget'}</span>
         </div>
       </section>
 
@@ -268,7 +270,7 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
             <h2>
               <Icon name="plus" /> Quick Expense Logger
             </h2>
-            <span className="hint">First log of the day pays +3 coins & +5 XP</span>
+            <span className="hint">First log of the day pays +{pts('money.logged', 3)} points</span>
           </header>
           <div className="log-form">
             <div className="row">
