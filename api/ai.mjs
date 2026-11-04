@@ -94,8 +94,12 @@ export const MODELS_KEY = 'ai_models'
 let chosen = null
 let chosenAt = 0
 /** {chat, deep}: the models you picked (null = automatic). Cached 30 s. */
+// Tests never read or write the real database (Vercel's build has its keys).
+const testing = (env) => !!(env.VITEST || process.env.VITEST)
+
 export async function chosenModels(env = process.env, fetchImpl = fetch) {
   if (chosen && Date.now() - chosenAt < 30_000) return chosen
+  if (testing(env)) return { chat: null, deep: null }
   const cfg = config(env)
   let v = { chat: null, deep: null }
   if (cfg.ok) {
@@ -115,6 +119,7 @@ export async function chosenModels(env = process.env, fetchImpl = fetch) {
 const USAGE_TABLE = `CREATE TABLE IF NOT EXISTS ai_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, model TEXT NOT NULL, kind TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, cost REAL)`
 const t = (v) => (v == null ? { type: 'null' } : typeof v === 'number' ? (Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v }) : { type: 'text', value: String(v) })
 export async function recordUsage(u, env = process.env, fetchImpl = fetch) {
+  if (testing(env)) return
   const cfg = config(env)
   if (!cfg.ok) return
   await turso(cfg, {
