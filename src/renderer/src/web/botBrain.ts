@@ -254,7 +254,7 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
   const sl = s.sleep
   const input = s.progress.input(financeSpending(extra.finance), now)
   const report = progressReport(input)
-  const wp = activePlan(s.weekPlan.saved(), today)
+  const wp = s.weekPlan.active()
   const wakes = input.wakes.filter((w) => w.day > addDays(today, -7)).sort((a, b) => (a.day < b.day ? -1 : 1))
   const lines = [
     `Now: ${now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}, ${now.toTimeString().slice(0, 5)}.`,

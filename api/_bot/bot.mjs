@@ -5428,6 +5428,8 @@ function payOnce(wallet, ref, coins, note, now = /* @__PURE__ */ new Date()) {
 }
 // src/main/weekPlan.ts
 var KEY$1 = "week_plan";
+/** One plan per week (Monday → plan), the last 26 weeks. */
+var ALL = "week_plans";
 var WeekPlanService = class {
 	db;
 	wallet;
@@ -5435,22 +5437,45 @@ var WeekPlanService = class {
 		this.db = db;
 		this.wallet = wallet;
 	}
-	/** The last plan saved (may be for an earlier week). */
-	saved() {
+	read(key) {
 		try {
-			return JSON.parse(getSetting(this.db, KEY$1) || "null");
+			return JSON.parse(getSetting(this.db, key) || "null");
 		} catch {
 			return null;
 		}
 	}
-	/** The plan for the week today is in, if one was made. */
+	/** Every saved week (older single-plan copies included). */
+	all() {
+		const map = { ...this.read(ALL) ?? {} };
+		const legacy = this.read(KEY$1);
+		if (legacy?.week && !map[legacy.week]) map[legacy.week] = legacy;
+		return map;
+	}
+	write(map, latest) {
+		const keep = Object.keys(map).sort().slice(-26);
+		setSetting(this.db, ALL, JSON.stringify(Object.fromEntries(keep.map((k) => [k, map[k]]))));
+		setSetting(this.db, KEY$1, JSON.stringify(latest));
+	}
+	/** The last plan saved (may be for next week on Sunday, or an earlier week). */
+	saved() {
+		return Object.values(this.all()).sort((a, b) => String(a.savedAt).localeCompare(String(b.savedAt))).pop() ?? null;
+	}
+	/** The plan for the week today is in (planning next week on Sunday never replaces it). */
 	active(now = /* @__PURE__ */ new Date()) {
-		return activePlan(this.saved(), this.wallet.today(now));
+		const today = this.wallet.today(now);
+		return activePlan(this.all()[currentWeek(today)] ?? null, today);
+	}
+	/** Past weeks, newest first (for the weekly review). */
+	history() {
+		return Object.values(this.all()).sort((a, b) => b.week.localeCompare(a.week));
 	}
 	save(p, now = /* @__PURE__ */ new Date()) {
 		const plan = cleanPlan(p, this.wallet.today(now), now);
 		if (!plan.big3.length) throw new LedgerError("Add at least one big task for the week");
-		setSetting(this.db, KEY$1, JSON.stringify(plan));
+		this.write({
+			...this.all(),
+			[plan.week]: plan
+		}, plan);
 		return plan;
 	}
 	/** Ticks (or unticks) one of the big 3. */
@@ -5458,7 +5483,10 @@ var WeekPlanService = class {
 		const plan = this.active(now);
 		if (!plan || !plan.big3[i]) throw new LedgerError("No such task in this week’s plan");
 		plan.big3[i].done = !plan.big3[i].done;
-		setSetting(this.db, KEY$1, JSON.stringify(plan));
+		this.write({
+			...this.all(),
+			[plan.week]: plan
+		}, plan);
 		if (plan.big3[i].done) payOnce(this.wallet, `week:${plan.week}:big${i}`, 25, `Week goal done: ${plan.big3[i].text}`, now);
 		return plan;
 	}
@@ -11746,7 +11774,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 	const sl = s.sleep;
 	const input = s.progress.input(financeSpending(extra.finance), now);
 	const report = progressReport(input);
-	const wp = activePlan(s.weekPlan.saved(), today);
+	const wp = s.weekPlan.active();
 	const wakes = input.wakes.filter((w) => w.day > addDays$1(today, -7)).sort((a, b) => a.day < b.day ? -1 : 1);
 	const lines = [
 		`Now: ${now.toLocaleDateString("en-GB", {
