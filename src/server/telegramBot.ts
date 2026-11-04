@@ -22,6 +22,8 @@ import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
+import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
+import { loadTriggers, urgeEvents } from '../renderer/src/web/disciplinePatterns'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, pollSporty, sportyUpdated, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
@@ -513,6 +515,20 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       setSetting(db as any, RHYTHM, JSON.stringify({ ...cur, selfReviewed: true }))
     })
     await bots.rhythm.selfReview().catch(() => null)
+  }
+  // Before your risky time (Ben learned it from when urges and resets happen): one heads-up.
+  if (f.prefs.on && !f.facts.paused) {
+    const risk = await mirror.read((db) => {
+      const w = upcomingRisk(riskWindows(urgeEvents(db), now), now, 60)
+      if (!w) return null
+      const key = `${f.facts.today}:${w.weekday ?? 'd'}:${w.slot}`
+      if (getSetting(db as any, 'discipline_warned') === key) return null
+      return { key, text: warningText(w, topTriggers(loadTriggers(db), now)[0]?.trigger ?? null, getSetting(db as any, 'discipline_stealth') === '1') }
+    })
+    if (risk) {
+      await mirror.write((db) => setSetting(db as any, 'discipline_warned', risk.key))
+      await send(risk.text)
+    }
   }
   const jobs = dueRhythm(f.state, f.prefs, f.facts)
   for (const job of jobs) {

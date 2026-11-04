@@ -7336,9 +7336,9 @@ var MONTHS$1 = [
 	"November",
 	"December"
 ];
-var pad$3 = (n) => String(n).padStart(2, "0");
+var pad$4 = (n) => String(n).padStart(2, "0");
 function toISO(d) {
-	return `${d.getFullYear()}-${pad$3(d.getMonth() + 1)}-${pad$3(d.getDate())}`;
+	return `${d.getFullYear()}-${pad$4(d.getMonth() + 1)}-${pad$4(d.getDate())}`;
 }
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
@@ -7349,7 +7349,7 @@ function monthLabel(key, short = false) {
 function addMonths(key, n) {
 	const [y, m] = key.split("-").map(Number);
 	const idx = y * 12 + (m - 1) + n;
-	return `${Math.floor(idx / 12)}-${pad$3(idx % 12 + 1)}`;
+	return `${Math.floor(idx / 12)}-${pad$4(idx % 12 + 1)}`;
 }
 function daysInMonth(key) {
 	const [y, m] = key.split("-").map(Number);
@@ -7402,13 +7402,13 @@ var MONTHS = {
 	"3months": 3,
 	year: 12
 };
-var pad$2 = (n) => String(n).padStart(2, "0");
+var pad$3 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays(rule.start, 14 * n);
 	const key = addMonths(monthKey(rule.start), (MONTHS[rule.every] || 1) * n);
-	return `${key}-${pad$2(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
+	return `${key}-${pad$3(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
 	const out = [];
@@ -8115,7 +8115,7 @@ function workText(state, amountBase, today) {
 	return formatWork(workHours(amountBase, r.rate));
 }
 // src/renderer/public/apps/finance/js/payyourself.js
-var pad$1 = (n) => String(n).padStart(2, "0");
+var pad$2 = (n) => String(n).padStart(2, "0");
 var toBase = (state, c, cur) => !cur || cur === state.settings.currency ? c : convert(c, cur, state.settings.currency, state.rates);
 function suggestSalary(state, today) {
 	const key = monthKey(today);
@@ -8139,7 +8139,7 @@ function suggestSalary(state, today) {
 		months: months.length
 	};
 }
-var salaryDate = (key, day = 1) => `${key}-${pad$1(Math.min(Math.max(1, day), daysInMonth(key)))}`;
+var salaryDate = (key, day = 1) => `${key}-${pad$2(Math.min(Math.max(1, day), daysInMonth(key)))}`;
 var salaryOf = (state, key) => state.tx.find((t) => t.type === "transfer" && t.salary === key) || null;
 function payStatus(state, today) {
 	if (!payOn(state)) return {
@@ -9608,6 +9608,133 @@ function parseWater(text, glass = 250) {
 	const n = Number(bare?.[1] ?? bare?.[2]);
 	return bare && n >= 100 && n <= 3e3 ? n : null;
 }
+// src/core/urgePatterns.ts
+var DAYS = [
+	"Sun",
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat"
+];
+var pad$1 = (n) => String(n % 24).padStart(2, "0");
+var W = {
+	urge: 1,
+	reset: 3
+};
+function recent(list, now, days = 90) {
+	const from = now.getTime() - days * 864e5;
+	return list.filter((e) => {
+		const t = Date.parse(e.ts ?? e.at);
+		return Number.isFinite(t) && t >= from && t <= now.getTime();
+	});
+}
+/** Your risky times, worst first (at most `max`). */
+function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
+	const daily = /* @__PURE__ */ new Map();
+	const weekly = /* @__PURE__ */ new Map();
+	const add = (m, k, e, date) => {
+		const a = m.get(k) ?? {
+			urges: 0,
+			resets: 0,
+			score: 0,
+			dates: /* @__PURE__ */ new Set()
+		};
+		a[e.kind === "urge" ? "urges" : "resets"]++;
+		a.score += W[e.kind];
+		a.dates.add(date);
+		m.set(k, a);
+	};
+	for (const e of recent(events, now)) {
+		const d = new Date(e.ts);
+		const slot = Math.floor(d.getHours() / 2);
+		const date = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+		add(daily, slot, e, date);
+		add(weekly, `${d.getDay()}:${slot}`, e, date);
+	}
+	const out = [];
+	const win = (slot, weekday, a) => ({
+		slot,
+		weekday,
+		from: `${pad$1(slot * 2)}:00`,
+		to: `${pad$1(slot * 2 + 2)}:00`,
+		urges: a.urges,
+		resets: a.resets,
+		score: a.score
+	});
+	for (const [slot, a] of daily) if (a.score >= 4 && a.dates.size >= 3) out.push(win(slot, null, a));
+	for (const [k, a] of weekly) {
+		const [wd, slot] = k.split(":").map(Number);
+		if (a.score >= 3 && a.dates.size >= 2 && !out.some((w) => w.weekday === null && w.slot === slot)) out.push(win(slot, wd, a));
+	}
+	return out.sort((a, b) => b.score - a.score || (a.weekday === null ? -1 : 1)).slice(0, max);
+}
+/** A risky window that is on now, or starts within `aheadMin` minutes. */
+function upcomingRisk(windows, now = /* @__PURE__ */ new Date(), aheadMin = 60) {
+	const minNow = now.getHours() * 60 + now.getMinutes();
+	for (const w of windows) {
+		if (w.weekday !== null && w.weekday !== now.getDay()) continue;
+		const start = w.slot * 120;
+		const until = start - minNow;
+		if (until >= 0 && until <= aheadMin || minNow >= start && minNow < start + 120) return w;
+	}
+	return null;
+}
+function windowLabel(w) {
+	return `${w.weekday === null ? "every day" : DAYS[w.weekday]} ${w.from}–${w.to}`;
+}
+/** What sets it off most (last 90 days). */
+function topTriggers(notes, now = /* @__PURE__ */ new Date(), max = 3) {
+	const n = /* @__PURE__ */ new Map();
+	for (const t of recent(notes, now)) if (t.trigger) n.set(t.trigger, (n.get(t.trigger) ?? 0) + (t.kind === "reset" ? 2 : 1));
+	return [...n.entries()].map(([trigger, k]) => ({
+		trigger,
+		n: k
+	})).sort((a, b) => b.n - a.n).slice(0, max);
+}
+/** Lines for Ben (empty when there's no pattern yet). */
+function patternLines(events, notes, now = /* @__PURE__ */ new Date()) {
+	const w = riskWindows(events, now);
+	const t = topTriggers(notes, now);
+	const lines = [];
+	if (w.length) lines.push(`Discipline danger times (last 90 days): ${w.map((x) => `${windowLabel(x)} (${x.urges} urges, ${x.resets} resets)`).join("; ")}.`);
+	if (t.length) lines.push(`What sets it off most: ${t.map((x) => x.trigger).join(", ")}.`);
+	return lines;
+}
+var TIP = {
+	"Late night, tired": "Lights out early tonight; no \"one more scroll\".",
+	"Phone in bed": "Phone charges outside the bedroom tonight.",
+	Bored: "Have the next thing ready to do (a task, a walk, a call).",
+	Stress: "When it hits: 20 push-ups, cold water on your face, 10 slow breaths.",
+	Alone: "Be around people or call someone for that stretch.",
+	"Social media": "Log out of the feed apps before it starts."
+};
+/** Ben's heads-up before a risky time (discreet when the streak is hidden). */
+function warningText(w, topTrigger, stealth = false) {
+	if (stealth) return `🛡️ Heads-up: a tough stretch is coming (${w.from}–${w.to}). Stay sharp, keep the plan.`;
+	const tip = topTrigger && TIP[topTrigger] || "Decide now what you will do instead, and keep your phone away.";
+	const what = [w.urges ? `${w.urges} urge${w.urges === 1 ? "" : "s"}` : "", w.resets ? `${w.resets} reset${w.resets === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ");
+	return `🛡️ <b>Heads-up</b>: ${w.from}–${w.to} is your risky time lately (${what}). ${tip}\nIf an urge hits: open the urge crusher, 3 minutes, you win.`;
+}
+function loadTriggers(db) {
+	try {
+		const v = JSON.parse(getSetting(db, "discipline_triggers") || "[]");
+		return Array.isArray(v) ? v.filter((x) => x && typeof x.trigger === "string" && typeof x.at === "string") : [];
+	} catch {
+		return [];
+	}
+}
+function urgeEvents(db) {
+	try {
+		return db.prepare("SELECT kind, ts FROM discipline_events WHERE kind IN ('urge', 'reset') ORDER BY id DESC LIMIT 400").all().map((r) => ({
+			kind: r.kind,
+			ts: r.ts
+		}));
+	} catch {
+		return [];
+	}
+}
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
 function loadMemory(db) {
@@ -9795,6 +9922,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 			return `Focus sessions felt ${avg.toFixed(1)}/5 on average this week (${r.length} rated)${reasons ? `; what got in the way: ${reasons}` : ""}.`;
 		})(),
 		`Discipline: clean streak Day ${disc.day ?? disc.current} (${disc.current} full clean days, best ${disc.best}; the day he sees everywhere is Day ${disc.day ?? disc.current}).`,
+		...patternLines(urgeEvents(db), loadTriggers(db), now),
 		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join("; ") || "none"}.`,
 		moneyContext(extra.finance, today),
 		...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc)
@@ -15812,6 +15940,22 @@ async function rhythmTick(env, now, send) {
 			}));
 		});
 		await bots.rhythm.selfReview().catch(() => null);
+	}
+	if (f.prefs.on && !f.facts.paused) {
+		const risk = await mirror.read((db) => {
+			const w = upcomingRisk(riskWindows(urgeEvents(db), now), now, 60);
+			if (!w) return null;
+			const key = `${f.facts.today}:${w.weekday ?? "d"}:${w.slot}`;
+			if (getSetting(db, "discipline_warned") === key) return null;
+			return {
+				key,
+				text: warningText(w, topTriggers(loadTriggers(db), now)[0]?.trigger ?? null, getSetting(db, "discipline_stealth") === "1")
+			};
+		});
+		if (risk) {
+			await mirror.write((db) => setSetting(db, "discipline_warned", risk.key));
+			await send(risk.text);
+		}
 	}
 	const jobs = dueRhythm(f.state, f.prefs, f.facts);
 	for (const job of jobs) if (job === "briefing") {

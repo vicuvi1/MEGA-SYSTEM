@@ -34,6 +34,8 @@ import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus } from './web/coachStatus'
 import { backupTables, restoreStatements } from '@core/backupPlan'
+import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
+import { addTrigger, loadTriggers, urgeEvents } from './web/disciplinePatterns'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport } from '@core/sportCards'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
@@ -872,7 +874,15 @@ export function createTursoWebBridge(): Bridge {
     money: S('money') as Bridge['money'],
     shields: S('shields') as Bridge['shields'],
     economy: S('economy') as Bridge['economy'],
-    discipline: S('discipline', { state: async () => withMan(await (await svcP).discipline.state()) }) as Bridge['discipline'],
+    discipline: S('discipline', {
+      state: async () => withMan(await (await svcP).discipline.state()),
+      note: async (kind: 'urge' | 'reset', trigger: string) => (await svcP).write((s) => addTrigger(s.db, { at: new Date().toISOString(), kind, trigger })),
+      patterns: async () =>
+        (await svcP).read((s) => ({
+          windows: riskWindows(urgeEvents(s.db)).map(windowLabel),
+          triggers: topTriggers(loadTriggers(s.db)).map((t) => t.trigger)
+        }))
+    }) as Bridge['discipline'],
     body: S('body', { state: async () => withSportTrack(await (await svcP).body.state()) }) as Bridge['body'],
     connections: {
       ...base.connections,

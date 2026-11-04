@@ -414,6 +414,10 @@ export interface LifeApi {
     finishUrge(): Promise<DisciplineState>
     cancelUrge(): Promise<DisciplineState>
     setStealth(on: boolean): Promise<DisciplineState>
+    /** What set off an urge / a reset (Ben learns your patterns from it). */
+    note?(kind: 'urge' | 'reset', trigger: string): Promise<void>
+    /** Your risky times and top triggers, in words. */
+    patterns?(): Promise<{ windows: string[]; triggers: string[] }>
   }
   body: {
     state(): Promise<BodyState>

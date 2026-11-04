@@ -18,6 +18,8 @@ import { planGoal, planLine } from '@core/goalPlan'
 import { readButtons, readShow } from '@core/coachButtons'
 import { cleanMind, findPatterns, focusBySubject, sleepDiary, weekAhead, type CoachMind } from '@core/coachMind'
 import { sharedView, sportToday } from '@core/sportShared'
+import { patternLines } from '@core/urgePatterns'
+import { loadTriggers, urgeEvents } from './disciplinePatterns'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -267,6 +269,7 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
       return `Focus sessions felt ${avg.toFixed(1)}/5 on average this week (${r.length} rated)${reasons ? `; what got in the way: ${reasons}` : ''}.`
     })(),
     `Discipline: clean streak Day ${disc.day ?? disc.current} (${disc.current} full clean days, best ${disc.best}; the day he sees everywhere is Day ${disc.day ?? disc.current}).`,
+    ...patternLines(urgeEvents(db), loadTriggers(db), now),
     `Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ''}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join('; ') || 'none'}.`,
     moneyContext(extra.finance, today),
     ...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc)

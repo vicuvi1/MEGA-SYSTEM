@@ -172,7 +172,10 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
                 onClick={async () => {
                   const s = await run(() => life.discipline.reset())
                   setConfirmReset(false)
-                  if (s) setComeback(true)
+                  if (s) {
+                    setComeback(true)
+                    window.dispatchEvent(new Event('life-discipline-reset-done'))
+                  }
                 }}
               >
                 Reset honestly
@@ -213,7 +216,10 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
             }}
             onFinish={async () => {
               const s = await run(() => life.discipline.finishUrge(), 'Urge crushed. You won that one.')
-              if (s) onUrgeOpen(false)
+              if (s) {
+                onUrgeOpen(false)
+                window.dispatchEvent(new Event('life-urge-won'))
+              }
             }}
           />
         )}

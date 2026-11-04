@@ -21,6 +21,7 @@ import { useUiPrefs } from './uiPrefs'
 import { useCoachUnread } from './coachUnread'
 import { NewVersionBar } from './newVersion'
 import { FocusIsland } from './FocusIsland'
+import { DisciplineMoments } from './DisciplineMoments'
 import { BenBubble } from './BenBubble'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
@@ -519,6 +520,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         {/* The desktop app has its own island at the top of the screen: one is enough. */}
         {!window.desktop?.islandState && <FocusIsland />}
         <BenBubble hidden={page === 'coach'} unread={coachUnread} onOpenChat={() => setPage('coach')} />
+        <DisciplineMoments onOpenChat={() => setPage('coach')} />
         <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">
             <h1>{current.label}</h1>

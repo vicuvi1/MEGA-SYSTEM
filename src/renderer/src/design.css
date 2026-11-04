@@ -1206,7 +1206,7 @@
 .dbar-space { flex: 1; }
 .dbar-btn { border: 0; border-radius: 999px; padding: 4px 12px; background: rgb(var(--ink) / 0.08); color: var(--text); font-weight: 600; }
 .dbar-btn:hover { background: rgb(var(--ink) / 0.14); }
-.dbar-btn.primary { background: var(--accent); color: var(--accent-text, #111); }
+.dbar-btn.primary { background: var(--lime); color: var(--lime-ink); }
 .dbar-icon { border: 0; width: 26px; height: 26px; border-radius: 50%; background: transparent; color: var(--muted); font-size: 14px; }
 .dbar-icon:hover { background: rgb(var(--ink) / 0.08); color: var(--text); }
 
@@ -1244,3 +1244,17 @@
   .td2 .cmd-side > .tl .tl-list { max-height: none; flex: 1; min-height: 0; overflow-y: auto; }
   .td2 .cmd-side:has(> .td-fold[open]) > .tl { flex: 0 1 auto; max-height: 62%; }
 }
+
+/* Discipline moments: what set it off / the 72-hour plan */
+.dm-scrim { position: fixed; inset: 0; z-index: 140; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 0.55); backdrop-filter: blur(6px); animation: pg-rise 0.25s ease both; }
+.dm-card { width: min(520px, 100%); max-height: calc(100vh - 60px); overflow-y: auto; background: var(--surface); border-radius: 22px; padding: 24px; box-shadow: 0 30px 80px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(var(--ink) / 0.08); text-align: center; }
+.dm-emoji { font-size: 34px; display: block; margin-bottom: 6px; }
+.dm-card h3 { margin: 0 0 6px; font-size: 19px; }
+.dm-card p { margin: 0 auto 16px; color: var(--muted); max-width: 400px; line-height: 1.5; }
+.dm-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; }
+.dm-chips button { border: 0; cursor: pointer; font: inherit; padding: 9px 14px; border-radius: 999px; background: rgb(var(--ink) / 0.07); color: var(--text); transition: background 0.15s, transform 0.1s; }
+.dm-chips button:hover { background: var(--lime); color: var(--lime-ink); }
+.dm-chips button:active { transform: scale(0.96); }
+.dm-wait { color: var(--muted); font-style: italic; }
+.dm-plan { text-align: left; white-space: pre-wrap; line-height: 1.55; background: rgb(var(--ink) / 0.04); border-radius: 14px; padding: 14px 16px; margin: 4px 0 14px; }
+.dm-actions { display: flex; gap: 8px; justify-content: center; }

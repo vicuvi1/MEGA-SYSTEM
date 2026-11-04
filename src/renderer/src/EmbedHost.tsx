@@ -274,6 +274,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         } else if (action === 'MAN_RESET') {
           await life.discipline.reset()
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'reset', ...payload } }))
+          window.dispatchEvent(new Event('life-discipline-reset-done'))
         } else if (action === 'MAN_SET_STREAK') {
           const streak = Math.max(0, Number(payload?.streakDays) || 0)
           const d = await life.discipline.state()
@@ -369,6 +370,14 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           if (typeof args[0] === 'string' && args[0].startsWith('LIFE_SYSTEM_BRIDGE:')) onConsole({ message: args[0] })
         }
         const doc = w.document
+        // MAN's urge crusher: counted in Life System too (time + what set it off).
+        doc.getElementById('btn-open-urge')?.addEventListener('click', () => void life.discipline.startUrge().catch(() => {}))
+        doc.getElementById('btn-conquer-urge')?.addEventListener('click', () => {
+          life.discipline
+            .finishUrge()
+            .then(() => window.dispatchEvent(new Event('life-urge-won')))
+            .catch(() => void life.discipline.cancelUrge().catch(() => {}))
+        })
         if (!doc.getElementById('life-fit')) {
           const st = doc.createElement('style')
           st.id = 'life-fit'
