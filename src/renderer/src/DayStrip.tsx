@@ -1,6 +1,6 @@
-// Today as one strip across the page: your day from 06:00 to midnight, a
-// "now" line, and every block where it really is.
-// - Drag a block sideways to move it, pull its right edge to change its
+// Today as one column on the right: your day from 06:00 to midnight running
+// down, a "now" line, and every block where it really is.
+// - Drag a block up or down to move it, pull its bottom edge to change its
 //   length (15-minute steps): it moves at once, Google catches up, Undo.
 // - ✓ on a block marks it done in one click; click it for Done / Skip /
 //   ±15 min / Start focus.
@@ -9,6 +9,7 @@
 // - Free time shows as "free 1h"; click to fill it with your top task.
 // - Running late? Shift everything after now by 15 / 30 / 60 minutes.
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { layoutDay } from '@core/calLayout'
 import { addBlockTask, blockTasks } from '@core/blockTasks'
 import { blockState, blockSubject, freeGaps, isFocusBlock, localDay, localHM, planKept, type BlockState, type CalEvent } from '@core/dayTime'
@@ -22,13 +23,15 @@ import { useAction, useToast } from './ui'
 
 const START_H = 6
 const END_H = 24
-const PX = 86 // pixels per hour
-const LANE_TOP = 24 // under the hour labels
-const LANES_H = 104 // the height the blocks share
+const PX = 64 // pixels per hour (down the column)
+const LANE_LEFT = 42 // right of the hour labels
+const LANE_RIGHT = 6
 const pad = (n: number) => String(n).padStart(2, '0')
 const toMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
 const hmOf = (m: number) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`
-const xOf = (m: number) => ((m - START_H * 60) / 60) * PX
+const yOf = (m: number) => ((m - START_H * 60) / 60) * PX
+/** A left/width share (0–100) of the lanes, as CSS. */
+const lane = (pct: number) => `calc(${LANE_LEFT}px + (100% - ${LANE_LEFT + LANE_RIGHT}px) * ${pct / 100})`
 const iso = (day: string, m: number) => (m >= 24 * 60 ? new Date(`${day}T23:59:00`).toISOString() : new Date(`${day}T${hmOf(m)}:00`).toISOString())
 
 interface Block {
@@ -41,7 +44,7 @@ interface Block {
   task?: TodoTask
 }
 
-type Drag = { kind: 'move' | 'resize'; b: Block; x0: number; moved: boolean; offset: number; el: HTMLElement | null }
+type Drag = { kind: 'move' | 'resize'; b: Block; y0: number; moved: boolean; offset: number; el: HTMLElement | null }
 
 export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: TodoTask, startMin: number) => void }) {
   const act = useAction()
@@ -57,7 +60,9 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   const setMenu = (k: string | null, el?: HTMLElement | null) => {
     if (!k || !el) return setMenuRaw(null)
     const r = el.getBoundingClientRect()
-    setMenuRaw({ key: k, x: Math.min(window.innerWidth - 250, Math.max(8, r.left)), y: r.bottom + 6 })
+    // Beside the block (left of it: the column sits on the right), kept on screen.
+    const x = r.left - 246 > 8 ? r.left - 246 : Math.min(window.innerWidth - 250, r.right + 6)
+    setMenuRaw({ key: k, x, y: Math.max(8, Math.min(window.innerHeight - 160, r.top)) })
   }
   // Click anywhere else, scroll or Escape closes the menu.
   useEffect(() => {
@@ -89,7 +94,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   // Open on now (an hour before it), not at 06:00.
   useEffect(() => {
     const el = scroller.current
-    if (el) el.scrollLeft = Math.max(0, xOf(new Date().getHours() * 60 - 60))
+    if (el) el.scrollTop = Math.max(0, yOf(new Date().getHours() * 60 - 60))
   }, [])
 
   const nowMin = new Date(now).getHours() * 60 + new Date(now).getMinutes()
@@ -194,20 +199,20 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     if (await act(() => life.focus.start(blockSubject(b.title), minutes, b.task ? { kind: 'todoist', ref: b.task.id, title: b.task.content } : null), `Focus: ${b.title} · ${minutes} min`)) setMenu(null)
   }
 
-  // ---- Pointer drag (sideways) -------------------------------------------
-  const minuteAt = (clientX: number) => {
+  // ---- Pointer drag (up and down) ----------------------------------------
+  const minuteAt = (clientY: number) => {
     const el = scroller.current
     if (!el) return 0
-    const x = clientX - el.getBoundingClientRect().left + el.scrollLeft
-    return Math.max(START_H * 60, Math.min(END_H * 60, START_H * 60 + Math.round(((x / PX) * 60) / 15) * 15))
+    const y = clientY - el.getBoundingClientRect().top + el.scrollTop
+    return Math.max(START_H * 60, Math.min(END_H * 60, START_H * 60 + Math.round(((y / PX) * 60) / 15) * 15))
   }
   useEffect(() => {
     const onMove = (ev: PointerEvent) => {
       const d = drag.current
       if (!d) return
-      if (!d.moved && Math.abs(ev.clientX - d.x0) < 5) return
+      if (!d.moved && Math.abs(ev.clientY - d.y0) < 5) return
       d.moved = true
-      const m = minuteAt(ev.clientX)
+      const m = minuteAt(ev.clientY)
       const g = d.kind === 'move' ? { key: d.b.key, start: Math.max(START_H * 60, Math.min(END_H * 60 - (d.b.end - d.b.start), m - d.offset)), end: 0 } : { key: d.b.key, start: d.b.start, end: Math.max(d.b.start + 15, m) }
       if (d.kind === 'move') g.end = g.start + (d.b.end - d.b.start)
       ghostRef.current = g
@@ -234,7 +239,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   const startDrag = (ev: React.PointerEvent, b: Block, kind: 'move' | 'resize') => {
     if (ev.button !== 0 || (ev.target as HTMLElement).closest('.ds-tick, .ds-menu')) return
     ev.stopPropagation()
-    drag.current = { kind, b, x0: ev.clientX, moved: false, offset: minuteAt(ev.clientX) - b.start, el: (ev.currentTarget as HTMLElement).closest('.ds-block') }
+    drag.current = { kind, b, y0: ev.clientY, moved: false, offset: minuteAt(ev.clientY) - b.start, el: (ev.currentTarget as HTMLElement).closest('.ds-block') }
   }
 
   // ---- Tasks dropped from the list ----------------------------------------
@@ -248,10 +253,10 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     }
   }
 
-  const width = (END_H - START_H) * PX
-  const nowX = xOf(nowMin)
+  const height = (END_H - START_H) * PX
+  const nowY = yOf(nowMin)
   return (
-    <section className="ds" aria-label="Your day">
+    <section className="ds ds-v" aria-label="Your day">
       <header className="ds-head">
         <b>Your day</b>
         {kept.pct != null && <span className={`ds-kept ${kept.pct >= 70 ? 'good' : ''}`}>Plan kept {kept.pct}% · {kept.done}/{kept.total}</span>}
@@ -271,12 +276,12 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
       <div className="ds-scroll" ref={scroller}>
         <div
           className={`ds-track ${dropAt ? 'dropping' : ''}`}
-          style={{ width, height: LANE_TOP + LANES_H + 26 }}
+          style={{ height }}
           onDragOver={(ev) => {
             if (!connected) return
             ev.preventDefault()
             const key = (ev.target as HTMLElement).closest<HTMLElement>('.ds-block[data-key]')?.dataset.key ?? null
-            const m = minuteAt(ev.clientX)
+            const m = minuteAt(ev.clientY)
             if (dropAt?.key !== key || dropAt?.min !== m) setDropAt({ key, min: m })
           }}
           onDragLeave={(ev) => !(ev.currentTarget as HTMLElement).contains(ev.relatedTarget as Node) && setDropAt(null)}
@@ -285,7 +290,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
             const t = taskFrom(ev)
             const target = dropAt?.key ? blocks.find((b) => b.key === dropAt.key && b.event) : null
             // Where the drop line was while dragging (some drops report no position).
-            const at = dropAt?.min ?? (ev.clientX ? minuteAt(ev.clientX) : null)
+            const at = dropAt?.min ?? (ev.clientY ? minuteAt(ev.clientY) : null)
             setDropAt(null)
             if (!t || at == null) return
             if (target) group(t, target)
@@ -293,12 +298,12 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
           }}
         >
           {Array.from({ length: END_H - START_H }, (_, i) => (
-            <span key={i} className="ds-hour" style={{ left: i * PX }}>
+            <span key={i} className="ds-hour" style={{ top: i * PX }}>
               {pad(START_H + i)}
             </span>
           ))}
           {gaps.map((g) => (
-            <button key={g.start} className="ds-gap" style={{ left: xOf(toMin(g.start)) + 2, width: Math.max(28, xOf(toMin(g.end)) - xOf(toMin(g.start)) - 4) }} onClick={() => onBook(tasks.find((t) => !t.dueTime) ?? tasks[0], toMin(g.start))} title="Fill this with your top task" disabled={!tasks.length}>
+            <button key={g.start} className="ds-gap" style={{ top: yOf(toMin(g.start)) + 2, height: Math.max(22, yOf(toMin(g.end)) - yOf(toMin(g.start)) - 4) }} onClick={() => onBook(tasks.find((t) => !t.dueTime) ?? tasks[0], toMin(g.start))} title="Fill this with your top task" disabled={!tasks.length}>
               free {g.minutes >= 60 ? `${Math.floor(g.minutes / 60)}h${g.minutes % 60 ? ` ${g.minutes % 60}m` : ''}` : `${g.minutes}m`}
             </button>
           ))}
@@ -313,8 +318,8 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
               <div
                 key={b.key}
                 data-key={b.key}
-                className={`ds-block ${backdrop ? 'band' : ''} ${b.task ? 'task' : ''} ${done ? 'done' : ''} ${st === 'skipped' ? 'skipped' : ''} ${st === 'now' ? 'now' : ''} ${g ? 'dragging' : ''} ${dropAt?.key === b.key ? 'drop' : ''}`}
-                style={{ left: xOf(s) + 1, width: Math.max(18, xOf(e) - xOf(s) - 2), top: LANE_TOP + (left / 100) * LANES_H, height: (w / 100) * LANES_H - 4, ['--c' as string]: b.color }}
+                className={`ds-block ${backdrop ? 'band' : ''} ${b.task ? 'task' : ''} ${done ? 'done' : ''} ${st === 'skipped' ? 'skipped' : ''} ${st === 'now' ? 'now' : ''} ${g ? 'dragging' : ''} ${yOf(e) - yOf(s) < 38 ? 'short' : ''} ${dropAt?.key === b.key ? 'drop' : ''}`}
+                style={{ top: yOf(s) + 1, height: Math.max(16, yOf(e) - yOf(s) - 2), left: lane(left), width: `calc((100% - ${LANE_LEFT + LANE_RIGHT}px) * ${w / 100} - 3px)`, ['--c' as string]: b.color }}
                 onPointerDown={(ev) => startDrag(ev, b, 'move')}
                 title={`${b.title} · ${hmOf(s)}–${hmOf(e)}${bt.length ? ` · ${bt.length} tasks` : ''}`}
               >
@@ -333,12 +338,12 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
             )
           })}
           {lay.more.map((m) => (
-            <span key={`m${m.start}`} className="ds-more" style={{ left: xOf(m.start) + 1, top: LANE_TOP + (m.left / 100) * LANES_H }} title={m.items.map((x) => x.title).join(', ')}>
+            <span key={`m${m.start}`} className="ds-more" style={{ top: yOf(m.start) + 1, left: lane(m.left) }} title={m.items.map((x) => x.title).join(', ')}>
               +{m.items.length}
             </span>
           ))}
-          {dropAt && !dropAt.key && <i className="ds-drop" style={{ left: xOf(dropAt.min) }} />}
-          {nowMin >= START_H * 60 && <i className="ds-now" style={{ left: nowX }} />}
+          {dropAt && !dropAt.key && <i className="ds-drop" style={{ top: yOf(dropAt.min) }} />}
+          {nowMin >= START_H * 60 && <i className="ds-now" style={{ top: nowY }} />}
         </div>
       </div>
       {menu &&
@@ -346,7 +351,8 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
           const b = blocks.find((x) => x.key === menu.key)
           if (!b) return null
           const st = stateOf(b)
-          return (
+          // On the page itself: a moved parent would carry a fixed menu off screen.
+          return createPortal(
             <div className="ds-menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(ev) => ev.stopPropagation()}>
               <b className="ds-menu-title">{b.title}</b>
               <button onClick={() => void mark(b, st === 'done' ? null : 'done').then(() => setMenu(null))}>{st === 'done' ? 'Not done' : '✓ Done'}</button>
@@ -357,10 +363,11 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
               <button className="go" onClick={() => void startFocus(b)}>
                 ▶ Start
               </button>
-            </div>
+            </div>,
+            document.body
           )
         })()}
-      <p className="hint small ds-tip">Drag to move · pull the right edge to resize · ✓ to mark done · drop a task here to book it, or onto a block to add it</p>
+      <p className="hint small ds-tip">Drag to move · pull the bottom edge to resize · ✓ to mark done · drop a task here to book it, or onto a block to add it</p>
     </section>
   )
 }

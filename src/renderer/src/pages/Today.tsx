@@ -191,7 +191,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
       <QuickCapture />
       <DeepWork />
-      {on.some((x) => x.id === 'timeline') && <TodayStrip />}
       <div className="cmd">
         <div className="cmd-main">
           {on.filter((x) => MAIN.includes(x.id)).map((x) => (
@@ -212,6 +211,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
           )}
         </div>
         <aside className="cmd-side">
+          {on.some((x) => x.id === 'timeline') && <TodayStrip />}
           <WeekStrip />
           {on.filter((x) => SIDE.includes(x.id)).map((x) => (
             <Fragment key={x.id}>{sections[x.id]()}</Fragment>
