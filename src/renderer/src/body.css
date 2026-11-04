@@ -341,3 +341,6 @@
   color: #fff;
   transform: translateY(-1px);
 }
+
+.sporty-remove { margin-left: 6px; border: none; background: none; color: var(--muted); opacity: 0; cursor: pointer; font-size: 11px; padding: 0 4px; }
+.sporty-routine-item:hover .sporty-remove, .sporty-remove:focus-visible { opacity: 0.8; }

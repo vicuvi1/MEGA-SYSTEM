@@ -74,17 +74,11 @@ export class Body {
 
   exercises(): Exercise[] {
     let rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
-    if (rows.length === 0) {
+    // The starter exercises only on a brand-new install (one you removed stays removed).
+    const any = (this.db.prepare('SELECT COUNT(*) AS n FROM exercises').get() as { n: number }).n
+    if (rows.length === 0 && !any) {
       for (const ex of DEFAULT_EXERCISES) {
         this.saveExercise(ex)
-      }
-      rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
-    } else {
-      const existingIds = new Set(rows.map((r) => r.id))
-      for (const ex of DEFAULT_EXERCISES.slice(0, 3)) {
-        if (!existingIds.has(ex.id)) {
-          this.saveExercise(ex)
-        }
       }
       rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
     }
@@ -105,15 +99,15 @@ export class Body {
     const sort = ex.sort ?? 99
     this.db.prepare(
       `INSERT INTO exercises (id, name, unit, target, category, sort, archived)
-       VALUES (?, ?, ?, ?, ?, ?, 0)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          unit = excluded.unit,
          target = excluded.target,
          category = excluded.category,
          sort = excluded.sort,
-         archived = 0`
-    ).run(id, ex.name.trim(), ex.unit || 'reps', Math.max(1, ex.target || 10), ex.category || 'calisthenics', sort)
+         archived = excluded.archived`
+    ).run(id, ex.name.trim(), ex.unit || 'reps', Math.max(1, ex.target || 10), ex.category || 'calisthenics', sort, (ex as { archived?: boolean }).archived ? 1 : 0)
   }
 
   workouts(limit = 100): Workout[] {
@@ -130,7 +124,8 @@ export class Body {
   }
 
   metrics(limit = 60): BodyMetric[] {
-    const rows = this.db.prepare('SELECT day, weight, waist, note, updated_at FROM body_metrics ORDER BY day ASC LIMIT ?').all(limit) as DbMetricRow[]
+    // The newest `limit` days, oldest first (the latest weight keeps moving after 100 days).
+    const rows = (this.db.prepare('SELECT day, weight, waist, note, updated_at FROM body_metrics ORDER BY day DESC LIMIT ?').all(limit) as DbMetricRow[]).reverse()
     return rows.map((r) => ({
       day: r.day,
       weight: r.weight,

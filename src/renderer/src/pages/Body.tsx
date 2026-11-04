@@ -50,14 +50,17 @@ export function Body({
   // Calculate today's completed reps per exercise
   const todayWorkouts = state.recentWorkouts.filter((w) => w.day === todayKey)
   const doneMap: Record<string, number> = {}
+  // Each item counts once, under its id and (if different) its name.
+  const canon = (x: string) => (x || '').toLowerCase().replace(/[^a-z0-9]/g, '')
   for (const w of todayWorkouts) {
     for (const it of w.items) {
-      const key = (it.exerciseId || it.name || '').toLowerCase()
-      doneMap[key] = (doneMap[key] || 0) + it.amount
-      const cleanKey = key.replace(/[^a-z0-9]/g, '')
-      if (cleanKey) doneMap[cleanKey] = (doneMap[cleanKey] || 0) + it.amount
+      const keys = [...new Set([canon(it.exerciseId), canon(it.name)].filter(Boolean))]
+      for (const k of keys) doneMap[k] = (doneMap[k] || 0) + it.amount
     }
   }
+  const doneOf = (ex: { id: string; name: string }) => doneMap[canon(ex.id)] || doneMap[canon(ex.name)] || 0
+  // The routine is what the card shows.
+  const routine = state.exercises.slice(0, 3)
 
   const handleQuickLog = async (ex: Exercise, amount: number) => {
     const next = await act(
@@ -77,23 +80,14 @@ export function Body({
   }
 
   const handleCompleteAllRoutine = async () => {
-    const activeExercises = state.exercises.length > 0 ? state.exercises : [
-      { id: 'situps', name: 'Sit-ups', target: 60, unit: 'reps', category: 'calisthenics', sort: 0 },
-      { id: 'pushups', name: 'Push-ups', target: 123, unit: 'reps', category: 'calisthenics', sort: 1 },
-      { id: 'press', name: 'press', target: 50, unit: 'reps', category: 'calisthenics', sort: 2 }
-    ]
-
-    const items: WorkoutExerciseItem[] = activeExercises.map((ex) => {
-      const target = shortOnTime ? Math.max(1, Math.round(ex.target * 0.5)) : ex.target
-      const done = doneMap[ex.id] || doneMap[ex.name.toLowerCase().replace(/[^a-z0-9]/g, '')] || 0
-      const remaining = Math.max(0, target - done)
-      return {
-        exerciseId: ex.id,
-        name: ex.name,
-        amount: remaining > 0 ? remaining : target,
-        unit: ex.unit as any
-      }
-    })
+    // Only what's left of the exercises on the card (nothing twice when it's all done).
+    const items: WorkoutExerciseItem[] = routine
+      .map((ex) => {
+        const target = shortOnTime ? Math.max(1, Math.round(ex.target * 0.5)) : ex.target
+        return { exerciseId: ex.id, name: ex.name, amount: Math.max(0, target - doneOf(ex)), unit: ex.unit as any }
+      })
+      .filter((it) => it.amount > 0)
+    if (!items.length) return void act(async () => true, 'Already done today 💪')
 
     const next = await act(
       () =>
@@ -274,9 +268,9 @@ export function Body({
         </div>
 
         <div className="sporty-routine-grid">
-          {state.exercises.slice(0, 3).map((ex) => {
+          {routine.map((ex) => {
             const target = shortOnTime ? Math.max(1, Math.round(ex.target * 0.5)) : ex.target
-            const done = doneMap[ex.id] || doneMap[ex.name.toLowerCase().replace(/[^a-z0-9]/g, '')] || 0
+            const done = doneOf(ex)
             const actualPct = target > 0 ? Math.round((done / target) * 100) : 0
             const isDone = done >= target
             const isOver = done > target
@@ -286,7 +280,20 @@ export function Body({
             return (
               <div key={ex.id} className={`sporty-routine-item ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}`}>
                 <div className="sporty-item-top">
-                  <span className="sporty-item-name">{ex.name}</span>
+                  <span className="sporty-item-name">
+                    {ex.name}
+                    <button
+                      className="sporty-remove"
+                      title={`Take ${ex.name} off the routine`}
+                      aria-label={`Remove ${ex.name}`}
+                      onClick={async () => {
+                        const next = await act(() => life.body.saveExercise({ ...ex, archived: true } as any), `${ex.name} taken off the routine`)
+                        if (next) onState(next)
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </span>
                   <span className="sporty-item-progress-text">
                     {done} / {target} {unit}{shortOnTime ? ' (50%)' : ''} {isOver ? `🔥 (${actualPct}%)` : isDone ? `✓ (${actualPct}%)` : `(${actualPct}%)`}
                   </span>

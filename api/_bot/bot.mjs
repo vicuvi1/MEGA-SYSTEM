@@ -2064,12 +2064,9 @@ var Body = class {
 	}
 	exercises() {
 		let rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
-		if (rows.length === 0) {
+		const any = this.db.prepare("SELECT COUNT(*) AS n FROM exercises").get().n;
+		if (rows.length === 0 && !any) {
 			for (const ex of DEFAULT_EXERCISES$1) this.saveExercise(ex);
-			rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
-		} else {
-			const existingIds = new Set(rows.map((r) => r.id));
-			for (const ex of DEFAULT_EXERCISES$1.slice(0, 3)) if (!existingIds.has(ex.id)) this.saveExercise(ex);
 			rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
 		}
 		return rows.map((r) => ({
@@ -2087,14 +2084,14 @@ var Body = class {
 		const id = ex.id?.trim() || ex.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
 		const sort = ex.sort ?? 99;
 		this.db.prepare(`INSERT INTO exercises (id, name, unit, target, category, sort, archived)
-       VALUES (?, ?, ?, ?, ?, ?, 0)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          unit = excluded.unit,
          target = excluded.target,
          category = excluded.category,
          sort = excluded.sort,
-         archived = 0`).run(id, ex.name.trim(), ex.unit || "reps", Math.max(1, ex.target || 10), ex.category || "calisthenics", sort);
+         archived = excluded.archived`).run(id, ex.name.trim(), ex.unit || "reps", Math.max(1, ex.target || 10), ex.category || "calisthenics", sort, ex.archived ? 1 : 0);
 	}
 	workouts(limit = 100) {
 		return this.db.prepare("SELECT id, day, ts, title, items_json, note, ledger_id FROM workouts ORDER BY ts DESC LIMIT ?").all(limit).map((r) => ({
@@ -2108,7 +2105,7 @@ var Body = class {
 		}));
 	}
 	metrics(limit = 60) {
-		return this.db.prepare("SELECT day, weight, waist, note, updated_at FROM body_metrics ORDER BY day ASC LIMIT ?").all(limit).map((r) => ({
+		return this.db.prepare("SELECT day, weight, waist, note, updated_at FROM body_metrics ORDER BY day DESC LIMIT ?").all(limit).reverse().map((r) => ({
 			day: r.day,
 			weight: r.weight,
 			waist: r.waist,
