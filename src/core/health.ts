@@ -57,7 +57,7 @@ function okErr(id: string, label: string, b: Beat | undefined, now: Date, never:
   if (!b || (!b.ok && !b.err)) return { id, label, ok: true, detail: never }
   const errNewer = !!b.err && (!b.ok || b.err.at > b.ok)
   const hint = errNewer ? keyHint(id, b.err!.msg) : null
-  if (errNewer) return { id, label, ok: false, detail: hint ? `${hint} (since ${ago(now, b.err!.at)})` : `Failing since ${ago(now, b.err!.at)}: ${b.err!.msg.slice(0, 140)}`, since: b.err!.at }
+  if (errNewer) return { id, label, ok: false, detail: hint ? `${hint}. Since ${ago(now, b.err!.at)}: ${b.err!.msg.slice(0, 80)}` : `Failing since ${ago(now, b.err!.at)}: ${b.err!.msg.slice(0, 140)}`, since: b.err!.at }
   return { id, label, ok: true, detail: `OK, last ${ago(now, b.ok!)}` }
 }
 
