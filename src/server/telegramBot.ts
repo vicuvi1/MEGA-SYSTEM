@@ -235,7 +235,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { services, mirror } = await botsFor(env)
   // The daily rhythm (the tick) sends the morning plan and the evening and Sunday reviews now.
-  if (job === 'morning' || job === 'reask' || job === 'evening') {
+  if (job === 'morning' || job === 'reask' || job === 'evening' || job === 'midday') {
     const on = await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db as any, RHYTHM_PREFS) || 'null')).on).catch(() => true)
     if (on) return []
   }
@@ -371,7 +371,7 @@ export { cleanupPrompt, parseCleanup, localCleanup } from '../core/todoistClean'
 // when you're slipping (idle 60+ min with must-dos open), never while paused.
 const TICK_AT = 'coach_tick_at'
 
-export async function runTick(env: BotEnv & { botToken: string; chatId: string }, now = new Date()): Promise<string[]> {
+export async function runTick(env: BotEnv & { botToken: string; chatId: string; sleepBotToken?: string }, now = new Date()): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { services, mirror, calendar, bots, SQL } = await botsFor(env)
   // At most once a minute, whoever calls.
@@ -557,6 +557,23 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     }
   }
   if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db as any, NUDGES_KEY, JSON.stringify(nudge)))
+  // The wind-down, 25–50 minutes before YOUR bedtime target (a fixed UTC cron
+  // drifted an hour with daylight saving), once a day.
+  try {
+    const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget())
+    const bm = Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5))
+    const before = (bm - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440
+    if (before >= 25 && before <= 50) {
+      const first = await mirror.write((db) => {
+        if (getSetting(db as any, 'wind_down_day') === today0) return false
+        setSetting(db as any, 'wind_down_day', today0)
+        return true
+      })
+      if (first) sent.push(...(await runDaily(env as any, 'night')))
+    }
+  } catch (e) {
+    console.error('wind-down:', e)
+  }
   return sent
 }
 

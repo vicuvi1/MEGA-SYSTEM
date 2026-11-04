@@ -18851,7 +18851,7 @@ async function handleTelegramUpdate(env, token, update) {
 async function runDaily(env, job) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { services, mirror } = await botsFor(env);
-	if (job === "morning" || job === "reask" || job === "evening") {
+	if (job === "morning" || job === "reask" || job === "evening" || job === "midday") {
 		if (await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) return [];
 	}
 	const send = async (text, reply_markup, token = env.botToken) => {
@@ -19200,6 +19200,19 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		} catch {}
 	}
 	if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));
+	try {
+		const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget());
+		const before = (Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5)) - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440;
+		if (before >= 25 && before <= 50) {
+			if (await mirror.write((db) => {
+				if (getSetting(db, "wind_down_day") === today0) return false;
+				setSetting(db, "wind_down_day", today0);
+				return true;
+			})) sent.push(...await runDaily(env, "night"));
+		}
+	} catch (e) {
+		console.error("wind-down:", e);
+	}
 	return sent;
 }
 /** Stakes (points taken when time is up, a reminder an hour before), study reviews, mood, the Sunday call. */

@@ -61,7 +61,8 @@ async function tick(req, res) {
     // The model plans the day and writes the reviews (the daily rhythm); plain text without one.
     const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
     const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
-    const sent = await runTick({ tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, model })
+    const sleepBot = serverBots().find((b) => b.name === 'WAKY_BOT_TOKEN') ?? serverBots().find((b) => b.name === 'MAN_BOT_TOKEN')
+    const sent = await runTick({ tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, model, sleepBotToken: sleepBot?.token })
     send(res, 200, { ok: true, sent: sent.length })
   } catch (e) {
     console.error('tick:', e)
