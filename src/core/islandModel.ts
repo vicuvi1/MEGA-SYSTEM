@@ -34,7 +34,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward'
   title: string
   text: string
   face?: string
@@ -59,6 +59,10 @@ export interface IslandSnapshot {
   call?: { title: string; end: number } | null
   /** Wind-down: the hour before your bedtime target. */
   windDown?: { bedAt: string; minutesLeft: number } | null
+  /** Your best streak right now (sport / focus / water), and whether it's at risk today. */
+  streak?: { days: number; kind: 'sport' | 'focus' | 'water'; atRisk: boolean } | null
+  /** How much of today is done, 0–100 (the day ring around the pill). */
+  dayPct?: number
   /** Todoist: your next tasks for today (tick them on the island). */
   tasks?: { id: string; content: string; time: string | null }[]
   /** 20-20-20 eye breaks on? */

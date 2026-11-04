@@ -8,6 +8,8 @@ import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@c
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
 import { eyesAlert, morningAlert, moveAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
 import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
+import { bestStreak, dayHighlight, highlightAlert, rewardAlert, runOf } from '@core/islandFeel'
+import { liveScore } from '@core/liveScore'
 import { life } from './bridge'
 import { useLive } from './live'
 import { findExercise, readSport, updateSport } from './sportTrack'
@@ -33,6 +35,8 @@ const LAST_EYES = 'ls.lastEyesAt'
 const EYES = 'ls.eyeBreaks'
 /** Phase 3: the last copied dated text, and today's Todoist (cached a minute). */
 const CLIP = 'ls.islandClip'
+/** Phase 4: rewards already celebrated (id → first shown). */
+const CELEBRATED = 'ls.rewardCelebrated'
 let todoCache: { at: number; list: { id: string; content: string; time: string | null }[] } = { at: 0, list: [] }
 function bodyTick(sec: number) {
   const now = Date.now()
@@ -167,6 +171,7 @@ export function IslandFeed() {
   const build = useCallback(async (): Promise<IslandSnapshot> => {
     const now = Date.now()
     if (!life.coach?.status) return { ...EMPTY_ISLAND, at: now }
+    const body = await life.body.state().catch(() => null)
     const [status, focus, log, sleep, shop] = await Promise.all([life.coach.status(), life.focus.state(), life.coach.log().catch(() => []), life.sleep.state().catch(() => null), life.shop?.state().catch(() => null) ?? Promise.resolve(null)])
     if (now - blocks.current.at > 60_000) blocks.current = { at: now, list: await todayBlocks().catch(() => blocks.current.list) }
     const run = focus.running
@@ -203,6 +208,18 @@ export function IslandFeed() {
     const localWater = Number(sport?.water?.currentMl) || 0
     const { now: cur, next } = nowNext(blocks.current.list, now)
     const dismissed = get<Record<string, number>>(DISMISSED, {})
+    // Phase 4: the reward you're working toward, your best streak, today's ring and highlight.
+    const rewards = (shop?.rewards ?? []).filter((r) => !r.archived && r.price > 0)
+    const goal = shop ? rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b) => a.price - b.price).find((r) => r.price > shop.balance) ?? [...rewards].sort((a, b) => a.price - b.price)[0] ?? null : null
+    const todayKey = localDayOf(now)
+    const streak = bestStreak({
+      now,
+      sport: { days: body?.streak ?? 0, todayDone: !!body?.workoutDoneToday || !!body?.restToday },
+      focus: runOf(status.week.map((d) => ({ day: d.day, ok: d.min >= 25 })), todayKey)
+    })
+    const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusMin: status.today.focusMin, focusGoal: Math.max(50, status.goals.reduce((t, g) => t + g.perDayMin, 0)), waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone })
+    const highlight = dayHighlight({ focusMin: status.today.focusMin, focusBefore: status.week.filter((d) => d.day < todayKey).map((d) => d.min), mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone, sportStreak: body?.streak ?? 0 })
+    const celebrated = get<Record<string, number>>(CELEBRATED, {})
     if (now - todoCache.at > 60_000 && life.todoist?.today) {
       todoCache = { at: now, list: todoCache.list }
       const list = await life.todoist.today().catch(() => null)
@@ -246,6 +263,12 @@ export function IslandFeed() {
           bedAlert(dismissed, now, !!running) ??
           qualityAlert(dismissed, now) ??
           (() => {
+            // A reward you can now afford: celebrate it (for 3 minutes, once).
+            const r = rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
+            if (r && !celebrated[r.id]) put(CELEBRATED, { ...celebrated, [r.id]: now })
+            return r
+          })() ??
+          (() => {
             const c = get<{ text: string; at: number } | null>(CLIP, null)
             return c && !call ? clipAlert(c.text, c.at, dismissed, now) : null
           })() ??
@@ -255,6 +278,7 @@ export function IslandFeed() {
           moveAlert(body) ??
           waterAlert(body) ??
           eyesAlert(body) ??
+          highlightAlert(highlight, now, dismissed) ??
           (call ? null : pick)
         )
       })(),
@@ -265,6 +289,8 @@ export function IslandFeed() {
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
+      streak,
+      dayPct: live.score,
       windDown: (() => {
         const logs = sleep?.recentLogs ?? []
         const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'

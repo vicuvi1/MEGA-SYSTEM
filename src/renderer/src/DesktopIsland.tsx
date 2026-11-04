@@ -4,6 +4,7 @@
 // a block is coming up) the collapsed pill shows it. New things from Ben, a
 // block starting, or time up drop it down for a few seconds by themselves.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { dayPart } from '@core/islandFeel'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, HIDE_MS, activities, clock, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot } from '@core/islandModel'
 import type { IslandPlacement } from '../../shared/desktop'
 import './island.css'
@@ -353,6 +354,21 @@ export function DesktopIsland() {
     window.setTimeout(() => (setMoon(false), hide()), 2600)
   }
   const pts = s.points
+  // Points that pop: each new point flies up from the pill; a reward unlocking gets confetti.
+  const [pop, setPop] = useState<{ n: number; key: number } | null>(null)
+  const prevPts = useRef<number | null>(null)
+  useEffect(() => {
+    const b = s.points?.balance
+    if (b == null) return
+    const before = prevPts.current
+    prevPts.current = b
+    if (before != null && b > before) {
+      setPop({ n: b - before, key: Date.now() })
+      const t = window.setTimeout(() => setPop(null), 1800)
+      return () => clearTimeout(t)
+    }
+  }, [s.points?.balance])
+  const confetti = s.alert?.kind === 'reward'
   // Hold 🎤 to talk to Ben (a voice note, like on Telegram).
   const [rec, setRec] = useState<{ r: MediaRecorder; parts: Blob[]; at: number } | null>(null)
   const startRec = async () => {
@@ -587,7 +603,7 @@ export function DesktopIsland() {
       ref={root}
       {...dropProps}
       style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
-      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""} ${s.windDown ? "winddown" : ""} ${dropping ? "dropping" : ""}`}
+      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""} ${s.windDown ? "winddown" : ""} ${dropping ? "dropping" : ""} tod-${dayPart(now)} ${confetti ? "confetti" : ""}`}
     >
       {/* Collapsed: a thin line, or the live pill (main activity + a bubble for the next one) */}
       {!open && (
@@ -596,6 +612,7 @@ export function DesktopIsland() {
             role="button"
             tabIndex={0}
             className={`di-pill kind-${s.locked ? 'locked' : main?.kind ?? 'idle'}`}
+            style={{ ['--day' as string]: `${Math.max(0, Math.min(100, s.dayPct ?? 0))}%` }}
             {...dragProps}
             onClick={() => {
               if (dragged.current) return void (dragged.current = false)
@@ -649,6 +666,17 @@ export function DesktopIsland() {
                 )}
               </>
             )}
+            {!s.locked && (s.dayPct ?? 0) > 0 && <i className="di-dayring" aria-hidden title={`Today: ${s.dayPct}% done`} />}
+            {s.streak && !s.locked && (
+              <span className={`di-flame ${s.streak.atRisk ? 'risk' : ''}`} style={{ ['--s' as string]: String(1 + Math.min(s.streak.days, 30) / 40) }} title={`${s.streak.days}-day ${s.streak.kind} streak${s.streak.atRisk ? ' · at risk today!' : ''}`}>
+                🔥<b>{s.streak.days}</b>
+              </span>
+            )}
+            {pop && (
+              <span key={pop.key} className="di-pop" aria-live="polite">
+                +{pop.n} ⭐
+              </span>
+            )}
             {s.water.target > 0 && !s.locked && (
               <i className="di-drop" style={{ ['--p' as string]: `${Math.min(100, (s.water.ml / s.water.target) * 100)}%` }} title={`Water ${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`} />
             )}
@@ -681,6 +709,13 @@ export function DesktopIsland() {
             </button>
           </header>
 
+          {confetti && (
+            <div className="di-confetti" aria-hidden>
+              {Array.from({ length: 18 }, (_, i) => (
+                <i key={i} style={{ ['--i' as string]: String(i) }}>{['🎉', '⭐', '✨', '🎁'][i % 4]}</i>
+              ))}
+            </div>
+          )}
           {s.alert && (
             <section className={`di-alert kind-${s.alert.kind}`}>
               <div className="di-alert-top">

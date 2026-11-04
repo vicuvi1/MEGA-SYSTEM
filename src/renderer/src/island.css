@@ -321,3 +321,37 @@ html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(
 .di.dropping .di-pill, .di.dropping .di-card { box-shadow: 0 0 0 2px var(--lime), 0 0 28px -4px var(--lime); }
 .di-alert.kind-clip { background: linear-gradient(135deg, rgb(255 255 255 / 0.08), rgb(0 0 0 / 0)); }
 .di .di-ben form .di-mic { background: rgb(255 255 255 / 0.1); color: inherit; } .di .di-ben form .di-mic.on { background: var(--red); color: #fff; }
+
+/* ---- phase 4: points pop, streak flame, day ring, time of day, celebrations ---- */
+.di-pill { overflow: visible; }
+/* The day ring: a thin line around the pill, filled as today gets done. */
+.di-dayring { position: absolute; inset: -3px; border-radius: inherit; padding: 2px; pointer-events: none;
+  background: conic-gradient(from -90deg, var(--lime) var(--day), rgb(255 255 255 / 0.07) 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.85; transition: opacity 0.3s; }
+.di.hidden .di-dayring, .di.hidden .di-flame { display: none; }
+/* Streak flame: bigger with the streak, flickers when today puts it at risk. */
+.di-flame { flex: none; display: inline-flex; align-items: center; gap: 1px; font-size: calc(12px * var(--s, 1)); line-height: 1; transform-origin: bottom center; animation: di-flame 2.4s ease-in-out infinite; }
+.di-flame b { font-size: 11px; font-weight: 800; color: #ffb547; }
+.di-flame.risk { animation: di-flicker 0.9s steps(2, jump-none) infinite; }
+.di-flame.risk b { color: #ff6b5a; }
+@keyframes di-flame { 50% { transform: scale(1.08) rotate(-3deg); } }
+@keyframes di-flicker { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.92); } }
+/* Points that pop: '+15 ⭐' floats up from the pill. */
+.di-pop { position: absolute; right: 18px; top: -4px; font-weight: 800; font-size: 13px; color: #ffd451; text-shadow: 0 0 10px rgb(255 212 81 / 0.7); pointer-events: none; animation: di-popup 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+@keyframes di-popup { 0% { opacity: 0; transform: translateY(8px) scale(0.6); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px) scale(1); } }
+/* The time of day tints the island: sunrise, day, dusk, night. */
+.di.tod-morning .di-card { background-image: radial-gradient(circle at 15% 0%, rgb(255 190 90 / 0.13), transparent 55%); }
+.di.tod-evening .di-card { background-image: radial-gradient(circle at 85% 0%, rgb(170 110 255 / 0.14), transparent 55%); }
+.di.tod-night .di-card { background-image: radial-gradient(circle at 50% 0%, rgb(60 90 200 / 0.16), transparent 60%); }
+.di.tod-morning .di-pill { box-shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 18px -6px rgb(255 190 90 / 0.5); }
+.di.tod-night .di-pill { box-shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 18px -6px rgb(90 120 255 / 0.45); }
+/* A reward unlocking: confetti bursts out of the island. */
+.di-card { position: relative; }
+.di-confetti { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 5; }
+.di-confetti i { position: absolute; left: 50%; top: 40px; font-style: normal; font-size: 16px; animation: di-burst 1.6s cubic-bezier(0.15, 0.7, 0.3, 1) both; animation-delay: calc(var(--i) * 25ms); --a: calc(var(--i) * 20deg); }
+@keyframes di-burst { 0% { opacity: 0; transform: translate(-50%, 0) rotate(0) scale(0.4); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(-50% + cos(var(--a)) * 170px), calc(sin(var(--a)) * 120px + 40px)) rotate(var(--a)) scale(1.1); } }
+.di-alert.kind-reward { background: linear-gradient(135deg, rgb(255 212 81 / 0.28), rgb(255 120 200 / 0.14)); }
+.di-alert.kind-highlight { background: linear-gradient(135deg, rgb(255 212 81 / 0.22), rgb(212 255 63 / 0.12)); }
+/* At the top of the screen there's no room above: the points fall below the pill. */
+.di.at-top .di-pop { top: auto; bottom: -22px; animation-name: di-popdown; }
+@keyframes di-popdown { 0% { opacity: 0; transform: translateY(-8px) scale(0.6); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(20px) scale(1); } }
