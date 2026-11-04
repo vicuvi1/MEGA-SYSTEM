@@ -13,7 +13,8 @@ import { BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
 import { decodePending, diffRows, encodePending, schemaInfo, sendPending, touchedTables, type Remap } from './desktopSync'
 
-const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_)/
+// cloud_snapshots: 30 full backups, read straight from Turso when needed, never copied to every device.
+const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|cloud_snapshots$)/
 
 export interface MirrorStore {
   load(): Promise<Uint8Array | null>

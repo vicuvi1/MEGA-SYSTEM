@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
 import { createIsland } from './island'
+import { createBackups } from './backups'
 
 const origin = 'life-system://app'
 const server = 'https://mega-system-ten.vercel.app'
@@ -64,6 +65,13 @@ else void app.whenReady().then(async () => {
     await copyFile(file, result.filePath)
     return result.filePath
   })
+  // Daily backup files (PC folder + Google Drive), written from the app window's export.
+  const backups = createBackups(dir)
+  handle('backups:status', () => backups.status())
+  handle('backups:write', (text: string, day: string) => backups.write(text, day))
+  handle('backups:read', (where: 'local' | 'drive', name: string) => backups.read(where, name))
+  handle('backups:choose', () => backups.choose(win))
+  handle('backups:open', (where: 'local' | 'drive') => backups.open(where))
   handle('desktop:updateStatus', () => updater.get())
   handle('desktop:checkUpdates', () => updater.check())
   handle('desktop:installUpdate', async () => { await saves; return updater.update() })

@@ -502,6 +502,8 @@ export interface LifeApi {
     cloudSnapshots?(): Promise<{ day: string; exportedAt: string; sizeBytes: number }[]>
     saveDailySnapshot?(): Promise<boolean>
     restoreCloudSnapshot?(day: string): Promise<boolean>
+    /** Puts back a backup (the JSON of a daily file, an export or a snapshot). */
+    restoreSnapshot?(text: string): Promise<boolean>
   }
     economy: {
     summary(): Promise<EconomySummary>

@@ -19,6 +19,7 @@ import { useUiPrefs } from '../uiPrefs'
 import { features, life } from '../bridge'
 import { GooglePanel } from '../GooglePanel'
 import { SportyPanel } from '../SportyPanel'
+import { DesktopBackupPanel } from '../DesktopBackups'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -561,13 +562,14 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       // 4. Full Life System Unified Backup
       else if (data.tables || data.version || data.financeState || data.wakyState) {
         if (!window.confirm(`Restore full Life System backup from "${file.name}"? This will update your cloud database and local state.`)) return
-        if (data.financeState) {
-          localStorage.setItem('finance-helper.state', JSON.stringify(data.financeState))
+        if (data.tables && life.data.restoreSnapshot) {
+          // The real thing: every table back, on every device (PIN and bot setup kept).
+          await life.data.restoreSnapshot(text)
+        } else {
+          if (data.financeState) localStorage.setItem('finance-helper.state', JSON.stringify(data.financeState))
+          if (data.wakyState) localStorage.setItem('waky_web_data_v2', JSON.stringify(data.wakyState))
         }
-        if (data.wakyState) {
-          localStorage.setItem('waky_web_data_v2', JSON.stringify(data.wakyState))
-        }
-        importedType = 'Full Life System Unified State'
+        importedType = 'Full Life System backup'
       } else {
         throw new Error('Unrecognized backup format. Please select a valid Life System, Finance Helper, Waky, or MAN export file.')
       }
@@ -606,6 +608,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   return (
     <div className="settings">
       {features.updates && <UpdatePanel status={update} onStatus={onUpdate} />}
+
+      <DesktopBackupPanel />
 
       <SportyPanel />
 

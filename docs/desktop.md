@@ -101,3 +101,23 @@ clicks pass through to the apps below.
 Life System starts with Windows (`--hidden`, tray only) from the first run of
 an installed copy; the tray menu turns that and the island off, and Quit ends
 it for real.
+
+## Where the data is, and backups
+
+- **Main copy: Turso** (the cloud database). Website, Ben/Telegram, Sporty's sync
+  and the desktop all read and write it.
+- **This PC:** `%APPDATA%\LifeSystem-CloudDesktop\life-local.sqlite`, a full copy
+  plus changes waiting to sync (works offline). Plain SQLite, not encrypted.
+- **Daily backup files** (desktop, `src/desktop/backups.ts`): one JSON a day in
+  `Documents\Life System Backups` and, when Google Drive for desktop is found
+  (`G:\My Drive`, …) or its folder is chosen, `My Drive\Life System Backups`.
+  The last 30 days plus the first of each month for a year
+  (`backupsToDelete` in `src/core/backupPlan.ts`). Settings → Backups on this PC:
+  back up now, open the folders, choose the Drive folder, restore any file.
+- **Cloud snapshots:** one a day inside Turso, 30 kept (`cloud_snapshots`, never
+  copied to devices).
+A backup holds every data table (`backupTables`) plus the Sport/Waky/MAN/Finance
+app states. Restoring (`restoreStatements`) replaces each table in one
+transaction, only adds missing rows to the append-only history (ledger,
+discipline), keeps the PIN and bot setup, and moves the data marker so every
+device reloads. Settings → Restore from backup file takes the same files.

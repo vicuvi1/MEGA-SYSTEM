@@ -33,6 +33,7 @@ import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus } from './web/coachStatus'
+import { backupTables, restoreStatements } from '@core/backupPlan'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport } from '@core/sportCards'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
@@ -382,7 +383,9 @@ export function createTursoWebBridge(): Bridge {
     const mirror = await mirrorP
     const tables = await mirror.read((db) => {
       const out: Record<string, unknown[]> = {}
-      for (const t of SNAPSHOT_TABLES) {
+      // Every data table (focus, day plans, … too), not a fixed list.
+      const all = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r: any) => String(r.name))
+      for (const t of backupTables([...new Set([...SNAPSHOT_TABLES, ...all])])) {
         try {
           out[t] = db.prepare(`SELECT * FROM "${t}"`).all()
         } catch {
@@ -1011,37 +1014,28 @@ export function createTursoWebBridge(): Bridge {
       restoreCloudSnapshot: async (day: string) => {
         const [res] = await turso.readMany([{ sql: 'SELECT data FROM cloud_snapshots WHERE day = ?', args: [day] }])
         if (res instanceof Error || !res.rows.length) return false
-        const snap = JSON.parse(String(res.rows[0][0]))
+        return bridge.data.restoreSnapshot!(String(res.rows[0][0]))
+      },
+      /**
+       * Puts a backup back (a daily file, an export, a cloud snapshot), all in
+       * one Turso transaction (all or nothing). Tables are replaced, except the
+       * append-only history (ledger, discipline events), where only missing
+       * rows come back. Your current PIN and bot settings are kept. Every
+       * device reloads (the data marker moves).
+       */
+      restoreSnapshot: async (text: string) => {
+        const snap = JSON.parse(text)
         const mirror = await mirrorP
-        const appendOnly = new Set(['ledger', 'discipline_events'])
-        const keepSettings = new Set(['pin_hash', 'bot_bridge_config'])
-        const stmts = await mirror.read((db) => {
-          const out: { sql: string; args: any[] }[] = []
-          for (const t of SNAPSHOT_TABLES) {
-            const rows = snap.tables?.[t]
-            if (!Array.isArray(rows)) continue
-            if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t)) continue
-            const cols = new Set(db.prepare(`PRAGMA table_info("${t}")`).all().map((c: any) => String(c.name)))
-            if (t === 'settings') {
-              for (const r of rows) {
-                if (!r || keepSettings.has(r.key) || typeof r.value !== 'string') continue
-                out.push({ sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [r.key, r.value] })
-              }
-              continue
-            }
-            if (!appendOnly.has(t)) out.push({ sql: `DELETE FROM "${t}"`, args: [] })
-            for (const r of rows) {
-              const keys = Object.keys(r ?? {}).filter((k) => cols.has(k))
-              if (!keys.length) continue
-              out.push({
-                sql: `INSERT ${appendOnly.has(t) ? 'OR IGNORE ' : ''}INTO "${t}" (${keys.map((k) => `"${k}"`).join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`,
-                args: keys.map((k) => r[k] ?? null)
-              })
-            }
+        // Changes still waiting on this computer go first.
+        await mirror.refresh().catch(() => {})
+        const columns = await mirror.read((db) => {
+          const out: Record<string, string[]> = {}
+          for (const r of db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as any[]) {
+            out[String(r.name)] = db.prepare(`PRAGMA table_info("${String(r.name)}")`).all().map((c: any) => String(c.name))
           }
           return out
         })
-        await turso.writeAtomic(stmts)
+        await turso.writeAtomic(restoreStatements(snap, columns, `restore-${Date.now().toString(36)}`) as any)
         for (const [key, field] of [['finance-helper.state', 'financeState'], ['waky_web_data_v2', 'wakyState'], ['life_sport_tracker_v1', 'sportState'], ['MAN_SPARTAN_DATA', 'manState']] as const) {
           if (snap[field]) store?.setItem(key, JSON.stringify(snap[field]))
         }

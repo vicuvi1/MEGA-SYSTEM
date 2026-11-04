@@ -27,11 +27,12 @@ if (isIsland) {
 } else if (isHud) {
   void import('./HudBar').then(({ HudBar }) => root.render(<StrictMode><HudBar /></StrictMode>))
 } else {
-  void Promise.all([import('./App'), import('./DesktopBar'), import('./IslandFeed')]).then(([{ App }, { DesktopBar }, { IslandFeed }]) =>
+  void Promise.all([import('./App'), import('./DesktopBar'), import('./IslandFeed'), import('./DesktopBackups')]).then(([{ App }, { DesktopBar }, { IslandFeed }, { DesktopAutoBackup }]) =>
     root.render(
       <StrictMode>
         <DesktopBar />
         {window.desktop?.islandState && <IslandFeed />}
+        {window.desktop?.writeBackup && <DesktopAutoBackup />}
         <App />
       </StrictMode>
     )

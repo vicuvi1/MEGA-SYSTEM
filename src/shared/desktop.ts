@@ -1,5 +1,6 @@
 import type { UpdateStatus } from './api'
 import type { IslandAction, IslandSnapshot } from '../core/islandModel'
+import type { BackupStatus, BackupWhere } from '../desktop/backups'
 
 export type IslandMode = 'hidden' | 'pill' | 'open'
 
@@ -11,6 +12,12 @@ export interface DesktopApi {
   checkUpdates(): Promise<UpdateStatus>
   installUpdate(): Promise<UpdateStatus>
   loginGithub(): Promise<void>
+  // ---- daily backup files (optional: older desktops don't have them) ----
+  backupStatus?(): Promise<BackupStatus>
+  writeBackup?(text: string, day: string): Promise<BackupStatus>
+  readBackup?(where: BackupWhere, name: string): Promise<string>
+  chooseBackupFolder?(): Promise<BackupStatus>
+  openBackupFolder?(where: BackupWhere): Promise<void>
   // ---- the desktop island (optional: older desktops don't have it) ----
   /** App window → island: what to show. */
   islandState?(s: IslandSnapshot): void
