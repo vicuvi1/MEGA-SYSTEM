@@ -14003,6 +14003,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
 		return true;
 	});
+	const plain = (html) => html.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 	/**
 	* The coach's brain (botBrain.ts): free text, a voice note or a photo, with
 	* your data and the coach's memory. It answers and acts (logs, must-dos,
@@ -15098,7 +15099,37 @@ His note: ${note}`, { json: true }));
 			__token: token
 		}, cfg);
 	}
+	/**
+	* The island's command bar: the bots' rules only (no AI, instant, offline):
+	* "spent 40 taxi", "water 500", "30 pushups", "bed 23:40"… Not understood →
+	* { unknown: true } and the caller asks Ben.
+	*/
+	async function quick(text) {
+		const t = text.trim();
+		if (!t || t.length > 200) return { unknown: true };
+		const key = `quick:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+		const out = await mirror.write((db) => {
+			const svc = services.services(db);
+			try {
+				return applyText(db, svc, t, key);
+			} catch (e) {
+				currentDb = null;
+				return {
+					reply: `⚠️ ${esc(e.message)}`,
+					error: true
+				};
+			}
+		});
+		if (out.unknown) return { unknown: true };
+		if (out.sport) addRepsToSportTrack(out.sport.name, out.sport.amount);
+		if (out.expense) onExpense?.();
+		return {
+			ok: !out.error,
+			reply: plain(out.reply).replace(/\n{2,}/g, "\n").trim()
+		};
+	}
 	return {
+		quick,
 		pollOnce,
 		handleUpdate,
 		/** The app's Coach page: the same brain and memory as the bots. */

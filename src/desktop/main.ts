@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, shell, Tray } from 'electron'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
@@ -248,6 +248,17 @@ if (firstCopy) void app.whenReady().then(async () => {
     setInterval(tick, 60_000)
     // Seconds since the last mouse/keys, for the island (drift, focus quality).
     setInterval(() => win.webContents.send('desktop:idle', powerMonitor.getSystemIdleTime()), 15_000)
+    // Copied text, for the island's "save this?" (it only offers dated things;
+    // nothing leaves this PC, nothing is kept).
+    let lastClip = ''
+    const readClip = async (): Promise<string> => { try { return String(await clipboard.readText()) } catch { return '' } }
+    lastClip = await readClip()
+    setInterval(async () => {
+      const t = await readClip()
+      if (!t || t === lastClip) return
+      lastClip = t
+      if (t.length <= 200) win.webContents.send('desktop:clip', t)
+    }, 1500)
     const leaving = () => {
       lastActive = Date.now() - powerMonitor.getSystemIdleTime() * 1000
       save()

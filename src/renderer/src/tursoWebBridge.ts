@@ -469,6 +469,7 @@ export function createTursoWebBridge(): Bridge {
     google,
     coach: {
       // The answer streams: live steps ("Reading your calendar…"), then the reply.
+      quick: async (text: string) => (await botsP).quick(text),
       chat: async (text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }) => {
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, ...(media ? { media } : {}) }) })
         if (!r.ok || !r.body) {

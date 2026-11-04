@@ -24,6 +24,7 @@ const api: DesktopApi = {
   onNavigate: (cb) => void ipcRenderer.on('app:navigate', (_e, page) => cb(page)),
   onAway: (cb) => void ipcRenderer.on('desktop:away', (_e, a) => cb(a)),
   onIdle: (cb) => void ipcRenderer.on('desktop:idle', (_e, sec) => cb(Number(sec) || 0)),
+  onClip: (cb) => void ipcRenderer.on('desktop:clip', (_e, t) => cb(String(t ?? ''))),
   onIslandState: (cb) => void ipcRenderer.on('island:state', (_e, s) => cb(s)),
   islandAction: (a) => ipcRenderer.send('island:action', a),
   islandAck: (ack) => ipcRenderer.send('island:ack', ack),

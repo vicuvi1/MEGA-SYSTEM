@@ -7,6 +7,7 @@ import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, ty
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
 import { eyesAlert, morningAlert, moveAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
+import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
 import { life } from './bridge'
 import { useLive } from './live'
 import { findExercise, readSport, updateSport } from './sportTrack'
@@ -30,6 +31,9 @@ const LAST_WATER = 'ls.lastWaterAt'
 const LAST_MOVE = 'ls.lastMoveAt'
 const LAST_EYES = 'ls.lastEyesAt'
 const EYES = 'ls.eyeBreaks'
+/** Phase 3: the last copied dated text, and today's Todoist (cached a minute). */
+const CLIP = 'ls.islandClip'
+let todoCache: { at: number; list: { id: string; content: string; time: string | null }[] } = { at: 0, list: [] }
 function bodyTick(sec: number) {
   const now = Date.now()
   if (sec >= 300) activeSince = null
@@ -199,6 +203,11 @@ export function IslandFeed() {
     const localWater = Number(sport?.water?.currentMl) || 0
     const { now: cur, next } = nowNext(blocks.current.list, now)
     const dismissed = get<Record<string, number>>(DISMISSED, {})
+    if (now - todoCache.at > 60_000 && life.todoist?.today) {
+      todoCache = { at: now, list: todoCache.list }
+      const list = await life.todoist.today().catch(() => null)
+      if (list) todoCache.list = list.slice(0, 3).map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null }))
+    }
     return {
       at: now,
       locked: false,
@@ -236,6 +245,10 @@ export function IslandFeed() {
         return (
           bedAlert(dismissed, now, !!running) ??
           qualityAlert(dismissed, now) ??
+          (() => {
+            const c = get<{ text: string; at: number } | null>(CLIP, null)
+            return c && !call ? clipAlert(c.text, c.at, dismissed, now) : null
+          })() ??
           smart ??
           windDownAlert(wd, now, dismissed) ??
           (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
@@ -251,6 +264,7 @@ export function IslandFeed() {
       })(),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
+      tasks: todoCache.list,
       windDown: (() => {
         const logs = sleep?.recentLogs ?? []
         const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
@@ -290,6 +304,7 @@ export function IslandFeed() {
   const act = useCallback(
     async (a: IslandAction) => {
       let error: string | null = null
+      let said: string | null = null
       try {
         // Locked (PIN) or still loading: say so instead of doing nothing.
         if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss') throw new Error('Life System is locked: open it and enter your PIN')
@@ -393,6 +408,67 @@ export function IslandFeed() {
             put(DISMISSED, d)
             break
           }
+          case 'todoDone': {
+            await life.todoist!.complete({ id: a.id, content: a.content, priority: 1, due: null, dueTime: null, project: null, recurring: false } as any)
+            todoCache = { at: 0, list: todoCache.list.filter((t) => t.id !== a.id) }
+            window.dispatchEvent(new CustomEvent('life-external-changed'))
+            said = `✓ ${a.content}`
+            break
+          }
+          case 'clipSave': {
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[a.alertId] = Date.now() + 864e5
+            put(DISMISSED, d)
+            if (a.to === 'task') {
+              const t = await life.todoist!.quickAdd(a.text)
+              todoCache.at = 0
+              said = `➕ Todoist: ${t?.content ?? a.text}${t?.due ? ` (${t.due})` : ''}`
+            } else {
+              // Into the notebook's Inbox note (made if needed), with today's date.
+              const notes = await life.notes!.list()
+              const inbox = notes.find((n) => n.title.toLowerCase() === 'inbox')
+              const line = `- ${a.text} _(${localDayOf(Date.now())})_`
+              await life.notes!.save(inbox ? { id: inbox.id, title: inbox.title, body: `${inbox.body.replace(/\s*$/, '')}\n${line}\n` } : { title: 'Inbox', body: `# Inbox\n\nThings you saved from the island.\n\n${line}\n` })
+              said = '📓 Saved in Notebook → Inbox'
+            }
+            break
+          }
+          case 'book': {
+            // A task dropped on the island: the next free slot today, in your calendar.
+            const text = a.text.trim().split('\n')[0].slice(0, 120)
+            if (!text) throw new Error('Nothing to book')
+            const minutes = taskMinutes(text)
+            const slot = nextFreeSlot(blocks.current.list, Date.now(), minutes)
+            const on = !!(await life.google?.status().catch(() => null))?.connected
+            if (!slot || !on) {
+              await life.todoist!.quickAdd(`${text} today`)
+              said = slot ? `➕ Todoist: ${text} (today) · connect Google Calendar to book times` : `➕ Todoist: ${text} (today) · no free slot left today`
+              break
+            }
+            await life.google!.create({ title: text.replace(/\s*\d{1,3}\s*(?:m|min|mins|minutes|h|hr|hours?)\b/i, '').trim() || text, start: new Date(slot.start).toISOString(), end: new Date(slot.end).toISOString(), description: 'Booked from the island' })
+            blocks.current = { at: 0, list: blocks.current.list }
+            window.dispatchEvent(new CustomEvent('life-external-changed'))
+            const hhmm = (t: number) => new Date(t).toTimeString().slice(0, 5)
+            said = `📅 Booked ${hhmm(slot.start)}–${hhmm(slot.end)}: ${text}`
+            break
+          }
+          case 'voice': {
+            if (!life.coach) throw new Error('Ben is not available here')
+            if (busy.current.on) throw new Error('Ben is still answering your last message')
+            busy.current = { on: true, steps: ['Listening to your voice note'] }
+            void send()
+            try {
+              const r = await life.coach.chat('', (st) => {
+                if (!busy.current.steps.includes(st)) busy.current.steps = [...busy.current.steps, st]
+                void send()
+              }, { mime: a.mime, data: a.data })
+              said = r.reply.replace(/<[^>]+>/g, '').slice(0, 140)
+            } finally {
+              busy.current = { on: false, steps: [] }
+              put(SEEN, Date.now())
+            }
+            break
+          }
           case 'closeDay':
             window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'today' }))
             setTimeout(() => window.dispatchEvent(new CustomEvent('life-close-day')), 600)
@@ -406,6 +482,28 @@ export function IslandFeed() {
             if (a.page) window.dispatchEvent(new CustomEvent('life-open-page', { detail: a.page }))
             break
           case 'chat': {
+            // The command bar: "focus 50 algebra" starts a timer; the rules do
+            // money, water, reps, sleep (free, instant); only the rest goes to Ben.
+            const t = a.text.trim()
+            // "focus 50 algebra", "focus algebra 25", "f 90 lab report"
+            const fm = /^(?:focus|f)\s+(.{2,80})$/i.exec(t)
+            const num = fm ? /(?:^|\s)(\d{1,3})\s*(?:min|m)?(?=\s|$)/i.exec(fm[1]) : null
+            const subject = fm && num ? fm[1].replace(num[0], ' ').replace(/\s+/g, ' ').trim() : ''
+            if (fm && num && subject) {
+              const minutes = Math.max(5, Math.min(180, Number(num[1]) || 50))
+              await life.focus.start(subject, minutes, null)
+              window.dispatchEvent(new Event('life-focus-changed'))
+              said = `⏱ Focus: ${subject} · ${minutes} min`
+              break
+            }
+            const q = await life.coach?.quick?.(t).catch(() => null)
+            if (q && !('unknown' in q)) {
+              if (!q.ok) throw new Error(q.reply.replace(/^⚠️\s*/, ''))
+              said = q.reply.split('\n').slice(0, 3).join(' · ').slice(0, 140)
+              window.dispatchEvent(new CustomEvent('life-body-changed'))
+              window.dispatchEvent(new CustomEvent('life-external-changed'))
+              break
+            }
             if (!life.coach) throw new Error('Ben is not available here')
             if (busy.current.on) throw new Error('Ben is still answering your last message')
             busy.current = { on: true, steps: [] }
@@ -426,7 +524,7 @@ export function IslandFeed() {
         error = (e as Error)?.message || 'It did not work'
       }
       // The island shows ✓ or the reason; the log (Settings → Island log) keeps it.
-      if (a.id) desk?.islandAck?.({ id: a.id, ok: !error, ...(error ? { error } : {}) })
+      if (a.id) desk?.islandAck?.({ id: a.id, ok: !error, ...(error ? { error } : {}), ...(said ? { text: said } : {}) })
       logIsland({ at: new Date().toISOString(), kind: a.kind, ok: !error, error: error ?? undefined })
       if (error) void life.system?.logError('island', `${a.kind}: ${error}`).catch(() => {})
       await send()
@@ -447,6 +545,13 @@ export function IslandFeed() {
       desk.onNavigate?.((page) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: page })))
       // Back after a night away from the PC: that's when you went to bed.
       desk.onAway?.((w) => void onAway(w).then(() => void sendRef.current()))
+      // Copied a dated thing: offer to save it (island phase 3).
+      desk.onClip?.((t) => {
+        const text = clipWorthSaving(t)
+        if (!text) return
+        put(CLIP, { text, at: Date.now() })
+        void sendRef.current()
+      })
       // Every 15 s from the desktop: how long since your last mouse/keys.
       desk.onIdle?.((sec) => {
         const before = idleSec

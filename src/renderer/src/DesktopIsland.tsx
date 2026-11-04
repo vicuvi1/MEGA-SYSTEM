@@ -282,6 +282,10 @@ export function DesktopIsland() {
     : a.kind === 'moveBreak' ? `💪 +${a.n} ${a.name} · nice break`
     : a.kind === 'eyeBreaks' ? (a.on ? 'Eye breaks on: every 20 min' : 'Eye breaks off')
     : a.kind === 'closeDay' ? 'Opening Close your day…'
+    : a.kind === 'todoDone' ? `✓ ${a.content}`
+    : a.kind === 'clipSave' ? (a.to === 'task' ? 'Adding to Todoist…' : 'Saving to Notebook…')
+    : a.kind === 'book' ? 'Finding a free slot…'
+    : a.kind === 'voice' ? '🎤 Sent to Ben'
     : null
   const clearToastLater = (ms: number) => {
     if (toastT.current) clearTimeout(toastT.current)
@@ -289,8 +293,8 @@ export function DesktopIsland() {
   }
   useEffect(() => {
     desk()?.onIslandAck?.((ack) => {
-      setToast((t) => (t && t.id === ack.id ? { ...t, state: ack.ok ? 'ok' : 'err', text: ack.ok ? `✓ ${t.text}` : `⚠ ${ack.error ?? 'It did not work'}` } : t))
-      clearToastLater(ack.ok ? 2200 : 7000)
+      setToast((t) => (t && t.id === ack.id ? { ...t, state: ack.ok ? 'ok' : 'err', text: ack.ok ? (ack.text ?? `✓ ${t.text}`) : `⚠ ${ack.error ?? 'It did not work'}` } : t))
+      clearToastLater(ack.ok ? (ack.text ? 4500 : 2200) : 7000)
     })
   }, [])
   const send = (a: IslandAction) => {
@@ -323,7 +327,7 @@ export function DesktopIsland() {
       desk()?.showApp?.('today')
       hide()
     }
-    if (a.kind === 'dismiss' || a.kind === 'start' || a.kind === 'stop' || a.kind === 'push' || a.kind === 'blockResult' || a.kind === 'moveBreak' || (a.kind === 'water' && s.alert?.kind === 'water')) {
+    if (a.kind === 'dismiss' || a.kind === 'start' || a.kind === 'stop' || a.kind === 'push' || a.kind === 'blockResult' || a.kind === 'moveBreak' || a.kind === 'clipSave' || (a.kind === 'water' && s.alert?.kind === 'water')) {
       if (alertOnly) hide()
     }
   }
@@ -349,7 +353,65 @@ export function DesktopIsland() {
     window.setTimeout(() => (setMoon(false), hide()), 2600)
   }
   const pts = s.points
+  // Hold 🎤 to talk to Ben (a voice note, like on Telegram).
+  const [rec, setRec] = useState<{ r: MediaRecorder; parts: Blob[]; at: number } | null>(null)
+  const startRec = async () => {
+    if (rec || s.ben.busy) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const r = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' })
+      const parts: Blob[] = []
+      r.ondataavailable = (e) => e.data.size && parts.push(e.data)
+      r.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        if (Date.now() - started < 700) return
+        const blob = new Blob(parts, { type: r.mimeType.split(';')[0] })
+        const fr = new FileReader()
+        fr.onload = () => send({ kind: 'voice', mime: blob.type || 'audio/webm', data: String(fr.result).split(',')[1] ?? '' })
+        fr.readAsDataURL(blob)
+      }
+      const started = Date.now()
+      r.start()
+      setRec({ r, parts, at: started })
+      setPinned(true)
+    } catch {
+      setToast({ id: 'mic', state: 'err', text: '⚠ No microphone (allow it for Life System in Windows privacy settings)' })
+      clearToastLater(6000)
+    }
+  }
+  const stopRec = () => {
+    if (!rec) return
+    rec.r.stop()
+    setRec(null)
+  }
+  // Drop a task (text) on the island: booked in the next free slot today.
+  const [dropping, setDropping] = useState(false)
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      if ([...e.dataTransfer.types].some((t) => t === 'text/plain')) {
+        e.preventDefault()
+        setDropping(true)
+      }
+    },
+    onDragLeave: () => setDropping(false),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      setDropping(false)
+      const t = e.dataTransfer.getData('text/plain').trim()
+      if (t) send({ kind: 'book', text: t })
+    }
+  }
   const blocks: Record<IslandSection, ReactNode> = {
+    tasks: s.tasks?.length ? (<section className="di-tasks">
+                  <span className="di-label">Todoist · next up</span>
+                  {s.tasks.map((t) => (
+                    <button key={t.id} className="di-task" onClick={() => send({ kind: 'todoDone', id: t.id, content: t.content })} title="Done: tick it in Todoist">
+                      <i />
+                      <span>{t.content}</span>
+                      {t.time && <small>{t.time}</small>}
+                    </button>
+                  ))}
+                </section>) : null,
     sleep: s.sleep?.bed || s.sleep?.wake ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
                   {s.sleep?.bed ? (
                     <>
@@ -502,7 +564,19 @@ export function DesktopIsland() {
                     chat()
                   }}
                 >
-                  <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message Ben…" onPointerDown={() => desk()?.islandFocus?.()} onFocus={() => { setPinned(true); desk()?.islandFocus?.() }} />
+                  <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="spent 40 taxi · water 500 · focus 50 algebra · or ask Ben" onPointerDown={() => desk()?.islandFocus?.()} onFocus={() => { setPinned(true); desk()?.islandFocus?.() }} />
+                  <button
+                    type="button"
+                    className={`di-mic ${rec ? 'on' : ''}`}
+                    aria-label="Hold to talk to Ben"
+                    title="Hold to talk to Ben"
+                    disabled={s.ben.busy}
+                    onPointerDown={(e) => (e.preventDefault(), void startRec())}
+                    onPointerUp={stopRec}
+                    onPointerLeave={stopRec}
+                  >
+                    {rec ? '●' : '🎤'}
+                  </button>
                   <button disabled={!text.trim() || s.ben.busy} aria-label="Send">↑</button>
                 </form>
               </section>)
@@ -511,8 +585,9 @@ export function DesktopIsland() {
   return (
     <div
       ref={root}
+      {...dropProps}
       style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
-      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""} ${s.windDown ? "winddown" : ""}`}
+      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""} ${s.windDown ? "winddown" : ""} ${dropping ? "dropping" : ""}`}
     >
       {/* Collapsed: a thin line, or the live pill (main activity + a bubble for the next one) */}
       {!open && (

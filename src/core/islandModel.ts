@@ -6,7 +6,7 @@
 export interface IslandBlock { title: string; start: number; end: number; id?: string; calendarId?: string }
 
 /** Every tap gets an answer from the app window: done, or why not. */
-export interface IslandAck { id: string; ok: boolean; error?: string }
+export interface IslandAck { id: string; ok: boolean; error?: string; /** What happened, in words (the command bar's answer). */ text?: string }
 
 export type IslandAction = { id?: string } & (
   | { kind: 'water'; ml: number }
@@ -23,6 +23,10 @@ export type IslandAction = { id?: string } & (
   | { kind: 'moveBreak'; name: string; n: number; alertId: string }
   | { kind: 'eyeBreaks'; on: boolean }
   | { kind: 'closeDay' }
+  | { kind: 'todoDone'; id: string; content: string }
+  | { kind: 'clipSave'; to: 'task' | 'note'; text: string; alertId: string }
+  | { kind: 'book'; text: string }
+  | { kind: 'voice'; mime: string; data: string }
   | { kind: 'push'; block: IslandBlock; minutes: number }
   | { kind: 'blockResult'; block: IslandBlock; result: 'done' | 'half' | 'no'; alertId: string }
   | { kind: 'autoFocus'; on: boolean }
@@ -30,7 +34,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip'
   title: string
   text: string
   face?: string
@@ -55,6 +59,8 @@ export interface IslandSnapshot {
   call?: { title: string; end: number } | null
   /** Wind-down: the hour before your bedtime target. */
   windDown?: { bedAt: string; minutesLeft: number } | null
+  /** Todoist: your next tasks for today (tick them on the island). */
+  tasks?: { id: string; content: string; time: string | null }[]
   /** 20-20-20 eye breaks on? */
   eyeBreaks?: boolean
   /** Start focus by itself when a calendar block begins. */
@@ -211,7 +217,7 @@ export function pill(s: IslandSnapshot, now: number): Pill {
 
 // ---- Your island: how it looks and behaves (Settings → Desktop island) ----
 
-export type IslandSection = 'timer' | 'sleep' | 'plan' | 'mustdos' | 'logs' | 'points' | 'ben'
+export type IslandSection = 'timer' | 'sleep' | 'plan' | 'tasks' | 'mustdos' | 'logs' | 'points' | 'ben'
 export interface IslandPrefs {
   size: 'compact' | 'normal' | 'large'
   /** Background opacity, 0.55 (see-through) … 1 (solid). */
@@ -227,13 +233,13 @@ export interface IslandPrefs {
   shortcut: string
 }
 
-export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', sleep: 'Bedtime', plan: 'Now & next', mustdos: 'Must-dos', logs: 'Water & reps', points: 'Points & reward', ben: 'Ben' }
+export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', sleep: 'Bedtime', plan: 'Now & next', tasks: 'Todoist', mustdos: 'Must-dos', logs: 'Water & reps', points: 'Points & reward', ben: 'Ben' }
 export const SHORTCUTS = ['Control+Alt+Space', 'Control+Shift+Space', 'Alt+Q', 'Control+Alt+L', ''] as const
 export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   size: 'normal',
   opacity: 1,
   look: 'black',
-  sections: (['timer', 'sleep', 'plan', 'mustdos', 'logs', 'points', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
+  sections: (['timer', 'sleep', 'plan', 'tasks', 'mustdos', 'logs', 'points', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
   sound: true,
   hide: 'normal',
   shortcut: 'Control+Alt+Space'

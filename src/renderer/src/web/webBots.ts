@@ -2025,7 +2025,32 @@ His note: ${note}`,
     return handle(token.split(':')[0], { ...update, __token: token }, cfg)
   }
 
+  /**
+   * The island's command bar: the bots' rules only (no AI, instant, offline):
+   * "spent 40 taxi", "water 500", "30 pushups", "bed 23:40"… Not understood →
+   * { unknown: true } and the caller asks Ben.
+   */
+  async function quick(text: string): Promise<{ ok: boolean; reply: string } | { unknown: true }> {
+    const t = text.trim()
+    if (!t || t.length > 200) return { unknown: true }
+    const key = `quick:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`
+    const out = await mirror.write((db) => {
+      const svc = services.services(db)
+      try {
+        return applyText(db, svc, t, key) as RunOut & { error?: boolean }
+      } catch (e) {
+        currentDb = null
+        return { reply: `⚠️ ${esc((e as Error).message)}`, error: true } as RunOut & { error?: boolean }
+      }
+    })
+    if (out.unknown) return { unknown: true }
+    if (out.sport) addRepsToSportTrack(out.sport.name, out.sport.amount)
+    if (out.expense) onExpense?.()
+    return { ok: !out.error, reply: plain(out.reply).replace(/\n{2,}/g, '\n').trim() }
+  }
+
   return {
+    quick,
     pollOnce,
     handleUpdate,
     /** The app's Coach page: the same brain and memory as the bots. */
