@@ -15667,6 +15667,43 @@ function sendOnce(prev, html, day) {
 		}
 	};
 }
+// src/core/benVoice.ts
+/** Which nudge this is (null: not one Ben rewrites, e.g. plans, reviews, your reminders). */
+function voiceKind(html) {
+	const p = html.replace(/<[^>]+>/g, "").trimStart();
+	if (/^💧/u.test(p)) return "water";
+	if (/^💪/u.test(p)) return "training";
+	if (/^(😤|🎯|🙂|😐)\s*Nothing done/u.test(p)) return "idle";
+	if (/^🔁/u.test(p)) return "moved";
+	return null;
+}
+function voicePrompt(kind, template, c) {
+	const plain = template.replace(/<[^>]+>/g, "");
+	return [
+		`You are Ben, Victor's personal coach, writing him ONE Telegram message right now (${c.time}).`,
+		`What to say (the facts and numbers are true, keep them): "${plain}"`,
+		"His day right now:",
+		`- focus so far: ${c.focusMin} min`,
+		c.mustDos.length ? `- open must-dos: ${c.mustDos.join("; ")}` : "- no open must-dos",
+		c.nextEvent ? `- next in his calendar: ${c.nextEvent}` : "- nothing more in his calendar today",
+		c.tasks.length ? `- Todoist today: ${c.tasks.join("; ")}` : "",
+		c.water ? `- water: ${c.water}` : "",
+		`Write it like a real coach who knows his day: 1–2 short sentences, specific (name the task or the gap before the next event), ONE concrete next step he can do in the next minutes. ${c.tone >= 4 ? "Be direct and push." : "Warm but firm, no guilt-tripping."}`,
+		`Start with the same emoji as the original. Keep every number from it true; invent no facts. English. Plain text, <b>bold</b> allowed. No quotes, no lists, max 260 characters. Answer with the message only.`
+	].filter(Boolean).join("\n");
+}
+/** The model's text, if it's safe and sensible to send; else null (the fixed line goes). */
+function cleanVoice(out, template) {
+	let t = String(out ?? "").trim().replace(/^["'“”]+|["'“”]+$/g, "").trim();
+	if (!t || t.length > 420 || /^\{/.test(t)) return null;
+	t = t.replace(/<(?!\/?(b|i)>)[^>]*>/g, "");
+	const emoji = template.replace(/<[^>]+>/g, "").trimStart().match(/^\p{Extended_Pictographic}️?/u)?.[0];
+	if (emoji && !t.startsWith(emoji)) t = `${emoji} ${t.replace(/^\p{Extended_Pictographic}️?\s*/u, "")}`;
+	const nums = (s) => (s.replace(/<[^>]+>/g, "").match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(",", "."));
+	const have = new Set(nums(t));
+	if (nums(template).some((n) => !have.has(n))) return null;
+	return t;
+}
 // src/core/health.ts
 var ago = (now, iso) => {
 	const m = Math.round((now.getTime() - Date.parse(iso)) / 6e4);
@@ -16634,6 +16671,33 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
 	await beat(healthDb, "tick", true, void 0, now);
 	const sent = [];
+	const voiced = async (template) => {
+		const kind = voiceKind(template);
+		if (!kind || !env.model) return template;
+		try {
+			const ctx = await mirror.read((db) => {
+				const f = services.services(db).focus.state(now);
+				return {
+					focusMin: f.todayMin,
+					mustDos: f.plan.items.filter((x) => !x.done).map((x) => x.text).slice(0, 4),
+					tone: loadStyle(db).tone
+				};
+			});
+			const day = now.toLocaleDateString("sv-SE");
+			const next = (calendar ? await calendar.events(now.toISOString(), (/* @__PURE__ */ new Date(`${day}T23:59:59`)).toISOString()).catch(() => []) : []).filter((e) => !e.allDay && Date.parse(e.start) > now.getTime()).sort((a, b) => a.start.localeCompare(b.start))[0];
+			const tasks = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((l) => l.map((t) => t.content).slice(0, 5), () => []) : [];
+			const hm = (iso) => new Date(iso).toTimeString().slice(0, 5);
+			return cleanVoice(await env.model(voicePrompt(kind, template, {
+				time: hm(now.toISOString()),
+				...ctx,
+				nextEvent: next ? `${next.title} at ${hm(next.start)}` : null,
+				tasks,
+				water: null
+			}), { kind: "nudge" }), template) ?? template;
+		} catch {
+			return template;
+		}
+	};
 	const send = async (text, reply_markup) => {
 		if (!await mirror.write((db) => {
 			let prev = null;
@@ -16644,6 +16708,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			if (r.send) setSetting(db, BEN_SENT, JSON.stringify(r.next));
 			return r.send;
 		})) return;
+		text = await voiced(text);
 		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },

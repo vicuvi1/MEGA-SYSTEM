@@ -24,6 +24,7 @@ import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
 import { sendOnce, type SentToday } from '../core/benOnce'
+import { cleanVoice, voiceKind, voicePrompt } from '../core/benVoice'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
 import { alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
 import { beat, logError, readHealth, setNote } from '../renderer/src/web/systemHealth'
@@ -379,6 +380,26 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
   await beat(healthDb, 'tick', true, undefined, now)
   const sent: string[] = []
+  const voiced = async (template: string): Promise<string> => {
+    const kind = voiceKind(template)
+    if (!kind || !env.model) return template
+    try {
+      const ctx = await mirror.read((db) => {
+        const svc = services.services(db)
+        const f = svc.focus.state(now)
+        return { focusMin: f.todayMin, mustDos: f.plan.items.filter((x) => !x.done).map((x) => x.text).slice(0, 4), tone: loadStyle(db).tone }
+      })
+      const day = now.toLocaleDateString('sv-SE')
+      const events = calendar ? await calendar.events(now.toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => []) : []
+      const next = events.filter((e) => !e.allDay && Date.parse(e.start) > now.getTime()).sort((a, b) => a.start.localeCompare(b.start))[0]
+      const tasks = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((l) => l.map((t) => t.content).slice(0, 5), () => []) : []
+      const hm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
+      const out = await env.model(voicePrompt(kind, template, { time: hm(now.toISOString()), ...ctx, nextEvent: next ? `${next.title} at ${hm(next.start)}` : null, tasks, water: null }), { kind: 'nudge' } as any)
+      return cleanVoice(out, template) ?? template
+    } catch {
+      return template
+    }
+  }
   const send = async (text: string, reply_markup?: unknown) => {
     // Each kind of message at most once a day (not the same water nudge 4 times).
     const ok = await mirror.write((db) => {
@@ -393,6 +414,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
       return r.send
     })
     if (!ok) return
+    // Nudges in Ben's own words for this moment of your day (the fixed line if that fails).
+    text = await voiced(text)
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
