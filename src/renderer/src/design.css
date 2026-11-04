@@ -1840,3 +1840,16 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .bt-cases li.bad summary span { color: var(--red, #f87171); font-weight: 800; }
 .bt-cases small { color: var(--muted); margin-left: 6px; }
 .bt-cases pre { margin: 4px 0 8px 22px; padding: 8px 10px; border-radius: 8px; background: rgb(var(--ink) / 0.05); font-size: 11.5px; white-space: pre-wrap; color: var(--muted); }
+
+/* Rest day (Sport) */
+.rest-chip.on { background: color-mix(in srgb, #8b7cff 22%, transparent); color: var(--text); }
+.rest-card { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: var(--s-4, 16px); padding: 12px 16px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.06); }
+.rest-card.on { background: linear-gradient(135deg, color-mix(in srgb, #8b7cff 18%, var(--surface)), var(--surface)); }
+.rest-card > div { flex: 1 1 240px; display: grid; }
+.rest-card small { color: var(--muted); }
+.rest-other { display: flex; gap: 6px; align-items: center; }
+.rest-other input { padding: 4px 8px; }
+.rest-list { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rest-day { border: 0; border-radius: 999px; padding: 2px 8px; background: rgb(var(--ink) / 0.07); color: var(--text); font: inherit; font-size: 11.5px; cursor: pointer; }
+.rest-day:hover { background: rgb(var(--ink) / 0.14); }
+.rest-chip .rest-text { display: inline; }

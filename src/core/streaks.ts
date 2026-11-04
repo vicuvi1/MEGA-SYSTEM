@@ -4,23 +4,27 @@ import { addDays, daysBetween } from './dates'
  * Consecutive days ending today. If today isn't done yet the streak is still
  * alive as long as yesterday was.
  */
-export function dayStreak(doneDays: Iterable<string>, today: string): number {
+export function dayStreak(doneDays: Iterable<string>, today: string, restDays: Iterable<string> = []): number {
   const set = new Set(doneDays)
-  let cursor = set.has(today) ? today : addDays(today, -1)
+  // A rest day you chose keeps the streak alive (it doesn't add to it).
+  const rest = new Set([...restDays].filter((d) => !set.has(d)))
+  let cursor = set.has(today) || rest.has(today) ? today : addDays(today, -1)
   let n = 0
-  while (set.has(cursor)) {
-    n++
+  while (set.has(cursor) || rest.has(cursor)) {
+    if (set.has(cursor)) n++
     cursor = addDays(cursor, -1)
   }
   return n
 }
 
-export function bestDayStreak(doneDays: Iterable<string>): number {
-  const days = [...new Set(doneDays)].sort()
+export function bestDayStreak(doneDays: Iterable<string>, restDays: Iterable<string> = []): number {
+  const done = new Set(doneDays)
+  const days = [...new Set([...done, ...restDays])].sort()
   let best = 0
   let run = 0
   for (let i = 0; i < days.length; i++) {
-    run = i > 0 && daysBetween(days[i - 1], days[i]) === 1 ? run + 1 : 1
+    if (i > 0 && daysBetween(days[i - 1], days[i]) !== 1) run = 0
+    if (done.has(days[i])) run++
     best = Math.max(best, run)
   }
   return best

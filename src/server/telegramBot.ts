@@ -677,7 +677,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
         wakeTarget: targetForDay(today, sl.weekdayTarget(), sl.weekendTarget()),
         waterMl: water.ml,
         waterTarget: water.target,
-        workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done'),
+        workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done') || !!svc.body.state().restToday,
         paused
       }
     }

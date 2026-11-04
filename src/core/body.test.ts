@@ -100,3 +100,19 @@ describe('workout stats and streaks', () => {
     expect(stats.workoutDoneToday).toBe(false)
   })
 })
+
+describe('rest days', () => {
+  it("a rest day keeps the streak alive but doesn't add to it", async () => {
+    const { computeWorkoutStats } = await import('./body')
+    const w = (day: string) => ({ id: 1, day, title: 'x', items: [], note: null, createdAt: day }) as any
+    const workouts = [w('2026-11-01'), w('2026-11-02'), w('2026-11-04')]
+    expect(computeWorkoutStats(workouts, '2026-11-04').streak).toBe(1)
+    const s = computeWorkoutStats(workouts, '2026-11-04', ['2026-11-03'])
+    expect(s.streak).toBe(3)
+    expect(s.bestStreak).toBe(3)
+    const r = computeWorkoutStats(workouts.slice(0, 2), '2026-11-03', ['2026-11-03'])
+    expect(r.streak).toBe(2)
+    expect(r.restToday).toBe(true)
+    expect(r.workoutDoneToday).toBe(false)
+  })
+})

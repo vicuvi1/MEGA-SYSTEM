@@ -65,6 +65,10 @@ export interface BodySummary {
   totalWorkouts: number
   workoutsThisWeek: number
   workoutDoneToday: boolean
+  /** You marked today a rest day (keeps the streak, no training nudges). */
+  restToday?: boolean
+  /** The rest days you marked (recent). */
+  restDays?: string[]
   latestWeight: number | null
   previousWeight: number | null
   latestWaist: number | null
@@ -127,10 +131,12 @@ export function weekMonday(day: string): string {
   return addDays(day, diff)
 }
 
-export function computeWorkoutStats(workouts: Workout[], today: string) {
+export function computeWorkoutStats(workouts: Workout[], today: string, restDays: string[] = []) {
   const workoutDays = Array.from(new Set(workouts.filter((w) => w.day <= today).map((w) => w.day))).sort()
-  const streak = dayStreak(workoutDays, today)
-  const bestStreak = bestDayStreak(workoutDays)
+  const rest = restDays.filter((d) => d <= today)
+  const streak = dayStreak(workoutDays, today, rest)
+  const bestStreak = bestDayStreak(workoutDays, rest)
+  const restToday = rest.includes(today)
   const totalWorkouts = workouts.length
   const workoutDoneToday = workoutDays.includes(today)
 
@@ -143,7 +149,8 @@ export function computeWorkoutStats(workouts: Workout[], today: string) {
     bestStreak,
     totalWorkouts,
     workoutsThisWeek,
-    workoutDoneToday
+    workoutDoneToday,
+    restToday
   }
 }
 

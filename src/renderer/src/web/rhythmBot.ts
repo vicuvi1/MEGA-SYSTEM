@@ -174,7 +174,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const st = load(db, today)
       const sport = sportState(db)
       const water = sport ? sharedView(sport, sportToday()).water.target : 2700
-      const workoutDone = (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done')
+      const workoutDone = (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done') || !!svc.body.state(now).restToday
       return { today, st, water, workoutDone }
     })
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
@@ -296,7 +296,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         blocksPlanned: 0,
         waterMl: water.ml,
         waterTarget: water.target,
-        workoutDone: (svc.wallet.summary().todayRules ?? []).includes('body.workout_done'),
+        workoutDone: (svc.wallet.summary().todayRules ?? []).includes('body.workout_done') || !!svc.body.state().restToday,
         trainingPlanned: !!st.briefing?.plan.training
       }
     })

@@ -192,7 +192,8 @@ export function createWebServices(mirror: Mirror) {
       logWorkout: (input: WorkoutInput) => write((s) => s.body.logWorkout(input), W, B),
       deleteWorkout: (id: number) => write((s) => s.body.deleteWorkout(id), W, B),
       logMetric: (input: BodyMetricInput) => write((s) => s.body.logMetric(input), W, B),
-      saveExercise: (ex: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }) => write((s) => (s.body.saveExercise(ex), s.body.state()), B)
+      saveExercise: (ex: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }) => write((s) => (s.body.saveExercise(ex), s.body.state()), B),
+      setRest: (day: string | null, on: boolean) => write((s) => s.body.setRest(day, on), B)
     },
     focus: {
       state: () => read((s) => s.focus.state()),

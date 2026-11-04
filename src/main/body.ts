@@ -16,6 +16,7 @@ import {
 } from '@core/body'
 import { LedgerError } from '@core/ledger'
 import type { DB } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
 
 interface DbWorkoutRow {
@@ -46,8 +47,30 @@ interface DbExerciseRow {
   archived: number
 }
 
+const REST_DAYS = 'sport_rest_days'
+
 export class Body {
   constructor(private db: DB, private wallet: Wallet) {}
+
+  /** Rest days you chose (synced setting, the last 120). */
+  restDays(): string[] {
+    try {
+      const v = JSON.parse(getSetting(this.db, REST_DAYS) || '[]')
+      return Array.isArray(v) ? v.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d))).map(String) : []
+    } catch {
+      return []
+    }
+  }
+
+  /** Marks a day (default today) as a rest day, or takes it back. */
+  setRest(day: string | null, on: boolean, now = new Date()): BodySummary {
+    const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : this.wallet.today(now)
+    const set = new Set(this.restDays())
+    if (on) set.add(d)
+    else set.delete(d)
+    setSetting(this.db, REST_DAYS, JSON.stringify([...set].sort().slice(-120)))
+    return this.state(now)
+  }
 
   exercises(): Exercise[] {
     let rows = this.db.prepare('SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name').all() as DbExerciseRow[]
@@ -123,7 +146,8 @@ export class Body {
     const allMetrics = this.metrics(100)
     const exercises = this.exercises()
 
-    const stats = computeWorkoutStats(allWorkouts, today)
+    const restDays = this.restDays()
+    const stats = computeWorkoutStats(allWorkouts, today, restDays)
     const weeklyAverages = computeWeeklyAverages(allMetrics, 12)
 
     const withWeight = allMetrics.filter((m) => m.weight != null)
@@ -141,6 +165,8 @@ export class Body {
       totalWorkouts: stats.totalWorkouts,
       workoutsThisWeek: stats.workoutsThisWeek,
       workoutDoneToday: stats.workoutDoneToday,
+      restToday: stats.restToday,
+      restDays,
       latestWeight,
       previousWeight,
       latestWaist,

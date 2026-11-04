@@ -1,3 +1,4 @@
+import { RestDayCard } from '../RestDay'
 import { useState } from 'react'
 import type { BodyMetricInput, BodyState, Exercise, WorkoutExerciseItem, WorkoutInput } from '@shared/api'
 import { life } from '../bridge'
@@ -139,6 +140,7 @@ export function Body({
 
   return (
     <div className="body-page">
+      <RestDayCard />
       <section className="stats four">
         <div className="stat hero pink">
           <span className="label">Workout streak</span>
@@ -146,7 +148,9 @@ export function Body({
           <span className="sub">
             {state.workoutDoneToday
               ? 'Completed today (+10 coins paid)'
-              : `Best streak: ${state.bestStreak} days · Ready for today`}
+              : state.restToday
+                ? `😴 Rest day · streak kept · best ${state.bestStreak}`
+                : `Best streak: ${state.bestStreak} days · Ready for today`}
           </span>
         </div>
 

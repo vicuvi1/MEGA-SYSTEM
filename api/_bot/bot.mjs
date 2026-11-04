@@ -604,22 +604,25 @@ function monthKey$1(day) {
 * Consecutive days ending today. If today isn't done yet the streak is still
 * alive as long as yesterday was.
 */
-function dayStreak(doneDays, today) {
+function dayStreak(doneDays, today, restDays = []) {
 	const set = new Set(doneDays);
-	let cursor = set.has(today) ? today : addDays$1(today, -1);
+	const rest = new Set([...restDays].filter((d) => !set.has(d)));
+	let cursor = set.has(today) || rest.has(today) ? today : addDays$1(today, -1);
 	let n = 0;
-	while (set.has(cursor)) {
-		n++;
+	while (set.has(cursor) || rest.has(cursor)) {
+		if (set.has(cursor)) n++;
 		cursor = addDays$1(cursor, -1);
 	}
 	return n;
 }
-function bestDayStreak(doneDays) {
-	const days = [...new Set(doneDays)].sort();
+function bestDayStreak(doneDays, restDays = []) {
+	const done = new Set(doneDays);
+	const days = [.../* @__PURE__ */ new Set([...done, ...restDays])].sort();
 	let best = 0;
 	let run = 0;
 	for (let i = 0; i < days.length; i++) {
-		run = i > 0 && daysBetween$1(days[i - 1], days[i]) === 1 ? run + 1 : 1;
+		if (i > 0 && daysBetween$1(days[i - 1], days[i]) !== 1) run = 0;
+		if (done.has(days[i])) run++;
 		best = Math.max(best, run);
 	}
 	return best;
@@ -731,10 +734,12 @@ function weekMonday(day) {
 	const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 	return addDays$1(day, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
 }
-function computeWorkoutStats(workouts, today) {
+function computeWorkoutStats(workouts, today, restDays = []) {
 	const workoutDays = Array.from(new Set(workouts.filter((w) => w.day <= today).map((w) => w.day))).sort();
-	const streak = dayStreak(workoutDays, today);
-	const bestStreak = bestDayStreak(workoutDays);
+	const rest = restDays.filter((d) => d <= today);
+	const streak = dayStreak(workoutDays, today, rest);
+	const bestStreak = bestDayStreak(workoutDays, rest);
+	const restToday = rest.includes(today);
 	const totalWorkouts = workouts.length;
 	const workoutDoneToday = workoutDays.includes(today);
 	const thisMonday = weekMonday(today);
@@ -744,7 +749,8 @@ function computeWorkoutStats(workouts, today) {
 		bestStreak,
 		totalWorkouts,
 		workoutsThisWeek: workouts.filter((w) => w.day >= thisMonday && w.day < nextMonday).length,
-		workoutDoneToday
+		workoutDoneToday,
+		restToday
 	};
 }
 function computeWeeklyAverages(metrics, weeks = 12) {
@@ -2022,13 +2028,39 @@ var TursoHttp = class {
 		}
 	}
 };
+// src/main/settings.ts
+function getSetting(db, key) {
+	return db.prepare("SELECT value FROM settings WHERE key = ?").get(key)?.value ?? null;
+}
+function setSetting(db, key, value) {
+	db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
 // src/main/body.ts
+var REST_DAYS = "sport_rest_days";
 var Body = class {
 	db;
 	wallet;
 	constructor(db, wallet) {
 		this.db = db;
 		this.wallet = wallet;
+	}
+	/** Rest days you chose (synced setting, the last 120). */
+	restDays() {
+		try {
+			const v = JSON.parse(getSetting(this.db, REST_DAYS) || "[]");
+			return Array.isArray(v) ? v.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d))).map(String) : [];
+		} catch {
+			return [];
+		}
+	}
+	/** Marks a day (default today) as a rest day, or takes it back. */
+	setRest(day, on, now = /* @__PURE__ */ new Date()) {
+		const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : this.wallet.today(now);
+		const set = new Set(this.restDays());
+		if (on) set.add(d);
+		else set.delete(d);
+		setSetting(this.db, REST_DAYS, JSON.stringify([...set].sort().slice(-120)));
+		return this.state(now);
 	}
 	exercises() {
 		let rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
@@ -2089,7 +2121,8 @@ var Body = class {
 		const allWorkouts = this.workouts(200);
 		const allMetrics = this.metrics(100);
 		const exercises = this.exercises();
-		const stats = computeWorkoutStats(allWorkouts, today);
+		const restDays = this.restDays();
+		const stats = computeWorkoutStats(allWorkouts, today, restDays);
 		const weeklyAverages = computeWeeklyAverages(allMetrics, 12);
 		const withWeight = allMetrics.filter((m) => m.weight != null);
 		const latestWeight = withWeight.length ? withWeight[withWeight.length - 1].weight : null;
@@ -2104,6 +2137,8 @@ var Body = class {
 			totalWorkouts: stats.totalWorkouts,
 			workoutsThisWeek: stats.workoutsThisWeek,
 			workoutDoneToday: stats.workoutDoneToday,
+			restToday: stats.restToday,
+			restDays,
 			latestWeight,
 			previousWeight,
 			latestWaist,
@@ -2403,13 +2438,6 @@ function planUrgeFinish(startedAt, now) {
 function dayNumber(s) {
 	if (s.setup === false) return 0;
 	return s.current + (s.resets === 0 ? 1 : 0);
-}
-// src/main/settings.ts
-function getSetting(db, key) {
-	return db.prepare("SELECT value FROM settings WHERE key = ?").get(key)?.value ?? null;
-}
-function setSetting(db, key, value) {
-	db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
 }
 // src/main/discipline.ts
 var Discipline = class {
@@ -6803,7 +6831,8 @@ syncFinance: (recordDays) => write((s) => {
 			logWorkout: (input) => write((s) => s.body.logWorkout(input), W, B),
 			deleteWorkout: (id) => write((s) => s.body.deleteWorkout(id), W, B),
 			logMetric: (input) => write((s) => s.body.logMetric(input), W, B),
-			saveExercise: (ex) => write((s) => (s.body.saveExercise(ex), s.body.state()), B)
+			saveExercise: (ex) => write((s) => (s.body.saveExercise(ex), s.body.state()), B),
+			setRest: (day, on) => write((s) => s.body.setRest(day, on), B)
 		},
 		focus: {
 			state: () => read((s) => s.focus.state()),
@@ -11889,7 +11918,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				today,
 				st,
 				water: sport ? sharedView(sport, sportToday()).water.target : 2700,
-				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done")
+				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done") || !!svc.body.state(now).restToday
 			};
 		});
 		const plans = await goalPlans().catch(() => []);
@@ -12052,7 +12081,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				blocksPlanned: 0,
 				waterMl: water.ml,
 				waterTarget: water.target,
-				workoutDone: (svc.wallet.summary().todayRules ?? []).includes("body.workout_done"),
+				workoutDone: (svc.wallet.summary().todayRules ?? []).includes("body.workout_done") || !!svc.body.state().restToday,
 				trainingPlanned: !!st.briefing?.plan.training
 			};
 		});
@@ -17608,7 +17637,7 @@ async function rhythmTick(env, now, send) {
 				wakeTarget: targetForDay(today, sl.weekdayTarget(), sl.weekendTarget()),
 				waterMl: water.ml,
 				waterTarget: water.target,
-				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done"),
+				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done") || !!svc.body.state().restToday,
 				paused
 			}
 		};

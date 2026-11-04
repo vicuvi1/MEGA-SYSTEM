@@ -443,6 +443,8 @@ export interface LifeApi {
     deleteWorkout(id: number): Promise<BodyState>
     logMetric(input: BodyMetricInput): Promise<BodyState>
     saveExercise(exercise: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }): Promise<BodyState>
+    /** Mark a day (default today) as a rest day, or take it back. */
+    setRest?(day: string | null, on: boolean): Promise<BodyState>
   }
   connections: {
     state(): Promise<ConnectionsState>
