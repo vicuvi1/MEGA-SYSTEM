@@ -1,3 +1,4 @@
+import { parseTelegramText } from '@core/botCommands'
 // The coach's brain: a message that isn't a simple log or a command goes to
 // Gemini with your real data (today, the week, sleep, money, Todoist), what
 // the coach remembers about you and the last messages. It answers as a coach
@@ -160,6 +161,10 @@ export function personaFor(botId: string, cfg: BotBridgeConfig): Persona {
 export function isSimpleLog(text: string): boolean {
   const t = text.trim()
   if (t.startsWith('/')) return true
+  // A short sentence the rules understand (an expense, wake/bed time, a gym
+  // session, "how much did I spend?") never costs an AI call.
+  const many = /\b(and|și|si|и|then|also|plus)\b/i.test(t)
+  if (!many && t.split(/\s+/).length <= 9 && parseTelegramText(t).type !== 'unknown') return true
   const nums = t.match(/\d+(?:[.,]\d+)?/g) ?? []
   const words = t.split(/\s+/).filter(Boolean)
   return nums.length >= 1 && nums.length <= 2 && words.length <= 5 && !/[?]/.test(t) && !/\b(and|și|si|и|then|also|plus)\b/i.test(t)

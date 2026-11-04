@@ -18,6 +18,7 @@ export type BotCommandType =
   | 'vault'
   | 'goals'
   | 'balance'
+  | 'spent'
   | 'unknown'
 
 export interface ParsedCommand {
@@ -35,6 +36,8 @@ export interface ParsedCommand {
   expenseCategory?: string
   expenseNote?: string
   taskIndex?: number
+  /** 'spent': which days you ask about. */
+  period?: 'today' | 'yesterday' | 'week' | 'month'
 }
 
 function parseAmountAndUnit(str: string, defaultUnit = 'reps'): { amount: number; unit: string } {
@@ -56,7 +59,8 @@ function parseAmountAndUnit(str: string, defaultUnit = 'reps'): { amount: number
 
 
 export function detectExpenseCategory(text: string): string {
-  const t = text.toLowerCase()
+  // "benzină", "cafeá"… match their plain spelling.
+  const t = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   if (/\b(coffee|cafe|cafea|cappuccino|tea|ceai|lunch|pranz|dinner|cina|breakfast|dejun|groceries|alimente|market|magazin|lidl|kaufland|linella|supermarket|food|mancare|mcdonalds|kfc|pizza|burger|shawarma|kebab|restaurant|bar|bere|beer|snack|water|apa)\b/i.test(t)) {
     return 'food'
   }
@@ -85,15 +89,20 @@ export function detectExpenseCategory(text: string): string {
 }
 
 export function tryParseNaturalExpense(text: string): ParsedCommand | null {
-  const trimmed = text.trim()
+  // "spent 50 lei on lunch", "am cheltuit 120 lei pe benzină", "paid 30 for taxi":
+  // the verb and the little words around the amount are not the note.
+  const trimmed = text
+    .trim()
+    .replace(/^(i\s+)?(just\s+)?(spent|paid|bought|am\s+cheltuit|am\s+dat|am\s+pl[aă]tit|am\s+cump[aă]rat|cheltuit|pl[aă]tit|потратил[аи]?|заплатил[аи]?)\s+/i, '')
   if (!trimmed || trimmed.startsWith('/')) return null
+  const cleanNote = (n: string) => n.replace(/\b(lei|mdl)\b/gi, '').replace(/[$€]/g, '').replace(/^\s*(on|for|at|pe|pentru|la|na|за)\s+/i, '').replace(/\s+/g, ' ').trim()
 
   // Pattern A: Amount first: e.g. "35 coffee", "35.50 lunch with alex", "+500 salary", "45 lei pizza", "120 mdl groceries"
   const amountFirstMatch = trimmed.match(/^([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?\s+(.+)$/i)
   if (amountFirstMatch) {
     const rawAmt = amountFirstMatch[1].replace(/\s+/g, '').replace(',', '.')
     const amt = parseFloat(rawAmt)
-    const note = amountFirstMatch[2].replace(/\b(lei|mdl|\$|€)\b/gi, '').trim()
+    const note = cleanNote(amountFirstMatch[2])
     if (!isNaN(amt) && amt > 0 && note.length > 0) {
       const cat = rawAmt.startsWith('+') ? 'income' : detectExpenseCategory(note)
       return {
@@ -110,7 +119,7 @@ export function tryParseNaturalExpense(text: string): ParsedCommand | null {
   // Pattern B: Note first, amount last: e.g. "coffee 35", "taxi 50", "lunch with alex 120", "groceries 250 lei", "freelance +1000"
   const noteFirstMatch = trimmed.match(/^(.+?)\s+([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?$/i)
   if (noteFirstMatch) {
-    const note = noteFirstMatch[1].replace(/\b(lei|mdl|\$|€)\b/gi, '').trim()
+    const note = cleanNote(noteFirstMatch[1])
     const rawAmt = noteFirstMatch[2].replace(/\s+/g, '').replace(',', '.')
     const amt = parseFloat(rawAmt)
     if (!isNaN(amt) && amt > 0 && note.length > 0) {
@@ -146,6 +155,24 @@ export function parseTelegramText(text: string): ParsedCommand {
   }
 
   const args = parts.slice(1)
+
+  // Plain sentences the rules can do without AI (free and instant):
+  // "woke up at 7:30", "m-am trezit la 7:30" → wake; "went to bed at 23:40",
+  // "m-am culcat la 0:30", "bed 23:40" → bed at that time.
+  const hm = (h: string, m?: string) => `${h.padStart(2, '0')}:${(m ?? '00').padStart(2, '0')}`
+  const wake = /^(?:i\s+)?(?:woke(?:\s+up)?|wake(?:\s+up)?|got\s+up|up|m-?am\s+trezit|trezit|m-?am\s+sculat|проснул[аи]?с[ья])\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed)
+  if (wake && Number(wake[1]) < 24) return { type: 'wake', args: [hm(wake[1], wake[2])], raw: trimmed }
+  const bed = /^(?:i\s+)?(?:went\s+to\s+(?:bed|sleep)|going\s+to\s+(?:bed|sleep)|bed|sleep|m-?am\s+culcat|culcat|m[aă]\s+culc|лег(?:ла)?\s+спать)\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed)
+  if (bed && Number(bed[1]) < 24) return { type: 'bed', args: [hm(bed[1], bed[2])], raw: trimmed }
+  // "gym done", "workout done", "am fost la sală", "trained": a gym session.
+  if (/^(?:(?:gym|sala|sală|workout|training|antrenament(?:ul)?)\s+(?:done|finished|gata|f[aă]cut)|(?:done|finished)\s+(?:gym|workout|training)|am\s+fost\s+la\s+s[aă]l[aă]|trained|i\s+trained|m-?am\s+antrenat)\s*[.!]*$/i.test(trimmed))
+    return { type: 'sport', args: [], raw: trimmed, exerciseName: 'Gym Session', exerciseAmount: 60, exerciseUnit: 'minutes' }
+  // "how much did I spend today/this week?", "cât am cheltuit azi?", "spent this month?"
+  const q = trimmed.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (/(how\s+much.*spen[dt]|spent\b.*\?|cat\s+am\s+cheltuit|cheltuieli|сколько.*потрат)/.test(q) && !/\d{2,}/.test(q)) {
+    const period = /yesterday|ieri|вчера/.test(q) ? 'yesterday' : /week|saptaman|недел/.test(q) ? 'week' : /month|luna|месяц/.test(q) ? 'month' : 'today'
+    return { type: 'spent', args: [], raw: trimmed, period }
+  }
 
   // 1. Direct exercise shortcuts like /pushups 50, /situps 30, /press 20
   const exerciseShortcuts: Record<string, string> = {
@@ -348,7 +375,12 @@ export function parseTelegramText(text: string): ParsedCommand {
     }
   }
 
-  if (cmd === 'expense' || cmd === 'buy' || cmd === 'spent' || cmd === 'pay') {
+  if (cmd === 'expense' || cmd === 'buy' || cmd === 'spent' || cmd === 'pay' || cmd === 'paid') {
+    // "spent 50 lei on lunch": read like a sentence (the category comes from the words).
+    if (!trimmed.startsWith('/') || !/^[a-z]+$/i.test(args[1] ?? '') || /^(lei|mdl|on|for|pe|la)$/i.test(args[1] ?? '')) {
+      const natural = tryParseNaturalExpense(args.join(' '))
+      if (natural) return natural
+    }
     // /expense 45 food lunch
     let amount = 0
     let cat = 'food'

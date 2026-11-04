@@ -6932,7 +6932,7 @@ function parseAmountAndUnit(str, defaultUnit = "reps") {
 	};
 }
 function detectExpenseCategory(text) {
-	const t = text.toLowerCase();
+	const t = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 	if (/\b(coffee|cafe|cafea|cappuccino|tea|ceai|lunch|pranz|dinner|cina|breakfast|dejun|groceries|alimente|market|magazin|lidl|kaufland|linella|supermarket|food|mancare|mcdonalds|kfc|pizza|burger|shawarma|kebab|restaurant|bar|bere|beer|snack|water|apa)\b/i.test(t)) return "food";
 	if (/\b(taxi|cab|uber|bolt|yandex|bus|troleibuz|autobuz|gas|benzina|fuel|motorina|car|auto|parking|parcare|metro|train|tren|transit|transport)\b/i.test(t)) return "transport";
 	if (/\b(rent|chirie|bills|facturi|utilitati|gaz|lumina|electricitate|net|internet|wifi|moldtelecom|orange|clean|cleaning|intretinere|home|casa)\b/i.test(t)) return "home";
@@ -6944,13 +6944,14 @@ function detectExpenseCategory(text) {
 	return "other";
 }
 function tryParseNaturalExpense(text) {
-	const trimmed = text.trim();
+	const trimmed = text.trim().replace(/^(i\s+)?(just\s+)?(spent|paid|bought|am\s+cheltuit|am\s+dat|am\s+pl[aă]tit|am\s+cump[aă]rat|cheltuit|pl[aă]tit|потратил[аи]?|заплатил[аи]?)\s+/i, "");
 	if (!trimmed || trimmed.startsWith("/")) return null;
+	const cleanNote = (n) => n.replace(/\b(lei|mdl)\b/gi, "").replace(/[$€]/g, "").replace(/^\s*(on|for|at|pe|pentru|la|na|за)\s+/i, "").replace(/\s+/g, " ").trim();
 	const amountFirstMatch = trimmed.match(/^([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?\s+(.+)$/i);
 	if (amountFirstMatch) {
 		const rawAmt = amountFirstMatch[1].replace(/\s+/g, "").replace(",", ".");
 		const amt = parseFloat(rawAmt);
-		const note = amountFirstMatch[2].replace(/\b(lei|mdl|\$|€)\b/gi, "").trim();
+		const note = cleanNote(amountFirstMatch[2]);
 		if (!isNaN(amt) && amt > 0 && note.length > 0) {
 			const cat = rawAmt.startsWith("+") ? "income" : detectExpenseCategory(note);
 			return {
@@ -6969,7 +6970,7 @@ function tryParseNaturalExpense(text) {
 	}
 	const noteFirstMatch = trimmed.match(/^(.+?)\s+([+-]?\s*\d+(?:[.,]\d+)?)\s*(?:mdl|lei|\$|€)?$/i);
 	if (noteFirstMatch) {
-		const note = noteFirstMatch[1].replace(/\b(lei|mdl|\$|€)\b/gi, "").trim();
+		const note = cleanNote(noteFirstMatch[1]);
 		const rawAmt = noteFirstMatch[2].replace(/\s+/g, "").replace(",", ".");
 		const amt = parseFloat(rawAmt);
 		if (!isNaN(amt) && amt > 0 && note.length > 0) {
@@ -7002,6 +7003,34 @@ function parseTelegramText(text) {
 	if (cmd.startsWith("/")) cmd = cmd.slice(1);
 	if (cmd.includes("@")) cmd = cmd.split("@")[0];
 	const args = parts.slice(1);
+	const hm = (h, m) => `${h.padStart(2, "0")}:${(m ?? "00").padStart(2, "0")}`;
+	const wake = /^(?:i\s+)?(?:woke(?:\s+up)?|wake(?:\s+up)?|got\s+up|up|m-?am\s+trezit|trezit|m-?am\s+sculat|проснул[аи]?с[ья])\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed);
+	if (wake && Number(wake[1]) < 24) return {
+		type: "wake",
+		args: [hm(wake[1], wake[2])],
+		raw: trimmed
+	};
+	const bed = /^(?:i\s+)?(?:went\s+to\s+(?:bed|sleep)|going\s+to\s+(?:bed|sleep)|bed|sleep|m-?am\s+culcat|culcat|m[aă]\s+culc|лег(?:ла)?\s+спать)\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed);
+	if (bed && Number(bed[1]) < 24) return {
+		type: "bed",
+		args: [hm(bed[1], bed[2])],
+		raw: trimmed
+	};
+	if (/^(?:(?:gym|sala|sală|workout|training|antrenament(?:ul)?)\s+(?:done|finished|gata|f[aă]cut)|(?:done|finished)\s+(?:gym|workout|training)|am\s+fost\s+la\s+s[aă]l[aă]|trained|i\s+trained|m-?am\s+antrenat)\s*[.!]*$/i.test(trimmed)) return {
+		type: "sport",
+		args: [],
+		raw: trimmed,
+		exerciseName: "Gym Session",
+		exerciseAmount: 60,
+		exerciseUnit: "minutes"
+	};
+	const q = trimmed.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+	if (/(how\s+much.*spen[dt]|spent\b.*\?|cat\s+am\s+cheltuit|cheltuieli|сколько.*потрат)/.test(q) && !/\d{2,}/.test(q)) return {
+		type: "spent",
+		args: [],
+		raw: trimmed,
+		period: /yesterday|ieri|вчера/.test(q) ? "yesterday" : /week|saptaman|недел/.test(q) ? "week" : /month|luna|месяц/.test(q) ? "month" : "today"
+	};
 	const exerciseShortcuts = {
 		pushups: "pushups",
 		pushup: "pushups",
@@ -7231,7 +7260,11 @@ function parseTelegramText(text) {
 			exerciseUnit: "reps"
 		};
 	}
-	if (cmd === "expense" || cmd === "buy" || cmd === "spent" || cmd === "pay") {
+	if (cmd === "expense" || cmd === "buy" || cmd === "spent" || cmd === "pay" || cmd === "paid") {
+		if (!trimmed.startsWith("/") || !/^[a-z]+$/i.test(args[1] ?? "") || /^(lei|mdl|on|for|pe|la)$/i.test(args[1] ?? "")) {
+			const natural = tryParseNaturalExpense(args.join(" "));
+			if (natural) return natural;
+		}
 		let amount = 0;
 		let cat = "food";
 		let note = "";
@@ -10595,6 +10628,7 @@ function personaFor(botId, cfg) {
 function isSimpleLog(text) {
 	const t = text.trim();
 	if (t.startsWith("/")) return true;
+	if (!/\b(and|și|si|и|then|also|plus)\b/i.test(t) && t.split(/\s+/).length <= 9 && parseTelegramText(t).type !== "unknown") return true;
 	const nums = t.match(/\d+(?:[.,]\d+)?/g) ?? [];
 	const words = t.split(/\s+/).filter(Boolean);
 	return nums.length >= 1 && nums.length <= 2 && words.length <= 5 && !/[?]/.test(t) && !/\b(and|și|si|и|then|also|plus)\b/i.test(t);
@@ -13315,8 +13349,25 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					keyboard: sleepKeyboard(res.log.day)
 				};
 			}
+			case "spent": {
+				const today = s.wallet.today();
+				const from = parsed.period === "week" ? addDays$1(today, -6) : parsed.period === "month" ? `${today.slice(0, 8)}01` : parsed.period === "yesterday" ? addDays$1(today, -1) : today;
+				const line = answerLocal(`spending ${from} ${parsed.period === "yesterday" ? from : today}`, {
+					finance: financeStateFrom(currentDb, store),
+					input: null,
+					ledger: [],
+					sessions: []
+				}) ?? "No spending data yet.";
+				return { reply: `💸 <b>${{
+					today: "Today",
+					yesterday: "Yesterday",
+					week: "The last 7 days",
+					month: "This month"
+				}[parsed.period ?? "today"]}</b>\n${esc(line.replace(/^Spending [^:]+: /, ""))}` };
+			}
 			case "bed": {
-				const res = s.sleep.logBed((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
+				const at = parsed.args.find((a) => /^\d{1,2}:\d{2}$/.test(a));
+				const res = s.sleep.logBed(at ?? (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
 				return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? "🎯 On time! <b>+5 coins</b>" : "Saved to your sleep history."}` };
 			}
 			case "tasks": {

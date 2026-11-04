@@ -597,8 +597,19 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           keyboard: sleepKeyboard(res.log.day)
         }
       }
+      case 'spent': {
+        // Answered from Finance Helper's records, no AI needed.
+        const today = s.wallet.today()
+        const from = parsed.period === 'week' ? addDays(today, -6) : parsed.period === 'month' ? `${today.slice(0, 8)}01` : parsed.period === 'yesterday' ? addDays(today, -1) : today
+        const to = parsed.period === 'yesterday' ? from : today
+        const line = answerLocal(`spending ${from} ${to}`, { finance: financeStateFrom(currentDb, store), input: null as any, ledger: [], sessions: [] }) ?? 'No spending data yet.'
+        const label = { today: 'Today', yesterday: 'Yesterday', week: 'The last 7 days', month: 'This month' }[parsed.period ?? 'today']
+        return { reply: `💸 <b>${label}</b>\n${esc(line.replace(/^Spending [^:]+: /, ''))}` }
+      }
       case 'bed': {
-        const res = s.sleep.logBed(new Date().toTimeString().slice(0, 5))
+        // "bed 23:40" / "went to bed at 0:30": that time, else now.
+        const at = parsed.args.find((a) => /^\d{1,2}:\d{2}$/.test(a))
+        const res = s.sleep.logBed(at ?? new Date().toTimeString().slice(0, 5))
         return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? '🎯 On time! <b>+5 coins</b>' : 'Saved to your sleep history.'}` }
       }
       case 'tasks': {
