@@ -11292,7 +11292,7 @@ function nextMove(m, now = Date.now()) {
 		sub: "You promised this. Did you do it?",
 		promise
 	};
-	if (m.planStatus === "proposed" && m.hour < 20) return {
+	if (m.planStatus === "proposed" && m.hour < 18) return {
 		kind: "approve",
 		title: "Approve today's plan",
 		sub: "Blocks go in your calendar, must-dos on Today."
@@ -11381,7 +11381,7 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 			behind: p.status === "behind"
 		})),
 		openMustDos: open.map((x) => x.text),
-		evening: now.getHours() >= 21
+		evening: now.getHours() >= 19
 	}, now.getTime());
 	const mood = shownMood(feel.mood, loadStyle(db).tone);
 	return {
