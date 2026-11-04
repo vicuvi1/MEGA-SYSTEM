@@ -24,6 +24,7 @@ import { HealthPanel } from '../HealthPanel'
 import { IslandLogPanel } from '../IslandLogPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
+import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { timeAgo, useAction } from '../ui'
@@ -134,6 +135,8 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   const [pinError, setPinError] = useState<string | null>(null)
   const [pinSuccess, setPinSuccess] = useState<string | null>(null)
   const [isUpdatingPin, setIsUpdatingPin] = useState(false)
+  const [lookFlash, lookSaved] = useSaved()
+  const [bgFlash, bgSaved] = useSaved()
   // "Ask for the PIN on this device": off = this device remembers you.
   const [noPin, setNoPin] = useState(false)
   const [offAsk, setOffAsk] = useState(false)
@@ -642,22 +645,11 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           <span className={`chip ${noPin ? 'warn' : 'ok'}`}>{noPin ? 'Not asked on this device' : 'Asked when the app opens'}</span>
         </header>
         <p className="hint block">The PIN keeps your data private. The website is on the internet, so a new device always needs it once; on your own PC or phone you can skip it.</p>
-        <div className="set-row">
-          <div>
-            <b>Ask for the PIN on this device</b>
-            <small>{noPin ? 'Off: Life System opens straight away here and stays signed in.' : 'Every time Life System opens.'}</small>
-          </div>
+        <Row title="Ask for the PIN on this device" hint={noPin ? 'Never: Life System opens straight away here and stays signed in.' : 'Every time Life System opens.'}>
           {life.auth.setRemembered && (
-            <div className="seg" role="group" aria-label="Ask for the PIN on this device">
-              <button className={!noPin ? 'on' : ''} onClick={() => noPin && void setAskPin(true)}>
-                Always
-              </button>
-              <button className={noPin ? 'on' : ''} onClick={() => !noPin && void setAskPin(false)}>
-                Never
-              </button>
-            </div>
+            <Segmented label="Ask for the PIN on this device" value={noPin ? 'never' : 'always'} options={[['always', 'Always'], ['never', 'Never']]} onChange={(v) => void setAskPin(v === 'always')} />
           )}
-        </div>
+        </Row>
         {offAsk && !noPin && (
           <form
             className="set-confirm"
@@ -756,30 +748,29 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
         <section className="panel">
           <header className="panel-head">
             <h2>
-              <Icon name="bolt" /> Background
+              <Icon name="bolt" /> Apps & start-up
             </h2>
+            <Saved show={bgFlash} />
           </header>
-          <label className="check toggle-row">
-            <input type="checkbox" checked={prefs.keepInTray} onChange={(e) => changePrefs({ keepInTray: e.target.checked })} />
-            <span>
-              Keep running in the tray when the window is closed
-              <small>Needed for block reminders. Quit from the tray icon.</small>
-            </span>
-          </label>
-          <label className="check toggle-row">
-            <input type="checkbox" checked={prefs.matchAppThemes} onChange={(e) => changePrefs({ matchAppThemes: e.target.checked })} />
-            <span>
-              Match the apps to Life System's look
-              <small>Finance Helper, Waky and MAN use Life System's dark colors and fonts. Picking a theme inside an app overrides it for that app; switching this off and on brings Life System's look back.</small>
-            </span>
-          </label>
-          <label className={`check toggle-row ${prefs.canAutoStart ? '' : 'muted'}`}>
-            <input type="checkbox" disabled={!prefs.canAutoStart} checked={prefs.openAtLogin} onChange={(e) => changePrefs({ openAtLogin: e.target.checked })} />
-            <span>
-              Start with Windows
-              <small>{prefs.canAutoStart ? 'Opens quietly when you sign in.' : 'Available once the app is installed (not in dev mode).'}</small>
-            </span>
-          </label>
+          <Row title="Match the apps to Life System's look" hint="Finance Helper, Waky and MAN use the same dark colors and fonts">
+            <Switch label="Match the apps to Life System's look" on={prefs.matchAppThemes} onChange={(v) => void changePrefs({ matchAppThemes: v }).then(bgSaved)} />
+          </Row>
+          {window.desktop ? (
+            <Row title="Start with Windows, keep in the tray" hint="In the tray icon's menu (bottom right of the taskbar): Life System keeps running there when you close the window." />
+          ) : (
+            <>
+              {features.updates && (
+                <Row title="Keep running in the tray" hint="When the window is closed. Needed for block reminders.">
+                  <Switch label="Keep running in the tray" on={prefs.keepInTray} onChange={(v) => void changePrefs({ keepInTray: v }).then(bgSaved)} />
+                </Row>
+              )}
+              {prefs.canAutoStart && (
+                <Row title="Start with Windows" hint="Opens quietly when you sign in">
+                  <Switch label="Start with Windows" on={prefs.openAtLogin} onChange={(v) => void changePrefs({ openAtLogin: v }).then(bgSaved)} />
+                </Row>
+              )}
+            </>
+          )}
         </section>
       )}
         </>
@@ -798,85 +789,40 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
           <h2>
             <Icon name="sun" /> Appearance
           </h2>
+          <Saved show={lookFlash} />
         </header>
-        <div className="field">
-          <span>Text size</span>
-          <div className="seg">
-            {[90, 100, 110, 125].map((n) => (
-              <button key={n} type="button" className={(ui.textSize ?? 100) === n ? 'on' : ''} onClick={() => setUi({ textSize: n })}>
-                {n === 100 ? 'Normal' : `${n}%`}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <span>Theme</span>
-          <div className="seg">
-            {(['dark', 'light', 'system'] as const).map((t) => (
-              <button key={t} type="button" className={ui.theme === t ? 'on' : ''} onClick={() => setUi({ theme: t })}>
-                {t === 'dark' ? 'Dark' : t === 'light' ? 'Light' : 'Like Windows'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <label className="field">
-          <span>Your name, for the greeting on Today</span>
-          <input value={ui.name} maxLength={30} placeholder="e.g. Victor" onChange={(e) => setUi({ name: e.target.value })} />
-        </label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 10, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <label className="check toggle-row" style={{ margin: 0 }}>
-            <input type="checkbox" checked={ui.calm !== false} onChange={(e) => setUi({ calm: e.target.checked })} />
-            <span>
-              Calm mode
-              <small>Lighter and faster: effects play once instead of looping, no glass blur. Turn off for the full effects.</small>
-            </span>
-          </label>
-          <IslandToggle />
-          <label className="check toggle-row" style={{ margin: 0 }}>
-            <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ sound: e.target.checked })} />
-            <span>
-              Sound effects
-              <small>Rich, low-latency synthesized audio for rituals, tasks, coins, and system warnings.</small>
-            </span>
-          </label>
-
-          {ui.sound && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Master SFX Volume</span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: '#00d2ff', fontWeight: 700 }}>{ui.volume ?? 80}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={ui.volume ?? 80}
-                onChange={(e) => setUi({ volume: Number(e.target.value) })}
-                style={{ width: '100%', accentColor: '#00d2ff' }}
-              />
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                <button type="button" className="btn small ghost" onClick={() => soundSystemOracle()}>
-                  Coach chime
-                </button>
-                <button type="button" className="btn small ghost" onClick={() => soundCoin()}>
-                  💰 Gold Clink
-                </button>
-                <button type="button" className="btn small ghost" onClick={() => soundMechanicalClick()}>
-                  ⌨️ Mechanical Click
-                </button>
-                <button type="button" className="btn small ghost" onClick={() => soundFanfare()}>
-                  🏆 Rank Fanfare
-                </button>
-                <button type="button" className="btn small ghost" onClick={() => soundWarning()}>
-                  ⚠️ Conflict Alert
-                </button>
-              </div>
+        <Row title="Theme" hint="Dark, light, or follow Windows">
+          <Segmented label="Theme" value={ui.theme} options={[['dark', 'Dark'], ['light', 'Light'], ['system', 'Like Windows']]} onChange={(v) => (setUi({ theme: v }), lookSaved())} />
+        </Row>
+        <Row title="Text size" hint="Ctrl + / Ctrl − also work, Ctrl 0 resets">
+          <Segmented label="Text size" value={ui.textSize ?? 100} options={[[90, 'Small'], [100, 'Normal'], [110, '110%'], [125, '125%']]} onChange={(v) => (setUi({ textSize: v }), lookSaved())} />
+        </Row>
+        <Row title="Your name" hint="For the greeting on Today">
+          <input className="sx-input" value={ui.name} maxLength={30} placeholder="e.g. Victor" onChange={(e) => setUi({ name: e.target.value })} onBlur={() => lookSaved()} aria-label="Your name" />
+        </Row>
+        <Row title="Calm mode" hint="Lighter and faster: effects play once, no glass blur">
+          <Switch label="Calm mode" on={ui.calm !== false} onChange={(v) => (setUi({ calm: v }), lookSaved())} />
+        </Row>
+        {!window.desktop && <IslandToggle onSaved={lookSaved} />}
+        <Row title="Sounds" hint="Short sounds for done tasks, points and alerts">
+          <Switch label="Sounds" on={!!ui.sound} onChange={(v) => (setUi({ sound: v }), lookSaved())} />
+        </Row>
+        {ui.sound && (
+          <Row title="Volume" hint={`${ui.volume ?? 80}%`}>
+            <input className="sx-range" type="range" min={0} max={100} step={5} value={ui.volume ?? 80} onChange={(e) => setUi({ volume: Number(e.target.value) })} onMouseUp={() => (soundCoin(), lookSaved())} aria-label="Volume" />
+          </Row>
+        )}
+        {ui.sound && (
+          <Row title="Try them" hint="Hear how they sound">
+            <div className="sx-try">
+              <button type="button" className="btn small ghost" onClick={() => soundSystemOracle()}>Ben</button>
+              <button type="button" className="btn small ghost" onClick={() => soundCoin()}>Points</button>
+              <button type="button" className="btn small ghost" onClick={() => soundMechanicalClick()}>Click</button>
+              <button type="button" className="btn small ghost" onClick={() => soundFanfare()}>Level up</button>
+              <button type="button" className="btn small ghost" onClick={() => soundWarning()}>Alert</button>
             </div>
-          )}
-        </div>
-        <p className="hint block">Size: Ctrl + and Ctrl − make everything bigger or smaller, Ctrl 0 resets. The apps inside keep their own dark look in the light theme.</p>
+          </Row>
+        )}
       </section>
       <LayoutEditor />
         </>
@@ -1691,7 +1637,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
 }
 
 /** The focus island on/off (its other options live in its own ⚙). */
-function IslandToggle() {
+function IslandToggle({ onSaved }: { onSaved?: () => void }) {
   const read = () => {
     try {
       return JSON.parse(localStorage.getItem('ls.island') || '{}').on !== false
@@ -1708,14 +1654,11 @@ function IslandToggle() {
     }
     setOn(v)
     window.dispatchEvent(new Event('life-island-prefs'))
+    onSaved?.()
   }
   return (
-    <label className="check toggle-row" style={{ margin: 0 }}>
-      <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />
-      <span>
-        Focus island
-        <small>A live timer pill at the top of every page, like the iPhone's Dynamic Island. Hover it to stop, add time or start; ⚙ inside to customize.</small>
-      </span>
-    </label>
+    <Row title="Focus island" hint="A live timer pill at the top of every page; ⚙ inside it to customize">
+      <Switch label="Focus island" on={on} onChange={set} />
+    </Row>
   )
 }

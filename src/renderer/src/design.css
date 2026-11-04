@@ -1353,3 +1353,42 @@
 .set-more > summary::before { content: '› '; }
 .set-more[open] > summary { margin-bottom: 10px; color: var(--text); }
 .st-search input { border: 0 !important; padding: 2px 0 !important; background: transparent !important; box-shadow: none !important; height: auto !important; }
+
+/* ---- Settings building blocks (settingsUi.tsx): one style everywhere ---- */
+.sx-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 0; border-top: 1px solid rgb(var(--ink) / 0.06); }
+.panel-head + .sx-row, .bk-note + .sx-row, .hint + .sx-row { border-top: 0; }
+.sx-row.off { opacity: .5; }
+.sx-label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sx-label b { font-weight: 600; color: var(--text); font-size: 14.5px; }
+.sx-label small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.sx-control { flex: none; display: flex; align-items: center; gap: 8px; }
+.sx-switch { position: relative; width: 44px; height: 26px; border: 0; border-radius: 999px; background: rgb(var(--ink) / 0.16); cursor: pointer; transition: background .2s; padding: 0; flex: none; }
+.sx-switch i { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .35); transition: transform .22s cubic-bezier(.3, 1.3, .5, 1); }
+.sx-switch.on { background: var(--lime); }
+.sx-switch.on i { transform: translateX(18px); background: var(--lime-ink); }
+.sx-switch:focus-visible, .sx-seg button:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.sx-switch:disabled { opacity: .45; cursor: default; }
+.sx-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: rgb(var(--ink) / 0.06); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.06); }
+.sx-seg button { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.sx-seg button:hover { color: var(--text); }
+.sx-seg button.on { background: var(--lime); color: var(--lime-ink); }
+.sx-range { width: 200px; accent-color: var(--lime); }
+.sx-select, .sx-input { min-width: 200px; padding: 7px 10px; border-radius: 10px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; }
+.sx-try { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.sx-saved { font-size: 12px; font-weight: 700; color: var(--lime); opacity: 0; transition: opacity .2s; margin-left: auto; margin-right: 8px; }
+.sx-saved.on { opacity: 1; }
+.sx-list { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sx-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.04); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.06); cursor: grab; transition: background .15s, box-shadow .15s, opacity .15s; }
+.sx-list li .sx-label { flex: 1; }
+.sx-list li.off .sx-label { opacity: .55; }
+.sx-list li.dragging { opacity: .4; }
+.sx-list li.over { box-shadow: inset 0 2px 0 var(--lime), inset 0 0 0 1px rgb(var(--ink) / 0.06); }
+.sx-list li:focus-visible { outline: 2px solid var(--lime); outline-offset: 1px; }
+.sx-grip { color: var(--muted); font-size: 16px; line-height: 1; letter-spacing: -2px; cursor: grab; }
+.sx-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); column-gap: 24px; }
+@media (max-width: 600px) {
+  .sx-row { flex-wrap: wrap; }
+  .sx-control { width: 100%; justify-content: flex-start; }
+  .sx-range, .sx-select, .sx-input { width: 100%; min-width: 0; }
+  .sx-seg { flex-wrap: wrap; }
+}

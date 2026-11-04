@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { SECTION_LABEL, SHORTCUTS, type IslandPrefs } from '@core/islandModel'
 import { Icon } from './Icon'
+import { ReorderList, Row, Saved, Segmented, Switch, useSaved } from './settingsUi'
 
 const keyName = (k: string) => (k ? k.replace('Control', 'Ctrl').replace(/\+/g, ' + ') : 'No shortcut')
 
@@ -10,6 +11,7 @@ export function IslandSettingsPanel() {
   const desk = window.desktop
   const [p, setP] = useState<IslandPrefs | null>(null)
   const [msg, setMsg] = useState('')
+  const [flash, saved] = useSaved()
   useEffect(() => {
     desk?.getIslandPrefs?.().then(setP).catch(() => {})
   }, [desk])
@@ -21,23 +23,11 @@ export function IslandSettingsPanel() {
     if (r) {
       setP(r.prefs)
       setMsg(r.shortcutOk ? '' : 'That shortcut is taken by another app: pick another one.')
+      saved()
     }
   }
-  const move = (i: number, d: -1 | 1) => {
-    const list = [...p.sections]
-    const j = i + d
-    if (j < 0 || j >= list.length) return
-    ;[list[i], list[j]] = [list[j], list[i]]
-    void save({ sections: list })
-  }
-  const seg = <K extends keyof IslandPrefs>(k: K, opts: [IslandPrefs[K], string][]) => (
-    <div className="seg-row">
-      {opts.map(([v, label]) => (
-        <button key={String(v)} className={`chip ${p[k] === v ? 'on' : ''}`} onClick={() => void save({ [k]: v } as Partial<IslandPrefs>)}>
-          {label}
-        </button>
-      ))}
-    </div>
+  const opt = <K extends keyof IslandPrefs>(k: K, label: string, opts: [IslandPrefs[K], string][]) => (
+    <Segmented label={label} value={p[k] as any} options={opts as any} onChange={(v) => void save({ [k]: v } as Partial<IslandPrefs>)} />
   )
 
   return (
@@ -46,49 +36,39 @@ export function IslandSettingsPanel() {
         <h2>
           <Icon name="spark" /> Desktop island
         </h2>
+        <Saved show={flash} />
       </header>
-      <p className="muted bk-note">How the island at the top (or side) of your screen looks and behaves. Changes show right away.</p>
-      <div className="is-grid">
-        <label>Size</label>
-        {seg('size', [['compact', 'Compact'], ['normal', 'Normal'], ['large', 'Large']])}
-        <label>Look</label>
-        {seg('look', [['black', 'Black'], ['glass', 'Glass'], ['mood', "Ben's mood glow"]])}
-        <label>See-through</label>
-        <div className="is-range">
-          <input type="range" min={55} max={100} step={5} value={Math.round(p.opacity * 100)} onChange={(e) => void save({ opacity: Number(e.target.value) / 100 })} />
-          <span>{Math.round(p.opacity * 100)}%</span>
-        </div>
-        <label>Tucks away</label>
-        {seg('hide', [['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']])}
-        <label>Sound</label>
-        {seg('sound', [[true, 'Chime when it drops down'], [false, 'Silent']])}
-        <label>Shortcut</label>
-        <div className="seg-row">
+      <p className="muted bk-note">How the island at the edge of your screen looks and behaves. Changes show right away.</p>
+      <Row title="Size" hint="The pill, the card and their click areas">
+        {opt('size', 'Size', [['compact', 'Compact'], ['normal', 'Normal'], ['large', 'Large']])}
+      </Row>
+      <Row title="Look" hint="Black like an iPhone, glass, or a glow in Ben's mood">
+        {opt('look', 'Look', [['black', 'Black'], ['glass', 'Glass'], ['mood', 'Mood glow']])}
+      </Row>
+      <Row title="See-through" hint={`${Math.round(p.opacity * 100)}% solid`}>
+        <input className="sx-range" type="range" min={55} max={100} step={5} value={Math.round(p.opacity * 100)} onChange={(e) => void save({ opacity: Number(e.target.value) / 100 })} aria-label="See-through" />
+      </Row>
+      <Row title="Tucks away" hint="How fast it hides after you move away">
+        {opt('hide', 'Tucks away', [['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']])}
+      </Row>
+      <Row title="Chime" hint="A soft sound when it drops down by itself">
+        <Switch label="Chime" on={!!p.sound} onChange={(v) => void save({ sound: v })} />
+      </Row>
+      <Row title="Shortcut" hint={msg || 'Opens the island from anywhere'}>
+        <select className="sx-select" value={p.shortcut} onChange={(e) => void save({ shortcut: e.target.value })} aria-label="Shortcut">
           {SHORTCUTS.map((k) => (
-            <button key={k || 'none'} className={`chip ${p.shortcut === k ? 'on' : ''}`} onClick={() => void save({ shortcut: k })}>
+            <option key={k || 'none'} value={k}>
               {keyName(k)}
-            </button>
+            </option>
           ))}
-        </div>
-        <label>Sections</label>
-        <ul className="is-sections">
-          {p.sections.map((x, i) => (
-            <li key={x.id} className={x.on ? '' : 'off'}>
-              <label>
-                <input type="checkbox" checked={x.on} onChange={() => void save({ sections: p.sections.map((y) => (y.id === x.id ? { ...y, on: !y.on } : y)) })} />
-                {SECTION_LABEL[x.id]}
-              </label>
-              <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up">
-                ↑
-              </button>
-              <button className="icon-btn" disabled={i === p.sections.length - 1} onClick={() => move(i, 1)} aria-label="Move down">
-                ↓
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      {msg && <p className="bk-error">{msg}</p>}
+        </select>
+      </Row>
+      <Row title="Sections" hint="What the open island shows, in this order. Drag to reorder." />
+      <ReorderList
+        label="Island sections"
+        items={p.sections.map((x) => ({ id: x.id, label: SECTION_LABEL[x.id], on: x.on }))}
+        onChange={(next) => void save({ sections: next.map((x) => ({ id: x.id as any, on: x.on })) })}
+      />
     </section>
   )
 }
