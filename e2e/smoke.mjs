@@ -38,10 +38,10 @@ try {
     await pg.waitForSelector('input', { timeout: 20000 })
     await pg.fill('input', '1234')
     await pg.keyboard.press('Enter')
-    await pg.waitForSelector('text=Good', { timeout: 20000 })
+    await pg.waitForSelector('.td2', { timeout: 20000 })
   })
   await step('Today shows Ben and the day', async () => {
-    await pg.waitForSelector('.td2', { timeout: 10000 })
+    await pg.waitForSelector('.thb', { timeout: 15000 })
   })
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
   for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky'], ['discipline', 'MAN']]) {

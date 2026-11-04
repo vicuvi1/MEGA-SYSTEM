@@ -23,6 +23,7 @@ import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
+import { sendOnce, type SentToday } from '../core/benOnce'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
 import { alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
 import { beat, logError, readHealth, setNote } from '../renderer/src/web/systemHealth'
@@ -41,6 +42,9 @@ import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@co
 import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState } from '@core/rhythm'
+
+/** What Ben already said today, by kind (each kind once a day). */
+const BEN_SENT = 'ben_sent_today'
 
 export { createTodoistApi }
 export { GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, localIso } from './googleCalendar'
@@ -376,6 +380,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   await beat(healthDb, 'tick', true, undefined, now)
   const sent: string[] = []
   const send = async (text: string, reply_markup?: unknown) => {
+    // Each kind of message at most once a day (not the same water nudge 4 times).
+    const ok = await mirror.write((db) => {
+      let prev: SentToday | null = null
+      try {
+        prev = JSON.parse(getSetting(db as any, BEN_SENT) || 'null')
+      } catch {
+        /* start fresh */
+      }
+      const r = sendOnce(prev, text, now.toLocaleDateString('sv-SE'))
+      if (r.send) setSetting(db as any, BEN_SENT, JSON.stringify(r.next))
+      return r.send
+    })
+    if (!ok) return
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

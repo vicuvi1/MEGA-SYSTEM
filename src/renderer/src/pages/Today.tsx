@@ -190,10 +190,10 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   return (
     <div className="today td2">
       <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
-      <QuickCapture />
       <DeepWork />
       <div className="cmd">
         <div className="cmd-main">
+          <QuickCapture />
           {on.filter((x) => MAIN.includes(x.id)).map((x) => (
             <Fragment key={x.id}>{sections[x.id]()}</Fragment>
           ))}

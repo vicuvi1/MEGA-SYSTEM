@@ -1,8 +1,9 @@
-// Today's top: Ben's face and one line about your day, the one move that
-// matters now, and three numbers (focus, water, must-dos). Everything else on
-// Today sits below it, and the extras fold away.
+// Today's top, one thin row: Ben (click to talk), what's on now and its one
+// button, your points and the bar to the reward you're working toward, and
+// the day's numbers (score, focus, water, must-dos).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CoachStatus } from './web/coachStatus'
+import type { ShopState } from '@shared/api'
 import { life } from './bridge'
 import { useAction } from './ui'
 import { useLive } from './live'
@@ -32,28 +33,12 @@ export function useCountUp(value: number, ms = 700): number {
   return n
 }
 
-function Stat({ label, value, sub, pct, tone }: { label: string; value: string; sub: string; pct: number; tone?: 'water' | 'ok' }) {
-  const p = useCountUp(Math.min(100, Math.max(0, pct)))
-  return (
-    <div className={`th-stat ${tone ?? ''}`}>
-      <div className="th-ring" style={{ ['--p' as string]: `${p}%` }}>
-        <span>{Math.round(p)}%</span>
-      </div>
-      <div>
-        <small>{label}</small>
-        <b>{value}</b>
-        <em>{sub}</em>
-      </div>
-    </div>
-  )
-}
-
 const greet = () => {
   const h = new Date().getHours()
   return h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 }
 
-export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach') => void }) {
+export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' | 'shop') => void }) {
   const act = useAction()
   const [st, setSt] = useState<CoachStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -71,6 +56,12 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
     }
   }, [load])
   useLive(load)
+  // Your points and the reward you're working toward (pinned first, else the
+  // cheapest one you can't afford yet).
+  const [shop, setShop] = useState<ShopState | null>(null)
+  const loadShop = useCallback(() => void life.shop?.state().then(setShop).catch(() => {}), [])
+  useEffect(loadShop, [loadShop])
+  useLive(loadShop)
   const focusMin = useCountUp(st?.today.focusMin ?? 0)
   // What's on now (or soon) in your calendar: the Now card.
   const { events } = useTodayEvents()
@@ -115,140 +106,81 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
     }
   }
   const label: Record<string, string> = { focus: '▶ Start', running: '⏹ Stop & log', approve: '✓ Approve', plan: 'Plan my day', answer: '✅ Done', ask: 'Ask Ben' }
+  const focusGoal = Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0))
+  const live = liveScore({
+    mustDone: st.today.mustDone,
+    openMustDos: st.mustdos.filter((x) => !x.done).map((x) => x.text),
+    focusMin: st.today.focusMin,
+    focusGoal,
+    waterMl: st.today.waterMl,
+    waterTarget: st.today.waterTarget,
+    workoutDone: !!st.today.workoutDone
+  })
+  // What the row's left side says and does: evening close, a block now/soon, or Ben's move.
+  const evening = new Date(tick).getHours() >= 19 && !closed && m.kind !== 'running'
+  const block = !evening && m.kind !== 'running' && m.kind !== 'answer' ? nowBlock : null
+  const soon = !evening && !block && m.kind !== 'running' && m.kind !== 'answer' && nextBlock && Date.parse(nextBlock.start) - tick < 60 * 60000 ? nextBlock : null
+  const b = block ?? soon
+  const left = b ? Math.max(5, Math.round((Date.parse(b.end) - Math.max(tick, Date.parse(b.start))) / 60000)) : 0
+  const now = evening
+    ? { tag: 'Evening', title: 'Close your day · 2 minutes', btn: 'Close my day', go: () => window.dispatchEvent(new CustomEvent('life-close-day')) }
+    : b
+      ? {
+          tag: block ? `Now · ${left} min left` : `Next · ${hm(b.start)}`,
+          title: b.title,
+          btn: block ? `▶ Start · ${Math.min(180, left)} min` : '▶ Start early',
+          go: () => void act(() => life.focus.start(blockSubject(b.title), Math.min(180, left), null), `Focus: ${b.title}`).then(load)
+        }
+      : { tag: m.kind === 'running' ? 'Focus running' : 'Do this now', title: m.title, btn: busy ? '…' : label[m.kind], go: () => void run() }
+  // The reward you're working toward.
+  const rewards = (shop?.rewards ?? []).filter((r) => !r.archived && r.price > 0)
+  const balance = shop?.balance ?? 0
+  const goal = rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b2) => a.price - b2.price).find((r) => r.price > balance) ?? [...rewards].sort((a, b2) => b2.price - a.price)[0]
   const water = st.today.waterTarget ? st.today.waterMl / st.today.waterTarget : 0
+  const fm = Math.round(focusMin)
   return (
-    <section className={`th mood-${st.mood}`}>
-      <div className="th-top">
-        <button className={`th-face mood-${st.mood}`} onClick={() => onGo('coach')} title="Talk to Ben" aria-label="Talk to Ben">
-          {st.face}
-        </button>
-        <div className="th-hello">
-          <h2>
-            {greet()}
-            {name ? `, ${name}` : ''}
-          </h2>
-          <p>
-            {st.mood === 'focused' ? (
-              <>
-                <b>Ben</b>: {st.why}
-              </>
-            ) : (
-              <>
-                <b>Ben</b> is {st.mood}: {st.why}.
-              </>
-            )}
-          </p>
-        </div>
+    <section className={`thb mood-${st.mood}`}>
+      <button className={`thb-face mood-${st.mood}`} onClick={() => onGo('coach')} title={`${greet()}${name ? `, ${name}` : ''}. Ben is ${st.mood}: ${st.why}. Click to talk to Ben.`} aria-label="Talk to Ben">
+        {st.face}
+      </button>
+      <div className={`thb-now ${evening ? 'evening' : ''} ${m.kind === 'running' ? 'running' : ''}`}>
+        <small>{now.tag}</small>
+        <b title={now.title}>{now.title}</b>
       </div>
-      {(() => {
-        // Evening: one place to close the day.
-        if (new Date(tick).getHours() >= 19 && !closed && m.kind !== 'running')
-          return (
-            <div className="th-move th-now evening">
-              <div>
-                <small>Evening</small>
-                <b>Close your day · 2 minutes</b>
-                <span>What's left goes to tomorrow, Ben's review, tomorrow's top 3.</span>
-              </div>
-              <div className="th-move-actions">
-                <button className="btn primary" onClick={() => window.dispatchEvent(new CustomEvent('life-close-day'))}>
-                  Close my day
-                </button>
-              </div>
-            </div>
-          )
-        // A block on now (and nothing running): start it, see what's next.
-        const block = m.kind !== 'running' && m.kind !== 'answer' ? nowBlock : null
-        const soon = !block && m.kind !== 'running' && m.kind !== 'answer' && nextBlock && Date.parse(nextBlock.start) - tick < 60 * 60000 ? nextBlock : null
-        const b = block ?? soon
-        if (!b) return null
-        const left = Math.max(5, Math.round((Date.parse(b.end) - Math.max(tick, Date.parse(b.start))) / 60000))
-        const inMin = Math.round((Date.parse(b.start) - tick) / 60000)
-        return (
-          <div className="th-move th-now">
-            <div>
-              <small>{block ? `Now · ${left} min left` : `Next · in ${inMin} min`}</small>
-              <b>{b.title}</b>
-              <span>
-                {hm(b.start)}–{hm(b.end)}
-                {block && nextBlock ? ` · then ${nextBlock.title} at ${hm(nextBlock.start)}` : ''}
-              </span>
-            </div>
-            <div className="th-move-actions">
-              <button className="btn primary" disabled={busy} onClick={() => void act(() => life.focus.start(blockSubject(b.title), Math.min(180, left), null), `Focus: ${b.title} · ${Math.min(180, left)} min`).then(load)}>
-                ▶ {block ? `Start · ${Math.min(180, left)} min` : 'Start early'}
-              </button>
-            </div>
-          </div>
-        )
-      })() ?? (
-      <div className={`th-move move-${m.kind}`}>
-        <div>
-          <small>Do this now</small>
-          <b>{m.title}</b>
-          <span>{m.sub}</span>
-        </div>
-        <div className="th-move-actions">
-          {m.kind === 'running' && (
-            <button className="btn ghost" onClick={() => window.dispatchEvent(new CustomEvent('life-deep-work'))}>
-              ⛶ Deep work
-            </button>
-          )}
-          {m.kind === 'answer' && (
-            <button className="btn ghost" disabled={busy} onClick={() => onGo('coach')}>
-              Not yet
-            </button>
-          )}
-          <button className="btn primary" disabled={busy} onClick={() => void run()}>
-            {busy ? '…' : label[m.kind]}
+      <div className="thb-act">
+        {m.kind === 'running' && (
+          <button className="btn small ghost" onClick={() => window.dispatchEvent(new CustomEvent('life-deep-work'))}>
+            ⛶ Deep work
           </button>
-        </div>
+        )}
+        <button className="btn small primary" disabled={busy} onClick={now.go}>
+          {now.btn}
+        </button>
       </div>
-      )}
-      {(() => {
-        const live = liveScore({
-          mustDone: st.today.mustDone,
-          openMustDos: st.mustdos.filter((x) => !x.done).map((x) => x.text),
-          focusMin: st.today.focusMin,
-          focusGoal: Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0)),
-          waterMl: st.today.waterMl,
-          waterTarget: st.today.waterTarget,
-          workoutDone: !!st.today.workoutDone
-        })
-        return (
-          <div className="th-score">
-            <div className={`th-score-ring ${live.score >= 70 ? 'good' : ''}`} style={{ ['--p' as string]: `${live.score}%` }} title="Today's score: the same one Ben uses in the evening review">
-              <b>{live.score}</b>
-              <small>today</small>
-            </div>
-            {live.gains.length ? (
-              <div className="th-gains">
-                <span className="th-gains-lead">Raise it:</span>
-                {live.gains.slice(0, 4).map((g) => (
-                  <button
-                    key={g.kind + g.label}
-                    className={`th-gain k-${g.kind}`}
-                    onClick={() =>
-                      g.kind === 'mustdo' || g.kind === 'focus'
-                        ? void act(() => life.focus.start(g.kind === 'mustdo' ? g.label.split(/\s+/).slice(0, 4).join(' ').slice(0, 40) : 'Focus', 25, null), `Focus started · 25 min`).then(load)
-                        : onGo('coach')
-                    }
-                    title={g.kind === 'mustdo' || g.kind === 'focus' ? 'Start 25 minutes on it' : 'Log it with Ben'}
-                  >
-                    {g.label} <em>+{g.points}</em>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <span className="th-gains-lead">A perfect day. 🔥</span>
-            )}
-          </div>
-        )
-      })()}
-      <div className="th-stats">
-        <Stat label={focusStreak(st.week) >= 2 ? `Focus · 🔥 ${focusStreak(st.week)} days` : 'Focus'} value={`${Math.floor(focusMin / 60) ? `${Math.floor(focusMin / 60)}h ` : ''}${Math.round(focusMin % 60)}m`} sub={st.goals.length ? `${st.goals.reduce((t, g) => t + g.todayLeftMin, 0)} min still for your goals` : 'goal: 50 min a day'} pct={(st.today.focusMin / Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0) || 50)) * 100} tone="ok" />
-        <Stat label="Water" value={st.today.waterTarget ? `${(st.today.waterMl / 1000).toFixed(1)} L` : '—'} sub={st.today.waterTarget ? `of ${(st.today.waterTarget / 1000).toFixed(1)} L` : 'log with Ben: water 250'} pct={water * 100} tone="water" />
-        <Stat label="Must-dos" value={st.today.mustTotal ? `${st.today.mustDone}/${st.today.mustTotal}` : '—'} sub={st.today.mustTotal ? (st.today.mustDone === st.today.mustTotal ? 'all done 🔥' : `${st.today.mustTotal - st.today.mustDone} to go`) : 'none set yet'} pct={st.today.mustTotal ? (st.today.mustDone / st.today.mustTotal) * 100 : 0} />
+      <button className={`thb-reward ${goal && balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title="Your rewards: add your own (1h manga, a film…) and redeem them">
+        <span className="thb-pts">⭐ {balance}</span>
+        {goal ? (
+          <span className="thb-goal">
+            <i style={{ ['--p' as string]: `${Math.min(100, (balance / goal.price) * 100)}%` }} />
+            <small>{balance >= goal.price ? `Ready: ${goal.title} 🎉` : `${goal.price - balance} to ${goal.title}`}</small>
+          </span>
+        ) : (
+          <small className="thb-goal-empty">+ Add a reward to work toward</small>
+        )}
+      </button>
+      <div className="thb-nums">
+        <span className={live.score >= 70 ? 'good' : ''} title={`Today's score (Ben's evening review). Raise it: ${live.gains.map((g) => `${g.label} +${g.points}`).join(', ') || 'a perfect day'}`}>
+          <b>{live.score}</b> score
+        </span>
+        <span title={focusStreak(st.week) >= 2 ? `Focus streak: ${focusStreak(st.week)} days` : `Goal: ${focusGoal} min`} style={{ ['--p' as string]: `${Math.min(100, (st.today.focusMin / focusGoal) * 100)}%` }}>
+          <b>{fm >= 60 ? `${Math.floor(fm / 60)}h${fm % 60 ? ` ${fm % 60}m` : ''}` : `${fm}m`}</b> focus
+        </span>
+        <span title={st.today.waterTarget ? `of ${(st.today.waterTarget / 1000).toFixed(1)} L` : 'log with Ben: water 250'} style={{ ['--p' as string]: `${Math.min(100, water * 100)}%` }}>
+          <b>{st.today.waterTarget ? `${(st.today.waterMl / 1000).toFixed(1)}L` : '—'}</b> water
+        </span>
+        <span>
+          <b>{st.today.mustTotal ? `${st.today.mustDone}/${st.today.mustTotal}` : '—'}</b> must-dos
+        </span>
       </div>
     </section>
   )

@@ -15624,6 +15624,37 @@ function deadlineFacts(items) {
 		};
 	});
 }
+// src/core/benOnce.ts
+/** The message's kind: its opening words without numbers or markup. */
+function messageKind(html) {
+	const plain = html.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").trim();
+	if (!plain || /^(🔔|⏰)/u.test(plain)) return null;
+	const words = plain.replace(/[\d.,:%/+-]+/g, " ").split(/\s+/).filter(Boolean).slice(0, 4);
+	return words.length ? words.join(" ").toLowerCase() : null;
+}
+/** Whether to send it today, and what to remember if so. */
+function sendOnce(prev, html, day) {
+	const base = prev && prev.day === day ? prev : {
+		day,
+		kinds: []
+	};
+	const kind = messageKind(html);
+	if (!kind) return {
+		send: true,
+		next: base
+	};
+	if (base.kinds.includes(kind)) return {
+		send: false,
+		next: base
+	};
+	return {
+		send: true,
+		next: {
+			day,
+			kinds: [...base.kinds, kind].slice(-200)
+		}
+	};
+}
 // src/core/health.ts
 var ago = (now, iso) => {
 	const m = Math.round((now.getTime() - Date.parse(iso)) / 6e4);
@@ -16239,6 +16270,8 @@ function localCleanup(tasks, today) {
 	return out;
 }
 // src/server/telegramBot.ts
+/** What Ben already said today, by kind (each kind once a day). */
+var BEN_SENT = "ben_sent_today";
 /**
 * Your Google Calendar for the bots, when you signed in (Settings): reads
 * the sealed sign-in from the database each time, so a new sign-in works
@@ -16590,6 +16623,15 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	await beat(healthDb, "tick", true, void 0, now);
 	const sent = [];
 	const send = async (text, reply_markup) => {
+		if (!await mirror.write((db) => {
+			let prev = null;
+			try {
+				prev = JSON.parse(getSetting(db, BEN_SENT) || "null");
+			} catch {}
+			const r = sendOnce(prev, text, now.toLocaleDateString("sv-SE"));
+			if (r.send) setSetting(db, BEN_SENT, JSON.stringify(r.next));
+			return r.send;
+		})) return;
 		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
