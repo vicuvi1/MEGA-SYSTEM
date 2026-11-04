@@ -351,8 +351,24 @@ export function nowContext(s: Services, db: any, events: CalEvent[] | null, fina
   }
   const tx = Array.isArray(finance?.tx) ? finance.tx.filter((x: any) => x && !x.deleted).sort((a: any, b: any) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))[0] : null
   if (tx?.createdAt) fresh.push(`last money record ${new Date(tx.createdAt).toISOString().slice(0, 16).replace('T', ' ')} UTC`)
+  let sporty = ''
+  try {
+    const seen = JSON.parse(getSetting(db, 'sport_sync_seen') || 'null')
+    sporty = seen?.at ? `Sporty (his workout bot) IS connected: last sync ${new Date(seen.at).toISOString().slice(0, 16).replace('T', ' ')} UTC; its workouts, reps and water land here.` : ''
+  } catch {
+    sporty = ''
+  }
+  let workouts = ''
+  try {
+    const w = s.body.workouts(8).map((x: any) => x.day)
+    workouts = w.length ? `Workout days logged: ${[...new Set(w)].join(', ')}.` : 'No workouts logged yet.'
+  } catch {
+    workouts = ''
+  }
   out.push(
-    `DATA SOURCES: ${fresh.join('; ')}. Water and reps are only what was logged with you (Ben), the app or Sport Track. Sporty (his old workout bot) keeps its OWN separate log you cannot see: if he logged something there, tell him plainly and offer to log it here. Never blame "sync" vaguely; say exactly where the number comes from.`
+    `DATA SOURCES: ${fresh.join('; ')}. ${workouts} ${
+      sporty || 'Sporty (his workout bot) is NOT connected yet: anything he logs there does not reach you. If he says he trained on days that are missing, believe him and log those days with "workout: <YYYY-MM-DD> | <what>", and tell him the fix (update Sporty so it syncs).'
+    } Never blame "sync" vaguely; say exactly where the number comes from.`
   )
   return out
 }
@@ -518,6 +534,7 @@ Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
 - His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
+- "workout: <YYYY-MM-DD> | <what he did>" log a workout he did on a past day that is missing (counts for his streak); today's checklist uses reps/log instead.
 - "style: short|normal|detailed; tone=1-5" when he tells you how to talk ("be shorter", "go harder on me", "more detail"). 1 = gentle, 5 = drill sergeant.
 - He can see/tap his cards: button {"do": "workout"} shows today's workout checklist, {"do": "water"} the water card.
 Money records (use the M-numbers; this is how you FIX a wrong log):
@@ -674,6 +691,7 @@ export type BrainAction =
   | { kind: 'exercise'; name: string; target?: number; unit?: string }
   | { kind: 'noexercise'; name: string }
   | { kind: 'style'; length?: 'short' | 'normal' | 'detailed'; tone?: number }
+  | { kind: 'workout'; day: string; title: string }
   | { kind: 'editmoney'; ref: string; amount?: number; category?: string; account?: string; note?: string; date?: string }
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
@@ -685,7 +703,7 @@ const MREF = /^M\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -740,6 +758,7 @@ export function readAction(line: string): BrainAction | null {
     const target = Math.round(Number(parts[1]))
     return parts[0] ? { kind: 'exercise', name: parts[0].slice(0, 30), ...(target > 0 && target <= 2000 ? { target } : {}), ...(parts[2] ? { unit: parts[2].slice(0, 10) } : {}) } : null
   }
+  if (kind === 'workout') return DATE_RE.test(parts[0] ?? '') ? { kind: 'workout', day: parts[0], title: (parts[1] || 'Workout').slice(0, 80) } : null
   if (kind === 'style') {
     const len = /\b(short|normal|detailed)\b/i.exec(arg)?.[1]?.toLowerCase() as 'short' | 'normal' | 'detailed' | undefined
     const tone = Number(/tone\s*=?\s*([1-5])/i.exec(arg)?.[1])

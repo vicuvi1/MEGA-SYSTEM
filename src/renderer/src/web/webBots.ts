@@ -1440,6 +1440,19 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           expense = true
           continue
         }
+        if (a.kind === 'workout') {
+          const line = await mirror.write((db) => {
+            const svc = services.services(db)
+            const today = svc.wallet.today()
+            if (a.day > today || a.day < addDays(today, -60)) return `⚠️ ${a.day} is out of range (last 60 days only)`
+            if (db.prepare('SELECT 1 FROM workouts WHERE day = ?').get(a.day)) return `✅ ${a.day} already has a workout`
+            svc.body.logWorkout({ title: a.title, day: a.day, items: [{ exerciseId: 'ex_workout', name: a.title, amount: 1, unit: 'sets' }], note: 'Logged by Ben (past day)' } as any)
+            const b = svc.body.state()
+            return `💪 Workout logged for ${a.day} · streak ${b.streak}`
+          })
+          done.push(line)
+          continue
+        }
         if (a.kind === 'style') {
           const st = await mirror.write((db) => saveStyle(db, { ...(a.length ? { length: a.length } : {}), ...(a.tone ? { tone: a.tone } : {}) }))
           done.push(`🎚 Style: ${st.length}, tone ${st.tone}/5`)

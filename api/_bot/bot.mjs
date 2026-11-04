@@ -9499,7 +9499,21 @@ function nowContext(s, db, events, finance, now = /* @__PURE__ */ new Date()) {
 	} catch {}
 	const tx = Array.isArray(finance?.tx) ? finance.tx.filter((x) => x && !x.deleted).sort((a, b) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))[0] : null;
 	if (tx?.createdAt) fresh.push(`last money record ${new Date(tx.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC`);
-	out.push(`DATA SOURCES: ${fresh.join("; ")}. Water and reps are only what was logged with you (Ben), the app or Sport Track. Sporty (his old workout bot) keeps its OWN separate log you cannot see: if he logged something there, tell him plainly and offer to log it here. Never blame "sync" vaguely; say exactly where the number comes from.`);
+	let sporty = "";
+	try {
+		const seen = JSON.parse(getSetting(db, "sport_sync_seen") || "null");
+		sporty = seen?.at ? `Sporty (his workout bot) IS connected: last sync ${new Date(seen.at).toISOString().slice(0, 16).replace("T", " ")} UTC; its workouts, reps and water land here.` : "";
+	} catch {
+		sporty = "";
+	}
+	let workouts = "";
+	try {
+		const w = s.body.workouts(8).map((x) => x.day);
+		workouts = w.length ? `Workout days logged: ${[...new Set(w)].join(", ")}.` : "No workouts logged yet.";
+	} catch {
+		workouts = "";
+	}
+	out.push(`DATA SOURCES: ${fresh.join("; ")}. ${workouts} ${sporty || "Sporty (his workout bot) is NOT connected yet: anything he logs there does not reach you. If he says he trained on days that are missing, believe him and log those days with \"workout: <YYYY-MM-DD> | <what>\", and tell him the fix (update Sporty so it syncs)."} Never blame "sync" vaguely; say exactly where the number comes from.`);
 	return out;
 }
 var COACH_STYLE = "coach_style";
@@ -9670,6 +9684,7 @@ Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
 - His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
+- "workout: <YYYY-MM-DD> | <what he did>" log a workout he did on a past day that is missing (counts for his streak); today's checklist uses reps/log instead.
 - "style: short|normal|detailed; tone=1-5" when he tells you how to talk ("be shorter", "go harder on me", "more detail"). 1 = gentle, 5 = drill sergeant.
 - He can see/tap his cards: button {"do": "workout"} shows today's workout checklist, {"do": "water"} the water card.
 Money records (use the M-numbers; this is how you FIX a wrong log):
@@ -9795,7 +9810,7 @@ var TREF = /^T\d{1,3}$/i;
 var MREF = /^M\d{1,2}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
-	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 400);
@@ -9900,6 +9915,11 @@ function readAction(line) {
 			...parts[2] ? { unit: parts[2].slice(0, 10) } : {}
 		} : null;
 	}
+	if (kind === "workout") return DATE_RE.test(parts[0] ?? "") ? {
+		kind: "workout",
+		day: parts[0],
+		title: (parts[1] || "Workout").slice(0, 80)
+	} : null;
 	if (kind === "style") {
 		const len = /\b(short|normal|detailed)\b/i.exec(arg)?.[1]?.toLowerCase();
 		const tone = Number(/tone\s*=?\s*([1-5])/i.exec(arg)?.[1]);
@@ -13279,6 +13299,29 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					expense = true;
 					continue;
 				}
+				if (a.kind === "workout") {
+					const line = await mirror.write((db) => {
+						const svc = services.services(db);
+						const today = svc.wallet.today();
+						if (a.day > today || a.day < addDays$1(today, -60)) return `⚠️ ${a.day} is out of range (last 60 days only)`;
+						if (db.prepare("SELECT 1 FROM workouts WHERE day = ?").get(a.day)) return `✅ ${a.day} already has a workout`;
+						svc.body.logWorkout({
+							title: a.title,
+							day: a.day,
+							items: [{
+								exerciseId: "ex_workout",
+								name: a.title,
+								amount: 1,
+								unit: "sets"
+							}],
+							note: "Logged by Ben (past day)"
+						});
+						const b = svc.body.state();
+						return `💪 Workout logged for ${a.day} · streak ${b.streak}`;
+					});
+					done.push(line);
+					continue;
+				}
 				if (a.kind === "style") {
 					const st = await mirror.write((db) => saveStyle(db, {
 						...a.length ? { length: a.length } : {},
@@ -15414,6 +15457,10 @@ async function sportShared(env, body) {
 		data: st
 	}));
 	const op = String(body?.op ?? "state");
+	await mirror.write((db) => setSetting(db, "sport_sync_seen", JSON.stringify({
+		at: (/* @__PURE__ */ new Date()).toISOString(),
+		op
+	}))).catch(() => null);
 	if (op === "state") return {
 		ok: true,
 		state: await mirror.read((db) => sharedView(read(db), today))
@@ -15462,16 +15509,26 @@ async function sportShared(env, body) {
 		const items = Array.isArray(body.items) && body.items.length ? body.items : [{
 			exerciseId: "ex_workout",
 			name: title,
-			sets: 1,
-			reps: 1
+			amount: 1,
+			unit: "sets"
 		}];
+		const localToday = await mirror.read((db) => services.services(db).wallet.today());
+		const day = /^\d{4}-\d{2}-\d{2}$/.test(String(body.day ?? "")) && body.day <= localToday && body.day >= addDays$1(localToday, -60) ? String(body.day) : localToday;
+		const fromSporty = body.source === "sporty";
 		try {
-			await mirror.write((db) => services.services(db).body.logWorkout({
-				title,
-				items
-			}));
 			return {
 				ok: true,
+				added: await mirror.write((db) => {
+					if (fromSporty && db.prepare("SELECT 1 FROM workouts WHERE day = ? AND note = 'Sporty'").get(day)) return false;
+					services.services(db).body.logWorkout({
+						title,
+						items,
+						day,
+						note: fromSporty ? "Sporty" : void 0
+					});
+					return true;
+				}),
+				day,
 				state: await mirror.read((db) => sharedView(read(db), today))
 			};
 		} catch (e) {

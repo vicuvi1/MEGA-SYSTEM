@@ -596,6 +596,8 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   }
   const save = (db: any, st: any) => setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
   const op = String(body?.op ?? 'state')
+  // Remember when Sporty last talked to us (Ben and the app show it).
+  await mirror.write((db) => setSetting(db as any, 'sport_sync_seen', JSON.stringify({ at: new Date().toISOString(), op }))).catch(() => null)
   if (op === 'state') return { ok: true, state: await mirror.read((db) => sharedView(read(db), today)) }
   // Never start an empty copy: it could replace the app's exercises on the next sync.
   if ((op === 'water' || op === 'reps') && !(await mirror.read((db) => read(db)))) return { ok: false, error: 'Open Sport Track in the Life System app once, so there is something to share' }
@@ -621,10 +623,19 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   }
   if (op === 'workout') {
     const title = String(body.title || 'Workout').slice(0, 80)
-    const items = Array.isArray(body.items) && body.items.length ? body.items : [{ exerciseId: 'ex_workout', name: title, sets: 1, reps: 1 }]
+    const items = Array.isArray(body.items) && body.items.length ? body.items : [{ exerciseId: 'ex_workout', name: title, amount: 1, unit: 'sets' }]
+    // Its own day (Sporty sends past days too); never in the future or older than 60 days.
+    const localToday = await mirror.read((db) => services.services(db).wallet.today())
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(String(body.day ?? '')) && body.day <= localToday && body.day >= addDays(localToday, -60) ? String(body.day) : localToday
+    const fromSporty = body.source === 'sporty'
     try {
-      await mirror.write((db) => services.services(db).body.logWorkout({ title, items } as any))
-      return { ok: true, state: await mirror.read((db) => sharedView(read(db), today)) }
+      const added = await mirror.write((db) => {
+        // One Sporty workout per day: sending the same day again changes nothing.
+        if (fromSporty && db.prepare("SELECT 1 FROM workouts WHERE day = ? AND note = 'Sporty'").get(day)) return false
+        services.services(db).body.logWorkout({ title, items, day, note: fromSporty ? 'Sporty' : undefined } as any)
+        return true
+      })
+      return { ok: true, added, day, state: await mirror.read((db) => sharedView(read(db), today)) } as any
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

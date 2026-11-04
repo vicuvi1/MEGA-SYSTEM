@@ -132,3 +132,10 @@ describe('how Ben talks and learns', () => {
     expect(feedbackText([], now)).toBe('')
   })
 })
+
+describe('past workouts', () => {
+  it('reads a past-day workout', () => {
+    expect(readAction('workout: 2026-11-02 | Push-ups and squats')).toEqual({ kind: 'workout', day: '2026-11-02', title: 'Push-ups and squats' })
+    expect(readAction('workout: yesterday | x')).toBeNull()
+  })
+})
