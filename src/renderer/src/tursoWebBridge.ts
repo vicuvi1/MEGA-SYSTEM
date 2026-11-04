@@ -319,7 +319,18 @@ export function createTursoWebBridge(): Bridge {
   // when it sits in the background, paused when the tab is hidden.
   if (typeof window !== 'undefined') {
     let lastUse = Date.now()
-    for (const ev of ['pointerdown', 'keydown', 'focus', 'touchstart']) window.addEventListener(ev, () => (lastUse = Date.now()), { passive: true })
+    // Back after a while: look for changes right away (not at the next slow round).
+    let wake: (() => void) | null = null
+    for (const ev of ['pointerdown', 'keydown', 'focus', 'touchstart'])
+      window.addEventListener(
+        ev,
+        () => {
+          const was = lastUse
+          lastUse = Date.now()
+          if (lastUse - was > 60_000) wake?.()
+        },
+        { passive: true }
+      )
     const announce = () => {
       for (const n of LIVE_EVENTS) window.dispatchEvent(new CustomEvent(n, { detail: { live: true, fromSync: true } }))
     }
@@ -360,7 +371,18 @@ export function createTursoWebBridge(): Bridge {
         return false
       }
     }
+    // How lively to be: you're using it (every 3 s), it's open but you're away
+    // (every 20 s), away for long or in the background (every 60 s). Fewer
+    // server calls, and changes still show within seconds when you look.
+    const pace = (): { db: number; todo: number; ext: number } => {
+      const idle = Date.now() - lastUse
+      if (document.visibilityState !== 'visible') return { db: 60_000, todo: Infinity, ext: Infinity }
+      if (idle < 3 * 60_000 && document.hasFocus()) return { db: 3000, todo: 5000, ext: 30_000 }
+      if (idle < 15 * 60_000) return { db: 20_000, todo: 60_000, ext: 120_000 }
+      return { db: 60_000, todo: 300_000, ext: 300_000 }
+    }
     const loop = async () => {
+      const p = pace()
       if (document.visibilityState === 'visible') {
         await check()
         // Wake the coach (reminders, check-ins, follow-ups) more often than the server timer.
@@ -370,7 +392,7 @@ export function createTursoWebBridge(): Bridge {
         }
         // Todoist: a task added or done in Todoist itself shows up within
         // seconds (a cheap "anything new?" every 5 s while you're here).
-        if (!direct && Date.now() - todoQuickAt > 5_000) {
+        if (!direct && Date.now() - todoQuickAt > p.todo) {
           todoQuickAt = Date.now()
           void todoistChanged().then((changed) => {
             if (!changed) return
@@ -379,16 +401,16 @@ export function createTursoWebBridge(): Bridge {
           })
         }
         // Google Calendar changes made in its own app (and a safety net for Todoist): every 30 s.
-        if (Date.now() - todoAt > 30_000) {
+        if (Date.now() - todoAt > p.ext) {
           todoAt = Date.now()
           window.dispatchEvent(new CustomEvent('life-external-changed'))
           bridge.todoist?.sync().catch(() => 0)
         }
       }
-      const active = Date.now() - lastUse < 3 * 60_000 && document.hasFocus()
-      setTimeout(loop, active ? 3000 : 12_000)
+      setTimeout(loop, pace().db)
     }
     setTimeout(loop, 3000)
+    wake = () => void check()
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         todoAt = 0
