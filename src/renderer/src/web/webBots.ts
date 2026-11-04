@@ -695,7 +695,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -953,14 +953,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // ✕ Drop it, under a block Ben moved: off the calendar for today.
     if (data.startsWith('bd|')) {
       if (!(await markSeen(key))) return null
-      const idx = Number(data.slice(3))
-      const id = await mirror.read((db) => {
-        try {
-          return (JSON.parse(getSetting(db as any, 'coach_rhythm') || 'null')?.moved ?? [])[idx] as string | undefined
-        } catch {
-          return undefined
-        }
-      })
+      const arg = data.slice(3)
+      // New buttons carry the event id; older ones a position in the moved list.
+      const id = /^\d{1,3}$/.test(arg)
+        ? await mirror.read((db) => {
+            try {
+              return (JSON.parse(getSetting(db as any, 'coach_rhythm') || 'null')?.moved ?? [])[Number(arg)] as string | undefined
+            } catch {
+              return undefined
+            }
+          })
+        : arg
       let ok = false
       if (id && calendar?.remove) {
         const day = new Date()

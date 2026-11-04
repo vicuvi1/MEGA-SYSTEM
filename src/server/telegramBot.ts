@@ -689,8 +689,9 @@ async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unk
     const slot = nextSlot(events.filter((e) => e.id !== m.event.id), day, time, m.minutes)
     if (slot) await calendar.move(m.event.calendarId, m.event.id, new Date(`${day}T${slot.start}:00`).toISOString(), new Date(`${day}T${slot.end}:00`).toISOString()).catch(() => null)
     const subject = blockSubject(m.event.title).slice(0, 28)
-    const idx = (state.moved ?? []).length
-    await send(movedText(m.event.title, slot), { inline_keyboard: [[{ text: `▶ Start now: ${subject}`, callback_data: `fo|${subject}` }, { text: '✕ Drop it', callback_data: `bd|${idx}` }]] })
+    // The button carries the event's own id (fits Telegram's 64 bytes), never a list position.
+    const drop = `bd|${m.event.id}`.length <= 64 ? `bd|${m.event.id}` : `bd|${(state.moved ?? []).length}`
+    await send(movedText(m.event.title, slot), { inline_keyboard: [[{ text: `▶ Start now: ${subject}`, callback_data: `fo|${subject}` }, { text: '✕ Drop it', callback_data: drop }]] })
   }
 }
 

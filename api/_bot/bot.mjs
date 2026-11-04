@@ -14951,7 +14951,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -15286,14 +15286,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}
 		if (data.startsWith("bd|")) {
 			if (!await markSeen(key)) return null;
-			const idx = Number(data.slice(3));
-			const id = await mirror.read((db) => {
+			const arg = data.slice(3);
+			const id = /^\d{1,3}$/.test(arg) ? await mirror.read((db) => {
 				try {
-					return (JSON.parse(getSetting(db, "coach_rhythm") || "null")?.moved ?? [])[idx];
+					return (JSON.parse(getSetting(db, "coach_rhythm") || "null")?.moved ?? [])[Number(arg)];
 				} catch {
 					return;
 				}
-			});
+			}) : arg;
 			let ok = false;
 			if (id && calendar?.remove) {
 				const day = /* @__PURE__ */ new Date();
@@ -19282,13 +19282,13 @@ async function benActs(env, now, send, state, on, time) {
 		const slot = nextSlot(events.filter((e) => e.id !== m.event.id), day, time, m.minutes);
 		if (slot) await calendar.move(m.event.calendarId, m.event.id, (/* @__PURE__ */ new Date(`${day}T${slot.start}:00`)).toISOString(), (/* @__PURE__ */ new Date(`${day}T${slot.end}:00`)).toISOString()).catch(() => null);
 		const subject = blockSubject(m.event.title).slice(0, 28);
-		const idx = (state.moved ?? []).length;
+		const drop = `bd|${m.event.id}`.length <= 64 ? `bd|${m.event.id}` : `bd|${(state.moved ?? []).length}`;
 		await send(movedText(m.event.title, slot), { inline_keyboard: [[{
 			text: `▶ Start now: ${subject}`,
 			callback_data: `fo|${subject}`
 		}, {
 			text: "✕ Drop it",
-			callback_data: `bd|${idx}`
+			callback_data: drop
 		}]] });
 	}
 }
