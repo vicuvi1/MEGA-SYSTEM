@@ -94,7 +94,16 @@ export function Notebook() {
       ?.list()
       .then((l) => {
         setNotes(l)
-        setSel((s) => s ?? l.find((n) => n.pinned)?.id ?? l[0]?.id ?? null)
+        // Another page asked for a note by title (Coach → "Ben's profile of you").
+        let want: string | null = null
+        try {
+          want = localStorage.getItem('ls.openNote')
+          if (want) localStorage.removeItem('ls.openNote')
+        } catch {
+          want = null
+        }
+        const asked = want ? l.find((n) => n.title === want)?.id : undefined
+        setSel((s) => asked ?? s ?? l.find((n) => n.pinned)?.id ?? l[0]?.id ?? null)
       })
       .catch((e) => toast((e as Error).message, 'bad'))
   }, [toast])

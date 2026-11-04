@@ -23,6 +23,7 @@ import type { RhythmPrefs, RhythmState } from '@core/rhythm'
 import type { WeekRow } from '@core/coachImpact'
 import type { CoachStatus } from './web/coachStatus'
 import type { ProfileView } from './web/coachProfile'
+import type { DeskOp, DeskView } from './web/benDesk'
 import type { SportyView } from '@core/sportyUpdate'
 
 export type Bridge = LifeApi & {
@@ -43,8 +44,12 @@ export type Bridge = LifeApi & {
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
     mind?(): Promise<CoachMind>
-    rhythm?(action?: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter', note?: string, prefs?: Partial<RhythmPrefs>): Promise<{ state: RhythmState; prefs: RhythmPrefs; done?: string[]; ok?: boolean; lines?: string[]; letter?: string | null }>
+    rhythm?(action?: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month', note?: string, prefs?: Partial<RhythmPrefs>): Promise<{ state: RhythmState; prefs: RhythmPrefs; done?: string[]; ok?: boolean; lines?: string[]; letter?: string | null }>
     profileView?(): Promise<ProfileView>
+    /** Ben's desk: patterns, energy map, excuses, mood, study, stacks, stakes, month story, money (read here, instant). */
+    desk?(): Promise<DeskView>
+    /** A change on the desk (mood, stake, study topic, habit stack, coach call). Returns a line for the toast. */
+    deskDo?(op: DeskOp): Promise<string>
     feedback?(at: string, kind: 'up' | 'down' | 'long' | 'wrong'): Promise<void>
     style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>
     setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>

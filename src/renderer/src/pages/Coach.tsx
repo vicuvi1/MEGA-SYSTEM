@@ -13,7 +13,10 @@ import { CoachScorecard, GoalPlans } from '../CoachPanels'
 import { CoachPlan } from '../CoachPlan'
 import { CoachAbout } from '../CoachAbout'
 import type { CoachStatus } from '../web/coachStatus'
+import type { DeskView } from '../web/benDesk'
 import { readDo } from '@core/coachButtons'
+import { BenDesk, type DeskTab } from '../BenDesk'
+import '../ben.css'
 
 type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[] }
 type Profile = { about: string; goals: string[]; rules: string[] }
@@ -109,11 +112,28 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     setPhoto({ url, data: url.split(',')[1] })
   }
   // The info drawer: open by default on wide screens, a slide-over on phones.
-  const [info, setInfo] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1400)
-  const [tab, setTab] = useState<'plan' | 'goals' | 'score' | 'about'>('plan')
+  const [info, setInfo] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1200)
+  const [tab, setTabRaw] = useState<DeskTab>(() => {
+    try {
+      return (localStorage.getItem('ls.deskTab') as DeskTab) || 'today'
+    } catch {
+      return 'today'
+    }
+  })
+  const setTab = (t: DeskTab | 'goals' | 'score' | 'about') => {
+    const next: DeskTab = t === 'goals' ? 'plan' : t === 'score' || t === 'about' ? 'you' : t
+    setTabRaw(next)
+    try {
+      localStorage.setItem('ls.deskTab', next)
+    } catch {
+      /* fine */
+    }
+  }
   const end = useRef<HTMLDivElement>(null)
+  const [deck, setDeck] = useState<DeskView | null>(null)
   const loadStatus = useCallback(() => {
     life.coach?.status?.().then(setStatus).catch(() => {})
+    life.coach?.desk?.().then(setDeck).catch(() => {})
   }, [])
   useEffect(() => {
     loadStatus()
@@ -317,7 +337,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               <b>{status.plan.status === 'approved' ? '✓ Approved' : status.plan.status === 'proposed' ? 'Waiting for you' : 'Not yet'}</b>
               <span>{status.plan.score != null ? `Day score ${status.plan.score}/100` : status.plan.status === 'none' ? 'Tap “Plan it”' : `${status.plan.mustdos} must-dos · ${status.plan.blocks} blocks`}</span>
             </button>
-            <button role="listitem" className={`cx-card ${status.promises.missed ? 'warn' : ''}`} onClick={() => (setTab('score'), setInfo(true))}>
+            <button role="listitem" className={`cx-card ${status.promises.missed ? 'warn' : ''}`} onClick={() => (setTab('today'), setInfo(true))}>
               <small>Promises · 7 days</small>
               <b>
                 {status.promises.kept} kept · {status.promises.missed} missed
@@ -355,6 +375,28 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 {status.today.waterTarget ? ` · 💧 ${(status.today.waterMl / 1000).toFixed(1)}/${(status.today.waterTarget / 1000).toFixed(1)} L` : ''}
               </span>
             </div>
+          </div>
+        )}
+
+        {query == null && (
+          <div className="cx-deck" role="toolbar" aria-label="Ben's big moves">
+            {(
+              [
+                ['today', '🛟', 'Rescue my day', false],
+                ['plan', '🗓', 'Plan my week', false],
+                ['today', '💎', 'Stake a promise', false],
+                ['plan', '🎙', 'Coach call', !!deck?.callDue],
+                ['money', '🛍', 'Should I buy it?', false],
+                ['you', '🔍', 'My patterns', false],
+                ['month', '📖', 'My month', false]
+              ] as const
+            ).map(([t, icon, label, hot]) => (
+              <button key={label} className={hot ? 'hot' : ''} onClick={() => (setTab(t), setInfo(true))}>
+                <span>{icon}</span>
+                {label}
+                {label === 'Stake a promise' && !!deck?.stakes.filter((x) => x.status === 'open').length && <i className="n">{deck.stakes.filter((x) => x.status === 'open').length}</i>}
+              </button>
+            ))}
           </div>
         )}
 
@@ -512,60 +554,53 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           <span className={`cx-face big mood-${status?.mood ?? 'chill'}`}>{face}</span>
           <div>
             <b>Ben</b>
-            <small>Your coach · same memory on Telegram</small>
+            <small>Ben's desk · everything he knows and plans for you</small>
           </div>
           <button className="icon-btn cx-close" onClick={() => setInfo(false)} aria-label="Close">
             ✕
           </button>
         </div>
-        <nav className="cx-tabs" role="tablist">
-          {(
-            [
-              ['plan', 'Plan'],
-              ['goals', 'Goals'],
-              ['score', 'Score'],
-              ['about', 'About you']
-            ] as const
-          ).map(([id, label]) => (
-            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="cx-tab-body">
-          {tab === 'plan' && (
-            <>
-              <CoachPlan onChange={loadStatus} />
-              <RhythmSettings />
-            </>
-          )}
-          {tab === 'goals' && <GoalPlans />}
-          {tab === 'score' && <CoachScorecard />}
-          {tab === 'about' && (
-            <>
-              <CoachAbout />
-              {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
-              {mind && (
-                <Learning
-                  mind={mind}
-                  onSave={async (next) => {
-                    setMind(next)
-                    await act(() => life.coach!.setMind!(next))
-                  }}
-                />
-              )}
-              <section className="panel">
-                <header className="panel-head">
-                  <h2>
-                    <Icon name="list" /> What the coach remembers
-                  </h2>
-                </header>
-                <p className="hint small">Picked up from your conversations. Edit or delete anything that's wrong or old.</p>
-                <FactList facts={facts} onSave={saveFacts} />
-              </section>
-            </>
-          )}
-        </div>
+        <BenDesk
+          tab={tab}
+          setTab={setTab}
+          status={status}
+          onChange={() => (loadStatus(), onWallet())}
+          onSay={(t) => void send(t)}
+          slots={{
+            plan: (
+              <>
+                <CoachPlan onChange={loadStatus} />
+                <RhythmSettings />
+              </>
+            ),
+            goals: <GoalPlans />,
+            score: <CoachScorecard />,
+            about: (
+              <>
+                <CoachAbout />
+                {profile && <GoalsRules profile={profile} onSave={saveProfile} />}
+                {mind && (
+                  <Learning
+                    mind={mind}
+                    onSave={async (next) => {
+                      setMind(next)
+                      await act(() => life.coach!.setMind!(next))
+                    }}
+                  />
+                )}
+                <section className="panel">
+                  <header className="panel-head">
+                    <h2>
+                      <Icon name="list" /> What the coach remembers
+                    </h2>
+                  </header>
+                  <p className="hint small">Picked up from your conversations. Edit or delete anything that's wrong or old.</p>
+                  <FactList facts={facts} onSave={saveFacts} />
+                </section>
+              </>
+            )
+          }}
+        />
       </aside>
     </div>
   )

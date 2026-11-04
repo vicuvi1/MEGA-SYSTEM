@@ -8096,7 +8096,7 @@ function validTx(t) {
 		"transfer"
 	].includes(t.type) && Number.isInteger(t.amount) && t.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(t.date);
 }
-var B = (t) => Number.isInteger(t.base) ? t.base : t.amount;
+var B$1 = (t) => Number.isInteger(t.base) ? t.base : t.amount;
 var counts = (t) => !t.loan;
 function sortTx(list) {
 	return [...list].sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1);
@@ -8120,7 +8120,7 @@ function accountBalances(state, upTo = null) {
 var txInMonth = (state, key) => state.tx.filter((t) => monthKey(t.date) === key);
 function sumBy(list, keyFn) {
 	const out = /* @__PURE__ */ new Map();
-	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + B(t));
+	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + B$1(t));
 	return [...out.entries()].map(([id, amount]) => ({
 		id,
 		amount
@@ -8130,8 +8130,8 @@ function monthSummary(state, key) {
 	const list = txInMonth(state, key);
 	const incomes = list.filter((t) => t.type === "income" && counts(t));
 	const expenses = list.filter((t) => t.type === "expense" && counts(t));
-	const income = incomes.reduce((a, t) => a + B(t), 0);
-	const expense = expenses.reduce((a, t) => a + B(t), 0);
+	const income = incomes.reduce((a, t) => a + B$1(t), 0);
+	const expense = expenses.reduce((a, t) => a + B$1(t), 0);
 	const net = income - expense;
 	return {
 		key,
@@ -8163,11 +8163,11 @@ var payOn = (state) => {
 };
 function personalMonth(state, key) {
 	const s = monthSummary(state, key);
-	const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B(t), 0);
-	const workCosts = s.expenses.filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + B(t), 0);
+	const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B$1(t), 0);
+	const workCosts = s.expenses.filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + B$1(t), 0);
 	const otherIncome = s.income - workIncome;
 	const pay = payOn(state);
-	const salary = pay ? txInMonth(state, key).filter((t) => t.type === "transfer" && t.salary).reduce((a, t) => a + B(t), 0) : 0;
+	const salary = pay ? txInMonth(state, key).filter((t) => t.type === "transfer" && t.salary).reduce((a, t) => a + B$1(t), 0) : 0;
 	const personalIncome = pay ? salary + otherIncome : s.income - workCosts;
 	const personalSpent = s.expense - workCosts;
 	const kept = personalIncome - personalSpent;
@@ -8191,12 +8191,12 @@ var isBillCategory = (state, catId) => {
 	if (!c) return false;
 	return typeof c.bill === "boolean" ? c.bill : c.id === "home" || c.id === "subscriptions" || BILLISH.test(c.name || "");
 };
-var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => t.type === "expense" && counts(t) && t.category === catId).reduce((a, t) => a + B(t), 0);
+var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => t.type === "expense" && counts(t) && t.category === catId).reduce((a, t) => a + B$1(t), 0);
 function budgetAlert(state, t) {
 	const c = category(state, t.category);
 	if (t.type !== "expense" || !counts(t) || !(c?.budget > 0)) return null;
 	const after = spentIn(state, monthKey(t.date), c.id);
-	const before = after - B(t);
+	const before = after - B$1(t);
 	const fmt = (x) => formatMoney(x, state.settings.currency);
 	if (before <= c.budget && after > c.budget) return {
 		level: "over",
@@ -8338,7 +8338,7 @@ function hourlyRate(state, today) {
 		const t = h > 0 && state.tx.find((x) => x.id === inv.paidTx);
 		if (t) {
 			hours += h;
-			paid += B(t);
+			paid += B$1(t);
 		}
 	}
 	if (hours >= 10) return {
@@ -8352,7 +8352,7 @@ function hourlyRate(state, today) {
 		2,
 		3
 	].map((i) => addMonths(cur, -i));
-	const income = state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).reduce((a, t) => a + B(t), 0);
+	const income = state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).reduce((a, t) => a + B$1(t), 0);
 	const active = new Set(state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).map((t) => t.date.slice(0, 7))).size;
 	if (!income || !active) return null;
 	return {
@@ -8439,8 +8439,8 @@ function spentFrom(state, today, window = 60) {
 	for (const t of state.tx) {
 		if (t.type !== "expense" || t.loan || t.recurring || t.date < since || t.date > today) continue;
 		if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
-		by.set(t.account, (by.get(t.account) || 0) + B(t));
-		total += B(t);
+		by.set(t.account, (by.get(t.account) || 0) + B$1(t));
+		total += B$1(t);
 	}
 	return [...by.entries()].map(([id, amount]) => ({
 		id,
@@ -8460,9 +8460,9 @@ function spendingIds(state, today = null) {
 	return ids;
 }
 // src/renderer/public/apps/finance/js/safespend.js
-var lei$1 = (c) => Math.floor(c / 100) * 100;
+var lei$2 = (c) => Math.floor(c / 100) * 100;
 var isEveryday = (state, t) => t.type === "expense" && !t.loan && !t.recurring && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
-var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B(t), 0);
+var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B$1(t), 0);
 var limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);
 function limitStatus(state, today) {
 	if (!limitOn(state)) return null;
@@ -8472,7 +8472,7 @@ function limitStatus(state, today) {
 	const before = everydaySpent(state, `${key}-01`, addDays(today, -1));
 	const spentToday = everydaySpent(state, today, today);
 	const leftBefore = amount - before;
-	const perDay = leftBefore > 0 ? lei$1(leftBefore / daysLeft) : 0;
+	const perDay = leftBefore > 0 ? lei$2(leftBefore / daysLeft) : 0;
 	const spent = before + spentToday;
 	return {
 		amount,
@@ -8511,20 +8511,20 @@ function safeToSpend(state, today) {
 	let moved = 0;
 	for (const t of state.tx) {
 		if (t.type !== "transfer" || monthKey(t.date) !== key) continue;
-		const v = B(t);
+		const v = B$1(t);
 		if (liquidIds.has(t.from) && !liquidIds.has(t.to)) moved += v;
 		else if (!liquidIds.has(t.from) && liquidIds.has(t.to)) moved -= v;
 	}
 	const savingsLeft = pay ? 0 : Math.max(0, plan - moved);
 	const spentToday = everydaySpent(state, today, today);
 	const pool = liquid + spentToday - billsTotal - savingsLeft;
-	const moneyPerDay = pool > 0 ? lei$1(pool / days) : 0;
-	let tomorrow = days > 1 && pool - spentToday > 0 ? lei$1((pool - spentToday) / (days - 1)) : 0;
+	const moneyPerDay = pool > 0 ? lei$2(pool / days) : 0;
+	let tomorrow = days > 1 && pool - spentToday > 0 ? lei$2((pool - spentToday) / (days - 1)) : 0;
 	const limit = limitStatus(state, today);
 	const byLimit = !!limit && limit.perDay < moneyPerDay;
 	const perDay = byLimit ? limit.perDay : moneyPerDay;
 	if (limit) {
-		const lt = limit.daysLeft > 1 && limit.left > 0 ? lei$1(limit.left / (limit.daysLeft - 1)) : 0;
+		const lt = limit.daysLeft > 1 && limit.left > 0 ? lei$2(limit.left / (limit.daysLeft - 1)) : 0;
 		tomorrow = Math.min(tomorrow, lt);
 	}
 	const leftToday = perDay - spentToday;
@@ -8661,18 +8661,18 @@ var esc$3 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	">": "&gt;"
 })[c]);
 var fm = (state, c) => esc$3(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
-var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
+var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B$1(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
 	const a = account(state, t.account)?.name || "";
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
-	const work = t.type === "expense" ? workText(state, B(t), t.date) : "";
+	const work = t.type === "expense" ? workText(state, B$1(t), t.date) : "";
 	const lines = [`✅ <b>${sign}${esc$3(formatMoney(t.amount, t.currency))}</b> · ${esc$3(t.note || c)}`, `${esc$3(c)} · ${esc$3(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
 	if (work) lines.push(`⏱ ${esc$3(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
-		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
+		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B$1(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
 		lines.push(`${esc$3(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
@@ -9823,6 +9823,940 @@ function journalNote(day, lines) {
 		].join("\n").trim()
 	};
 }
+// src/core/benKnows.ts
+var HOURS = Array.from({ length: 18 }, (_, i) => i + 6);
+var hourOf = (iso) => new Date(iso).getHours();
+/**
+* Your best hours from focus minutes (how much you do), focus quality (how
+* much of it you were really at it) and finished blocks (done/half/no).
+*/
+function energyMap(sessions, quality = [], blocks = []) {
+	const acc = /* @__PURE__ */ new Map();
+	const at = (h) => acc.get(h) ?? (acc.set(h, {
+		min: 0,
+		q: [],
+		b: [],
+		n: 0
+	}), acc.get(h));
+	for (const s of sessions) {
+		if (!s.startedAt || !(s.minutes > 0)) continue;
+		let t = Date.parse(s.startedAt);
+		let left = s.minutes;
+		while (left > 0 && Number.isFinite(t)) {
+			const h = new Date(t).getHours();
+			const into = new Date(t).getMinutes();
+			const take = Math.min(left, 60 - into);
+			const a = at(h);
+			a.min += take;
+			a.n += take >= 15 ? 1 : 0;
+			left -= take;
+			t += take * 6e4;
+		}
+	}
+	for (const q of quality) at(hourOf(q.at)).q.push(Math.max(0, Math.min(100, q.pct)));
+	for (const b of blocks) {
+		const a = at(hourOf(b.at));
+		a.b.push(b.result === "done" ? 100 : b.result === "half" ? 50 : 0);
+		a.n++;
+	}
+	const maxMin = Math.max(1, ...[...acc.values()].map((v) => v.min));
+	const avg = (xs) => xs.length ? xs.reduce((t, x) => t + x, 0) / xs.length : null;
+	const hours = HOURS.map((h) => {
+		const a = acc.get(h);
+		if (!a) return {
+			h,
+			score: 0,
+			minutes: 0,
+			n: 0
+		};
+		const volume = a.min / maxMin * 100;
+		const q = avg(a.q);
+		const b = avg(a.b);
+		const parts = [
+			volume,
+			...q != null ? [q] : [],
+			...b != null ? [b] : []
+		];
+		return {
+			h,
+			score: Math.round(avg(parts) ?? 0),
+			minutes: Math.round(a.min),
+			n: a.n
+		};
+	});
+	const ready = sessions.length + blocks.length >= 6;
+	const ranked = hours.filter((x) => x.n > 0).sort((a, b) => b.score - a.score || b.minutes - a.minutes);
+	return {
+		hours,
+		ready,
+		best: ready ? ranked.slice(0, Math.min(4, Math.max(2, Math.ceil(ranked.length / 4)))).map((x) => x.h) : [],
+		worst: ready && ranked.length >= 5 ? ranked.filter((x) => x.n >= 2).slice(-2).reverse().map((x) => x.h).filter((h) => !ranked.slice(0, Math.min(4, Math.max(2, Math.ceil(ranked.length / 4)))).some((b) => b.h === h)) : []
+	};
+}
+/** "09–11 and 16–17" from start hours. */
+function hoursText(hs) {
+	const s = [...hs].sort((a, b) => a - b);
+	const runs = [];
+	for (const h of s) {
+		const last = runs[runs.length - 1];
+		if (last && h === last[1] + 1) last[1] = h;
+		else runs.push([h, h]);
+	}
+	const p = (h) => String(h).padStart(2, "0");
+	return runs.map(([a, b]) => `${p(a)}–${p(b + 1)}`).join(" and ");
+}
+var DOW = [
+	"Sun",
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat"
+];
+var dow = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+var minsOf = (hm) => hm && /^\d{1,2}:\d{2}/.test(hm) ? Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)) : null;
+var sleepMin = (bed, wake) => (wake - bed + 1440) % 1440;
+/** What your own data shows, each with one change to try. Strongest first, at most 5. */
+function weeklyPatterns(i) {
+	const out = [];
+	const from = addDays$1(i.today, -55);
+	const ses = i.sessions.filter((s) => s.day >= from && s.day <= i.today && s.startedAt);
+	let am = 0;
+	let pm = 0;
+	for (const s of ses) hourOf(s.startedAt) < 12 ? am += s.minutes : pm += s.minutes;
+	if (am + pm >= 300) {
+		if (am >= pm * 1.8) out.push({
+			id: "am",
+			text: `Your focus is ${(am / Math.max(1, pm)).toFixed(1)}× stronger before noon.`,
+			change: "Put the hardest task of the day before 12:00.",
+			weight: am / Math.max(1, pm)
+		});
+		else if (pm >= am * 1.8) out.push({
+			id: "pm",
+			text: `You get ${(pm / Math.max(1, am)).toFixed(1)}× more focus done after noon.`,
+			change: "Keep mornings for light tasks; book deep work after lunch.",
+			weight: pm / Math.max(1, am)
+		});
+	}
+	const lateByDow = Array(7).fill(0);
+	const daysWithAny = new Set(ses.map((s) => s.day));
+	for (const s of ses) if (hourOf(s.startedAt) >= 15) lateByDow[dow(s.day)] += s.minutes;
+	const totalLate = lateByDow.reduce((t, x) => t + x, 0);
+	if (totalLate >= 240 && daysWithAny.size >= 10) {
+		const weekdays = [
+			1,
+			2,
+			3,
+			4,
+			5
+		];
+		const avgLate = totalLate / 7;
+		const lost = weekdays.filter((d) => lateByDow[d] < avgLate * .25);
+		if (lost.length && lost.length <= 3) out.push({
+			id: "lost-pm",
+			text: `You lose afternoons after 15:00 on ${lost.map((d) => DOW[d]).join("/")}.`,
+			change: `Book one 50-min block at 15:00 on ${lost.map((d) => DOW[d]).join(" and ")}, with the task named.`,
+			weight: 2.2
+		});
+	}
+	const perDow = Array(7).fill(0);
+	for (const s of ses) perDow[dow(s.day)] += s.minutes;
+	const wk = (perDow[1] + perDow[2] + perDow[3] + perDow[4] + perDow[5]) / 5;
+	const we = (perDow[0] + perDow[6]) / 2;
+	if (wk >= 60 && we < wk * .3) out.push({
+		id: "weekend",
+		text: `Weekends drop to ${Math.round(we / Math.max(1, wk) * 100)}% of a weekday's focus.`,
+		change: "One 50-min block Saturday morning keeps the streak alive without killing the weekend.",
+		weight: 1.6
+	});
+	const nights = i.sleep.filter((s) => s.day >= from).map((s) => {
+		const b = minsOf(s.bed);
+		const w = minsOf(s.wake);
+		return b != null && w != null ? {
+			day: s.day,
+			min: sleepMin(b, w)
+		} : null;
+	}).filter((x) => !!x && x.min >= 180 && x.min <= 720);
+	if (nights.length >= 6) {
+		const avgSleep = nights.reduce((t, n) => t + n.min, 0) / nights.length;
+		const examDays = new Set((i.exams ?? []).flatMap((d) => [d, addDays$1(d, -1)]));
+		const before = nights.filter((n) => examDays.has(n.day));
+		if (before.length >= 1) {
+			const b = before.reduce((t, n) => t + n.min, 0) / before.length;
+			if (avgSleep - b >= 25) out.push({
+				id: "exam-sleep",
+				text: `You sleep ${Math.round(avgSleep - b)} min less before exams.`,
+				change: "Two nights before an exam: lights out at your normal time, review in the morning instead.",
+				weight: 2
+			});
+		}
+		const focusOn = (day) => ses.filter((s) => s.day === day).reduce((t, s) => t + s.minutes, 0);
+		const short = nights.filter((n) => n.min < 390);
+		const long = nights.filter((n) => n.min >= 420);
+		if (short.length >= 3 && long.length >= 3) {
+			const fs = short.reduce((t, n) => t + focusOn(n.day), 0) / short.length;
+			const fl = long.reduce((t, n) => t + focusOn(n.day), 0) / long.length;
+			if (fl >= 30 && fl >= fs * 1.4) out.push({
+				id: "sleep-focus",
+				text: `After 7h+ of sleep you focus ${Math.round(fl)} min, after a short night only ${Math.round(fs)}.`,
+				change: "Protect the bedtime: it buys you about an extra focus block the next day.",
+				weight: fl / Math.max(1, fs)
+			});
+		}
+	}
+	const wset = new Set(i.workouts.filter((d) => d >= from));
+	const days = [.../* @__PURE__ */ new Set([...ses.map((s) => s.day), ...wset])];
+	if (wset.size >= 4 && days.length >= 14) {
+		const f = (d) => ses.filter((s) => s.day === d).reduce((t, s) => t + s.minutes, 0);
+		const on = [...wset].map(f);
+		const off = days.filter((d) => !wset.has(d)).map(f);
+		const a = on.reduce((t, x) => t + x, 0) / Math.max(1, on.length);
+		const b = off.reduce((t, x) => t + x, 0) / Math.max(1, off.length);
+		if (a >= b * 1.3 && a >= 40) out.push({
+			id: "sport-focus",
+			text: `On training days you focus ${Math.round(a)} min vs ${Math.round(b)} on other days.`,
+			change: "Train before your hardest study day, even 20 minutes.",
+			weight: a / Math.max(1, b)
+		});
+	}
+	const bl = (i.blocks ?? []).filter((b) => b.day >= from);
+	if (bl.length >= 8) {
+		const byH = /* @__PURE__ */ new Map();
+		for (const b of bl) byH.set(hourOf(b.at), [...byH.get(hourOf(b.at)) ?? [], b.result === "done" ? 1 : b.result === "half" ? .5 : 0]);
+		const bad = [...byH.entries()].filter(([, v]) => v.length >= 3 && v.reduce((t, x) => t + x, 0) / v.length < .4).sort((a, b) => a[0] - b[0]);
+		if (bad.length) out.push({
+			id: "bad-hour",
+			text: `Blocks at ${bad.map(([h]) => `${String(h).padStart(2, "0")}:00`).join(", ")} mostly don't get done.`,
+			change: "Stop booking hard work there: a walk, errands or easy tasks fit that hour better.",
+			weight: 1.8
+		});
+	}
+	for (const l of moodLinks(i.moods ?? [], i).slice(0, 1)) out.push({
+		id: `mood-${l.id}`,
+		text: l.text,
+		change: l.change,
+		weight: 1.5
+	});
+	return out.sort((a, b) => b.weight - a.weight).slice(0, 5);
+}
+var EXCUSE_RX = [
+	["sick", /\b(sick|ill|fever|headache|migraine|cold|flu|bolnav|răcit|racit|ma doare|mă doare|durere)\b/iu],
+	["tired", /\b(tired|exhausted|sleepy|no energy|drained|obosit|somnoros|n-am energie|nu am energie|fără energie|fara energie)\b/iu],
+	["busy", /\b(busy|no time|too much|work(ed)? late|class(es)? all day|ocupat|n-am timp|nu am timp|fără timp|prea mult)\b/iu],
+	["forgot", /\b(forgot|forget|didn'?t remember|am uitat|uitat)\b/iu],
+	["no mood", /\b(lazy|not in the mood|no motivation|don'?t feel like|didn'?t feel like|unmotivated|lene|nu am chef|n-am chef|fără chef|fara chef|nu-mi vine)\b/iu],
+	["phone", /\b(phone|tiktok|youtube|instagram|scroll(ed|ing)?|games?|gaming|netflix|series|telefon)\b/iu],
+	["friends", /\b(friends?|party|went out|guests|prieteni|petrecere|am ieșit|am iesit)\b/iu],
+	["later", /\b(tomorrow|later|next week|mâine|maine|mai târziu|mai tarziu|săptămâna viitoare)\b/iu]
+];
+/** The kind of excuse in a message, or null when it isn't one. */
+function classifyExcuse(text) {
+	const t = String(text ?? "");
+	if (!/\b(didn'?t|did not|couldn'?t|can'?t|won'?t|not|skip(ped)?|missed|no\b|nu|n-am|n-a|nu am|am sărit|am sarit)\b|\bbecause\b|\bpentru că\b|\bpt ca\b/iu.test(t)) return null;
+	for (const [k, rx] of EXCUSE_RX) if (rx.test(t)) return k;
+	return null;
+}
+function addExcuse(list, text, at) {
+	const kind = classifyExcuse(text);
+	if (!kind) return list;
+	if (list.some((e) => e.at.slice(0, 10) === at.slice(0, 10) && e.kind === kind)) return list;
+	return [...list, {
+		at,
+		kind,
+		text: String(text).slice(0, 160)
+	}].slice(-120);
+}
+/** Excuses in the last `days`, most repeated first. */
+function excuseCounts(list, today, days = 30) {
+	const from = addDays$1(today, -(days - 1));
+	const m = /* @__PURE__ */ new Map();
+	for (const e of list) {
+		if (e.at.slice(0, 10) < from) continue;
+		const c = m.get(e.kind) ?? {
+			kind: e.kind,
+			n: 0,
+			last: e.at
+		};
+		c.n++;
+		if (e.at > c.last) c.last = e.at;
+		m.set(e.kind, c);
+	}
+	return [...m.values()].sort((a, b) => b.n - a.n || b.last.localeCompare(a.last));
+}
+var EXCUSE_WORD = {
+	tired: "\"too tired\"",
+	busy: "\"no time\"",
+	sick: "\"sick\"",
+	forgot: "\"I forgot\"",
+	"no mood": "\"not in the mood\"",
+	phone: "the phone",
+	friends: "going out",
+	later: "\"tomorrow\""
+};
+var EXCUSE_FIX = {
+	tired: "Do the 10-minute version, then decide.",
+	busy: "Book 25 minutes now so it has a slot.",
+	sick: "Rest is fine, but say when you're back on.",
+	forgot: "Set a check-in at the time you will do it.",
+	"no mood": "Start for 5 minutes; mood follows action.",
+	phone: "Phone in another room for one block.",
+	friends: "Do the block before you go out.",
+	later: "Pick the exact time now."
+};
+/** Ben's kind call-out of a repeat ("3rd time this month it's 'too tired'"), or null. */
+function excuseCallout(list, kind, today) {
+	const c = excuseCounts(list, today).find((x) => x.kind === kind);
+	if (!c || c.n < 2) return null;
+	return `That's the ${c.n === 2 ? "2nd" : c.n === 3 ? "3rd" : `${c.n}th`} time this month it's ${EXCUSE_WORD[kind]}. ${EXCUSE_FIX[kind]}`;
+}
+/** One line for Ben's prompt. */
+function excuseLine(list, today) {
+	const c = excuseCounts(list, today);
+	return c.length ? `Excuses he gave in the last 30 days: ${c.map((x) => `${EXCUSE_WORD[x.kind]} ×${x.n}`).join(", ")}. Name a repeat kindly, with the count.` : "";
+}
+var MOOD_FACES = [
+	"😫",
+	"😕",
+	"😐",
+	"🙂",
+	"😄"
+];
+var moodFace = (m) => MOOD_FACES[Math.max(1, Math.min(5, Math.round(m))) - 1];
+function addMood(list, e) {
+	const mood = Math.max(1, Math.min(5, Math.round(e.mood)));
+	return [...list.filter((x) => !(x.day === e.day && x.slot === e.slot)), {
+		...e,
+		mood
+	}].sort((a, b) => a.at.localeCompare(b.at)).slice(-240);
+}
+/** Which check-in is due now (12–15 noon, 19–23 evening), if not done today. */
+function moodDue(list, now) {
+	const h = now.getHours();
+	const day = now.toLocaleDateString("sv-SE");
+	const slot = h >= 12 && h < 15 ? "noon" : h >= 19 && h < 23 ? "evening" : null;
+	return slot && !list.some((x) => x.day === day && x.slot === slot) ? slot : null;
+}
+/** How mood moves with sleep, training and spending (only with enough days). */
+function moodLinks(moods, i) {
+	const byDay = /* @__PURE__ */ new Map();
+	for (const m of moods) byDay.set(m.day, [...byDay.get(m.day) ?? [], m.mood]);
+	const dayMood = new Map([...byDay.entries()].map(([d, v]) => [d, v.reduce((t, x) => t + x, 0) / v.length]));
+	if (dayMood.size < 6) return [];
+	const out = [];
+	const split = (id, yes, text, change) => {
+		const a = [];
+		const b = [];
+		for (const [d, m] of dayMood) {
+			const y = yes(d);
+			if (y === null) continue;
+			(y ? a : b).push(m);
+		}
+		if (a.length < 3 || b.length < 3) return;
+		const ma = a.reduce((t, x) => t + x, 0) / a.length;
+		const mb = b.reduce((t, x) => t + x, 0) / b.length;
+		if (Math.abs(ma - mb) >= .5) out.push({
+			id,
+			text: text(ma, mb),
+			change: typeof change === "string" ? change : change(ma, mb),
+			diff: Math.abs(ma - mb)
+		});
+	};
+	const w = new Set(i.workouts);
+	split("sport", (d) => w.has(d), (a, b) => `Mood ${a.toFixed(1)} on training days vs ${b.toFixed(1)} without.`, "When the day feels heavy, train first: it lifts you.");
+	const night = new Map(i.sleep.map((s) => {
+		const b = minsOf(s.bed);
+		const wk = minsOf(s.wake);
+		return [s.day, b != null && wk != null ? sleepMin(b, wk) : null];
+	}));
+	split("sleep", (d) => night.get(d) == null ? null : night.get(d) >= 420, (a, b) => `Mood ${a.toFixed(1)} after 7h+ of sleep vs ${b.toFixed(1)} after less.`, "A bad mood is often a short night: go to bed on time tonight.");
+	if (i.spending?.length) {
+		const spent = /* @__PURE__ */ new Map();
+		for (const s of i.spending) spent.set(s.day, (spent.get(s.day) ?? 0) + s.bani);
+		const vals = [...spent.values()].sort((a, b) => a - b);
+		const high = vals[Math.floor(vals.length * .75)] ?? Infinity;
+		split("spend", (d) => (spent.get(d) ?? 0) >= high && high > 0, (a, b) => `On big spending days your mood is ${a.toFixed(1)} vs ${b.toFixed(1)}.`, (a, b) => a < b ? "Low days → impulse buys. Wait a day before buying when you feel down." : "Spending lifts you only for the day; plan treats instead.");
+	}
+	return out.sort((a, b) => b.diff - a.diff);
+}
+function moodLine(list, today) {
+	const recent = list.filter((m) => m.day >= addDays$1(today, -6));
+	if (!recent.length) return "";
+	const avg = recent.reduce((t, m) => t + m.mood, 0) / recent.length;
+	const todayM = list.filter((m) => m.day === today).map((m) => `${m.slot} ${moodFace(m.mood)} ${m.mood}/5`);
+	return `Mood check-ins: last 7 days average ${avg.toFixed(1)}/5${todayM.length ? `; today ${todayM.join(", ")}` : ""}.`;
+}
+var PROFILE_NOTE = "Ben's profile of you";
+var KEEP_MARK = "## Your corrections";
+/**
+* The profile note Ben keeps current: goals, exams, people, what works, what
+* fails, patterns, best hours, excuses. A "Your corrections" section at the end
+* is yours: it is kept as you wrote it on every refresh (and Ben reads it).
+*/
+function profileNote(p, previousBody = "") {
+	const keep = previousBody.includes(KEEP_MARK) ? previousBody.slice(previousBody.indexOf(KEEP_MARK)) : `${KEEP_MARK}\n\nWrite here anything above that's wrong or missing. Ben keeps this part and reads it.\n\n- \n`;
+	const left = (d) => Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${p.today}T12:00:00Z`)) / 864e5);
+	const list = (xs, empty) => xs.length ? xs.map((x) => `- ${x}`).join("\n") : `- ${empty}`;
+	return [
+		`# ${PROFILE_NOTE}`,
+		"",
+		`Ben updates this himself (last ${p.today}). Edit the last section to correct him.`,
+		"",
+		"## Goals",
+		list(p.goals.map((g) => `${g.title}${g.deadline ? ` (by ${g.deadline}, ${left(g.deadline)} days)` : ""}${g.weekly ? ` · ${g.weekly} a week` : ""}`), "none yet: tell Ben one with a date"),
+		"",
+		"## Exams & deadlines",
+		list(p.exams.filter((e) => left(e.deadline) >= 0).sort((a, b) => a.deadline.localeCompare(b.deadline)).map((e) => `${e.title}: ${e.deadline} (${left(e.deadline)} days)`), "none coming up"),
+		"",
+		"## People",
+		list(p.people.map((x) => `${x.name}: ${x.note}`), "none yet"),
+		"",
+		"## Best hours (energy map)",
+		p.energy.ready ? `- Best: ${hoursText(p.energy.best)}${p.energy.worst.length ? `\n- Weakest: ${hoursText(p.energy.worst)}` : ""}` : "- Not enough focus data yet (about a week of sessions).",
+		"",
+		"## What works",
+		list(p.works, "Ben is still learning"),
+		"",
+		"## What doesn't",
+		list(p.fails, "Ben is still learning"),
+		"",
+		"## Patterns",
+		list(p.patterns.map((x) => `${x.text} → ${x.change}`), "none strong enough yet"),
+		"",
+		"## Excuses (30 days)",
+		list(p.excuses.map((e) => `${EXCUSE_WORD[e.kind]} ×${e.n}`), "none: nice"),
+		p.moodAvg != null ? `\n## Mood\n- 7-day average ${p.moodAvg.toFixed(1)}/5` : "",
+		"",
+		keep.replace(/\n+$/, ""),
+		""
+	].join("\n");
+}
+/** What you wrote in "Your corrections" (for Ben's prompt). */
+function profileCorrections(body) {
+	if (!body.includes(KEEP_MARK)) return "";
+	return body.slice(body.indexOf(KEEP_MARK) + 19).split("\n").map((l) => l.trim()).filter((l) => /^-\s*\S/.test(l)).join("\n");
+}
+// src/core/benPlans.ts
+/** Review after 1, 3, 7, 14, 30 days (each from the previous review). */
+var SRS_STEPS = [
+	1,
+	3,
+	7,
+	14,
+	30
+];
+function nextReview(t) {
+	const n = t.reviews.length;
+	if (n >= SRS_STEPS.length) return null;
+	const base = n ? t.reviews[n - 1] : t.learned;
+	let due = addDays$1(base, SRS_STEPS[n]);
+	if (t.examDay && due >= t.examDay) due = addDays$1(t.examDay, -1) >= base ? addDays$1(t.examDay, -1) : t.examDay;
+	return due;
+}
+function dueTopics(list, today) {
+	return list.filter((t) => t.examDay ? t.examDay >= today : true).filter((t) => {
+		const d = nextReview(t);
+		return d != null && d <= today;
+	});
+}
+function addTopic(list, exam, topic, today, examDay) {
+	const key = `${exam}|${topic}`.toLowerCase();
+	if (list.some((t) => `${t.exam}|${t.topic}`.toLowerCase() === key)) return list;
+	return [...list, {
+		id: `s${Date.now().toString(36)}${list.length}`,
+		exam: exam.slice(0, 60),
+		topic: topic.slice(0, 80),
+		learned: today,
+		reviews: [],
+		examDay: examDay ?? null
+	}].slice(-200);
+}
+function reviewTopic(list, id, today) {
+	return list.map((t) => t.id === id && !t.reviews.includes(today) ? {
+		...t,
+		reviews: [...t.reviews, today]
+	} : t);
+}
+/** "after coffee → 10 pushups → plan review" (also > or ,) into a stack. */
+function parseStack(text, today) {
+	const parts = String(text ?? "").split(/\s*(?:→|->|>|,|\bthen\b|\bapoi\b)\s*/i).map((x) => x.trim()).filter(Boolean);
+	if (parts.length < 2) return null;
+	const cue = parts[0].replace(/^(after|când|cand|dupa|după)\s+/i, "").slice(0, 60);
+	return {
+		id: `h${Date.now().toString(36)}`,
+		cue,
+		steps: parts.slice(1, 6).map((s) => s.slice(0, 60)),
+		log: {},
+		createdAt: today
+	};
+}
+function tickStack(s, day, step) {
+	const cur = s.log[day] ?? [];
+	const next = cur.includes(step) ? cur.filter((x) => x !== step) : [...cur, step].sort((a, b) => a - b);
+	return {
+		...s,
+		log: {
+			...s.log,
+			[day]: next
+		}
+	};
+}
+/** Days in a row (ending today or yesterday) with every step done. */
+function stackStreak(s, today) {
+	const full = (d) => (s.log[d] ?? []).length >= s.steps.length;
+	let d = full(today) ? today : addDays$1(today, -1);
+	let n = 0;
+	while (full(d) && n < 400) {
+		n++;
+		d = addDays$1(d, -1);
+	}
+	return n;
+}
+/** Share of the last 14 days with the whole chain done. */
+function stackRate(s, today) {
+	const since = s.createdAt > addDays$1(today, -13) ? s.createdAt : addDays$1(today, -13);
+	let days = 0;
+	let full = 0;
+	for (let d = since; d <= today; d = addDays$1(d, 1)) {
+		days++;
+		if ((s.log[d] ?? []).length >= s.steps.length) full++;
+	}
+	return days ? Math.round(full / days * 100) : 0;
+}
+// src/core/benStakes.ts
+function addStake(list, text, due, points, now) {
+	const p = Math.max(10, Math.min(500, Math.round(points)));
+	return [...list, {
+		id: `k${now.getTime().toString(36)}${list.length}`,
+		text: text.slice(0, 120),
+		due,
+		points: p,
+		status: "open",
+		at: now.toISOString()
+	}].slice(-100);
+}
+function keepStake(list, id, now) {
+	return list.map((s) => s.id === id && s.status === "open" ? {
+		...s,
+		status: "kept",
+		settledAt: now.toISOString()
+	} : s);
+}
+/** Open stakes past their time: these get enforced (points taken). */
+function overdueStakes(list, now) {
+	return list.filter((s) => s.status === "open" && Date.parse(s.due) <= now.getTime());
+}
+function loseStakes(list, ids, now) {
+	return list.map((s) => ids.includes(s.id) && s.status === "open" ? {
+		...s,
+		status: "lost",
+		settledAt: now.toISOString()
+	} : s);
+}
+/** Kept / lost in the last 30 days, and points lost. */
+function stakeStats(list, now) {
+	const from = now.getTime() - 2592e6;
+	const recent = list.filter((s) => Date.parse(s.at) >= from);
+	return {
+		kept: recent.filter((s) => s.status === "kept").length,
+		lost: recent.filter((s) => s.status === "lost").length,
+		pointsLost: recent.filter((s) => s.status === "lost").reduce((t, s) => t + s.points, 0),
+		open: list.filter((s) => s.status === "open").length
+	};
+}
+/**
+* "by 18:00" / "18:00" / "tomorrow 9" / "2026-11-05 18:00" → ISO, in local time.
+* A clock time already past today means tomorrow.
+*/
+function readDue(text, now) {
+	const t = String(text ?? "").trim().toLowerCase();
+	const iso = /^(\d{4}-\d{2}-\d{2})[ t](\d{1,2})(?::(\d{2}))?$/.exec(t);
+	if (iso) return (/* @__PURE__ */ new Date(`${iso[1]}T${iso[2].padStart(2, "0")}:${iso[3] ?? "00"}:00`)).toISOString();
+	const m = /^(?:by\s+|până la\s+|pana la\s+)?(tomorrow|mâine|maine|today|azi)?\s*(?:at\s+|la\s+)?(\d{1,2})(?::(\d{2}))?$/.exec(t);
+	if (!m) return null;
+	const h = Number(m[2]);
+	const mi = Number(m[3] ?? 0);
+	if (h > 23 || mi > 59) return null;
+	const d = new Date(now);
+	d.setHours(h, mi, 0, 0);
+	if (/tomorrow|mâine|maine/.test(m[1] ?? "")) d.setDate(d.getDate() + 1);
+	else if (!m[1] && d.getTime() <= now.getTime()) d.setDate(d.getDate() + 1);
+	return d.toISOString();
+}
+function stakeLostText(s) {
+	return `💸 Time's up: "${s.text}" wasn't done by ${new Date(s.due).toTimeString().slice(0, 5)}. −${s.points} points, as you promised. Make the next one smaller and win it back.`;
+}
+function stakeRemindText(s, now) {
+	const left = (Date.parse(s.due) - now.getTime()) / 6e4;
+	if (left > 60 || left <= 0) return null;
+	return `⏳ ${Math.round(left)} min left: "${s.text}" or −${s.points} points. Mark it done when it is.`;
+}
+/** Minutes from now until "HH:MM" (today, or tomorrow if past). */
+function minutesUntil(hmText, now) {
+	const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(hmText ?? "").trim());
+	if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+	const d = new Date(now);
+	d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+	if (d.getTime() <= now.getTime()) d.setDate(d.getDate() + 1);
+	return Math.max(1, Math.round((d.getTime() - now.getTime()) / 6e4));
+}
+/** The Monday a week starts on. */
+function weekOf(day) {
+	return addDays$1(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+}
+/** The call is due Saturday 18:00 → Monday 12:00 when this week has none. */
+function callDue(calls, now) {
+	const day = now.toLocaleDateString("sv-SE");
+	const dow = now.getDay();
+	const h = now.getHours();
+	if (!(dow === 6 && h >= 18 || dow === 0 || dow === 1 && h < 12)) return false;
+	const wk = dow === 1 ? addDays$1(weekOf(day), -7) : weekOf(day);
+	return !calls.some((c) => c.week === wk);
+}
+function big3Of(answer) {
+	return String(answer ?? "").split(/\n|;|\s\/\s|^\d[.)]\s*/m).map((x) => x.replace(/^\s*(\d[.)]|[-•*])\s*/, "").trim()).filter(Boolean).slice(0, 3);
+}
+function callNote(c) {
+	const a = c.answers;
+	return [
+		`## Week of ${c.week}`,
+		`- ✅ Went well: ${a.good || "-"}`,
+		`- ❌ Didn't: ${a.bad || "-"}`,
+		`- 🔍 Why: ${a.why || "-"}`,
+		`- 🔧 One change: ${a.change || "-"}`,
+		`- 🎯 Big 3: ${big3Of(a.big3).join(" · ") || "-"}`
+	].join("\n");
+}
+var sleptMin = (bed, wake) => {
+	const m = (t) => t && /^\d{1,2}:\d{2}/.test(t) ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null;
+	const b = m(bed);
+	const w = m(wake);
+	if (b == null || w == null) return null;
+	const v = (w - b + 1440) % 1440;
+	return v >= 120 && v <= 840 ? v : null;
+};
+function monthSums(i, month, upToDay = 31) {
+	const inM = (d) => d.startsWith(month) && Number(d.slice(8, 10)) <= upToDay;
+	return {
+		focusH: i.focus.filter((f) => inM(f.day)).reduce((t, f) => t + f.minutes, 0) / 60,
+		trained: new Set(i.workouts.filter(inM)).size,
+		spent: i.spent.filter((s) => inM(s.day)).reduce((t, s) => t + s.bani, 0)
+	};
+}
+/** The month as a calendar (one cell a day) plus its numbers and the plain-words lines. */
+function monthStory(i) {
+	const [y, mo] = i.month.split("-").map(Number);
+	const n = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+	const first = `${i.month}-01`;
+	const pad = ((/* @__PURE__ */ new Date(`${first}T12:00:00Z`)).getUTCDay() + 6) % 7;
+	const focusBy = /* @__PURE__ */ new Map();
+	for (const f of i.focus) focusBy.set(f.day, (focusBy.get(f.day) ?? 0) + f.minutes);
+	const w = new Set(i.workouts);
+	const r = new Set(i.restDays);
+	const sl = new Map(i.sleep.map((s) => [s.day, sleptMin(s.bed, s.wake)]));
+	const md = /* @__PURE__ */ new Map();
+	for (const m of i.moods) md.set(m.day, [...md.get(m.day) ?? [], m.mood]);
+	const days = [];
+	for (let k = 1; k <= n; k++) {
+		const day = `${i.month}-${String(k).padStart(2, "0")}`;
+		if (day > i.today) break;
+		const focus = focusBy.get(day) ?? 0;
+		const trained = w.has(day);
+		const level = Math.min(4, (focus >= 180 ? 3 : focus >= 90 ? 2 : focus >= 25 ? 1 : 0) + (trained ? 1 : 0));
+		const moods = md.get(day);
+		days.push({
+			day,
+			focus,
+			trained,
+			rest: r.has(day),
+			slept: sl.get(day) ?? null,
+			mood: moods ? moods.reduce((t, x) => t + x, 0) / moods.length : null,
+			level
+		});
+	}
+	const nights = days.map((d) => d.slept).filter((x) => x != null);
+	const avg = nights.length ? nights.reduce((t, x) => t + x, 0) / nights.length : null;
+	const moods = days.map((d) => d.mood).filter((x) => x != null);
+	const best = [...days].sort((a, b) => b.focus - a.focus)[0];
+	let streak = 0;
+	let bestStreak = 0;
+	for (const d of days) {
+		streak = d.level >= 1 ? streak + 1 : 0;
+		bestStreak = Math.max(bestStreak, streak);
+	}
+	const sums = monthSums(i, i.month);
+	const prevMonth = (() => {
+		return new Date(Date.UTC(y, mo - 2, 1)).toISOString().slice(0, 7);
+	})();
+	const running = i.today.startsWith(i.month);
+	const prev = monthSums(i, prevMonth, running ? Number(i.today.slice(8, 10)) : 31);
+	const compare = prev.focusH || prev.trained || prev.spent ? prev : null;
+	const onTime = i.sleep.filter((s) => s.day.startsWith(i.month) && s.onTime).length;
+	const stats = {
+		focusH: Math.round(sums.focusH * 10) / 10,
+		trained: sums.trained,
+		avgSleep: avg != null ? `${Math.floor(avg / 60)}h${String(Math.round(avg % 60)).padStart(2, "0")}` : null,
+		onTime,
+		spent: sums.spent,
+		moodAvg: moods.length ? Math.round(moods.reduce((t, x) => t + x, 0) / moods.length * 10) / 10 : null,
+		bestDay: best && best.focus > 0 ? best.day : null,
+		bestStreak
+	};
+	const delta = (a, b) => b ? `${a >= b ? "+" : ""}${Math.round((a - b) / b * 100)}%` : "";
+	const vsLast = running ? "vs the same days last month" : "vs last month";
+	const shortDay = (d) => (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).toLocaleDateString("en-GB", {
+		day: "numeric",
+		month: "short",
+		timeZone: "UTC"
+	});
+	const lines = [
+		`🎯 ${stats.focusH}h of focus${compare ? ` (${delta(sums.focusH, compare.focusH)} ${vsLast})` : ""}${stats.bestDay ? `, best day ${shortDay(stats.bestDay)} with ${Math.round((focusBy.get(stats.bestDay) ?? 0) / 60 * 10) / 10}h` : ""}.`,
+		`💪 Trained ${stats.trained} day${stats.trained === 1 ? "" : "s"}${compare ? ` (${running ? "same days last month" : "last month"}: ${compare.trained})` : ""}.`,
+		stats.avgSleep ? `😴 Slept ${stats.avgSleep} on average, up on time ${onTime} day${onTime === 1 ? "" : "s"}.` : "",
+		stats.spent ? `💸 Spent ${Math.round(stats.spent / 100).toLocaleString("en-US")} lei${compare?.spent ? ` (${delta(sums.spent, compare.spent)})` : ""}.` : "",
+		i.promises.kept + i.promises.missed ? `🤝 Promises: ${i.promises.kept} kept, ${i.promises.missed} missed.` : "",
+		i.stakes.kept + i.stakes.lost ? `💎 Stakes: ${i.stakes.kept} won, ${i.stakes.lost} lost.` : "",
+		stats.moodAvg != null ? `🙂 Mood ${stats.moodAvg}/5 on average.` : "",
+		bestStreak >= 3 ? `🔥 Longest run of active days: ${bestStreak}.` : ""
+	].filter(Boolean);
+	const label = (/* @__PURE__ */ new Date(`${first}T12:00:00Z`)).toLocaleDateString("en-GB", {
+		month: "long",
+		year: "numeric",
+		timeZone: "UTC"
+	});
+	return {
+		month: i.month,
+		label,
+		days,
+		pad,
+		stats,
+		compare,
+		lines
+	};
+}
+function monthTakePrompt(s, goals) {
+	return [
+		"You are Ben, Victor's best friend and coach. Write his month's letter: 4–6 short lines, plain text, warm and honest (tough love when it's earned).",
+		"Line 1: the verdict on the month in one sentence. Then what was strongest, what slipped (with his numbers), and ONE change for next month. End with one line that makes him want to start.",
+		"Use ONLY these numbers, never invent any. English.",
+		"",
+		`Month: ${s.label}`,
+		...s.lines,
+		goals.length ? `His goals: ${goals.join("; ")}` : ""
+	].filter(Boolean).join("\n");
+}
+/** The desk actions Ben may use (prompt text; parsed by readDeskOp in web/benDesk). */
+var DESK_ACTIONS = `His coaching desk (these stay and show on his Coach page):
+- "stake: <what> | <by when: 18:00, tomorrow 9, YYYY-MM-DD HH:MM> | <points 10-500>" a promise WITH STAKES: if it isn't marked done in time, the app takes the points by itself. Only when he agrees to put points on it ("bet 50 points", "if I don't, take 100").
+- "study: <exam> | <topic>" a topic he just learned: the app brings it back for review after 1, 3, 7, 14, 30 days (before the exam). "reviewed: <topic>" when he reviewed one that was due.
+- "stack: after <cue> → <step> → <step>" a habit chain he wants ("after coffee → 10 pushups → plan review").
+- "mood: <1-5>" when he tells you how he feels today (1 awful … 5 great).
+- "checkin: <HH:MM> | <question>" also works with a clock time ("I'll start at 15:00" → "checkin: 15:00 | Started the lab?").`;
+// src/core/benMoney.ts
+var B = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
+var lei$1 = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
+var expenses = (tx) => tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+/**
+* This week (Monday → today) by category against the same days of your
+* usual week (average of the 4 weeks before). Only categories with real
+* money in them; over by 25%+ and 100+ lei gets a line.
+*/
+function spendPace(tx, catName, today) {
+	const dow = ((/* @__PURE__ */ new Date(`${today}T12:00:00Z`)).getUTCDay() + 6) % 7;
+	const monday = addDays$1(today, -dow);
+	const exp = expenses(tx);
+	const byCat = (from, to) => {
+		const m = /* @__PURE__ */ new Map();
+		for (const t of exp) if (t.date >= from && t.date <= to) m.set(catName(String(t.category ?? "Other")), (m.get(catName(String(t.category ?? "Other"))) ?? 0) + B(t));
+		return m;
+	};
+	const now = byCat(monday, today);
+	const past = [
+		1,
+		2,
+		3,
+		4
+	].map((w) => byCat(addDays$1(monday, -7 * w), addDays$1(today, -7 * w)));
+	const list = [.../* @__PURE__ */ new Set([...now.keys(), ...past.flatMap((m) => [...m.keys()])])].map((c) => {
+		const week = now.get(c) ?? 0;
+		const usual = Math.round(past.reduce((s, m) => s + (m.get(c) ?? 0), 0) / 4);
+		return {
+			category: c,
+			week,
+			usual,
+			pct: usual ? Math.round((week - usual) / usual * 100) : week ? 100 : 0
+		};
+	}).filter((c) => c.week + c.usual > 0).sort((a, b) => b.week - b.usual - (a.week - a.usual));
+	const week = [...now.values()].reduce((s, x) => s + x, 0);
+	const usual = Math.round(past.reduce((s, m) => s + [...m.values()].reduce((a, x) => a + x, 0), 0) / 4);
+	const daysLeft = 7 - dow;
+	const worst = list.find((c) => c.usual >= 5e3 && c.pct >= 25 && c.week - c.usual >= 1e4);
+	const line = worst ? `You're ${worst.pct}% over on ${worst.category.toLowerCase()} this week (${lei$1(worst.week)} vs your usual ${lei$1(worst.usual)} by now), ${daysLeft} day${daysLeft === 1 ? "" : "s"} left.` : null;
+	return {
+		daysLeft,
+		week,
+		usual,
+		cats: list.slice(0, 6),
+		line
+	};
+}
+/**
+* Charges that repeat every month with about the same amount and note
+* (subscriptions). Ones already marked as repeating in Finance Helper are
+* left out: these are the ones you may have forgotten.
+*/
+function recurringCharges(tx, catName, today) {
+	const from = addDays$1(today, -125);
+	const groups = /* @__PURE__ */ new Map();
+	for (const t of expenses(tx)) {
+		if (t.date < from || t.repeat || t.recurringId) continue;
+		const name = String(t.note || "").trim() || catName(String(t.category ?? ""));
+		if (!name) continue;
+		const key = `${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()}|${Math.round(B(t) / 500)}`;
+		groups.set(key, [...groups.get(key) ?? [], t]);
+	}
+	const out = [];
+	for (const [key, list] of groups) {
+		const months = new Set(list.map((t) => t.date.slice(0, 7)));
+		if (months.size < 3) continue;
+		const days = list.map((t) => Number(t.date.slice(8, 10)));
+		if (Math.max(...days) - Math.min(...days) > 8) continue;
+		const last = list.map((t) => t.date).sort().pop();
+		const d = /* @__PURE__ */ new Date(`${last}T12:00:00Z`);
+		d.setUTCMonth(d.getUTCMonth() + 1);
+		out.push({
+			key,
+			name: String(list[0].note || "").trim() || catName(String(list[0].category ?? "")),
+			amount: Math.round(list.reduce((s, t) => s + B(t), 0) / list.length),
+			months: months.size,
+			last,
+			next: d.toISOString().slice(0, 10)
+		});
+	}
+	return out.sort((a, b) => b.amount - a.amount).slice(0, 8);
+}
+/** "Should I buy X?" from your own numbers. Waits 48 h on anything ≥ 3 days of normal spending. */
+function purchaseCheck(p) {
+	const lines = [];
+	const hours = p.hourly && p.hourly > 0 ? p.price / p.hourly : null;
+	if (hours != null) lines.push(`It costs you ${hours < 1 ? `${Math.round(hours * 60)} min` : `${hours.toFixed(1)} h`} of work.`);
+	const days = p.perDay > 0 ? p.price / p.perDay : null;
+	if (days != null && days >= 1) lines.push(`That's ${days.toFixed(1)} days of your normal spending.`);
+	let score = 0;
+	if (p.limitLeft != null) {
+		if (p.price > p.limitLeft) {
+			lines.push(`It's more than the ${lei$1(Math.max(0, p.limitLeft))} left of this month's limit.`);
+			score -= 3;
+		} else lines.push(`It leaves ${lei$1(p.limitLeft - p.price)} of this month's limit.`);
+	}
+	if (p.safeToday != null) {
+		if (p.price <= p.safeToday) {
+			lines.push(`Fits in today's safe-to-spend (${lei$1(p.safeToday)}).`);
+			score += 2;
+		} else score -= p.price > p.safeToday * 3 ? 2 : 1;
+	}
+	if (p.balance != null && p.price > p.balance * .25) {
+		lines.push(`It's ${Math.round(p.price / Math.max(1, p.balance) * 100)}% of the money on your cards.`);
+		score -= 2;
+	}
+	const g = p.goals.filter((x) => x.left > 0).sort((a, b) => a.left - b.left)[0];
+	if (g && p.price >= g.left * .1) {
+		lines.push(`It delays "${g.title}" by ${Math.round(p.price / g.left * 100)}%.`);
+		score -= 1;
+	}
+	const verdict = score <= -4 ? "skip" : score < 1 || days != null && days >= 3 ? "wait" : "buy";
+	return {
+		verdict,
+		title: verdict === "buy" ? `Go for it: ${p.what} fits your budget.` : verdict === "wait" ? `Wait 48 hours on ${p.what}. If you still want it, buy it.` : `Skip ${p.what} for now.`,
+		lines,
+		hours
+	};
+}
+/** "should I buy headphones 1200" / "merită să cumpăr X 500 lei" → {what, price bani}. */
+function readPurchase(text) {
+	const t = String(text ?? "").trim();
+	const m = /^(?:should i (?:buy|get)|can i afford|is it ok to buy|să cumpăr|sa cumpar|merită să cumpăr|merita sa cumpar|pot să cumpăr|pot sa cumpar)\s+(.+?)\s+(?:for\s+)?(\d+(?:[.,]\d{1,2})?)\s*(?:lei|mdl)?\s*\??$/i.exec(t);
+	if (!m) return null;
+	const price = Math.round(Number(m[2].replace(",", ".")) * 100);
+	const what = m[1].replace(/^(a|an|the|un|o)\s+/i, "").trim();
+	return price > 0 && what ? {
+		what: what.slice(0, 60),
+		price
+	} : null;
+}
+/** How last night changes today: a lighter morning after a short night. */
+function sleepLink(bed, wake, target = 450) {
+	const m = (t) => t && /^\d{1,2}:\d{2}/.test(t) ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null;
+	const b = m(bed);
+	const w = m(wake);
+	const slept = b != null && w != null ? (w - b + 1440) % 1440 : null;
+	if (slept == null || slept < 120 || slept > 840) return {
+		slept: null,
+		level: "ok",
+		title: "Log your bedtime to get a plan that fits your sleep.",
+		tips: [],
+		lightUntil: null
+	};
+	const h = `${Math.floor(slept / 60)}h${String(slept % 60).padStart(2, "0")}`;
+	if (slept >= target - 30) return {
+		slept,
+		level: "ok",
+		title: `${h} of sleep: full power today.`,
+		tips: ["Hard work in your best hours."],
+		lightUntil: null
+	};
+	if (slept >= 330) return {
+		slept,
+		level: "short",
+		title: `${h} of sleep: a lighter morning.`,
+		tips: [
+			"Easy tasks until 11:00, hard work after.",
+			"Coffee before 14:00 only.",
+			"In bed 30 min earlier tonight."
+		],
+		lightUntil: "11:00"
+	};
+	return {
+		slept,
+		level: "very short",
+		title: `Only ${h} of sleep: protect the day.`,
+		tips: [
+			"Light morning until 12:00; one deep block after lunch.",
+			"A 20-min nap at 14:00–15:00 if you can.",
+			"No new big tasks today. Bed by your target tonight."
+		],
+		lightUntil: "12:00"
+	};
+}
+var read = (db) => {
+	try {
+		const v = JSON.parse(getSetting(db, "island_day_log") || "{}");
+		return v && typeof v === "object" ? v : {};
+	} catch {
+		return {};
+	}
+};
+var empty = () => ({
+	focus: [],
+	blocks: []
+});
+function dayLog(db, day) {
+	return read(db)[day] ?? empty();
+}
+/** One line for Ben: "Focus quality 82% (3 sessions). Blocks: 2 done, 1 half, 1 not done." */
+function dayLogLine(d) {
+	const parts = [];
+	if (d.focus.length) {
+		const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1;
+		const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins);
+		parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? "" : "s"} (share of the time he was really at the PC)`);
+	}
+	if (d.blocks.length) {
+		const n = (r) => d.blocks.filter((x) => x.result === r).length;
+		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
+	}
+	return parts.join(". ");
+}
 // src/renderer/src/web/notes.ts
 var newId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 var row = (r) => ({
@@ -9846,6 +10780,20 @@ var byTitle = (db, title) => {
 	const r = db.prepare("SELECT id, title, body, author, pinned, created_at, updated_at FROM notes WHERE lower(title) = ?").all(noteKey(title))[0];
 	return r ? row(r) : null;
 };
+/** Saves a note you wrote (new or edited). A title another note has is refused. */
+function saveNote(db, n, now = /* @__PURE__ */ new Date()) {
+	const title = n.title.trim().slice(0, 120) || "Untitled";
+	const clash = byTitle(db, title);
+	if (clash && clash.id !== n.id) throw new Error(`There is already a note called “${clash.title}”`);
+	const at = now.toISOString();
+	if (n.id) {
+		db.prepare("UPDATE notes SET title = ?, body = ?, pinned = COALESCE(?, pinned), updated_at = ? WHERE id = ?").run(title, n.body, n.pinned == null ? null : n.pinned ? 1 : 0, at, n.id);
+		return byTitle(db, title);
+	}
+	const id = newId();
+	db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(id, title, n.body, "me", n.pinned ? 1 : 0, at, at);
+	return byTitle(db, title);
+}
 /** Ben adds a dated line under a note (made if it doesn't exist). Returns the "done" line, or null. */
 function benNote(db, title, line, day, now = /* @__PURE__ */ new Date()) {
 	const cur = byTitle(db, title);
@@ -10628,6 +11576,7 @@ function personaFor(botId, cfg) {
 function isSimpleLog(text) {
 	const t = text.trim();
 	if (t.startsWith("/")) return true;
+	if (readPurchase(t)) return true;
 	if (!/\b(and|și|si|и|then|also|plus)\b/i.test(t) && t.split(/\s+/).length <= 9 && parseTelegramText(t).type !== "unknown") return true;
 	const nums = t.match(/\d+(?:[.,]\d+)?/g) ?? [];
 	const words = t.split(/\s+/).filter(Boolean);
@@ -11040,6 +11989,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		"Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see \"How he wants you to write\"; default short: 3–4 lines). Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).",
 		"",
 		ACTIONS,
+		DESK_ACTIONS,
 		"",
 		extra.found ? "" : LOOKUPS,
 		"",
@@ -11067,6 +12017,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		extra.notes ? `== His notebook (the notes that matter now; what he wrote himself counts most) ==\n${extra.notes}` : "",
 		"",
 		extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : "",
+		extra.desk ? `== What you know about how he works (use it: plan with his energy map, name repeat excuses, respect a short night) ==\n${extra.desk}` : "",
 		"",
 		"== What you remember about him ==",
 		memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join("\n") : "- nothing yet",
@@ -11207,7 +12158,8 @@ function readAction(line) {
 		} : null;
 	}
 	if (kind === "checkin") {
-		const minutes = Number(parts[0]);
+		const clock = /^(\d{1,2})[:.](\d{2})$/.exec(parts[0] ?? "");
+		const minutes = clock ? minutesUntil(`${clock[1]}:${clock[2]}`, /* @__PURE__ */ new Date()) ?? 0 : Number(parts[0]);
 		return minutes >= 5 && minutes <= 720 && parts[1] ? {
 			kind: "checkin",
 			minutes,
@@ -11513,6 +12465,466 @@ function loadLetters(db) {
 function saveLetter(db, l) {
 	setSetting(db, LETTERS, JSON.stringify([...loadLetters(db).filter((x) => x.week !== l.week), l].slice(-12)));
 }
+// src/renderer/src/web/benDesk.ts
+var DESK = "ben_desk";
+var EMPTY_DESK = {
+	excuses: [],
+	moods: [],
+	study: [],
+	stacks: [],
+	stakes: [],
+	calls: [],
+	letters: {}
+};
+function loadDesk(db) {
+	try {
+		const v = JSON.parse(getSetting(db, "ben_desk") || "null");
+		return v && typeof v === "object" ? {
+			...EMPTY_DESK,
+			...v
+		} : { ...EMPTY_DESK };
+	} catch {
+		return { ...EMPTY_DESK };
+	}
+}
+function saveDesk(db, d) {
+	setSetting(db, DESK, JSON.stringify(d));
+	return d;
+}
+function editDesk(db, f) {
+	return saveDesk(db, f(loadDesk(db)));
+}
+var json$1 = (db, key) => {
+	try {
+		return JSON.parse(getSetting(db, key) || "null");
+	} catch {
+		return null;
+	}
+};
+function sessionsOf(db, from) {
+	try {
+		return db.prepare("SELECT day, started_at, minutes FROM focus_sessions WHERE day >= ?").all(from).map((r) => ({
+			day: String(r.day),
+			startedAt: String(r.started_at),
+			minutes: Number(r.minutes)
+		}));
+	} catch {
+		return [];
+	}
+}
+function moneyNumbers(finance, today) {
+	const tx = Array.isArray(finance?.tx) ? finance.tx : [];
+	const B = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
+	const exp = tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+	const from30 = addDays$1(today, -29);
+	const perDay = Math.round(exp.filter((t) => t.date >= from30 && t.date <= today).reduce((s, t) => s + B(t), 0) / 30);
+	const wh = finance?.settings?.workHour;
+	let hourly = wh?.mode === "manual" && Number(wh.rate) > 0 ? Number(wh.rate) : null;
+	if (hourly == null) {
+		const months = [
+			1,
+			2,
+			3
+		].map((k) => {
+			const d = /* @__PURE__ */ new Date(`${today.slice(0, 7)}-15T12:00:00Z`);
+			d.setUTCMonth(d.getUTCMonth() - k);
+			return d.toISOString().slice(0, 7);
+		});
+		const inc = tx.filter((t) => t && t.type === "income" && !t.deleted && !t.loan && typeof t.date === "string" && months.includes(t.date.slice(0, 7)));
+		const active = new Set(inc.map((t) => t.date.slice(0, 7))).size;
+		const sum = inc.reduce((s, t) => s + B(t), 0);
+		hourly = active && sum ? Math.round(sum / active / (Number(wh?.hoursPerMonth) || 160)) : null;
+	}
+	const limit = finance?.settings?.limit;
+	let limitLeft = null;
+	let safeToday = null;
+	if (limit?.on && Number(limit.amount) > 0) {
+		const month = today.slice(0, 7);
+		const spent = exp.filter((t) => t.date.startsWith(month)).reduce((s, t) => s + B(t), 0);
+		limitLeft = Number(limit.amount) - spent;
+		const dim = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+		safeToday = Math.max(0, Math.round(limitLeft / (dim - Number(today.slice(8)) + 1)));
+	}
+	const goals = (Array.isArray(finance?.goals) ? finance.goals : []).filter((g) => g && !g.deleted && Number(g.target) > 0).map((g) => ({
+		title: String(g.name ?? g.title ?? "Goal"),
+		left: Math.max(0, Number(g.target) - Number(g.saved ?? g.current ?? 0))
+	}));
+	return {
+		hourly,
+		safeToday,
+		limitLeft,
+		perDay,
+		balance: null,
+		goals
+	};
+}
+/** Everything the Coach page's desk shows (pure read). */
+function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
+	const db = s.db;
+	const today = s.wallet.today(now);
+	const d = loadDesk(db);
+	const sessions = sessionsOf(db, addDays$1(today, -62));
+	const dayLog = json$1(db, "island_day_log") ?? {};
+	const quality = Object.values(dayLog).flatMap((x) => x.focus ?? []).map((q) => ({
+		at: q.at,
+		pct: q.pct
+	}));
+	const blocks = Object.entries(dayLog).flatMap(([day, x]) => (x.blocks ?? []).map((b) => ({
+		day,
+		at: b.at,
+		result: b.result
+	})));
+	const energy = energyMap(sessions, quality, blocks);
+	let logs = [];
+	try {
+		logs = s.sleep.logs();
+	} catch {
+		logs = [];
+	}
+	const sleep = logs.map((l) => ({
+		day: l.day,
+		wake: l.wakeTime,
+		bed: l.bedTime,
+		onTime: !!l.onTime
+	}));
+	const input = s.progress.input(null, now, 70);
+	const workouts = [...new Set(input.workouts.map((w) => w.day))];
+	const f = s.focus.state(now);
+	const exams = f.goals.map((g) => ({
+		title: g.title,
+		deadline: g.deadline
+	}));
+	const spending = financeSpending(finance);
+	const patterns = weeklyPatterns({
+		today,
+		sessions,
+		sleep,
+		workouts,
+		moods: d.moods,
+		blocks,
+		exams: exams.map((e) => e.deadline),
+		spending
+	});
+	const recentMoods = d.moods.filter((m) => m.day >= addDays$1(today, -6));
+	const cats = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
+	const catName = (id) => cats.get(id) ?? id;
+	const ps = promiseStats(json$1(db, "coach_reminders") ?? [], now);
+	let restDays = [];
+	try {
+		restDays = s.body.restDays();
+	} catch {
+		restDays = [];
+	}
+	const month = today.slice(0, 7);
+	const story = monthStory({
+		month,
+		today,
+		focus: sessions.map((x) => ({
+			day: x.day,
+			minutes: x.minutes
+		})),
+		workouts,
+		restDays,
+		sleep,
+		spent: spending ?? [],
+		moods: d.moods,
+		stakes: stakeStats(d.stakes, now),
+		promises: {
+			kept: ps.kept,
+			missed: ps.broken + ps.ignored
+		}
+	});
+	const lastNight = logs.find((l) => l.day === today) ?? null;
+	const tx = Array.isArray(finance?.tx) ? finance.tx : null;
+	return {
+		today,
+		energy,
+		patterns,
+		excuses: excuseCounts(d.excuses, today),
+		moods: d.moods.filter((m) => m.day >= addDays$1(today, -13)),
+		moodDue: moodDue(d.moods, now),
+		moodAvg: recentMoods.length ? recentMoods.reduce((t, m) => t + m.mood, 0) / recentMoods.length : null,
+		study: d.study.filter((t) => !t.examDay || t.examDay >= addDays$1(today, -1)).map((t) => ({
+			...t,
+			next: nextReview(t),
+			due: dueTopics([t], today).length > 0
+		})).sort((a, b) => Number(b.due) - Number(a.due) || String(a.next).localeCompare(String(b.next))),
+		stacks: d.stacks.map((x) => ({
+			...x,
+			streak: stackStreak(x, today),
+			rate: stackRate(x, today),
+			today: x.log[today] ?? []
+		})),
+		stakes: [...d.stakes].sort((a, b) => Number(b.status === "open") - Number(a.status === "open") || b.at.localeCompare(a.at)).slice(0, 12),
+		stakeStats: stakeStats(d.stakes, now),
+		callDue: callDue(d.calls, now),
+		lastCall: d.calls[d.calls.length - 1] ?? null,
+		month: story,
+		letter: d.letters[month] ?? null,
+		spend: tx ? spendPace(tx, catName, today) : null,
+		recurring: tx ? recurringCharges(tx, catName, today) : [],
+		sleep: sleepLink(lastNight?.bedTime, lastNight?.wakeTime),
+		money: moneyNumbers(finance, today),
+		goals: f.goals.map((g) => ({
+			id: g.id,
+			title: g.title,
+			deadline: g.deadline,
+			hoursLeft: Math.max(0, Math.round((g.hours - g.doneMin / 60) * 10) / 10),
+			daysLeft: g.daysLeft,
+			behind: g.aheadH <= -1
+		})),
+		exams,
+		restDays
+	};
+}
+/** What the desk adds to Ben's prompt (short lines; only what's there). */
+function deskPrompt(s, finance, now = /* @__PURE__ */ new Date()) {
+	const v = deskView(s, finance, now);
+	const d = loadDesk(s.db);
+	const lines = [];
+	if (v.energy.ready) lines.push(`His energy map: best hours ${hoursText(v.energy.best)}${v.energy.worst.length ? `, weakest ${hoursText(v.energy.worst)}` : ""}. Put HARD tasks in the best hours when you plan or move blocks.`);
+	if (v.patterns.length) lines.push(`Weekly patterns (his data):\n${v.patterns.map((p) => `- ${p.text} → try: ${p.change}`).join("\n")}`);
+	const ex = excuseLine(d.excuses, v.today);
+	if (ex) lines.push(ex);
+	const ml = moodLine(d.moods, v.today);
+	if (ml) lines.push(ml);
+	if (v.sleep.slept != null && v.sleep.level !== "ok") lines.push(`Sleep link: ${v.sleep.title} ${v.sleep.tips.join(" ")} Plan today lighter before ${v.sleep.lightUntil}.`);
+	const due = v.study.filter((t) => t.due);
+	if (due.length) lines.push(`Study reviews due today: ${due.map((t) => `${t.exam} · ${t.topic}`).join("; ")}.`);
+	if (v.stacks.length) lines.push(`Habit stacks: ${v.stacks.map((x) => `after ${x.cue} → ${x.steps.join(" → ")} (today ${x.today.length}/${x.steps.length}, streak ${x.streak})`).join("; ")}.`);
+	const open = v.stakes.filter((x) => x.status === "open");
+	if (open.length) lines.push(`Open stakes (he loses the points if not done in time): ${open.map((x) => `"${x.text}" by ${new Date(x.due).toTimeString().slice(0, 5)} −${x.points}`).join("; ")}.`);
+	if (v.stakeStats.kept + v.stakeStats.lost) lines.push(`Stakes last 30 days: ${v.stakeStats.kept} won, ${v.stakeStats.lost} lost (−${v.stakeStats.pointsLost} points).`);
+	if (v.spend?.line) lines.push(`Spending coach: ${v.spend.line}`);
+	if (v.recurring.length) lines.push(`Monthly charges that repeat: ${v.recurring.slice(0, 4).map((r) => `${r.name} ${Math.round(r.amount / 100)} lei`).join(", ")}. Ask if he still uses them when money comes up.`);
+	if (v.lastCall) lines.push(`Last Sunday call (${v.lastCall.week}): change "${v.lastCall.answers.change}", big 3: ${v.lastCall.answers.big3.replace(/\n/g, " / ")}.`);
+	try {
+		const p = listNotes(s.db).find((n) => n.title === PROFILE_NOTE);
+		const corr = p ? profileCorrections(p.body) : "";
+		if (corr) lines.push(`His corrections to your profile of him (always true):\n${corr}`);
+	} catch {}
+	return lines.join("\n");
+}
+/** A message from him: if it's an excuse, it's counted; returns Ben's kind call-out of a repeat. */
+function noteExcuse(db, text, today, now = /* @__PURE__ */ new Date()) {
+	const kind = classifyExcuse(text);
+	if (!kind) return null;
+	return excuseCallout(editDesk(db, (x) => ({
+		...x,
+		excuses: addExcuse(x.excuses, text, now.toISOString())
+	})).excuses, kind, today);
+}
+function logMood(db, mood, now = /* @__PURE__ */ new Date()) {
+	const day = now.toLocaleDateString("sv-SE");
+	const slot = now.getHours() < 17 ? "noon" : "evening";
+	return editDesk(db, (x) => ({
+		...x,
+		moods: addMood(x.moods, {
+			day,
+			slot,
+			mood,
+			at: now.toISOString()
+		})
+	}));
+}
+function refreshProfile(s, finance, now = /* @__PURE__ */ new Date(), force = false) {
+	const db = s.db;
+	const d = loadDesk(db);
+	const today = s.wallet.today(now);
+	if (!force && d.profileDay === today) return false;
+	const v = deskView(s, finance, now);
+	const mind = loadMind(db);
+	const prof = loadProfile(db);
+	let notes = [];
+	try {
+		notes = listNotes(db);
+	} catch {
+		return false;
+	}
+	const prev = notes.find((n) => n.title === PROFILE_NOTE);
+	const body = profileNote({
+		today,
+		aboutMe: prof.about,
+		goals: [...mind.goals.map((g) => ({
+			title: g.title,
+			deadline: g.deadline ?? null,
+			weekly: g.weekly ?? null
+		})), ...prof.goals.filter((t) => !mind.goals.some((g) => g.title === t)).map((t) => ({ title: t }))],
+		exams: v.exams,
+		people: mind.people.map((p) => ({
+			name: p.name,
+			note: p.note
+		})),
+		works: mind.works.map((x) => x.t),
+		fails: mind.fails.map((x) => x.t),
+		patterns: v.patterns,
+		energy: v.energy,
+		excuses: v.excuses,
+		moodAvg: v.moodAvg
+	}, prev?.body ?? "");
+	if (prev?.body !== body) saveNote(db, {
+		id: prev?.id,
+		title: PROFILE_NOTE,
+		body,
+		pinned: true
+	}, now);
+	saveDesk(db, {
+		...loadDesk(db),
+		profileDay: today
+	});
+	return true;
+}
+/** One change on the desk (from the Coach page or Ben's actions). Returns a short line for the screen. */
+function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
+	const db = s.db;
+	const today = s.wallet.today(now);
+	if (o.op === "mood") {
+		logMood(db, o.mood, now);
+		return "Mood noted";
+	}
+	if (o.op === "stake") {
+		const due = readDue(o.due, now) ?? (Number.isFinite(Date.parse(o.due)) ? new Date(o.due).toISOString() : null);
+		if (!due) throw new Error("When? e.g. 18:00 or tomorrow 9");
+		editDesk(db, (x) => ({
+			...x,
+			stakes: addStake(x.stakes, o.text, due, o.points, now)
+		}));
+		return `Stake set: "${o.text}" by ${new Date(due).toTimeString().slice(0, 5)} or −${Math.round(o.points)} points`;
+	}
+	if (o.op === "keepStake") {
+		editDesk(db, (x) => ({
+			...x,
+			stakes: keepStake(x.stakes, o.id, now)
+		}));
+		return "Won it 💎";
+	}
+	if (o.op === "dropStake") {
+		editDesk(db, (x) => ({
+			...x,
+			stakes: x.stakes.filter((k) => !(k.id === o.id && k.status === "open" && Date.parse(k.at) > now.getTime() - 6e5))
+		}));
+		return "Removed (only within 10 minutes of setting it)";
+	}
+	if (o.op === "study") {
+		editDesk(db, (x) => ({
+			...x,
+			study: addTopic(x.study, o.exam, o.topic, today, o.examDay ?? s.focus.state(now).goals.find((g) => g.title.toLowerCase().includes(o.exam.toLowerCase()))?.deadline ?? null)
+		}));
+		return `Study topic added: ${o.exam} · ${o.topic} (first review tomorrow)`;
+	}
+	if (o.op === "reviewed") {
+		editDesk(db, (x) => ({
+			...x,
+			study: reviewTopic(x.study, o.id, today)
+		}));
+		return "Reviewed ✓";
+	}
+	if (o.op === "dropStudy") {
+		editDesk(db, (x) => ({
+			...x,
+			study: x.study.filter((t) => t.id !== o.id)
+		}));
+		return "Removed";
+	}
+	if (o.op === "stack") {
+		const st = parseStack(o.text, today);
+		if (!st) throw new Error("Write it like: after coffee → 10 pushups → plan review");
+		editDesk(db, (x) => ({
+			...x,
+			stacks: [...x.stacks, st].slice(-8)
+		}));
+		return `Habit stack: after ${st.cue} → ${st.steps.join(" → ")}`;
+	}
+	if (o.op === "tickStack") {
+		editDesk(db, (x) => ({
+			...x,
+			stacks: x.stacks.map((k) => k.id === o.id ? tickStack(k, today, o.step) : k)
+		}));
+		return "Ticked";
+	}
+	if (o.op === "dropStack") {
+		editDesk(db, (x) => ({
+			...x,
+			stacks: x.stacks.filter((k) => k.id !== o.id)
+		}));
+		return "Removed";
+	}
+	if (o.op === "call") {
+		const dow = now.getDay();
+		const week = addDays$1(today, -((dow + 6) % 7) - (dow === 1 && now.getHours() < 12 ? 7 : 0));
+		const call = {
+			week,
+			at: now.toISOString(),
+			answers: o.answers
+		};
+		editDesk(db, (x) => ({
+			...x,
+			calls: [...x.calls.filter((c) => c.week !== week), call].slice(-26)
+		}));
+		try {
+			const prev = listNotes(db).find((n) => n.title === "Weekly reviews");
+			saveNote(db, {
+				id: prev?.id,
+				title: "Weekly reviews",
+				body: `${prev?.body?.trim() || "# Weekly reviews\n\nYour Sunday calls with Ben."}\n\n${callNote(call)}\n`
+			}, now);
+		} catch {}
+		return "Coach call saved: next week is set";
+	}
+	editDesk(db, (x) => ({
+		...x,
+		letters: {
+			...x.letters,
+			[o.month]: o.text.slice(0, 3e3)
+		}
+	}));
+	return "Letter saved";
+}
+/**
+* Ben's desk actions (from his "actions"):
+*   "stake: <what> | <when: 18:00, tomorrow 9> | <points>"
+*   "study: <exam> | <topic>"   "reviewed: <topic>"
+*   "stack: after coffee → 10 pushups → plan review"
+*   "mood: 1-5"
+*/
+function readDeskOp(line, desk) {
+	const m = /^\s*(stake|study|reviewed|stack|mood)\s*:\s*([\s\S]+)$/i.exec(String(line ?? ""));
+	if (!m) return null;
+	const kind = m[1].toLowerCase();
+	const arg = m[2].trim().slice(0, 300);
+	const parts = arg.split("|").map((x) => x.trim());
+	if (kind === "stake") {
+		const points = Math.round(Number(parts[2] ?? 50));
+		return parts[0] && parts[1] && points > 0 ? {
+			op: "stake",
+			text: parts[0].slice(0, 120),
+			due: parts[1],
+			points: Math.min(500, points)
+		} : null;
+	}
+	if (kind === "study") return parts[0] && parts[1] ? {
+		op: "study",
+		exam: parts[0],
+		topic: parts[1]
+	} : null;
+	if (kind === "reviewed") {
+		const want = arg.toLowerCase();
+		const t = desk?.study.find((x) => x.topic.toLowerCase().includes(want) || want.includes(x.topic.toLowerCase()));
+		return t ? {
+			op: "reviewed",
+			id: t.id
+		} : null;
+	}
+	if (kind === "stack") return {
+		op: "stack",
+		text: arg
+	};
+	const mood = Math.round(Number(arg.match(/[1-5]/)?.[0]));
+	return mood >= 1 && mood <= 5 ? {
+		op: "mood",
+		mood
+	} : null;
+}
 // src/core/coachNext.ts
 function nextMove(m, now = Date.now()) {
 	if (m.running) {
@@ -11801,35 +13213,6 @@ function impactVerdict(rows) {
 		verdict: up > down && up >= 2 ? "working" : down > up ? "not yet" : "mixed",
 		lines
 	};
-}
-var read = (db) => {
-	try {
-		const v = JSON.parse(getSetting(db, "island_day_log") || "{}");
-		return v && typeof v === "object" ? v : {};
-	} catch {
-		return {};
-	}
-};
-var empty = () => ({
-	focus: [],
-	blocks: []
-});
-function dayLog(db, day) {
-	return read(db)[day] ?? empty();
-}
-/** One line for Ben: "Focus quality 82% (3 sessions). Blocks: 2 done, 1 half, 1 not done." */
-function dayLogLine(d) {
-	const parts = [];
-	if (d.focus.length) {
-		const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1;
-		const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins);
-		parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? "" : "s"} (share of the time he was really at the PC)`);
-	}
-	if (d.blocks.length) {
-		const n = (r) => d.blocks.filter((x) => x.result === r).length;
-		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
-	}
-	return parts.join(". ");
 }
 // src/renderer/src/web/rhythmBot.ts
 var pad = (n) => String(n).padStart(2, "0");
@@ -13445,7 +14828,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr)\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -13589,6 +14972,32 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				reply_markup: { inline_keyboard: kb }
 			}).catch(() => null);
 			return null;
+		}
+		if (data.startsWith("md|") || data.startsWith("sk|") || data.startsWith("sr|")) {
+			if (!await markSeen(key)) return null;
+			const arg = data.slice(3);
+			const line = await mirror.write((db) => {
+				const svc = services.services(db);
+				if (data.startsWith("md|")) return `${moodFace(Number(arg))} ${deskChange(svc, {
+					op: "mood",
+					mood: Number(arg)
+				})}`;
+				if (data.startsWith("sk|")) {
+					const st = loadDesk(db).stakes.find((x) => x.id === arg);
+					if (!st || st.status !== "open") return st?.status === "lost" ? "Too late: the points are gone." : "Already done.";
+					return `💎 ${deskChange(svc, {
+						op: "keepStake",
+						id: arg
+					})} "${st.text}" · your ${st.points} points are safe.`;
+				}
+				return `📚 ${deskChange(svc, {
+					op: "reviewed",
+					id: arg
+				})}`;
+			});
+			await answer(line.slice(0, 190));
+			await edit(`${esc(String(cq.message?.text ?? ""))}\n\n${esc(line)}`);
+			return line;
 		}
 		if (data.startsWith("cu|")) {
 			if (!await markSeen(key)) return null;
@@ -13978,6 +15387,15 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	*/
 	function applyText(db, svc, text, key) {
 		currentDb = db;
+		const buy = readPurchase(text);
+		if (buy) {
+			const r = purchaseCheck({
+				...deskView(svc, financeStateFrom(db, store)).money,
+				price: buy.price,
+				what: buy.what
+			});
+			return { reply: `${r.verdict === "buy" ? "🟢" : r.verdict === "wait" ? "🟡" : "🔴"} <b>${esc(r.title)}</b>\n${r.lines.map((l) => `• ${esc(l)}`).join("\n")}` };
+		}
 		return db.transaction(() => {
 			const out = run(svc, text, key);
 			if (server && out.sport) {
@@ -14033,7 +15451,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (!raw) return;
 			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
 		}).catch(() => null);
-		const { context, memory, profile, look, mind, money, promises, feel, talk, notes } = await mirror.read((db) => {
+		const excuseNote = await mirror.write((db) => {
+			const svc = services.services(db);
+			try {
+				refreshProfile(svc, financeStateFrom(db, store));
+			} catch {}
+			return text ? noteExcuse(db, text, svc.wallet.today()) : null;
+		}).catch(() => null);
+		const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			let sessions = [];
@@ -14115,6 +15540,13 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						return "";
 					}
 				})(),
+				desk: (() => {
+					try {
+						return [deskPrompt(svc, finance), excuseNote ? `Repeat excuse just now. Say it kindly with the count: "${excuseNote}"` : ""].filter(Boolean).join("\n");
+					} catch {
+						return "";
+					}
+				})(),
 				look: {
 					finance,
 					input: svc.progress.input(null, /* @__PURE__ */ new Date(), 400),
@@ -14150,7 +15582,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			tone: talk.tone,
 			feedback: talk.feedback,
 			selfReview: talk.selfReview,
-			notes
+			notes,
+			desk
 		}), {
 			json: true,
 			think: big,
@@ -14229,6 +15662,23 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			const lines = await mirror.write((db) => {
 				const day = services.services(db).wallet.today();
 				return noteOps.map((op) => benNote(db, op.title, op.line, day)).filter((x) => !!x);
+			}).catch(() => []);
+			done.push(...lines);
+		}
+		if (out.actions.some((l) => /^\s*(stake|study|reviewed|stack|mood)\s*:/i.test(l))) {
+			const lines = await mirror.write((db) => {
+				const svc = services.services(db);
+				const said = [];
+				for (const l of out.actions) {
+					const op = readDeskOp(l, loadDesk(db));
+					if (!op) continue;
+					try {
+						said.push(`${op.op === "stake" ? "💎" : op.op === "study" || op.op === "reviewed" ? "📚" : op.op === "stack" ? "🔗" : "🙂"} ${deskChange(svc, op)}`);
+					} catch (e) {
+						said.push(`⚠️ ${e.message}`);
+					}
+				}
+				return said;
 			}).catch(() => []);
 			done.push(...lines);
 		}
@@ -17503,6 +18953,11 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		logError(healthDb, "server", `rhythm: ${e.message}`);
 	}
 	try {
+		await deskTick(mirror, services, now, send, esc);
+	} catch (e) {
+		console.error("desk:", e);
+	}
+	try {
 		await backupTick(healthDb, SQL, mirror, now);
 		await healthTick(healthDb, mirror, now, send);
 	} catch (e) {
@@ -17581,6 +19036,55 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	}
 	if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));
 	return sent;
+}
+/** Stakes (points taken when time is up, a reminder an hour before), study reviews, mood, the Sunday call. */
+async function deskTick(mirror, services, now, send, esc) {
+	const lost = await mirror.write((db) => {
+		const svc = services.services(db);
+		const d = loadDesk(db);
+		const over = overdueStakes(d.stakes, now);
+		if (!over.length) return [];
+		for (const st of over) {
+			const ref = `stake:${st.id}`;
+			if (!svc.wallet.entries().some((e) => e.ref === ref)) svc.wallet.append({
+				ts: now.toISOString(),
+				day: svc.wallet.today(now),
+				module: "goals",
+				kind: "adjust",
+				coins: -st.points,
+				xp: 0,
+				ref,
+				note: `Stake lost: ${st.text}`
+			});
+		}
+		saveDesk(db, {
+			...d,
+			stakes: loseStakes(d.stakes, over.map((x) => x.id), now)
+		});
+		return over;
+	});
+	for (const st of lost) await send(esc(stakeLostText(st))).catch(() => null);
+	const d = await mirror.read((db) => loadDesk(db));
+	for (const st of d.stakes.filter((x) => x.status === "open")) {
+		const t = stakeRemindText(st, now);
+		if (t) await send(esc(t), { inline_keyboard: [[{
+			text: "✅ Done",
+			callback_data: `sk|${st.id}`
+		}]] }).catch(() => null);
+	}
+	const h = now.getHours();
+	const today = now.toLocaleDateString("sv-SE");
+	const due = dueTopics(d.study, today);
+	if (due.length && h >= 10 && h < 21) await send(`📚 Review time: ${due.slice(0, 4).map((t) => `<b>${esc(t.exam)}</b> · ${esc(t.topic)}`).join(", ")}${due.length > 4 ? ` +${due.length - 4}` : ""}. 15 minutes each, from memory first.`, { inline_keyboard: due.slice(0, 3).map((t) => [{
+		text: `✅ Reviewed: ${t.topic}`.slice(0, 40),
+		callback_data: `sr|${t.id}`
+	}]) }).catch(() => null);
+	const slot = moodDue(d.moods, now);
+	if (slot && (slot === "noon" && h === 13 || slot === "evening" && h === 20)) await send(slot === "noon" ? "🙂 Lunch check-in: how do you feel right now?" : "🌙 Evening check-in: how was today, really?", { inline_keyboard: [MOOD_FACES.map((f, i) => ({
+		text: f,
+		callback_data: `md|${i + 1}`
+	}))] }).catch(() => null);
+	if (callDue(d.calls, now) && now.getDay() === 0 && h >= 18 && h < 22) await send("🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.").catch(() => null);
 }
 /**
 * The daily cloud snapshot, made by the server so no device has to be open
@@ -17844,7 +19348,26 @@ async function rhythmTick(env, now, send) {
 /** The app: today's rhythm (state), or an action on it. */
 async function coachRhythm(env, op) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
-	const { bots } = await botsFor(env);
+	const { bots, mirror, services } = await botsFor(env);
+	if (op.action === "month") {
+		const { story, goals } = await mirror.read((db) => {
+			return {
+				story: deskView(services.services(db), financeStateFrom(db, null)).month,
+				goals: loadProfile(db).goals
+			};
+		});
+		const model = env.model;
+		let text = story.lines.join("\n");
+		if (model) try {
+			text = (await model(monthTakePrompt(story, goals), { kind: "letter" })).trim().replace(/^```\w*|```$/g, "").trim() || text;
+		} catch {}
+		await mirror.write((db) => deskChange(services.services(db), {
+			op: "letter",
+			month: story.month,
+			text
+		}));
+		return { letter: text };
+	}
 	if (op.action === "book") {
 		const id = Number(op.note);
 		return bots.rhythm.bookGoals(Number.isFinite(id) && id > 0 ? [id] : void 0);

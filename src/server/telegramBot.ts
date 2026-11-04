@@ -39,6 +39,11 @@ import { notifFromMessage } from '@core/notify'
 import { addNotif } from '../renderer/src/web/notifications'
 import { autoApproveDue, autoApprovedText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
 import { loadStyle } from '../renderer/src/web/botBrain'
+import { deskChange, deskView, loadDesk, saveDesk } from '../renderer/src/web/benDesk'
+import { financeStateFrom, loadProfile } from '../renderer/src/web/botBrain'
+import { monthTakePrompt, callDue, loseStakes, overdueStakes, stakeLostText, stakeRemindText, type Stake } from '@core/benStakes'
+import { dueTopics } from '@core/benPlans'
+import { MOOD_FACES, moodDue } from '@core/benKnows'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
@@ -478,6 +483,13 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     void logError(healthDb, 'server', `rhythm: ${(e as Error).message}`)
   }
 
+  // Ben's desk: stakes enforced on time, study reviews, mood check-ins, the Sunday call.
+  try {
+    await deskTick(mirror, services, now, send, esc)
+  } catch (e) {
+    console.error('desk:', e)
+  }
+
   // System health: Ben warns you when a part has been broken for 30+ minutes,
   // says when it works again, and sends a short report on Sunday evenings.
   try {
@@ -542,6 +554,45 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   }
   if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db as any, NUDGES_KEY, JSON.stringify(nudge)))
   return sent
+}
+
+/** Stakes (points taken when time is up, a reminder an hour before), study reviews, mood, the Sunday call. */
+async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: string, markup?: unknown) => Promise<void>, esc: (s: string) => string): Promise<void> {
+  // 1) Stakes that ran out: the points go, once (the ledger ref makes it idempotent).
+  const lost = await mirror.write((db) => {
+    const svc = services.services(db)
+    const d = loadDesk(db)
+    const over = overdueStakes(d.stakes, now)
+    if (!over.length) return [] as Stake[]
+    for (const st of over) {
+      const ref = `stake:${st.id}`
+      if (!svc.wallet.entries().some((e: any) => e.ref === ref)) svc.wallet.append({ ts: now.toISOString(), day: svc.wallet.today(now), module: 'goals', kind: 'adjust', coins: -st.points, xp: 0, ref, note: `Stake lost: ${st.text}` } as any)
+    }
+    saveDesk(db, { ...d, stakes: loseStakes(d.stakes, over.map((x) => x.id), now) })
+    return over
+  })
+  for (const st of lost) await send(esc(stakeLostText(st))).catch(() => null)
+  const d = await mirror.read((db) => loadDesk(db))
+  for (const st of d.stakes.filter((x) => x.status === 'open')) {
+    const t = stakeRemindText(st, now)
+    if (t) await send(esc(t), { inline_keyboard: [[{ text: '✅ Done', callback_data: `sk|${st.id}` }]] }).catch(() => null)
+  }
+  const h = now.getHours()
+  const today = now.toLocaleDateString('sv-SE')
+  // 2) Study topics due for review (between 10:00 and 21:00).
+  const due = dueTopics(d.study, today)
+  if (due.length && h >= 10 && h < 21) {
+    await send(`📚 Review time: ${due.slice(0, 4).map((t) => `<b>${esc(t.exam)}</b> · ${esc(t.topic)}`).join(', ')}${due.length > 4 ? ` +${due.length - 4}` : ''}. 15 minutes each, from memory first.`, { inline_keyboard: due.slice(0, 3).map((t) => [{ text: `✅ Reviewed: ${t.topic}`.slice(0, 40), callback_data: `sr|${t.id}` }]) }).catch(() => null)
+  }
+  // 3) Mood check-in (one tap) at lunch and in the evening.
+  const slot = moodDue(d.moods, now)
+  if (slot && ((slot === 'noon' && h === 13) || (slot === 'evening' && h === 20))) {
+    await send(slot === 'noon' ? '🙂 Lunch check-in: how do you feel right now?' : '🌙 Evening check-in: how was today, really?', { inline_keyboard: [MOOD_FACES.map((f, i) => ({ text: f, callback_data: `md|${i + 1}` }))] }).catch(() => null)
+  }
+  // 4) The Sunday coach call (in the app, 5 minutes).
+  if (callDue(d.calls, now) && now.getDay() === 0 && h >= 18 && h < 22) {
+    await send('🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.').catch(() => null)
+  }
 }
 
 /**
@@ -758,9 +809,28 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
 }
 
 /** The app: today's rhythm (state), or an action on it. */
-export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter'; note?: string; prefs?: any }): Promise<any> {
+export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month'; note?: string; prefs?: any }): Promise<any> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
-  const { bots } = await botsFor(env)
+  const { bots, mirror, services } = await botsFor(env)
+  // The month's letter: Ben's honest take on the month's story (saved; the app shows it).
+  if (op.action === 'month') {
+    const { story, goals } = await mirror.read((db) => {
+      const svc = services.services(db)
+      const v = deskView(svc, financeStateFrom(db, null))
+      return { story: v.month, goals: loadProfile(db).goals }
+    })
+    const model = (env as any).model as AskModel | undefined
+    let text = story.lines.join('\n')
+    if (model) {
+      try {
+        text = (await model(monthTakePrompt(story, goals), { kind: 'letter' } as any)).trim().replace(/^```\w*|```$/g, '').trim() || text
+      } catch {
+        /* the numbers alone */
+      }
+    }
+    await mirror.write((db) => deskChange(services.services(db), { op: 'letter', month: story.month, text }))
+    return { letter: text }
+  }
   // Book a goal's blocks for the next 7 days (note: the goal id, or all goals).
   if (op.action === 'book') {
     const id = Number(op.note)

@@ -33,6 +33,9 @@ import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FAC
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
+import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
+import { purchaseCheck, readPurchase } from '@core/benMoney'
+import { moodFace } from '@core/benKnows'
 import { benNote, listNotes, seedNotes } from './notes'
 import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
@@ -666,7 +669,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr)\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -761,6 +764,24 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row: any[]) => !row.some((b) => String(b.callback_data ?? '').startsWith('fb|')))
       await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: kb } }).catch(() => null)
       return null
+    }
+    // Ben's desk from Telegram: mood (md|1-5), a stake done (sk|id), a study topic reviewed (sr|id).
+    if (data.startsWith('md|') || data.startsWith('sk|') || data.startsWith('sr|')) {
+      if (!(await markSeen(key))) return null
+      const arg = data.slice(3)
+      const line = await mirror.write((db) => {
+        const svc = services.services(db)
+        if (data.startsWith('md|')) return `${moodFace(Number(arg))} ${deskChange(svc, { op: 'mood', mood: Number(arg) })}`
+        if (data.startsWith('sk|')) {
+          const st = loadDesk(db).stakes.find((x) => x.id === arg)
+          if (!st || st.status !== 'open') return st?.status === 'lost' ? 'Too late: the points are gone.' : 'Already done.'
+          return `💎 ${deskChange(svc, { op: 'keepStake', id: arg })} "${st.text}" · your ${st.points} points are safe.`
+        }
+        return `📚 ${deskChange(svc, { op: 'reviewed', id: arg })}`
+      })
+      await answer(line.slice(0, 190))
+      await edit(`${esc(String(cq.message?.text ?? ''))}\n\n${esc(line)}`)
+      return line
     }
     // ↩ Undo under a coach reply: take back what it did.
     if (data.startsWith('cu|')) {
@@ -1104,6 +1125,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    */
   function applyText(db: any, svc: Services, text: string, key: string): RunOut {
     currentDb = db
+    // "Should I buy headphones 1200?": the verdict from your budget, goals and price in work hours.
+    const buy = readPurchase(text)
+    if (buy) {
+      const v = deskView(svc, financeStateFrom(db, store))
+      const r = purchaseCheck({ ...v.money, price: buy.price, what: buy.what })
+      return { reply: `${r.verdict === 'buy' ? '🟢' : r.verdict === 'wait' ? '🟡' : '🔴'} <b>${esc(r.title)}</b>\n${r.lines.map((l) => `• ${esc(l)}`).join('\n')}` } as RunOut
+    }
     return db.transaction(() => {
       const out = run(svc, text, key)
       if (server && out.sport) {
@@ -1171,7 +1199,19 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
       })
       .catch(() => null)
-    const { context, memory, profile, look, mind, money, promises, feel, talk, notes } = await mirror.read((db) => {
+    // An excuse he repeats gets counted (Ben names the repeat kindly), and his profile note stays current.
+    const excuseNote = await mirror
+      .write((db) => {
+        const svc = services.services(db)
+        try {
+          refreshProfile(svc, financeStateFrom(db, store))
+        } catch {
+          /* the notebook can wait */
+        }
+        return text ? noteExcuse(db, text, svc.wallet.today()) : null
+      })
+      .catch(() => null)
+    const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       let sessions: LookupData['sessions'] = []
@@ -1242,6 +1282,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             return ''
           }
         })(),
+        desk: (() => {
+          try {
+            return [deskPrompt(svc, finance), excuseNote ? `Repeat excuse just now. Say it kindly with the count: "${excuseNote}"` : ''].filter(Boolean).join('\n')
+          } catch {
+            return ''
+          }
+        })(),
         look: { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
       }
     })
@@ -1258,7 +1305,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
     const ask = (found?: string, extraNote = '') =>
-      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1329,6 +1376,26 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         .write((db) => {
           const day = services.services(db).wallet.today()
           return noteOps.map((op) => benNote(db as any, op.title, op.line, day)).filter((x): x is string => !!x)
+        })
+        .catch(() => [] as string[])
+      done.push(...lines)
+    }
+    // His coaching desk: stakes, study topics, habit stacks, mood.
+    if (out.actions.some((l) => /^\s*(stake|study|reviewed|stack|mood)\s*:/i.test(l))) {
+      const lines = await mirror
+        .write((db) => {
+          const svc = services.services(db)
+          const said: string[] = []
+          for (const l of out.actions) {
+            const op = readDeskOp(l, loadDesk(db))
+            if (!op) continue
+            try {
+              said.push(`${op.op === 'stake' ? '💎' : op.op === 'study' || op.op === 'reviewed' ? '📚' : op.op === 'stack' ? '🔗' : '🙂'} ${deskChange(svc, op)}`)
+            } catch (e) {
+              said.push(`⚠️ ${(e as Error).message}`)
+            }
+          }
+          return said
         })
         .catch(() => [] as string[])
       done.push(...lines)

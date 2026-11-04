@@ -21,6 +21,8 @@ import { cleanMind, findPatterns, focusBySubject, sleepDiary, weekAhead, type Co
 import { sharedView, sportToday } from '@core/sportShared'
 import { patternLines } from '@core/urgePatterns'
 import { loadTriggers, urgeEvents } from './disciplinePatterns'
+import { DESK_ACTIONS, minutesUntil } from '@core/benStakes'
+import { readPurchase } from '@core/benMoney'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -161,6 +163,8 @@ export function personaFor(botId: string, cfg: BotBridgeConfig): Persona {
 export function isSimpleLog(text: string): boolean {
   const t = text.trim()
   if (t.startsWith('/')) return true
+  // "Should I buy X 500?" is answered from your numbers, not by the model.
+  if (readPurchase(t)) return true
   // A short sentence the rules understand (an expense, wake/bed time, a gym
   // session, "how much did I spend?") never costs an AI call.
   const many = /\b(and|și|si|и|then|also|plus)\b/i.test(t)
@@ -581,7 +585,7 @@ const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string } = {}): string {
   const chat = memory.chat.slice(-18).map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
@@ -594,6 +598,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     'Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see "How he wants you to write"; default short: 3–4 lines). Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).',
     '',
     ACTIONS,
+    DESK_ACTIONS,
     '',
     extra.found ? '' : LOOKUPS,
     '',
@@ -621,6 +626,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     extra.notes ? `== His notebook (the notes that matter now; what he wrote himself counts most) ==\n${extra.notes}` : '',
     '',
     extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : '',
+    extra.desk ? `== What you know about how he works (use it: plan with his energy map, name repeat excuses, respect a short night) ==\n${extra.desk}` : '',
     '',
     '== What you remember about him ==',
     memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join('\n') : '- nothing yet',
@@ -764,7 +770,9 @@ export function readAction(line: string): BrainAction | null {
     return w && parts[1] ? { kind: 'remind', day: w[1], time: `${w[2].padStart(2, '0')}:${w[3]}`, text: parts.slice(1).join(' | ').slice(0, 300) } : null
   }
   if (kind === 'checkin') {
-    const minutes = Number(parts[0])
+    // A clock time ("15:00") works too: minutes until then.
+    const clock = /^(\d{1,2})[:.](\d{2})$/.exec(parts[0] ?? '')
+    const minutes = clock ? (minutesUntil(`${clock[1]}:${clock[2]}`, new Date()) ?? 0) : Number(parts[0])
     return minutes >= 5 && minutes <= 720 && parts[1] ? { kind: 'checkin', minutes, text: parts.slice(1).join(' | ').slice(0, 300) } : null
   }
   if (kind === 'book') return { kind: 'book', goal: arg.slice(0, 120) }
