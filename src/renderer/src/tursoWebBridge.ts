@@ -16,6 +16,7 @@ import { createWebAuth } from './web/webAuth'
 import { createWebBots } from './web/webBots'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
+import { sportDay } from './sportTrack'
 import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
@@ -114,8 +115,7 @@ function withSportTrack(state: BodyState): BodyState {
   const sport = readJson<any>('life_sport_tracker_v1')
   if (!sport || !Array.isArray(sport.exercises) || !sport.exercises.length) return state
   const t = state.today
-  const utcToday = new Date().toISOString().slice(0, 10)
-  const fresh = sport.lastDate === utcToday
+  const fresh = sport.lastDate === sportDay()
   const routineDone = fresh && sport.exercises.filter((e: any) => e.active !== false).every((e: any) => (Number(e.doneToday) || 0) >= (Number(e.target) || 0) && Number(e.target) > 0)
   const historyToday = Array.isArray(sport.history) && sport.history.some((h: any) => sportEntryDay(h) === t)
   const workoutDoneToday = state.workoutDoneToday || routineDone || historyToday

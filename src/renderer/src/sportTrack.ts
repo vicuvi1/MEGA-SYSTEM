@@ -1,10 +1,11 @@
 // Sport Track's data on this device (localStorage), shared by the Today
 // banner, the Telegram bot and the Body page. Sport Track starts a new
-// checklist when its `lastDate` (a UTC date) changes; everything that adds
-// reps here applies the same rule first, so reps never land on yesterday.
+// checklist when its `lastDate` (your local date) changes; everything that
+// adds reps here applies the same rule first, so reps never land on yesterday.
 const KEY = 'life_sport_tracker_v1'
 
-export const sportDay = () => new Date().toISOString().slice(0, 10)
+/** Today on this device, YYYY-MM-DD in local time (a new day starts at your midnight). */
+export const sportDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 /** Sport Track's data with today's checklist (reset if its day has passed). */
 export function readSport(): any | null {

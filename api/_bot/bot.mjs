@@ -9645,7 +9645,8 @@ function coachMood(f) {
 }
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
-var sportDay = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+/** Today on this device, YYYY-MM-DD in local time (a new day starts at your midnight). */
+var sportDay = (d = /* @__PURE__ */ new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 /** Sport Track's data with today's checklist (reset if its day has passed). */
 function readSport() {
 	try {

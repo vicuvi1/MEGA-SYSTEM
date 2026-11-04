@@ -1391,6 +1391,14 @@
       transform: translateY(0);
       opacity: 1;
     }
+      .rep-custom { display: flex; gap: 6px; flex-basis: 100%; margin-top: 6px; }
+    .rep-custom input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); color: #fff; font: inherit; }
+    .pr-card { position: relative; }
+    .pr-del, .hist-del { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 13px; opacity: 0.4; transition: opacity 0.15s; }
+    .pr-del { position: absolute; top: 6px; right: 6px; }
+    .pr-card:hover .pr-del, .history-item:hover .hist-del { opacity: 1; }
+    .pr-form { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .pr-form input { flex: 1 1 160px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); color: #fff; font: inherit; }
   </style>
 </head>
 <body>
@@ -1933,6 +1941,41 @@
     }
     animateParticles();
 
+    // --- Helpers ---
+    /** Today in local time (a new day starts at your midnight, not UTC's). */
+    const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    /** Text for innerHTML (a name with < or & can't break the page). */
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    /** The day of a history entry (new entries keep an ISO day; old ones a locale date or a timestamp id). */
+    function entryDay(h) {
+      if (h && typeof h.day === 'string') return h.day;
+      if (h && typeof h.id === 'number' && h.id > 1e12) return localDay(new Date(h.id));
+      const d = String(h?.date ?? '').trim();
+      let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(d);
+      if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(d);
+      if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+      return null;
+    }
+    const shiftDay = (day, n) => { const d = new Date(day + 'T12:00:00'); d.setDate(d.getDate() + n); return localDay(d); };
+    /** Days in a row with a workout, ending today (or yesterday, if today isn't done yet). */
+    function computeStreak(history) {
+      const days = new Set(history.map(entryDay).filter(Boolean));
+      let cur = days.has(localDay()) ? localDay() : shiftDay(localDay(), -1);
+      let n = 0;
+      while (days.has(cur)) { n++; cur = shiftDay(cur, -1); }
+      return n;
+    }
+    function relDay(day) {
+      if (!day) return '';
+      const t = localDay();
+      if (day === t) return 'Today';
+      if (day === shiftDay(t, -1)) return 'Yesterday';
+      return new Date(day + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    }
+
     // --- State Storage & Defaults ---
     const STORAGE_KEY = 'life_sport_tracker_v1';
     const DEFAULT_EXERCISES = [
@@ -1942,13 +1985,13 @@
     ];
 
     const DEFAULT_STATE = {
-      xp: 45,
+      xp: 0,
       level: 1,
       rank: 'E-RANK',
       title: 'Recruit Athlete',
       combatPower: 1420,
-      streak: 1,
-      lastDate: new Date().toISOString().split('T')[0],
+      streak: 0,
+      lastDate: localDay(),
       exercises: DEFAULT_EXERCISES,
       water: {
         currentMl: 0,
@@ -1964,42 +2007,31 @@
         bodyHeight: 186,
         reminderTime: '07:00'
       },
-      prs: [
-        { id: 'bench', title: 'Bench Press', value: '85 kg', date: 'Yesterday' },
-        { id: 'run5k', title: '5KM Run', value: '23m 15s', date: '3 days ago' },
-        { id: 'pullups', title: 'Max Pull-ups', value: '18 reps', date: 'This week' },
-        { id: 'pushups', title: 'Max Push-ups', value: '55 reps', date: 'Last week' }
-      ],
-      history: [
-        {
-          id: 1,
-          category: 'Gym',
-          title: 'Upper Body Power & Bench',
-          amount: '5 sets (80kg)',
-          duration: '50m',
-          coins: 15,
-          xp: 35,
-          date: new Date().toLocaleDateString()
-        }
-      ]
+      // Your records and sessions only (no made-up examples).
+      prs: [],
+      history: []
     };
 
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return DEFAULT_STATE;
+        if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
         const parsed = JSON.parse(raw);
+        // The made-up examples older versions started with are not yours: drop them.
+        const FAKE_PRS = { bench: '85 kg', run5k: '23m 15s', pullups: '18 reps', pushups: '55 reps' };
+        const prs = (Array.isArray(parsed.prs) ? parsed.prs : []).filter((p) => !(FAKE_PRS[p.id] && FAKE_PRS[p.id] === p.value));
+        const history = (Array.isArray(parsed.history) ? parsed.history : []).filter((h) => !(h.id === 1 && h.title === 'Upper Body Power & Bench'));
         return {
           ...DEFAULT_STATE,
           ...parsed,
           exercises: (Array.isArray(parsed.exercises) && parsed.exercises.length > 0 ? parsed.exercises : DEFAULT_EXERCISES).map(e => ({ ...e, unit: (!e.unit || e.unit === '1') ? 'reps' : e.unit })),
           water: { ...DEFAULT_STATE.water, ...(parsed.water || {}) },
           sportySettings: { ...DEFAULT_STATE.sportySettings, ...(parsed.sportySettings || {}) },
-          prs: Array.isArray(parsed.prs) && parsed.prs.length > 0 ? parsed.prs : DEFAULT_STATE.prs,
-          history: Array.isArray(parsed.history) ? parsed.history : DEFAULT_STATE.history
+          prs,
+          history
         };
       } catch (e) {
-        return DEFAULT_STATE;
+        return JSON.parse(JSON.stringify(DEFAULT_STATE));
       }
     }
 
@@ -2011,14 +2043,21 @@
 
     let state = loadState();
 
-    // Check day reset for daily checklist & water
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (state.lastDate !== todayStr) {
-      state.lastDate = todayStr;
+    // A new day (your midnight): a fresh checklist and water. Checked on open,
+    // every minute, and when you come back to the window.
+    function rollover() {
+      const today = localDay();
+      if (state.lastDate === today) return false;
+      state.lastDate = today;
       state.exercises.forEach(ex => { ex.doneToday = 0; });
       state.water.currentMl = 0;
       saveState(state);
+      return true;
     }
+    rollover();
+    // Done today with an older version (before routineDay existed): don't log it twice.
+    if (!state.routineDay && state.history.some(h => entryDay(h) === localDay() && /^Daily/i.test(h.title || ''))) state.routineDay = localDay();
+    state.streak = computeStreak(state.history);
 
     // --- Coach Quotes Catalog ---
     const COACH_QUOTES = {
@@ -2087,7 +2126,9 @@
     // --- Hunter Level & CP Engine ---
     function updateHunterStats() {
       const totalSessions = state.history.length;
-      const calculatedXp = (totalSessions * 35) + state.xp;
+      state.streak = computeStreak(state.history);
+      // Every session already added its XP to state.xp (it used to be counted twice).
+      const calculatedXp = Math.max(0, state.xp);
       const level = Math.floor(calculatedXp / 100) + 1;
       const xpIntoLevel = calculatedXp % 100;
 
@@ -2177,8 +2218,8 @@
           <div class="routine-item ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}" data-id="${ex.id}">
             <div class="routine-item-top">
               <div class="routine-item-info">
-                <span class="routine-item-title">${ex.name}</span>
-                <span class="routine-item-target">${done} / ${target} ${unit}${state.sportySettings.shortOnTime ? ' (50%)' : ''}</span>
+                <span class="routine-item-title">${esc(ex.name)}</span>
+                <span class="routine-item-target">${done} / ${target} ${esc(unit)}${state.sportySettings.shortOnTime ? ' (50%)' : ''}</span>
               </div>
               <div class="routine-item-badges">
                 <span class="routine-pct-badge ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}">${pctBadgeText}</span>
@@ -2194,6 +2235,7 @@
               <button class="btn-rep" data-action="add" data-amount="10">+10</button>
               <button class="btn-rep" data-action="add" data-amount="25">+25</button>
               <button class="btn-rep complete" data-action="full">⚡ Done (${target})</button>
+              <button class="btn-rep" data-action="custom" title="Add an exact number">＋ #</button>
               <button class="btn-rep" data-action="sub" data-amount="10" style="color: var(--text-muted);" title="Undo 10 reps">-10</button>
               <button class="btn-rep edit-btn" data-action="edit-target" title="Edit this exercise">✏️ Edit</button>
             </div>
@@ -2210,7 +2252,7 @@
       }
 
       if (completeAllBtn) {
-        if (allDone) {
+        if (allDone && state.routineDay === localDay()) {
           completeAllBtn.classList.add('completed');
           completeAllBtn.innerHTML = `<span>🔥 ALL EXERCISES DONE! TAP FOR +1 EXTRA ROUND (+Target Reps) (+10 🪙 / +25 XP)</span>`;
         } else {
@@ -2240,6 +2282,27 @@
         saveState(state);
         renderTodayRoutine();
         checkAllCompleted();
+      } else if (action === 'custom') {
+        const row = btn.parentElement;
+        if (row.querySelector('.rep-custom')) return;
+        const f = document.createElement('form');
+        f.className = 'rep-custom';
+        f.innerHTML = `<input type="number" min="1" max="2000" placeholder="how many?" aria-label="How many"><button class="btn-rep complete">Add</button>`;
+        row.appendChild(f);
+        const input = f.querySelector('input');
+        input.focus();
+        f.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          const n = parseInt(input.value, 10);
+          if (!n || n < 1) return;
+          ex.doneToday = (ex.doneToday || 0) + n;
+          audio.playClick();
+          saveState(state);
+          renderTodayRoutine();
+          showToast(`+${n} ${ex.name}`);
+          checkAllCompleted();
+        });
+        return;
       } else if (action === 'sub') {
         const amt = parseInt(btn.dataset.amount, 10) || 10;
         ex.doneToday = Math.max(0, (ex.doneToday || 0) - amt);
@@ -2265,9 +2328,58 @@
       const active = state.exercises.filter(e => e.active);
       if (active.length === 0) return;
       const allDone = active.every(e => (e.doneToday || 0) >= getEffectiveTarget(e));
-      if (allDone) {
-        audio.playLevelUp();
+      // Finishing each exercise yourself logs the day's routine too (once a day),
+      // so it counts in your history, your streak and Life System.
+      if (allDone && state.routineDay !== localDay()) {
+        logRoutine(false);
         updateCoachQuote('"ALL ROUTINES CRUSHED! The System recognizes your supreme mastery today!"');
+      }
+    }
+
+    /** Saves the day's routine (or an extra round) as a session and tells Life System. */
+    function logRoutine(extra) {
+      const active = state.exercises.filter(e => e.active);
+      const summaryText = active.map(e => `${e.doneToday || getEffectiveTarget(e)} ${e.name}`).join(', ');
+      const earnedCoins = extra ? 10 : 15;
+      const earnedXp = extra ? 25 : 35;
+      const record = {
+        id: Date.now(),
+        day: localDay(),
+        category: 'Calisthenics',
+        title: `${extra ? 'Extra round' : 'Daily routine'}: ${summaryText}`,
+        amount: `${active.length} exercises`,
+        duration: '',
+        coins: earnedCoins,
+        xp: earnedXp,
+        date: new Date().toLocaleDateString()
+      };
+      state.history.unshift(record);
+      state.xp += earnedXp;
+      if (!extra) {
+        state.routineDay = localDay();
+        // Auto-progression: +5% after 3 days of full routines (not on short-on-time days).
+        if (state.sportySettings.autoProgression && !state.sportySettings.shortOnTime) {
+          state.sportySettings.progressionStreak = (state.sportySettings.progressionStreak || 0) + 1;
+          if (state.sportySettings.progressionStreak >= 3) {
+            state.sportySettings.progressionStreak = 0;
+            state.exercises.forEach(ex => { ex.target = Math.max(ex.target + 1, Math.round(ex.target * 1.05)); });
+            showToast('🔥 AUTO-PROGRESSION! All targets +5%. Next tier reached!');
+          } else {
+            showToast(`🏆 Routine done! ${state.sportySettings.progressionStreak}/3 to the next +5% (+${earnedCoins} 🪙, +${earnedXp} XP)`);
+          }
+        } else {
+          showToast(`🏆 Daily routine done! +${earnedCoins} coins, +${earnedXp} XP`);
+        }
+      } else {
+        showToast(`💥 Extra round logged! (+${earnedCoins} 🪙, +${earnedXp} XP)`);
+      }
+      audio.playLevelUp();
+      saveState(state);
+      updateHunterStats();
+      renderTodayRoutine();
+      renderHistory();
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'SPORT_WORKOUT_LOGGED', workout: record }, '*');
       }
     }
 
@@ -2279,74 +2391,14 @@
         showToast('No active exercises in routine!');
         return;
       }
-
-      const allAlreadyDone = active.every(e => (e.doneToday || 0) >= getEffectiveTarget(e));
-
-      if (allAlreadyDone) {
-        // Multi-click / Extra Rounds!
-        // The user already crushed the required targets and wants to add another full round!
-        active.forEach(ex => {
-          ex.doneToday = (ex.doneToday || 0) + getEffectiveTarget(ex);
-        });
-        audio.playLevelUp();
-      } else {
-        // First completion: bring every exercise up to its effective target
-        // (preserving any exercises where the user already did extra reps!)
-        active.forEach(ex => {
-          ex.doneToday = Math.max(ex.doneToday || 0, getEffectiveTarget(ex));
-        });
-      }
-
-      const summaryText = active.map(e => `${getEffectiveTarget(e)} ${e.name}`).join(', ');
-      const roundLabel = allAlreadyDone ? 'Extra Overdrive Round' : 'Daily Sporty Routine';
-      const earnedCoins = allAlreadyDone ? 10 : 15;
-      const earnedXp = allAlreadyDone ? 25 : 35;
-
-      // Add workout record
-      const record = {
-        id: Date.now(),
-        category: 'Calisthenics',
-        title: `${roundLabel}: ${summaryText}`,
-        amount: `${active.length} exercises`,
-        duration: '35m',
-        coins: earnedCoins,
-        xp: earnedXp,
-        date: new Date().toLocaleDateString()
-      };
-
-      state.history.unshift(record);
-      state.xp += earnedXp;
-
-      // Handle Auto-progression (+5% after 3 completed days) - only on initial routine completion
-      if (state.sportySettings.autoProgression && !allAlreadyDone) {
-        state.sportySettings.progressionStreak = (state.sportySettings.progressionStreak || 0) + 1;
-        if (state.sportySettings.progressionStreak >= 3) {
-          state.sportySettings.progressionStreak = 0;
-          // Apply 5% target increase to all exercises
-          state.exercises.forEach(ex => {
-            ex.target = Math.max(ex.target + 1, Math.round(ex.target * 1.05));
-          });
-          audio.playLevelUp();
-          showToast('🔥 AUTO-PROGRESSION! All targets increased by +5%! Next tier reached!');
-        } else {
-          showToast(`🏆 Routine Finished! Streak: ${state.sportySettings.progressionStreak}/3 for next +5% boost! (+${earnedCoins} 🪙, +${earnedXp} XP)`);
-        }
-      } else if (allAlreadyDone) {
-        showToast(`💥 EXTRA OVERDRIVE ROUND LOGGED! Added another full set! (+${earnedCoins} 🪙, +${earnedXp} XP)`);
-      } else {
-        showToast(`🏆 Daily Routine Finished! +${earnedCoins} Coins & +${earnedXp} XP Awarded!`);
-      }
-
-      saveState(state);
-      updateHunterStats();
-      renderTodayRoutine();
-      renderHistory();
-      updateCoachQuote(allAlreadyDone ? '"UNSTOPPABLE BEAST! Stacking extra rounds on top of victory!"' : '"EVERY ROUTINE CONQUERED! Outstanding work, Hunter. Rest and re-hydrate!"');
-
-      // Electron IPC Broadcast
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'SPORT_WORKOUT_LOGGED', workout: record }, '*');
-      }
+      // Already logged today: one more full round on top. Otherwise: fill every
+      // exercise up to its target (keeping extra reps) and log the day's routine.
+      const extra = state.routineDay === localDay();
+      active.forEach(ex => {
+        ex.doneToday = extra ? (ex.doneToday || 0) + getEffectiveTarget(ex) : Math.max(ex.doneToday || 0, getEffectiveTarget(ex));
+      });
+      logRoutine(extra);
+      updateCoachQuote(extra ? '"UNSTOPPABLE BEAST! Stacking extra rounds on top of victory!"' : '"EVERY ROUTINE CONQUERED! Outstanding work, Hunter. Rest and re-hydrate!"');
     });
 
     // --- Short on Time Toggle ---
@@ -2412,7 +2464,7 @@
         const target = state.water.targetMl || 2700;
         if (state.water.currentMl >= target && prev < target) {
           audio.playChime();
-          showToast('💧 Daily Hydration Target Reached (2,700 ml)! Body fully energized!');
+          showToast(`💧 Daily water target reached (${target.toLocaleString()} ml)! Body fully energized!`);
         } else if (ml > 0) {
           showToast(`💧 +${ml} ml logged!`);
         }
@@ -2427,15 +2479,10 @@
       showToast('Hydration tracker reset to 0 ml.');
     });
 
+    // The water target is set in Settings (window.prompt doesn't work in the desktop app).
     document.getElementById('btn-calibrate-water').addEventListener('click', () => {
-      audio.playClick();
-      const newGoal = prompt('Enter your daily hydration target in ml:', state.water.targetMl || 2700);
-      if (newGoal && !isNaN(parseInt(newGoal, 10))) {
-        state.water.targetMl = parseInt(newGoal, 10);
-        saveState(state);
-        renderHydration();
-        showToast(`Water target updated to ${state.water.targetMl} ml.`);
-      }
+      openSettingsModal();
+      setTimeout(() => document.getElementById('setting-water-target')?.focus(), 50);
     });
 
     // --- MANAGE EXERCISES MODAL LOGIC ---
@@ -2468,8 +2515,8 @@
               <span class="toggle-slider"></span>
             </label>
             <div class="catalog-info">
-              <h4>${ex.name}</h4>
-              <span>Target: ${ex.target} ${ex.unit}</span>
+              <h4>${esc(ex.name)}</h4>
+              <span>Target: ${ex.target} ${esc(ex.unit)}</span>
             </div>
           </div>
           <div class="catalog-actions">
@@ -2528,14 +2575,14 @@
       editBox.innerHTML = `
         <div class="catalog-edit-card">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h4 style="font-size: 14px; font-weight: 800; color: #fff;">✏️ Edit Exercise: ${ex.name}</h4>
+            <h4 style="font-size: 14px; font-weight: 800; color: #fff;">✏️ Edit Exercise: ${esc(ex.name)}</h4>
             <button class="preset-btn" id="btn-cancel-edit">✕ Cancel</button>
           </div>
 
           <div class="form-row" style="margin-bottom: 6px;">
             <div class="input-group" style="grid-column: span 2;">
               <label>Exercise Title</label>
-              <input type="text" id="edit-ex-name" value="${ex.name}">
+              <input type="text" id="edit-ex-name" value="${esc(ex.name)}">
             </div>
             <div class="input-group">
               <label>Target Amount</label>
@@ -2545,7 +2592,6 @@
               <label>Unit</label>
               <select id="edit-ex-unit">
                 <option value="reps" ${ex.unit === 'reps' ? 'selected' : ''}>reps</option>
-                <option value="1" ${ex.unit === '1' ? 'selected' : ''}>1</option>
                 <option value="sets" ${ex.unit === 'sets' ? 'selected' : ''}>sets</option>
                 <option value="kg" ${ex.unit === 'kg' ? 'selected' : ''}>kg</option>
                 <option value="min" ${ex.unit === 'min' ? 'selected' : ''}>min</option>
@@ -2695,14 +2741,19 @@
     // --- PR Hall of Fame ---
     function renderPRs() {
       const container = document.getElementById('pr-container');
+      if (!state.prs.length) {
+        container.innerHTML = '<div style="padding: 14px; color: var(--text-muted); font-size: 13px;">No records yet. Tap “Update PR” when you beat one.</div>';
+        return;
+      }
       container.innerHTML = state.prs.map(pr => `
-        <div class="pr-card">
+        <div class="pr-card" data-id="${esc(pr.id)}">
           <div class="pr-trophy">🏆</div>
           <div class="pr-details">
-            <div class="pr-title">${pr.title}</div>
-            <div class="pr-value">${pr.value}</div>
-            <div class="pr-date">${pr.date}</div>
+            <div class="pr-title">${esc(pr.title)}</div>
+            <div class="pr-value">${esc(pr.value)}</div>
+            <div class="pr-date">${esc(pr.day ? relDay(pr.day) : pr.date)}</div>
           </div>
+          <button class="pr-del" title="Delete this record" data-del="${esc(pr.id)}">✕</button>
         </div>
       `).join('');
     }
@@ -2714,22 +2765,38 @@
         container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;">No workouts recorded yet. Complete a session above!</div>';
         return;
       }
-      container.innerHTML = state.history.map(h => `
-        <div class="history-item">
+      container.innerHTML = state.history.slice(0, 100).map(h => `
+        <div class="history-item" data-id="${esc(h.id)}">
           <div class="hist-left">
             <div class="hist-icon">⚡</div>
             <div>
-              <div class="hist-title">${h.title}</div>
-              <div class="hist-sub">${h.amount} · ${h.duration} · ${h.date}</div>
+              <div class="hist-title">${esc(h.title)}</div>
+              <div class="hist-sub">${[h.amount, h.duration, relDay(entryDay(h)) || h.date].filter(Boolean).map(esc).join(' · ')}</div>
             </div>
           </div>
           <div class="hist-reward">
-            <span>+${h.coins} 🪙</span>
-            <span style="color: var(--cyan-neon);">+${h.xp} XP</span>
+            <span>+${esc(h.coins)} 🪙</span>
+            <span style="color: var(--cyan-neon);">+${esc(h.xp)} XP</span>
           </div>
+          <button class="hist-del" title="Delete this session (a mistake)" data-del="${esc(h.id)}">🗑</button>
         </div>
       `).join('');
     }
+
+    document.getElementById('history-container').addEventListener('click', (e) => {
+      const id = e.target.closest('[data-del]')?.dataset.del;
+      if (!id) return;
+      const h = state.history.find(x => String(x.id) === id);
+      if (!h || !confirm(`Delete “${h.title}” from your history?`)) return;
+      state.history = state.history.filter(x => x !== h);
+      state.xp = Math.max(0, state.xp - (Number(h.xp) || 0));
+      if (entryDay(h) === localDay() && /^Daily routine/.test(h.title || '')) state.routineDay = null;
+      saveState(state);
+      updateHunterStats();
+      renderHistory();
+      renderTodayRoutine();
+      showToast('Session deleted here (Life System keeps the coins it gave).');
+    });
 
     // --- Category Selector ---
     let currentCat = 'gym';
@@ -2739,7 +2806,7 @@
       football: { name: 'Football Match', amount: '90', unit: 'minutes', duration: '90' },
       boxing: { name: 'Heavy Bag & Sparring', amount: '6', unit: 'sets', duration: '45' },
       calisthenics: { name: 'Pushups & Pullups', amount: '50', unit: 'reps', duration: '30' },
-      swim: { name: 'Freestyle Laps', amount: '1000', unit: 'km', duration: '40' },
+      swim: { name: 'Freestyle Laps', amount: '1', unit: 'km', duration: '40' },
       cycling: { name: 'Road Cycling', amount: '15', unit: 'km', duration: '45' }
     };
 
@@ -2776,6 +2843,7 @@
         duration: `${duration}m`,
         coins: 15,
         xp: 35,
+        day: localDay(),
         date: new Date().toLocaleDateString()
       };
 
@@ -2836,8 +2904,13 @@
       }
       startBtn.textContent = 'PAUSE';
       statusEl.textContent = 'RESTING';
+      // Counts against the clock, so it stays right when the window is in the background.
+      const endsAt = Date.now() + timerRemaining * 1000;
+      let lastTick = timerRemaining;
       timerInterval = setInterval(() => {
-        timerRemaining--;
+        timerRemaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+        if (timerRemaining === lastTick) return;
+        lastTick = timerRemaining;
         if (timerRemaining <= 3 && timerRemaining > 0) {
           audio.playTick();
         }
@@ -2853,7 +2926,7 @@
           return;
         }
         updateTimerUI();
-      }, 1000);
+      }, 250);
     }
 
     startBtn.addEventListener('click', startTimer);
@@ -2892,27 +2965,48 @@
       soundToggle.textContent = audio.enabled ? '🔊' : '🔇';
     });
 
-    // Update PR Button
+    // Update PR: a small form (window.prompt doesn't work in the desktop app).
     document.getElementById('btn-add-pr').addEventListener('click', () => {
       audio.playClick();
-      const ex = prompt('Enter exercise or sport for PR (e.g. Bench Press, 5km Run, Squat):', 'Bench Press');
-      if (!ex) return;
-      const val = prompt(`Enter new Personal Record value for ${ex} (e.g. 90 kg, 22m 10s, 60 reps):`, '90 kg');
-      if (!val) return;
-
-      const existing = state.prs.find(p => p.title.toLowerCase() === ex.toLowerCase());
-      if (existing) {
-        existing.value = val;
-        existing.date = 'Just now';
-      } else {
-        state.prs.push({ id: 'pr_' + Date.now(), title: ex, value: val, date: 'Just now' });
-      }
-      state.xp += 50;
+      const box = document.getElementById('pr-container');
+      if (document.getElementById('pr-form')) return document.getElementById('pr-title-in').focus();
+      const f = document.createElement('form');
+      f.id = 'pr-form';
+      f.className = 'pr-form';
+      f.innerHTML = `<input id="pr-title-in" placeholder="Exercise (Bench Press, 5 km run…)" maxlength="60" required>
+        <input id="pr-value-in" placeholder="Record (90 kg, 22:10, 60 reps)" maxlength="40" required>
+        <button class="btn-rep complete">Save PR</button><button type="button" class="btn-rep" id="pr-cancel">✕</button>`;
+      box.parentElement.insertBefore(f, box);
+      document.getElementById('pr-title-in').focus();
+      document.getElementById('pr-cancel').addEventListener('click', () => f.remove());
+      f.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const ex = document.getElementById('pr-title-in').value.trim();
+        const val = document.getElementById('pr-value-in').value.trim();
+        if (!ex || !val) return;
+        const existing = state.prs.find(p => p.title.toLowerCase() === ex.toLowerCase());
+        if (existing) {
+          existing.value = val;
+          existing.day = localDay();
+          delete existing.date;
+        } else {
+          state.prs.unshift({ id: 'pr_' + Date.now(), title: ex, value: val, day: localDay() });
+        }
+        state.xp += 50;
+        saveState(state);
+        f.remove();
+        renderPRs();
+        updateHunterStats();
+        audio.playLevelUp();
+        showToast(`🏆 New PR for ${ex}! +50 XP`);
+      });
+    });
+    document.getElementById('pr-container').addEventListener('click', (e) => {
+      const id = e.target.closest('[data-del]')?.dataset.del;
+      if (!id || !confirm('Delete this record?')) return;
+      state.prs = state.prs.filter(p => p.id !== id);
       saveState(state);
       renderPRs();
-      updateHunterStats();
-      audio.playLevelUp();
-      showToast(`🏆 New PR Saved for ${ex}! +50 XP`);
     });
 
     // Telegram Command Copy Helper
@@ -2926,6 +3020,29 @@
           showToast(`Command: ${cmd}`);
         });
       });
+    });
+
+    // Life System (the island, Ben, Telegram) changes this data too: reload it
+    // instead of overwriting it with an old copy on the next tap.
+    function renderAll() {
+      updateHunterStats();
+      renderTodayRoutine();
+      renderHydration();
+      renderPRs();
+      renderHistory();
+    }
+    window.addEventListener('storage', (e) => {
+      if (e.key !== STORAGE_KEY) return;
+      state = loadState();
+      rollover();
+      renderAll();
+    });
+    setInterval(() => { if (rollover()) renderAll(); }, 60000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      state = loadState();
+      rollover();
+      renderAll();
     });
 
     // --- Initialize App ---
