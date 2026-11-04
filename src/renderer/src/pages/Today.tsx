@@ -78,18 +78,32 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       /* private window */
     }
   }
+  const [repsOpen, setRepsOpenState] = useState(() => {
+    try {
+      return localStorage.getItem('ls.todayReps') !== '0'
+    } catch {
+      return true
+    }
+  })
+  const setRepsOpen = (v: boolean) => {
+    setRepsOpenState(v)
+    try {
+      localStorage.setItem('ls.todayReps', v ? '1' : '0')
+    } catch {
+      /* private window */
+    }
+  }
   // Your sections, in your order (Settings → Today screen).
   const sections: Record<TodaySectionId, () => ReactNode> = {
     reps: () => (
-        <>
-      <SoloDailyQuestBanner
-        body={body ?? null}
-        summary={summary}
-        onRefresh={() => onChange()}
-        onGo={onGo}
-      />
-        </>
-      ),
+      <details className="td-fold" open={repsOpen} onToggle={(e) => setRepsOpen((e.target as HTMLDetailsElement).open)}>
+        <summary>
+          <span>Reps & water</span>
+          <small>{repsOpen ? 'hide' : 'show'}</small>
+        </summary>
+        <SoloDailyQuestBanner body={body ?? null} summary={summary} onRefresh={() => onChange()} onGo={onGo} />
+      </details>
+    ),
     day: () => (
       <>
       <CoachPlan onChange={() => onChange()} />
@@ -161,7 +175,9 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       )
   }
 
-  // One clean screen: Ben and the one move on top, the day below, extras folded.
+  // A calm cockpit: Ben and the one move on top; your day's timeline on the
+  // right, full height; the lists on the left. On a big screen each column
+  // scrolls on its own, so the page never feels endless.
   const on = todayLayout(ui).filter((x) => x.on)
   const MAIN: TodaySectionId[] = ['day']
   const SIDE: TodaySectionId[] = ['timeline', 'reps']
@@ -174,6 +190,19 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
           {on.filter((x) => MAIN.includes(x.id)).map((x) => (
             <Fragment key={x.id}>{sections[x.id]()}</Fragment>
           ))}
+          {FOLDED.length > 0 && (
+            <details className="td-more" open={moreOpen} onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
+              <summary>
+                <span>More</span>
+                <small>{FOLDED.map((x) => ({ progress: 'week score', fun: 'fun time', quicklog: 'quick log', day: '', timeline: '', reps: '' })[x.id]).filter(Boolean).join(' · ')}</small>
+              </summary>
+              <div className="td-more-body">
+                {FOLDED.map((x) => (
+                  <Fragment key={x.id}>{sections[x.id]()}</Fragment>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
         <aside className="cmd-side">
           {on.filter((x) => SIDE.includes(x.id)).map((x) => (
@@ -181,19 +210,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
           ))}
         </aside>
       </div>
-      {FOLDED.length > 0 && (
-        <details className="td-more" open={moreOpen} onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
-          <summary>
-            <span>More</span>
-            <small>{FOLDED.map((x) => ({ progress: 'week score', fun: 'fun time', quicklog: 'quick log', day: '', timeline: '', reps: '' })[x.id]).filter(Boolean).join(' · ')}</small>
-          </summary>
-          <div className="td-more-body">
-            {FOLDED.map((x) => (
-              <Fragment key={x.id}>{sections[x.id]()}</Fragment>
-            ))}
-          </div>
-        </details>
-      )}
     </div>
   )
 }
