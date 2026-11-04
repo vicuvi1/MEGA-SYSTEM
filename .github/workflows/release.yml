@@ -67,9 +67,29 @@ jobs:
           echo "VERSION=$v" >> "$GITHUB_ENV"
           git log -1 --format=%s > notes.txt
       - run: npm run build:electron
+      # Code signing (docs/code-signing.md): only when the Azure Trusted Signing
+      # secrets are set; without them the build stays unsigned, as before.
+      - name: Code signing settings
+        shell: bash
+        env:
+          AZURE_SIGN_ENDPOINT: ${{ secrets.AZURE_SIGN_ENDPOINT }}
+          AZURE_SIGN_ACCOUNT: ${{ secrets.AZURE_SIGN_ACCOUNT }}
+          AZURE_SIGN_PROFILE: ${{ secrets.AZURE_SIGN_PROFILE }}
+          AZURE_SIGN_PUBLISHER: ${{ secrets.AZURE_SIGN_PUBLISHER }}
+        run: |
+          if [ -n "$AZURE_SIGN_ENDPOINT" ]; then
+            node -e 'const f="package.json",p=require("./"+f);p.build.win={...p.build.win,azureSignOptions:{endpoint:process.env.AZURE_SIGN_ENDPOINT,codeSigningAccountName:process.env.AZURE_SIGN_ACCOUNT,certificateProfileName:process.env.AZURE_SIGN_PROFILE,publisherName:process.env.AZURE_SIGN_PUBLISHER}};require("fs").writeFileSync(f,JSON.stringify(p,null,2))'
+            echo "Signing with Azure Trusted Signing"
+          else
+            echo "No signing secrets: unsigned build"
+          fi
       # Build the app (no installer yet) and START it on Windows: if the window
       # doesn't open with the page in it, nothing is published.
       - run: npx electron-builder --win --dir --publish never
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       # The --dir build leaves out resources/app-update.yml, and without it the
       # installed app can't download updates. Put it in, and check it's there.
       - name: Update config inside the app
@@ -97,6 +117,9 @@ jobs:
       - run: npx electron-builder --win --prepackaged release/win-unpacked --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       # Everything is uploaded: now the apps may see it.
       - shell: bash
         run: |
