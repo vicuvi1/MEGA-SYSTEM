@@ -203,6 +203,38 @@ describe('Todoist in Life System', () => {
     expect(r.done.join('\n')).toMatch(/Moved: Deep block/)
     expect(r.done.join('\n')).toMatch(/Shifted 1 block by \+30 min/)
   })
+
+  it('a failed action goes back to the coach once; it tries another way and says so', async () => {
+    fakeTurso()
+    const mirror = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'), null)
+    await mirror.ready
+    const services = createWebServices(mirror)
+    const today = await services.read((s) => s.wallet.today())
+    let tries = 0
+    const calendar = {
+      events: async () => [],
+      create: vi.fn(async (e: any) => {
+        if (++tries === 1) throw new Error('Google: that time is busy')
+        return { ...e, id: 'n', calendarId: 'cal', allDay: false }
+      }),
+      move: vi.fn(async () => {}),
+      remove: vi.fn(async () => {})
+    }
+    const prompts: string[] = []
+    const ai = vi.fn(async (p: string) => {
+      prompts.push(p)
+      return prompts.length === 1
+        ? JSON.stringify({ reply: 'Booked gym at 18:00.', actions: [`event: Gym | ${today} 18:00 | 60`], remember: [] })
+        : JSON.stringify({ reply: '18:00 was busy, so gym is at 19:00.', actions: [`event: Gym | ${today} 19:00 | 60`], remember: [] })
+    })
+    const bots = createWebBots({ mirror, services, defaults: { botToken: '1:x', chatId: '42' } as any, calendar, ai })
+    const r = await bots.think('gym at 18 today', 'k-fix')
+    expect(ai).toHaveBeenCalledTimes(2)
+    expect(prompts[1]).toMatch(/RESULTS of your actions[\s\S]*⚠️ Google: that time is busy/)
+    expect(calendar.create).toHaveBeenCalledTimes(2)
+    expect(r.reply).toMatch(/19:00/)
+    expect(r.done.join('\n')).toMatch(/⚠️ Google: that time is busy/)
+  })
 })
 
 describe('Todoist changes (incremental sync)', () => {
