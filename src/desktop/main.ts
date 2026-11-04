@@ -5,6 +5,7 @@ import { join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
+import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
 import { createBackups } from './backups'
 
@@ -204,8 +205,10 @@ if (firstCopy) void app.whenReady().then(async () => {
     if (smoke) {
       setTimeout(async () => {
         const seen = await win.webContents.executeJavaScript('document.body.innerText.trim().length').catch(() => 0)
-        const ok = win.isVisible() && Number(seen) > 0
-        await writeFile(join(dir, 'smoke.txt'), `visible=${win.isVisible()} text=${seen}\n`).catch(() => {})
+        // The updater must be able to read its config (else every download fails).
+        const updates = await (autoUpdater as unknown as { configOnDisk: { value: Promise<{ provider?: string }> } }).configOnDisk.value.then((c) => c?.provider ?? 'none', (e: Error) => `error ${e.message}`)
+        const ok = win.isVisible() && Number(seen) > 0 && updates === 'github'
+        await writeFile(join(dir, 'smoke.txt'), `visible=${win.isVisible()} text=${seen} updates=${updates}\n`).catch(() => {})
         app.exit(ok ? 0 : 1)
       }, 5000)
       return

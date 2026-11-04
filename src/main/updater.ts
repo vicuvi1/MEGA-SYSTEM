@@ -2,7 +2,7 @@
 // read from Git Credential Manager (or the GitHub CLI) on this PC when needed.
 // Credentials never go to the renderer or into the bundled app.
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
@@ -10,6 +10,27 @@ import type { UpdateStatus } from '@shared/api'
 
 const OWNER = 'vicuvi1'
 const REPO = 'MEGA-SYSTEM'
+
+/** What the installer normally puts in resources/app-update.yml. */
+export const UPDATE_CONFIG = `provider: github\nowner: ${OWNER}\nrepo: ${REPO}\nprivate: true\nreleaseType: release\nupdaterCacheDirName: life-system-updater\n`
+
+/**
+ * The updater reads resources/app-update.yml before every download (for its
+ * cache folder). If the build left it out, downloads fail ("update failed"):
+ * then keep our own copy in the app's data folder and point the updater at it.
+ */
+function ensureUpdateConfig(): void {
+  if (!app.isPackaged || existsSync(join(process.resourcesPath, 'app-update.yml'))) return
+  try {
+    const dir = app.getPath('userData')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, 'app-update.yml')
+    writeFileSync(file, UPDATE_CONFIG)
+    autoUpdater.updateConfigPath = file
+  } catch {
+    /* the check still works; a download would say why it failed */
+  }
+}
 
 function ghPath(): string {
   const installed = join(process.env.ProgramFiles ?? 'C:\\Program Files', 'GitHub CLI', 'gh.exe')
@@ -56,6 +77,7 @@ export class Updater {
 
   /** `beforeQuit` lets the app close for real (not hide to the tray) during an update. */
   constructor(private onChange: (s: UpdateStatus) => void, private beforeQuit: () => void) {
+    ensureUpdateConfig()
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
     autoUpdater.on('download-progress', (p) => this.set({ state: 'downloading', progress: Math.round(p.percent) }))

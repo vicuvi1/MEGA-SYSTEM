@@ -70,9 +70,17 @@ jobs:
       # Build the app (no installer yet) and START it on Windows: if the window
       # doesn't open with the page in it, nothing is published.
       - run: npx electron-builder --win --dir --publish never
+      # The --dir build leaves out resources/app-update.yml, and without it the
+      # installed app can't download updates. Put it in, and check it's there.
+      - name: Update config inside the app
+        shell: bash
+        run: |
+          printf 'provider: github\nowner: vicuvi1\nrepo: MEGA-SYSTEM\nprivate: true\nreleaseType: release\nupdaterCacheDirName: life-system-updater\n' > release/win-unpacked/resources/app-update.yml
+          cat release/win-unpacked/resources/app-update.yml
       - name: The app opens on Windows
         shell: pwsh
         run: |
+          if (-not (Test-Path 'release\win-unpacked\resources\app-update.yml')) { throw 'app-update.yml is missing: installed apps could not update' }
           $dir = Join-Path $env:RUNNER_TEMP 'life-smoke'
           $env:LIFE_SMOKE = '1'
           $p = Start-Process -FilePath 'release\win-unpacked\Life System.exe' -ArgumentList "--user-data-dir=$dir" -PassThru
