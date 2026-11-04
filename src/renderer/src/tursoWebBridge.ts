@@ -13,7 +13,6 @@ import { Mirror, indexedDbStore } from './web/mirror'
 import { TursoHttp } from './web/tursoHttp'
 import { createWebServices, type WebServices } from './web/webServices'
 import { createWebAuth } from './web/webAuth'
-import { createWebBots } from './web/webBots'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
 import { sportDay } from './sportTrack'
@@ -306,7 +305,12 @@ export function createTursoWebBridge(): Bridge {
     .then((j) => !!j.connected)
     .catch(() => false)
   let todoistSyncedAt = 0
-  const botsP = Promise.all([mirrorP, svcP, botDefaultsP, todoistOnP]).then(([mirror, services, defaults, todoOn]) => createWebBots({ mirror, services, defaults, onExpense: () => void applyFinance(), todoist: todoOn ? todoist : null }))
+  // The bots' code (big) loads on first use, not with the app.
+  type Bots = ReturnType<typeof import('./web/webBots').createWebBots>
+  let botsMade: Promise<Bots> | null = null
+  const makeBots = () => (botsMade ??= Promise.all([mirrorP, svcP, botDefaultsP, todoistOnP, import('./web/webBots')]).then(([mirror, services, defaults, todoOn, { createWebBots }]) => createWebBots({ mirror, services, defaults, onExpense: () => void applyFinance(), todoist: todoOn ? todoist : null })))
+  // Awaitable like a promise, but nothing loads until something asks for the bots.
+  const botsP: PromiseLike<Bots> = { then: (ok, no) => makeBots().then(ok, no) }
 
   // Live data: while the app is open it asks Turso "anything new?" every few
   // seconds (one tiny query; every change anywhere moves a marker). When a
