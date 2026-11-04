@@ -12,6 +12,8 @@ export interface DesktopApi {
   checkUpdates(): Promise<UpdateStatus>
   installUpdate(): Promise<UpdateStatus>
   loginGithub(): Promise<void>
+  /** Colors of Windows' own minimize/maximize/close (they sit on the app's title bar). */
+  titleBar?(color: string, symbol: string): void
   // ---- daily backup files (optional: older desktops don't have them) ----
   backupStatus?(): Promise<BackupStatus>
   writeBackup?(text: string, day: string): Promise<BackupStatus>

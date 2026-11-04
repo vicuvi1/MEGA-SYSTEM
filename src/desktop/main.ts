@@ -38,8 +38,11 @@ else void app.whenReady().then(async () => {
   })
   // Started by Windows at login: stay in the tray, the island is enough.
   const hidden = process.argv.includes('--hidden')
+  // No white Windows title bar and no File/Edit menu: the app draws its own slim
+  // dark bar; Windows keeps its minimize/maximize/close on it (same colors).
   const win = new BrowserWindow({ width: 1440, height: 950, minWidth: 850, minHeight: 600, show: !hidden,
-    title: 'Life System', backgroundColor: '#0a0c10',
+    title: 'Life System', backgroundColor: '#07090e', autoHideMenuBar: true,
+    titleBarStyle: 'hidden', titleBarOverlay: { color: '#07090e', symbolColor: '#c9ced6', height: 36 },
     webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false }
   })
   // Only this bundled window can use the fixed, narrow IPC methods.
@@ -85,6 +88,12 @@ else void app.whenReady().then(async () => {
   }
   win.webContents.setWindowOpenHandler(({ url }) => { external(url); return { action: 'deny' } })
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(origin + '/')) { event.preventDefault(); external(url) } })
+  win.setMenu(null)
+  ipcMain.on('desktop:titlebar', (event, color: unknown, symbol: unknown) => {
+    const ok = (c: unknown): c is string => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)
+    if (event.sender !== win.webContents || !ok(color) || !ok(symbol)) return
+    try { win.setTitleBarOverlay({ color, symbolColor: symbol, height: 36 }) } catch { /* not on this OS */ }
+  })
   const showApp = (page?: string) => {
     if (win.isMinimized()) win.restore()
     win.show()
