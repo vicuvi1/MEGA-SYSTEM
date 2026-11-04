@@ -23,6 +23,7 @@ import { soundCoin, soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
 import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
+import { PLAN_ITEM_COINS } from '@core/focus'
 
 interface Props {
   summary: Summary
@@ -875,7 +876,7 @@ export function DayFlow(props: Props) {
         {tab === 'today' && (<>
         <div className="dl-group" style={{ ['--c' as string]: 'var(--accent)' }}>
           <h3 className="dl-head">
-            <i /> Must-dos <small>+10 each</small>
+            <i /> Must-dos <small>+{PLAN_ITEM_COINS} each, first 3</small>
           </h3>
           <ul className="dl">
             {starred.map((t) => taskRow(t, true, null))}

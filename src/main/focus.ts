@@ -230,7 +230,9 @@ export class FocusService {
     return this.db.transaction(() => {
       this.savePlan(p, now)
       if (item.done && d === this.wallet.today(now)) {
-        const ref = `plan:${d}:${index}`
+        // Paid once per must-do (by its words, not its position: removing one
+        // before it must not block the others), at most 3 a day.
+        const ref = `plan:${d}:${item.text.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 60)}`
         const entries = this.wallet.entries()
         const paidToday = entries.filter((e) => e.ruleId === 'plan.item_done' && e.day === d).length
         if (!entries.some((e) => e.ref === ref) && paidToday < 3) {

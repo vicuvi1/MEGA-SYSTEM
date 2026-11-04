@@ -4544,7 +4544,7 @@ var FocusService = class {
 		return this.db.transaction(() => {
 			this.savePlan(p, now);
 			if (item.done && d === this.wallet.today(now)) {
-				const ref = `plan:${d}:${index}`;
+				const ref = `plan:${d}:${item.text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 60)}`;
 				const entries = this.wallet.entries();
 				const paidToday = entries.filter((e) => e.ruleId === "plan.item_done" && e.day === d).length;
 				if (!entries.some((e) => e.ref === ref) && paidToday < 3) {
