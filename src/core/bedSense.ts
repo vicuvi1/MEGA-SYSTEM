@@ -29,7 +29,7 @@ export function showBedButton(now: Date, bedTarget: string, bedLogged: boolean):
   if (bedLogged) return false
   const m = minOf(now)
   const [h, mm] = bedTarget.split(':').map(Number)
-  const from = ((h || 23) * 60 + (mm || 0) - 90 + 1440) % 1440
+  const from = ((Number.isFinite(h) ? h : 23) * 60 + (mm || 0) - 90 + 1440) % 1440
   return m >= from || m < 4 * 60
 }
 
@@ -44,7 +44,9 @@ export function bedLoggedTonight(logs: { day: string; bedTime: string | null }[]
   const day = (d: Date) => d.toLocaleDateString('sv-SE')
   const today = day(now)
   const yesterday = day(new Date(now.getTime() - 86400000))
+  const tomorrow = day(new Date(now.getTime() + 86400000))
   const morning = now.getHours() < 12
-  return logs.some((l) => !!l.bedTime && (l.day === today || (morning && l.day === yesterday && toMin(l.bedTime) >= 18 * 60)))
+  // A bedtime sits on the row of the morning the night ends in (older rows: the evening's own day).
+  return logs.some((l) => !!l.bedTime && (morning ? l.day === today || (l.day === yesterday && toMin(l.bedTime) >= 18 * 60) : l.day === tomorrow || (l.day === today && toMin(l.bedTime) >= 18 * 60)))
 }
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))

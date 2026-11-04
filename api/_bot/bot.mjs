@@ -4078,7 +4078,8 @@ function toMinutes(hhmm) {
 /**
 * On-time check: wake up at or before target (with up to 15 min grace, consistent with Waky).
 */
-function isWakeOnTime(wakeTime, targetTime, graceMinutes = 15) {
+/** On time = within 20 minutes of the target (the same grace as Waky). */
+function isWakeOnTime(wakeTime, targetTime, graceMinutes = 20) {
 	return toMinutes(wakeTime) <= toMinutes(targetTime) + graceMinutes;
 }
 /** Bedtime check: in bed within 30 min of bedtime target. */
@@ -4093,8 +4094,10 @@ function targetForDay(day, weekdayTarget, weekendTarget) {
 	return dow === 0 || dow === 6 ? weekendTarget : weekdayTarget;
 }
 function computeSleepStats(logs, today, weekdayTarget = "07:00", weekendTarget = "08:30") {
-	const valid = logs.filter((l) => l.day <= today).sort((a, b) => b.day.localeCompare(a.day));
+	const valid = logs.filter((l) => l.day <= today && !!l.wakeTime).sort((a, b) => b.day.localeCompare(a.day));
 	const todayLog = valid.find((l) => l.day === today) ?? null;
+	const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 864e5).toISOString().slice(0, 10);
+	const tonight = logs.find((l) => l.day === tomorrow && !!l.bedTime) ?? null;
 	const onTimeDays = valid.filter((l) => l.onTime).map((l) => l.day);
 	const streak = dayStreak(onTimeDays, today);
 	const bestStreak = bestDayStreak(onTimeDays);
@@ -4112,6 +4115,7 @@ function computeSleepStats(logs, today, weekdayTarget = "07:00", weekendTarget =
 		}
 	}
 	return {
+		tonight,
 		today,
 		weekdayTarget,
 		weekendTarget,
@@ -4122,6 +4126,10 @@ function computeSleepStats(logs, today, weekdayTarget = "07:00", weekendTarget =
 		avgSleepMin: sleepCount > 0 ? Math.round(sleepMinsTotal / sleepCount) : null,
 		recentLogs: valid.slice(0, 14)
 	};
+}
+/** The morning a bedtime belongs to: tomorrow's row for an evening or a late night (12:00–04:00). */
+function bedNightDay(appToday, hour) {
+	return hour >= 12 || hour < 4 ? new Date(Date.parse(`${appToday}T12:00:00Z`) + 864e5).toISOString().slice(0, 10) : appToday;
 }
 // src/main/sleep.ts
 function toLog(r) {
@@ -4158,6 +4166,7 @@ var SleepService = class {
 		if (weekday) setSetting(this.db, "sleep_weekday_target", weekday);
 		if (weekend) setSetting(this.db, "sleep_weekend_target", weekend);
 		if (bedtime) setSetting(this.db, "sleep_bed_target", bedtime);
+		if (weekday) this.db.prepare("UPDATE rules SET title = ? WHERE id = 'sleep.up_on_time'").run(`Up by ${weekday}`);
 		return this.state();
 	}
 	logs() {
@@ -4165,7 +4174,10 @@ var SleepService = class {
 	}
 	state(now = /* @__PURE__ */ new Date()) {
 		const today = this.wallet.today(now);
-		return computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget());
+		return {
+			...computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget()),
+			bedTarget: this.bedtimeTarget()
+		};
 	}
 	/** How you slept (1–5) for a morning already logged (the bot's check-in buttons). */
 	setQuality(day, quality) {
@@ -4226,16 +4238,16 @@ var SleepService = class {
 		};
 	}
 	logBed(time, now = /* @__PURE__ */ new Date()) {
-		const today = this.wallet.today(now);
 		const hh = String(now.getHours()).padStart(2, "0");
 		const mm = String(now.getMinutes()).padStart(2, "0");
 		const bedTime = time || `${hh}:${mm}`;
 		const target = this.bedtimeTarget();
 		const onTime = isBedOnTime(bedTime, target);
+		const today = bedNightDay(this.wallet.today(now), now.getHours());
 		if (this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)) this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(bedTime, target, onTime ? 1 : 0, today);
 		else {
 			const wakeTarget = targetForDay(today, this.weekdayTarget(), this.weekendTarget());
-			this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)").run(today, "07:00", wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString());
+			this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)").run(today, "", wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString());
 		}
 		let awarded = false;
 		if (onTime) try {

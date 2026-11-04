@@ -246,6 +246,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
       setSummary(s)
       setWeekdayDraft(s.weekdayTarget)
       setWeekendDraft(s.weekendTarget)
+      if (s.bedTarget) setBedDraft(s.bedTarget)
     })
   }
 
@@ -303,7 +304,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
       <section className="stats four">
         <div className="stat hero teal">
           <span className="label">This morning</span>
-          <div className="big">{todayLog ? todayLog.wakeTime : '–'}</div>
+          <div className="big">{todayLog?.wakeTime || '–'}</div>
           <span className="sub">
             {todayLog ? (todayLog.onTime ? `On time (target ${todayLog.wakeTarget}) · +${pts('sleep.up_on_time', 10)} points` : `Late (target ${todayLog.wakeTarget})`) : 'Not logged yet today'}
           </span>
@@ -375,13 +376,13 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
             </h2>
             <span className="hint">In bed on time earns +{pts('sleep.bed_on_time', 5)} points</span>
           </header>
-          {todayLog?.bedTime ? (
+          {(summary.tonight ?? todayLog)?.bedTime ? (
             <div className="empty small-empty">
               <Icon name="check" size={28} />
               <p>
-                <b>In bed at {todayLog.bedTime}</b>
+                <b>In bed at {(summary.tonight ?? todayLog)!.bedTime}</b>
               </p>
-              <small className="muted">{todayLog.bedOnTime ? 'Bedtime on-time award received.' : 'Bedtime logged.'}</small>
+              <small className="muted">{(summary.tonight ?? todayLog)?.bedOnTime ? 'Bedtime on-time award received.' : 'Bedtime logged.'}</small>
             </div>
           ) : (
             <div className="log-form">

@@ -1,4 +1,4 @@
-import { computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, type SleepLog, type SleepSummary } from '@core/sleep'
+import { bedNightDay, computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, type SleepLog, type SleepSummary } from '@core/sleep'
 import { daysBetween } from '@core/dates'
 import { LedgerError } from '@core/ledger'
 import type { DB } from './db'
@@ -52,6 +52,8 @@ export class SleepService {
     if (weekday) setSetting(this.db, 'sleep_weekday_target', weekday)
     if (weekend) setSetting(this.db, 'sleep_weekend_target', weekend)
     if (bedtime) setSetting(this.db, 'sleep_bed_target', bedtime)
+    // The rule's name follows your target ("Up by 06:30", not a fixed 07:00).
+    if (weekday) this.db.prepare("UPDATE rules SET title = ? WHERE id = 'sleep.up_on_time'").run(`Up by ${weekday}`)
     return this.state()
   }
 
@@ -62,7 +64,7 @@ export class SleepService {
 
   state(now = new Date()): SleepSummary {
     const today = this.wallet.today(now)
-    return computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget())
+    return { ...computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget()), bedTarget: this.bedtimeTarget() }
   }
 
   /** How you slept (1–5) for a morning already logged (the bot's check-in buttons). */
@@ -153,12 +155,14 @@ export class SleepService {
     time?: string,
     now = new Date()
   ): { log: SleepLog; state: SleepSummary; awarded: boolean } {
-    const today = this.wallet.today(now)
     const hh = String(now.getHours()).padStart(2, '0')
     const mm = String(now.getMinutes()).padStart(2, '0')
     const bedTime = time || `${hh}:${mm}`
     const target = this.bedtimeTarget()
     const onTime = isBedOnTime(bedTime, target)
+    // A night belongs to the morning it ends in: bed at 23:30 (or 01:30) goes on
+    // tomorrow morning's row, next to that wake-up, so hours slept are right.
+    const today = bedNightDay(this.wallet.today(now), now.getHours())
 
     const existing = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(today) as SleepLogRow | undefined
 
@@ -172,7 +176,8 @@ export class SleepService {
         .prepare(
           'INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)'
         )
-        .run(today, '07:00', wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString())
+        // No wake-up yet: an empty wake time (never a made-up 07:00).
+        .run(today, '', wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString())
     }
 
     let awarded = false

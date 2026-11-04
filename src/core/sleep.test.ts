@@ -13,8 +13,8 @@ describe('sleep core', () => {
   it('evaluates wake on-time with grace window', () => {
     expect(isWakeOnTime('06:55', '07:00')).toBe(true)
     expect(isWakeOnTime('07:00', '07:00')).toBe(true)
-    expect(isWakeOnTime('07:15', '07:00')).toBe(true) // 15m grace
-    expect(isWakeOnTime('07:16', '07:00')).toBe(false)
+    expect(isWakeOnTime('07:20', '07:00')).toBe(true) // 20 min grace, like Waky
+    expect(isWakeOnTime('07:21', '07:00')).toBe(false)
     expect(isWakeOnTime('08:30', '07:00')).toBe(false)
   })
 
@@ -46,5 +46,14 @@ describe('sleep core', () => {
     expect(stats.todayLog).not.toBeNull()
     expect(stats.todayLog?.day).toBe('2026-10-27')
     expect(stats.avgSleepMin).toBeGreaterThan(400)
+  })
+})
+
+import { bedNightDay } from './sleep'
+describe('a night belongs to its morning', () => {
+  it('bed at 23:30 or 01:30 goes on the next morning; a nap at 10:00 stays today', () => {
+    expect(bedNightDay('2026-11-04', 23)).toBe('2026-11-05')
+    expect(bedNightDay('2026-11-04', 1)).toBe('2026-11-05')
+    expect(bedNightDay('2026-11-04', 10)).toBe('2026-11-04')
   })
 })

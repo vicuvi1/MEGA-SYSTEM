@@ -15,6 +15,10 @@ export interface SleepLog {
 }
 
 export interface SleepSummary {
+  /** Tonight's bedtime, once logged (it sits on tomorrow morning's row). */
+  tonight?: SleepLog | null
+  /** Your bedtime target. */
+  bedTarget?: string
   today: string
   weekdayTarget: string
   weekendTarget: string
@@ -42,7 +46,8 @@ export function fromMinutes(min: number): string {
 /**
  * On-time check: wake up at or before target (with up to 15 min grace, consistent with Waky).
  */
-export function isWakeOnTime(wakeTime: string, targetTime: string, graceMinutes = 15): boolean {
+/** On time = within 20 minutes of the target (the same grace as Waky). */
+export function isWakeOnTime(wakeTime: string, targetTime: string, graceMinutes = 20): boolean {
   const w = toMinutes(wakeTime)
   const t = toMinutes(targetTime)
   return w <= t + graceMinutes
@@ -69,8 +74,11 @@ export function computeSleepStats(
   weekdayTarget = '07:00',
   weekendTarget = '08:30'
 ): SleepSummary {
-  const valid = logs.filter((l) => l.day <= today).sort((a, b) => b.day.localeCompare(a.day))
+  // A row with only a bedtime (the night before a wake-up) isn't a morning yet.
+  const valid = logs.filter((l) => l.day <= today && !!l.wakeTime).sort((a, b) => b.day.localeCompare(a.day))
   const todayLog = valid.find((l) => l.day === today) ?? null
+  const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)
+  const tonight = logs.find((l) => l.day === tomorrow && !!l.bedTime) ?? null
   const onTimeDays = valid.filter((l) => l.onTime).map((l) => l.day)
 
   const streak = dayStreak(onTimeDays, today)
@@ -96,6 +104,7 @@ export function computeSleepStats(
   }
 
   return {
+    tonight,
     today,
     weekdayTarget,
     weekendTarget,
@@ -106,4 +115,9 @@ export function computeSleepStats(
     avgSleepMin: sleepCount > 0 ? Math.round(sleepMinsTotal / sleepCount) : null,
     recentLogs: valid.slice(0, 14)
   }
+}
+
+/** The morning a bedtime belongs to: tomorrow's row for an evening or a late night (12:00–04:00). */
+export function bedNightDay(appToday: string, hour: number): string {
+  return hour >= 12 || hour < 4 ? new Date(Date.parse(`${appToday}T12:00:00Z`) + 86400000).toISOString().slice(0, 10) : appToday
 }
