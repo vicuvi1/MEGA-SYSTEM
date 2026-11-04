@@ -67,12 +67,20 @@ jobs:
           echo "VERSION=$v" >> "$GITHUB_ENV"
           git log -1 --format=%s > notes.txt
       - run: npm run build:electron
-      # Create the release up front: electron-builder uploads its files in
-      # parallel and would otherwise race to create two releases.
+      # Create the release up front as a DRAFT: electron-builder uploads its
+      # files in parallel and would otherwise race to create two releases, and
+      # installed apps must never see a "latest" release without latest.yml.
       - shell: bash
-        run: gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.txt
+        run: gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --draft --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Everything is uploaded: now the apps may see it.
+      - shell: bash
+        run: |
+          gh release view "v$VERSION" --json assets -q '.assets[].name' | grep -qx latest.yml
+          gh release edit "v$VERSION" --draft=false --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

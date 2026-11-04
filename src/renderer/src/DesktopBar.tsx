@@ -97,7 +97,41 @@ export function DesktopBar() {
       <span className="dbar-brand">
         <i className="dbar-logo" />
         Life System
-        {update?.current && <small title={update.state === 'downloading' ? `Downloading ${update.latest} in the background (${update.progress}%)` : update.state === 'up-to-date' ? 'Up to date' : undefined}>{update.current}{update.state === 'downloading' ? ' · updating…' : ''}</small>}
+        {update?.current && (
+          <button
+            className={`dbar-ver ${update.state}`}
+            disabled={busy || update.state === 'checking' || update.state === 'installing' || update.state === 'dev'}
+            title={
+              update.state === 'error'
+                ? `Couldn't check for updates: ${update.error ?? 'unknown'}. Click to try again.`
+                : update.state === 'downloading'
+                  ? `Downloading ${update.latest} in the background`
+                  : update.state === 'ready'
+                    ? `${update.latest} is ready: restart to update`
+                    : `${update.checkedAt ? `Checked ${new Date(update.checkedAt).toLocaleTimeString()}. ` : ''}Click to check for updates`
+            }
+            onClick={() =>
+              void action(async () => {
+                const s = await desktop.checkUpdates()
+                setUpdate(s)
+                if (s.state === 'up-to-date') setMessage(`You have the newest version (${s.current})`)
+              })
+            }
+          >
+            {update.current}
+            {update.state === 'checking'
+              ? ' · checking…'
+              : update.state === 'downloading'
+                ? ` · downloading ${update.latest ?? ''} ${update.progress}%`
+                : update.state === 'available'
+                  ? ` · ${update.latest} found`
+                  : update.state === 'error'
+                    ? ' · update failed, retry'
+                    : update.state === 'up-to-date' || update.state === 'idle'
+                      ? ' · check for updates'
+                      : ''}
+          </button>
+        )}
       </span>
       <button className={`dbar-sync ${state}`} disabled={busy} onClick={() => window.dispatchEvent(new Event('life-desktop-retry'))} title={sync.error ?? (sync.syncedAt ? `Last synced ${new Date(sync.syncedAt).toLocaleTimeString()}. Click to sync now.` : 'Sync now')}>
         <i />

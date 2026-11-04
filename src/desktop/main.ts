@@ -202,11 +202,22 @@ else void app.whenReady().then(async () => {
   })
 
   await win.loadURL(origin + '/')
-  // Look for a new version shortly after start and every 4 hours; the top bar
-  // then shows "Update to …" (one tap installs it). Quiet when offline.
-  const look = () => { if (!['downloading', 'ready', 'installing'].includes(updater.get().state)) void updater.check().catch(() => {}) }
-  setTimeout(look, 20_000)
-  setInterval(look, 4 * 3600_000)
+  // Look for a new version shortly after start, every 30 minutes and when the
+  // window comes back to the front; a failed look is tried again in 3 minutes.
+  // A new version downloads quietly, then the top bar shows "Restart to update".
+  let retry: NodeJS.Timeout | null = null
+  const look = async () => {
+    if (['checking', 'downloading', 'ready', 'installing'].includes(updater.get().state)) return
+    const s = await updater.check().catch(() => updater.get())
+    if (retry) clearTimeout(retry)
+    retry = s.state === 'error' ? setTimeout(() => void look(), 3 * 60_000) : null
+  }
+  setTimeout(() => void look(), 20_000)
+  setInterval(() => void look(), 30 * 60_000)
+  win.on('focus', () => {
+    const at = updater.get().checkedAt
+    if (!at || Date.now() - Date.parse(at) > 10 * 60_000) void look()
+  })
 })
 // The tray keeps the app alive with no windows open.
 app.on('window-all-closed', () => {})
