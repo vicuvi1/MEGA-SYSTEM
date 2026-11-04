@@ -14,7 +14,8 @@ import { useTicker } from './useTicker'
 import { Skeleton } from './blocks'
 import { useSwipeRows } from './swipe'
 import { TodayTaskRow, withToday } from './TodayTaskRow'
-import { useTodayEvents } from './todayEvents'
+import { reloadToday, useTodayEvents } from './todayEvents'
+import { nextSlot } from '@core/benActs'
 import { blockSubject, isFocusBlock, localDay } from '@core/dayTime'
 import { focusCoins } from '@core/focus'
 import { activePlan } from '@core/weekPlan'
@@ -400,6 +401,25 @@ export function DayFlow(props: Props) {
     // Moved out of today, or a date Todoist worked out: reload to see where it went.
     if (!ok || patch.due) void loadTodo()
   }
+  /** 📅 Book: the task goes into your next free time today (calendar block + its time in Todoist). */
+  const bookTask = async (t: TodoTask) => {
+    const minutes = t.duration && t.duration >= 10 ? Math.min(t.duration, 240) : 30
+    const n = new Date()
+    const hm = `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`
+    const slot = nextSlot(calEvents, today, hm, minutes)
+    if (!slot) return toast(`No free ${minutes} min left today. Pick a day with the date chip.`, 'bad')
+    if (!life.google) return toast('Connect Google Calendar in Settings to book tasks', 'bad')
+    const at = (h: string) => new Date(`${today}T${h}:00`).toISOString()
+    setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, due: today, dueTime: slot.start, duration: minutes } : x)))
+    const ok = await act(async () => {
+      await life.google!.create({ title: t.content, start: at(slot.start), end: at(slot.end), description: 'Booked from Todoist with Life System' })
+      await life.todoist!.update!(t.id, { due: `${today} ${slot.start}`, duration: minutes })
+      return true
+    }, `Booked ${slot.start}–${slot.end}: ${t.content}`)
+    if (ok) soundSuccess()
+    void reloadToday()
+    void loadTodo()
+  }
   const moveTask = async (t: TodoTask, a: Area) => {
     setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, sectionId: a.kind === 'section' ? a.id : null, projectId: a.projectId, section: a.kind === 'section' ? a.name : null, project: a.kind === 'project' ? a.name : x.project } : x)))
     if (!(await act(() => life.todoist!.move!(t.id, a.key).then(() => true), `Moved to ${plainName(a.name) || a.name}`))) void loadTodo()
@@ -484,6 +504,7 @@ export function DayFlow(props: Props) {
       dropping={dropOn === t.id && dragId !== t.id}
       onDone={() => void (isStar ? doneStarred(t) : doneTodo(t))}
       onFocus={() => void startFocus(todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content }, t.duration ?? 50)}
+      onBook={t.dueTime ? undefined : () => void bookTask(t)}
       onStar={() => void (isStar ? unstar(t) : star(t))}
       onPatch={(patch, local, msg) => void patchTask(t, patch, local, msg)}
       onMove={(a) => void moveTask(t, a)}

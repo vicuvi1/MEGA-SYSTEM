@@ -204,3 +204,21 @@ describe('Todoist in Life System', () => {
     expect(r.done.join('\n')).toMatch(/Shifted 1 block by \+30 min/)
   })
 })
+
+describe('Todoist changes (incremental sync)', () => {
+  it('first call only gets a token; later calls count changed tasks', async () => {
+    const calls: string[] = []
+    const fake = (async (url: string, init: any) => {
+      calls.push(`${url} ${init.body}`)
+      const token = new URLSearchParams(init.body).get('sync_token')
+      const json = token === '*' ? { sync_token: 't1', full_sync: true, items: [{ id: 1 }, { id: 2 }] } : token === 't1' ? { sync_token: 't2', full_sync: false, items: [{ id: 3 }] } : { sync_token: 't2', full_sync: false, items: [] }
+      return new Response(JSON.stringify(json), { status: 200 })
+    }) as typeof fetch
+    const api = createTodoistApi('tok', fake)
+    expect(await api.changes('*')).toEqual({ token: 't1', changed: 0 })
+    expect(await api.changes('t1')).toEqual({ token: 't2', changed: 1 })
+    expect(await api.changes('t2')).toEqual({ token: 't2', changed: 0 })
+    expect(calls[0]).toContain('/api/v1/sync')
+    expect(calls[0]).toContain('resource_types=%5B%22items%22%5D')
+  })
+})

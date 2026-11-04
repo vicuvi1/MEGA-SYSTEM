@@ -336,6 +336,20 @@ export function createTursoWebBridge(): Bridge {
     void mirrorP.then((m) => m.onChange(() => tab?.postMessage('changed')))
     let todoAt = 0
     let tickAt = 0
+    let todoQuickAt = 0
+    // Todoist's sync token: null = not started, '' = Todoist off or failing (stop asking).
+    let todoToken: string | null = null
+    const todoistChanged = async (): Promise<boolean> => {
+      if (todoToken === '' || !(await todoistOnP)) return false
+      try {
+        const j = await todoistCall('changes', { token: todoToken ?? '*' })
+        const first = todoToken === null
+        todoToken = String(j.token || '') || null
+        return !first && Number(j.changed) > 0
+      } catch {
+        return false
+      }
+    }
     const loop = async () => {
       if (document.visibilityState === 'visible') {
         await check()
@@ -344,7 +358,17 @@ export function createTursoWebBridge(): Bridge {
           tickAt = Date.now()
           void fetch('/api/cron?job=tick').catch(() => null)
         }
-        // Todoist and Google Calendar changes made in their own apps: every 30 s.
+        // Todoist: a task added or done in Todoist itself shows up within
+        // seconds (a cheap "anything new?" every 5 s while you're here).
+        if (!direct && Date.now() - todoQuickAt > 5_000) {
+          todoQuickAt = Date.now()
+          void todoistChanged().then((changed) => {
+            if (!changed) return
+            window.dispatchEvent(new CustomEvent('life-external-changed'))
+            bridge.todoist?.sync().catch(() => 0)
+          })
+        }
+        // Google Calendar changes made in its own app (and a safety net for Todoist): every 30 s.
         if (Date.now() - todoAt > 30_000) {
           todoAt = Date.now()
           window.dispatchEvent(new CustomEvent('life-external-changed'))

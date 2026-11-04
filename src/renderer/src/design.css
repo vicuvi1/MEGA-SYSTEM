@@ -660,6 +660,9 @@
 .tt-chip:hover { color: var(--text); border-color: var(--border-strong); }
 .tt-chip.late { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
 .tt-chip.empty { opacity: 0; }
+.tt-book { display: inline-flex; align-items: center; gap: 4px; border: 1px solid color-mix(in srgb, var(--lime) 35%, transparent); background: transparent; color: var(--lime); font-size: var(--t-xs); border-radius: 999px; padding: 2px 8px; cursor: pointer; white-space: nowrap; opacity: 0; transition: opacity .15s; }
+.tt-row:hover .tt-book, .tt-book:focus-visible { opacity: 1; }
+@media (hover: none) { .tt-book { opacity: 1; } }
 .tt-row:hover .tt-chip.empty { opacity: 1; }
 .tt-chip.dur { cursor: default; }
 .tt-flag, .tt-more { border: 0; background: transparent; cursor: pointer; width: 24px; height: 24px; border-radius: 6px; font-size: 14px; }

@@ -131,6 +131,19 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
       return { tasks: list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs)), areas }
     },
     areas: async () => (await areaList()).areas,
+    /**
+     * Anything changed since `token`? Todoist's incremental sync answers with
+     * only the tasks that changed (usually none), so checking every few
+     * seconds is cheap. The first call ('*') just returns a token.
+     */
+    async changes(token: string): Promise<{ token: string; changed: number }> {
+      const j = await call(`${V1}/sync`, {
+        method: 'POST',
+        body: new URLSearchParams({ sync_token: token || '*', resource_types: '["items"]' }).toString(),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      })
+      return { token: String(j?.sync_token ?? ''), changed: j?.full_sync ? 0 : Array.isArray(j?.items) ? j.items.length : 0 }
+    },
     /** Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or note. */
     async update(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }): Promise<void> {
       const body: any = {}
