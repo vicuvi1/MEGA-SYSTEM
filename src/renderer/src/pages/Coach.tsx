@@ -133,6 +133,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   useEffect(() => {
     void load()
     life.coach?.model().then(setModel).catch(() => {})
+    const onBrain = () => void life.coach?.model().then(setModel).catch(() => {})
+    window.addEventListener('life-brain-changed', onBrain)
+    return () => window.removeEventListener('life-brain-changed', onBrain)
   }, [load])
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -254,9 +257,21 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               )}
             </span>
           </div>
-          <span className="cx-model" title="Quick answers on flash, hard ones on the strong model">
-            {model ? model.replace(/^.*\//, '').replace(/-\d{3,}$/, '') : 'coach'}
-          </span>
+          <button
+            className="cx-model"
+            title="Ben's brain: change the model and see what it costs"
+            onClick={() => {
+              try {
+                localStorage.setItem('ls.settingsTab', 'ben')
+              } catch {
+                /* fine */
+              }
+              window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'settings' }))
+              setTimeout(() => window.dispatchEvent(new CustomEvent('life-settings-tab', { detail: 'ben' })), 300)
+            }}
+          >
+            🧠 {model ? model.replace(/^.*\//, '').replace(/-\d{3,}$/, '') : 'coach'}
+          </button>
           <button className={`icon-btn ${query != null ? 'on' : ''}`} onClick={() => setQuery((q) => (q == null ? '' : null))} aria-label="Search the chat" title="Search the chat">
             <Icon name="search" />
           </button>

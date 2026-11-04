@@ -2,7 +2,7 @@
 //      {op:'status'}                     → {configured}
 // Google Gemini for the website, with the key kept on the server
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
-import { bearer, config, readBody, send, sessionOk } from './_lib.mjs'
+import { bearer, config, getSetting, readBody, send, sessionOk, setSetting, turso } from './_lib.mjs'
 
 const MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -29,6 +29,8 @@ export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
     }
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(`Gemini ${r.status}: ${j?.error?.message || 'request failed'}`)
+    const um = j?.usageMetadata ?? {}
+    await recordUsage({ model: `google/${model}`, kind: opts.media?.length ? 'media' : 'chat', prompt: um.promptTokenCount, completion: um.candidatesTokenCount, cost: null }, process.env, fetchImpl)
     const parts = j?.candidates?.[0]?.content?.parts ?? []
     const text = parts.filter((p) => !p.thought && typeof p.text === 'string').map((p) => p.text).join('')
     if (!text) throw new Error('Gemini gave an empty answer')
@@ -87,8 +89,55 @@ export async function strongModel(env = process.env, fetchImpl = fetch) {
   return resolvedStrong
 }
 
+// ---- Your choice of model (Settings → Ben → Brain), kept in the database ----
+export const MODELS_KEY = 'ai_models'
+let chosen = null
+let chosenAt = 0
+/** {chat, deep}: the models you picked (null = automatic). Cached 30 s. */
+export async function chosenModels(env = process.env, fetchImpl = fetch) {
+  if (chosen && Date.now() - chosenAt < 30_000) return chosen
+  const cfg = config(env)
+  let v = { chat: null, deep: null }
+  if (cfg.ok) {
+    try {
+      const raw = JSON.parse((await getSetting(cfg, MODELS_KEY, fetchImpl)) || 'null')
+      if (raw && typeof raw === 'object') v = { chat: raw.chat || null, deep: raw.deep || null }
+    } catch {
+      /* automatic */
+    }
+  }
+  chosen = v
+  chosenAt = Date.now()
+  return v
+}
+
+// ---- Usage: every call's tokens and real cost (OpenRouter reports it) ----
+const USAGE_TABLE = `CREATE TABLE IF NOT EXISTS ai_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, model TEXT NOT NULL, kind TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, cost REAL)`
+const t = (v) => (v == null ? { type: 'null' } : typeof v === 'number' ? (Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v }) : { type: 'text', value: String(v) })
+export async function recordUsage(u, env = process.env, fetchImpl = fetch) {
+  const cfg = config(env)
+  if (!cfg.ok) return
+  await turso(cfg, {
+    requests: [
+      { type: 'execute', stmt: { sql: USAGE_TABLE } },
+      { type: 'execute', stmt: { sql: 'INSERT INTO ai_usage (at, model, kind, prompt_tokens, completion_tokens, cost) VALUES (?, ?, ?, ?, ?, ?)', args: [t(new Date().toISOString()), t(u.model), t(u.kind ?? null), t(u.prompt ?? null), t(u.completion ?? null), t(u.cost ?? null)] } },
+      { type: 'close' }
+    ]
+  }, fetchImpl).catch(() => null)
+}
+
 /** Asks OpenRouter (text only). opts.json: answer as a JSON object; opts.strong: the strong model (flash if it fails). */
 export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, env = process.env) {
+  // Your pick wins: the chat model for everything, the deep one for plans and reviews.
+  const pick = opts.noPick ? { chat: null, deep: null } : await chosenModels(env, fetchImpl)
+  const mine = opts.strong ? pick.deep || pick.chat : pick.chat
+  if (mine) {
+    try {
+      return await callOpenRouter(key, mine, prompt, fetchImpl, { ...opts, think: !!opts.strong }, opts.strong ? 60_000 : 45_000, 'medium')
+    } catch (e) {
+      console.warn(`chosen model ${mine} failed, using automatic:`, e.message)
+    }
+  }
   if (opts.strong) {
     const strong = await strongModel(env, fetchImpl)
     const flash = await openRouterModel(env, fetchImpl)
@@ -110,14 +159,16 @@ async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effo
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-system-ten.vercel.app', 'X-Title': 'Life System' },
     // opts.think: big asks (plans, reviews, reshuffles) get the model's reasoning.
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
     signal: AbortSignal.timeout(timeout)
   })
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(`OpenRouter ${r.status}: ${j?.error?.message || 'request failed'}`)
   const text = j?.choices?.[0]?.message?.content
+  const u = j?.usage ?? {}
+  await recordUsage({ model: j?.model || model, kind: opts.kind || (opts.think ? 'deep' : 'chat'), prompt: u.prompt_tokens, completion: u.completion_tokens, cost: typeof u.cost === 'number' ? u.cost : null }, process.env, fetchImpl)
   if (!text) throw new Error('OpenRouter gave an empty answer')
-  return { text: String(text), model }
+  return { text: String(text), model: j?.model || model }
 }
 
 /**
@@ -151,8 +202,19 @@ export default async function handler(req, res) {
   const orKey = (process.env.OPENROUTER_API_KEY || '').trim()
   if (body?.op === 'status') {
     const strong = orKey ? await strongModel() : null
-    return send(res, 200, { configured: !!(key || orKey), model: orKey ? await openRouterModel() : key ? 'gemini' : null, strong })
+    const pick = await chosenModels()
+    return send(res, 200, { configured: !!(key || orKey), model: orKey ? pick.chat || (await openRouterModel()) : key ? 'gemini' : null, strong: pick.deep || pick.chat || strong, chosen: pick, auto: { chat: orKey ? await openRouterModel() : null, deep: strong } })
   }
+  if (body?.op === 'models') return send(res, 200, { models: await listModels() })
+  if (body?.op === 'setModels') {
+    const clean = (v) => (typeof v === 'string' && /^[\w.\-]+\/[\w.:\-]+$/.test(v) ? v : null)
+    const v = { chat: clean(body.chat), deep: clean(body.deep) }
+    await setSetting(config(), MODELS_KEY, JSON.stringify(v))
+    chosen = v
+    chosenAt = Date.now()
+    return send(res, 200, { ok: true, chosen: v })
+  }
+  if (body?.op === 'usage') return send(res, 200, await usageReport(orKey))
   if (!key && !orKey) return send(res, 503, { error: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use AI on the website' })
   const prompt = String(body?.prompt || '').slice(0, 60_000)
   if (!prompt.trim()) return send(res, 400, { error: 'Empty prompt' })
@@ -161,4 +223,64 @@ export default async function handler(req, res) {
   } catch (e) {
     send(res, 502, { error: e.message || 'Gemini failed' })
   }
+}
+
+/** OpenRouter's models with prices per 1M tokens (in USD), newest/popular first. */
+let modelsCache = null
+async function listModels(fetchImpl = fetch) {
+  if (modelsCache && Date.now() - modelsCache.at < 3600_000) return modelsCache.list
+  const r = await fetchImpl(`${OPENROUTER}/models`, { signal: AbortSignal.timeout(15_000) })
+  const data = (await r.json())?.data ?? []
+  const per1M = (x) => (x == null || x === '' || Number(x) < 0 ? null : Math.round(Number(x) * 1e6 * 1000) / 1000)
+  const list = data
+    .filter((m) => (m.architecture?.output_modalities ?? ['text']).includes('text'))
+    .map((m) => ({ id: m.id, name: m.name, in: per1M(m.pricing?.prompt), out: per1M(m.pricing?.completion), context: m.context_length ?? null, created: m.created ?? 0, tools: (m.supported_parameters ?? []).includes('tools'), reasoning: (m.supported_parameters ?? []).includes('reasoning') }))
+    .sort((a, b) => b.created - a.created)
+  modelsCache = { at: Date.now(), list }
+  return list
+}
+
+/** What the coach cost: today, 7 and 30 days, by model, the last calls, and OpenRouter's balance. */
+async function usageReport(orKey, fetchImpl = fetch) {
+  const cfg = config()
+  const out = { today: null, week: null, month: null, byModel: [], recent: [], credits: null }
+  if (cfg.ok) {
+    const day0 = new Date()
+    day0.setHours(0, 0, 0, 0)
+    const since = (d) => new Date(Date.now() - d * 86400_000).toISOString()
+    const q = (sql, args = []) => ({ type: 'execute', stmt: { sql, args: args.map((a) => ({ type: 'text', value: a })) } })
+    const sum = 'SELECT COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ?'
+    const { json } = await turso(cfg, {
+      requests: [
+        { type: 'execute', stmt: { sql: USAGE_TABLE } },
+        q(sum, [day0.toISOString()]),
+        q(sum, [since(7)]),
+        q(sum, [since(30)]),
+        q('SELECT model, COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0) + COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ? GROUP BY model ORDER BY 3 DESC, 2 DESC', [since(30)]),
+        q('SELECT at, model, kind, prompt_tokens, completion_tokens, cost FROM ai_usage ORDER BY id DESC LIMIT 25'),
+        { type: 'close' }
+      ]
+    }, fetchImpl).catch(() => ({ json: null }))
+    const rows = (i) => json?.results?.[i]?.response?.result?.rows ?? []
+    const v = (c) => (c == null || c.type === 'null' ? null : c.value)
+    const tot = (i) => {
+      const r = rows(i)[0]
+      return r ? { calls: Number(v(r[0])), cost: Number(v(r[1])), tokens: Number(v(r[2])) + Number(v(r[3])) } : null
+    }
+    out.today = tot(1)
+    out.week = tot(2)
+    out.month = tot(3)
+    out.byModel = rows(4).map((r) => ({ model: v(r[0]), calls: Number(v(r[1])), cost: Number(v(r[2])), tokens: Number(v(r[3])) }))
+    out.recent = rows(5).map((r) => ({ at: v(r[0]), model: v(r[1]), kind: v(r[2]), prompt: v(r[3]) == null ? null : Number(v(r[3])), completion: v(r[4]) == null ? null : Number(v(r[4])), cost: v(r[5]) == null ? null : Number(v(r[5])) }))
+  }
+  if (orKey) {
+    try {
+      const r = await fetchImpl(`${OPENROUTER}/credits`, { headers: { Authorization: `Bearer ${orKey}` }, signal: AbortSignal.timeout(8000) })
+      const d = (await r.json())?.data
+      if (d) out.credits = { total: Number(d.total_credits), used: Number(d.total_usage), left: Number(d.total_credits) - Number(d.total_usage) }
+    } catch {
+      /* no balance shown */
+    }
+  }
+  return out
 }

@@ -29,6 +29,7 @@ import { NotifSettings } from '../NotifSettings'
 import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
+import { BrainPanel } from '../BrainPanel'
 import { timeAgo, useAction } from '../ui'
 import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundSystemOracle, soundWarning } from '../sound'
 
@@ -842,10 +843,11 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       id: 'ben',
       label: 'Ben',
       icon: 'spark',
-      hint: 'Your coach: tone, length, daily rhythm',
-      keywords: 'coach ai tone style length nudges rhythm model angry',
+      hint: 'Your coach: his brain (model & cost), tone, rhythm',
+      keywords: 'coach ai tone style length nudges rhythm model angry brain openrouter price cost usage claude gpt',
       body: (
         <>
+          {!features.aiSettings && <BrainPanel />}
           {onGo && (
             <section className="panel">
               <header className="panel-head">

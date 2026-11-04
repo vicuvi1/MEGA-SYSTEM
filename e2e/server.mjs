@@ -141,6 +141,26 @@ const todo = (() => {
   }
 })()
 
+// Fake /api/ai: Ben's brain settings (model list with prices, usage), no real AI.
+let aiChosen = { chat: null, deep: null }
+const fakeAi = (q, r) => {
+  const send = (j) => (r.setHeader('Content-Type', 'application/json'), r.end(JSON.stringify(j)))
+  const b = q.body || {}
+  if (b.op === 'status') return send({ configured: true, model: aiChosen.chat || 'deepseek/deepseek-v4.1-flash', chosen: aiChosen, auto: { chat: 'deepseek/deepseek-v4.1-flash', deep: 'deepseek/deepseek-v4-pro' } })
+  if (b.op === 'models')
+    return send({ models: [
+      { id: 'anthropic/claude-sonnet-5.5', name: 'Anthropic: Claude Sonnet 5.5', in: 3, out: 15, context: 1000000, tools: true, reasoning: true },
+      { id: 'openai/gpt-6-mini', name: 'OpenAI: GPT-6 mini', in: 0.4, out: 1.6, context: 400000, tools: true, reasoning: true },
+      { id: 'deepseek/deepseek-v4.1-flash', name: 'DeepSeek: V4.1 Flash', in: 0.1, out: 0.4, context: 128000, tools: true, reasoning: false },
+      { id: 'meta/llama-free', name: 'Meta: Llama (free)', in: 0, out: 0, context: 64000, tools: false, reasoning: false }
+    ] })
+  if (b.op === 'setModels') return ((aiChosen = { chat: b.chat || null, deep: b.deep || null }), send({ ok: true, chosen: aiChosen }))
+  if (b.op === 'usage')
+    return send({ today: { calls: 14, cost: 0.083, tokens: 112000 }, week: { calls: 96, cost: 0.61, tokens: 790000 }, month: { calls: 380, cost: 2.4, tokens: 3100000 }, byModel: [{ model: 'deepseek/deepseek-v4.1-flash', calls: 340, cost: 0.9, tokens: 2800000 }, { model: 'anthropic/claude-sonnet-5.5', calls: 40, cost: 1.5, tokens: 300000 }], recent: [{ at: new Date().toISOString(), model: 'anthropic/claude-sonnet-5.5', kind: 'chat', prompt: 8200, completion: 420, cost: 0.031 }], credits: { total: 20, used: 7.5, left: 12.5 } })
+  r.statusCode = 503
+  return send({ error: 'No AI in the e2e server' })
+}
+
 const dist = join(repo, 'dist')
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }
 http
@@ -154,6 +174,7 @@ http
         q.body = body ? JSON.parse(body) : {}
         if (n === 'google') return gcal(q, r)
         if (n === 'todoist') return todo(q, r)
+        if (n === 'ai') return fakeAi(q, r)
         return api[n] ? api[n](q, r) : ((r.statusCode = 404), r.end('{}'))
       }
       if (url.pathname === '/v2/pipeline') {
