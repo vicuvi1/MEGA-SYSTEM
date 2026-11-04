@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, session, shell, Tray } from 'electron'
+import { clipWorthSaving } from '../core/islandActions'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
@@ -25,6 +26,16 @@ if (!firstCopy) app.quit()
 if (process.platform === 'win32') app.setAppUserModelId('com.vicuvi1.lifesystem')
 // Keep this on its own line (never behind an if/else): it starts the whole app.
 if (firstCopy) void app.whenReady().then(async () => {
+  // Camera, microphone, location…: only the app itself may ask for the
+  // microphone (voice notes) and notifications; everything else is refused,
+  // and the embedded apps get nothing.
+  const own = (url: string) => url.startsWith('life-system://app/') && !url.startsWith('life-system://app/apps/')
+  session.defaultSession.setPermissionRequestHandler((wc, permission, done, details) => {
+    const url = details.requestingUrl || wc.getURL()
+    const media = permission === 'media' && (details as any).mediaTypes?.every((m: string) => m === 'audio')
+    done(own(url) && (media || permission === 'notifications' || permission === 'clipboard-sanitized-write'))
+  })
+  session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) => (permission === 'media' || permission === 'notifications' || permission === 'clipboard-sanitized-write') && origin.startsWith('life-system://app'))
   const dir = app.getPath('userData')
   await mkdir(dir, { recursive: true })
   const file = join(dir, 'life-local.sqlite')
@@ -248,8 +259,9 @@ if (firstCopy) void app.whenReady().then(async () => {
     setInterval(tick, 60_000)
     // Seconds since the last mouse/keys, for the island (drift, focus quality).
     setInterval(() => win.webContents.send('desktop:idle', powerMonitor.getSystemIdleTime()), 15_000)
-    // Copied text, for the island's "save this?" (it only offers dated things;
-    // nothing leaves this PC, nothing is kept).
+    // Copied text, for the island's "save this?". The check happens HERE, in
+    // the main process: only short dated text ("exam friday 10:00") ever
+    // reaches a page; passwords, codes, keys, links and long text never do.
     let lastClip = ''
     const readClip = async (): Promise<string> => { try { return String(await clipboard.readText()) } catch { return '' } }
     lastClip = await readClip()
@@ -257,7 +269,8 @@ if (firstCopy) void app.whenReady().then(async () => {
       const t = await readClip()
       if (!t || t === lastClip) return
       lastClip = t
-      if (t.length <= 200) win.webContents.send('desktop:clip', t)
+      const safe = clipWorthSaving(t)
+      if (safe) win.webContents.send('desktop:clip', safe)
     }, 1500)
     const leaving = () => {
       lastActive = Date.now() - powerMonitor.getSystemIdleTime() * 1000
