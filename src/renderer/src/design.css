@@ -1281,3 +1281,10 @@
 .hp-errors li { grid-template-columns: 120px 70px 1fr !important; }
 .hp-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 620px) { .hp-list li { grid-template-columns: 10px 1fr; } .hp-list li span { grid-column: 2; } }
+
+/* 🎯 focused: Ben is helping you move (a slipping day below tone 5), calm, never red. */
+.th.mood-focused::before { background: radial-gradient(700px 260px at 0% 0%, color-mix(in srgb, var(--lime) 10%, transparent), transparent 60%); }
+.th-face.mood-focused, .cx-face.mood-focused { box-shadow: 0 0 0 2px color-mix(in srgb, var(--lime) 55%, transparent); }
+.co-avatar.mood-focused { background: color-mix(in srgb, var(--lime) 14%, transparent); }
+.cx-dot.mood-focused { background: var(--lime); }
+.bb-bubble.mood-focused { box-shadow: 0 14px 40px rgb(0 0 0 / 0.5), 0 0 0 2px color-mix(in srgb, var(--lime) 55%, transparent); }

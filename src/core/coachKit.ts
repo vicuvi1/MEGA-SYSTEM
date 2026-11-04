@@ -202,11 +202,19 @@ export function promiseLine(s: PromiseStats): string {
   return `Promises in the last 7 days: ${s.kept} kept, ${s.broken} broken, ${s.ignored} ignored${s.misses.length ? `. Missed: ${s.misses.map((m) => `"${m.slice(0, 60)}"`).join(', ')}` : ''}.`
 }
 
-/** The follow-up gets sharper each time, and names the pattern when there is one. */
-export function followUpText(r: Reminder, s: PromiseStats): string {
+/**
+ * Asking again about something you said you'd do. Below tone 5 it gets more
+ * helpful each time (smaller step, move it); at tone 5 it gets sharper.
+ */
+export function followUpText(r: Reminder, s: PromiseStats, tone = 4): string {
   const tries = r.tries ?? 0
   const misses = s.broken + s.ignored
   if (tries === 0) return `🔔 ${r.text}`
+  if (tone < 5) {
+    if (tries === 1) return `🔔 ${r.text}\n<i>Still on? "Done", "not yet" or "later" all work.</i>`
+    if (tries === 2) return `🎯 ${r.text}\nToo big right now? Tell me what's in the way and I'll make it smaller or move it.`
+    return `🎯 Last check on: ${r.text}\nIf it's not happening today, just say so and I'll move it to tomorrow.`
+  }
   if (tries === 1) return `😤 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`
   if (tries === 2) return `😠 ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? '' : 's'} missed this week already.` : ''} Answer me.`
   return `😡 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ''}You said you'd do it. Do it now, or tell me why not.`
@@ -214,8 +222,9 @@ export function followUpText(r: Reminder, s: PromiseStats): string {
 
 // ---- The coach's mood: how it feels about your day, from the data --------
 
-export type Mood = 'proud' | 'happy' | 'chill' | 'annoyed' | 'angry' | 'furious'
-export const MOOD_FACE: Record<Mood, string> = { proud: '😎', happy: '😄', chill: '🙂', annoyed: '😤', angry: '😠', furious: '😡' }
+export type Mood = 'proud' | 'happy' | 'chill' | 'focused' | 'annoyed' | 'angry' | 'furious'
+/** 🎯 focused: a slipping day below tone 5 (Ben helps instead of glaring). */
+export const MOOD_FACE: Record<Mood, string> = { proud: '😎', happy: '😄', chill: '🙂', focused: '🎯', annoyed: '😤', angry: '😠', furious: '😡' }
 export const isMood = (m: unknown): m is Mood => typeof m === 'string' && m in MOOD_FACE
 
 export interface MoodFacts {

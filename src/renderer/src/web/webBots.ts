@@ -28,6 +28,7 @@ import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
 import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTime'
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
+import { shownMood } from '@core/benActs'
 import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
@@ -889,6 +890,30 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
       return text
     }
+    // ✕ Drop it, under a block Ben moved: off the calendar for today.
+    if (data.startsWith('bd|')) {
+      if (!(await markSeen(key))) return null
+      const idx = Number(data.slice(3))
+      const id = await mirror.read((db) => {
+        try {
+          return (JSON.parse(getSetting(db as any, 'coach_rhythm') || 'null')?.moved ?? [])[idx] as string | undefined
+        } catch {
+          return undefined
+        }
+      })
+      let ok = false
+      if (id && calendar?.remove) {
+        const day = new Date()
+        const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString()
+        const ev = (await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [])).find((e) => e.id === id)
+        if (ev) ok = await calendar.remove(ev.calendarId, ev.id).then(() => true).catch(() => false)
+      }
+      const text = ok ? '✕ Dropped for today. Your calendar is up to date.' : 'Could not find that block anymore; it may already be gone.'
+      await answer(ok ? 'Dropped' : 'Not found')
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
+      return text
+    }
     // How you slept (1–5), under the wake-up message.
     if (data.startsWith('sq|')) {
       const [, day, n] = data.split('|')
@@ -1155,6 +1180,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           const sr = loadSelfReview(db)
           return {
             style: styleText(loadStyle(db)),
+            tone: loadStyle(db).tone,
             feedback: feedbackText(loadFeedback(db)),
             selfReview: sr && sr.day >= addDays(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join('\n') : ''
           }
@@ -1211,7 +1237,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
     const ask = (found?: string, extraNote = '') =>
-      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${feel.mood} ${MOOD_FACE[feel.mood]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, feedback: talk.feedback, selfReview: talk.selfReview }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1256,7 +1282,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     for (const s of out.steps ?? []) step(s)
     // Its mood: the model's call, else the data's; the reply starts with its face.
-    const mood: Mood = isMood(out.mood) ? out.mood : feel.mood
+    // Below tone 5 a slipping day shows as 🎯 (focused), never an angry face.
+    const mood: Mood = shownMood(isMood(out.mood) ? out.mood : feel.mood, talk.tone)
+    if (out.reply && talk.tone < 5) out.reply = out.reply.replace(/^\s*[😤😠😡🤬]+\s*/u, '')
     if (out.reply && !/^\p{Extended_Pictographic}/u.test(out.reply)) out.reply = `${MOOD_FACE[mood]} ${out.reply}`
     const refs = made.refs
     const done: string[] = []

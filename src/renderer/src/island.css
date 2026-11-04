@@ -12,6 +12,7 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 }
 .di.mood-proud, .di.mood-happy { --glow: rgb(212 255 63 / 0.38); }
 .di.mood-chill { --glow: rgb(140 200 255 / 0.28); }
+.di.mood-focused { --glow: rgb(200 240 80 / 0.3); }
 .di.mood-annoyed { --glow: rgb(255 170 60 / 0.38); }
 .di.mood-angry, .di.mood-furious, .di.is-over { --glow: rgb(255 90 95 / 0.5); }
 

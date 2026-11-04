@@ -102,7 +102,15 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
             {name ? `, ${name}` : ''}
           </h2>
           <p>
-            <b>Ben</b> is {st.mood}: {st.why}.
+            {st.mood === 'focused' ? (
+              <>
+                <b>Ben</b>: {st.why}
+              </>
+            ) : (
+              <>
+                <b>Ben</b> is {st.mood}: {st.why}.
+              </>
+            )}
           </p>
         </div>
       </div>

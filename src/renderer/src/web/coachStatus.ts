@@ -6,6 +6,8 @@ import { planGoal } from '@core/goalPlan'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
 import { sharedView, sportToday } from '@core/sportShared'
 import { getSetting } from '../../../main/settings'
+import { helpLine, shownMood } from '@core/benActs'
+import { loadStyle } from './botBrain'
 import { addDays } from '@core/dates'
 import type { Services } from './webServices'
 
@@ -72,10 +74,12 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
     },
     now.getTime()
   )
+  // Below tone 5 a slipping day shows as 🎯 with a helpful line, not "Ben is angry".
+  const mood = shownMood(feel.mood, loadStyle(db).tone)
   return {
-    mood: feel.mood,
-    face: MOOD_FACE[feel.mood],
-    why: feel.why,
+    mood,
+    face: MOOD_FACE[mood],
+    why: mood === 'focused' ? helpLine(feel.why) : feel.why,
     move,
     plan: { status: planStatus, blocks: rh.briefing?.plan.blocks.length ?? 0, mustdos: rh.briefing?.plan.mustdos.length ?? 0, headline: rh.briefing?.plan.headline ?? '', score: rh.evening?.score },
     promises: { awaiting, kept: ps.kept, missed: ps.broken + ps.ignored },

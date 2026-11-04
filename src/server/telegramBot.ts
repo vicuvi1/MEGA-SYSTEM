@@ -33,10 +33,12 @@ import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, MOOD_FACE, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
 import { blockSubject, isFocusBlock } from '@core/dayTime'
+import { autoApproveDue, autoApprovedText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
+import { loadStyle } from '../renderer/src/web/botBrain'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
-import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText } from '@core/rhythm'
+import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState } from '@core/rhythm'
 
 export { createTodoistApi }
 export { GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, localIso } from './googleCalendar'
@@ -400,6 +402,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   ]
 
   const today0 = await mirror.read((db) => services.services(db).wallet.today(now))
+  const tone = await mirror.read((db) => loadStyle(db).tone)
   // 1) Reminders and check-ins that are due.
   const reminders = await mirror.read((db) => {
     try {
@@ -412,7 +415,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
   for (const r of dueReminders(list, now)) {
     try {
       // Check-ins get sharper each time and name the week's missed promises.
-      await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now)) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined)
+      await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined)
       list = afterSend(list, r.id, now)
       // Never answered after every follow-up: an ignored promise (the scorecard counts it).
       if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, 'ignored').catch(() => null)
@@ -453,7 +456,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     const lastLedger = svc.wallet.entries().filter((e: any) => e.day === today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
     const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
     const last = Math.max(0, ...lastLedger, ...lastFocus)
-    return { nudge, today, focus: f, idleMin: last ? (now.getTime() - last) / 60000 : Infinity }
+    return { nudge, today, focus: f, idleMin: last ? (now.getTime() - last) / 60000 : Infinity, tone: loadStyle(db).tone }
   })
   let nudge: NudgeState = st.nudge.day === st.today ? st.nudge : { ...st.nudge, day: st.today, count: 0, announced: [] }
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -483,12 +486,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
     const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
     const first = openMustDos[0]?.text
     const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'
-    const text =
-      n === 1
-        ? `😤 Nothing done for ${idle}. ${first ? `Your must-do: <b>${esc(first)}</b>.` : `Focus today: ${st.focus.todayMin} min.`} 25 minutes, starting now.`
-        : n <= 3
-          ? `😠 Still waiting. ${first ? `<b>${esc(first)}</b> won't do itself.` : 'One focus block.'} Just start the timer, the rest follows.`
-          : `😡 Nudge ${n}: you said you want this. ${first ? `<b>${esc(first)}</b>,` : 'One block,'} 25 min. Tap and go.`
+    const text = nudgeText(n, idle, first, st.focus.todayMin, st.tone)
     const subject = (first ?? 'Focus').split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
     try {
       await send(text, { inline_keyboard: [[{ text: `▶ 50 min: ${subject}`, callback_data: `fo|${subject}` }], pauseRow] })
@@ -565,6 +563,41 @@ async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: 
   }
 }
 
+/**
+ * Ben acts instead of judging: a plan still waiting at 10:00 gets approved
+ * (blocks into the calendar), and a planned block you missed moves into
+ * your next free time, once, with Start / Drop buttons.
+ */
+async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unknown) => Promise<void>, state: RhythmState, on: boolean, time: string): Promise<void> {
+  if (!on) return
+  const { bots, mirror, calendar, services } = await botsFor(env)
+  const mark = (patch: Partial<RhythmState>) =>
+    mirror.write((db) => {
+      const cur = rhythmFor(JSON.parse(getSetting(db as any, RHYTHM) || 'null'), state.day)
+      setSetting(db as any, RHYTHM, JSON.stringify({ ...cur, ...patch, moved: [...new Set([...(cur.moved ?? []), ...(patch.moved ?? [])])] }))
+    })
+  if (autoApproveDue(state.briefing?.status, time, !!state.autoApproved)) {
+    await mark({ autoApproved: true })
+    const r = await bots.rhythm.approve()
+    if (r.ok && r.plan) await send(`${autoApprovedText(r.plan.headline)}\n${r.done.map(escapeHtml).join('\n')}`, { inline_keyboard: [[{ text: '✏️ Change', callback_data: 'rb|e' }, { text: '🔄 New plan', callback_data: 'rb|r' }]] })
+  }
+  if (!calendar?.move) return
+  const day = state.day
+  const events = await calendar.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => null)
+  if (!events) return
+  const focus = await mirror.read((db) => services.services(db).focus.state(now))
+  if (focus.running) return
+  const sessions = focus.todaySessions
+  for (const m of missedBlocks(events, sessions, now, state.moved ?? []).slice(0, 1)) {
+    await mark({ moved: [m.event.id] })
+    const slot = nextSlot(events.filter((e) => e.id !== m.event.id), day, time, m.minutes)
+    if (slot) await calendar.move(m.event.calendarId, m.event.id, new Date(`${day}T${slot.start}:00`).toISOString(), new Date(`${day}T${slot.end}:00`).toISOString()).catch(() => null)
+    const subject = blockSubject(m.event.title).slice(0, 28)
+    const idx = (state.moved ?? []).length
+    await send(movedText(m.event.title, slot), { inline_keyboard: [[{ text: `▶ Start now: ${subject}`, callback_data: `fo|${subject}` }, { text: '✕ Drop it', callback_data: `bd|${idx}` }]] })
+  }
+}
+
 async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown) => Promise<void>): Promise<void> {
   const { bots, services, mirror } = await botsFor(env)
   const f = await mirror.read((db) => {
@@ -590,6 +623,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     return {
       prefs,
       state,
+      tone: loadStyle(db).tone,
       facts: {
         today,
         time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
@@ -643,6 +677,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       await send(risk.text)
     }
   }
+  await benActs(env, now, send, f.state, f.prefs.on, f.facts.time).catch((e) => console.error('ben acts:', e))
   const jobs = dueRhythm(f.state, f.prefs, f.facts)
   for (const job of jobs) {
     if (job === 'briefing') {
@@ -672,7 +707,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
         return payOnce(svc.wallet, `weekfocus:${plan.week}`, WEEK_FOCUS_POINTS, `Week focus reached: ${m.label}`) ? `\n\n🏆 Week focus reached: <b>${m.label}</b> (${m.text}). +${WEEK_FOCUS_POINTS} points.` : ''
       })
       const goalText = r.goals.length ? `\n\n🎯 <b>Goals</b>\n${r.goals.map((g) => escapeHtml(g)).join('\n')}${r.rebooked.length ? `\n${r.rebooked.map((x) => escapeHtml(x)).join('\n')}` : ''}` : ''
-      await send(reviewText(r.result, r.score, r.lesson, r.top3) + goalText + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
+      await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
     }
   }
 }

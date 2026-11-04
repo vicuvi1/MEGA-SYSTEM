@@ -88,9 +88,9 @@ describe('promises', () => {
     const s = k.promiseStats(list, new Date(t0.getTime() + 3600_000))
     expect(s).toMatchObject({ kept: 0, broken: 1, ignored: 1 })
     expect(k.promiseLine(s)).toContain('1 broken, 1 ignored')
-    expect(k.followUpText({ ...a, tries: 3 }, s)).toContain('miss #3')
+    expect(k.followUpText({ ...a, tries: 3 }, s, 5)).toContain('miss #3')
     expect(k.followUpText({ ...a, tries: 0 }, s)).toBe('🔔 Start the CV')
-    expect(k.followUpText({ ...a, tries: 3 }, s).startsWith('😡')).toBe(true)
+    expect(k.followUpText({ ...a, tries: 3 }, s, 5).startsWith('😡')).toBe(true)
   })
 })
 

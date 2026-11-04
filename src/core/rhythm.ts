@@ -24,6 +24,10 @@ export interface DayProposal {
 
 export interface RhythmState {
   day: string
+  /** Ben approved the plan himself (it waited past 10:00). */
+  autoApproved?: boolean
+  /** Calendar blocks Ben already moved or asked about today (event ids). */
+  moved?: string[]
   briefing?: { status: 'proposed' | 'approved'; sentAt: string; plan: DayProposal; version: number }
   evening?: { sentAt: string; score: number; top3: string[]; lesson?: string }
   water: string[]
@@ -267,9 +271,9 @@ export function weakest(r: DayResult): string {
   return parts[0].k >= 1 ? 'Everything done. Keep the same rhythm tomorrow.' : parts[0].t
 }
 
-export function reviewText(r: DayResult, score: number, lesson: string, top3: string[]): string {
+export function reviewText(r: DayResult, score: number, lesson: string, top3: string[], tone = 4): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const mark = score >= 80 ? '😎🔥' : score >= 55 ? '🙂' : score >= 35 ? '😤' : '😠'
+  const mark = score >= 80 ? '😎🔥' : score >= 55 ? '🙂' : tone < 5 ? '🎯' : score >= 35 ? '😤' : '😠'
   return [
     `🌙 <b>Day review: ${score}/100</b> ${mark}`,
     '',
