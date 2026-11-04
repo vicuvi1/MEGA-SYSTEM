@@ -298,27 +298,10 @@ export function setupFinance(appsDir: string, onShow: () => void): FinanceHost {
         }
       }
 
-      if (!state || typeof state !== 'object') {
-        state = {
-          v: 1,
-          meta: { createdAt: Date.now() },
-          settings: {
-            currency: 'MDL',
-            accounts: [{ id: 'acc-cash', name: 'Cash Wallet', kind: 'cash', currency: 'MDL', start: 0, color: '#38bdf8' }],
-            categories: [
-              { id: 'food', name: 'Food & Dining', emoji: '🍔' },
-              { id: 'transit', name: 'Transit & Taxi', emoji: '🚕' },
-              { id: 'home', name: 'Home & Rent', emoji: '🏠' },
-              { id: 'sport', name: 'Sport & Gym', emoji: '⚡' },
-              { id: 'health', name: 'Health & Pharmacy', emoji: '💊' },
-              { id: 'clothes', name: 'Clothes & Shopping', emoji: '👕' },
-              { id: 'fun', name: 'Fun & Entertainment', emoji: '🎉' },
-              { id: 'other', name: 'Other', emoji: '📦' },
-              { id: 'other-in', name: 'Income', emoji: '💰' }
-            ]
-          },
-          tx: []
-        }
+      // No readable data (locked with Finance Helper's PIN, or not loaded): never
+      // build a fresh state over it (that would overwrite your real file on sync).
+      if (!state || typeof state !== 'object' || state.sealed || state._sealed) {
+        return { ok: false, error: 'Finance Helper is locked or not loaded: the expense stays in Life System and reaches Finance Helper through the inbox' }
       }
 
       if (!Array.isArray(state.tx)) state.tx = []

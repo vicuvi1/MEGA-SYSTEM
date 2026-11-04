@@ -2035,6 +2035,23 @@ function getSetting(db, key) {
 function setSetting(db, key, value) {
 	db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
 }
+// src/renderer/src/web/financeInbox.ts
+var SETTING$1 = "finance_inbox_json";
+var KEEP_DAYS = 60;
+var parse = (raw, fallback) => {
+	try {
+		return raw ? JSON.parse(raw) : fallback;
+	} catch {
+		return fallback;
+	}
+};
+/** Adds an expense to the inbox (call inside the bot's change). */
+function queueFinanceExpense(db, entry) {
+	const cutoff = entry.at - KEEP_DAYS * 864e5;
+	const list = parse(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff && e.id !== entry.id);
+	list.push(entry);
+	setSetting(db, SETTING$1, JSON.stringify(list));
+}
 // src/main/body.ts
 var REST_DAYS = "sport_rest_days";
 var Body = class {
@@ -2758,6 +2775,14 @@ var MoneyService = class {
 			this.wallet.award("money.logged", `Logged expense: ${category}`, now);
 			awarded = true;
 		} catch {}
+		if (!skipFinanceSync && !this.financeHost && this.toFinance) this.toFinance({
+			id: `life-exp-${row.id}`,
+			amount: roundedBani,
+			category: category.trim(),
+			note: note?.trim() || category.trim(),
+			date: today,
+			at: now.getTime()
+		});
 		if (!skipFinanceSync && this.financeHost) this.financeHost.addTransaction({
 			type: "expense",
 			amount: roundedBani,
@@ -2774,8 +2799,19 @@ var MoneyService = class {
 	}
 	deleteExpense(id) {
 		this.db.prepare("DELETE FROM expenses WHERE id = ?").run(id);
+		this.toFinance?.({
+			id: `life-exp-${id}`,
+			amount: 0,
+			category: "",
+			note: "",
+			date: this.wallet.today(),
+			at: Date.now(),
+			remove: true
+		});
 		return this.state();
 	}
+	/** Where expenses go when Finance Helper isn't on this machine (the web app's inbox). */
+	toFinance;
 };
 function weekdayIndex(day) {
 	const [y, m, d] = day.split("-").map(Number);
@@ -6791,6 +6827,7 @@ function servicesFor(db) {
 	const shields = new ShieldService(d, wallet);
 	const discipline = new Discipline(d, wallet);
 	const money = new MoneyService(d, wallet);
+	money.toFinance = (e) => queueFinanceExpense(d, e);
 	const body = new Body(d, wallet);
 	return {
 		db: d,
@@ -7578,23 +7615,6 @@ function formatUrgeResponse() {
 		``,
 		`<i>A few seconds of temporary comfort is not worth your self-respect and progress. You are stronger than any momentary impulse. STAND FAST!</i>`
 	].join("\n");
-}
-// src/renderer/src/web/financeInbox.ts
-var SETTING$1 = "finance_inbox_json";
-var KEEP_DAYS = 60;
-var parse = (raw, fallback) => {
-	try {
-		return raw ? JSON.parse(raw) : fallback;
-	} catch {
-		return fallback;
-	}
-};
-/** Adds an expense to the inbox (call inside the bot's change). */
-function queueFinanceExpense(db, entry) {
-	const cutoff = entry.at - KEEP_DAYS * 864e5;
-	const list = parse(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff && e.id !== entry.id);
-	list.push(entry);
-	setSetting(db, SETTING$1, JSON.stringify(list));
 }
 // src/renderer/public/apps/finance/js/money.js
 var LETTERS$1 = /[^\d.,+\-*/()x×÷]/gi;

@@ -1,6 +1,7 @@
 // The desktop services (src/main/*.ts) running on the web app's copy of the
 // Turso database. Same rules as the desktop: daily caps, cooldowns, undo,
 // quests, the shop, streaks. Each change is saved to Turso before it shows.
+import { queueFinanceExpense } from './financeInbox'
 import type { Exercise } from '@core/body'
 import type { Rule } from '@core/rules'
 import type {
@@ -41,6 +42,8 @@ function servicesFor(db: BrowserDb) {
   const shields = new ShieldService(d, wallet)
   const discipline = new Discipline(d, wallet)
   const money = new MoneyService(d, wallet)
+  // Expenses logged here reach Finance Helper through the synced inbox (deletes too).
+  money.toFinance = (e) => queueFinanceExpense(d as any, e)
   const body = new Body(d, wallet)
   const shop = new Shop(d, wallet)
   return {

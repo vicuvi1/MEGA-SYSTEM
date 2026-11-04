@@ -109,6 +109,10 @@ export class MoneyService {
       // already logged today
     }
 
+    // No Finance Helper on this machine (the web app): it gets the expense through the inbox.
+    if (!skipFinanceSync && !this.financeHost && this.toFinance) {
+      this.toFinance({ id: `life-exp-${row.id}`, amount: roundedBani, category: category.trim(), note: note?.trim() || category.trim(), date: today, at: now.getTime() })
+    }
     if (!skipFinanceSync && this.financeHost) {
       this.financeHost.addTransaction({
         type: 'expense',
@@ -129,6 +133,11 @@ export class MoneyService {
 
   deleteExpense(id: number): NativeMoneySummary {
     this.db.prepare('DELETE FROM expenses WHERE id = ?').run(id)
+    // …and out of Finance Helper too.
+    this.toFinance?.({ id: `life-exp-${id}`, amount: 0, category: '', note: '', date: this.wallet.today(), at: Date.now(), remove: true })
     return this.state()
   }
+
+  /** Where expenses go when Finance Helper isn't on this machine (the web app's inbox). */
+  toFinance?: (e: { id: string; amount: number; category: string; note: string; date: string; at: number; remove?: boolean }) => void
 }

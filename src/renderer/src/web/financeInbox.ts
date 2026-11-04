@@ -18,6 +18,8 @@ export interface InboxEntry {
   date: string // YYYY-MM-DD
   at: number
   type?: 'expense' | 'income' // expense when missing
+  /** Take this record back out of Finance Helper (you deleted it in Life System). */
+  remove?: boolean
 }
 
 type DbLike = Parameters<typeof getSetting>[0]
@@ -86,13 +88,22 @@ function financeAccount(state: any): { id: string; currency: string } | null {
 /** Finance Helper's data with the inbox expenses it doesn't have yet. */
 export function applyInbox(state: any, inbox: InboxEntry[], now = Date.now()): { state: any; added: number } {
   if (!state || !Array.isArray(state.tx) || !inbox.length) return { state, added: 0 }
+  // Deleted in Life System: removed here too (with Finance Helper's own deletion marker).
+  const gone = new Set(inbox.filter((e) => e.remove).map((e) => e.id))
+  const removing = state.tx.filter((t: any) => gone.has(t.id))
+  if (removing.length) {
+    const deleted = { ...(state.deleted ?? {}) }
+    for (const t of removing) deleted[t.id] = now
+    state = { ...state, tx: state.tx.filter((t: any) => !gone.has(t.id)), deleted }
+  }
+  inbox = inbox.filter((e) => !e.remove && !gone.has(e.id))
   const have = new Set(state.tx.map((t: any) => t.id))
   // Deleted in Finance Helper (id → when): don't bring it back.
   if (state.deleted && typeof state.deleted === 'object') Object.keys(state.deleted).forEach((id) => have.add(id))
   const acc = financeAccount(state)
-  if (!acc) return { state, added: 0 }
+  if (!acc) return { state, added: removing.length }
   const fresh = inbox.filter((e) => !have.has(e.id))
-  if (!fresh.length) return { state, added: 0 }
+  if (!fresh.length) return { state, added: removing.length }
   const tx = fresh.map((e) => ({
     id: e.id,
     createdAt: e.at,
@@ -108,7 +119,7 @@ export function applyInbox(state: any, inbox: InboxEntry[], now = Date.now()): {
     note: e.note,
     source: 'telegram'
   }))
-  return { state: { ...state, tx: [...state.tx, ...tx] }, added: tx.length }
+  return { state: { ...state, tx: [...state.tx, ...tx] }, added: tx.length + removing.length }
 }
 
 export function createFinanceInbox(mirror: Mirror, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null) {

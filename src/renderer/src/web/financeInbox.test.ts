@@ -44,3 +44,14 @@ describe('Telegram expenses into Finance Helper', () => {
     expect(state.tx[1]).toMatchObject({ type: 'income', category: 'work', amount: 4500 })
   })
 })
+
+describe('deletes reach Finance Helper', () => {
+  it('a removed expense leaves Finance Helper with a deletion marker and never comes back', async () => {
+    const { applyInbox } = await import('./financeInbox')
+    const state = { settings: { currency: 'MDL', accounts: [{ id: 'a', currency: 'MDL' }], categories: [{ id: 'food', type: 'expense' }] }, tx: [{ id: 'life-exp-7', type: 'expense', amount: 5000, date: '2026-11-04' }], deleted: {} }
+    const r = applyInbox(state, [{ id: 'life-exp-7', amount: 5000, category: 'food', note: 'x', date: '2026-11-04', at: 1 }, { id: 'life-exp-7', amount: 0, category: '', note: '', date: '2026-11-04', at: 2, remove: true }], 99)
+    expect(r.state.tx).toHaveLength(0)
+    expect(r.state.deleted['life-exp-7']).toBe(99)
+    expect(applyInbox(r.state, [{ id: 'life-exp-7', amount: 5000, category: 'food', note: 'x', date: '2026-11-04', at: 1 }]).added).toBe(0)
+  })
+})
