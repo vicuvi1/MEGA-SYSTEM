@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { localDay, localHM, type CalEvent } from '@core/dayTime'
 import { layoutDay } from '@core/calLayout'
+import { addBlockTask, blockTasks, removeBlockTask, setBlockTaskDone } from '@core/blockTasks'
 import { blocksToApply, repeatRule, templateFromDay, type DayTemplate, type Repeat } from '@core/calTemplates'
 import { defaultAreaColor, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life, type GoogleStatus } from '../bridge'
@@ -91,6 +92,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     setZoomRaw(n)
     store.set('ls.calZoom2', n)
   }
+  const [dropOn, setDropOn] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState<{ day: string; top: number; left: number; items: Item[] } | null>(null)
   const hourPx = ZOOMS[zoom] ?? 44
   const [hidden, setHidden] = useState<string[]>(() => store.get('ls.calHidden', []))
@@ -122,6 +124,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     return () => clearInterval(t)
   }, [])
   const drag = useRef<Drag | null>(null)
+  const itemsRef = useRef<Item[]>([])
   const pending = useRef(new Map<string, { start: string; end: string }>())
   const toast = useToast()
   const gridRef = useRef<HTMLDivElement>(null)
@@ -213,8 +216,10 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       out.push({ key: `e:${e.calendarId}:${e.id}`, title: e.title, day, start: s, end: Math.max(en, s + 15), color: e.color ?? calColor(e.calendarId) ?? '#7CC4FF', kind: 'event', event: e, dim: dimmed.includes(e.calendarId) })
     }
     const blocked = new Set(events.filter((e) => e.ours).map((e) => `${localDay(e.start)}|${e.title}`))
+    // Tasks grouped into a block show inside it, not again on their own.
+    const grouped = new Set(events.flatMap((e) => blockTasks(e.description).map((t) => t.id)))
     for (const t of todo?.tasks ?? []) {
-      if (!t.due || !t.dueTime || blocked.has(`${t.due}|${t.content}`)) continue
+      if (!t.due || !t.dueTime || blocked.has(`${t.due}|${t.content}`) || grouped.has(t.id)) continue
       const s = toMin(t.dueTime)
       out.push({ key: `t:${t.id}`, title: t.content, day: t.due, start: s, end: s + Math.max(15, Math.min(240, t.duration ?? 30)), color: areaColor(t), kind: 'task', task: t })
     }
@@ -222,6 +227,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, events, todo, colors, dimmed, status])
 
+  itemsRef.current = items
   const toSchedule = sortTasks((todo?.tasks ?? []).filter((t) => !t.dueTime && (!t.due || t.due <= addDays(today, 7))), today).slice(0, 30)
 
   // ---- Changes ----------------------------------------------------------
@@ -260,14 +266,46 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     } else if (it.task) {
       const id = it.task.id
       const before = { due: it.task.due, dueTime: it.task.dueTime }
-      setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === id ? { ...x, due: day, dueTime: hmOf(start) } : x)) } : t))
+      const minutes = end - start
+      const resized = minutes !== it.end - it.start
+      setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === id ? { ...x, due: day, dueTime: hmOf(start), ...(resized ? { duration: minutes } : {}) } : x)) } : t))
       toast(undoable ? said : `Moved back: ${it.title}`, 'good', undo)
-      life.todoist!.update!(id, { due: `${day} ${hmOf(start)}` }).catch((err: Error) => {
+      life.todoist!.update!(id, { due: `${day} ${hmOf(start)}`, ...(resized ? { duration: minutes } : {}) }).catch((err: Error) => {
         setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === id ? { ...x, ...before } : x)) } : t))
         toast(`Todoist didn't take that move (${err.message}). It's back where it was.`, 'bad')
       })
     }
   }
+  /**
+   * A task dropped onto a block joins it: a checklist line in the block's
+   * Google notes, and the block's time on the task in Todoist.
+   */
+  const groupTask = (task: TodoTask, it: Item) => {
+    const e = it.event
+    if (!e) return
+    const before = { notes: e.description ?? '', due: task.due, dueTime: task.dueTime }
+    const notes = addBlockTask(e.description, { id: task.id, text: task.content })
+    if (notes === (e.description ?? '')) return toast(`${task.content} is already in ${e.title}`, 'info')
+    const setNotes = (d: string) => setEvents((list) => list.map((x) => (x.id === e.id && x.calendarId === e.calendarId ? { ...x, description: d } : x)))
+    setNotes(notes)
+    setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === task.id ? { ...x, due: it.day, dueTime: hmOf(it.start) } : x)) } : t))
+    toast(`${task.content} → ${e.title}`, 'good', {
+      label: 'Undo',
+      run: () => {
+        setNotes(before.notes)
+        setTodo((t) => (t ? { ...t, tasks: t.tasks.map((x) => (x.id === task.id ? { ...x, due: before.due, dueTime: before.dueTime } : x)) } : t))
+        void life.google!.update!(e.calendarId, e.id, { description: before.notes }).catch(() => null)
+        void life.todoist!.update!(task.id, { due: before.due ? (before.dueTime ? `${before.due} ${before.dueTime}` : before.due) : 'no date' }).catch(() => null)
+      }
+    })
+    Promise.all([life.google!.update!(e.calendarId, e.id, { description: notes }), life.todoist!.update!(task.id, { due: `${it.day} ${hmOf(it.start)}` })]).catch((err: Error) => {
+      setNotes(before.notes)
+      toast(`Couldn't add it to the block (${err.message})`, 'bad')
+    })
+  }
+  const groupRef = useRef(groupTask)
+  groupRef.current = groupTask
+
   const createEvent = async (title: string, day: string, start: number, end: number, repeat: Repeat) => {
     const ok = await act(() => life.google!.create({ title, start: isoAt(day, start), end: isoAt(day, end), recurrence: repeatRule(repeat, day) }).then(() => true), repeat === 'none' ? 'Added to your calendar' : `Added, repeating ${repeat}`)
     if (ok) {
@@ -318,7 +356,8 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         put({ day: d.day, start: Math.min(d.from, m), end: Math.max(d.from + 15, m), title: 'New event', color: 'var(--accent)' })
       }
     }
-    const up = () => {
+    const up = (pe: PointerEvent) => {
+      const upAt = { x: pe.clientX, y: pe.clientY }
       if (frame) cancelAnimationFrame(frame)
       frame = 0
       if (last && drag.current?.moved) step(last)
@@ -334,6 +373,10 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         return
       }
       if (!g) return
+      // A timed task dropped onto a block joins the block.
+      const under = upAt && d.kind === 'move' && d.item.kind === 'task' ? (document.elementFromPoint(upAt.x, upAt.y) as HTMLElement | null)?.closest<HTMLElement>('.cal-item.event[data-key]') : null
+      const target = under ? itemsRef.current.find((x) => x.key === under.dataset.key) : null
+      if (target?.event && d.kind === 'move' && d.item.task) return void groupRef.current(d.item.task, target)
       if (d.kind === 'create') setDraft({ day: g.day, start: g.start, end: g.end })
       else if (g.day !== d.item.day || g.start !== d.item.start || g.end !== d.item.end) void commitRef.current(d.item, g.day, g.start, d.kind === 'resize' ? g.end : g.start + (d.item.end - d.item.start))
     }
@@ -518,7 +561,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       <div className="cal-body">
         <aside className="card cal-side">
           <h3>To schedule</h3>
-          <p className="hint small">Drag a task onto a time: a 50-minute block in your calendar, and its time set in Todoist.</p>
+          <p className="hint small">Drag a task onto a time for a 50-minute block, or onto a block to add it to that block's checklist. The time goes to Todoist too.</p>
           <ul className="cal-todo">
             {toSchedule.map((t) => (
               <li key={t.id} draggable onDragStart={(e) => e.dataTransfer.setData('text/task', t.id)} style={{ ['--c' as string]: areaColor(t) }} title={t.content}>
@@ -623,7 +666,23 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                               key={it.key}
                               role="button"
                               tabIndex={0}
-                              className={`cal-item ${it.kind} ${tiny ? 'tiny' : ''} ${backdrop ? 'band' : ''} ${it.dim ? 'dim' : ''} ${ghost?.key === it.key ? 'dragging' : ''}`}
+                              data-key={it.key}
+                              className={`cal-item ${it.kind} ${tiny ? 'tiny' : ''} ${backdrop ? 'band' : ''} ${it.dim ? 'dim' : ''} ${ghost?.key === it.key ? 'dragging' : ''} ${dropOn === it.key ? 'drop' : ''}`}
+                              onDragOver={(ev) => {
+                                if (it.kind !== 'event' || !connected || !writable(it.event!.calendarId)) return
+                                ev.preventDefault()
+                                ev.stopPropagation()
+                                if (dropOn !== it.key) setDropOn(it.key)
+                              }}
+                              onDragLeave={() => dropOn === it.key && setDropOn(null)}
+                              onDrop={(ev) => {
+                                if (it.kind !== 'event' || !connected || !writable(it.event!.calendarId)) return
+                                ev.preventDefault()
+                                ev.stopPropagation()
+                                setDropOn(null)
+                                const t = todo?.tasks.find((x) => x.id === ev.dataTransfer.getData('text/task'))
+                                if (t) groupTask(t, it)
+                              }}
                               style={{ top, height: h, left: `calc(${l}% + 2px)`, width: `calc(${w}% - 4px)`, ['--c' as string]: it.color }}
                               onPointerDown={(e) => startItemDrag(e, it)}
                               onKeyDown={(e) => e.key === 'Enter' && setEditing(it)}
@@ -642,7 +701,15 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                                   </small>
                                 </>
                               )}
-                              {it.kind === 'event' && connected && writable(it.event!.calendarId) && <span className="cal-resize" onPointerDown={(e) => startItemDrag(e, it, true)} title="Drag to resize" />}
+                              {(() => {
+                                const bt = it.event ? blockTasks(it.event.description) : []
+                                return bt.length > 0 && !tiny ? (
+                                  <span className="cal-tasks" title={bt.map((t) => `${t.done ? '✓' : '○'} ${t.text}`).join('\n')}>
+                                    ✓ {bt.filter((t) => t.done).length}/{bt.length} tasks
+                                  </span>
+                                ) : null
+                              })()}
+                              {((it.kind === 'event' && connected && writable(it.event!.calendarId)) || it.kind === 'task') && <span className="cal-resize" onPointerDown={(e) => startItemDrag(e, it, true)} title="Drag to resize" />}
                             </div>
                           )
                         })}
@@ -695,6 +762,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         <EditSheet
           item={editing}
           calendars={(status?.calendars ?? []) as any}
+          tasks={todo?.tasks ?? []}
           connected={connected && (editing.kind === 'task' || writable(editing.event!.calendarId))}
           onClose={() => setEditing(null)}
           onChanged={() => {
@@ -831,7 +899,7 @@ const EVENT_COLORS: [string, string, string][] = [
   ['8', 'Graphite', '#616161']
 ]
 
-function EditSheet({ item, connected, calendars, onClose, onChanged }: { item: Item; connected: boolean; calendars: { id: string; name: string; color?: string; canWrite?: boolean }[]; onClose: () => void; onChanged: () => void }) {
+function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { item: Item; connected: boolean; calendars: { id: string; name: string; color?: string; canWrite?: boolean }[]; tasks: TodoTask[]; onClose: () => void; onChanged: () => void }) {
   const act = useAction()
   const e = item.event
   const [title, setTitle] = useState(item.title)
@@ -949,6 +1017,51 @@ function EditSheet({ item, connected, calendars, onClose, onChanged }: { item: I
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+            {blockTasks(notes).length > 0 && (
+              <div className="ce-tasks">
+                <span className="ce-label">Tasks in this block</span>
+                {blockTasks(notes).map((t) => (
+                  <div key={t.id} className={`ce-task ${t.done ? 'done' : ''}`}>
+                    <button
+                      className="dl-check"
+                      aria-label={t.done ? `${t.text} is done` : `Done: ${t.text}`}
+                      disabled={!canEdit || t.done}
+                      onClick={async () => {
+                        const next = setBlockTaskDone(notes, t.id, true)
+                        setNotes(next)
+                        const full = tasks.find((x) => x.id === t.id) ?? ({ id: t.id, content: t.text, priority: 1, due: null, dueTime: null, project: null, recurring: false } as TodoTask)
+                        await act(async () => {
+                          await life.todoist!.complete(full)
+                          await life.google!.update!(e.calendarId, e.id, { description: next })
+                          return true
+                        }, `Done: ${t.text}`)
+                      }}
+                    >
+                      {t.done ? '✓' : ''}
+                    </button>
+                    <span>{t.text}</span>
+                    {!t.done && canEdit && (
+                      <button
+                        className="nc-x"
+                        title="Take it out of this block"
+                        aria-label={`Take ${t.text} out of this block`}
+                        onClick={async () => {
+                          const next = removeBlockTask(notes, t.id)
+                          setNotes(next)
+                          await act(async () => {
+                            await life.google!.update!(e.calendarId, e.id, { description: next })
+                            await life.todoist!.update!(t.id, { due: item.day })
+                            return true
+                          }, `${t.text}: back to your list`)
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
             <textarea className="ce-notes" value={notes} onChange={(ev) => setNotes(ev.target.value)} disabled={!canEdit} placeholder="Notes" rows={3} aria-label="Notes" />

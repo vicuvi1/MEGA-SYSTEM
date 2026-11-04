@@ -71,6 +71,12 @@ try {
       if (!ok) throw new Error(`${name} looks empty`)
     }
   })
+  await step('Calendar shows the week with its events', async () => {
+    await open('calendar')
+    await pg.waitForSelector('.cal-item', { timeout: 15000 })
+    const n = await pg.locator('.cal-item').count()
+    if (n < 3) throw new Error(`only ${n} events on the calendar`)
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

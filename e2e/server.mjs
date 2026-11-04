@@ -116,6 +116,31 @@ const gcal = (() => {
   }
 })()
 
+// A fake Todoist (made-up tasks): one waiting to be scheduled, one timed today.
+const todo = (() => {
+  const day = new Date().toISOString().slice(0, 10)
+  const t = (id, content, due, dueTime) => ({ id, content, priority: 1, due, dueTime, project: 'Inbox', section: null, recurring: false, projectId: 'p1', sectionId: null, labels: [], duration: null })
+  const tasks = [t('t1', 'Pay the internet bill', day, null), t('t2', 'Email the lab partner', day, '16:00'), t('t3', 'Read chapter 4', null, null)]
+  return (q, r) => {
+    const b = q.body || {}
+    const send = (j) => (r.setHeader('Content-Type', 'application/json'), r.end(JSON.stringify(j)))
+    const open = tasks.filter((x) => !x.done)
+    if (b.op === 'status') return send({ connected: true })
+    if (b.op === 'everything') return send({ tasks: open, areas: [{ key: 'p:p1', kind: 'project', id: 'p1', projectId: 'p1', name: 'Inbox' }] })
+    if (b.op === 'today' || b.op === 'upcoming') return send({ connected: true, tasks: open.filter((x) => x.due) })
+    if (b.op === 'changes') return send({ token: 'x', changed: 0 })
+    const x = tasks.find((y) => y.id === b.id)
+    if (b.op === 'update' && x) {
+      if (b.due) [x.due, x.dueTime] = b.due === 'no date' ? [null, null] : [b.due.slice(0, 10), b.due.slice(11, 16) || null]
+      if (b.duration !== undefined) x.duration = b.duration
+      return send({ ok: true })
+    }
+    if (b.op === 'close' && x) return ((x.done = true), send({ ok: true }))
+    if (b.op === 'peek') return send(tasks)
+    return send({ ok: true, tasks: [], items: [] })
+  }
+})()
+
 const dist = join(repo, 'dist')
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }
 http
@@ -128,6 +153,7 @@ http
         const n = url.pathname.slice(5)
         q.body = body ? JSON.parse(body) : {}
         if (n === 'google') return gcal(q, r)
+        if (n === 'todoist') return todo(q, r)
         return api[n] ? api[n](q, r) : ((r.statusCode = 404), r.end('{}'))
       }
       if (url.pathname === '/v2/pipeline') {
