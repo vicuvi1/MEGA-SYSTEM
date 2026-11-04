@@ -951,18 +951,18 @@
 @media (max-width: 760px) { .nv-bar { bottom: 84px; width: calc(100% - 32px); justify-content: space-between; } }
 
 /* ===== Focus island (a Dynamic Island for the timer) ===== */
-.isl-zone { position: fixed; z-index: 120; height: 14px; width: 340px; left: 50%; transform: translateX(-50%); top: 0; }
+.isl-zone { position: fixed; z-index: 120; height: 14px; width: 340px; left: 50%; transform: translateX(-50%); top: var(--desk-bar, 0px); }
 .isl-zone.pos-top-left { left: 0; transform: none; }
 .isl-zone.pos-top-right { left: auto; right: 0; transform: none; }
 .isl-zone.pos-bottom { top: auto; bottom: 0; }
-.isl { --isl-bg: #050506; --isl-fg: #f4f4f5; --isl-sub: rgb(255 255 255 / 0.55); position: fixed; z-index: 121; top: 8px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: stretch; color: var(--isl-fg); background: var(--isl-bg); border-radius: 22px; box-shadow: 0 10px 40px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.06); transition: width 0.35s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.35s, box-shadow 0.3s; overflow: hidden; width: auto; min-width: 120px; max-width: min(440px, calc(100vw - 24px)); font-size: 13px; }
+.isl { --isl-bg: #050506; --isl-fg: #f4f4f5; --isl-sub: rgb(255 255 255 / 0.55); position: fixed; z-index: 121; top: calc(8px + var(--desk-bar, 0px)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: stretch; color: var(--isl-fg); background: var(--isl-bg); border-radius: 22px; box-shadow: 0 10px 40px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.06); transition: width 0.35s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.35s, box-shadow 0.3s; overflow: hidden; width: auto; min-width: 120px; max-width: min(440px, calc(100vw - 24px)); font-size: 13px; }
 .isl.pos-top-left { left: 12px; transform: none; }
 .isl.pos-top-right { left: auto; right: 12px; transform: none; }
 .isl.pos-bottom { top: auto; bottom: 14px; flex-direction: column-reverse; }
 .isl.look-glass { --isl-bg: color-mix(in srgb, var(--surface) 70%, transparent); --isl-fg: var(--text); --isl-sub: var(--muted); backdrop-filter: blur(18px) saturate(1.4); box-shadow: 0 10px 40px rgb(0 0 0 / 0.3), 0 0 0 1px rgb(var(--ink) / 0.1); }
 .isl.look-accent { --isl-bg: var(--accent); --isl-fg: var(--lime-ink, #111); --isl-sub: rgb(0 0 0 / 0.55); }
 .isl.open { width: min(400px, calc(100vw - 24px)); border-radius: 26px; }
-.isl.isl-dotmode:not(.open) { min-width: 0; width: 64px; height: 12px; border-radius: 999px; top: 6px; opacity: 0.85; }
+.isl.isl-dotmode:not(.open) { min-width: 0; width: 64px; height: 12px; border-radius: 999px; top: calc(6px + var(--desk-bar, 0px)); opacity: 0.85; }
 .isl-pill { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 14px 0 9px; border: none; background: none; color: inherit; font: inherit; cursor: pointer; width: 100%; justify-content: center; }
 .isl.size-large .isl-pill { height: 44px; font-size: 14.5px; padding: 0 18px 0 11px; }
 .isl.isl-dotmode:not(.open) .isl-pill { height: 12px; padding: 0; }

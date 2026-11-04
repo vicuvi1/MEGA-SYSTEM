@@ -76,5 +76,10 @@ else void app.whenReady().then(async () => {
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(origin + '/')) { event.preventDefault(); external(url) } })
   app.on('second-instance', () => { if (win.isMinimized()) win.restore(); win.show(); win.focus() })
   await win.loadURL(origin + '/')
+  // Look for a new version shortly after start and every 4 hours; the top bar
+  // then shows "Update to …" (one tap installs it). Quiet when offline.
+  const look = () => { if (!['downloading', 'ready', 'installing'].includes(updater.get().state)) void updater.check().catch(() => {}) }
+  setTimeout(look, 20_000)
+  setInterval(look, 4 * 3600_000)
 })
 app.on('window-all-closed', () => app.quit())

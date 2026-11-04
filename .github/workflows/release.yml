@@ -1,13 +1,38 @@
-# Builds the Windows installer and publishes it as a GitHub Release when a
-# version tag (v1.2.3) is pushed. The app's Update button installs from here.
+# Builds the Windows installer and publishes it as a GitHub Release. The
+# desktop app looks for new releases on start and every 4 hours and offers
+# "Update to …" in its top bar.
+#
+# - Every push to main that changes the app (not only the server or docs)
+#   publishes vMAJOR.MINOR.(1000 + run number) automatically, so the desktop
+#   never falls behind the website. package.json keeps MAJOR.MINOR.
+# - A pushed tag (v1.2.3, `npm run release`) publishes exactly that version.
 name: Release
 
 on:
   push:
     tags: ['v*']
+    branches: [main]
+    paths:
+      - 'src/**'
+      - '!src/server/**'
+      - '!src/**/*.test.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'index.html'
+      - 'public/**'
+      - 'build/**'
+      - 'vite.web.mts'
+      - 'electron.desktop.config.mts'
+      - 'scripts/copy-desktop-ui.mjs'
+      - '.github/workflows/release.yml'
 
 permissions:
   contents: write
+
+concurrency:
+  # Quick pushes in a row: only the newest one is built.
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 jobs:
   windows:
@@ -23,11 +48,23 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node node_modules/electron/install.js
       - run: npm test
+      - name: Version
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            base=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
+            v="$base.$((1000 + GITHUB_RUN_NUMBER))"
+          fi
+          npm version "$v" --no-git-tag-version --allow-same-version
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          git log -1 --format=%s > notes.txt
       - run: npm run build:electron
       # Create the release up front: electron-builder uploads its files in
       # parallel and would otherwise race to create two releases.
-      - run: gh release view "$env:GITHUB_REF_NAME" 2>$null; if ($LASTEXITCODE -ne 0) { gh release create "$env:GITHUB_REF_NAME" --title "$env:GITHUB_REF_NAME" --notes "Life System $env:GITHUB_REF_NAME" }; exit 0
-        shell: pwsh
+      - shell: bash
+        run: gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npx electron-builder --win --publish always

@@ -11,7 +11,7 @@ import { DEFAULT_RULES } from '@core/rules'
 import { DEFAULT_EXERCISES } from '@core/body'
 import { BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
-import { decodePending, encodePending, sendPending } from './desktopSync'
+import { decodePending, diffRows, encodePending, schemaInfo, sendPending, touchedTables, type Remap } from './desktopSync'
 
 const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_)/
 
@@ -233,12 +233,38 @@ export class Mirror {
   }
 
   private async flushDesktop(): Promise<void> {
+    let merged = false
     try {
-      for (const row of this.pending()) {
-        await sendPending(this.turso, decodePending(row.data))
-        // Persist acknowledgement before another operation can start.
+      const rows = this.pending()
+      const info = rows.length ? schemaInfo(this.current.raw) : undefined
+      for (const { id } of rows) {
+        // Read it again: an earlier merge may have marked it.
+        const row = this.pending().find((x) => x.id === id)
+        if (!row) continue
+        const write = decodePending(row.data)
+        const r = await sendPending(this.turso, write, info)
+        // Persist acknowledgement before another operation can start. After a
+        // merge, the later changes saw the old copy: they get merged too, with
+        // any ids the server renumbered.
+        this.current.raw.run('BEGIN')
         this.current.raw.run('DELETE FROM desktop_outbox WHERE id = ?', [row.id])
+        if (r.merged || write.rebase) {
+          merged = true
+          const remap: Remap = { ...(write.remap ?? {}) }
+          for (const [t, ids] of Object.entries(r.remap)) remap[t] = { ...(remap[t] ?? {}), ...ids }
+          for (const next of this.pending()) {
+            this.current.raw.run('UPDATE desktop_outbox SET data = ? WHERE id = ?', [encodePending({ ...decodePending(next.data), rebase: true, remap }), next.id])
+          }
+        }
+        this.current.raw.run('COMMIT')
         await this.store!.save(this.current.raw.export())
+      }
+      // The server's copy now holds both sides: take it.
+      if (merged) {
+        await this.rebuild()
+        this.pending()
+        await this.store!.save(this.current.raw.export())
+        this.emit()
       }
       this.lastError = null
       this.syncedAt = new Date().toISOString()
@@ -266,9 +292,18 @@ export class Mirror {
         result = this.current.transaction(() => fn(this.current))()
         const changes = this.current.takeChanges()
         if (!changes.length) return result
+        // Which rows changed (before → after), so the change can be merged later.
+        const old = new this.SQL.Database(before)
+        let rows
+        try {
+          rows = diffRows(old, this.current.raw, touchedTables(changes), schemaInfo(this.current.raw))
+        } finally {
+          old.close()
+        }
+        if (!rows.length && !changes.some((c) => /^\s*(CREATE|ALTER)\s/i.test(c.sql))) return result
         const version = crypto.randomUUID()
         this.pending()
-        this.current.raw.run('INSERT INTO desktop_outbox (data) VALUES (?)', [encodePending({ id: version, base, version, changes })])
+        this.current.raw.run('INSERT INTO desktop_outbox (data) VALUES (?)', [encodePending({ id: version, base, version, changes, rows })])
         this.current.raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version])
         await this.store.save(this.current.raw.export())
         this.version = version

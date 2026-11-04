@@ -1,8 +1,8 @@
 // Publishes a new version: bumps package.json, commits, tags and pushes.
 // GitHub Actions then builds the installer and the app's Update button finds it.
 //
-//   npm run release            -> next patch (0.5.0 -> 0.5.1)
-//   npm run release -- minor   -> 0.6.0
+//   npm run release            -> next minor (1.4.0 -> 1.5.0); main pushes already publish 1.4.10xx
+//   npm run release -- patch   -> 1.4.1 (lower than automatic builds: avoid)
 //   npm run release -- 1.0.0   -> exactly that
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -14,7 +14,7 @@ if (git('rev-parse', '--abbrev-ref', 'HEAD') !== 'main') throw new Error('Releas
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 const [major, minor, patch] = pkg.version.split('.').map(Number)
-const arg = process.argv[2] ?? 'patch'
+const arg = process.argv[2] ?? 'minor'
 const next = /^\d+\.\d+\.\d+$/.test(arg) ? arg : arg === 'major' ? `${major + 1}.0.0` : arg === 'minor' ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`
 
 pkg.version = next

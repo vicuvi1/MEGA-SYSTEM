@@ -27,15 +27,25 @@ older `%APPDATA%\LifeSystem` database remains separate and is not imported.
 On reconnection, pending changes upload in order. Each has an operation ID and
 a server receipt, so retrying a lost response does not apply it twice. A server
 version check and the entire write run inside one transaction. A stale write
-is refused, including spending against an old points balance.
+is not applied as-is; it is merged (below).
 
-Conflict handling is conservative: if the server version changes before an
-offline operation uploads, automatic sync pauses and both copies are kept.
-The app does not merge arbitrary SQL or guess which version to keep. Save a
-backup to retain the local operations. The explicit Back up and use server copy
-action downloads the server copy only after confirmation and a saved backup.
-Recovering individual offline operations from that backup currently requires
-manual review. Unrelated server updates can also cause this conflict prompt.
+When the server changed meanwhile (the phone, Ben, the 10-minute tick or
+Sporty write all the time), the change is merged instead of refused
+(`rebaseWrite` in `src/renderer/src/web/desktopSync.ts`). Each saved change
+keeps the rows it touched, before and after:
+- rows only one side changed take that side;
+- both changed: fields merge one by one, JSON values (settings blobs, logs)
+  merge inside, lists by their `id`/`at`/`day`, counters add both changes,
+  times take the later one, anything else keeps the desktop's value;
+- a row the desktop deleted stays if the server edited it;
+- a new row that got the same id on both sides gets the next free id, and
+  rows pointing at it (foreign keys) follow. Later queued changes are then
+  merged too and use the new ids; the server keeps the renumbering with the
+  receipt (`desktop_sync_done`), so a crash in between repeats nothing.
+After a merge the desktop downloads the server copy, which holds both sides.
+A change that changes nothing is not queued. Only when a merged change still
+breaks a rule of the data does sync stop with "Sync conflict"; then save a
+backup before "Back up and use server copy".
 
 Local database files and backups contain personal data. Keep them out of Git.
 The database file is ordinary SQLite; the app PIN controls the interface, not
@@ -56,10 +66,12 @@ npm run dist
 
 The installer is written to `release/Life-System-Setup-VERSION.exe`.
 `npm run dev` builds and opens the modern desktop; `npm run dev:legacy` starts
-the older Electron implementation. A `vVERSION` tag triggers the Windows
-release workflow, which builds and uploads the installer and update metadata.
-The version in package.json and package-lock.json must match the tag. Each
-release needs a higher version for the update button to offer it.
+the older Electron implementation. Every push to main that changes the app
+publishes `vMAJOR.MINOR.(1000 + run number)` automatically (`release.yml`), so
+the desktop never falls behind the website; the app looks for it on start and
+every 4 hours and shows "Update to …". A pushed `vVERSION` tag
+(`npm run release`, minor by default) publishes exactly that version and must
+be higher than the automatic ones.
 
 The renderer is loaded from the bundled `life-system://app` origin. Requests
 under `/api/` are forwarded to the production website by the main process.

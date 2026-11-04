@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { UpdateStatus } from '../../shared/api'
 import type {} from '../../shared/desktop'
 
@@ -8,6 +8,17 @@ export function DesktopBar() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const desktop = window.desktop
+  const bar = useRef<HTMLDivElement>(null)
+  // Floating things (the focus island) sit below this bar, whatever its height.
+  useEffect(() => {
+    const el = bar.current
+    if (!el) return
+    const set = () => document.documentElement.style.setProperty('--desk-bar', `${el.offsetHeight}px`)
+    set()
+    const ro = new ResizeObserver(set)
+    ro.observe(el)
+    return () => { ro.disconnect(); document.documentElement.style.removeProperty('--desk-bar') }
+  }, [desktop])
   useEffect(() => {
     if (!desktop) return
     const changed = (event: Event) => setSync((event as CustomEvent).detail)
@@ -23,9 +34,9 @@ export function DesktopBar() {
     try { await fn() } catch (error) { setMessage((error as Error).message) } finally { setBusy(false) }
   }
   const installing = update && ['checking', 'downloading', 'installing'].includes(update.state)
-  return <div style={{ padding: '6px 16px', background: 'var(--surface, #161a20)', borderBottom: '1px solid var(--border, #30343a)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
+  return <div ref={bar} className="desk-bar" style={{ padding: '6px 16px', background: 'var(--surface, #161a20)', borderBottom: '1px solid var(--border, #30343a)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
     <strong>Life System desktop {update?.current}</strong>
-    <span role="status">{sync.pending ? `${sync.pending} changes saved locally · waiting to sync` : sync.syncedAt ? 'Saved locally and synced' : 'Opening your local data…'}</span>
+    <span role="status">{sync.pending ? `${sync.pending} change${sync.pending === 1 ? '' : 's'} saved on this computer · will sync when online` : sync.syncedAt ? 'Saved locally and synced' : 'Opening your local data…'}</span>
     <button className="btn small" disabled={busy} onClick={() => window.dispatchEvent(new Event('life-desktop-retry'))}>Sync now</button>
     <button className="btn small" disabled={busy} onClick={() => void action(async () => { const path = await desktop.backup(); if (path) setMessage('Backup saved') })}>Save backup</button>
     {sync.error?.startsWith('Sync conflict:') && <button className="btn small" disabled={busy} onClick={() => void action(async () => {
