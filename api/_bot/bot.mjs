@@ -311,6 +311,19 @@ var MIGRATIONS = [
     reasons TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT NOT NULL
   );
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    action TEXT,
+    read_at TEXT,
+    dismissed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS notifications_at ON notifications(at);
   `
 ];
 // src/core/ledger.ts
@@ -15992,6 +16005,54 @@ function sportyUpdated(prev, r, now) {
 		}
 	};
 }
+// src/core/notify.ts
+var plainOf = (html) => html.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
+/** A Telegram message Ben sent on his own → an inbox entry (null: not worth one). */
+function notifFromMessage(html, markup, at) {
+	const plain = plainOf(html);
+	if (!plain) return null;
+	const lines = plain.split("\n").map((l) => l.trim()).filter(Boolean);
+	const title = lines[0].slice(0, 110);
+	const body = lines.slice(1).join(" ").slice(0, 240) || null;
+	const focus = (markup?.inline_keyboard ?? []).flat().map((b) => /^fo\|(?:(\d+)\|)?(.+)$/.exec(String(b.callback_data ?? ""))).find(Boolean);
+	const action = focus ? {
+		kind: "focus",
+		subject: focus[2].slice(0, 40),
+		minutes: Number(focus[1]) || 50,
+		label: `Start: ${focus[2].slice(0, 24)}`
+	} : null;
+	const kind = /^☀️/.test(plain) || /locked in today's plan/i.test(plain) ? "plan" : /^🔁|^📚/.test(plain) ? "block" : /^🌙/.test(plain) ? "review" : /^🔧|^✅ Working again|^🩺/.test(plain) ? "health" : /^💧/.test(plain) ? "water" : /^🏋|💪/.test(plain.slice(0, 4)) ? "training" : /^📊|^💌/.test(plain) ? "week" : /^🔔|^⏰/.test(plain) ? "reminder" : "ben";
+	const page = {
+		plan: ["today", "Open Today"],
+		block: ["today", "Open Today"],
+		review: ["coach", "Open with Ben"],
+		health: ["settings", "See what to fix"],
+		water: ["body", "Log water"],
+		training: ["body", "Open Sport"],
+		week: ["progress", "See the week"],
+		reminder: ["coach", "Answer Ben"],
+		ben: ["coach", "Reply to Ben"]
+	};
+	return {
+		id: `${kind}:${at.getTime().toString(36)}`,
+		at: at.toISOString(),
+		kind,
+		title,
+		body,
+		action: action ?? {
+			kind: "page",
+			page: page[kind][0],
+			label: page[kind][1]
+		}
+	};
+}
+// src/renderer/src/web/notifications.ts
+/** Adds one (once per id), and keeps the newest 200 from the last 30 days. */
+function addNotif(db, n) {
+	db.prepare("INSERT OR IGNORE INTO notifications (id, at, kind, title, body, action) VALUES (?, ?, ?, ?, ?, ?)").run(n.id, n.at, n.kind, n.title, n.body, n.action ? JSON.stringify(n.action) : null);
+	const cut = (/* @__PURE__ */ new Date(Date.parse(n.at) - 2592e6)).toISOString();
+	db.prepare("DELETE FROM notifications WHERE at < ? OR id IN (SELECT id FROM notifications ORDER BY at DESC LIMIT -1 OFFSET 200)").run(cut);
+}
 // src/core/todoistClean.ts
 var MAX_TASKS = 150;
 var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -16494,6 +16555,8 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				proactive: true,
 				mood
 			}]);
+			const n = notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
+			if (n) addNotif(db, n);
 		}).catch(() => null);
 	};
 	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

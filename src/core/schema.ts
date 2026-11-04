@@ -310,5 +310,19 @@ export const MIGRATIONS: string[] = [
     reasons TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT NOT NULL
   );
+  `,
+  // The notification center (synced: read on one device is read everywhere).
+  `
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    action TEXT,
+    read_at TEXT,
+    dismissed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS notifications_at ON notifications(at);
   `
 ]

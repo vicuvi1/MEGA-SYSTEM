@@ -33,6 +33,8 @@ import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, MOOD_FACE, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
 import { blockSubject, isFocusBlock } from '@core/dayTime'
+import { notifFromMessage } from '@core/notify'
+import { addNotif } from '../renderer/src/web/notifications'
 import { autoApproveDue, autoApprovedText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
 import { loadStyle } from '../renderer/src/web/botBrain'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
@@ -392,6 +394,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string }
         const plain = text.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
         const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith('🔔') ? 'annoyed' : 'chill'])[0]
         appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood }])
+        // …and in the bell, with the one thing to do about it.
+        const n = notifFromMessage(text, reply_markup, new Date())
+        if (n) addNotif(db as any, n)
       })
       .catch(() => null)
   }

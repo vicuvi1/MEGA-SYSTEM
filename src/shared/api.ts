@@ -369,6 +369,12 @@ export interface LifeApi {
     /** Turn "ask for the PIN on this device" off (needs the PIN once) or back on. */
     setRemembered?(on: boolean, pin?: string): Promise<boolean>
   }
+  /** The notification center (synced across devices). */
+  notifications?: {
+    list(): Promise<import('@core/notify').Notif[]>
+    read(ids: string[] | null): Promise<void>
+    dismiss(id: string): Promise<void>
+  }
   wallet: {
     summary(): Promise<Summary>
     history(limit?: number): Promise<LedgerEntry[]>
