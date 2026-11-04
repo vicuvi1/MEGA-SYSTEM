@@ -35,6 +35,7 @@ const monday = (day: string) => {
   const d = new Date(`${day}T12:00:00`)
   return addDays(day, -((d.getDay() + 6) % 7))
 }
+const agoShort = (ms: number) => (ms < 10_000 ? 'just now' : ms < 60_000 ? `${Math.round(ms / 1000)} s ago` : `${Math.round(ms / 60_000)} min ago`)
 const toMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
 const hmOf = (min: number) => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`
 const isoAt = (day: string, min: number) => (min >= 24 * 60 ? new Date(`${addDays(day, 1)}T00:00:00`).toISOString() : new Date(`${day}T${hmOf(min)}:00`).toISOString())
@@ -97,14 +98,29 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const [anchor, setAnchor] = useState(today)
   const [events, setEvents] = useState<CalEvent[]>([])
   const [status, setStatus] = useState<GoogleStatus | null>(null)
+  const statusRef = useRef(status)
+  statusRef.current = status
+  const [sync, setSync] = useState<{ at: number; busy: boolean; error: string | null }>({ at: 0, busy: false, error: null })
+  const syncRef = useRef(sync)
+  syncRef.current = sync
   const [todo, setTodo] = useState<{ tasks: TodoTask[]; areas: Area[] } | null>(null)
   const [colors, setColors] = useState<Record<string, string>>({})
   const [draft, setDraft] = useState<{ day: string; start: number; end: number } | null>(null)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
   const [editing, setEditing] = useState<Item | null>(null)
+  const editingRef = useRef(editing)
+  editingRef.current = editing
   const [ghost, setGhost] = useState<{ day: string; start: number; end: number; title: string; color: string; key?: string } | null>(null)
   const [templates, setTemplates] = useState<DayTemplate[]>([])
   const [menu, setMenu] = useState<'cals' | 'templates' | null>(null)
   const [now, setNow] = useState(new Date())
+  // Ticks every 5 s, only for the "Synced 10 s ago" chip.
+  const [clock, setClock] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 5000)
+    return () => clearInterval(t)
+  }, [])
   const drag = useRef<Drag | null>(null)
   const pending = useRef(new Map<string, { start: string; end: string }>())
   const toast = useToast()
@@ -122,16 +138,24 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     return Array.from({ length: 42 }, (_, i) => addDays(first, i))
   }, [view, anchor])
 
-  const load = useCallback(async () => {
-    const st = await life.google?.status().catch(() => null)
-    setStatus(st ?? { configured: false, connected: false })
+  const load = useCallback(async (quick = false) => {
+    setSync((x) => ({ ...x, busy: true }))
+    // The quick check (every 15 s) only reads events; the full one also the calendars list.
+    const st = quick && statusRef.current?.connected ? statusRef.current : await life.google?.status().catch(() => null)
+    if (!quick || !statusRef.current) setStatus(st ?? { configured: false, connected: false })
     if (st?.connected) {
       const from = new Date(`${days[0]}T00:00:00`).toISOString()
       const to = new Date(`${addDays(days[days.length - 1], 1)}T00:00:00`).toISOString()
-      const fresh = await life.google!.events(from, to).catch(() => null)
-      // Moves still on their way to Google keep their new time on screen.
-      if (fresh) setEvents(fresh.map((x) => pending.current.get(`${x.calendarId}:${x.id}`) ? { ...x, ...pending.current.get(`${x.calendarId}:${x.id}`)! } : x))
-    }
+      const fresh = await life.google!.events(from, to).catch((e: Error) => (setSync({ at: syncRef.current.at, busy: false, error: e.message }), null))
+      if (fresh) {
+        // Moves still on their way to Google keep their new time on screen.
+        const next = fresh.map((x) => (pending.current.get(`${x.calendarId}:${x.id}`) ? { ...x, ...pending.current.get(`${x.calendarId}:${x.id}`)! } : x))
+        // Only redraw when something really changed (no flicker every 15 s).
+        setEvents((cur) => (JSON.stringify(cur) === JSON.stringify(next) ? cur : next))
+        setSync({ at: Date.now(), busy: false, error: null })
+      }
+    } else setSync((x) => ({ ...x, busy: false }))
+    if (quick) return
     if (life.todoist?.everything && (await life.todoist.status().catch(() => ({ connected: false }))).connected) {
       setTodo(await life.todoist.everything().catch(() => null))
       life.todoist.colors?.().then(setColors).catch(() => {})
@@ -142,6 +166,23 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     void load()
   }, [load])
   useLive(() => void load(), { external: true })
+  // Changes made in Google Calendar (your phone, the website) show up within
+  // 15 s while this page is open, and at once when you come back to it.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== 'visible' || drag.current || editingRef.current || draftRef.current) return
+      void load(true)
+    }
+    const t = setInterval(tick, 15_000)
+    const back = () => document.visibilityState === 'visible' && tick()
+    window.addEventListener('focus', tick)
+    document.addEventListener('visibilitychange', back)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('focus', tick)
+      document.removeEventListener('visibilitychange', back)
+    }
+  }, [load])
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(t)
@@ -365,6 +406,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         ? fmt(anchor, { weekday: 'long', day: 'numeric', month: 'long' })
         : `${fmt(days[0], { day: 'numeric', month: 'short' })} – ${fmt(days[days.length - 1], { day: 'numeric', month: 'short', year: 'numeric' })}`
   const nowMin = now.getHours() * 60 + now.getMinutes()
+  const now2 = clock
   const gridDays = view === 'day' || view === '3day' || view === 'week' ? days : []
   const closeMenus = (e: React.PointerEvent) => {
     if (menu && !(e.target as HTMLElement).closest('.cal-pop-wrap')) setMenu(null)
@@ -386,6 +428,12 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
             ›
           </button>
           <h2 className="cal-title">{title}</h2>
+          {connected && (
+            <button className={`cal-sync ${sync.error ? 'bad' : sync.busy ? 'busy' : 'ok'}`} onClick={() => void load()} title={sync.error ? `Google: ${sync.error}. Click to try again.` : 'Checks Google Calendar every 15 seconds. Click to check now.'}>
+              <i />
+              {sync.error ? "Couldn't reach Google · Retry" : sync.busy && !sync.at ? 'Syncing…' : sync.at ? `Synced ${agoShort(now2 - sync.at)}` : 'Syncing…'}
+            </button>
+          )}
         </div>
         <div className="cal-tools">
           {!connected && status && (
