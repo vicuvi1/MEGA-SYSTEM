@@ -210,3 +210,21 @@ html.di-dragging .di-pill { transform: scale(1.05); box-shadow: 0 14px 40px rgb(
 .di.at-left .di-card.closing { animation: di-slide-l 0.2s reverse forwards; }
 .di.at-right .di-card.closing { animation: di-slide-r 0.2s reverse forwards; }
 @media (prefers-reduced-motion: reduce) { .di-card, .di-card.closing, .di-bubble, .di-fade { animation: none !important; } }
+
+/* ---- Side tab, readable: icon, then the time big, then one short line ---- */
+.di.at-left .di-pill, .di.at-right .di-pill { width: 78px; min-height: 0; gap: 3px; padding: 9px 6px 10px; border-radius: 20px; }
+.di.at-left .di-pill-time, .di.at-right .di-pill-time { order: 1; font-size: 15px; font-weight: 700; line-height: 1.1; color: var(--fg); letter-spacing: -0.01em; }
+.di.at-left .di-pill-time.over, .di.at-right .di-pill-time.over { color: var(--red); }
+.di.at-left .di-pill-time:empty, .di.at-right .di-pill-time:empty { display: none; }
+.di.at-left .di-pill-text, .di.at-right .di-pill-text { order: 2; font-size: 10.5px; font-weight: 500; color: var(--sub); -webkit-line-clamp: 1; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.di.at-left .di-pill-ctl, .di.at-right .di-pill-ctl { order: 3; }
+.di.at-left .di-pill:hover, .di.at-right .di-pill:hover { transform: scale(1.04); }
+
+/* Calmer everywhere: the time is the thing to read, the label supports it. */
+.di-pill { height: 38px; padding: 0 12px 0 8px; gap: 8px; }
+.di-pill-text { font-weight: 500; color: rgb(255 255 255 / 0.9); }
+.di-pill-time { font-size: 13.5px; }
+/* The island sizes to its content (positioned at 50%, it was capped at half the window). */
+.di { width: max-content; max-width: 100vw; }
+.di-pill-text { flex: 1 1 auto; }
+.di-pill-time { white-space: nowrap; flex: none; }

@@ -454,7 +454,7 @@ export function DesktopIsland() {
             onKeyDown={(e) => e.key === 'Enter' && (show(false), setPinned(true))}
             onWheel={(e) => cycle(e.deltaY > 0 ? 1 : -1)}
             aria-label="Open the island (drag to move it, scroll to switch)"
-            title={acts.length > 1 ? 'Click to open · scroll to switch · drag to move' : 'Click to open · drag to move'}
+            title={`${main ? `${main.kind === 'next' ? 'Next: ' : ''}${main.text}${main.sub ? ` · ${main.sub}` : ''}\n` : ''}${acts.length > 1 ? 'Click to open · scroll to switch · drag to move' : 'Click to open · drag to move'}`}
           >
             {s.locked ? (
               <span className="di-pill-text">🔒 Open Life System</span>
@@ -466,7 +466,11 @@ export function DesktopIsland() {
                 <span key={main.key} className="di-pill-text di-fade">
                   {main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text}
                 </span>
-                <span className={`di-pill-time ${main.over ? 'over' : ''}`}>{main.kind === 'timer' || main.kind === 'water' ? (main.kind === 'water' ? '' : main.text) : main.sub}</span>
+                <span className={`di-pill-time ${main.over ? 'over' : ''}`}>{(() => {
+                  const t = main.kind === 'timer' || main.kind === 'water' ? (main.kind === 'water' ? '' : main.text) : main.sub
+                  // On a side tab every character counts: "3h 07m left" → "3h 07m".
+                  return place === 'left' || place === 'right' ? String(t ?? '').replace(/\s*left$/i, '') : t
+                })()}</span>
                 {main.kind === 'timer' && (
                   <span className="di-pill-ctl">
                     <button
