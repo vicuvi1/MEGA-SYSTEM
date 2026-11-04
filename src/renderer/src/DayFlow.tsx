@@ -22,6 +22,7 @@ import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
 import { useLive } from './live'
+import { addDays } from '@core/dates'
 
 interface Props {
   summary: Summary
@@ -135,6 +136,30 @@ export function DayFlow(props: Props) {
   const toast = useToast()
   const [st, loadFocus] = useFocus()
   const [todo, loadTodo, setTodo] = useTodoist()
+  // Every open task (Tomorrow, No date, Next 7 days, All tabs): what you add in
+  // Todoist in the evening shows here too.
+  const [allTasks, setAllTasks] = useState<TodoTask[] | null>(null)
+  const [syncedAt, setSyncedAt] = useState(0)
+  const loadAll = useCallback(async () => {
+    const r = await life.todoist?.everything?.().catch(() => null)
+    if (r) {
+      setAllTasks(r.tasks)
+      setAreas(r.areas)
+      setSyncedAt(Date.now())
+    }
+  }, [])
+  useLive(() => void loadAll(), { external: true })
+  const [tab, setTabRaw] = useState<TodoTab>(() => (storeGet('ls.todoTab') as TodoTab) || 'today')
+  const setTab = (t: TodoTab) => {
+    setTabRaw(t)
+    storeSet('ls.todoTab', t)
+  }
+  const [syncing, setSyncing] = useState(false)
+  const syncNow = async () => {
+    setSyncing(true)
+    await Promise.all([loadTodo(), loadAll(), life.todoist?.sync?.().catch(() => 0)])
+    setSyncing(false)
+  }
   const [weekPlan, loadWeek] = useWeekPlan()
   const [colors, setColors] = useState<Record<string, string>>({})
   const [upcoming, setUpcoming] = useState<TodoTask[]>([])
@@ -143,7 +168,7 @@ export function DayFlow(props: Props) {
   useEffect(() => {
     life.todoist?.upcoming?.().then(setUpcoming).catch(() => {})
     life.todoist?.colors?.().then(setColors).catch(() => {})
-    life.todoist?.everything?.().then((x) => setAreas(x.areas)).catch(() => {})
+    void loadAll()
     life.todoist?.order?.().then(setOrder).catch(() => {})
   }, [])
   const today = summary.today
@@ -226,6 +251,7 @@ export function DayFlow(props: Props) {
     soundSuccess()
     await fadeOut(t.id)
     setTodo((cur) => (cur ?? []).filter((x) => x.id !== t.id))
+    setAllTasks((cur) => (cur ? cur.filter((x) => x.id !== t.id) : cur))
     setLeaving((l) => l.filter((x) => x !== t.id))
     const r = await act(() => life.todoist!.complete(t))
     if (r) toast(`Done: ${t.content}${r.paid ? ' · +5 points' : ''}`, 'good')
@@ -402,12 +428,24 @@ export function DayFlow(props: Props) {
     return out
   }, [loose, colors])
 
+  const tabTasks = (t: TodoTab): TodoTask[] => {
+    const all = allTasks ?? []
+    const tom = addDays(today, 1)
+    const wk = addDays(today, 7)
+    const list = t === 'tomorrow' ? all.filter((x) => x.due === tom) : t === 'nodate' ? all.filter((x) => !x.due) : t === 'week' ? all.filter((x) => !!x.due && x.due > today && x.due <= wk) : t === 'all' ? all : todoList ?? []
+    return sortToday(list, today)
+  }
+
   // ---- Editing tasks in place -------------------------------------------
   const patchTask = async (t: TodoTask, patch: { content?: string; priority?: number; due?: string; description?: string; duration?: number | null }, local: Partial<TodoTask>, msg?: string) => {
     setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, ...local } : x)))
     const ok = await act(() => life.todoist!.update!(t.id, patch).then(() => true), msg)
     // Moved out of today, or a date Todoist worked out: reload to see where it went.
-    if (!ok || patch.due) void loadTodo()
+    setAllTasks((cur) => (cur ? cur.map((x) => (x.id === t.id ? { ...x, ...local } : x)) : cur))
+    if (!ok || patch.due) {
+      void loadTodo()
+      void loadAll()
+    }
   }
   /** 📅 Book: the task goes into your next free time today (calendar block + its time in Todoist). */
   const bookTask = async (t: TodoTask) => {
@@ -499,8 +537,9 @@ export function DayFlow(props: Props) {
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
   }, [])
-  const taskRow = (t: TodoTask, isStar: boolean, group: string | null) => (
+  const taskRow = (t: TodoTask, isStar: boolean, group: string | null, extra?: React.ReactNode) => (
     <TodayTaskRow
+      extra={extra}
       key={t.id}
       t={t}
       today={today}
@@ -543,7 +582,7 @@ export function DayFlow(props: Props) {
   const mustDone = planOnly.filter((x) => x.p.done).length
   const lateCount = loose.filter((t) => t.due && t.due < today).length
   // The rest of today's tasks fold away while you have must-dos (your choice is remembered).
-  const restOpen = restPref ?? mustTotal === 0
+  const restOpen = restPref ?? true
   const total = planOnly.length + starred.length + bigOpen.length + loose.length
   const running = st.running
   const elapsed = running ? tick - new Date(running.startedAt).getTime() : 0
@@ -743,6 +782,37 @@ export function DayFlow(props: Props) {
           ))}
         </div>
 
+        <div className="dl-tabs" role="tablist" aria-label="Which tasks">
+          {TODO_TABS.map(([id, label]) => (
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+              {label}
+              <i>{id === 'today' ? (todoList?.length ?? 0) + planOnly.length : tabTasks(id).length}</i>
+            </button>
+          ))}
+          <button className={`dl-sync ${syncing ? 'busy' : ''}`} onClick={() => void syncNow()} title="Get the newest from Todoist now (it also checks by itself every few seconds)">
+            ⟳ {syncing ? 'Syncing…' : syncedAt ? `Synced ${Date.now() - syncedAt < 15_000 ? 'just now' : `${Math.round((Date.now() - syncedAt) / 60_000) || '<1'} min ago`}` : 'Sync'}
+          </button>
+        </div>
+
+        {tab !== 'today' && (
+          <TabList
+            tasks={tabTasks(tab)}
+            empty={tab === 'nodate' ? 'Every task has a date. Nice.' : tab === 'tomorrow' ? 'Nothing for tomorrow yet.' : 'Nothing here.'}
+            groupOf={(t) => ({ key: areaKey(t), name: t.section || (t.project && t.project !== 'Inbox' ? t.project : 'Inbox'), color: colorOf(t) })}
+            row={(t, g, extra) => taskRow(t, isStarred(t), g, extra)}
+            quick={(t) => (
+              <span className="dl-quick">
+                {t.due !== today && (
+                  <button onClick={() => void patchTask(t, { due: 'today' }, { due: today }, `${t.content}: today`)}>Today</button>
+                )}
+                {t.due !== addDays(today, 1) && (
+                  <button onClick={() => void patchTask(t, { due: 'tomorrow' }, { due: addDays(today, 1) }, `${t.content}: tomorrow`)}>Tomorrow</button>
+                )}
+              </span>
+            )}
+          />
+        )}
+        {tab === 'today' && (<>
         <div className="dl-group" style={{ ['--c' as string]: 'var(--accent)' }}>
           <h3 className="dl-head">
             <i /> Must-dos <small>+10 each</small>
@@ -807,7 +877,7 @@ export function DayFlow(props: Props) {
               </small>
             </summary>
         {groups.map((g) => {
-          const items = showAll ? g.items : g.items.filter(() => shown_++ < LIMIT)
+          const items = g.items
           if (!items.length) return null
           return (
             <div key={g.key} className="dl-group" style={{ ['--c' as string]: g.color }}>
@@ -830,11 +900,7 @@ export function DayFlow(props: Props) {
             </div>
           )
         })}
-        {loose.length > LIMIT && (
-          <button className="btn ghost dl-more" onClick={() => setShowAll(!showAll)}>
-            {showAll ? 'Show fewer' : `Show all ${loose.length} (the most urgent are on top)`}
-          </button>
-        )}
+
           </details>
         )}
         {todoList && todoList.length === 0 && <p className="hint dl-empty">Nothing due in Todoist today.</p>}
@@ -855,7 +921,8 @@ export function DayFlow(props: Props) {
             </ul>
           </div>
         )}
-        {week?.focus && (
+        </>)}
+        {tab === 'today' && week?.focus && (
           <p className="hint dl-week" onClick={() => onGo('progress')}>
             <Icon name="trophy" size={13} /> Week focus: <b>{week.note || WEEK_LABEL[week.focus] || week.focus}</b>
           </p>
@@ -969,3 +1036,36 @@ function AreaAdd({ name, onAdd }: { name: string; onAdd: (v: string) => Promise<
   )
 }
 
+
+type TodoTab = 'today' | 'tomorrow' | 'nodate' | 'week' | 'all'
+const TODO_TABS: [TodoTab, string][] = [
+  ['today', 'Today'],
+  ['tomorrow', 'Tomorrow'],
+  ['nodate', 'No date'],
+  ['week', 'Next 7 days'],
+  ['all', 'All']
+]
+
+/** Every task of a tab, numbered and grouped by area (with a count per area). */
+function TabList({ tasks, empty, groupOf, row, quick }: { tasks: TodoTask[]; empty: string; groupOf: (t: TodoTask) => { key: string; name: string; color: string }; row: (t: TodoTask, group: string, extra: React.ReactNode) => React.ReactNode; quick: (t: TodoTask) => React.ReactNode }) {
+  if (!tasks.length) return <p className="hint dl-empty">{empty}</p>
+  const groups: { key: string; name: string; color: string; items: TodoTask[] }[] = []
+  for (const t of tasks) {
+    const g = groupOf(t)
+    let x = groups.find((y) => y.key === g.key)
+    if (!x) groups.push((x = { ...g, items: [] }))
+    x.items.push(t)
+  }
+  return (
+    <div className="dl-tablist">
+      {groups.map((g) => (
+        <div key={g.key} className="dl-group" style={{ ['--c' as string]: g.color }}>
+          <h3 className="dl-head">
+            <i /> {g.name} <small>{g.items.length}</small>
+          </h3>
+          <ul className="dl">{g.items.map((t) => row(t, g.key, quick(t)))}</ul>
+        </div>
+      ))}
+    </div>
+  )
+}

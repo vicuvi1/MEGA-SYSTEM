@@ -44,6 +44,7 @@ export function TodayTaskRow({
   onDone,
   onFocus,
   onBook,
+  extra,
   onStar,
   onPatch,
   onMove,
@@ -63,6 +64,8 @@ export function TodayTaskRow({
   onFocus: () => void
   /** Put it into the next free time today (only for tasks without a time). */
   onBook?: () => void
+  /** Extra quick buttons (e.g. Today / Tomorrow in the other tabs). */
+  extra?: React.ReactNode
   onStar: () => void
   /** Change the task (optimistic in the list, then Todoist). */
   onPatch: (patch: { content?: string; priority?: number; due?: string; description?: string; duration?: number | null }, local: Partial<TodoTask>, msg?: string) => void
@@ -144,6 +147,7 @@ export function TodayTaskRow({
         <button className="tt-flag" style={{ color: P_COLOR[t.priority] }} onClick={() => setMenu(menu === 'prio' ? null : 'prio')} title={`${P_NAME[t.priority]} (keys 1–4)`} aria-label="Priority">
           ⚑
         </button>
+        {extra}
         {onBook && (
           <button className="tt-book" onClick={onBook} title="Book it into your next free time today" aria-label={`Book ${t.content} into your calendar`}>
             <Icon name="calendar" size={12} /> Book
