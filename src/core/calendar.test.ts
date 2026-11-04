@@ -115,3 +115,30 @@ describe('calendar core domain', () => {
     expect(emptyPrompt).toBe('No Google Calendar events scheduled for this day.')
   })
 })
+
+describe('calendar files done right', () => {
+  const ics = (body: string) => `BEGIN:VCALENDAR\nBEGIN:VEVENT\n${body}\nEND:VEVENT\nEND:VCALENDAR`
+  it('honours TZID', async () => {
+    const { parseIcs } = await import('./calendar')
+    const [e] = parseIcs(ics('UID:a\nSUMMARY:Lecture\nDTSTART;TZID=Europe/Chisinau:20261104T100000\nDTEND;TZID=Europe/Chisinau:20261104T113000'), 'Europe/Chisinau', new Date('2026-11-04T00:00:00Z'))
+    expect(e.start).toBe('2026-11-04T08:00:00.000Z') // 10:00 in Chisinau (UTC+2 in November)
+    expect(e.startTime).toBe('10:00')
+    expect(e.endTime).toBe('11:30')
+  })
+  it('an all-day DTEND is exclusive', async () => {
+    const { parseIcs } = await import('./calendar')
+    const [e] = parseIcs(ics('UID:b\nSUMMARY:Holiday\nDTSTART;VALUE=DATE:20261105\nDTEND;VALUE=DATE:20261106'), 'UTC', new Date('2026-11-04T00:00:00Z'))
+    expect(e.end.slice(0, 10)).toBe('2026-11-05')
+  })
+  it('expands weekly repeats with BYDAY and COUNT, skips EXDATE', async () => {
+    const { parseIcs } = await import('./calendar')
+    const list = parseIcs(ics('UID:c\nSUMMARY:Lab\nDTSTART:20261102T140000Z\nDTEND:20261102T160000Z\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=4\nEXDATE:20261104T140000Z'), 'UTC', new Date('2026-11-02T00:00:00Z'))
+    expect(list.map((e) => e.day)).toEqual(['2026-11-02', '2026-11-09', '2026-11-11'])
+    expect(new Set(list.map((e) => e.id)).size).toBe(3)
+  })
+  it('the same event without a UID keeps the same id', async () => {
+    const { parseIcs } = await import('./calendar')
+    const body = ics('SUMMARY:Gym\nDTSTART:20261104T180000Z')
+    expect(parseIcs(body, 'UTC')[0].id).toBe(parseIcs(body, 'UTC')[0].id)
+  })
+})
