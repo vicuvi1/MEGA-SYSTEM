@@ -14,7 +14,7 @@ import { useTicker } from './useTicker'
 import { Skeleton } from './blocks'
 import { useSwipeRows } from './swipe'
 import { TodayTaskRow, withToday } from './TodayTaskRow'
-import { reloadToday, useTodayEvents } from './todayEvents'
+import { localToday, reloadToday, useTodayEvents } from './todayEvents'
 import { nextSlot } from '@core/benActs'
 import { blockSubject, isFocusBlock, localDay } from '@core/dayTime'
 import { focusCoins } from '@core/focus'
@@ -22,7 +22,7 @@ import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
 import { useLive } from './live'
-import { addDays } from '@core/dates'
+import { addDays, dayKey } from '@core/dates'
 
 interface Props {
   summary: Summary
@@ -207,7 +207,7 @@ export function DayFlow(props: Props) {
   const blockNow = useMemo(() => {
     if (st?.running) return null
     const t = Date.now()
-    return calEvents.find((e) => !e.allDay && localDay(e.start) === today && isFocusBlock(e) && Date.parse(e.start) <= t && Date.parse(e.end) - t >= 10 * 60000) ?? null
+    return calEvents.find((e) => !e.allDay && dayKey(e.start) === today && isFocusBlock(e) && Date.parse(e.start) <= t && Date.parse(e.end) - t >= 10 * 60000) ?? null
     // tick keeps it fresh while focusing; the 30 s live reload otherwise
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calEvents, st?.running, today, tick])
@@ -1064,7 +1064,7 @@ function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, openTodo, 
               ))}
             </ul>
           ) : (
-            <span className="hint">Nothing left for {today === new Date().toISOString().slice(0, 10) ? 'today' : 'the day'}. Clean finish.</span>
+            <span className="hint">Nothing left for {today === localToday() ? 'today' : 'the day'}. Clean finish.</span>
           )}
         </li>
         <li>

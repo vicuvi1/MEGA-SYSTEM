@@ -17,7 +17,7 @@ import type { TodoTask } from '@core/todoist'
 import { life } from './bridge'
 import { useLive } from './live'
 import { useFocus } from './pages/Focus'
-import { localToday, reloadToday, useTodayEvents } from './todayEvents'
+import { localToday, calendarToday, reloadToday, useTodayEvents } from './todayEvents'
 import { soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
 
@@ -48,7 +48,7 @@ type Drag = { kind: 'move' | 'resize'; b: Block; y0: number; moved: boolean; off
 export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: TodoTask, startMin: number) => void }) {
   const act = useAction()
   const toast = useToast()
-  const today = localToday()
+  const today = calendarToday()
   const { events, connected } = useTodayEvents()
   const [marks, setMarks] = useState<Record<string, 'done' | 'skip'>>({})
   const [focus] = useFocus()

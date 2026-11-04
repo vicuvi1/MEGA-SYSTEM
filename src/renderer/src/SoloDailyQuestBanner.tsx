@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import { dayKey } from '@core/dates'
 import { findExercise, readSport, updateSport } from './sportTrack'
 import type { BodyState, Summary } from '@shared/api'
 import { life } from './bridge'
@@ -16,7 +17,7 @@ interface Props {
 export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) {
   const [waterMl, setWaterMl] = useState<number>(() => {
     try {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = dayKey(new Date(), undefined, 0)
       const saved = localStorage.getItem('ls.hydration')
       if (saved) {
         const parsed = JSON.parse(saved)
@@ -26,7 +27,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
     return 0
   })
 
-  const todayKey = new Date().toISOString().slice(0, 10)
+  const todayKey = dayKey(new Date(), undefined, 0)
 
   // Live real-time Sport Track state from shared browser storage
   // (yesterday's reps don't count: readSport starts a new day like Sport Track does)

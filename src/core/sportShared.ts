@@ -3,13 +3,15 @@
 // coach and Sporty (the Python bot, through /api/cron?job=sport) all read
 // and write it here. Pure helpers; Sport Track's day is the UTC date.
 
+import { dayKey } from './dates'
 export interface SharedSport {
   date: string
   water: { ml: number; target: number; glass: number }
   exercises: { id: string; name: string; target: number; done: number }[]
 }
 
-export const sportToday = (now = new Date()) => now.toISOString().slice(0, 10)
+/** The calendar day in local time (Sport Track and Sporty use the same; never UTC). */
+export const sportToday = (now = new Date()) => dayKey(now, undefined, 0)
 
 /** A new day starts a fresh checklist (reps and water back to 0). */
 export function sportForDay(st: any, today: string): any {

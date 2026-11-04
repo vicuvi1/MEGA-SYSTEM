@@ -1,16 +1,16 @@
 // Today's Google Calendar events, shared by the timeline and the Now card
 // (one fetch, everyone redraws). Reloads live: when data changes and every
 // ~30 s for changes made in Google Calendar itself.
+import { addDays, dayKey } from '@core/dates'
 import { useEffect, useState } from 'react'
 import type { CalEvent } from '@core/dayTime'
 import { life } from './bridge'
 import { useLive } from './live'
 
-const pad = (n: number) => String(n).padStart(2, '0')
-export const localToday = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
+/** Today, the app's way: the day ends at 04:00, so at 01:30 it is still "today" for your plan. */
+export const localToday = () => dayKey(new Date())
+/** The calendar date (midnight to midnight): the timeline and booking use this one. */
+export const calendarToday = () => dayKey(new Date(), undefined, 0)
 
 interface Snapshot {
   day: string
@@ -42,7 +42,7 @@ export function reloadToday(): Promise<void> {
     let events = snap.day === day ? snap.events : []
     if (on && !error) {
       try {
-        events = await limit(life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()), 20_000)
+        events = await limit(life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${addDays(calendarToday(), 1)}T04:00:00`).toISOString()), 20_000)
       } catch (e) {
         error = (e as Error).message
       }

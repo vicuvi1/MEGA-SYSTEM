@@ -1,4 +1,5 @@
 import { RestDayCard } from '../RestDay'
+import { dayKey } from '@core/dates'
 import { useState } from 'react'
 import type { BodyMetricInput, BodyState, Exercise, WorkoutExerciseItem, WorkoutInput } from '@shared/api'
 import { life } from '../bridge'
@@ -24,7 +25,7 @@ export function Body({
   const [exerciseOpen, setExerciseOpen] = useState(false)
   const [shortOnTime, setShortOnTime] = useState(false)
 
-  const todayKey = new Date().toISOString().split('T')[0]
+  const todayKey = dayKey(new Date(), undefined, 0)
   const [waterMl, setWaterMl] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('ls.hydration')

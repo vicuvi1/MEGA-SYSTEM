@@ -12,7 +12,7 @@ import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
 import { ProgressCard } from './Progress'
 import { FunCard } from '../FunCard'
 import { DayStrip } from '../DayStrip'
-import { localToday, reloadToday } from '../todayEvents'
+import { localToday, calendarToday, reloadToday } from '../todayEvents'
 import { useLive } from '../live'
 import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
@@ -232,7 +232,7 @@ function TodayStrip() {
   useLive(load, { external: true })
   const book = async (t: TodoTask, startMin: number) => {
     if (!t) return
-    const day = localToday()
+    const day = calendarToday()
     const minutes = t.duration && t.duration >= 10 ? Math.min(t.duration, 240) : 50
     const at = (m: number) => new Date(`${day}T${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00`).toISOString()
     const hm = `${String(Math.floor(startMin / 60)).padStart(2, '0')}:${String(startMin % 60).padStart(2, '0')}`

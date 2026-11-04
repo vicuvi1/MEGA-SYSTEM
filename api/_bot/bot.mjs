@@ -11366,7 +11366,8 @@ function weekSoFar(today, focus, workouts, tasks) {
 	};
 }
 // src/core/sportShared.ts
-var sportToday = (now = /* @__PURE__ */ new Date()) => now.toISOString().slice(0, 10);
+/** The calendar day in local time (Sport Track and Sporty use the same; never UTC). */
+var sportToday = (now = /* @__PURE__ */ new Date()) => dayKey(now, void 0, 0);
 /** A new day starts a fresh checklist (reps and water back to 0). */
 function sportForDay(st, today) {
 	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : {};
