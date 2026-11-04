@@ -14,8 +14,8 @@ import { useTicker } from './useTicker'
 import { Skeleton } from './blocks'
 import { useSwipeRows } from './swipe'
 import { TodayTaskRow, withToday } from './TodayTaskRow'
-import { localToday, reloadToday, useTodayEvents } from './todayEvents'
-import { nextSlot } from '@core/benActs'
+import { calendarToday, localToday, reloadToday, useTodayEvents } from './todayEvents'
+import { nextSlot, planMustDos } from '@core/benActs'
 import { blockSubject, isFocusBlock, localDay } from '@core/dayTime'
 import { focusCoins } from '@core/focus'
 import { activePlan } from '@core/weekPlan'
@@ -689,7 +689,26 @@ export function DayFlow(props: Props) {
             <li>
               <b>3. Put them in your calendar</b>
               <span className="hint">Blocks in your free time; you approve them.</span>
-              <button className="btn small" disabled={!plan.length} onClick={planDayInCalendar}>
+              <button
+                className="btn small"
+                disabled={!plan.length}
+                onClick={async () => {
+                  // Book the open must-dos into today's free time (50 min each).
+                  if (!life.google) return props.onGo('settings')
+                  const day = calendarToday()
+                  const nowHm = new Date().toTimeString().slice(0, 5)
+                  const todo = plan.filter((p) => !p.done).map((p) => p.text).filter((t) => !calEvents.some((e) => same(e.title, t)))
+                  const slots = planMustDos(calEvents, day, nowHm, todo)
+                  if (!todo.length) return void act(async () => true, 'Your must-dos are already in the calendar')
+                  if (!slots.length) return void act(async () => true, 'No free time left today: move something or plan tomorrow')
+                  const at = (hm: string) => new Date(`${day}T${hm}:00`).toISOString()
+                  const ok = await act(async () => {
+                    for (const b of slots) await life.google!.create({ title: b.title, start: at(b.start), end: at(b.end), description: 'Must-do · planned in Life System' })
+                    return true
+                  }, `Booked ${slots.length} block${slots.length === 1 ? '' : 's'}: ${slots.map((b) => `${b.start} ${b.title}`).join(' · ')}`)
+                  if (ok) void reloadToday()
+                }}
+              >
                 <Icon name="calendar" size={13} /> Plan my day
               </button>
             </li>

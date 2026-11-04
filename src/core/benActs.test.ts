@@ -44,3 +44,15 @@ describe('Ben acts', () => {
     expect(helpLine('2 promises missed this week, no focus yet today')).toContain('25-minute')
   })
 })
+
+import { planMustDos } from './benActs'
+describe('Plan my day', () => {
+  it('books must-dos one after another in free time, around events', () => {
+    const day = '2026-11-04'
+    const ev = [{ id: 'c', calendarId: 'x', title: 'Class', start: new Date(`${day}T10:00:00`).toISOString(), end: new Date(`${day}T12:00:00`).toISOString(), allDay: false }]
+    const out = planMustDos(ev, day, '09:05', ['Lab report', 'CV', 'Read'])
+    expect(out.map((b) => b.title)).toEqual(['Lab report', 'CV', 'Read'])
+    expect(out[0].start >= '12:00' || out[0].end <= '10:00').toBe(true)
+    for (let i = 1; i < out.length; i++) expect(out[i].start >= out[i - 1].end).toBe(true)
+  })
+})

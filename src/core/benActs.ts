@@ -90,3 +90,17 @@ export function nudgeText(n: number, idle: string, first: string | undefined, fo
       ? `🎯 Smallest next step: ${step} If something's in the way, tell me and I'll move it.`
       : `🎯 Still here when you're ready. ${step} Or pause me for today.`
 }
+
+/** Must-dos into today's free time, one after another (50 min each, 10 min apart). */
+export function planMustDos(events: CalEvent[], day: string, nowHm: string, titles: string[], minutes = 50): { title: string; start: string; end: string }[] {
+  const taken: CalEvent[] = [...events]
+  const out: { title: string; start: string; end: string }[] = []
+  for (const title of titles) {
+    const slot = nextSlot(taken, day, nowHm, minutes + 10)
+    if (!slot) break
+    const end = fromMin(toMin(slot.start) + minutes)
+    out.push({ title, start: slot.start, end })
+    taken.push({ id: `plan-${out.length}`, calendarId: '', title, start: new Date(`${day}T${slot.start}:00`).toISOString(), end: new Date(`${day}T${fromMin(toMin(slot.start) + minutes + 10)}:00`).toISOString(), allDay: false })
+  }
+  return out
+}
