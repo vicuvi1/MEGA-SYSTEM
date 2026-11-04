@@ -370,6 +370,12 @@ export interface LifeApi {
     setRemembered?(on: boolean, pin?: string): Promise<boolean>
   }
   /** The notification center (synced across devices). */
+  /** The notebook (Obsidian-like): your notes and Ben's. */
+  notes?: {
+    list(): Promise<import('@core/notebook').Note[]>
+    save(n: { id?: string; title: string; body: string; pinned?: boolean }): Promise<import('@core/notebook').Note>
+    remove(id: string): Promise<void>
+  }
   notifications?: {
     list(): Promise<import('@core/notify').Notif[]>
     read(ids: string[] | null): Promise<void>

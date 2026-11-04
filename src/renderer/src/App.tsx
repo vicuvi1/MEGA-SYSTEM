@@ -43,6 +43,7 @@ const Sleep = lazyNamed(() => import('./pages/Sleep'), 'Sleep')
 const Money = lazyNamed(() => import('./pages/Money'), 'Money')
 const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
 const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
+const Notebook = lazyNamed(() => import('./pages/Notebook'), 'Notebook')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
@@ -653,6 +654,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'bots' && <BotCenter />}
+            {page === 'notebook' && <Notebook />}
             {page === 'tasks' && <TodoTasks onWallet={onWallet} />}
             {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
             {(page === 'progress' || page === 'focus') && <Progress onGo={setPage} onWallet={onWallet} />}

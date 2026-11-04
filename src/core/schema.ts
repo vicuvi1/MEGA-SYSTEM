@@ -324,5 +324,18 @@ export const MIGRATIONS: string[] = [
     dismissed_at TEXT
   );
   CREATE INDEX IF NOT EXISTS notifications_at ON notifications(at);
+  `,
+  // The notebook (Obsidian-like): your notes and Ben's, synced everywhere.
+  `
+  CREATE TABLE IF NOT EXISTS notes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT 'me',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS notes_title ON notes(lower(title));
   `
 ]

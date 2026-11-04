@@ -272,6 +272,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           >
             🧠 {model ? model.replace(/^.*\//, '').replace(/-\d{3,}$/, '') : 'coach'}
           </button>
+          <button className="cx-model" title="Your notebook: what Ben knows about you, his notes, your journal" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'notebook' }))}>
+            📓 Notebook
+          </button>
           <button className={`icon-btn ${query != null ? 'on' : ''}`} onClick={() => setQuery((q) => (q == null ? '' : null))} aria-label="Search the chat" title="Search the chat">
             <Icon name="search" />
           </button>

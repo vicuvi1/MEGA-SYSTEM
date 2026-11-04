@@ -1782,3 +1782,45 @@
 .brain-recent td { padding: 4px 6px; border-top: 1px solid rgb(var(--ink) / 0.06); color: var(--muted); white-space: nowrap; }
 .brain-recent td:nth-child(2) { color: var(--text); }
 .cx-model { border: 0; cursor: pointer; font: inherit; }
+
+/* The notebook (Obsidian-like): notes on the left, the note on the right. */
+.nb { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; min-height: calc(100vh - 160px); }
+.nb-side { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 18px; background: var(--surface); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.06); min-height: 0; }
+.nb-side-head { display: flex; gap: 8px; align-items: center; }
+.nb-side-head .st-search { flex: 1; }
+.nb-filters { display: flex; gap: 4px; flex-wrap: wrap; }
+.nb-filters button { border: 0; border-radius: 999px; padding: 4px 10px; background: rgb(var(--ink) / 0.06); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.nb-filters button.on { background: var(--accent); color: var(--accent-ink); }
+.nb-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; }
+.nb-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.nb-item:hover { background: rgb(var(--ink) / 0.05); }
+.nb-item.on { background: var(--accent-soft); }
+.nb-item b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.nb-item small { color: var(--muted); font-size: 11px; }
+.nb-main { display: flex; flex-direction: column; gap: 12px; padding: 18px 22px; border-radius: 18px; background: var(--surface); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.06); min-width: 0; }
+.nb-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nb-title { flex: 1; min-width: 200px; margin: 0; font-size: 24px; font-weight: 700; }
+input.nb-title { border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 0 !important; color: var(--text); font: inherit; font-size: 24px; font-weight: 700; }
+.nb-actions { display: flex; gap: 6px; }
+.nb-edit { flex: 1; min-height: 420px; width: 100%; resize: vertical; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 14px; border-radius: 12px; }
+.nb-view { flex: 1; min-height: 300px; cursor: text; }
+.nb-md { font-size: 15px; line-height: 1.65; }
+.nb-md h2 { font-size: 22px; margin: 4px 0 10px; }
+.nb-md h3 { font-size: 18px; margin: 16px 0 8px; }
+.nb-md h4 { font-size: 15px; margin: 14px 0 6px; }
+.nb-md p { margin: 0 0 10px; }
+.nb-md ul { margin: 0 0 10px; padding-left: 20px; }
+.nb-md li { margin: 3px 0; }
+.nb-md li.nb-task { list-style: none; margin-left: -20px; display: flex; gap: 8px; align-items: flex-start; }
+.nb-md li.nb-task.done span { color: var(--muted); text-decoration: line-through; }
+.nb-md blockquote { margin: 0 0 10px; padding: 6px 12px; border-left: 3px solid var(--accent); color: var(--muted); }
+.nb-md code { padding: 1px 5px; border-radius: 5px; background: rgb(var(--ink) / 0.08); font-size: 13px; }
+.nb-md i { color: var(--muted); }
+.nb-link { border: 0; padding: 0 2px; background: transparent; color: var(--accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
+.nb-link.new { color: var(--muted); text-decoration-style: dashed; }
+.nb-foot { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid rgb(var(--ink) / 0.06); }
+.nb-foot > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.nb-foot small { color: var(--muted); font-size: 12px; margin-right: 4px; }
+.nb-empty { margin: auto; text-align: center; color: var(--muted); }
+@media (max-width: 900px) { .nb { grid-template-columns: 1fr; } .nb-side { max-height: 320px; } }
+.nb-side-head .st-search { min-width: 0; } .nb-side-head .btn { flex: none; }

@@ -324,6 +324,18 @@ var MIGRATIONS = [
     dismissed_at TEXT
   );
   CREATE INDEX IF NOT EXISTS notifications_at ON notifications(at);
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS notes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT 'me',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS notes_title ON notes(lower(title));
   `
 ];
 // src/core/ledger.ts
@@ -8157,7 +8169,7 @@ var KEYWORDS = {
 };
 var fold$2 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 var STOP = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store magazin".split(" "));
-var words = (note) => [...new Set(fold$2(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP.has(w));
+var words$1 = (note) => [...new Set(fold$2(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP.has(w));
 function matchRule(state, note, type) {
 	const n = fold$2(note);
 	if (!n) return null;
@@ -8173,7 +8185,7 @@ function wordStats(state, type) {
 	const out = /* @__PURE__ */ new Map();
 	for (const t of state.tx) {
 		if (t.type !== type || !t.note || t.category === "other" || t.category === "other-in") continue;
-		for (const w of words(t.note)) {
+		for (const w of words$1(t.note)) {
 			const m = out.get(w) || /* @__PURE__ */ new Map();
 			m.set(t.category, (m.get(t.category) || 0) + 1);
 			out.set(w, m);
@@ -8188,7 +8200,7 @@ function wordStats(state, type) {
 function learnedCategory(state, note, type) {
 	const stats = wordStats(state, type);
 	let best = null;
-	for (const w of words(note)) {
+	for (const w of words$1(note)) {
 		const m = stats.get(w);
 		if (!m) continue;
 		const total = [...m.values()].reduce((a, b) => a + b, 0);
@@ -9641,6 +9653,150 @@ function findExercise(s, name) {
 		return id.includes(key) || n.includes(key) || n.length > 3 && key.includes(n);
 	}) ?? null;
 }
+// src/core/notebook.ts
+/** Notes you start with (empty, for you to fill). */
+var STARTER_NOTES = [
+	{
+		title: "About me",
+		pinned: true,
+		body: "# About me\n\nWrite what Ben should always know: who you are, what you study or work on, your goals, what motivates you, what makes you procrastinate.\n\n- \n"
+	},
+	{
+		title: "Goals",
+		body: "# Goals\n\n- \n"
+	},
+	{
+		title: "People",
+		body: "# People\n\nThe people in your life Ben should know about.\n\n- \n"
+	},
+	{
+		title: "Ben's notes",
+		body: "# Ben's notes\n\nWhat Ben learned about you. He adds a dated line here; you can edit or delete any of it.\n"
+	}
+];
+var noteKey = (title) => title.trim().toLowerCase().replace(/\s+/g, " ");
+var words = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2);
+/** Search: title words count most, then body; newest first on a tie. */
+function searchNotes(notes, q) {
+	const w = words(q);
+	if (!w.length) return [...notes].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
+	return notes.map((n) => {
+		const t = new Set(words(n.title));
+		const b = words(n.body);
+		return {
+			n,
+			score: w.reduce((s, x) => s + (t.has(x) ? 5 : 0) + (b.filter((y) => y.startsWith(x)).length ? 1 + Math.min(3, b.filter((y) => y.startsWith(x)).length) / 3 : 0), 0)
+		};
+	}).filter((x) => x.score > 0).sort((a, b) => b.score - a.score || b.n.updatedAt.localeCompare(a.n.updatedAt)).map((x) => x.n);
+}
+/**
+* What Ben reads before he answers: pinned notes (About me) and the notes
+* that match the message, then the latest journal days; within `budget` chars.
+*/
+function notesForBen(notes, message, budget = 3500) {
+	const picked = [];
+	const add = (n) => n && !picked.includes(n) && picked.push(n);
+	notes.filter((n) => n.pinned).forEach(add);
+	searchNotes(notes, message).slice(0, 4).forEach(add);
+	notes.filter((n) => /^journal\//i.test(n.title)).sort((a, b) => b.title.localeCompare(a.title)).slice(0, 2).forEach(add);
+	let left = budget;
+	const parts = [];
+	for (const n of picked) {
+		if (left < 120) break;
+		const body = n.body.replace(/\n{3,}/g, "\n\n").trim();
+		const cut = body.length > left - 40 ? `${body.slice(0, left - 60)}…` : body;
+		parts.push(`### ${n.title}${n.author === "me" ? " (written by Victor)" : ""}\n${cut}`);
+		left -= cut.length + n.title.length + 8;
+	}
+	return parts.join("\n\n");
+}
+/** Ben's notebook actions: "note: <Title> | <line>" adds a dated line (creates the note if needed). */
+function readNoteOp(action) {
+	const m = /^\s*note\s*:\s*([^|]{1,80})\|\s*([\s\S]{1,500})$/i.exec(action);
+	if (!m) return null;
+	const title = m[1].trim();
+	const line = m[2].trim().replace(/\s+/g, " ");
+	if (!title || !line) return null;
+	return {
+		title,
+		line
+	};
+}
+/** The note after Ben adds a line (new note when it doesn't exist yet). */
+function appendLine(note, title, line, day, now, id) {
+	const entry = `- ${line} _(Ben, ${day})_`;
+	if (!note) return {
+		id,
+		title,
+		body: `# ${title}\n\n${entry}\n`,
+		author: "ben",
+		pinned: false,
+		createdAt: now,
+		updatedAt: now
+	};
+	if (note.body.includes(line)) return note;
+	return {
+		...note,
+		body: `${note.body.replace(/\s*$/, "")}\n${entry}\n`,
+		updatedAt: now
+	};
+}
+/** The evening journal page, from Ben's review of the day. */
+function journalNote(day, lines) {
+	return {
+		title: `Journal/${day}`,
+		body: [
+			`# ${day}`,
+			"",
+			`**Day score:** ${lines.score}/100`,
+			"",
+			lines.result.trim(),
+			"",
+			`**Lesson:** ${lines.lesson.trim()}`,
+			"",
+			lines.top3.length ? `**Tomorrow's top 3:**\n${lines.top3.map((t, i) => `${i + 1}. ${t}`).join("\n")}` : ""
+		].join("\n").trim()
+	};
+}
+// src/renderer/src/web/notes.ts
+var newId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+var row = (r) => ({
+	id: String(r.id),
+	title: String(r.title),
+	body: String(r.body ?? ""),
+	author: r.author === "ben" ? "ben" : "me",
+	pinned: !!Number(r.pinned),
+	createdAt: String(r.created_at),
+	updatedAt: String(r.updated_at)
+});
+function listNotes(db) {
+	return db.prepare("SELECT id, title, body, author, pinned, created_at, updated_at FROM notes ORDER BY pinned DESC, updated_at DESC").all().map(row);
+}
+/** The first time: the starter notes (About me, Goals, People, Ben's notes). */
+function seedNotes(db, now = /* @__PURE__ */ new Date()) {
+	if (db.prepare("SELECT COUNT(*) AS n FROM notes").all()[0]?.n > 0) return;
+	for (const s of STARTER_NOTES) db.prepare("INSERT OR IGNORE INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(newId(), s.title, s.body, "me", s.pinned ? 1 : 0, now.toISOString(), now.toISOString());
+}
+var byTitle = (db, title) => {
+	const r = db.prepare("SELECT id, title, body, author, pinned, created_at, updated_at FROM notes WHERE lower(title) = ?").all(noteKey(title))[0];
+	return r ? row(r) : null;
+};
+/** Ben adds a dated line under a note (made if it doesn't exist). Returns the "done" line, or null. */
+function benNote(db, title, line, day, now = /* @__PURE__ */ new Date()) {
+	const cur = byTitle(db, title);
+	const next = appendLine(cur, cur?.title ?? title.trim().slice(0, 120), line.slice(0, 400), day, now.toISOString(), cur?.id ?? newId());
+	if (cur && next === cur) return null;
+	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(next.body, next.updatedAt, cur.id);
+	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(next.id, next.title, next.body, "ben", next.createdAt, next.updatedAt);
+	return `📓 Noted in “${next.title}”: ${line.slice(0, 80)}`;
+}
+/** The evening journal page (Journal/YYYY-MM-DD), written or replaced by Ben. */
+function writeJournal(db, day, r, now = /* @__PURE__ */ new Date()) {
+	const j = journalNote(day, r);
+	const cur = byTitle(db, j.title);
+	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(j.body, now.toISOString(), cur.id);
+	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(newId(), j.title, j.body, "ben", now.toISOString(), now.toISOString());
+}
 // src/core/goalPlan.ts
 var round5 = (m) => Math.ceil(m / 5) * 5;
 /** Minutes a day to finish `leftMin` in `days` days. */
@@ -10783,6 +10939,8 @@ Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
 - "person: <name> | <who they are to him, short>" when he mentions someone in his life (friend, family, teacher, partner).
 - "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
+His notebook (Obsidian-like notes he can read and edit; you see the ones that matter below):
+- "note: <note title> | <one line>" adds a dated line under that note (a new note if none has that title). Use it for anything worth keeping in his own words of record: facts about him and people ("note: People | Maxim, lab partner, ..."), exam dates and topics ("note: Etica | exam Friday, chapters 3-5"), decisions, what you learned. Prefer an existing title. One line, specific.
 Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
 - "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
@@ -10839,6 +10997,8 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		profile.goals.length ? profile.goals.map((g) => `- ${g}`).join("\n") : "- (none set)",
 		profile.rules.length ? `== His own rules (hold him to them, call it out when he breaks one) ==\n${profile.rules.map((r) => `- ${r}`).join("\n")}` : "",
 		profile.about ? `== About him, in his words ==\n${profile.about}` : "",
+		"",
+		extra.notes ? `== His notebook (the notes that matter now; what he wrote himself counts most) ==\n${extra.notes}` : "",
 		"",
 		extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : "",
 		"",
@@ -11946,6 +12106,14 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				score,
 				mustdos: [result.mustdosDone, result.mustdosTotal]
 			});
+			try {
+				writeJournal(db, today, {
+					score,
+					result: `Must-dos ${result.mustdosDone}/${result.mustdosTotal} · focus ${result.focusMin}/${result.plannedFocusMin} min · blocks ${result.blocksDone}/${result.blocksPlanned} · water ${(result.waterMl / 1e3).toFixed(1)}/${(result.waterTarget / 1e3).toFixed(1)} L · training ${result.workoutDone ? "done" : "not done"}`,
+					lesson,
+					top3
+				});
+			} catch {}
 		});
 		const goals = (await goalPlans().catch(() => [])).filter((p) => p.status !== "done");
 		const rebooked = await rebookGoals().catch(() => []);
@@ -13750,7 +13918,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (!raw) return;
 			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
 		}).catch(() => null);
-		const { context, memory, profile, look, mind, money, promises, feel, talk } = await mirror.read((db) => {
+		const { context, memory, profile, look, mind, money, promises, feel, talk, notes } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			let sessions = [];
@@ -13824,6 +13992,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					};
 				})(),
 				money: recentMoney(db, svc.wallet.today()),
+				notes: (() => {
+					try {
+						seedNotes(db);
+						return notesForBen(listNotes(db), text);
+					} catch {
+						return "";
+					}
+				})(),
 				look: {
 					finance,
 					input: svc.progress.input(null, /* @__PURE__ */ new Date(), 400),
@@ -13858,7 +14034,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			style: talk.style,
 			tone: talk.tone,
 			feedback: talk.feedback,
-			selfReview: talk.selfReview
+			selfReview: talk.selfReview,
+			notes
 		}), {
 			json: true,
 			think: big,
@@ -13931,6 +14108,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}].slice(0, 3);
 			}
 			acts = acts.filter((a) => a.kind !== "focus");
+		}
+		const noteOps = out.actions.map(readNoteOp).filter((x) => !!x);
+		if (noteOps.length) {
+			const lines = await mirror.write((db) => {
+				const day = services.services(db).wallet.today();
+				return noteOps.map((op) => benNote(db, op.title, op.line, day)).filter((x) => !!x);
+			}).catch(() => []);
+			done.push(...lines);
 		}
 		const mindOps = out.actions.map(readMindOp).filter((x) => !!x);
 		if (mindOps.length) {

@@ -32,6 +32,8 @@ import { shownMood } from '@core/benActs'
 import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
+import { notesForBen, readNoteOp } from '@core/notebook'
+import { benNote, listNotes, seedNotes } from './notes'
 import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
@@ -1158,7 +1160,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
       })
       .catch(() => null)
-    const { context, memory, profile, look, mind, money, promises, feel, talk } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind, money, promises, feel, talk, notes } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       let sessions: LookupData['sessions'] = []
@@ -1221,6 +1223,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           return { ...promiseRefs(list), stats: promiseLine(promiseStats(list)) }
         })(),
         money: recentMoney(db as any, svc.wallet.today()),
+        notes: (() => {
+          try {
+            seedNotes(db as any)
+            return notesForBen(listNotes(db as any), text)
+          } catch {
+            return ''
+          }
+        })(),
         look: { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
       }
     })
@@ -1237,7 +1247,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
     const ask = (found?: string, extraNote = '') =>
-      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
+      ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined })
     let out: BrainOut
     try {
       out = parseBrain(await ask())
@@ -1300,6 +1310,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         out.buttons = [...(out.buttons ?? []).filter((b) => !b.do.startsWith('focus:')), { label, do: `focus:${a.minutes}:${a.subject}` }].slice(0, 3)
       }
       acts = acts.filter((a) => a.kind !== 'focus')
+    }
+    // Its notebook: a dated line under the right note.
+    const noteOps = out.actions.map(readNoteOp).filter((x): x is { title: string; line: string } => !!x)
+    if (noteOps.length) {
+      const lines = await mirror
+        .write((db) => {
+          const day = services.services(db).wallet.today()
+          return noteOps.map((op) => benNote(db as any, op.title, op.line, day)).filter((x): x is string => !!x)
+        })
+        .catch(() => [] as string[])
+      done.push(...lines)
     }
     // Its long-term notes: goals it tracks, what works, patterns.
     const mindOps = out.actions.map(readMindOp).filter((x): x is MindOp => !!x)

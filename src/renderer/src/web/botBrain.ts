@@ -550,6 +550,8 @@ Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
 - "person: <name> | <who they are to him, short>" when he mentions someone in his life (friend, family, teacher, partner).
 - "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
+His notebook (Obsidian-like notes he can read and edit; you see the ones that matter below):
+- "note: <note title> | <one line>" adds a dated line under that note (a new note if none has that title). Use it for anything worth keeping in his own words of record: facts about him and people ("note: People | Maxim, lab partner, ..."), exam dates and topics ("note: Etica | exam Friday, chapters 3-5"), decisions, what you learned. Prefer an existing title. One line, specific.
 Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
 - "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
@@ -574,7 +576,7 @@ const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string } = {}): string {
   const chat = memory.chat.slice(-18).map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
   return [
     PERSONA[persona],
@@ -610,6 +612,8 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     profile.goals.length ? profile.goals.map((g) => `- ${g}`).join('\n') : '- (none set)',
     profile.rules.length ? `== His own rules (hold him to them, call it out when he breaks one) ==\n${profile.rules.map((r) => `- ${r}`).join('\n')}` : '',
     profile.about ? `== About him, in his words ==\n${profile.about}` : '',
+    '',
+    extra.notes ? `== His notebook (the notes that matter now; what he wrote himself counts most) ==\n${extra.notes}` : '',
     '',
     extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : '',
     '',

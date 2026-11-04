@@ -71,6 +71,12 @@ try {
       if (!ok) throw new Error(`${name} looks empty`)
     }
   })
+  await step('Notebook opens with your starter notes', async () => {
+    await open('notebook')
+    await pg.waitForSelector('.nb-item', { timeout: 15000 })
+    const titles = await pg.locator('.nb-item b').allInnerTexts()
+    if (!titles.some((t) => t.includes('About me'))) throw new Error(`no About me note (${titles.join(', ')})`)
+  })
   await step('Calendar shows the week with its events', async () => {
     await open('calendar')
     await pg.waitForSelector('.cal-item', { timeout: 15000 })

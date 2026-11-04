@@ -2,7 +2,7 @@ import type { IconName } from './Icon'
 
 export type PageId =
   | 'today' | 'focus' | 'progress' | 'calendar' | 'coach' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
-  | 'history' | 'rules' | 'connected' | 'settings' | 'bots'
+  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook'
 
 export interface ModuleDef {
   id: PageId
@@ -29,6 +29,7 @@ export const MODULES: ModuleDef[] = [
 ]
 
 export const SYSTEM_PAGES: ModuleDef[] = [
+  { id: 'notebook', label: 'Notebook', icon: 'book', color: 'var(--lime)', phase: 0, blurb: 'Your notes and Ben\'s: what he knows about you, your journal' },
   { id: 'history', label: 'History', icon: 'list', color: 'var(--muted)', phase: 0, blurb: 'Every point in and out' },
   { id: 'connected', label: 'Connected apps', icon: 'link', color: 'var(--muted)', phase: 0, blurb: 'Waky, Finance Helper and MAN' },
   { id: 'bots', label: 'Telegram bots', icon: 'bot', color: '#00D2FF', phase: 0, blurb: 'Your Telegram bots: Mega, Finance and Waky' },

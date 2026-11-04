@@ -45,6 +45,7 @@ import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyReques
 const sportyViewOf = (db: any) => sportyView(parseJson<SportyStatus>(getSetting(db, SPORTY_STATUS)), parseJson<{ at: string }>(getSetting(db, 'sport_sync_seen')), parseJson<SportyRequest>(getSetting(db, SPORTY_REQUEST)), new Date())
 import { profileView } from './web/coachProfile'
 import { dismissNotif, listNotifs, readNotifs } from './web/notifications'
+import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag } from './web/session'
 
 /**
@@ -902,6 +903,17 @@ export function createTursoWebBridge(): Bridge {
         unlocked = false
         lockedOnPurpose = true
         return (await authP).lock()
+      }
+    },
+    notes: {
+      list: async () => {
+        const m = await mirrorP
+        await m.write((db) => seedNotes(db as any))
+        return m.read((db) => listNotes(db as any))
+      },
+      save: async (n: { id?: string; title: string; body: string; pinned?: boolean }) => (await mirrorP).write((db) => saveNote(db as any, n)),
+      remove: async (id: string) => {
+        await (await mirrorP).write((db) => removeNote(db as any, id))
       }
     },
     notifications: {

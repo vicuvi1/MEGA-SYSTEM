@@ -32,6 +32,7 @@ import { bookBlocks, isGoalBlock, planGoal, planLine, type GoalPlan } from '@cor
 import type { Mirror } from './mirror'
 import type { AskModel, CalendarLike, TodoistLike } from './webBots'
 import type { WebServices } from './webServices'
+import { writeJournal } from './notes'
 
 export interface RhythmDeps {
   mirror: Mirror
@@ -343,6 +344,17 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const st = load(db, today)
       save(db, { ...st, evening: { sentAt: new Date().toISOString(), score, top3, lesson }, tomorrow: { day: tomorrow, top3 } })
       history(db, today, { score, mustdos: [result.mustdosDone, result.mustdosTotal] })
+      // The day in his notebook (Journal/YYYY-MM-DD), so Ben can look back later.
+      try {
+        writeJournal(db as any, today, {
+          score,
+          result: `Must-dos ${result.mustdosDone}/${result.mustdosTotal} · focus ${result.focusMin}/${result.plannedFocusMin} min · blocks ${result.blocksDone}/${result.blocksPlanned} · water ${(result.waterMl / 1000).toFixed(1)}/${(result.waterTarget / 1000).toFixed(1)} L · training ${result.workoutDone ? 'done' : 'not done'}`,
+          lesson,
+          top3
+        })
+      } catch {
+        /* the review still goes out */
+      }
     })
     // Goals: today's misses are spread over the days left, and booked blocks move.
     const goals = (await goalPlans().catch(() => [] as GoalPlan[])).filter((p) => p.status !== 'done')
