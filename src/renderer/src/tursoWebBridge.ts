@@ -167,6 +167,19 @@ const SNAPSHOT_TABLES = [
   'blocks', 'block_log', 'settings'
 ]
 
+// A short-lived shared result: calls in the same moment (several cards
+// loading together) share one read; any change clears it.
+const sharedCache = new Map<string, { at: number; p: Promise<unknown> }>()
+function shared<T>(key: string, load: () => Promise<T>, ms = 1500): Promise<T> {
+  const hit = sharedCache.get(key)
+  if (hit && Date.now() - hit.at < ms) return hit.p as Promise<T>
+  const p = load()
+  sharedCache.set(key, { at: Date.now(), p })
+  p.catch(() => sharedCache.delete(key))
+  return p
+}
+const forgetShared = () => sharedCache.clear()
+
 export function createTursoWebBridge(): Bridge {
   const base = createMockApi()
   const direct = getTursoConfig()
@@ -354,7 +367,7 @@ export function createTursoWebBridge(): Bridge {
     }
     // Another tab of this app wrote something: check now.
     if (tab) tab.onmessage = () => void check()
-    void mirrorP.then((m) => m.onChange(() => tab?.postMessage('changed')))
+    void mirrorP.then((m) => m.onChange(() => (forgetShared(), tab?.postMessage('changed'))))
     let todoAt = 0
     let tickAt = 0
     let todoQuickAt = 0
@@ -584,7 +597,7 @@ export function createTursoWebBridge(): Bridge {
         return j as { ok: boolean; lines: string[] }
       },
       // The chat's header, pinned "Do this now" and live cards (read here, instant).
-      status: async () => (await svcP).read((s) => coachStatus(s as any)),
+      status: () => shared('coachStatus', async () => (await svcP).read((s) => coachStatus(s as any))),
       // Is the coach working? The weekly scorecard from its history (read here).
       scorecard: async () =>
         (await svcP).read((s) => {
@@ -985,6 +998,9 @@ export function createTursoWebBridge(): Bridge {
     // Every focus change tells the open screens (the Now card, the timer, Focus).
     focus: new Proxy({} as Bridge['focus'], {
       get: (_t, method: string) => async (...args: unknown[]) => {
+        // Six parts of the screen ask for the focus state at once: one read serves them all.
+        if (method === 'state') return shared('focus', () => svcP.then((svc) => (svc.focus as any).state()))
+        forgetShared()
         const r = await ((await svcP).focus as any)[method](...args)
         if (method !== 'state') window.dispatchEvent(new CustomEvent('life-focus-changed'))
         // Every focus session goes into Google Calendar too (when connected).
