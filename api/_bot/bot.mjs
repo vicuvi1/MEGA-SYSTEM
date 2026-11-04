@@ -14727,6 +14727,63 @@ function deadlineFacts(items) {
 		};
 	});
 }
+// src/core/sportyUpdate.ts
+var SPORTY_STATUS = "sporty_status";
+var SPORTY_REQUEST = "sporty_update_request";
+function parseJson(raw) {
+	try {
+		return raw ? JSON.parse(raw) : null;
+	} catch {
+		return null;
+	}
+}
+/** What a poll changes: the new status, whether to update now, whether to save (rarely, to spare writes). */
+function pollSporty(prev, req, input, now) {
+	const version = String(input.version ?? "").slice(0, 40) || "unknown";
+	const behind = Math.max(0, Math.min(9999, Math.round(Number(input.behind) || 0)));
+	const latest = String(input.latest ?? "").slice(0, 40);
+	const update = !!req?.at && req.at !== prev?.sentRequest && (!prev?.lastUpdate || req.at > prev.lastUpdate.at);
+	const status = {
+		...prev ?? {},
+		version,
+		behind,
+		latest,
+		at: now.toISOString(),
+		...update ? { sentRequest: req.at } : {}
+	};
+	const stale = !prev || now.getTime() - Date.parse(prev.at) > 3e5;
+	const changed = !prev || prev.version !== version || prev.behind !== behind || prev.latest !== latest;
+	return {
+		status,
+		update,
+		save: update || stale || changed
+	};
+}
+/** Sporty reports how the update went. */
+function sportyUpdated(prev, r, now) {
+	const base = prev ?? {
+		version: "unknown",
+		behind: 0,
+		latest: "",
+		at: now.toISOString()
+	};
+	const ok = !!r.ok;
+	const updated = !!r.updated;
+	const version = r.version ? String(r.version).slice(0, 40) : void 0;
+	return {
+		...base,
+		...ok && version ? { version } : {},
+		...ok && updated ? { behind: 0 } : {},
+		lastUpdate: {
+			at: now.toISOString(),
+			ok,
+			updated,
+			...version ? { version } : {},
+			...r.error ? { error: String(r.error).slice(0, 300) } : {},
+			changes: Array.isArray(r.changes) ? r.changes.slice(0, 8).map((c) => String(c).slice(0, 120)) : []
+		}
+	};
+}
 // src/core/todoistClean.ts
 var MAX_TASKS = 150;
 var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -15457,6 +15514,18 @@ async function sportShared(env, body) {
 		data: st
 	}));
 	const op = String(body?.op ?? "state");
+	if (op === "poll") {
+		const r = await mirror.read((db) => pollSporty(parseJson(getSetting(db, SPORTY_STATUS)), parseJson(getSetting(db, SPORTY_REQUEST)), body, /* @__PURE__ */ new Date()));
+		if (r.save) await mirror.write((db) => setSetting(db, SPORTY_STATUS, JSON.stringify(r.status))).catch(() => null);
+		return {
+			ok: true,
+			update: r.update
+		};
+	}
+	if (op === "updated") {
+		await mirror.write((db) => setSetting(db, SPORTY_STATUS, JSON.stringify(sportyUpdated(parseJson(getSetting(db, SPORTY_STATUS)), body, /* @__PURE__ */ new Date()))));
+		return { ok: true };
+	}
 	await mirror.write((db) => setSetting(db, "sport_sync_seen", JSON.stringify({
 		at: (/* @__PURE__ */ new Date()).toISOString(),
 		op
@@ -15540,7 +15609,7 @@ async function sportShared(env, body) {
 	}
 	return {
 		ok: false,
-		error: "op must be state | water | reps | workout"
+		error: "op must be state | water | reps | workout | poll | updated"
 	};
 }
 export { GOOGLE_SETTING, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, exchangeCode, handleTelegramUpdate, localCleanup, localIso, parseCleanup, payTodoistDone, runDaily, runTick, sportShared };

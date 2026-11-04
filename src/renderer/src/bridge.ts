@@ -23,6 +23,7 @@ import type { RhythmPrefs, RhythmState } from '@core/rhythm'
 import type { WeekRow } from '@core/coachImpact'
 import type { CoachStatus } from './web/coachStatus'
 import type { ProfileView } from './web/coachProfile'
+import type { SportyView } from '@core/sportyUpdate'
 
 export type Bridge = LifeApi & {
   onLocked(cb: () => void): void
@@ -46,6 +47,9 @@ export type Bridge = LifeApi & {
     style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>
     setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>
     status?(): Promise<CoachStatus>
+    /** Sporty on your server: connected, version, updates waiting; update() presses its Update button. */
+    sporty?(): Promise<SportyView>
+    updateSporty?(): Promise<SportyView>
     scorecard?(): Promise<{ rows: WeekRow[]; verdict: 'working' | 'mixed' | 'not yet' | 'too early'; lines: string[] }>
     setMind?(m: CoachMind): Promise<void>
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>

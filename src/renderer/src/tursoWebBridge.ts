@@ -33,6 +33,9 @@ import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus } from './web/coachStatus'
+import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
+
+const sportyViewOf = (db: any) => sportyView(parseJson<SportyStatus>(getSetting(db, SPORTY_STATUS)), parseJson<{ at: string }>(getSetting(db, 'sport_sync_seen')), parseJson<SportyRequest>(getSetting(db, SPORTY_REQUEST)), new Date())
 import { profileView } from './web/coachProfile'
 import { NetworkError, clearSession, currentSession, serverLogin, sessionValid } from './web/session'
 
@@ -480,6 +483,13 @@ export function createTursoWebBridge(): Bridge {
         (await svcP).write((s) => {
           const e = loadLog(s.db).find((x) => x.role === 'coach' && x.at === at)
           addFeedback(s.db, { at, kind, text: e?.text ?? '' })
+        }),
+      // Sporty on the server: status, and the Update Sporty button (picked up within a minute).
+      sporty: async () => (await svcP).read((s) => sportyViewOf(s.db)),
+      updateSporty: async () =>
+        (await svcP).write((s) => {
+          setSetting(s.db, SPORTY_REQUEST, JSON.stringify({ at: new Date().toISOString() }))
+          return sportyViewOf(s.db)
         }),
       // How Ben writes: length and tone.
       style: async () => (await svcP).read((s) => loadStyle(s.db)),

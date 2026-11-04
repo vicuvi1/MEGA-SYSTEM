@@ -22,6 +22,7 @@ import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
+import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, pollSporty, sportyUpdated, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, MOOD_FACE, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
@@ -583,6 +584,8 @@ const localIsoHM = (iso: string) => {
 //   {op:'water', ml}                      → add (or remove, negative) water
 //   {op:'reps', name, amount}             → add reps to an exercise
 //   {op:'workout', title, items?}         → a workout done (counts in Insights, +points)
+//   {op:'poll', version, behind, latest}  → {update: true} when the Update Sporty button was pressed
+//   {op:'updated', ok, updated, version}  → how that update went
 export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean; state?: SharedSport; exercise?: unknown; error?: string }> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { mirror, services } = await botsFor(env)
@@ -596,6 +599,16 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   }
   const save = (db: any, st: any) => setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
   const op = String(body?.op ?? 'state')
+  // Self-update: Sporty polls every minute; the Update Sporty button leaves a request.
+  if (op === 'poll') {
+    const r = await mirror.read((db) => pollSporty(parseJson<SportyStatus>(getSetting(db as any, SPORTY_STATUS)), parseJson<SportyRequest>(getSetting(db as any, SPORTY_REQUEST)), body, new Date()))
+    if (r.save) await mirror.write((db) => setSetting(db as any, SPORTY_STATUS, JSON.stringify(r.status))).catch(() => null)
+    return { ok: true, update: r.update } as any
+  }
+  if (op === 'updated') {
+    await mirror.write((db) => setSetting(db as any, SPORTY_STATUS, JSON.stringify(sportyUpdated(parseJson<SportyStatus>(getSetting(db as any, SPORTY_STATUS)), body, new Date()))))
+    return { ok: true }
+  }
   // Remember when Sporty last talked to us (Ben and the app show it).
   await mirror.write((db) => setSetting(db as any, 'sport_sync_seen', JSON.stringify({ at: new Date().toISOString(), op }))).catch(() => null)
   if (op === 'state') return { ok: true, state: await mirror.read((db) => sharedView(read(db), today)) }
@@ -640,5 +653,5 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
       return { ok: false, error: (e as Error).message }
     }
   }
-  return { ok: false, error: 'op must be state | water | reps | workout' }
+  return { ok: false, error: 'op must be state | water | reps | workout | poll | updated' }
 }
