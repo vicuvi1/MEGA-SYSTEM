@@ -266,6 +266,8 @@ export interface UpdateStatus {
   progress: number
   error: string | null
   checkedAt: string | null
+  /** What's new in the newer version (one line), when known. */
+  notes?: string | null
 }
 
 export interface LogEntry {

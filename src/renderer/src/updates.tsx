@@ -19,7 +19,7 @@ const LABEL: Record<UpdateStatus['state'], string> = {
   idle: 'Not checked yet',
   checking: 'Checking…',
   'up-to-date': 'Up to date',
-  available: 'New version ready to download',
+  available: 'New version found',
   downloading: 'Downloading…',
   ready: 'Downloaded, restart to finish',
   installing: 'Installing and restarting…',
@@ -75,7 +75,7 @@ export function UpdatePanel({ status, onStatus }: { status: UpdateStatus | null;
           <i style={{ width: `${status.progress}%` }} />
         </div>
       )}
-      <p className="hint block">Life System checks GitHub on start and every 4 hours. Updating downloads the new version, installs it quietly and restarts. Your data stays.</p>
+      <p className="hint block">Life System checks for a new version on start and every 4 hours and downloads it in the background. When it's ready, Restart to update (in the top bar) installs it in a few seconds; it also installs by itself when you quit. Your data stays.</p>
       <div className="row">
         <button className="btn primary" disabled={busy || status.state === 'dev'} onClick={async () => { const s = await act(() => life.updates.run()); if (s) onStatus(s) }}>
           {status.state === 'ready' ? 'Restart and update' : 'Update now'}

@@ -143,11 +143,16 @@ function noOpOff() { return noOp }
 export const life: Bridge = {
   ...turso,
   // Desktop-only services: use IPC when in Electron, graceful no-ops on web.
-  updates: desktop?.updates ?? {
+  // The cloud desktop (window.desktop) has the real updater; the old desktop its own.
+  updates: desktop?.updates ?? (window.desktop?.updateStatus ? {
+    status: () => window.desktop!.updateStatus(),
+    check: () => window.desktop!.checkUpdates(),
+    run: () => window.desktop!.installUpdate(),
+  } : {
     status: async () => ({ current: '—', state: 'dev' as const, latest: null, progress: 0, error: null, checkedAt: null }),
     check:  async () => ({ current: '—', state: 'dev' as const, latest: null, progress: 0, error: null, checkedAt: null }),
     run:    async () => ({ current: '—', state: 'dev' as const, latest: null, progress: 0, error: null, checkedAt: null }),
-  },
+  }),
   app:  desktop?.app  ?? turso.app,
   apps: desktop?.apps ?? turso.apps,
   hud:  desktop?.hud  ?? { hide: async () => {}, toggle: async () => {}, show: async () => {} },
@@ -157,7 +162,7 @@ export const life: Bridge = {
   onWalletChanged:     (cb) => desktop ? desktop.onWalletChanged(cb)                     : noOp(),
   onDisciplineChanged: (cb) => desktop ? (desktop.onDisciplineChanged?.(cb) ?? noOpOff()) : noOpOff(),
   onNavigate:          (cb) => desktop ? desktop.onNavigate(cb)                          : noOp(),
-  onUpdate:            (cb) => desktop ? desktop.onUpdate(cb)                            : noOp(),
+  onUpdate:            (cb) => desktop ? desktop.onUpdate(cb)                            : window.desktop?.onUpdateStatus ? window.desktop.onUpdateStatus(cb) : noOp(),
   onUiKey:             (cb) => desktop ? (desktop.onUiKey?.(cb) ?? noOpOff())            : noOpOff(),
   onFullScreen:        (cb) => desktop ? (desktop.onFullScreen?.(cb) ?? noOpOff())       : noOpOff(),
 }

@@ -8,6 +8,7 @@ const api: DesktopApi = {
   updateStatus: () => ipcRenderer.invoke('desktop:updateStatus'),
   checkUpdates: () => ipcRenderer.invoke('desktop:checkUpdates'),
   installUpdate: () => ipcRenderer.invoke('desktop:installUpdate'),
+  onUpdateStatus: (cb: (s: any) => void) => void ipcRenderer.on('desktop:update', (_e, s) => cb(s)),
   loginGithub: () => ipcRenderer.invoke('desktop:loginGithub'),
   titleBar: (color, symbol) => ipcRenderer.send('desktop:titlebar', color, symbol),
   onCrashes: (cb) => void ipcRenderer.on('desktop:crashes', (_e, list) => cb(list)),

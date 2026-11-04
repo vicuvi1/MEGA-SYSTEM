@@ -13,6 +13,8 @@ export interface DesktopApi {
   updateStatus(): Promise<UpdateStatus>
   checkUpdates(): Promise<UpdateStatus>
   installUpdate(): Promise<UpdateStatus>
+  /** The update status, pushed whenever it changes. */
+  onUpdateStatus?(cb: (s: UpdateStatus) => void): void
   loginGithub(): Promise<void>
   /** Colors of Windows' own minimize/maximize/close (they sit on the app's title bar). */
   titleBar?(color: string, symbol: string): void

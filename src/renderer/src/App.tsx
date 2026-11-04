@@ -477,7 +477,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
   }
   const alerts: Alert[] = []
-  if (updateReady) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
+  // On the desktop the title bar offers 'Restart to update' itself.
+  if (updateReady && !window.desktop) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
   if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Backups are off', body: backup.lastError, page: 'settings' })
   if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current} · +20 coins`, page: 'discipline' })
   if (overdue) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
@@ -583,7 +584,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <Icon name="refresh" size={16} />
           </button>
           <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
-          <UpdateChip status={update} onClick={() => setPage('settings')} />
+          {!window.desktop && <UpdateChip status={update} onClick={() => setPage('settings')} />}
           {backup && !isDemo && (
             <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>
               <Icon name="cloud" size={15} />

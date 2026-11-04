@@ -1300,3 +1300,13 @@
 .dl-rest[open] > summary::before { transform: rotate(90deg); }
 .dl-rest > summary small { margin-left: auto; font-weight: 500; }
 .dl-rest > summary:hover { color: var(--text); }
+
+/* Desktop updates: one calm button when ready, and a clear "Updating…" screen while it restarts. */
+.dbar-update { animation: dbar-in .35s ease; }
+@keyframes dbar-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.dbar-updating { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); -webkit-app-region: no-drag; animation: dbar-in .25s ease; }
+.dbar-updating > div { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.dbar-updating b { font-size: 18px; color: var(--text); }
+.dbar-updating span { color: var(--muted); font-size: var(--t-sm); }
+.dbar-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgb(var(--ink) / 0.12); border-top-color: var(--lime); animation: dbar-spin .8s linear infinite; }
+@keyframes dbar-spin { to { transform: rotate(360deg); } }

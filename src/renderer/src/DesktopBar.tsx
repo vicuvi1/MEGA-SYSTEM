@@ -45,11 +45,37 @@ export function DesktopBar() {
     if (!desktop) return
     const changed = (event: Event) => setSync((event as CustomEvent).detail)
     window.addEventListener('life-desktop-sync', changed)
+    // The update status arrives when it changes; a slow poll is only a safety net.
     const poll = () => desktop.updateStatus().then(setUpdate).catch(() => {})
     void poll()
-    const interval = setInterval(poll, 3000)
+    desktop.onUpdateStatus?.(setUpdate)
+    const interval = setInterval(poll, 60_000)
     return () => { clearInterval(interval); window.removeEventListener('life-desktop-sync', changed) }
   }, [desktop])
+  // Just updated: say so once, with what's new (saved when the update was ready).
+  useEffect(() => {
+    if (!update?.current || update.state === 'dev') return
+    try {
+      const before = localStorage.getItem('ls.version')
+      if (before && before !== update.current) {
+        const notes = localStorage.getItem('ls.updateNotes')
+        setMessage(`Updated to ${update.current}${notes ? ` · ${notes}` : ''}`)
+        localStorage.removeItem('ls.updateNotes')
+      }
+      localStorage.setItem('ls.version', update.current)
+    } catch {
+      /* private storage: no note */
+    }
+  }, [update?.current, update?.state])
+  useEffect(() => {
+    if (update?.state === 'ready' && update.notes) {
+      try {
+        localStorage.setItem('ls.updateNotes', update.notes)
+      } catch {
+        /* fine */
+      }
+    }
+  }, [update?.state, update?.notes])
   useEffect(() => {
     if (!message) return
     const t = setTimeout(() => setMessage(''), 6000)
@@ -65,20 +91,18 @@ export function DesktopBar() {
   const state = conflict ? 'bad' : sync.error ? 'warn' : sync.pending ? 'warn' : sync.syncedAt ? 'ok' : 'idle'
   const label = conflict ? 'Sync needs you' : sync.pending ? `${sync.pending} waiting to sync` : sync.error ? 'Offline · saved here' : sync.syncedAt ? 'Synced' : 'Opening…'
   const needsLogin = !!update?.error && /sign in|401|403|404|auth|token|credential/i.test(update.error)
-  const installing = update && ['checking', 'downloading', 'installing'].includes(update.state)
 
   return (
     <div ref={bar} className="dbar">
       <span className="dbar-brand">
         <i className="dbar-logo" />
         Life System
-        {update?.current && <small>{update.current}</small>}
+        {update?.current && <small title={update.state === 'downloading' ? `Downloading ${update.latest} in the background (${update.progress}%)` : update.state === 'up-to-date' ? 'Up to date' : undefined}>{update.current}{update.state === 'downloading' ? ' · updating…' : ''}</small>}
       </span>
       <button className={`dbar-sync ${state}`} disabled={busy} onClick={() => window.dispatchEvent(new Event('life-desktop-retry'))} title={sync.error ?? (sync.syncedAt ? `Last synced ${new Date(sync.syncedAt).toLocaleTimeString()}. Click to sync now.` : 'Sync now')}>
         <i />
         {label}
       </button>
-      {update?.state === 'downloading' && <span className="dbar-note">Downloading update {update.progress}%</span>}
       {message && <span className="dbar-note">{message}</span>}
       <span className="dbar-space" />
       {conflict && (
@@ -89,12 +113,20 @@ export function DesktopBar() {
         })}>Back up and use server copy</button>
       )}
       {needsLogin && <button className="dbar-btn" disabled={busy} onClick={() => void action(async () => { await desktop.loginGithub(); setMessage('Signed in to GitHub'); setUpdate(await desktop.checkUpdates()) })}>Sign in to GitHub for updates</button>}
-      {update && ['available', 'ready'].includes(update.state) ? (
-        <button className="dbar-btn primary" disabled={busy} onClick={() => void action(async () => setUpdate(await desktop.installUpdate()))}>Update to {update.latest}</button>
-      ) : (
-        <button className="dbar-icon" disabled={busy || !!installing} title={update?.state === 'up-to-date' ? 'You have the latest version. Check again' : 'Check for updates'} onClick={() => void action(async () => { const r = await desktop.checkUpdates(); setUpdate(r); if (r.state === 'up-to-date') setMessage('You have the latest version') })}>
-          ⟳
+      {/* Updates download by themselves; only a finished one asks for anything. */}
+      {update?.state === 'ready' && (
+        <button className="dbar-btn primary dbar-update" disabled={busy} title={`${update.latest}${update.notes ? `: ${update.notes}` : ''}. Also installs by itself when you quit.`} onClick={() => void action(async () => setUpdate(await desktop.installUpdate()))}>
+          Restart to update
         </button>
+      )}
+      {update?.state === 'installing' && (
+        <div className="dbar-updating" role="status">
+          <div>
+            <i className="dbar-spinner" />
+            <b>Updating Life System</b>
+            <span>Back in a few seconds. Your data is saved.</span>
+          </div>
+        </div>
       )}
     </div>
   )

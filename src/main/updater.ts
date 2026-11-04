@@ -40,6 +40,17 @@ function legacyToken(): Promise<string> {
   })
 }
 
+/** The release's notes as one short plain line ("What's new"). */
+function notesOf(raw: unknown): string | null {
+  const text = (Array.isArray(raw) ? raw.map((x: any) => x?.note ?? '').join('\n') : String(raw ?? ''))
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+  const line = text.split('\n').map((l) => l.trim()).find(Boolean)
+  return line ? line.slice(0, 160) : null
+}
+
 export class Updater {
   private status: UpdateStatus = { current: app.getVersion(), state: app.isPackaged ? 'idle' : 'dev', latest: null, progress: 0, error: null, checkedAt: null }
 
@@ -49,6 +60,7 @@ export class Updater {
     autoUpdater.autoInstallOnAppQuit = true
     autoUpdater.on('download-progress', (p) => this.set({ state: 'downloading', progress: Math.round(p.percent) }))
     autoUpdater.on('update-downloaded', () => this.set({ state: 'ready', progress: 100 }))
+    autoUpdater.disableWebInstaller = true
     autoUpdater.on('error', (e) => this.set({ state: 'error', error: (e as Error).message.split('\n')[0] }))
   }
 
@@ -66,39 +78,60 @@ export class Updater {
     autoUpdater.setFeedURL({ provider: 'github', owner: OWNER, repo: REPO, private: true, token: await ghToken() })
   }
 
-  async check(): Promise<UpdateStatus> {
+  /**
+   * Looks for a newer version and, when there is one, downloads it quietly
+   * in the background (with `download`), so updating is just a restart.
+   */
+  async check(download = true): Promise<UpdateStatus> {
     if (!app.isPackaged) return this.set({ state: 'dev', error: 'Updates work in the installed app' })
-    if (this.status.state === 'downloading' || this.status.state === 'ready') return this.status
+    if (this.status.state === 'downloading' || this.status.state === 'ready' || this.status.state === 'installing') return this.status
     this.set({ state: 'checking', error: null })
     try {
       await this.feed()
       const r = await autoUpdater.checkForUpdates()
       const latest = r?.updateInfo.version ?? null
       const newer = !!r?.isUpdateAvailable
-      return this.set({ state: newer ? 'available' : 'up-to-date', latest, checkedAt: new Date().toISOString() })
+      const s = this.set({ state: newer ? 'available' : 'up-to-date', latest, notes: newer ? notesOf(r?.updateInfo.releaseNotes) : null, checkedAt: new Date().toISOString() })
+      if (newer && download) void this.download()
+      return s
     } catch (e) {
       return this.set({ state: 'error', error: (e as Error).message.split('\n')[0], checkedAt: new Date().toISOString() })
     }
   }
 
+  private downloading: Promise<boolean> | null = null
+  /** Downloads in the background; installs by itself when the app quits (or on Restart to update). */
+  private download(): Promise<boolean> {
+    this.downloading ??= (async () => {
+      this.set({ state: 'downloading', progress: 0 })
+      try {
+        await autoUpdater.downloadUpdate()
+        this.set({ state: 'ready', progress: 100 })
+        return true
+      } catch (e) {
+        this.set({ state: 'error', error: (e as Error).message.split('\n')[0] })
+        return false
+      } finally {
+        this.downloading = null
+      }
+    })()
+    return this.downloading
+  }
+
   /** Downloads the newer version; when it's in, installs it and restarts. */
   async update(): Promise<UpdateStatus> {
     if (this.status.state === 'ready') return this.install()
-    const s = this.status.state === 'available' ? this.status : await this.check()
+    if (this.status.state === 'downloading') return (await this.download()) ? this.install() : this.status
+    const s = this.status.state === 'available' ? this.status : await this.check(false)
     if (s.state !== 'available') return s
-    this.set({ state: 'downloading', progress: 0 })
-    try {
-      await autoUpdater.downloadUpdate()
-      return this.install()
-    } catch (e) {
-      return this.set({ state: 'error', error: (e as Error).message.split('\n')[0] })
-    }
+    return (await this.download()) ? this.install() : this.status
   }
 
   install(): UpdateStatus {
-    // Silent install, then start the new version.
+    // The window shows "Updating…" first, then a silent install starts the new version.
+    const s = this.set({ state: 'installing' })
     this.beforeQuit()
-    setImmediate(() => autoUpdater.quitAndInstall(true, true))
-    return this.set({ state: 'installing' })
+    setTimeout(() => autoUpdater.quitAndInstall(true, true), 900)
+    return s
   }
 }

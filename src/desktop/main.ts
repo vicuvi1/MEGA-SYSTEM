@@ -19,7 +19,10 @@ else void app.whenReady().then(async () => {
   await mkdir(dir, { recursive: true })
   const file = join(dir, 'life-local.sqlite')
   const ui = resolve(__dirname, '../renderer')
-  const updater = new Updater(() => {}, () => {})
+  // Update status goes to the window as it changes (set once the window exists).
+  let pushUpdate: (s: ReturnType<Updater['get']>) => void = () => {}
+  let markQuitting = () => {}
+  const updater = new Updater((s) => pushUpdate(s), () => markQuitting())
   protocol.handle('life-system', async (request) => {
     const url = new URL(request.url)
     if (url.host !== 'app') return new Response('Not found', { status: 404 })
@@ -106,6 +109,8 @@ else void app.whenReady().then(async () => {
   // reminders keep working); Quit in the tray menu really quits.
   let quitting = false
   app.on('before-quit', () => { quitting = true })
+  markQuitting = () => { quitting = true }
+  pushUpdate = (s) => { if (!win.isDestroyed()) win.webContents.send('desktop:update', s) }
   win.on('close', (event) => {
     if (quitting) return
     event.preventDefault()
