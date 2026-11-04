@@ -83,7 +83,18 @@ export default async function handler(req, res) {
       case 'create':
         return send(res, 200, { event: await api.create({ title: String(body.title || 'Focus').slice(0, 200), start: String(body.start), end: String(body.end), description: body.description ? String(body.description).slice(0, 2000) : undefined, calendarId: body.calendarId ? String(body.calendarId) : undefined, recurrence: Array.isArray(body.recurrence) ? body.recurrence.map(String) : undefined, timeZone: process.env.LIFE_TZ || undefined }) })
       case 'update':
-        await api.update(String(body.calendarId), String(body.id), { title: body.title != null ? String(body.title).slice(0, 200) : undefined, start: body.start ? String(body.start) : undefined, end: body.end ? String(body.end) : undefined, description: body.description != null ? String(body.description).slice(0, 2000) : undefined })
+        await api.update(String(body.calendarId), String(body.id), {
+          title: body.title != null ? String(body.title).slice(0, 200) : undefined,
+          start: body.start ? String(body.start) : undefined,
+          end: body.end ? String(body.end) : undefined,
+          description: body.description != null ? String(body.description).slice(0, 4000) : undefined,
+          colorId: body.colorId === undefined ? undefined : body.colorId ? String(body.colorId) : null,
+          recurrence: body.recurrence === undefined ? undefined : Array.isArray(body.recurrence) ? body.recurrence.map(String) : null,
+          moveTo: body.moveTo ? String(body.moveTo) : undefined,
+          scope: body.scope === 'all' ? 'all' : 'one',
+          recurringEventId: body.recurringEventId ? String(body.recurringEventId) : null,
+          timeZone: process.env.LIFE_TZ || undefined
+        })
         return send(res, 200, { ok: true })
       case 'move':
         await api.move(String(body.calendarId), String(body.id), String(body.start), String(body.end))

@@ -128,8 +128,12 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
     start: String(e.start?.dateTime ?? e.start?.date ?? ''),
     end: String(e.end?.dateTime ?? e.end?.date ?? ''),
     allDay: !e.start?.dateTime,
-    color: cal.color,
+    // The event's own color when you gave it one, else its calendar's.
+    color: (e.colorId && EVENT_COLORS[String(e.colorId)]) || cal.color,
+    colorId: e.colorId ? String(e.colorId) : null,
     location: e.location ?? null,
+    description: e.description ?? null,
+    recurringEventId: e.recurringEventId ?? null,
     ours: e.extendedProperties?.private?.lifeSystem === '1'
   })
 
@@ -168,21 +172,57 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
     async move(calendarId: string, id: string, start: string, end: string): Promise<void> {
       await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ start: { dateTime: start }, end: { dateTime: end } }) })
     },
-    /** Changes the title, times or notes of one event. */
-    async update(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string }): Promise<void> {
+    /**
+     * Changes an event: title, times, notes, color, repeat, calendar. With
+     * scope 'all' on a repeating event, the whole series changes (its times
+     * keep each day, only the time of day moves).
+     */
+    async update(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null; timeZone?: string }): Promise<void> {
+      let target = id
       const body: any = {}
       if (patch.title != null) body.summary = patch.title
       if (patch.description != null) body.description = patch.description
-      if (patch.start) body.start = { dateTime: patch.start }
-      if (patch.end) body.end = { dateTime: patch.end }
-      await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) })
+      if (patch.colorId !== undefined) body.colorId = patch.colorId || null
+      if (patch.scope === 'all' && patch.recurringEventId) {
+        target = patch.recurringEventId
+        if (patch.start || patch.end) {
+          const master = await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(target)}`)
+          const keepDay = (masterIso: string, newIso: string) => `${String(masterIso).slice(0, 10)}${String(newIso).slice(10)}`
+          const tz = master.start?.timeZone || patch.timeZone || process.env.TZ || 'Europe/Chisinau'
+          if (patch.start && master.start?.dateTime) body.start = { dateTime: keepDay(master.start.dateTime, localIsoOf(patch.start)), timeZone: tz }
+          if (patch.end && master.end?.dateTime) body.end = { dateTime: keepDay(master.end.dateTime, localIsoOf(patch.end)), timeZone: tz }
+        }
+      } else {
+        const tz = patch.recurrence?.length ? { timeZone: patch.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}
+        if (patch.start) body.start = { dateTime: patch.start, ...tz }
+        if (patch.end) body.end = { dateTime: patch.end, ...tz }
+      }
+      if (patch.recurrence !== undefined && !patch.recurringEventId) body.recurrence = (patch.recurrence ?? []).filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2)
+      if (Object.keys(body).length) await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(target)}`, { method: 'PATCH', body: JSON.stringify(body) })
+      // Another calendar (Google moves the event, or the whole series).
+      if (patch.moveTo && patch.moveTo !== calendarId) await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(target)}/move?destination=${encodeURIComponent(patch.moveTo)}`, { method: 'POST' })
     },
+    /** Deletes one event, or (with the series id) every repeat of it. */
     async remove(calendarId: string, id: string): Promise<void> {
       await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'DELETE' })
     }
   }
 }
 export type CalendarApi = ReturnType<typeof createCalendarApi>
+
+/** Google Calendar's event colors (colorId → color), as Google shows them. */
+export const EVENT_COLORS: Record<string, string> = {
+  '1': '#7986cb', '2': '#33b679', '3': '#8e24aa', '4': '#e67c73', '5': '#f6bf26', '6': '#f4511e',
+  '7': '#039be5', '8': '#616161', '9': '#3f51b5', '10': '#0b8043', '11': '#d50000'
+}
+
+/** An ISO time (any offset) as local "YYYY-MM-DDTHH:MM:SS±hh:mm" in this server's time zone. */
+function localIsoOf(iso: string): string {
+  const d = new Date(iso)
+  const p = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, '0')
+  const off = -d.getTimezoneOffset()
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00${off >= 0 ? '+' : '-'}${p(off / 60)}:${p(off % 60)}`
+}
 
 /** Local "YYYY-MM-DD" + "HH:MM" → an ISO time with the local offset (the server runs in your time zone). */
 export function localIso(day: string, hm: string): string {

@@ -91,7 +91,8 @@ const gcal = (() => {
     ev(0, '20:00', '21:00', 'Interview prep', '#a3e635'),
     ev(1, '07:00', '09:00', 'Deep block 1', '#c084fc'),
     ev(1, '12:00', '13:30', 'Lecture: Math', '#7cc4ff'),
-    ev(1, '17:00', '17:30', 'Sport (20 min)', '#fbbf24')
+    ev(1, '17:00', '17:30', 'Sport (20 min)', '#fbbf24'),
+    { ...ev(1, '20:00', '21:00', 'Weekly review', '#a78bfa'), recurringEventId: 'series1' }
   ]
   return (q, r) => {
     const b = q.body || {}
@@ -105,7 +106,11 @@ const gcal = (() => {
     }
     const e = events.find((x) => x.id === b.id)
     if (b.op === 'move' && e) return (Object.assign(e, { start: b.start, end: b.end }), send({ ok: true }))
-    if (b.op === 'update' && e) return (Object.assign(e, Object.fromEntries(Object.entries({ title: b.title, start: b.start, end: b.end, description: b.description, color: b.color }).filter(([, v]) => v !== undefined))), send({ ok: true }))
+    if (b.op === 'update' && e) {
+      gcal.last = b
+      return (Object.assign(e, Object.fromEntries(Object.entries({ title: b.title, start: b.start, end: b.end, description: b.description, colorId: b.colorId }).filter(([, v]) => v !== undefined))), send({ ok: true }))
+    }
+    if (b.op === 'lastUpdate') return send(gcal.last ?? null)
     if (b.op === 'remove' && e) return (events.splice(events.indexOf(e), 1), send({ ok: true }))
     return send({ ok: true })
   }

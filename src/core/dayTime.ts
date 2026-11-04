@@ -14,6 +14,12 @@ export interface CalEvent {
   location?: string | null
   /** Made by Life System (focus sessions, planned blocks). */
   ours?: boolean
+  /** Google's event color id ('1'–'11'), when set on the event itself. */
+  colorId?: string | null
+  /** Notes. */
+  description?: string | null
+  /** Set on one day of a repeating event: the series' id. */
+  recurringEventId?: string | null
 }
 
 export interface Gap {

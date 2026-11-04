@@ -175,7 +175,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     for (const t of todo?.tasks ?? []) {
       if (!t.due || !t.dueTime || blocked.has(`${t.due}|${t.content}`)) continue
       const s = toMin(t.dueTime)
-      out.push({ key: `t:${t.id}`, title: t.content, day: t.due, start: s, end: s + 30, color: areaColor(t), kind: 'task', task: t })
+      out.push({ key: `t:${t.id}`, title: t.content, day: t.due, start: s, end: s + Math.max(15, Math.min(240, t.duration ?? 30)), color: areaColor(t), kind: 'task', task: t })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -646,6 +646,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       {editing && (
         <EditSheet
           item={editing}
+          calendars={(status?.calendars ?? []) as any}
           connected={connected && (editing.kind === 'task' || writable(editing.event!.calendarId))}
           onClose={() => setEditing(null)}
           onChanged={() => {
@@ -766,14 +767,36 @@ function DraftForm({ top, start, end, day, onSave, onCancel }: { top: number; st
   )
 }
 
-function EditSheet({ item, connected, onClose, onChanged }: { item: Item; connected: boolean; onClose: () => void; onChanged: () => void }) {
+/** Google's event colors, as Google shows them (id → name, color). */
+const EVENT_COLORS: [string, string, string][] = [
+  ['', 'Calendar color', ''],
+  ['7', 'Peacock', '#039be5'],
+  ['9', 'Blueberry', '#3f51b5'],
+  ['1', 'Lavender', '#7986cb'],
+  ['3', 'Grape', '#8e24aa'],
+  ['4', 'Flamingo', '#e67c73'],
+  ['11', 'Tomato', '#d50000'],
+  ['6', 'Tangerine', '#f4511e'],
+  ['5', 'Banana', '#f6bf26'],
+  ['2', 'Sage', '#33b679'],
+  ['10', 'Basil', '#0b8043'],
+  ['8', 'Graphite', '#616161']
+]
+
+function EditSheet({ item, connected, calendars, onClose, onChanged }: { item: Item; connected: boolean; calendars: { id: string; name: string; color?: string; canWrite?: boolean }[]; onClose: () => void; onChanged: () => void }) {
   const act = useAction()
+  const e = item.event
   const [title, setTitle] = useState(item.title)
   const [day, setDay] = useState(item.day)
   const [start, setStart] = useState(hmOf(item.start))
   const [end, setEnd] = useState(hmOf(Math.min(item.end, 23 * 60 + 59)))
-  const [sure, setSure] = useState(false)
-  const e = item.event
+  const [notes, setNotes] = useState(e?.description ?? '')
+  const [colorId, setColorId] = useState(e?.colorId ?? '')
+  const [cal, setCal] = useState(e?.calendarId ?? '')
+  const [repeat, setRepeat] = useState<Repeat>('none')
+  const series = !!e?.recurringEventId
+  const [scope, setScope] = useState<'one' | 'all'>('one')
+  const [sure, setSure] = useState<null | 'one' | 'all'>(null)
   useEffect(() => {
     const on = (ev: KeyboardEvent) => ev.key === 'Escape' && onClose()
     window.addEventListener('keydown', on)
@@ -784,16 +807,29 @@ function EditSheet({ item, connected, onClose, onChanged }: { item: Item; connec
     const en = toMin(end)
     if (e) {
       if (en <= s) return void act(async () => true, 'The end must be after the start')
+      const timesChanged = day !== item.day || s !== item.start || en !== Math.min(item.end, 23 * 60 + 59)
       const ok = await act(async () => {
-        if (life.google?.update) await life.google.update(e.calendarId, e.id, { title: title.trim() || e.title, start: isoAt(day, s), end: isoAt(day, en) })
-        else await life.google!.move(e.calendarId, e.id, isoAt(day, s), isoAt(day, en))
+        await life.google!.update!(e.calendarId, e.id, {
+          title: title.trim() || e.title,
+          ...(timesChanged ? { start: isoAt(day, s), end: isoAt(day, en) } : {}),
+          description: notes,
+          colorId: colorId || null,
+          ...(cal && cal !== e.calendarId ? { moveTo: cal } : {}),
+          ...(series ? { scope, recurringEventId: e.recurringEventId } : repeat !== 'none' ? { recurrence: repeatRule(repeat, day) } : {})
+        })
         return true
-      }, 'Saved')
+      }, series && scope === 'all' ? 'Saved for every repeat' : 'Saved')
       if (ok) onChanged()
     } else if (item.task) {
-      const ok = await act(() => life.todoist!.update!(item.task!.id, { content: title.trim() || item.task!.content, due: `${day} ${start}` }).then(() => true), 'Saved in Todoist')
+      const ok = await act(() => life.todoist!.update!(item.task!.id, { content: title.trim() || item.task!.content, due: `${day} ${start}`, ...(en > s ? { duration: en - s } : {}) }).then(() => true), 'Saved in Todoist')
       if (ok) onChanged()
     }
+  }
+  const remove = async (which: 'one' | 'all') => {
+    if (!e) return
+    if (sure !== which) return setSure(which)
+    const id = which === 'all' && e.recurringEventId ? e.recurringEventId : e.id
+    if (await act(() => life.google!.remove(e.calendarId, id).then(() => true), which === 'all' ? 'Every repeat removed' : 'Removed from your calendar')) onChanged()
   }
   const focus = async () => {
     const nowM = new Date().getHours() * 60 + new Date().getMinutes()
@@ -801,26 +837,77 @@ function EditSheet({ item, connected, onClose, onChanged }: { item: Item; connec
     if (await act(() => life.focus.start(item.title.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 40), left, item.task ? { kind: 'todoist', ref: item.task.id, title: item.task.content } : null), `Focus started · ${left} min`)) onClose()
   }
   const canEdit = item.kind === 'task' || connected
+  const writableCals = calendars.filter((c) => c.canWrite !== false)
+  const shown = colorId ? EVENT_COLORS.find((c) => c[0] === colorId)?.[2] : item.color
   return (
     <div className="sheet" role="dialog" aria-label={item.title} onClick={(ev) => ev.target === ev.currentTarget && onClose()}>
-      <div className="sheet-card cal-edit">
-        <header className="card-head">
-          <h2>
-            <span className="cal-dot" style={{ background: item.color }} /> {item.kind === 'task' ? 'Todoist task' : 'Event'}
-          </h2>
-          <button className="btn small ghost" onClick={onClose}>
-            Close
+      <div className="sheet-card cal-edit ce">
+        <header className="ce-head" style={{ ['--c' as string]: shown ?? item.color }}>
+          <i className="ce-bar" />
+          <input className="ce-title" value={title} onChange={(ev) => setTitle(ev.target.value)} disabled={!canEdit} aria-label="Title" placeholder="Title" />
+          <button className="btn small ghost" onClick={onClose} aria-label="Close">
+            ✕
           </button>
         </header>
-        <input value={title} onChange={(ev) => setTitle(ev.target.value)} disabled={!canEdit} aria-label="Title" />
-        <div className="cal-edit-times">
+        <div className="ce-row">
+          <Icon name="clock" size={15} />
           <input type="date" value={day} onChange={(ev) => setDay(ev.target.value)} disabled={!canEdit} aria-label="Day" />
           <input type="time" value={start} step={300} onChange={(ev) => setStart(ev.target.value)} disabled={!canEdit} aria-label="Start" />
           <span>–</span>
-          <input type="time" value={end} step={300} onChange={(ev) => setEnd(ev.target.value)} disabled={!canEdit || item.kind === 'task'} aria-label="End" />
+          <input type="time" value={end} step={300} onChange={(ev) => setEnd(ev.target.value)} disabled={!canEdit} aria-label="End" />
+          <small className="ce-len">{toMin(end) > toMin(start) ? `${toMin(end) - toMin(start)} min` : ''}</small>
         </div>
-        {e?.location && <p className="hint small">📍 {e.location}</p>}
-        {e && !connected && <p className="hint small">This calendar is read-only (shared with you), so it can't be changed here.</p>}
+        {e && (
+          <>
+            {series ? (
+              <div className="ce-row">
+                <Icon name="refresh" size={15} />
+                <span className="ce-label">Repeating event · change</span>
+                <div className="sx-seg" role="radiogroup" aria-label="Which repeats">
+                  <button type="button" className={scope === 'one' ? 'on' : ''} onClick={() => setScope('one')}>
+                    Only this one
+                  </button>
+                  <button type="button" className={scope === 'all' ? 'on' : ''} onClick={() => setScope('all')}>
+                    All repeats
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="ce-row">
+                <Icon name="refresh" size={15} />
+                <span className="ce-label">Repeat</span>
+                <select value={repeat} onChange={(ev) => setRepeat(ev.target.value as Repeat)} disabled={!canEdit} aria-label="Repeat">
+                  <option value="none">Doesn't repeat</option>
+                  <option value="daily">Every day</option>
+                  <option value="weekdays">Every weekday</option>
+                  <option value="weekly">Every week</option>
+                </select>
+              </div>
+            )}
+            <div className="ce-row ce-colors" role="radiogroup" aria-label="Color">
+              <span className="ce-label">Color</span>
+              {EVENT_COLORS.map(([id, name, hex]) => (
+                <button key={id || 'cal'} type="button" title={name} aria-label={name} aria-checked={colorId === id} role="radio" className={`ce-swatch ${colorId === id ? 'on' : ''} ${id ? '' : 'cal'}`} style={{ ['--s' as string]: hex || item.color }} onClick={() => setColorId(id)} disabled={!canEdit} />
+              ))}
+            </div>
+            {writableCals.length > 1 && (
+              <div className="ce-row">
+                <Icon name="calendar" size={15} />
+                <span className="ce-label">Calendar</span>
+                <select value={cal} onChange={(ev) => setCal(ev.target.value)} disabled={!canEdit} aria-label="Calendar">
+                  {writableCals.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <textarea className="ce-notes" value={notes} onChange={(ev) => setNotes(ev.target.value)} disabled={!canEdit} placeholder="Notes" rows={3} aria-label="Notes" />
+            {e.location && <p className="hint small">📍 {e.location}</p>}
+            {!connected && <p className="hint small">This calendar is read-only (shared with you), so it can't be changed here.</p>}
+          </>
+        )}
         <div className="sheet-actions cal-edit-actions">
           <button className="btn small" onClick={() => void focus()}>
             ▶ Focus
@@ -836,14 +923,13 @@ function EditSheet({ item, connected, onClose, onChanged }: { item: Item; connec
             </button>
           )}
           {e && connected && (
-            <button
-              className={`btn small ghost ${sure ? 'danger' : ''}`}
-              onClick={async () => {
-                if (!sure) return setSure(true)
-                if (await act(() => life.google!.remove(e.calendarId, e.id).then(() => true), 'Removed from your calendar')) onChanged()
-              }}
-            >
-              <Icon name="trash" size={13} /> {sure ? 'Sure? Delete' : 'Delete'}
+            <button className={`btn small ghost ${sure === 'one' ? 'danger' : ''}`} onClick={() => void remove('one')}>
+              <Icon name="trash" size={13} /> {sure === 'one' ? 'Sure? Delete' : series ? 'Delete this one' : 'Delete'}
+            </button>
+          )}
+          {e && connected && series && (
+            <button className={`btn small ghost ${sure === 'all' ? 'danger' : ''}`} onClick={() => void remove('all')}>
+              {sure === 'all' ? 'Sure? Delete all' : 'Delete all repeats'}
             </button>
           )}
           <span style={{ flex: 1 }} />
