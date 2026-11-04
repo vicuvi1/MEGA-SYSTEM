@@ -48,6 +48,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node node_modules/electron/install.js
       - run: npm test
+      - run: npx tsc --noEmit -p tsconfig.json
       # The real app must work before an installer is published.
       - name: Smoke test
         run: |
