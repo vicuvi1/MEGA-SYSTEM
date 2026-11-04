@@ -187,6 +187,16 @@ export function DayFlow(props: Props) {
   }
   const [closed, setClosed] = useState(() => storeGet('ls.modeClosed'))
   const [forced, setForced] = useState<Mode | undefined>(undefined)
+  const shutRef = useRef<HTMLDivElement>(null)
+  // "Close my day" in the top card opens the shut-down here.
+  useEffect(() => {
+    const on = () => {
+      setForced('evening')
+      setTimeout(() => shutRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    }
+    window.addEventListener('life-close-day', on)
+    return () => window.removeEventListener('life-close-day', on)
+  }, [])
   const tick = useTicker(!!st?.running)
   // A deep-work block in your calendar that's on right now becomes the Now card.
   const { events: calEvents } = useTodayEvents()
@@ -681,7 +691,8 @@ export function DayFlow(props: Props) {
         </section>
       )}
 
-      {mode === 'evening' && <ShutDown today={today} focusMin={st.todayMin} doneToday={doneToday} planLen={plan.length} todoDone={0} openMustDos={openLeft.map((x) => x.p.text)} openTodo={(todoList ?? []).filter((t) => t.due && t.due <= today)} onTomorrow={toTomorrow} onMustDoTomorrow={mustDoToTomorrow} onClose={closeMode} onSaved={() => { loadFocus(); closeMode() }} />}
+      {mode === 'evening' && <div ref={shutRef} />}
+      {mode === 'evening' && <ShutDown today={today} focusMin={st.todayMin} doneToday={doneToday} planLen={plan.length} todoDone={0} openMustDos={openLeft.map((x) => x.p.text)} openTodo={(todoList ?? []).filter((t) => t.due && t.due <= today)} onTomorrow={toTomorrow} onMustDoTomorrow={mustDoToTomorrow} onClose={closeMode} onSaved={() => { loadFocus(); closeMode(); try { localStorage.setItem('ls.dayClosed', new Date().toDateString()) } catch { /* fine */ } window.dispatchEvent(new CustomEvent('life-day-closed')) }} />}
 
       {ended && (
         <section className="now-card ended" aria-label="Session finished">
@@ -958,6 +969,16 @@ function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, openTodo, 
     }
   }
   const left = [...openMustDos.map((m) => ({ id: `m:${m}`, title: m, todo: null as TodoTask | null })), ...openTodo.map((t) => ({ id: t.id, title: t.content, todo: t }))].filter((x) => !moved.includes(x.id))
+  // Ben's review of the day (score, lesson, tomorrow's top 3) sits in here, not in a card of its own.
+  const [review, setReview] = useState<{ score: number; lesson?: string; top3: string[] } | null>(null)
+  useEffect(() => {
+    life.coach?.rhythm?.('state').then((d: any) => setReview(d?.state?.evening ?? null)).catch(() => {})
+  }, [])
+  const moveAll = async () => {
+    const all = left
+    setMoved((m) => [...m, ...all.map((x) => x.id)])
+    for (const x of all) await (x.todo ? onTomorrow(x.todo) : onMustDoTomorrow(x.title)).catch(() => null)
+  }
   return (
     <section className="mode-card evening" aria-label="Shut down your day">
       <header>
@@ -971,12 +992,28 @@ function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, openTodo, 
       <p className="mode-sum">
         <b>{doneToday}/{planLen || 0}</b> must-dos · <b>{focusMin >= 60 ? `${Math.floor(focusMin / 60)}h ${focusMin % 60}m` : `${focusMin}m`}</b> focus today
       </p>
+      {review && (
+        <div className="mode-review">
+          <span className={`mode-score ${review.score >= 70 ? 'good' : ''}`}>{review.score}</span>
+          <div>
+            <b>Ben's review</b>
+            {review.lesson && <p>{review.lesson}</p>}
+            {review.top3.length > 0 && <small>Tomorrow: {review.top3.join(' · ')}</small>}
+          </div>
+        </div>
+      )}
       <ol className="mode-steps">
         <li className={left.length ? '' : 'done'}>
-          <b>1. What's left</b>
+          <b>
+            1. What's left{left.length > 1 && (
+              <button className="btn small mode-all" onClick={() => void moveAll()}>
+                Move all {left.length} to tomorrow
+              </button>
+            )}
+          </b>
           {left.length ? (
             <ul className="mode-left">
-              {left.slice(0, 6).map((x) => (
+              {left.map((x) => (
                 <li key={x.id}>
                   <span>{x.title}</span>
                   <button

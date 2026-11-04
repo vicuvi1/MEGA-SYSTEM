@@ -109,7 +109,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     ),
     day: () => (
       <>
-      <CoachPlan oneApprove onChange={() => onChange()} />
+      <CoachPlan oneApprove hideReview onChange={() => onChange()} />
       <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} />
       </>
     ),

@@ -6,6 +6,8 @@ import type { CoachStatus } from './web/coachStatus'
 import { life } from './bridge'
 import { useAction } from './ui'
 import { useLive } from './live'
+import { useTodayEvents } from './todayEvents'
+import { blockSubject, localDay } from '@core/dayTime'
 
 /** A number that counts up to its value (calm, quick). */
 export function useCountUp(value: number, ms = 700): number {
@@ -69,6 +71,29 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
   }, [load])
   useLive(load)
   const focusMin = useCountUp(st?.today.focusMin ?? 0)
+  // What's on now (or soon) in your calendar: the Now card.
+  const { events } = useTodayEvents()
+  const [tick, setTick] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setTick(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  const [closed, setClosed] = useState(() => {
+    try {
+      return localStorage.getItem('ls.dayClosed') === new Date().toDateString()
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    const on = () => setClosed(true)
+    window.addEventListener('life-day-closed', on)
+    return () => window.removeEventListener('life-day-closed', on)
+  }, [])
+  const timed = events.filter((e) => !e.allDay && localDay(e.start) === localDay(new Date().toISOString()))
+  const nowBlock = timed.filter((e) => Date.parse(e.start) <= tick && Date.parse(e.end) > tick).sort((a, b) => Date.parse(a.end) - Date.parse(a.start) - (Date.parse(b.end) - Date.parse(b.start)))[0]
+  const nextBlock = timed.filter((e) => Date.parse(e.start) > tick).sort((a, b) => a.start.localeCompare(b.start))[0]
+  const hm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   if (!life.coach?.status || !st) return null
   const m = st.move
   const run = async () => {
@@ -114,6 +139,48 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
           </p>
         </div>
       </div>
+      {(() => {
+        // Evening: one place to close the day.
+        if (new Date(tick).getHours() >= 19 && !closed && m.kind !== 'running')
+          return (
+            <div className="th-move th-now evening">
+              <div>
+                <small>Evening</small>
+                <b>Close your day · 2 minutes</b>
+                <span>What's left goes to tomorrow, Ben's review, tomorrow's top 3.</span>
+              </div>
+              <div className="th-move-actions">
+                <button className="btn primary" onClick={() => window.dispatchEvent(new CustomEvent('life-close-day'))}>
+                  Close my day
+                </button>
+              </div>
+            </div>
+          )
+        // A block on now (and nothing running): start it, see what's next.
+        const block = m.kind !== 'running' && m.kind !== 'answer' ? nowBlock : null
+        const soon = !block && m.kind !== 'running' && m.kind !== 'answer' && nextBlock && Date.parse(nextBlock.start) - tick < 60 * 60000 ? nextBlock : null
+        const b = block ?? soon
+        if (!b) return null
+        const left = Math.max(5, Math.round((Date.parse(b.end) - Math.max(tick, Date.parse(b.start))) / 60000))
+        const inMin = Math.round((Date.parse(b.start) - tick) / 60000)
+        return (
+          <div className="th-move th-now">
+            <div>
+              <small>{block ? `Now · ${left} min left` : `Next · in ${inMin} min`}</small>
+              <b>{b.title}</b>
+              <span>
+                {hm(b.start)}–{hm(b.end)}
+                {block && nextBlock ? ` · then ${nextBlock.title} at ${hm(nextBlock.start)}` : ''}
+              </span>
+            </div>
+            <div className="th-move-actions">
+              <button className="btn primary" disabled={busy} onClick={() => void act(() => life.focus.start(blockSubject(b.title), Math.min(180, left), null), `Focus: ${b.title} · ${Math.min(180, left)} min`).then(load)}>
+                ▶ {block ? `Start · ${Math.min(180, left)} min` : 'Start early'}
+              </button>
+            </div>
+          </div>
+        )
+      })() ?? (
       <div className={`th-move move-${m.kind}`}>
         <div>
           <small>Do this now</small>
@@ -131,6 +198,7 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach')
           </button>
         </div>
       </div>
+      )}
       <div className="th-stats">
         <Stat label="Focus" value={`${Math.floor(focusMin / 60) ? `${Math.floor(focusMin / 60)}h ` : ''}${Math.round(focusMin % 60)}m`} sub={st.goals.length ? `${st.goals.reduce((t, g) => t + g.todayLeftMin, 0)} min still for your goals` : 'goal: 50 min a day'} pct={(st.today.focusMin / Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0) || 50)) * 100} tone="ok" />
         <Stat label="Water" value={st.today.waterTarget ? `${(st.today.waterMl / 1000).toFixed(1)} L` : '—'} sub={st.today.waterTarget ? `of ${(st.today.waterTarget / 1000).toFixed(1)} L` : 'log with Ben: water 250'} pct={water * 100} tone="water" />

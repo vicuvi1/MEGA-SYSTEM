@@ -9,7 +9,7 @@ import { useAction } from './ui'
 import { useLive } from './live'
 
 /** `oneApprove`: on Today, where "Do this now" already shows Approve, the card doesn't repeat it. */
-export function CoachPlan({ onChange, oneApprove = false }: { onChange?: () => void; oneApprove?: boolean }) {
+export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: { onChange?: () => void; oneApprove?: boolean; hideReview?: boolean }) {
   const act = useAction()
   const [data, setData] = useState<{ state: RhythmState; prefs: RhythmPrefs } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -39,7 +39,8 @@ export function CoachPlan({ onChange, oneApprove = false }: { onChange?: () => v
     }
   }
 
-  // Evening: the review replaces the plan.
+  // Evening: the review replaces the plan (on Today it shows inside the shut-down).
+  if (ev && hideReview) return null
   if (ev) {
     return (
       <section className="panel cp cp-review">
