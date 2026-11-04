@@ -1,7 +1,8 @@
 // GET /api/bot-health: for each bot in the server's settings, what Telegram
 // says about it (name, webhook or not, messages waiting, last error). Reads
-// nothing from the chats and shows no tokens, so it needs no login.
-import { send } from './_lib.mjs'
+// nothing from the chats and shows no tokens; still, only you (a session or
+// the CRON_SECRET) may ask.
+import { bearer, config, cronSecretOk, send, sessionOk } from './_lib.mjs'
 
 const BOTS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN']
 
@@ -29,6 +30,7 @@ async function check(token) {
 }
 
 export default async function handler(req, res) {
+  if (!cronSecretOk(req) && !(await sessionOk(config(), bearer(req)).catch(() => false))) return send(res, 401, { error: 'Not allowed' })
   const out = {}
   const seen = new Map()
   for (const name of BOTS) {

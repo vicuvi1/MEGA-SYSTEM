@@ -362,7 +362,7 @@ export function createTursoWebBridge(): Bridge {
         // Wake the coach (reminders, check-ins, follow-ups) more often than the server timer.
         if (!direct && Date.now() - tickAt > 120_000) {
           tickAt = Date.now()
-          void fetch('/api/cron?job=tick').catch(() => null)
+          void fetch('/api/cron?job=tick', { headers: { Authorization: `Bearer ${currentSession()}` } }).catch(() => null)
         }
         // Todoist: a task added or done in Todoist itself shows up within
         // seconds (a cheap "anything new?" every 5 s while you're here).

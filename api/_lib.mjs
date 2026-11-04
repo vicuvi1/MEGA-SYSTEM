@@ -243,3 +243,29 @@ export function serverBots(env = process.env) {
 
 /** The secret Telegram sends with each message to a bot, so nobody else can post as it. */
 export const webhookSecret = (cfg, botId) => sign(cfg.secret, 'telegram:' + botId)
+
+/** "Authorization: Bearer <CRON_SECRET>", compared in constant time. */
+export function cronSecretOk(req, env = process.env) {
+  const want = String(env.CRON_SECRET || '')
+  const got = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '')
+  if (!want || !got) return false
+  const a = createHash('sha256').update(want).digest()
+  const b = createHash('sha256').update(got).digest()
+  return timingSafeEqual(a, b)
+}
+
+/**
+ * At most once per `gapMs` for a job, across every server instance (one
+ * atomic statement in Turso): true when this caller won the slot.
+ */
+export async function gate(cfg, name, gapMs, now = Date.now(), fetchImpl = fetch) {
+  const [, rows] = await run(
+    cfg,
+    [
+      ['CREATE TABLE IF NOT EXISTS sys_gate (name TEXT PRIMARY KEY, at INTEGER NOT NULL)'],
+      ['INSERT INTO sys_gate (name, at) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET at = excluded.at WHERE sys_gate.at <= ? RETURNING at', [name, now, now - gapMs]]
+    ],
+    fetchImpl
+  )
+  return rows.length > 0
+}
