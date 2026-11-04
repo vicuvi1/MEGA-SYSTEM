@@ -264,6 +264,15 @@ function stoppedReply(r: { session: { minutes: number; subject: string }; coins:
 
 
 
+/** A rule's points right now (labels never promise a stale amount). */
+const ruleCoins = (svc: any, id: string, fallback: number): number => {
+  try {
+    return svc.wallet.rule(id).coins
+  } catch {
+    return fallback
+  }
+}
+
 /** Bot settings without any token (what may be synced, saved or shown). */
 export function stripTokens<T extends Record<string, any>>(cfg: T): T {
   const out: any = {}
@@ -427,7 +436,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     linkExpense(currentDb, t.id, res.expense.id)
     // The money coach's context: how often this week, the month against the limit.
     const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.today())
-    return { reply: money.reply + (insight ? `\n${esc(insight)}` : '') + (res.awarded ? '\n🪙 <b>+3 coins</b> (first spending logged today)' : ''), keyboard: money.keyboard }
+    return { reply: money.reply + (insight ? `\n${esc(insight)}` : '') + (res.awarded ? `\n🪙 <b>+${ruleCoins(s, 'money.logged', 3)} points</b> (first spending logged today)` : ''), keyboard: money.keyboard }
   }
 
   /** /focus, /stop, /plan, /fun, /week, /deadlines (focus.ts). */
@@ -534,7 +543,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
       case 'oath':
         s.discipline.oath()
-        return { reply: '📜 <b>Morning Oath Affirmed!</b>\n\n<i>"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery."</i>\n\n+3 coins awarded!' }
+        return { reply: '📜 <b>Morning Oath Affirmed!</b>\n\n<i>"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery."</i>\n\n+' + ruleCoins(s, 'discipline.oath', 3) + ' points!' }
       case 'workout': {
         const name = parsed.exerciseName || 'pushups'
         const amount = parsed.exerciseAmount || 20 // like the desktop: "/pushups" alone is 20
@@ -618,11 +627,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           if (!time) return { reply: '⏰ What time? e.g. <code>/wake yesterday 06:30</code>' }
           const day = addDays(s.wallet.today(), -back)
           const res = s.sleep.setWake(day, time)
-          return { reply: `🌅 <b>Wake-up ${back ? 'for yesterday ' : ''}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? (back ? 'On time · no coins for past days.' : 'On time.') : 'Saved to your sleep history.'}` }
+          return { reply: `🌅 <b>Wake-up ${back ? 'for yesterday ' : ''}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.up_on_time', 10)} points</b>` : res.log.onTime ? (back ? 'On time · no coins for past days.' : 'On time.') : 'Saved to your sleep history.'}` }
         }
         const res = s.sleep.logWake(new Date().toTimeString().slice(0, 5)) // local time (the server runs in your time zone)
         return {
-          reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? '🎯 On time! <b>+10 coins</b>' : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>\n\n😴 <b>How did you sleep?</b>`,
+          reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.up_on_time', 10)} points</b>` : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>\n\n😴 <b>How did you sleep?</b>`,
           keyboard: sleepKeyboard(res.log.day)
         }
       }
@@ -639,7 +648,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         // "bed 23:40" / "went to bed at 0:30": that time, else now.
         const at = parsed.args.find((a) => /^\d{1,2}:\d{2}$/.test(a))
         const res = s.sleep.logBed(at ?? new Date().toTimeString().slice(0, 5))
-        return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? '🎯 On time! <b>+5 coins</b>' : 'Saved to your sleep history.'}` }
+        return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.bed_on_time', 5)} points</b>` : 'Saved to your sleep history.'}` }
       }
       case 'tasks': {
         const open = s.tasks.state().tasks.filter((t) => !t.done).slice(0, 8)
