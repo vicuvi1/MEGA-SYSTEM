@@ -168,8 +168,9 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       return
     }
 
-    if (!/^\d{4,12}$/.test(newPin)) {
-      setPinError('New PIN must be between 4 and 12 numeric digits')
+    // New PINs are 6+ digits (an old 4-digit one keeps working until you change it).
+    if (!/^\d{6,12}$/.test(newPin)) {
+      setPinError('New PIN must be 6 to 12 digits')
       soundWarning()
       return
     }
@@ -711,7 +712,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
               </div>
             )}
             <div className="field">
-              <span>New PIN (4–12 digits)</span>
+              <span>New PIN (6–12 digits)</span>
               <input
                 type="password"
                 inputMode="numeric"

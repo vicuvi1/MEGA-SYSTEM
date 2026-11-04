@@ -42,10 +42,20 @@ describe('web server', () => {
     const t = 1_800_000_000_000
     for (let i = 0; i < 4; i++) expect((await login(cfg, '0000', t, fetchImpl)).status).toBe(401)
     const fifth = await login(cfg, '0000', t, fetchImpl)
+    expect(fifth.status).toBe(429)
     expect(fifth.body.error).toMatch(/Wait 60 s/)
     expect((await login(cfg, '4821', t + 1000, fetchImpl)).status).toBe(429)
     expect((await login(cfg, '0000', t + 61_000, fetchImpl)).body.error).toMatch(/Wait 120 s/)
     expect((await login(cfg, '4821', t + 61_000 + 121_000, fetchImpl)).status).toBe(200)
+  })
+
+  it('a burst of parallel guesses is cut off at the limit', async () => {
+    const { fetchImpl } = fake(await hashPin('4821'))
+    const t = 1_900_000_000_000
+    const all = await Promise.all(Array.from({ length: 12 }, (_, k) => login(cfg, String(1000 + k), t, fetchImpl, '9.9.9.9')))
+    expect(all.filter((r: any) => r.status === 401).length).toBeLessThanOrEqual(4)
+    // Another device is not locked out by this one (only by the shared limit of 20).
+    expect((await login(cfg, '4821', t, fetchImpl, '1.1.1.1')).status).toBe(200)
   })
 
   it('accepts 2007 only while no PIN is set, and an old plain PIN', async () => {
