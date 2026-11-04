@@ -18,9 +18,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # The current desktop uses sql.js, so it does not need the legacy native
+      # SQLite module or Visual Studio. Install Electron explicitly afterward.
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/electron/install.js
       - run: npm test
-      - run: npx electron-vite build
+      - run: npm run build:electron
       # Create the release up front: electron-builder uploads its files in
       # parallel and would otherwise race to create two releases.
       - run: gh release view "$env:GITHUB_REF_NAME" 2>$null; if ($LASTEXITCODE -ne 0) { gh release create "$env:GITHUB_REF_NAME" --title "$env:GITHUB_REF_NAME" --notes "Life System $env:GITHUB_REF_NAME" }; exit 0

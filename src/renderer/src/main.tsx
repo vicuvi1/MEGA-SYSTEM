@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { HudBar } from './HudBar'
+import { DesktopBar } from './DesktopBar'
 import './styles.css'
 import './plan.css'
 import './discipline.css'
@@ -21,11 +22,11 @@ const isHud = typeof window !== 'undefined' && window.location.search.includes('
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isHud ? <HudBar /> : <App />}
+    {isHud ? <HudBar /> : <><DesktopBar /><App /></>}
   </StrictMode>
 )
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life) {
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life && !window.desktop) {
   window.addEventListener('load', () => {
     // Always check for a newer offline helper; when one takes over (a new
     // version was published), reload once so you see the new version.

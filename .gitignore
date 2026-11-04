@@ -9,3 +9,6 @@ release/
 .DS_Store
 
 *.bin
+work/
+*.sqlite
+*.sqlite-*

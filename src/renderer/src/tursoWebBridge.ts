@@ -177,10 +177,13 @@ export function createTursoWebBridge(): Bridge {
   let haveSession: () => void = () => {}
   const sessionReady = new Promise<void>((resolve) => (haveSession = resolve))
   if (direct || sessionValid(currentSession())) haveSession()
+  // The server session may expire during a trip. A previously downloaded
+  // desktop database still opens with its locally verified PIN while offline.
+  if (window.desktop) void window.desktop.load().then((bytes) => { if (bytes) haveSession() })
 
   // Starts loading at once; every call below waits for it.
   const mirrorP: Promise<Mirror> = Promise.all([initSqlJs({ locateFile: () => sqlWasmUrl }), sessionReady]).then(
-    ([SQL]) => new Mirror(SQL, turso, typeof indexedDB !== 'undefined' ? indexedDbStore() : null)
+    ([SQL]) => new Mirror(SQL, turso, window.desktop ? { load: () => window.desktop!.load(), save: (bytes) => window.desktop!.save(bytes) } : typeof indexedDB !== 'undefined' ? indexedDbStore() : null, !!window.desktop)
   )
   const svcP: Promise<WebServices> = mirrorP.then((m) => createWebServices(m))
   const authP = mirrorP.then((m) => createWebAuth(m))
@@ -796,7 +799,7 @@ export function createTursoWebBridge(): Bridge {
             haveSession()
             checked = true
           } catch (e) {
-            if (!(e instanceof NetworkError) || !sessionValid(currentSession())) throw e
+            if (!(e instanceof NetworkError) || (!sessionValid(currentSession()) && !window.desktop)) throw e
           }
         }
         const s = await (await authP).unlock(pin, checked)

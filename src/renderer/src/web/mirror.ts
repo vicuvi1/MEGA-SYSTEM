@@ -11,8 +11,9 @@ import { DEFAULT_RULES } from '@core/rules'
 import { DEFAULT_EXERCISES } from '@core/body'
 import { BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
+import { decodePending, encodePending, sendPending } from './desktopSync'
 
-const SKIP = /^(sqlite_|libsql_|_litestream|_cf_)/
+const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_)/
 
 export interface MirrorStore {
   load(): Promise<Uint8Array | null>
@@ -76,8 +77,22 @@ export class Mirror {
   lastError: string | null = null
   readonly ready: Promise<void>
 
-  constructor(private SQL: SqlJsStatic, private turso: TursoHttp, private store: MirrorStore | null = null) {
+  constructor(private SQL: SqlJsStatic, private turso: TursoHttp, private store: MirrorStore | null = null, private desktop = false) {
     this.ready = this.start()
+    if (desktop && typeof window !== 'undefined') {
+      window.addEventListener('life-desktop-retry', () => { void this.refresh().catch(() => {}) })
+      window.addEventListener('life-desktop-use-server', () => {
+        void this.ready.then(() => this.lock(async () => {
+          // The UI has already saved an explicit backup and confirmed this choice.
+          // Rebuild downloads fully before replacing the current local database.
+          await this.rebuild()
+          await this.store!.save(this.current.raw.export())
+          this.lastError = null
+          this.emit()
+          this.desktopStatus()
+        })).catch((error) => { this.lastError = error.message; this.desktopStatus() })
+      })
+    }
   }
 
   onChange(cb: () => void): () => void {
@@ -107,6 +122,7 @@ export class Mirror {
     if (cached) {
       try {
         this.db = new BrowserDb(new this.SQL.Database(cached))
+        this.version = String(this.db.prepare("SELECT value FROM settings WHERE key = 'data_version'").get()?.value ?? '')
         // Fresh data arrives in the background; the cached copy shows now.
         this.refresh().catch(() => {})
         return
@@ -134,6 +150,7 @@ export class Mirror {
    */
   async write<T>(fn: (db: BrowserDb) => T): Promise<T> {
     await this.ready
+    if (this.desktop) return this.writeDesktop(fn)
     return this.lock(async () => {
       const db = this.current
       db.dropChanges()
@@ -172,6 +189,7 @@ export class Mirror {
   refresh(): Promise<boolean> {
     if (this.refreshing) return this.refreshing
     this.refreshing = this.lock(async () => {
+      if (this.desktop && this.db) await this.flushDesktop()
       // Nothing changed since our copy (and it's not old): skip the download.
       if (this.version && Date.now() - this.rebuiltAt < 15 * 60_000) {
         const [r] = await this.turso.readMany([{ sql: "SELECT value FROM settings WHERE key = 'data_version'", args: [] }])
@@ -189,6 +207,7 @@ export class Mirror {
       })
       .finally(() => {
         this.refreshing = null
+        if (this.desktop) this.desktopStatus()
       })
     return this.refreshing
   }
@@ -200,6 +219,70 @@ export class Mirror {
     } catch {
       /* best effort */
     }
+  }
+
+  private pending() {
+    this.current.raw.run('CREATE TABLE IF NOT EXISTS desktop_outbox (id INTEGER PRIMARY KEY, data TEXT NOT NULL)')
+    return this.current.prepare('SELECT id, data FROM desktop_outbox ORDER BY id').all() as { id: number; data: string }[]
+  }
+
+  private desktopStatus(): void {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-desktop-sync', { detail: {
+      pending: this.db ? this.pending().length : 0, error: this.lastError, syncedAt: this.syncedAt
+    } }))
+  }
+
+  private async flushDesktop(): Promise<void> {
+    try {
+      for (const row of this.pending()) {
+        await sendPending(this.turso, decodePending(row.data))
+        // Persist acknowledgement before another operation can start.
+        this.current.raw.run('DELETE FROM desktop_outbox WHERE id = ?', [row.id])
+        await this.store!.save(this.current.raw.export())
+      }
+      this.lastError = null
+      this.syncedAt = new Date().toISOString()
+    } catch (error) {
+      this.lastError = (error as Error).message
+      throw error
+    } finally { this.desktopStatus() }
+  }
+
+  private writeDesktop<T>(fn: (db: BrowserDb) => T): Promise<T> {
+    return this.lock(async () => {
+      if (!this.store) throw new MirrorError('Local storage is unavailable')
+      // Online edits start from the newest copy, reducing avoidable conflicts.
+      if (!this.pending().length) {
+        try {
+          const [row] = await this.turso.readMany([{ sql: "SELECT value FROM settings WHERE key = 'data_version'", args: [] }])
+          if (!(row instanceof Error) && String(row.rows[0]?.[0] ?? '') !== (this.version ?? '')) await this.rebuild()
+        } catch { /* cached data is still usable offline */ }
+      }
+      const before = this.current.raw.export()
+      const base = this.version ?? ''
+      this.current.dropChanges()
+      let result: T
+      try {
+        result = this.current.transaction(() => fn(this.current))()
+        const changes = this.current.takeChanges()
+        if (!changes.length) return result
+        const version = crypto.randomUUID()
+        this.pending()
+        this.current.raw.run('INSERT INTO desktop_outbox (data) VALUES (?)', [encodePending({ id: version, base, version, changes })])
+        this.current.raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version])
+        await this.store.save(this.current.raw.export())
+        this.version = version
+      } catch (error) {
+        this.current.raw.close()
+        this.db = new BrowserDb(new this.SQL.Database(before))
+        throw error
+      }
+      this.emit()
+      this.desktopStatus()
+      // A successful local save is usable offline. Remote failures retain the outbox.
+      await this.flushDesktop().catch(() => {})
+      return result!
+    })
   }
 
   /** Reference schema: what the desktop app's migrations produce. */

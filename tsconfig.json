@@ -17,5 +17,5 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["src", "electron.vite.config.mts", "vitest.config.mts", "vite.web.mts"]
+  "include": ["src", "electron.vite.config.mts", "electron.desktop.config.mts", "vitest.config.mts", "vite.web.mts"]
 }

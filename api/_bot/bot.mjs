@@ -925,13 +925,62 @@ var BrowserDb = class {
 		});
 	}
 };
+// src/renderer/src/web/desktopSync.ts
+var encodePending = (write) => JSON.stringify(write, (_key, value) => value instanceof Uint8Array ? { blob: Array.from(value) } : value);
+var decodePending = (text) => JSON.parse(text, (_key, value) => value && Array.isArray(value.blob) ? new Uint8Array(value.blob) : value);
+/** A durable operation id makes retries safe after a response is lost. The
+* version check refuses stale SQL, including spending against an old balance. */
+async function sendPending(turso, write) {
+	const receipt = async () => {
+		const [row] = await turso.readMany([{
+			sql: "SELECT id FROM desktop_sync_receipts WHERE id = ?",
+			args: [write.id]
+		}]);
+		return !(row instanceof Error) && row.rows.length > 0;
+	};
+	if (await receipt()) return;
+	try {
+		await turso.writeAtomic([
+			{
+				sql: "CREATE TABLE IF NOT EXISTS desktop_sync_receipts (id TEXT PRIMARY KEY, saved_at TEXT NOT NULL)",
+				args: []
+			},
+			{
+				sql: "INSERT INTO desktop_sync_receipts (id, saved_at) VALUES (?, ?)",
+				args: [write.id, (/* @__PURE__ */ new Date()).toISOString()]
+			},
+			{
+				sql: "CREATE TABLE IF NOT EXISTS desktop_sync_guard (ok INTEGER CHECK (ok = 1))",
+				args: []
+			},
+			{
+				sql: "INSERT INTO desktop_sync_guard (ok) SELECT CASE WHEN COALESCE((SELECT value FROM settings WHERE key = 'data_version'), '') = ? THEN 1 ELSE 0 END",
+				args: [write.base]
+			},
+			...write.changes,
+			{
+				sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+				args: [write.version]
+			},
+			{
+				sql: "DELETE FROM desktop_sync_guard",
+				args: []
+			}
+		]);
+	} catch (error) {
+		if (await receipt()) return;
+		if (String(error).includes("CHECK constraint")) throw new Error("Sync conflict: the server changed while you were offline. Your local changes are kept. Save a backup before resolving this.");
+		throw error;
+	}
+}
 // src/renderer/src/web/mirror.ts
-var SKIP = /^(sqlite_|libsql_|_litestream|_cf_)/;
+var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_)/;
 var MirrorError = class extends Error {};
 var Mirror = class {
 	SQL;
 	turso;
 	store;
+	desktop;
 	db = null;
 	queue = Promise.resolve();
 	listeners = /* @__PURE__ */ new Set();
@@ -947,11 +996,29 @@ var Mirror = class {
 	syncedAt = null;
 	lastError = null;
 	ready;
-	constructor(SQL, turso, store = null) {
+	constructor(SQL, turso, store = null, desktop = false) {
 		this.SQL = SQL;
 		this.turso = turso;
 		this.store = store;
+		this.desktop = desktop;
 		this.ready = this.start();
+		if (desktop && typeof window !== "undefined") {
+			window.addEventListener("life-desktop-retry", () => {
+				this.refresh().catch(() => {});
+			});
+			window.addEventListener("life-desktop-use-server", () => {
+				this.ready.then(() => this.lock(async () => {
+					await this.rebuild();
+					await this.store.save(this.current.raw.export());
+					this.lastError = null;
+					this.emit();
+					this.desktopStatus();
+				})).catch((error) => {
+					this.lastError = error.message;
+					this.desktopStatus();
+				});
+			});
+		}
 	}
 	onChange(cb) {
 		this.listeners.add(cb);
@@ -974,6 +1041,7 @@ var Mirror = class {
 		const cached = this.store ? await this.store.load() : null;
 		if (cached) try {
 			this.db = new BrowserDb(new this.SQL.Database(cached));
+			this.version = String(this.db.prepare("SELECT value FROM settings WHERE key = 'data_version'").get()?.value ?? "");
 			this.refresh().catch(() => {});
 			return;
 		} catch {
@@ -996,6 +1064,7 @@ var Mirror = class {
 	*/
 	async write(fn) {
 		await this.ready;
+		if (this.desktop) return this.writeDesktop(fn);
 		return this.lock(async () => {
 			const db = this.current;
 			db.dropChanges();
@@ -1031,6 +1100,7 @@ var Mirror = class {
 	refresh() {
 		if (this.refreshing) return this.refreshing;
 		this.refreshing = this.lock(async () => {
+			if (this.desktop && this.db) await this.flushDesktop();
 			if (this.version && Date.now() - this.rebuiltAt < 9e5) {
 				const [r] = await this.turso.readMany([{
 					sql: "SELECT value FROM settings WHERE key = 'data_version'",
@@ -1048,6 +1118,7 @@ var Mirror = class {
 			return changed;
 		}).finally(() => {
 			this.refreshing = null;
+			if (this.desktop) this.desktopStatus();
 		});
 		return this.refreshing;
 	}
@@ -1056,6 +1127,73 @@ var Mirror = class {
 		try {
 			this.store.save(this.db.raw.export()).catch(() => {});
 		} catch {}
+	}
+	pending() {
+		this.current.raw.run("CREATE TABLE IF NOT EXISTS desktop_outbox (id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
+		return this.current.prepare("SELECT id, data FROM desktop_outbox ORDER BY id").all();
+	}
+	desktopStatus() {
+		if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-desktop-sync", { detail: {
+			pending: this.db ? this.pending().length : 0,
+			error: this.lastError,
+			syncedAt: this.syncedAt
+		} }));
+	}
+	async flushDesktop() {
+		try {
+			for (const row of this.pending()) {
+				await sendPending(this.turso, decodePending(row.data));
+				this.current.raw.run("DELETE FROM desktop_outbox WHERE id = ?", [row.id]);
+				await this.store.save(this.current.raw.export());
+			}
+			this.lastError = null;
+			this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+		} catch (error) {
+			this.lastError = error.message;
+			throw error;
+		} finally {
+			this.desktopStatus();
+		}
+	}
+	writeDesktop(fn) {
+		return this.lock(async () => {
+			if (!this.store) throw new MirrorError("Local storage is unavailable");
+			if (!this.pending().length) try {
+				const [row] = await this.turso.readMany([{
+					sql: "SELECT value FROM settings WHERE key = 'data_version'",
+					args: []
+				}]);
+				if (!(row instanceof Error) && String(row.rows[0]?.[0] ?? "") !== (this.version ?? "")) await this.rebuild();
+			} catch {}
+			const before = this.current.raw.export();
+			const base = this.version ?? "";
+			this.current.dropChanges();
+			let result;
+			try {
+				result = this.current.transaction(() => fn(this.current))();
+				const changes = this.current.takeChanges();
+				if (!changes.length) return result;
+				const version = crypto.randomUUID();
+				this.pending();
+				this.current.raw.run("INSERT INTO desktop_outbox (data) VALUES (?)", [encodePending({
+					id: version,
+					base,
+					version,
+					changes
+				})]);
+				this.current.raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version]);
+				await this.store.save(this.current.raw.export());
+				this.version = version;
+			} catch (error) {
+				this.current.raw.close();
+				this.db = new BrowserDb(new this.SQL.Database(before));
+				throw error;
+			}
+			this.emit();
+			this.desktopStatus();
+			await this.flushDesktop().catch(() => {});
+			return result;
+		});
 	}
 	/** Reference schema: what the desktop app's migrations produce. */
 	referenceDb() {
@@ -1242,7 +1380,8 @@ var TursoHttp = class {
 				Authorization: `Bearer ${this.token()}`,
 				"Content-Type": "application/json"
 			},
-			body: JSON.stringify({ requests: [...requests, { type: "close" }] })
+			body: JSON.stringify({ requests: [...requests, { type: "close" }] }),
+			signal: AbortSignal.timeout(2e4)
 		});
 		if (res.status === 401 && this.onUnauthorized) {
 			this.onUnauthorized();

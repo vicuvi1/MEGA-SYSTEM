@@ -1,6 +1,6 @@
 // Updates from GitHub Releases of the private MEGA-SYSTEM repo. The token is
-// read from the GitHub CLI login on this PC (`gh auth token`) when needed;
-// nothing secret is stored in the app.
+// read from Git Credential Manager (or the GitHub CLI) on this PC when needed.
+// Credentials never go to the renderer or into the bundled app.
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -18,9 +18,23 @@ function ghPath(): string {
 
 function ghToken(): Promise<string> {
   return new Promise((resolve, reject) => {
+    const git = existsSync(join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'))
+      ? join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe') : 'git'
+    const child = execFile(git, ['-c', 'credential.helper=', '-c', 'credential.helper=manager', '-c', 'credential.interactive=false', 'credential', 'fill'],
+      { windowsHide: true, timeout: 15_000 }, (error, output) => {
+        const password = output?.split(/\r?\n/).find((line) => line.startsWith('password='))?.slice(9)
+        if (!error && password) { resolve(password); return }
+        legacyToken().then(resolve, reject)
+      })
+    child.stdin?.end('protocol=https\nhost=github.com\nusername=vicuvi1\n\n')
+  })
+}
+
+function legacyToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
     execFile(ghPath(), ['auth', 'token'], { windowsHide: true, timeout: 10_000 }, (err, stdout) => {
       const token = stdout?.trim()
-      if (err || !token) reject(new Error('Sign in to GitHub on this PC first: run "gh auth login" once.'))
+      if (err || !token) reject(new Error('Sign in to GitHub using the desktop app’s Sign in to GitHub button.'))
       else resolve(token)
     })
   })

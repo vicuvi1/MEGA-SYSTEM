@@ -60,7 +60,8 @@ export class TursoHttp {
     const res = await fetch(this.url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.token()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requests: [...requests, { type: 'close' }] })
+      body: JSON.stringify({ requests: [...requests, { type: 'close' }] }),
+      signal: AbortSignal.timeout(20_000)
     })
     if (res.status === 401 && this.onUnauthorized) {
       this.onUnauthorized()
