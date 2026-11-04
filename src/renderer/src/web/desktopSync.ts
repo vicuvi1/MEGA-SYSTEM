@@ -1,3 +1,4 @@
+import { trackStatements } from './tableVersions'
 import type { Database as SqlJsDatabase } from 'sql.js'
 import type { Change, Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
@@ -294,6 +295,7 @@ async function commit(turso: TursoHttp, write: PendingWrite, base: string, chang
     { sql: 'CREATE TABLE IF NOT EXISTS desktop_sync_guard (ok INTEGER CHECK (ok = 1))', args: [] },
     { sql: "INSERT INTO desktop_sync_guard (ok) SELECT CASE WHEN COALESCE((SELECT value FROM settings WHERE key = 'data_version'), '') = ? THEN 1 ELSE 0 END", args: [base] },
     ...changes,
+    ...trackStatements(touchedTables(changes), write.version),
     { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [write.version] },
     { sql: 'DELETE FROM desktop_sync_guard', args: [] }
   ])

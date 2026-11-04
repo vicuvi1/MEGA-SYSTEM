@@ -925,6 +925,79 @@ var BrowserDb = class {
 		});
 	}
 };
+// src/renderer/src/web/tableVersions.ts
+var ENSURE$1 = {
+	sql: "CREATE TABLE IF NOT EXISTS sys_table_versions (name TEXT PRIMARY KEY, v TEXT NOT NULL)",
+	args: []
+};
+var DV = "COALESCE((SELECT value FROM settings WHERE key = 'data_version'), '')";
+var put$1 = (name, v) => ({
+	sql: "INSERT INTO sys_table_versions (name, v) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET v = excluded.v",
+	args: [name, v]
+});
+/** Read with data_version: what a device compares with its own copy. */
+var READ_VERSIONS = [{
+	sql: "SELECT value FROM settings WHERE key = 'data_version'",
+	args: []
+}, {
+	sql: "SELECT name, v FROM sys_table_versions",
+	args: []
+}];
+/**
+* What a tracked change adds to its transaction, BEFORE it sets data_version:
+* the chain moves on only when the change before was tracked too.
+*/
+function trackStatements(tables, version) {
+	return [
+		ENSURE$1,
+		{
+			sql: `INSERT INTO sys_table_versions (name, v) SELECT '*', ? WHERE ${DV} = COALESCE((SELECT v FROM sys_table_versions WHERE name = '*'), '') ON CONFLICT(name) DO UPDATE SET v = excluded.v`,
+			args: [version]
+		},
+		...tables.map((t) => put$1(t, version))
+	];
+}
+/**
+* After a full download at data_version `version`: mark every table changed
+* (devices with an older list then reload everything too) and join the chain
+* again. Only if nothing changed meanwhile.
+*/
+function repairStatements(tables, version, marker) {
+	const when = (name, v) => ({
+		sql: `INSERT INTO sys_table_versions (name, v) SELECT ?, ? WHERE ${DV} = ? ON CONFLICT(name) DO UPDATE SET v = excluded.v`,
+		args: [
+			name,
+			v,
+			version
+		]
+	});
+	return [
+		ENSURE$1,
+		...tables.map((t) => when(t, marker)),
+		when("*", version)
+	];
+}
+function parseVersions(rows) {
+	if (!rows) return null;
+	const out = {};
+	for (const [name, v] of rows) out[String(name)] = String(v);
+	return out;
+}
+/**
+* What a device does: nothing (same version), reload some tables, or
+* download everything (no list yet, the chain is broken, a table it
+* doesn't know).
+*/
+function catchUpPlan(remoteVersion, remote, localVersion, local, localTables) {
+	if (localVersion !== null && remoteVersion === localVersion) return { kind: "same" };
+	if (!remote || !local || (remote["*"] ?? "") !== remoteVersion) return { kind: "full" };
+	const tables = Object.keys(remote).filter((t) => t !== "*" && remote[t] !== local[t]);
+	if (tables.some((t) => !localTables.has(t))) return { kind: "full" };
+	return {
+		kind: "tables",
+		tables: tables.sort()
+	};
+}
 // src/renderer/src/web/desktopSync.ts
 var SKIP$1 = /^(sqlite_|libsql_|_litestream|_cf_|desktop_)/;
 var encodePending = (write) => JSON.stringify(write, (_key, value) => value instanceof Uint8Array ? { blob: Array.from(value) } : value);
@@ -1246,6 +1319,7 @@ async function commit(turso, write, base, changes, remap) {
 			args: [base]
 		},
 		...changes,
+		...trackStatements(touchedTables(changes), write.version),
 		{
 			sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
 			args: [write.version]
@@ -1324,6 +1398,8 @@ var Mirror = class {
 	* the whole database every minute.
 	*/
 	version = null;
+	/** Which version of each table this copy has (see tableVersions.ts). */
+	tv = null;
 	rebuiltAt = 0;
 	/** When the copy last matched Turso (null: only the cached copy so far). */
 	syncedAt = null;
@@ -1375,6 +1451,8 @@ var Mirror = class {
 		if (cached) try {
 			this.db = new BrowserDb(new this.SQL.Database(cached));
 			this.version = String(this.db.prepare("SELECT value FROM settings WHERE key = 'data_version'").get()?.value ?? "");
+			this.tv = this.loadTv();
+			this.rebuiltAt = Date.now();
 			this.refresh().catch(() => {});
 			return;
 		} catch {
@@ -1409,10 +1487,17 @@ var Mirror = class {
 				sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
 				args: [version]
 			};
+			const touched = touchedTables(changes);
 			try {
-				await this.turso.writeAtomic([...changes, mark]);
-				db.raw.run(mark.sql, mark.args);
-				this.version = version;
+				await this.turso.writeAtomic([
+					...changes,
+					...trackStatements(touched, version),
+					mark
+				]);
+				if (this.tv) {
+					for (const t of touched) this.tv[t] = version;
+					this.saveTv();
+				}
 				this.lastError = null;
 			} catch (e) {
 				this.lastError = e.message;
@@ -1434,18 +1519,7 @@ var Mirror = class {
 		if (this.refreshing) return this.refreshing;
 		this.refreshing = this.lock(async () => {
 			if (this.desktop && this.db) await this.flushDesktop();
-			if (this.version && Date.now() - this.rebuiltAt < 9e5) {
-				const [r] = await this.turso.readMany([{
-					sql: "SELECT value FROM settings WHERE key = 'data_version'",
-					args: []
-				}]);
-				if (!(r instanceof Error) && String(r.rows[0]?.[0] ?? "") === this.version) {
-					this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
-					return false;
-				}
-			}
-			await this.rebuild();
-			return true;
+			return this.catchUp();
 		}).then((changed) => {
 			if (changed) this.emit();
 			return changed;
@@ -1454,6 +1528,82 @@ var Mirror = class {
 			if (this.desktop) this.desktopStatus();
 		});
 		return this.refreshing;
+	}
+	/**
+	* Brings the copy up to Turso: nothing when nothing changed (one tiny
+	* query), only the changed tables when every change since was tracked,
+	* else (or every 6 hours, as a safety net) everything. True when it changed.
+	*/
+	async catchUp() {
+		if (this.db && Date.now() - this.rebuiltAt < 216e5) {
+			const [r, t] = await this.turso.readMany(READ_VERSIONS);
+			if (!(r instanceof Error)) {
+				const dv = String(r.rows[0]?.[0] ?? "");
+				const remote = t instanceof Error ? null : parseVersions(t.rows);
+				const plan = catchUpPlan(dv, remote, this.version, this.tv, new Set(this.localTables()));
+				if (plan.kind === "same") {
+					this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+					return false;
+				}
+				if (plan.kind === "tables") try {
+					await this.reloadTables(plan.tables, dv, remote);
+					return plan.tables.length > 0;
+				} catch {}
+			}
+		}
+		await this.rebuild();
+		return true;
+	}
+	localTables() {
+		return (this.current.raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP.test(t));
+	}
+	/** Replaces just these tables with Turso's rows, in one local transaction. */
+	async reloadTables(tables, version, remote) {
+		const data = tables.length ? await this.turso.readMany(tables.map((t) => ({
+			sql: `SELECT * FROM "${t}"`,
+			args: []
+		}))) : [];
+		const raw = this.current.raw;
+		raw.run("BEGIN");
+		try {
+			tables.forEach((t, i) => {
+				const res = data[i];
+				if (res instanceof Error) throw res;
+				raw.run(`DELETE FROM "${t}"`);
+				if (!res.rows.length) return;
+				const stmt = raw.prepare(`INSERT INTO "${t}" (${res.cols.map((c) => `"${c}"`).join(", ")}) VALUES (${res.cols.map(() => "?").join(", ")})`);
+				try {
+					for (const row of res.rows) stmt.run(row);
+				} finally {
+					stmt.free();
+				}
+			});
+			raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version]);
+			raw.run("COMMIT");
+		} catch (e) {
+			raw.run("ROLLBACK");
+			throw e;
+		}
+		this.version = version;
+		this.tv = { ...remote };
+		this.saveTv();
+		this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
+		this.persist();
+	}
+	loadTv() {
+		try {
+			const v = this.current.raw.exec("SELECT v FROM desktop_table_versions WHERE k = 1")[0]?.values[0]?.[0];
+			return v == null ? null : JSON.parse(String(v));
+		} catch {
+			return null;
+		}
+	}
+	saveTv() {
+		try {
+			const raw = this.current.raw;
+			raw.run("CREATE TABLE IF NOT EXISTS desktop_table_versions (k INTEGER PRIMARY KEY, v TEXT)");
+			raw.run("INSERT OR REPLACE INTO desktop_table_versions (k, v) VALUES (1, ?)", [JSON.stringify(this.tv)]);
+		} catch {}
 	}
 	persist() {
 		if (!this.store || !this.db) return;
@@ -1484,6 +1634,10 @@ var Mirror = class {
 				const r = await sendPending(this.turso, write, info);
 				this.current.raw.run("BEGIN");
 				this.current.raw.run("DELETE FROM desktop_outbox WHERE id = ?", [row.id]);
+				if (!r.merged && this.tv) {
+					for (const t of touchedTables(write.changes)) this.tv[t] = write.version;
+					this.saveTv();
+				}
 				if (r.merged || write.rebase) {
 					merged = true;
 					const remap = { ...write.remap ?? {} };
@@ -1519,11 +1673,7 @@ var Mirror = class {
 		return this.lock(async () => {
 			if (!this.store) throw new MirrorError("Local storage is unavailable");
 			if (!this.pending().length) try {
-				const [row] = await this.turso.readMany([{
-					sql: "SELECT value FROM settings WHERE key = 'data_version'",
-					args: []
-				}]);
-				if (!(row instanceof Error) && String(row.rows[0]?.[0] ?? "") !== (this.version ?? "")) await this.rebuild();
+				await this.catchUp();
 			} catch {}
 			const before = this.current.raw.export();
 			const base = this.version ?? "";
@@ -1571,6 +1721,7 @@ var Mirror = class {
 		return ref;
 	}
 	async rebuild() {
+		const [preDv, preTv] = await this.turso.readMany(READ_VERSIONS).catch(() => [/* @__PURE__ */ new Error("offline"), /* @__PURE__ */ new Error("offline")]);
 		const schema = (await this.turso.readMany([{
 			sql: "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, rowid",
 			args: []
@@ -1649,6 +1800,13 @@ var Mirror = class {
 		} catch {
 			this.version = null;
 		}
+		const before = preDv instanceof Error ? void 0 : preDv.rows[0]?.[0];
+		if (before != null && this.version != null && String(before) !== this.version) {
+			this.version = String(before);
+			local.raw.run("UPDATE settings SET value = ? WHERE key = 'data_version'", [this.version]);
+		}
+		const remoteTv = preTv instanceof Error ? null : parseVersions(preTv.rows);
+		this.tv = remoteTv;
 		old?.raw.close();
 		await this.seedDefaults();
 		if (!this.version) {
@@ -1663,6 +1821,20 @@ var Mirror = class {
 				this.version = version;
 			} catch {}
 		}
+		if (this.version && (!this.tv || this.tv["*"] !== this.version)) {
+			const tables = this.localTables();
+			const marker = `r-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+			try {
+				await this.turso.writeAtomic(repairStatements(tables, this.version, marker));
+				this.tv = {
+					...Object.fromEntries(tables.map((t) => [t, marker])),
+					"*": this.version
+				};
+			} catch {
+				this.tv = null;
+			}
+		}
+		this.saveTv();
 		this.persist();
 	}
 	async seedDefaults() {
@@ -15274,7 +15446,7 @@ function okErr(id, label, b, now, never) {
 		id,
 		label,
 		ok: false,
-		detail: hint ? `${hint} (since ${ago(now, b.err.at)})` : `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
+		detail: hint ? `${hint}. Since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 80)}` : `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
 		since: b.err.at
 	};
 	return {
