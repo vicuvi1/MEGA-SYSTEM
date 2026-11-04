@@ -28,11 +28,13 @@ import { financeSpending } from '@core/progress'
 const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', 'life-focus-changed', 'life-week-changed', 'life-sport-changed', 'life-data-changed']
 import type { CleanChange } from '@core/todoistClean'
 import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
-import { addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
+import { sportState, addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
 import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus } from './web/coachStatus'
+import { addWater, sharedView, sportToday } from '@core/sportShared'
+import { defaultSport } from '@core/sportCards'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
 
 const sportyViewOf = (db: any) => sportyView(parseJson<SportyStatus>(getSetting(db, SPORTY_STATUS)), parseJson<{ at: string }>(getSetting(db, 'sport_sync_seen')), parseJson<SportyRequest>(getSetting(db, SPORTY_REQUEST)), new Date())
@@ -483,6 +485,13 @@ export function createTursoWebBridge(): Bridge {
         (await svcP).write((s) => {
           const e = loadLog(s.db).find((x) => x.role === 'coach' && x.at === at)
           addFeedback(s.db, { at, kind, text: e?.text ?? '' })
+        }),
+      water: async (ml: number) =>
+        (await svcP).write((s) => {
+          const day = sportToday()
+          const next = addWater(sportState(s.db) ?? defaultSport(day), ml, day)
+          setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+          return sharedView(next, day).water
         }),
       // Sporty on the server: status, and the Update Sporty button (picked up within a minute).
       sporty: async () => (await svcP).read((s) => sportyViewOf(s.db)),

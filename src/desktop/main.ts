@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, Tray } from 'electron'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
+import { createIsland } from './island'
 
 const origin = 'life-system://app'
 const server = 'https://mega-system-ten.vercel.app'
@@ -34,7 +35,9 @@ else void app.whenReady().then(async () => {
     if (!target.startsWith(ui + sep)) return new Response('Not found', { status: 404 })
     return net.fetch(pathToFileURL(target).toString())
   })
-  const win = new BrowserWindow({ width: 1440, height: 950, minWidth: 850, minHeight: 600,
+  // Started by Windows at login: stay in the tray, the island is enough.
+  const hidden = process.argv.includes('--hidden')
+  const win = new BrowserWindow({ width: 1440, height: 950, minWidth: 850, minHeight: 600, show: !hidden,
     title: 'Life System', backgroundColor: '#0a0c10',
     webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false }
   })
@@ -74,7 +77,47 @@ else void app.whenReady().then(async () => {
   }
   win.webContents.setWindowOpenHandler(({ url }) => { external(url); return { action: 'deny' } })
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(origin + '/')) { event.preventDefault(); external(url) } })
-  app.on('second-instance', () => { if (win.isMinimized()) win.restore(); win.show(); win.focus() })
+  const showApp = (page?: string) => {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    if (page) win.webContents.send('app:navigate', page)
+  }
+  app.on('second-instance', () => showApp())
+
+  // Closing the window keeps Life System running in the tray (the island and
+  // reminders keep working); Quit in the tray menu really quits.
+  let quitting = false
+  app.on('before-quit', () => { quitting = true })
+  win.on('close', (event) => {
+    if (quitting) return
+    event.preventDefault()
+    win.hide()
+  })
+
+  const island = createIsland({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, showApp, dir })
+
+  // Tray: open, island on/off, start with Windows, quit.
+  const icon = nativeImage.createFromPath(join(ui, 'icon.png')).resize({ width: 16, height: 16 })
+  const tray = new Tray(icon)
+  tray.setToolTip('Life System')
+  const startsWithWindows = () => app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin
+  const menu = () => Menu.buildFromTemplate([
+    { label: 'Open Life System', click: () => showApp() },
+    { label: 'Show the island', type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
+    { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); tray.setContextMenu(menu()) } },
+    { type: 'separator' },
+    { label: 'Quit Life System', click: () => { quitting = true; app.quit() } }
+  ])
+  tray.setContextMenu(menu())
+  tray.on('click', () => showApp())
+  // First run of an installed copy: start with Windows (you can turn it off in the tray).
+  if (app.isPackaged && !existsSync(join(dir, 'login-item.json'))) {
+    app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] })
+    await writeFile(join(dir, 'login-item.json'), JSON.stringify({ setAt: new Date().toISOString() }))
+    tray.setContextMenu(menu())
+  }
+
   await win.loadURL(origin + '/')
   // Look for a new version shortly after start and every 4 hours; the top bar
   // then shows "Update to …" (one tap installs it). Quiet when offline.
@@ -82,4 +125,5 @@ else void app.whenReady().then(async () => {
   setTimeout(look, 20_000)
   setInterval(look, 4 * 3600_000)
 })
-app.on('window-all-closed', () => app.quit())
+// The tray keeps the app alive with no windows open.
+app.on('window-all-closed', () => {})

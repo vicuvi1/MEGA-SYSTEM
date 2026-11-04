@@ -49,6 +49,8 @@ export type Bridge = LifeApi & {
     status?(): Promise<CoachStatus>
     /** Sporty on your server: connected, version, updates waiting; update() presses its Update button. */
     sporty?(): Promise<SportyView>
+    /** Adds water to the shared log (the one Ben and Sporty use). */
+    water?(ml: number): Promise<{ ml: number; target: number }>
     updateSporty?(): Promise<SportyView>
     scorecard?(): Promise<{ rows: WeekRow[]; verdict: 'working' | 'mixed' | 'not yet' | 'too early'; lines: string[] }>
     setMind?(m: CoachMind): Promise<void>

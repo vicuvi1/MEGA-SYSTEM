@@ -1,8 +1,5 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { App } from './App'
-import { HudBar } from './HudBar'
-import { DesktopBar } from './DesktopBar'
 import './styles.css'
 import './plan.css'
 import './discipline.css'
@@ -18,13 +15,28 @@ import { applyTheme } from './uiPrefs'
 
 applyTheme()
 
-const isHud = typeof window !== 'undefined' && window.location.search.includes('hud=1')
+const search = typeof window !== 'undefined' ? window.location.search : ''
+const isHud = search.includes('hud=1')
+const isIsland = search.includes('island=1')
+const root = createRoot(document.getElementById('root')!)
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    {isHud ? <HudBar /> : <><DesktopBar /><App /></>}
-  </StrictMode>
-)
+// The desktop island is its own small window: it loads only itself (never the
+// data layer), so the app window stays the one owner of your data.
+if (isIsland) {
+  void import('./DesktopIsland').then(({ DesktopIsland }) => root.render(<DesktopIsland />))
+} else if (isHud) {
+  void import('./HudBar').then(({ HudBar }) => root.render(<StrictMode><HudBar /></StrictMode>))
+} else {
+  void Promise.all([import('./App'), import('./DesktopBar'), import('./IslandFeed')]).then(([{ App }, { DesktopBar }, { IslandFeed }]) =>
+    root.render(
+      <StrictMode>
+        <DesktopBar />
+        {window.desktop?.islandState && <IslandFeed />}
+        <App />
+      </StrictMode>
+    )
+  )
+}
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life && !window.desktop) {
   window.addEventListener('load', () => {

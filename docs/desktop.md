@@ -81,3 +81,23 @@ The renderer has no Node access. External web links open in the browser.
 Tests use synthetic databases. The desktop sync tests cover restart recovery,
 conflicts, lost acknowledgements and disk failures. Validate release checks
 against published builds; development mode intentionally skips installation.
+
+## The desktop island
+
+A small always-on-top window at the top center of the screen the mouse is on
+(`src/desktop/island.ts`, UI `src/renderer/src/DesktopIsland.tsx`, logic
+`src/core/islandModel.ts`). Hidden it is a thin line; while a timer runs, a
+block is now or within the hour, or Ben wrote, it is a small pill. Hover or
+click opens it: plan now & next (Start), must-dos, water and reps, Ben's last
+message and a box to write to him. Time up, a block starting or a new message
+from Ben (Telegram, nudges) drop it down for 8 seconds with buttons.
+
+The island never opens the data: the app window, which keeps running hidden in
+the tray when you close it, sends it snapshots (`IslandFeed.tsx`) and does what
+its buttons ask, so there is one owner of the local database. The main process
+polls the real pointer: over the pill/card the window takes clicks, elsewhere
+clicks pass through to the apps below.
+
+Life System starts with Windows (`--hidden`, tray only) from the first run of
+an installed copy; the tray menu turns that and the island off, and Quit ends
+it for real.

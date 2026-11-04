@@ -8,6 +8,15 @@ const api: DesktopApi = {
   updateStatus: () => ipcRenderer.invoke('desktop:updateStatus'),
   checkUpdates: () => ipcRenderer.invoke('desktop:checkUpdates'),
   installUpdate: () => ipcRenderer.invoke('desktop:installUpdate'),
-  loginGithub: () => ipcRenderer.invoke('desktop:loginGithub')
+  loginGithub: () => ipcRenderer.invoke('desktop:loginGithub'),
+  islandState: (s) => ipcRenderer.send('island:state', s),
+  onIslandAction: (cb) => void ipcRenderer.on('island:action', (_e, a) => cb(a)),
+  onNavigate: (cb) => void ipcRenderer.on('app:navigate', (_e, page) => cb(page)),
+  onIslandState: (cb) => void ipcRenderer.on('island:state', (_e, s) => cb(s)),
+  islandAction: (a) => ipcRenderer.send('island:action', a),
+  islandMode: (mode, height) => ipcRenderer.send('island:mode', mode, height),
+  islandHot: (rect) => ipcRenderer.send('island:hot', rect),
+  onIslandHover: (cb) => void ipcRenderer.on('island:hover', (_e, over) => cb(!!over)),
+  showApp: (page) => ipcRenderer.send('island:showApp', page)
 }
 contextBridge.exposeInMainWorld('desktop', api)
