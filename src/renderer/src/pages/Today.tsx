@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
 import type { BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
@@ -11,7 +11,10 @@ import { DayFlow } from '../DayFlow'
 import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
 import { ProgressCard } from './Progress'
 import { FunCard } from '../FunCard'
-import { DayTimeline } from '../DayTimeline'
+import { DayStrip } from '../DayStrip'
+import { localToday, reloadToday } from '../todayEvents'
+import { useLive } from '../live'
+import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
 
@@ -111,7 +114,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       </>
     ),
     progress: () => <ProgressCard onOpen={() => onGo('progress')} />,
-    timeline: () => <DayTimeline onGo={onGo} />,
+    timeline: () => null,
     fun: () => <FunCard onWallet={() => onChange()} onOpenShop={onOpenShop} />,
     quicklog: () => (
         <>
@@ -180,11 +183,12 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   // scrolls on its own, so the page never feels endless.
   const on = todayLayout(ui).filter((x) => x.on)
   const MAIN: TodaySectionId[] = ['day']
-  const SIDE: TodaySectionId[] = ['timeline', 'reps']
-  const FOLDED = on.filter((x) => !MAIN.includes(x.id) && !SIDE.includes(x.id))
+  const SIDE: TodaySectionId[] = ['reps']
+  const FOLDED = on.filter((x) => !MAIN.includes(x.id) && !SIDE.includes(x.id) && x.id !== 'timeline')
   return (
     <div className="today td2">
       <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
+      {on.some((x) => x.id === 'timeline') && <TodayStrip />}
       <div className="cmd">
         <div className="cmd-main">
           {on.filter((x) => MAIN.includes(x.id)).map((x) => (
@@ -212,4 +216,30 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       </div>
     </div>
   )
+}
+
+/** The day strip with today's Todoist tasks; a task dropped on it gets a block there. */
+function TodayStrip() {
+  const act = useAction()
+  const [tasks, setTasks] = useState<TodoTask[]>([])
+  const load = () => void life.todoist?.today().then(setTasks).catch(() => {})
+  useEffect(load, [])
+  useLive(load, { external: true })
+  const book = async (t: TodoTask, startMin: number) => {
+    if (!t) return
+    const day = localToday()
+    const minutes = t.duration && t.duration >= 10 ? Math.min(t.duration, 240) : 50
+    const at = (m: number) => new Date(`${day}T${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00`).toISOString()
+    const hm = `${String(Math.floor(startMin / 60)).padStart(2, '0')}:${String(startMin % 60).padStart(2, '0')}`
+    const ok = await act(async () => {
+      await life.google!.create({ title: t.content, start: at(startMin), end: at(Math.min(24 * 60 - 1, startMin + minutes)), description: 'Todoist task · planned in Life System' })
+      await life.todoist?.update?.(t.id, { due: `${day} ${hm}` })
+      return true
+    }, `Booked ${hm}: ${t.content}`)
+    if (ok) {
+      void reloadToday()
+      window.dispatchEvent(new CustomEvent('life-external-changed'))
+    }
+  }
+  return <DayStrip tasks={tasks} onBook={(t, m) => void book(t, m)} />
 }
