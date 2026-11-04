@@ -1,7 +1,6 @@
 import { addDays, dayKey } from '@core/dates'
 import {
-  milestoneRef, milestonesOf, planCheckIn, quoteFor, rankFor, startOf, statsOf, validateStart, type DisciplineEvent
-} from '@core/discipline'
+  milestoneRef, milestonesOf, planCheckIn, quoteFor, rankFor, startOf, statsOf, validateStart, type DisciplineEvent, dayNumber } from '@core/discipline'
 import { effective, type LedgerEntry, type NewEntry } from '@core/ledger'
 import { planAward, type Rule } from '@core/rules'
 import type { DisciplineState, LifeApi } from '@shared/api'
@@ -41,6 +40,7 @@ export function createMockDiscipline(ctx: Ctx): Pick<LifeApi, 'discipline'> {
       today: t,
       since: stats.since,
       current: stats.current,
+      day: dayNumber({ current: stats.current, resets: stats.relapses, setup: !!startOf(events) }),
       best: stats.best,
       totalClean: stats.totalClean,
       resets: stats.relapses,

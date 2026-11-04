@@ -139,17 +139,15 @@ function withMan(state: DisciplineState): DisciplineState {
   if (!man || typeof man.streakDays !== 'number') return state
   // The streak in Turso is the same on every device; MAN on this device only
   // fills in before a start date was set (a new phone's MAN starts at Day 1).
-  if (state.setup) {
-    return {
-      ...state,
-      checkedInToday: state.checkedInToday || man.lastCheckin === state.today,
-      oathToday: state.oathToday || man.lastOathDate === state.today
-    }
-  }
+  // Life System's record is the only truth once a start date exists: reading
+  // MAN's own "checked in today" here made MAN's check-in look done before it
+  // was recorded, so it was never counted (and the streaks drifted apart).
+  if (state.setup) return state
   const current = Math.max(0, man.streakDays)
   return {
     ...state,
     current,
+    day: current,
     best: Math.max(state.best, Number(man.longestStreak) || 0, current),
     checkedInToday: state.checkedInToday || man.lastCheckin === state.today,
     oathToday: state.oathToday || man.lastOathDate === state.today

@@ -149,3 +149,13 @@ export function campaignMap(stats: CleanStats, size = 90): { day: number; state:
     }
   })
 }
+
+/**
+ * The streak as "Day N", everywhere (Today, MAN, Ben, Telegram, the island).
+ * The start day is Day 1; a reset day is Day 0 and the next day Day 1.
+ * (`current` counts whole days since the start / last reset.)
+ */
+export function dayNumber(s: { current: number; resets: number; setup?: boolean }): number {
+  if (s.setup === false) return 0
+  return s.current + (s.resets === 0 ? 1 : 0)
+}

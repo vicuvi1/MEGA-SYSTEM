@@ -71,3 +71,14 @@ describe('discipline', () => {
     expect(map[10].state).toBe('today')
   })
 })
+
+describe('dayNumber: one "Day N" everywhere', () => {
+  it('start day is Day 1; after a reset the reset day is Day 0', async () => {
+    const { dayNumber } = await import('./discipline')
+    expect(dayNumber({ current: 0, resets: 0 })).toBe(1)
+    expect(dayNumber({ current: 10, resets: 0 })).toBe(11)
+    expect(dayNumber({ current: 0, resets: 1 })).toBe(0)
+    expect(dayNumber({ current: 3, resets: 2 })).toBe(3)
+    expect(dayNumber({ current: 5, resets: 0, setup: false })).toBe(0)
+  })
+})

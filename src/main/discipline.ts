@@ -1,6 +1,6 @@
 import { addDays } from '@core/dates'
 import {
-  milestoneRef, milestonesOf, planCheckIn, planUrgeFinish, quoteFor, rankFor, startOf, statsOf, validateStart,
+  dayNumber, milestoneRef, milestonesOf, planCheckIn, planUrgeFinish, quoteFor, rankFor, startOf, statsOf, validateStart,
   type DisciplineEvent, type DisciplineKind
 } from '@core/discipline'
 import { effective, LedgerError } from '@core/ledger'
@@ -40,6 +40,7 @@ export class Discipline {
       today,
       since: stats.since,
       current: stats.current,
+      day: dayNumber({ current: stats.current, resets: stats.relapses, setup: !!startOf(events) }),
       best: stats.best,
       totalClean: stats.totalClean,
       resets: stats.relapses,

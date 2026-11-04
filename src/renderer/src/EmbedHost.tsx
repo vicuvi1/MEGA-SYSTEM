@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EmbeddedApps } from '@shared/api'
 import { life } from './bridge'
+import { dayNumber } from '@core/discipline'
 
 // The apps load in a normal same-origin <iframe> (website and this desktop app);
 // only the old desktop (window.life) had Electron's <webview> switched on.
 // (Using <webview> anywhere else leaves the app blank.)
 const isDemo = !window.life
+
+/** MAN inside Life System: a readable column (no full-width buttons on big
+ *  screens), no audio banner or version footer (Life System has its own). */
+const MAN_FIT_CSS = `
+  .app-container { max-width: 1080px !important; margin: 0 auto !important; padding-top: 12px !important; }
+  .audio-banner, .version-footer { display: none !important; }
+`
 import { addDays } from '@core/dates'
 import { Icon } from './Icon'
 
@@ -190,7 +198,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     // Life System counts whole days since the start, one less until the
     // first reset. Sending Life's number set MAN back a day ("Day 2" became
     // "Day 1" again).
-    const manDay = (d: { current: number; resets: number }) => d.current + (d.resets === 0 ? 1 : 0)
+    const manDay = (d: { current: number; resets: number; day?: number }) => d.day ?? dayNumber(d)
 
     const syncToMan = async () => {
       try {
@@ -201,6 +209,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         if (d.oathToday) {
           runIn(el, `window.syncFromLifeSystemOath?.(${JSON.stringify(d.today)})`).catch(() => {})
         }
+        void pushStreak()
       } catch (err) {
         console.error('[EmbedHost MAN] syncToMan error:', err)
       }
@@ -331,8 +340,49 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       }
     }
 
+    // Life System's streak is the only one: MAN always shows it (also before
+    // today's check-in), so MAN, Today, Ben and Telegram say the same Day N.
+    const pushStreak = async () => {
+      try {
+        const d = await life.discipline.state()
+        if (!d.setup) return
+        const n = manDay(d)
+        await runIn(el, `(function(){ if (typeof appData === 'undefined') return; var n = ${n}; if (appData.streakDays !== n) { appData.streakDays = n; appData.longestStreak = Math.max(appData.longestStreak || 0, n); try { saveData(); refreshUI(); } catch (e) {} } })()`).catch(() => {})
+      } catch {
+        /* not loaded yet */
+      }
+    }
+
+    // In a normal frame (website, this desktop) MAN's "LIFE_SYSTEM_BRIDGE:…" lines
+    // only went to its own console, so its check-ins and oaths never reached
+    // Life System. Hear them again, and give MAN Life System's look and width.
+    const hookFrame = () => {
+      const w = (el as HTMLIFrameElement).contentWindow as (Window & { console: Console }) | null
+      // Per page, not per window: the frame's window object survives navigation.
+      const d0 = w?.document
+      if (!w || !d0 || d0.URL === 'about:blank' || d0.documentElement.hasAttribute('data-life-hooked')) return
+      try {
+        d0.documentElement.setAttribute('data-life-hooked', '')
+        const log = w.console.log.bind(w.console)
+        w.console.log = (...args: unknown[]) => {
+          log(...args)
+          if (typeof args[0] === 'string' && args[0].startsWith('LIFE_SYSTEM_BRIDGE:')) onConsole({ message: args[0] })
+        }
+        const doc = w.document
+        if (!doc.getElementById('life-fit')) {
+          const st = doc.createElement('style')
+          st.id = 'life-fit'
+          st.textContent = MAN_FIT_CSS
+          doc.head.appendChild(st)
+        }
+      } catch {
+        /* another origin: nothing to do */
+      }
+    }
+
     const onDomReady = () => {
-      reconcile()
+      if (isDemo) hookFrame()
+      reconcile().then(pushStreak)
     }
 
     if (isDemo) {
@@ -343,8 +393,10 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     }
     window.addEventListener('message', onWindowMessage)
     window.addEventListener('life-discipline-state', syncToMan)
+    window.addEventListener('life-discipline-changed', syncToMan)
 
-    if (visible) {
+    if (isDemo && (el as HTMLIFrameElement).contentDocument?.readyState === 'complete') onDomReady()
+    else if (visible) {
       reconcile()
     }
 
@@ -357,6 +409,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       }
       window.removeEventListener('message', onWindowMessage)
       window.removeEventListener('life-discipline-state', syncToMan)
+      window.removeEventListener('life-discipline-changed', syncToMan)
     }
   }, [appKey, visible])
 

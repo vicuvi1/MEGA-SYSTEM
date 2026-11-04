@@ -266,7 +266,7 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
       const reasons = f.week.topReasons.map((x) => x.reason).join(', ')
       return `Focus sessions felt ${avg.toFixed(1)}/5 on average this week (${r.length} rated)${reasons ? `; what got in the way: ${reasons}` : ''}.`
     })(),
-    `Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
+    `Discipline: clean streak Day ${disc.day ?? disc.current} (${disc.current} full clean days, best ${disc.best}; the day he sees everywhere is Day ${disc.day ?? disc.current}).`,
     `Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ''}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join('; ') || 'none'}.`,
     moneyContext(extra.finance, today),
     ...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc)

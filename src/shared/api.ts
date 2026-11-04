@@ -186,6 +186,8 @@ export interface DisciplineState {
   today: string
   since: string | null
   current: number
+  /** The streak as "Day N" (dayNumber): what every screen shows. */
+  day: number
   best: number
   totalClean: number
   resets: number

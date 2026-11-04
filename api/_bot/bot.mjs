@@ -2196,6 +2196,15 @@ function planUrgeFinish(startedAt, now) {
 	const elapsed = (now.getTime() - Date.parse(startedAt)) / 1e3;
 	if (elapsed < 170) throw new LedgerError(`Stay with it ${Math.ceil(170 - elapsed)} more seconds`);
 }
+/**
+* The streak as "Day N", everywhere (Today, MAN, Ben, Telegram, the island).
+* The start day is Day 1; a reset day is Day 0 and the next day Day 1.
+* (`current` counts whole days since the start / last reset.)
+*/
+function dayNumber(s) {
+	if (s.setup === false) return 0;
+	return s.current + (s.resets === 0 ? 1 : 0);
+}
 // src/main/settings.ts
 function getSetting(db, key) {
 	return db.prepare("SELECT value FROM settings WHERE key = ?").get(key)?.value ?? null;
@@ -2235,6 +2244,11 @@ var Discipline = class {
 			today,
 			since: stats.since,
 			current: stats.current,
+			day: dayNumber({
+				current: stats.current,
+				resets: stats.relapses,
+				setup: !!startOf(events)
+			}),
 			best: stats.best,
 			totalClean: stats.totalClean,
 			resets: stats.relapses,
@@ -9780,7 +9794,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 			const reasons = f.week.topReasons.map((x) => x.reason).join(", ");
 			return `Focus sessions felt ${avg.toFixed(1)}/5 on average this week (${r.length} rated)${reasons ? `; what got in the way: ${reasons}` : ""}.`;
 		})(),
-		`Discipline: clean streak ${disc.current} days (best ${disc.best}).`,
+		`Discipline: clean streak Day ${disc.day ?? disc.current} (${disc.current} full clean days, best ${disc.best}; the day he sees everywhere is Day ${disc.day ?? disc.current}).`,
 		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join("; ") || "none"}.`,
 		moneyContext(extra.finance, today),
 		...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc)
