@@ -23,7 +23,7 @@ function fakeTurso(): { remote: SqlJsDatabase; fullReads: string[][] } {
   const fullReads: string[][] = []
   vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
     const body = JSON.parse(init.body)
-    const reads = body.requests.map((r: any) => /^SELECT \* FROM "(\w+)"$/.exec(r.stmt?.sql ?? '')?.[1]).filter(Boolean)
+    const reads = body.requests.map((r: any) => /^SELECT \* FROM "(\w+)"(?: ORDER BY rowid LIMIT \d+ OFFSET 0)?$/.exec(r.stmt?.sql ?? '')?.[1]).filter(Boolean)
     if (reads.length) fullReads.push(reads)
     const json = handlePipeline(remote, body)
     return { ok: true, status: 200, json: async () => json, text: async () => JSON.stringify(json) }

@@ -530,17 +530,38 @@ export class Mirror {
     ref.close()
     if (ddl.length) await this.turso.writeAtomic(ddl)
 
-    // The data, every table in one round trip.
+    // The data, in pages (a request stays far below the server's 4.5 MB limit
+    // however big the history grows), and all or nothing: if any part can't be
+    // read, this copy is thrown away and the old one stays (never a half-empty copy).
     const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]))
-    const data = await this.turso.readMany(tables.map((t) => ({ sql: `SELECT * FROM "${t}"`, args: [] })))
+    const PAGE = 1500
+    const page = (t: string, offset: number) => ({ sql: `SELECT * FROM "${t}" ORDER BY rowid LIMIT ${PAGE} OFFSET ${offset}`, args: [] })
+    const loaded = new Map<string, { cols: string[]; rows: unknown[][] }>()
+    for (let i = 0; i < tables.length; i += 8) {
+      const group = tables.slice(i, i + 8)
+      const first = await this.turso.readMany(group.map((t) => page(t, 0)))
+      for (let k = 0; k < group.length; k++) {
+        const t = group[k]
+        let res = first[k]
+        if (res instanceof Error) throw new MirrorError(`Could not read ${t}: ${res.message}`)
+        const all = { cols: res.cols, rows: [...res.rows] }
+        while (res.rows.length === PAGE) {
+          const [next] = await this.turso.readMany([page(t, all.rows.length)])
+          if (next instanceof Error) throw new MirrorError(`Could not read ${t}: ${next.message}`)
+          res = next
+          all.rows.push(...res.rows)
+        }
+        loaded.set(t, all)
+      }
+    }
     raw.run('BEGIN')
-    tables.forEach((t, i) => {
-      const res = data[i]
-      if (res instanceof Error || !res.rows.length) return
+    for (const t of tables) {
+      const res = loaded.get(t)
+      if (!res || !res.rows.length) continue
       const stmt = raw.prepare(`INSERT INTO "${t}" (${res.cols.map((c) => `"${c}"`).join(', ')}) VALUES (${res.cols.map(() => '?').join(', ')})`)
       for (const row of res.rows) stmt.run(row as Param[] as any)
       stmt.free()
-    })
+    }
     raw.run('COMMIT')
     for (const o of objects.filter((x) => x.type !== 'table')) {
       try {
