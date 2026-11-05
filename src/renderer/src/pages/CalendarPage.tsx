@@ -22,7 +22,7 @@ import { Icon } from '../Icon'
 import type { PageId } from '../modules'
 import { useAction, useToast } from '../ui'
 import { useLive } from '../live'
-import { soundSuccess } from '../sound'
+import { buzz, soundSuccess } from '../soundKit'
 import { calendarDay } from '@core/dates'
 import { addLocalDays, dayDiff, dragSpan, hmOf, isoAt, isoFrom, isoWeek, lenLabel, snapMinute, toMin, tzAhead, weekStartOf, type DragShape } from '@core/calMath'
 
@@ -453,11 +453,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       timer: setTimeout(() => {
         drag.current = d
         pendingTouch.current = null
-        try {
-          navigator.vibrate?.(12)
-        } catch {
-          /* no vibration */
-        }
+        buzz(12)
       }, 350)
     }
   }

@@ -2,6 +2,7 @@
 // list: rows carry data-swipe="<key>"; a clear sideways swipe past the
 // threshold calls onSwipe(key). Vertical scrolling is never blocked.
 import { useEffect, type RefObject } from 'react'
+import { buzz } from './soundKit'
 
 const THRESHOLD = 84
 
@@ -56,13 +57,7 @@ export function useSwipeRows(ref: RefObject<HTMLElement | null>, onSwipe: (key: 
       sideways = null
       dx = 0
       if (done && key) {
-        if ('vibrate' in navigator) {
-          try {
-            navigator.vibrate(12)
-          } catch {
-            // no vibration here
-          }
-        }
+        buzz(12)
         onSwipe(key)
       }
     }

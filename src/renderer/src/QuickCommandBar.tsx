@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { capture } from './capture'
 import { triggerRpgPopup } from './RpgFloatingPopups'
-import { soundSuccess, soundTick, soundMechanicalClick } from './sound'
+import { soundSuccess, soundTick, soundMechanicalClick } from './soundKit'
 import { useToast } from './ui'
 import './quickCommand.css'
 

@@ -3,6 +3,7 @@
 // device. No screen keeps its own counter.
 import { useCallback, useEffect, useState } from 'react'
 import { life } from './bridge'
+import { play } from './soundKit'
 import { readSport, updateSport } from './sportTrack'
 import { WATER_TARGET_ML } from '@core/defaults'
 
@@ -49,6 +50,7 @@ export function useWater(): Water & { add: (ml: number) => Promise<Water>; set: 
     }
   }, [load])
   const add = useCallback(async (ml: number) => {
+    if (ml > 0) play('water')
     setW((cur) => ({ ...cur, ml: Math.max(0, cur.ml + ml) }))
     const next = await addWater(ml)
     setW(next)

@@ -18,6 +18,8 @@ const MAN_FIT_CSS = `
 import { addDays } from '@core/dates'
 import { embedPhoneCss, embedThemeCss, readTokens } from '@core/embedTheme'
 import { hostCall, parseBridgeLine, parseBridgeMessage } from '@core/embedBridge'
+import { isSoundName } from '@core/sounds'
+import { play } from './soundKit'
 import { Icon } from './Icon'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
@@ -48,6 +50,9 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
       if (!data || typeof data !== 'object') return
       // Only our own embedded apps (same origin) may log things here.
       if (e.origin !== window.location.origin) return
+      // SO4: an embedded app's sound plays through the app's one sound kit.
+      const snd = parseBridgeMessage(data, e.origin, window.location.origin)
+      if (snd?.action === 'SOUND') return embedSound(snd.payload)
 
       // Sport Track (Iron Pulse)
       if (data.type === 'SPORT_WORKOUT_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_WORKOUT_LOGGED')) {
@@ -219,9 +224,26 @@ type WebviewEl = HTMLElement & { reload(): void; loadURL(url: string): Promise<v
  * One app's page. If it fails to load (e.g. Waky's server is down) or its
  * page crashes, a card says so with a button to try again.
  */
+/** A sound an embedded app asked for, by name (SO4): only the app's own sounds. */
+function embedSound(p: Record<string, unknown>): void {
+  if (isSoundName(p.name)) play(p.name, { step: Math.max(0, Math.min(10, Number(p.step) || 0)) })
+}
+
 function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { appKey: EmbedKind; name: string; url: string; partition: string; visible: boolean; soundEnabled: boolean }) {
   const ref = useRef<WebviewEl | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+
+  // Desktop webview: an app's sounds arrive as console lines (SO4).
+  useEffect(() => {
+    const el = ref.current as any
+    if (isDemo || !el?.addEventListener) return
+    const onLine = (e: any) => {
+      const m = parseBridgeLine(e.message || '')
+      if (m?.action === 'SOUND' && visible) embedSound(m.payload)
+    }
+    el.addEventListener('console-message', onLine)
+    return () => el.removeEventListener('console-message', onLine)
+  }, [visible])
 
   // Telegram or another device changed Sport Track's (or Finance Helper's)
   // data: reload it, or it would save its older copy over the change.

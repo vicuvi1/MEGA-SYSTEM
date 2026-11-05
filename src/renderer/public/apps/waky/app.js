@@ -728,9 +728,19 @@ function countUp(el, from, to) {
 
 // ---------- effects ----------
 
+// SO4: inside Life System, its one sound kit plays the sound (one volume,
+// quiet hours, meetings); this app's own engine is only for when it runs on its own.
+function lifeSound(name) {
+  try {
+    if (window.parent && window.parent !== window) { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SOUND', payload: { name: name } }, location.origin); return true; }
+    if (/Electron/.test(navigator.userAgent)) { console.log('LIFE_SYSTEM_BRIDGE:SOUND:' + JSON.stringify({ name: name })); return true; }
+  } catch (e) {}
+  return false;
+}
 let audio = null;
 function sound(kind) {
   if (!state.settings.sound) return;
+  if (lifeSound(kind === "tick" ? "tick" : "success")) return;
   audio ??= new AudioContext();
   const notes = kind === "tick" ? [[880, 0, 0.08]] : [[523, 0, 0.18], [659, 0.12, 0.18], [784, 0.24, 0.18], [1047, 0.36, 0.4]];
   for (const [freq, at, dur] of notes) {

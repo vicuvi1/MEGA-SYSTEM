@@ -20,7 +20,7 @@ import { useLive } from './live'
 import { useFocus } from './pages/Focus'
 import { localToday, calendarToday, reloadToday, useTodayEvents } from './todayEvents'
 import { isDeclined, isInvite, isMarker, isTentative } from '@core/calResponse'
-import { soundSuccess } from './sound'
+import { soundSuccess } from './soundKit'
 import { useAction, useToast } from './ui'
 import { travelFor } from '@core/eventAlerts'
 

@@ -4,7 +4,7 @@ import type { TodoTask } from '@core/todoist'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { localToday } from '../todayEvents'
-import { soundSuccess } from '../sound'
+import { soundSuccess } from '../soundKit'
 import { useAction } from '../ui'
 import { tomorrowOf } from './util'
 

@@ -9,7 +9,7 @@ import { redeemBlocker, type Reward } from '@core/shop'
 import { life } from '../bridge'
 import { FunCard } from '../FunCard'
 import { Icon } from '../Icon'
-import { soundSuccess } from '../sound'
+import { play } from '../soundKit'
 import { useAction } from '../ui'
 import { POINT_RULES } from '../../../main/points'
 import { STREAK_LABEL, type StreakId, type Unlock } from '@core/unlocks'
@@ -131,7 +131,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     setSure(null)
     const s = await act(() => redeemReward(r.id), `${r.title}: yours. You earned it.`)
     if (s) {
-      soundSuccess()
+      play('reward')
       onState(s)
       onWallet()
     }

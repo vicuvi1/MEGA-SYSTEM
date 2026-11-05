@@ -2,6 +2,7 @@ import { moduleLabel } from './modules'
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import { AnimatePresence, m } from 'framer-motion'
 import type { LedgerEntry } from '@shared/api'
+import { play } from './soundKit'
 
 /** A toast may carry one action (e.g. Undo); it then stays a little longer. */
 export type ToastAction = { label: string; run: () => void }
@@ -12,6 +13,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const push = useCallback((text: string, tone: Toast['tone'] = 'info', action?: ToastAction) => {
     const id = Date.now() + Math.random()
+    // Something went wrong: a soft low thud (and a short buzz on phones).
+    if (tone === 'bad') play('error')
     setToasts((t) => [...t, { id, text, tone, action }])
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 6500 : 3200)
   }, [])

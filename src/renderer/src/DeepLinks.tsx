@@ -9,7 +9,7 @@ import type { PageId } from './modules'
 import { DEEP_KEYS, findWhen, guessShare, readDeepLink, sharedText, type ShareAs } from '@core/deepLinks'
 import { parseWhen } from '@core/whenParse'
 import { capture } from './capture'
-import { soundSuccess } from './sound'
+import { soundSuccess } from './soundKit'
 import './lifeExtras.css'
 
 /** Removes the action from the address, so a reload doesn't add the water twice. */

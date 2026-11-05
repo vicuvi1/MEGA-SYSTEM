@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import type { BodyState } from '@shared/api'
 import { life } from './bridge'
 import { useLive } from './live'
-import { soundSuccess } from './sound'
+import { soundSuccess } from './soundKit'
 import { useToast } from './ui'
 
 export function useRest(): [BodyState | null, (day: string | null, on: boolean) => Promise<void>] {

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { life } from './bridge'
 import { useLive } from './live'
-import { soundSystemOracle } from './sound'
+import { soundSystemOracle } from './soundKit'
 import { useToast } from './ui'
 
 const SEEN = 'ls.coachSeen'

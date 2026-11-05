@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
+import { buzz } from './soundKit'
 
 interface Props {
   page: PageId
@@ -11,13 +12,8 @@ interface Props {
   onQuickCommand: () => void
 }
 
-function haptic(ms = 12) {
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    try {
-      navigator.vibrate(ms)
-    } catch {}
-  }
-}
+/** A short buzz (Settings → Sound → Phone buzz). */
+const haptic = (ms = 12) => buzz(ms)
 
 const MAIN: { id: PageId; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
   { id: 'today', label: 'Today', icon: 'home' },

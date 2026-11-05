@@ -1,6 +1,7 @@
 // Per-viewer look-and-feel choices (theme, sounds, name). Kept in localStorage:
 // they are conveniences, not data, and the app works the same without them.
 import { useEffect, useState } from 'react'
+import type { SoundPrefs } from '@core/sounds'
 
 export type AccentColor = 'lime' | 'orange' | 'cyan' | 'purple' | 'pink'
 
@@ -22,6 +23,8 @@ export interface UiPrefs {
   layoutV?: number
   /** How new notifications reach you on this device (Settings → Notifications). */
   notif?: NotifPrefs
+  /** Sound kinds, theme, focus background, phone buzz (Settings → Sound). */
+  sounds?: SoundPrefs
 }
 
 export interface NotifPrefs {
@@ -120,6 +123,15 @@ export function setUiPrefs(p: Partial<UiPrefs>): void {
   }
   applyTheme()
   listeners.forEach((l) => l(current))
+}
+
+// Another window of the app (the desktop island) changed them: follow.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== KEY) return
+    current = load()
+    listeners.forEach((l) => l(current))
+  })
 }
 
 export function useUiPrefs(): [UiPrefs, (p: Partial<UiPrefs>) => void] {

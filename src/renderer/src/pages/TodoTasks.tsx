@@ -11,7 +11,7 @@ import { AREA_COLORS, defaultAreaColor, plainName, sortTasks, type Area, type To
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { EmptyState, Skeleton } from '../blocks'
-import { soundCoin, soundSuccess } from '../sound'
+import { soundCoin, soundSuccess } from '../soundKit'
 import { useAction, useToast } from '../ui'
 import type { CleanChange } from '@core/todoistClean'
 import { useSwipeRows } from '../swipe'

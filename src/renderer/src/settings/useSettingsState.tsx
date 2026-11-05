@@ -11,7 +11,7 @@ import { life } from '../bridge'
 import { useSaved } from '../settingsUi'
 import { addDays } from '@core/dates'
 import { useAction } from '../ui'
-import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundWarning } from '../sound'
+import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundWarning } from '../soundKit'
 
 export function downloadBlob(content: string, mime: string, filename: string) {
   const blob = new Blob([content], { type: mime })

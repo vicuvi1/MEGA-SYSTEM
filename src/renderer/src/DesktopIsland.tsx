@@ -20,6 +20,8 @@ import { finalShapeRect, inRects, roundOut, SHIELD_OFF, SHIELD_PAD, shieldStep, 
 import { installTaps, isPressed, onPress, tp } from './islandTap'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
+import { play, playReminder } from './soundKit'
+import { useIslandSounds } from './focusSound'
 import './island.css'
 import './island-motion.css'
 
@@ -34,47 +36,8 @@ export const DRAG_MS = 120
 /** What may wait while you press a button (IC5): never your own clicks. */
 const HELD_EVENTS = new Set<IslandUiEvent['type']>(['hover', 'hoverHeld', 'leave', 'alert', 'alertEnd', 'autoOpen', 'blur'])
 
-/** One note: frequency, start (s), length (s), type. */
-type Note = [number, number, number, OscillatorType?]
-/** A sound for each kind of reminder (A8), made on the spot (no files). */
-const SOUNDS: Record<string, Note[]> = {
-  // water: a "bloop" (falling pitch)
-  water: [[880, 0, 0.12, 'sine'], [520, 0.08, 0.22, 'sine']],
-  // stretch: a rising arpeggio
-  move: [[523, 0, 0.14, 'triangle'], [659, 0.1, 0.14, 'triangle'], [784, 0.2, 0.22, 'triangle']],
-  eyes: [[700, 0, 0.18, 'sine'], [700, 0.25, 0.18, 'sine']],
-  // bedtime: one soft low note
-  bed: [[330, 0, 0.7, 'sine']],
-  // reward: a sparkle
-  reward: [[1046, 0, 0.1, 'triangle'], [1318, 0.07, 0.1, 'triangle'], [1568, 0.14, 0.1, 'triangle'], [2093, 0.21, 0.25, 'triangle']],
-  // time up: a double tone
-  over: [[880, 0, 0.16, 'square'], [880, 0.24, 0.16, 'square']],
-  // everything else: the two-note chime
-  default: [[660, 0, 0.35, 'sine'], [880, 0.12, 0.35, 'sine']]
-}
-function playSound(kind: string, volume = 0.7) {
-  if (volume <= 0) return
-  try {
-    const ctx = new AudioContext()
-    const key = kind === 'winddown' || kind === 'sleep' ? 'bed' : kind
-    for (const [f, at, len, type] of SOUNDS[key] ?? SOUNDS.default) {
-      const o = ctx.createOscillator()
-      const g = ctx.createGain()
-      o.type = type ?? 'sine'
-      o.frequency.value = f
-      const t = ctx.currentTime + at
-      g.gain.setValueAtTime(0.0001, t)
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.11 * volume), t + 0.02)
-      g.gain.exponentialRampToValueAtTime(0.0001, t + len)
-      o.connect(g).connect(ctx.destination)
-      o.start(t)
-      o.stop(t + len + 0.05)
-    }
-    setTimeout(() => void ctx.close(), 1600)
-  } catch {
-    /* no audio */
-  }
-}
+/** A sound for each kind of reminder (A8), through the one sound kit (soundKit.ts). */
+const playSound = playReminder
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
 const minsText = (ms: number) => {
   const m = Math.max(1, Math.round(ms / 60000))
@@ -564,6 +527,7 @@ export function DesktopIsland() {
   const second = pillBubbles(acts, pick).second
   const bubble: Activity | null = liveActivity(main, now) && liveActivity(second, now) ? second : null
   const run = s.running
+  useIslandSounds(place, inCall, run)
 
   // IP3: nothing live for a while: it tucks away (a tiny dot, or faded); the mouse on it brings it back.
   const lastLive = useRef(Date.now())
@@ -948,7 +912,7 @@ export function DesktopIsland() {
     desk()?.islandAction?.({ ...a, id })
   }
   const tap = (a: IslandAction, lbl?: string) => {
-    if (a.kind === 'water') setSplash((x) => ({ n: x.n + 1, ml: a.ml }))
+    if (a.kind === 'water') (setSplash((x) => ({ n: x.n + 1, ml: a.ml })), play('water'))
     if (lbl === 'Reply') {
       dispatch({ type: 'click' })
       focusInput()

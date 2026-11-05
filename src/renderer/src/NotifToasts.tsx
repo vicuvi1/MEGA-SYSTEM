@@ -12,7 +12,7 @@ import { life } from './bridge'
 import { Icon, type IconName } from './Icon'
 import { useLive } from './live'
 import type { PageId } from './modules'
-import { soundNotify } from './sound'
+import { setSoundQuiet, soundNotify } from './soundKit'
 import { DEFAULT_NOTIF, getUiPrefs } from './uiPrefs'
 
 const POPPED = 'ls.notif.popped'
@@ -181,6 +181,8 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
       if (!life.notifications?.add) return
       const s = (await life.notifications.settings?.().catch(() => null)) ?? DEFAULT_NOTIF_SETTINGS
       synced.current = s
+      // Sounds keep the same quiet hours (SO3).
+      setSoundQuiet(s.quiet)
       const now = new Date()
       const list: Omit<Notif, 'readAt'>[] = []
       if (life.google) {

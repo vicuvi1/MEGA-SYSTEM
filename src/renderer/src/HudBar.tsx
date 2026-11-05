@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { life } from './bridge'
 import { parseTelegramText } from '@core/botCommands'
 import { formatMdl } from '@core/economy'
-import { soundSuccess, soundTick, soundFanfare } from './sound'
+import { soundSuccess, soundTick, soundFanfare } from './soundKit'
 import './hud.css'
 
 export function HudBar() {

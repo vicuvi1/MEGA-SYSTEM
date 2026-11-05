@@ -12,6 +12,7 @@ import { PluginsPanel } from '../../../plugins/PluginsPanel'
 import { useSettingsState, type SettingsProps } from '../settings/useSettingsState'
 import { GeneralSection } from '../settings/general'
 import { LookSection } from '../settings/look'
+import { SoundSection } from '../settings/sound'
 import { BenSection } from '../settings/ben'
 import { ConnectionsSection } from '../settings/connections'
 import { BackupsSection } from '../settings/backups'
@@ -45,6 +46,14 @@ export function Settings(props: SettingsProps) {
       hint: 'Theme, colors and your Today screen',
       keywords: 'appearance theme dark light color colour today sections layout name',
       body: <LookSection s={s} />
+    },
+    {
+      id: 'sound',
+      label: 'Sound',
+      icon: 'bell',
+      hint: 'Volume, kinds of sounds, theme, focus background, phone buzz',
+      keywords: 'sound sounds volume mute audio theme arcade glass soft focus background brown noise rain tick gong haptics vibrate buzz',
+      body: <SoundSection />
     },
     {
       id: 'ben',

@@ -2314,6 +2314,15 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
         // -------------------------------------------------------------
         // 1. PROCEDURAL CINEMATIC SPARTAN MUSIC & SOUND ENGINE
         // -------------------------------------------------------------
+        // SO4: inside Life System, its one sound kit plays the sound (one volume,
+        // quiet hours, meetings); this app's own engine is only for when it runs on its own.
+        function lifeSound(name) {
+          try {
+            if (window.parent && window.parent !== window) { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SOUND', payload: { name: name } }, location.origin); return true; }
+            if (/Electron/.test(navigator.userAgent)) { console.log('LIFE_SYSTEM_BRIDGE:SOUND:' + JSON.stringify({ name: name })); return true; }
+          } catch (e) {}
+          return false;
+        }
         class SoundEngine {
             constructor() {
                 this.ctx = null;
@@ -2352,6 +2361,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
 
             // Sound Effects
             playWarDrum() {
+                if (lifeSound('tick')) return;
                 this.init();
                 const now = this.ctx.currentTime;
                 const osc = this.ctx.createOscillator();
@@ -2372,6 +2382,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             }
 
             playWarHorn() {
+                if (lifeSound('mustDo')) return;
                 this.init();
                 const now = this.ctx.currentTime;
                 [110, 165, 220].forEach((freq, idx) => {
@@ -2393,6 +2404,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             }
 
             playVictory() {
+                if (lifeSound('levelUp')) return;
                 this.init();
                 const notes = [
                     { f: 293.66, t: 0.0, d: 0.2 }, // D4

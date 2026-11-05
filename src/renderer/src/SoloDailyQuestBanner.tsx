@@ -5,7 +5,7 @@ import { findExercise, readSport, SPORT_KEY, updateSport } from './sportTrack'
 import type { BodyState, Summary } from '@shared/api'
 import { life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
-import { soundCoin, soundSuccess } from './sound'
+import { soundCoin, soundSuccess } from './soundKit'
 import type { PageId } from './modules'
 import { barFill } from './motionKit'
 

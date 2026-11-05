@@ -8,7 +8,7 @@ import type { TodoTask } from '@core/todoist'
 import { activePlan, planWeek, shouldPlan, suggestFocus, type WeekPlan } from '@core/weekPlan'
 import { life } from './bridge'
 import { Icon } from './Icon'
-import { soundSuccess } from './sound'
+import { soundSuccess } from './soundKit'
 import { useAction } from './ui'
 
 export function useWeekPlan(): [WeekPlan | null | undefined, () => void] {

@@ -9,7 +9,7 @@ import { hm } from '@core/focus'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useLive } from '../live'
-import { soundSuccess } from '../sound'
+import { soundSuccess } from '../soundKit'
 
 const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
 const fmt = (m: Pick<GrowthMetric, 'unit'>, v: number) => (m.unit === 'min' ? (v ? hm(Math.round(v)) : '0m') : m.unit === 'bani' ? lei(v) : String(Math.round(v * 10) / 10))

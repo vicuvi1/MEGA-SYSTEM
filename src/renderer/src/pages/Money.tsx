@@ -4,7 +4,7 @@ import type { ConnectionsState, Expense, NativeMoneySummary } from '@shared/api'
 import { life } from '../bridge'
 import { barFill } from '../motionKit'
 import { Icon } from '../Icon'
-import { soundCoin, soundSpend } from '../sound'
+import { soundCoin, soundSpend } from '../soundKit'
 import { Coins, useAction } from '../ui'
 import { ConnectCard } from './Connected'
 

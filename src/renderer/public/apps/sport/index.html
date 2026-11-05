@@ -1972,6 +1972,15 @@
   </div>
 
   <script>
+    // SO4: inside Life System, its one sound kit plays the sound (one volume,
+    // quiet hours, meetings); this app's own engine is only for when it runs on its own.
+    function lifeSound(name) {
+      try {
+        if (window.parent && window.parent !== window) { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SOUND', payload: { name: name } }, location.origin); return true; }
+        if (/Electron/.test(navigator.userAgent)) { console.log('LIFE_SYSTEM_BRIDGE:SOUND:' + JSON.stringify({ name: name })); return true; }
+      } catch (e) {}
+      return false;
+    }
     // --- Synthesizer Audio Engine (Web Audio API) ---
     class AudioEngine {
       constructor() {
@@ -2005,17 +2014,21 @@
         } catch (e) {}
       }
       playClick() {
+        if (this.enabled && lifeSound('tick')) return;
         this.playTone(800, 'sine', 0.05, 0.1);
       }
       playTick() {
+        if (this.enabled && lifeSound('tick')) return;
         this.playTone(1200, 'triangle', 0.04, 0.08);
       }
       playWater() {
+        if (this.enabled && lifeSound('water')) return;
         this.playTone(600, 'sine', 0.08, 0.12);
         setTimeout(() => this.playTone(900, 'sine', 0.08, 0.08), 50);
       }
       playChime() {
         if (!this.enabled) return;
+        if (lifeSound('success')) return;
         this.init();
         if (!this.ctx) return;
         [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
@@ -2024,6 +2037,7 @@
       }
       playLevelUp() {
         if (!this.enabled) return;
+        if (lifeSound('levelUp')) return;
         this.init();
         if (!this.ctx) return;
         [440, 554.37, 659.25, 880, 1108.73].forEach((freq, i) => {

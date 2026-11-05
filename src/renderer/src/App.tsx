@@ -33,7 +33,7 @@ import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { reloadToday } from './todayEvents'
 import { capture } from './capture'
 import type { TodoTask } from '@core/todoist'
-import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
+import { play, soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './soundKit'
 import { countdown, nextUp } from '@core/dayGlance'
 import { useTodayEvents } from './todayEvents'
 import { storageWakesApp } from './islandLog'
@@ -386,6 +386,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     setPops((p) => [...p.slice(-2), pop])
     setTimeout(() => setPops((p) => p.filter((x) => x.id !== pop.id)), 2600)
   }, [summary, rules])
+
+  // Level up: the fanfare, once per new level.
+  const lastLevel = useRef<number | null>(null)
+  useEffect(() => {
+    const lv = summary?.level?.level
+    if (typeof lv !== 'number') return
+    const prev = lastLevel.current
+    lastLevel.current = lv
+    if (prev !== null && lv > prev) play('levelUp')
+  }, [summary?.level?.level])
 
   // A page that no longer exists (Schedule, Journey, Game Rules) opens Today.
   const current = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === (page === 'focus' ? 'progress' : page)) ?? MODULES[0]

@@ -8,7 +8,7 @@ import type { Reward } from '@core/shop'
 import { redeemBlocker } from '@core/shop'
 import { life } from './bridge'
 import { Icon } from './Icon'
-import { soundSuccess } from './sound'
+import { play, soundSuccess } from './soundKit'
 import { useAction } from './ui'
 import { barFill } from './motionKit'
 
@@ -57,7 +57,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
     setSure(null)
     const ok = await act(() => redeemReward(r.id), `${r.title}: yours! 🎁`)
     if (ok) {
-      soundSuccess()
+      play('reward')
       onWallet()
       reload()
     }

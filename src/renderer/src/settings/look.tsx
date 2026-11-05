@@ -4,7 +4,6 @@ import { LayoutEditor } from '../LayoutEditor'
 import { life } from '../bridge'
 import { Row, Saved, Segmented, Switch } from '../settingsUi'
 import { Icon } from '../Icon'
-import { soundCoin, soundFanfare, soundMechanicalClick, soundSystemOracle, soundWarning } from '../sound'
 import type { SettingsState } from './useSettingsState'
 
 export function LookSection({ s }: { s: SettingsState }) {
@@ -31,25 +30,6 @@ export function LookSection({ s }: { s: SettingsState }) {
           <Switch label="Calm mode" on={ui.calm !== false} onChange={(v) => (setUi({ calm: v }), lookSaved())} />
         </Row>
         {!window.desktop && <IslandToggle onSaved={lookSaved} />}
-        <Row title="Sounds" hint="Short sounds for done tasks, points and alerts">
-          <Switch label="Sounds" on={!!ui.sound} onChange={(v) => (setUi({ sound: v }), lookSaved())} />
-        </Row>
-        {ui.sound && (
-          <Row title="Volume" hint={`${ui.volume ?? 80}%`}>
-            <input className="sx-range" type="range" min={0} max={100} step={5} value={ui.volume ?? 80} onChange={(e) => setUi({ volume: Number(e.target.value) })} onMouseUp={() => (soundCoin(), lookSaved())} aria-label="Volume" />
-          </Row>
-        )}
-        {ui.sound && (
-          <Row title="Try them" hint="Hear how they sound">
-            <div className="sx-try">
-              <button type="button" className="btn small ghost" onClick={() => soundSystemOracle()}>Ben</button>
-              <button type="button" className="btn small ghost" onClick={() => soundCoin()}>Points</button>
-              <button type="button" className="btn small ghost" onClick={() => soundMechanicalClick()}>Click</button>
-              <button type="button" className="btn small ghost" onClick={() => soundFanfare()}>Level up</button>
-              <button type="button" className="btn small ghost" onClick={() => soundWarning()}>Alert</button>
-            </div>
-          </Row>
-        )}
       </section>
       <LayoutEditor />
         </>

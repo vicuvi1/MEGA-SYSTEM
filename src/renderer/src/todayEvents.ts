@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import type { CalEvent } from '@core/dayTime'
 import { life } from './bridge'
 import { useLive } from './live'
+import { addMeetingCheck } from './soundKit'
+import { meetingNow } from '@core/dayGlance'
 
 /** Today, the app's way: the day ends at 04:00, so at 01:30 it is still "today" for your plan. */
 export const localToday = () => dayKey(new Date())
@@ -22,6 +24,8 @@ interface Snapshot {
 let snap: Snapshot = { day: '', connected: null, events: [], error: null }
 let inflight: Promise<void> | null = null
 const subs = new Set<(s: Snapshot) => void>()
+// No sounds while a meeting from your calendar is on (SO3).
+addMeetingCheck(() => snap.day === localToday() && !!meetingNow(snap.events, Date.now()))
 
 export function reloadToday(): Promise<void> {
   if (inflight) return inflight

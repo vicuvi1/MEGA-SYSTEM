@@ -11,7 +11,7 @@ import type { FocusState } from '@shared/api'
 import { life } from './bridge'
 import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
-import { soundFanfare } from './sound'
+import { useFocusSound } from './focusSound'
 import { useAction } from './ui'
 
 export interface IslandPrefs {
@@ -137,13 +137,14 @@ export function FocusIsland() {
     chimed.current = run.startedAt
     setFlash(true)
     setOpen(true)
-    if (prefs.chime) soundFanfare()
     const t = window.setTimeout(() => {
       setFlash(false)
       if (!pinned) setOpen(false)
     }, 8000)
     return () => clearTimeout(t)
-  }, [run, over, prefs.chime, pinned])
+  }, [run, over, pinned])
+  // Its sounds: the swell, your background, the last 10 seconds and the gong.
+  useFocusSound(run ? { startedAt: startMs, endsAt: endMs } : null, prefs.chime)
 
   // The countdown in the tab title, so you see it from other tabs too.
   const baseTitle = useRef<string>(typeof document !== 'undefined' ? document.title : 'Life System')

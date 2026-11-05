@@ -15,7 +15,7 @@ import { capture } from './capture'
 import { useLive } from './live'
 import { useFocus } from './pages/Focus'
 import { reloadToday, useTodayEvents } from './todayEvents'
-import { soundSuccess } from './sound'
+import { soundSuccess } from './soundKit'
 import { useAction, useToast } from './ui'
 import { countdown, daySummary, isMeeting, nextUp } from '@core/dayGlance'
 

@@ -5,7 +5,7 @@ import { DesktopBackupPanel } from '../DesktopBackups'
 import { Icon } from '../Icon'
 import { SyncPanel } from '../SyncPanel'
 import { timeAgo } from '../ui'
-import { soundSuccess } from '../sound'
+import { soundSuccess } from '../soundKit'
 import type { SettingsState } from './useSettingsState'
 
 export function BackupsSection({ s }: { s: SettingsState }) {

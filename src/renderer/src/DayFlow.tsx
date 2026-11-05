@@ -22,7 +22,7 @@ import { calendarToday, reloadToday, useTodayEvents } from './todayEvents'
 import { nextSlot, planMustDos } from '@core/benActs'
 import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { activePlan } from '@core/weekPlan'
-import { soundCoin, soundSuccess } from './sound'
+import { play, soundCoin, soundSuccess } from './soundKit'
 import { useAction, useToast } from './ui'
 import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
@@ -265,7 +265,9 @@ export function DayFlow(props: DayFlowProps) {
   const tickMustDo = async (i: number) => {
     const r = await act(() => life.focus.togglePlan(i))
     if (!r) return
-    r.coins ? soundCoin() : soundSuccess()
+    // Two notes up; the coin after them when it paid.
+    play('mustDo')
+    if (r.coins) setTimeout(() => play('coin'), 260)
     refresh()
   }
   // A finished row plays a short "done" animation before it leaves.
