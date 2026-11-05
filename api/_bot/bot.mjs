@@ -18845,7 +18845,12 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 		location: e.location ?? null,
 		description: e.description ?? null,
 		recurringEventId: e.recurringEventId ?? null,
-		ours: e.extendedProperties?.private?.lifeSystem === "1"
+		ours: e.extendedProperties?.private?.lifeSystem === "1",
+		meet: e.hangoutLink ?? (e.conferenceData?.entryPoints ?? []).find((p) => p?.entryPointType === "video")?.uri ?? null,
+		attendees: Array.isArray(e.attendees) ? e.attendees.length : 0,
+		declined: Array.isArray(e.attendees) && e.attendees.some((a) => a?.self && a?.responseStatus === "declined"),
+		free: e.transparency === "transparent",
+		htmlLink: e.htmlLink ?? null
 	});
 	return {
 		calendars,

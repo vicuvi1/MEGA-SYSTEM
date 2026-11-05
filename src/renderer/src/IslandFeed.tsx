@@ -111,7 +111,11 @@ async function todayBlocks(): Promise<IslandBlock[]> {
   const on = !!(await life.google?.status().catch(() => null))?.connected
   if (on) {
     const events = await life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => [])
-    const blocks = events.filter((e) => !e.allDay).map((e) => ({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), id: e.id, calendarId: e.calendarId })).filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end))
+    // Declined and "free" events don't count; a call link or other people make it a meeting (Q4).
+    const blocks = events
+      .filter((e) => !e.allDay && !e.declined && !e.free)
+      .map((e) => ({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), id: e.id, calendarId: e.calendarId, call: !!e.meet || (e.attendees ?? 0) > 1 }))
+      .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end))
     if (blocks.length) return blocks
   }
   const rh = await life.coach?.rhythm?.('state').catch(() => null)

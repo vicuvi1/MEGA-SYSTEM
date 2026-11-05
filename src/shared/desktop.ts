@@ -63,6 +63,10 @@ export interface DesktopApi {
   islandKeyboard?(on: boolean): void
   /** Island window: you clicked into another app. */
   onIslandBlur?(cb: () => void): void
+  /** Island window: quiet for N minutes / until tomorrow, or back on (null). */
+  islandQuiet?(choice: number | 'tomorrow' | null): void
+  /** Island window: quiet until (ms, 0 = not quiet), and what Windows says (a call, a full-screen app). */
+  onIslandQuiet?(cb: (q: { until: number; call: boolean; fullscreen: boolean }) => void): void
   /** Island window: where the visible pill/card is (window pixels); clicks pass through elsewhere. */
   islandHot?(rect: { x: number; y: number; width: number; height: number }): void
   /** Island window: start / stop dragging it (the desktop moves the window with the pointer). */

@@ -1,7 +1,7 @@
 // Settings → Desktop island: size, see-through, look, which sections and in
 // what order, sound, how fast it hides, and your shortcut. Saved on this PC.
 import { useEffect, useState } from 'react'
-import { SECTION_LABEL, SHORTCUTS, type IslandPrefs } from '@core/islandModel'
+import { KIND_LABEL, QUIET_SHORTCUTS, SECTION_LABEL, SHORTCUTS, type AlertKindPref, type IslandPrefs } from '@core/islandModel'
 import { Icon } from './Icon'
 import { ReorderList, Row, Saved, Segmented, Switch, useSaved } from './settingsUi'
 
@@ -51,9 +51,36 @@ export function IslandSettingsPanel() {
       <Row title="Tucks away" hint="How fast it hides after you move away">
         {opt('hide', 'Tucks away', [['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']])}
       </Row>
-      <Row title="Chime" hint="A soft sound when it drops down by itself">
-        <Switch label="Chime" on={!!p.sound} onChange={(v) => void save({ sound: v })} />
+      <Row title="Sounds" hint="A sound when it drops down by itself (each kind has its own)">
+        <Switch label="Sounds" on={!!p.sound} onChange={(v) => void save({ sound: v })} />
       </Row>
+      <Row title="Volume" hint={`${Math.round(p.volume * 100)}%`}>
+        <input className="sx-range" type="range" min={0} max={100} step={5} value={Math.round(p.volume * 100)} onChange={(e) => void save({ volume: Number(e.target.value) / 100 })} aria-label="Volume" />
+      </Row>
+      <Row title="In a call or meeting" hint="When your mic or camera is on, or a meeting is in your calendar">
+        {opt('callMode', 'In a call', [['hide', 'Hide it'], ['dot', 'Small dot'], ['normal', 'Leave it']])}
+      </Row>
+      <Row title="Quiet shortcut" hint="Quiet for an hour, or back on (also in the tray and the island's 🌙)">
+        <select className="sx-select" value={p.quietShortcut} onChange={(e) => void save({ quietShortcut: e.target.value })} aria-label="Quiet shortcut">
+          {QUIET_SHORTCUTS.map((k) => (
+            <option key={k || 'none'} value={k}>
+              {keyName(k)}
+            </option>
+          ))}
+        </select>
+      </Row>
+      <Row title="Reminders" hint="Which ones show, and which make a sound. At most one drops down every 3 minutes." />
+      <div className="is-kinds">
+        {(Object.keys(KIND_LABEL) as AlertKindPref[]).map((k) => (
+          <div key={k} className="is-kind">
+            <span>{KIND_LABEL[k]}</span>
+            <Switch label={`${KIND_LABEL[k]}: show`} on={p.kinds[k].on} onChange={(v) => void save({ kinds: { ...p.kinds, [k]: { ...p.kinds[k], on: v } } })} />
+            <button type="button" className={`is-snd ${p.kinds[k].sound && p.kinds[k].on ? 'on' : ''}`} disabled={!p.kinds[k].on} onClick={() => void save({ kinds: { ...p.kinds, [k]: { ...p.kinds[k], sound: !p.kinds[k].sound } } })} aria-label={`${KIND_LABEL[k]}: sound ${p.kinds[k].sound ? 'on' : 'off'}`} title={p.kinds[k].sound ? 'Sound on' : 'Silent'}>
+              {p.kinds[k].sound ? '🔔' : '🔕'}
+            </button>
+          </div>
+        ))}
+      </div>
       <Row title="Shortcut" hint={msg || 'Opens the island from anywhere'}>
         <select className="sx-select" value={p.shortcut} onChange={(e) => void save({ shortcut: e.target.value })} aria-label="Shortcut">
           {SHORTCUTS.map((k) => (

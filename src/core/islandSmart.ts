@@ -9,6 +9,8 @@ import type { IslandAlert, IslandBlock } from './islandModel'
 /** Calendar titles that are calls or meetings (EN / RO / RU). */
 export const CALL = /(?<![\p{L}\p{N}])(call|calls|meet|meeting|zoom|teams|google meet|interview|standup|stand-up|1:1|sync|apel|ședință|sedinta|întâlnire|intalnire|interviu|звонок|созвон|встреча)(?![\p{L}\p{N}])/iu
 export const isCall = (title: string) => CALL.test(title)
+/** A meeting: marked by its data (link, people) or named like one. */
+const meeting = (b: IslandBlock) => !!b.call || isCall(b.title)
 
 /** Away this long (seconds of no mouse/keys) during a block counts as drifting. */
 export const DRIFT_IDLE_SEC = 8 * 60
@@ -19,12 +21,12 @@ const mins = (ms: number) => Math.max(1, Math.round(ms / 60000))
 
 /** The call/meeting going on now, if any. */
 export function callNow(blocks: IslandBlock[], now: number): IslandBlock | null {
-  return blocks.find((b) => b.start <= now && now < b.end && isCall(b.title)) ?? null
+  return blocks.find((b) => b.start <= now && now < b.end && meeting(b)) ?? null
 }
 
 /** The work block going on now (not a call). */
 export function workNow(blocks: IslandBlock[], now: number): IslandBlock | null {
-  return blocks.filter((b) => b.start <= now && now < b.end && !isCall(b.title)).sort((a, b) => a.end - a.start - (b.end - b.start))[0] ?? null
+  return blocks.filter((b) => b.start <= now && now < b.end && !meeting(b)).sort((a, b) => a.end - a.start - (b.end - b.start))[0] ?? null
 }
 
 export const blockKey = (b: IslandBlock) => b.id ?? `${b.start}:${b.title}`

@@ -117,3 +117,27 @@ describe('island states (command center)', () => {
     expect(islandStep(open, { type: 'alert' }).ui.view).toBe('expanded')
   })
 })
+
+describe('island quiet and priorities (Q1, P1, P3, P4)', () => {
+  it('quiet until: minutes, or tomorrow 06:00', async () => {
+    const { quietUntil } = await import('./islandModel')
+    const now = new Date(2026, 10, 5, 14, 0).getTime()
+    expect(quietUntil(30, now) - now).toBe(30 * 60_000)
+    expect(new Date(quietUntil('tomorrow', now)).toString()).toContain('Nov 06 2026 06:00')
+    // After midnight, "tomorrow" means this morning.
+    expect(new Date(quietUntil('tomorrow', new Date(2026, 10, 6, 1, 0).getTime())).getDate()).toBe(6)
+  })
+  it('one rule decides: quiet, calls, the 3-minute gap, kinds turned off', async () => {
+    const { alertGate, DEFAULT_ISLAND_PREFS } = await import('./islandModel')
+    const base = { prefs: DEFAULT_ISLAND_PREFS, quiet: false, call: false, lastPeekAt: 0, now: 10_000_000 }
+    expect(alertGate({ ...base, kind: 'water' })).toBe('peek')
+    expect(alertGate({ ...base, kind: 'water', lastPeekAt: base.now - 60_000 })).toBe('silent')
+    expect(alertGate({ ...base, kind: 'over', lastPeekAt: base.now - 60_000 })).toBe('peek')
+    expect(alertGate({ ...base, kind: 'ben', call: true })).toBe('silent')
+    expect(alertGate({ ...base, kind: 'over', call: true })).toBe('peek')
+    expect(alertGate({ ...base, kind: 'ben', quiet: true })).toBe('drop')
+    expect(alertGate({ ...base, kind: 'over', quiet: true })).toBe('silent')
+    const off = { ...DEFAULT_ISLAND_PREFS, kinds: { ...DEFAULT_ISLAND_PREFS.kinds, eyes: { on: false, sound: true } } }
+    expect(alertGate({ ...base, prefs: off, kind: 'eyes' })).toBe('drop')
+  })
+})

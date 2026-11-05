@@ -18,6 +18,16 @@ export interface CalEvent {
   colorId?: string | null
   /** Notes. */
   description?: string | null
+  /** The video-call link (Meet, Zoom… from Google), if any (Q4). */
+  meet?: string | null
+  /** How many people are invited (0 = just you). */
+  attendees?: number
+  /** You said no to it: it doesn't block your time. */
+  declined?: boolean
+  /** Marked "free" in Google (it doesn't block your time). */
+  free?: boolean
+  /** The event in Google Calendar (web link). */
+  htmlLink?: string | null
   /** Set on one day of a repeating event: the series' id. */
   recurringEventId?: string | null
 }

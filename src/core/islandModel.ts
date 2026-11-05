@@ -3,7 +3,7 @@
 // the tray) sends it a snapshot of your moment; the island sends back taps.
 // This file is the pure part: what it shows, and when it drops down.
 
-export interface IslandBlock { title: string; start: number; end: number; id?: string; calendarId?: string }
+export interface IslandBlock { title: string; start: number; end: number; id?: string; calendarId?: string; /** A meeting by its data (a call link or other people), whatever its name (Q4). */ call?: boolean }
 
 /** Every tap gets an answer from the app window: done, or why not. */
 export interface IslandAck { id: string; ok: boolean; error?: string; /** What happened, in words (the command bar's answer). */ text?: string }
@@ -235,6 +235,45 @@ export interface IslandPrefs {
   hide: 'fast' | 'normal' | 'slow'
   /** Electron accelerator, or '' for none. */
   shortcut: string
+  /** In a call or meeting: hide the island, shrink it to a dot, or leave it (Q5). */
+  callMode: 'hide' | 'dot' | 'normal'
+  /** The shortcut that turns quiet mode on and off (Q6), or ''. */
+  quietShortcut: string
+  /** Each kind of reminder: shown or not, with or without its sound (P4). */
+  kinds: Record<AlertKindPref, { on: boolean; sound: boolean }>
+  /** Sound volume, 0 … 1 (A8). */
+  volume: number
+}
+
+/** The reminder kinds you can turn on/off (P4). */
+export type AlertKindPref = 'water' | 'move' | 'eyes' | 'ben' | 'block' | 'bed' | 'morning' | 'highlight' | 'reward' | 'over'
+export const KIND_LABEL: Record<AlertKindPref, string> = { water: 'Water', move: 'Stretch breaks', eyes: 'Eye breaks (20-20-20)', ben: "Ben's messages", block: 'Blocks starting / ending', bed: 'Bedtime & wind-down', morning: 'Morning', highlight: 'Highlights', reward: 'Rewards', over: 'Focus time is up' }
+export const QUIET_SHORTCUTS = ['Control+Alt+Q', 'Control+Shift+Q', 'Alt+Shift+Q', ''] as const
+
+/** Which preference an alert kind falls under. */
+export function alertPref(kind: string): AlertKindPref | null {
+  if (kind === 'water') return 'water'
+  if (kind === 'move') return 'move'
+  if (kind === 'eyes') return 'eyes'
+  if (kind === 'ben') return 'ben'
+  if (kind === 'block' || kind === 'drift' || kind === 'end' || kind === 'quality') return 'block'
+  if (kind === 'bed' || kind === 'winddown' || kind === 'sleep') return 'bed'
+  if (kind === 'morning') return 'morning'
+  if (kind === 'highlight') return 'highlight'
+  if (kind === 'reward') return 'reward'
+  if (kind === 'over') return 'over'
+  return null
+}
+
+/** "Quiet for…" (Q1): when it ends. `choice`: minutes, or 'tomorrow' (06:00 next morning). */
+export function quietUntil(choice: number | 'tomorrow', now: number): number {
+  if (choice === 'tomorrow') {
+    const d = new Date(now)
+    d.setDate(d.getDate() + (d.getHours() < 4 ? 0 : 1))
+    d.setHours(6, 0, 0, 0)
+    return d.getTime()
+  }
+  return now + Math.max(1, Math.round(choice)) * 60_000
 }
 
 export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', sleep: 'Bedtime', plan: 'Now & next', tasks: 'Todoist', mustdos: 'Must-dos', logs: 'Water & reps', points: 'Points & reward', ben: 'Ben' }
@@ -246,7 +285,11 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   sections: (['timer', 'sleep', 'plan', 'tasks', 'mustdos', 'logs', 'points', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
   sound: true,
   hide: 'normal',
-  shortcut: 'Control+Alt+Space'
+  shortcut: 'Control+Alt+Space',
+  callMode: 'hide',
+  quietShortcut: 'Control+Alt+Q',
+  kinds: { water: { on: true, sound: true }, move: { on: true, sound: true }, eyes: { on: true, sound: true }, ben: { on: true, sound: true }, block: { on: true, sound: true }, bed: { on: true, sound: true }, morning: { on: true, sound: true }, highlight: { on: true, sound: false }, reward: { on: true, sound: true }, over: { on: true, sound: true } },
+  volume: 0.7
 }
 export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { compact: 0.88, normal: 1, large: 1.15 }
 export const HIDE_MS: Record<IslandPrefs['hide'], number> = { fast: 250, normal: 450, slow: 1200 }
@@ -268,7 +311,11 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
     sections,
     sound: p?.sound !== false,
     hide: ['fast', 'normal', 'slow'].includes(p?.hide) ? p.hide : d.hide,
-    shortcut: typeof p?.shortcut === 'string' && (SHORTCUTS as readonly string[]).includes(p.shortcut) ? p.shortcut : d.shortcut
+    shortcut: typeof p?.shortcut === 'string' && (SHORTCUTS as readonly string[]).includes(p.shortcut) ? p.shortcut : d.shortcut,
+    callMode: ['hide', 'dot', 'normal'].includes(p?.callMode) ? p.callMode : d.callMode,
+    quietShortcut: typeof p?.quietShortcut === 'string' && (QUIET_SHORTCUTS as readonly string[]).includes(p.quietShortcut) ? p.quietShortcut : d.quietShortcut,
+    kinds: Object.fromEntries((Object.keys(KIND_LABEL) as AlertKindPref[]).map((k) => [k, { on: typeof p?.kinds?.[k]?.on === 'boolean' ? p.kinds[k].on : d.kinds[k].on, sound: typeof p?.kinds?.[k]?.sound === 'boolean' ? p.kinds[k].sound : d.kinds[k].sound }])) as IslandPrefs['kinds'],
+    volume: Number.isFinite(p?.volume) ? Math.min(1, Math.max(0, Number(p.volume))) : d.volume
   }
 }
 
@@ -278,6 +325,8 @@ export interface Activity extends Omit<Pill, 'kind'> {
   kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed'
   /** Stable id, so a chosen activity stays chosen as numbers tick. */
   key: string
+  /** When it starts (ms): a live countdown in the last 10 minutes (P7). */
+  at?: number
 }
 
 /**
@@ -294,10 +343,16 @@ export function activities(s: IslandSnapshot, now: number): Activity[] {
     out.push({ key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot })
   }
   if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: `${s.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
-  if (s.next && s.next.start - now <= 3 * 3600_000) out.push({ key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot })
+  if (s.next && s.next.start - now <= 3 * 3600_000) {
+    const next: Activity = { key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot, at: s.next.start }
+    // Starting within 10 minutes: it goes first (after a running timer), with a live countdown (P7).
+    if (s.next.start - now <= 10 * 60_000) out.splice(s.running ? 1 : 0, 0, next)
+    else out.push(next)
+  }
   if (s.ben.unread > 0 && s.ben.last) out.push({ key: `ben:${s.ben.last.at}`, kind: 'ben', text: s.ben.last.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 60), sub: 'Ben', pct: 0, over: false, dot })
   if (s.sleep?.bed && !s.running) out.push({ key: 'bed', kind: 'bed', text: 'Going to bed?', sub: 'Tap to log it in Waky', pct: 0, over: false, dot })
-  if (s.water.target > 0 && s.water.ml < s.water.target && out.length) out.push({ key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot })
+  // Water shows even when nothing else is on (P5).
+  if (s.water.target > 0 && s.water.ml < s.water.target) out.push({ key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot })
   return out
 }
 
@@ -381,3 +436,29 @@ export const ISLAND_SHAPE = {
   peek: { width: 400, radius: 28 },
   expanded: { width: 460, maxHeight: 600, radius: 32 }
 } as const
+
+// ---- One rule for every reminder (P1, P3, P4) ------------------------------
+
+export type AlertPriority = 'urgent' | 'normal' | 'ambient'
+/** Time-up is urgent; plans, Ben and rewards are normal; body nudges are background. */
+export function alertPriority(kind: string): AlertPriority {
+  if (kind === 'over') return 'urgent'
+  if (kind === 'water' || kind === 'move' || kind === 'eyes' || kind === 'highlight' || kind === 'clip') return 'ambient'
+  return 'normal'
+}
+/** peek: drop down (with its sound); silent: only a dot, it waits in the panel; drop: not shown at all. */
+export type AlertGate = 'peek' | 'silent' | 'drop'
+export const PEEK_GAP_MS = 3 * 60_000
+
+export function alertGate(o: { kind: string; prefs: Pick<IslandPrefs, 'kinds'>; quiet: boolean; call: boolean; lastPeekAt: number; now: number }): AlertGate {
+  const pref = alertPref(o.kind)
+  if (pref && !o.prefs.kinds[pref].on) return 'drop'
+  const p = alertPriority(o.kind)
+  // Quiet: nothing drops down; your own timer running out still waits for you.
+  if (o.quiet) return p === 'urgent' ? 'silent' : 'drop'
+  // In a call: only time-up drops down.
+  if (o.call) return p === 'urgent' ? 'peek' : 'silent'
+  // At most one pop-up every 3 minutes (time-up always).
+  if (p !== 'urgent' && o.now - o.lastPeekAt < PEEK_GAP_MS) return 'silent'
+  return 'peek'
+}

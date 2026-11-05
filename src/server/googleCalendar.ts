@@ -134,7 +134,13 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
     location: e.location ?? null,
     description: e.description ?? null,
     recurringEventId: e.recurringEventId ?? null,
-    ours: e.extendedProperties?.private?.lifeSystem === '1'
+    ours: e.extendedProperties?.private?.lifeSystem === '1',
+    // Meetings by their data, not their name (Q4, E2): a call link, the people, your answer.
+    meet: e.hangoutLink ?? (e.conferenceData?.entryPoints ?? []).find((p: any) => p?.entryPointType === 'video')?.uri ?? null,
+    attendees: Array.isArray(e.attendees) ? e.attendees.length : 0,
+    declined: Array.isArray(e.attendees) && e.attendees.some((a: any) => a?.self && a?.responseStatus === 'declined'),
+    free: e.transparency === 'transparent',
+    htmlLink: e.htmlLink ?? null
   })
 
   return {

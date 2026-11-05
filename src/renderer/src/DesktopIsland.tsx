@@ -11,30 +11,50 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, ISLAND_SHAPE, ISLAND_UI, activities, clock, islandStep, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, ISLAND_SHAPE, ISLAND_UI, activities, alertGate, alertPref, clock, islandStep, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
 import type { IslandPlacement } from '../../shared/desktop'
+import { AlertScene, TypeIn } from './IslandScenes'
 import './island.css'
 
 const desk = () => window.desktop
 
-/** A soft two-note chime (no files): when the island drops down by itself. */
-function chime() {
+/** One note: frequency, start (s), length (s), type. */
+type Note = [number, number, number, OscillatorType?]
+/** A sound for each kind of reminder (A8), made on the spot (no files). */
+const SOUNDS: Record<string, Note[]> = {
+  // water: a "bloop" (falling pitch)
+  water: [[880, 0, 0.12, 'sine'], [520, 0.08, 0.22, 'sine']],
+  // stretch: a rising arpeggio
+  move: [[523, 0, 0.14, 'triangle'], [659, 0.1, 0.14, 'triangle'], [784, 0.2, 0.22, 'triangle']],
+  eyes: [[700, 0, 0.18, 'sine'], [700, 0.25, 0.18, 'sine']],
+  // bedtime: one soft low note
+  bed: [[330, 0, 0.7, 'sine']],
+  // reward: a sparkle
+  reward: [[1046, 0, 0.1, 'triangle'], [1318, 0.07, 0.1, 'triangle'], [1568, 0.14, 0.1, 'triangle'], [2093, 0.21, 0.25, 'triangle']],
+  // time up: a double tone
+  over: [[880, 0, 0.16, 'square'], [880, 0.24, 0.16, 'square']],
+  // everything else: the two-note chime
+  default: [[660, 0, 0.35, 'sine'], [880, 0.12, 0.35, 'sine']]
+}
+function playSound(kind: string, volume = 0.7) {
+  if (volume <= 0) return
   try {
     const ctx = new AudioContext()
-    ;[660, 880].forEach((f, i) => {
+    const key = kind === 'winddown' || kind === 'sleep' ? 'bed' : kind
+    for (const [f, at, len, type] of SOUNDS[key] ?? SOUNDS.default) {
       const o = ctx.createOscillator()
       const g = ctx.createGain()
-      o.type = 'sine'
+      o.type = type ?? 'sine'
       o.frequency.value = f
-      const t = ctx.currentTime + i * 0.12
+      const t = ctx.currentTime + at
       g.gain.setValueAtTime(0.0001, t)
-      g.gain.exponentialRampToValueAtTime(0.08, t + 0.02)
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35)
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.11 * volume), t + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len)
       o.connect(g).connect(ctx.destination)
       o.start(t)
-      o.stop(t + 0.4)
-    })
-    setTimeout(() => void ctx.close(), 900)
+      o.stop(t + len + 0.05)
+    }
+    setTimeout(() => void ctx.close(), 1600)
   } catch {
     /* no audio */
   }
@@ -96,6 +116,12 @@ function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard
     </>
   )
 }
+/** "in 4:59" before a meeting, amber in the last 5 minutes (P7). */
+function LiveCountdown({ at }: { at: number }) {
+  const now = useNow(1000)
+  const left = Math.max(0, Math.round((at - now) / 1000))
+  return <span className={`di-pill-time ${left <= 300 ? 'soon' : ''}`}>in {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}</span>
+}
 function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
   const now = useNow(1000)
   return <Ring pct={(now - run.startedAt) / Math.max(1, run.endsAt - run.startedAt)} over={now > run.endsAt} size={size} />
@@ -113,6 +139,10 @@ export function DesktopIsland() {
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
   const [text, setText] = useState('')
+  const [quietMenu, setQuietMenu] = useState(false)
+  // A splash in the water scene on each "+250" (A1); a squish of the shape when something new drops in.
+  const [splash, setSplash] = useState(0)
+  const [squish, setSquish] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const reduce = useReducedMotion()
 
@@ -162,20 +192,62 @@ export function DesktopIsland() {
     }
   }, [ui.view])
 
-  // Something new: peek for a moment (only time-up gets through during a call).
+  // Quiet for a while (Q1) and what Windows says (a call, a full-screen app: Q2, Q3).
+  const [q, setQ] = useState<{ until: number; call: boolean; fullscreen: boolean }>({ until: 0, call: false, fullscreen: false })
+  useEffect(() => {
+    desk()?.onIslandQuiet?.(setQ)
+  }, [])
+  const quiet = q.until > Date.now()
+  const inCall = !!s.call || q.call
+  const setQuiet = (choice: number | 'tomorrow' | null) => {
+    desk()?.islandQuiet?.(choice)
+    if (choice != null) close()
+  }
+
+  // Something new: one rule decides (P1, P3, P4): drop down with its sound,
+  // wait silently (a dot; it's in the panel), or not at all.
   const seenAlert = useRef<string | null>(null)
+  const lastPeek = useRef(0)
+  const held = useRef(0)
+  const gateOf = (kind: string) => alertGate({ kind, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() })
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
-    if (s.call && a.kind !== 'over') return
     seenAlert.current = a.id
+    const g = gateOf(a.kind)
+    if (g !== 'peek') {
+      if (quiet || inCall) held.current += 1
+      return
+    }
+    lastPeek.current = Date.now()
     dispatch({ type: 'alert' })
-    if (prefsRef.current.sound && uiRef.current.view !== 'expanded') chime()
-  }, [s.alert, s.call, dispatch])
+    setSquish((n) => n + 1)
+    const pref = alertPref(a.kind)
+    if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume)
+  }, [s.alert, quiet, inCall, dispatch]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Back from quiet or a call: what waited, in one line (P3).
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    const busyNow = quiet || inCall
+    if (wasBusy.current && !busyNow && held.current > 0) {
+      setToast({ id: 'held', state: 'ok', text: `While you were busy: ${held.current} reminder${held.current === 1 ? '' : 's'} (open the island)` })
+      clearToastLater(6000)
+      held.current = 0
+    }
+    wasBusy.current = busyNow
+  }, [quiet, inCall]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const p = useMemo(() => pill(s, now), [s, now])
   const acts = useMemo(() => activities(s, now), [s, now])
-  const main: Activity | null = acts[0] ?? null
+  // Switch between activities (P6): the dots under the pill, or a sideways swipe on the trackpad.
+  const [pick, setPick] = useState<string | null>(null)
+  const main: Activity | null = acts.find((x) => x.key === pick) ?? acts[0] ?? null
+  const swipeAcc = useRef(0)
+  const cycle = (d: 1 | -1) => {
+    if (acts.length < 2 || !main) return
+    const i = acts.indexOf(main)
+    setPick(acts[(i + d + acts.length) % acts.length].key)
+  }
   const run = s.running
 
   // ---- the shape's size: measured from the view inside it, animated with a spring ----
@@ -312,6 +384,7 @@ export function DesktopIsland() {
     desk()?.islandAction?.({ ...a, id })
   }
   const tap = (a: IslandAction, lbl?: string) => {
+    if (a.kind === 'water') setSplash((n) => n + 1)
     if (lbl === 'Reply') {
       dispatch({ type: 'click' })
       focusInput()
@@ -561,6 +634,7 @@ export function DesktopIsland() {
   // ---- compact: the pill ----
   const pillTime = (a: Activity) => {
     if (a.kind === 'timer' && run) return <LiveTimer run={run} />
+    if (a.kind === 'next' && a.at && a.at - Date.now() <= 10 * 60_000) return <LiveCountdown at={a.at} />
     const t = a.kind === 'water' ? '' : a.sub
     return <span className={`di-pill-time ${a.over ? 'over' : ''}`}>{place === 'left' || place === 'right' ? String(t ?? '').replace(/\s*left$/i, '') : t}</span>
   }
@@ -576,8 +650,17 @@ export function DesktopIsland() {
         if (s.locked) desk()?.showApp?.()
         else dispatch({ type: 'click' })
       }}
-      onKeyDown={(e) => e.key === 'Enter' && dispatch({ type: 'click' })}
-      aria-label="Open the island (drag to move it)"
+      onKeyDown={(e) => (e.key === 'Enter' ? dispatch({ type: 'click' }) : e.key === 'ArrowRight' ? cycle(1) : e.key === 'ArrowLeft' ? cycle(-1) : undefined)}
+      onWheel={(e) => {
+        // Only a sideways swipe switches (scrolling the page below doesn't).
+        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
+        swipeAcc.current += e.deltaX
+        if (Math.abs(swipeAcc.current) > 60) {
+          cycle(swipeAcc.current > 0 ? 1 : -1)
+          swipeAcc.current = 0
+        }
+      }}
+      aria-label="Open the island (drag to move it, arrows switch)"
     >
       {s.locked ? (
         <span className="di-pill-text">🔒 Open Life System</span>
@@ -596,19 +679,34 @@ export function DesktopIsland() {
       )}
       {pop && <span key={pop.key} className="di-pop" aria-live="polite">+{pop.n} ⭐</span>}
       {p.dot && <i className="di-dot" />}
+      {acts.length > 1 && !s.locked && (
+        <span className="di-dots" aria-hidden>
+          {acts.slice(0, 5).map((x) => (
+            <i
+              key={x.key}
+              className={x === main ? 'on' : ''}
+              onClick={(e) => {
+                e.stopPropagation()
+                setPick(x.key)
+              }}
+            />
+          ))}
+        </span>
+      )}
     </div>
   )
 
   // ---- peek: the alert, or what's on with one action and Ben's last line ----
-  const a = s.alert
+  const a = s.alert && gateOf(s.alert.kind) !== 'drop' ? s.alert : null
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main) ? (
-    <div className={`di-peek alert kind-${a.kind}`} onClick={(e) => e.target === e.currentTarget && dispatch({ type: 'click' })}>
+    <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} onClick={(e) => e.target === e.currentTarget && dispatch({ type: 'click' })}>
+      <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onDone={close} />
       <div className="di-peek-top">
-        <span className="di-peek-face">{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
+        <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
         <div className="di-peek-mid">
           <b>{a.title}</b>
-          <small>{a.text}</small>
+          <small>{a.kind === 'ben' ? <TypeIn key={a.id} text={a.text} /> : a.text}</small>
         </div>
       </div>
       {a.actions.length > 0 && (
@@ -649,11 +747,20 @@ export function DesktopIsland() {
           <b>Ben</b>
           <small>{s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood}</small>
         </div>
+        <button className={`di-icon ${quietMenu || quiet ? 'on' : ''}`} onClick={() => (quiet ? setQuiet(null) : setQuietMenu((x) => !x))} title={quiet ? `Quiet until ${new Date(q.until).toTimeString().slice(0, 5)}: wake now` : 'Quiet for a while'}>🌙</button>
         <button className={`di-icon ${ui.pinned ? 'on' : ''}`} onClick={() => dispatch({ type: 'pin' })} title={ui.pinned ? 'Unpin' : 'Keep open'}>📌</button>
         <button className="di-icon" onClick={() => (desk()?.showApp?.(), close())} title="Open Life System">⤢</button>
         <button className="di-icon" onClick={close} aria-label="Close" title="Close (Esc)">✕</button>
       </header>
 
+      {quietMenu && !quiet && (
+        <div className="di-quiet">
+          <span>Quiet for</span>
+          {([[30, '30 min'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'until tomorrow']] as const).map(([c, label]) => (
+            <button key={String(c)} onClick={() => (setQuietMenu(false), setQuiet(c))}>{label}</button>
+          ))}
+        </div>
+      )}
       <form
         className="di-cmd"
         onSubmit={(e) => {
@@ -682,20 +789,14 @@ export function DesktopIsland() {
         {run && <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>}
       </div>
 
-      {confetti && (
-        <div className="di-confetti" aria-hidden>
-          {Array.from({ length: 18 }, (_, i) => (
-            <i key={i} style={{ ['--i' as string]: String(i) }}>{['🎉', '⭐', '✨', '🎁'][i % 4]}</i>
-          ))}
-        </div>
-      )}
       {a && (
         <section className={`di-alert kind-${a.kind}`}>
+          <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onDone={close} />
           <div className="di-alert-top">
             <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
             <b>{a.title}</b>
           </div>
-          <p>{a.text}</p>
+          <p>{a.kind === 'ben' ? <TypeIn key={a.id} text={a.text} /> : a.text}</p>
           <div className="di-actions">
             {a.actions.map((x) => (
               <button key={x.label} className={x.primary ? 'primary' : ''} onClick={() => tap(x.action, x.label)}>{x.label}</button>
@@ -707,7 +808,27 @@ export function DesktopIsland() {
     </div>
   )
 
-  const views = { compact, peek, expanded }
+  // Quiet (Q7) or a call in "dot" mode (Q5): a small moon / dot; hold it to see why.
+  const until = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
+  const hushed = quiet || (inCall && prefs.callMode === 'dot')
+  const moonPill = (
+    <div className="di-moon-pill" role="button" tabIndex={0} {...dragProps} onClick={() => !dragged.current && dispatch({ type: 'click' })} aria-label={quiet ? `Quiet until ${until(q.until)}` : 'In a call'}>
+      <span>{quiet ? '🌙' : '📞'}</span>
+    </div>
+  )
+  const moonPeek = (
+    <div className="di-peek">
+      <div className="di-peek-top">
+        <span className="di-peek-face">{quiet ? '🌙' : '📞'}</span>
+        <div className="di-peek-mid">
+          <b>{quiet ? `Quiet until ${until(q.until)}` : 'In a call'}</b>
+          <small>{quiet ? 'No reminders until then. Time-up still waits for you here.' : s.call ? `${s.call.title} · until ${until(s.call.end)}` : 'Your microphone or camera is on.'}</small>
+        </div>
+        {quiet && <button className="primary" onClick={() => setQuiet(null)}>Wake now</button>}
+      </div>
+    </div>
+  )
+  const views = { compact: hushed ? moonPill : compact, peek: hushed ? moonPeek : peek, expanded }
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   const transition = reduce ? { duration: 0 } : ui.view === 'compact' ? SPRING_CLOSE : SPRING_OPEN
   return (
@@ -718,7 +839,7 @@ export function DesktopIsland() {
     >
       <motion.div
         ref={shape}
-        className="di-shape"
+        className={`di-shape ${squish ? `sq${squish % 2}` : ''}`}
         initial={false}
         animate={{ width: size.w, height: size.h, borderRadius: radius }}
         transition={transition}

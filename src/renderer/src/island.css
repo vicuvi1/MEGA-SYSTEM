@@ -268,3 +268,66 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di .di-pop { top: 10px; right: 46px; animation: di-popin 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
 @keyframes di-popin { 0% { opacity: 0; transform: scale(0.5); } 15% { opacity: 1; transform: scale(1.2); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: translateX(8px); } }
 .di-panel .di-confetti i { top: 30px; }
+
+/* Quiet (Q7) and call-dot (Q5): a small moon / phone; hold the mouse on it to see why. */
+.di-moon-pill { width: 34px; height: 30px; display: grid; place-items: center; cursor: pointer; touch-action: none; }
+.di-moon-pill span { font-size: 15px; filter: drop-shadow(0 0 6px rgb(160 180 255 / 0.6)); animation: di-moonbob 4s ease-in-out infinite; }
+@keyframes di-moonbob { 50% { transform: translateY(-1.5px) rotate(-8deg); } }
+.di-quiet { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 10px; border-radius: 16px; background: rgb(120 140 255 / 0.1); }
+.di-quiet span { color: var(--sub); font-size: 12px; margin-right: 2px; }
+.di-quiet button { border: 0; border-radius: 999px; padding: 5px 11px; background: rgb(255 255 255 / 0.09); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.di-quiet button:hover { background: rgb(140 160 255 / 0.3); }
+
+/* Several activities (P6): dots under the pill text; the next one starting soon goes amber (P7). */
+.di-dots { position: absolute; left: 50%; bottom: 3px; translate: -50% 0; display: flex; gap: 3px; }
+.di-dots i { width: 4px; height: 4px; border-radius: 50%; background: rgb(255 255 255 / 0.25); cursor: pointer; transition: width 0.25s, background 0.25s; }
+.di-dots i.on { width: 10px; border-radius: 3px; background: rgb(255 255 255 / 0.75); }
+.di-pill-time.soon { color: #ffb547 !important; animation: di-soon 1.6s ease-in-out infinite; }
+@keyframes di-soon { 50% { opacity: 0.65; } }
+
+/* ===== Scenes (A1–A7) ===== */
+/* Something new drops in: the shape squishes like a drop landing. */
+.di-shape.sq0 { animation: di-squish0 0.55s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.di-shape.sq1 { animation: di-squish1 0.55s cubic-bezier(0.3, 1.4, 0.5, 1); }
+@keyframes di-squish0 { 0% { transform: scale(1, 1); } 30% { transform: scale(1.06, 0.9); } 60% { transform: scale(0.97, 1.04); } 100% { transform: scale(1, 1); } }
+@keyframes di-squish1 { 0% { transform: scale(1, 1); } 30% { transform: scale(1.06, 0.9); } 60% { transform: scale(0.97, 1.04); } 100% { transform: scale(1, 1); } }
+.sc { width: 100%; position: relative; display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 64px; margin: -2px 0 4px; border-radius: 18px; overflow: hidden; }
+.sc-cap { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.sc-ring { position: relative; display: inline-grid; place-items: center; }
+.sc-ring svg { position: absolute; inset: 0; }
+.sc-ring b { font-size: 11px; font-variant-numeric: tabular-nums; }
+.sc-water { background: radial-gradient(circle at 50% 120%, rgb(71 181 255 / 0.25), transparent 70%); }
+.sc-move { background: radial-gradient(circle at 50% 120%, rgb(255 140 70 / 0.22), transparent 70%); }
+.sc-fig .sc-arms { transform-origin: 30px 22px; animation: sc-stretch 2.4s ease-in-out infinite; }
+@keyframes sc-stretch { 0%, 100% { transform: rotate(0deg) scaleY(1); } 25% { transform: rotate(-14deg) scaleY(1.08); } 75% { transform: rotate(14deg) scaleY(1.08); } }
+.sc-fig { animation: sc-lean 2.4s ease-in-out infinite; transform-origin: 30px 60px; }
+@keyframes sc-lean { 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
+.sc-eyes { background: radial-gradient(circle at 50% 120%, rgb(140 120 255 / 0.22), transparent 70%); }
+.sc-lid { transform: translateY(-20px); animation: sc-blink 3.2s infinite; }
+@keyframes sc-blink { 0%, 44%, 52%, 100% { transform: translateY(-20px); } 48% { transform: translateY(0); } }
+.sc-pupil { animation: sc-look 6s ease-in-out infinite; }
+@keyframes sc-look { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
+.sc-bed { min-height: 70px; background: linear-gradient(180deg, #0b1030, #1d1650 70%, #3a2a6a); animation: sc-dusk 2.4s ease both; }
+@keyframes sc-dusk { from { filter: brightness(1.8) saturate(0.6); } to { filter: none; } }
+.sc-bed i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff8c8; animation: di-twinkle 2.4s ease-in-out infinite; }
+.sc-moon { font-size: 30px; animation: sc-rise 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) both, di-float 3.6s ease-in-out 2.2s infinite; filter: drop-shadow(0 0 12px #fff3a0); }
+@keyframes sc-rise { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sc-over b { position: relative; font-size: 26px; z-index: 1; animation: sc-beat 1s ease-in-out infinite; }
+.sc-burst { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--red); animation: sc-burst 1.2s ease-out infinite; }
+.sc-burst.b2 { animation-delay: 0.6s; }
+.sc-over.good .sc-burst { border-color: var(--lime); animation-iteration-count: 2; }
+.sc-over.good { background: linear-gradient(90deg, transparent, rgb(212 255 63 / 0.22), transparent); background-size: 200% 100%; animation: sc-sweep 1.4s ease 2; }
+@keyframes sc-burst { from { transform: scale(0.6); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes sc-beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.18); } 30% { transform: scale(1); } 45% { transform: scale(1.12); } }
+@keyframes sc-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.sc-reward { min-height: 76px; flex-direction: column; gap: 2px; background: radial-gradient(circle at 50% 50%, rgb(255 212 81 / 0.22), transparent 70%); overflow: visible; }
+.sc-reward i { position: absolute; left: 50%; top: 40%; width: 6px; height: 9px; border-radius: 2px; }
+.sc-coin { font-size: 30px; filter: drop-shadow(0 0 10px rgb(255 212 81 / 0.7)); }
+.sc-reward b { font-size: 13px; color: #ffd451; }
+/* Ben's message (A6): his face slides in, the text types, a glow in his mood. */
+.di-peek-face.ben-in { animation: sc-slidein 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) both; box-shadow: 0 0 0 1.5px var(--glow), 0 0 18px -2px var(--glow); }
+@keyframes sc-slidein { from { transform: translateX(-24px) scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.sc-caret { display: inline-block; width: 6px; height: 12px; margin-left: 2px; vertical-align: -1px; background: var(--lime); animation: sc-caret 0.8s steps(2) infinite; }
+@keyframes sc-caret { 50% { opacity: 0; } }
+.di-peek.alert .di-peek-mid small { -webkit-line-clamp: 3; }
+@media (prefers-reduced-motion: reduce) { .sc *, .sc, .di-shape { animation: none !important; } }

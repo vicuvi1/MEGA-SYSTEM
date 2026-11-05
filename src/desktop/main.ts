@@ -166,6 +166,10 @@ if (firstCopy) void app.whenReady().then(async () => {
   const menu = () => Menu.buildFromTemplate([
     { label: 'Open Life System', click: () => showApp() },
     { label: `Show the island (${island.shortcut.replace('Control', 'Ctrl')})`, type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
+    // Quiet for a while (Q1): no reminders, only a small moon; back by itself.
+    island.quietUntil()
+      ? { label: `Island quiet until ${new Date(island.quietUntil()).toTimeString().slice(0, 5)} · Wake now`, click: () => { island.setQuiet(null); tray.setContextMenu(menu()) } }
+      : { label: 'Quiet the island for…', submenu: ([[30, '30 minutes'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'Until tomorrow 06:00']] as const).map(([c, label]) => ({ label, click: () => { island.setQuiet(c); tray.setContextMenu(menu()) } })) },
     { label: 'Island position', submenu: ([['top', 'Top of the screen'], ['left', 'Left side'], ['right', 'Right side'], ['free', 'Floating (where you drop it)']] as const).map(([p, label]) => ({ label, type: 'radio' as const, checked: island.placement() === p, click: () => { island.setPlacement(p); tray.setContextMenu(menu()) } })) },
     { label: 'Reset island position', click: () => { island.resetPosition(); tray.setContextMenu(menu()) } },
     { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); tray.setContextMenu(menu()) } },

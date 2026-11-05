@@ -6,11 +6,12 @@
 // It never takes the keyboard on its own, only when you type in it.
 // It never touches your data: the app window sends it snapshots and gets its
 // taps back. Clicks pass through everything except the visible shape.
-import { app, BrowserWindow, globalShortcut, ipcMain, screen } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, powerMonitor, screen } from 'electron'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IslandPlacement } from '../shared/desktop'
-import { cleanIslandPrefs, ISLAND_ZOOM, type IslandPrefs } from '../core/islandModel'
+import { cleanIslandPrefs, ISLAND_ZOOM, quietUntil, type IslandPrefs } from '../core/islandModel'
 
 /** The window: room for the biggest state (the command center); the rest is see-through. */
 const WIN = { width: 500, height: 660 }
@@ -27,6 +28,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let prefs: IslandPrefs = cleanIslandPrefs(null)
   // The screen you put it on (kept after a restart; the main screen if it's gone).
   let savedDisplay = -1
+  // Quiet until this time (Q1): no reminders, only a small moon; 0 = not quiet.
+  let quietEnd = 0
+  // What Windows says (Q2, Q3): a call (mic or camera in use) or a full-screen app / Focus Assist.
+  let busy = { call: false, fullscreen: false }
   try {
     if (existsSync(prefFile)) {
       const p = JSON.parse(readFileSync(prefFile, 'utf8'))
@@ -36,12 +41,13 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       if (Number.isFinite(p.top)) pos.top = Math.max(0, p.top)
       if (Number.isFinite(p.cy)) pos.cy = Math.min(1, Math.max(0, p.cy))
       if (Number.isFinite(p.displayId)) savedDisplay = p.displayId
+      if (Number.isFinite(p.quietUntil) && p.quietUntil > Date.now()) quietEnd = p.quietUntil
       // Older versions saved a dragged spot without a placement: that was "free".
       if (!p.place && p.top > 0) place = 'free'
       prefs = cleanIslandPrefs(p.prefs)
     }
   } catch { /* defaults */ }
-  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, place, ...pos, displayId: savedDisplay, prefs })) } catch { /* fine */ } }
+  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs })) } catch { /* fine */ } }
   /** Size setting: the page is zoomed, so the window and its click areas scale too. */
   const zoom = () => ISLAND_ZOOM[prefs.size]
   const scaled = () => ({ width: Math.round(WIN.width * zoom()), height: Math.round(WIN.height * zoom()) })
@@ -97,6 +103,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     win.webContents.on('did-finish-load', () => {
       win?.webContents.setZoomFactor(zoom())
       win?.webContents.send('island:prefs', prefs)
+      sendQuiet()
       sendPlacement()
       if (last) win?.webContents.send('island:state', last)
     })
@@ -120,6 +127,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   ipcMain.on('island:ready', (e) => {
     if (!fromIsland(e)) return
     win?.webContents.send('island:prefs', prefs)
+    sendQuiet()
     sendPlacement()
     if (last) win?.webContents.send('island:state', last)
   })
@@ -210,6 +218,77 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   screen.on('display-removed', replace)
   screen.on('display-added', replace)
 
+  // ---- Quiet, calls and full screen (Q1–Q3, Q5) ----------------------------
+  const sendQuiet = () => win?.webContents.send('island:quiet', { until: quietEnd, call: busy.call, fullscreen: busy.fullscreen })
+  /** Hidden over full-screen apps / Focus Assist, and in a call when you chose "hide". */
+  const applyVisibility = () => {
+    if (!win || win.isDestroyed() || !enabled) return
+    const hide = busy.fullscreen || (busy.call && prefs.callMode === 'hide')
+    if (hide) { if (win.isVisible()) win.hide() } else showWin()
+  }
+  /** Quiet for `choice` minutes / until tomorrow 06:00, or off (null). */
+  const setQuiet = (choice: number | 'tomorrow' | null) => {
+    quietEnd = choice == null ? 0 : quietUntil(choice, Date.now())
+    savePrefs()
+    sendQuiet()
+    o.onChange?.()
+  }
+  // Quiet time over: back by itself (checked every 15 s and when the PC wakes up).
+  const quietCheck = () => { if (quietEnd && Date.now() >= quietEnd) setQuiet(null) }
+  setInterval(quietCheck, 15_000)
+  powerMonitor.on('resume', quietCheck)
+  ipcMain.on('island:quiet', (e, choice) => {
+    if (!fromIsland(e)) return
+    setQuiet(choice === 'tomorrow' ? 'tomorrow' : Number.isFinite(choice) && choice > 0 ? Number(choice) : null)
+  })
+
+  // Windows: a call (any app using the microphone or camera, from Windows'
+  // own privacy log) and full-screen apps / presentation / Focus Assist
+  // (SHQueryUserNotificationState). One small PowerShell loop, every 4 s.
+  let watcher: ChildProcess | null = null
+  const startWatcher = () => {
+    if (process.platform !== 'win32' || watcher) return
+    const ps = [
+      "$ErrorActionPreference='SilentlyContinue'",
+      'Add-Type -TypeDefinition \'using System;using System.Runtime.InteropServices;public static class QN{[DllImport("shell32.dll")]public static extern int SHQueryUserNotificationState(out int s);}\'',
+      "$base='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore'",
+      'while($true){',
+      ' $s=0; [void][QN]::SHQueryUserNotificationState([ref]$s)',
+      " $m=0; foreach($k in 'microphone','webcam'){ Get-ChildItem -Path \"$base\\$k\" -Recurse | Where-Object { $_.PSChildName -notmatch 'Life System|electron' } | ForEach-Object { $p=Get-ItemProperty -Path $_.PSPath; if($p.LastUsedTimeStart -gt 0 -and $p.LastUsedTimeStop -eq 0){ $m=1 } } }",
+      ' Write-Output "qs=$s media=$m"',
+      ' Start-Sleep -Seconds 4',
+      '}'
+    ].join('\n')
+    try {
+      watcher = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
+    } catch {
+      watcher = null
+      return
+    }
+    let buf = ''
+    watcher.stdout?.on('data', (d: Buffer) => {
+      buf += d.toString()
+      const lines = buf.split(/\r?\n/)
+      buf = lines.pop() ?? ''
+      const last = lines.reverse().find((l) => l.startsWith('qs='))
+      if (!last) return
+      const qs = Number(/qs=(\d+)/.exec(last)?.[1] ?? 0)
+      // 2 busy (full screen), 3 full-screen game/video, 4 presentation, 6 Focus Assist / quiet time, 7 full-screen app.
+      const next = { fullscreen: [2, 3, 4, 6, 7].includes(qs), call: / media=1/.test(last) }
+      if (next.fullscreen === busy.fullscreen && next.call === busy.call) return
+      busy = next
+      sendQuiet()
+      applyVisibility()
+    })
+    watcher.on('exit', () => {
+      watcher = null
+      // It stopped (e.g. PowerShell blocked): try again in a minute.
+      setTimeout(startWatcher, 60_000)
+    })
+  }
+  startWatcher()
+  app.on('will-quit', () => { try { watcher?.kill() } catch { /* fine */ } })
+
   // Ctrl+Alt+Space: open / close it from anywhere.
   const toggle = () => {
     if (!enabled) return
@@ -229,14 +308,27 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     return false
   }
   bindShortcut()
+  // Ctrl+Alt+Q: quiet for an hour, or back on (Q6).
+  let boundQuiet = ''
+  const bindQuiet = (): boolean => {
+    if (boundQuiet) { try { globalShortcut.unregister(boundQuiet) } catch { /* fine */ } }
+    boundQuiet = ''
+    if (!prefs.quietShortcut) return true
+    try {
+      if (globalShortcut.register(prefs.quietShortcut, () => setQuiet(quietEnd > Date.now() ? null : 60))) { boundQuiet = prefs.quietShortcut; return true }
+    } catch { /* invalid */ }
+    return false
+  }
+  bindQuiet()
   // Settings → Desktop island (from the app window).
   ipcMain.handle('island:getPrefs', (e) => (e.sender === o.appWindow.webContents ? prefs : null))
   ipcMain.handle('island:setPrefs', (e, p: Partial<IslandPrefs>) => {
     if (e.sender !== o.appWindow.webContents) return null
     const before = prefs
     prefs = cleanIslandPrefs({ ...prefs, ...p })
-    const shortcutOk = prefs.shortcut === before.shortcut ? true : bindShortcut()
+    const shortcutOk = (prefs.shortcut === before.shortcut ? true : bindShortcut()) && (prefs.quietShortcut === before.quietShortcut ? true : bindQuiet())
     savePrefs()
+    applyVisibility()
     if (win && !win.isDestroyed()) {
       win.webContents.setZoomFactor(zoom())
       win.webContents.send('island:prefs', prefs)
@@ -251,6 +343,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   if (enabled) open()
   return {
     enabled: () => enabled,
+    /** Quiet until (ms), or 0. */
+    quietUntil: () => (quietEnd > Date.now() ? quietEnd : 0),
+    setQuiet,
     placement: () => place,
     get shortcut() { return prefs.shortcut || 'no shortcut' },
     setPlacement(p: IslandPlacement) {

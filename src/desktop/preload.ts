@@ -36,6 +36,8 @@ const api: DesktopApi = {
   onIslandPrefs: (cb) => void ipcRenderer.on('island:prefs', (_e, p) => cb(p)),
   islandKeyboard: (on) => ipcRenderer.send('island:keyboard', !!on),
   onIslandBlur: (cb) => void ipcRenderer.on('island:blur', () => cb()),
+  islandQuiet: (choice) => ipcRenderer.send('island:quiet', choice),
+  onIslandQuiet: (cb) => void ipcRenderer.on('island:quiet', (_e, q) => cb(q)),
   islandHot: (rect) => ipcRenderer.send('island:hot', rect),
   islandDrag: (on) => ipcRenderer.send(on ? 'island:dragStart' : 'island:dragEnd'),
   onIslandHover: (cb) => void ipcRenderer.on('island:hover', (_e, over) => cb(!!over)),
