@@ -1025,6 +1025,8 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     } else if (job === 'weekly') {
       const w = await bots.rhythm.weekly()
       await send(weeklyText(w), WEEKLY_KEYBOARD)
+      // Ben's story so far about you, rewritten once a week (B5).
+      await bots.rhythm.writeStory().catch(() => null)
       const letter = await bots.rhythm.letter().catch(() => null)
       if (letter) await send(`💌 <b>A letter from Ben</b>\n\n${escapeHtml(letter)}`)
     } else if (job === 'evening' && (await mirror.read((db) => (services.services(db).focus.state().plan.reasons?.length ?? 0) > 0).catch(() => false))) {

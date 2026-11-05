@@ -20,7 +20,8 @@ export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }, ...(opts.media ?? []).map((m) => ({ inline_data: { mime_type: m.mime, data: m.data } }))] }],
+        ...(splitPrompt(prompt).system ? { systemInstruction: { parts: [{ text: splitPrompt(prompt).system }] } } : {}),
+        contents: [{ parts: [{ text: splitPrompt(prompt).user }, ...(opts.media ?? []).map((m) => ({ inline_data: { mime_type: m.mime, data: m.data } }))] }],
         generationConfig: { temperature: 0.7, maxOutputTokens: 4096, ...(opts.json ? { responseMimeType: 'application/json' } : {}) }
       })
     })
@@ -214,12 +215,27 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
   return callOpenRouter(key, model, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000)
 }
 
+/**
+ * B1: Ben's prompt has a fixed part (his instructions, the same every time)
+ * and a live part, split by <<<LIVE>>>. The fixed part goes first as the
+ * system message, so the provider caches it and charges much less for it.
+ */
+export const PROMPT_SPLIT = '\n<<<LIVE>>>\n'
+export function splitPrompt(prompt) {
+  const i = String(prompt).indexOf(PROMPT_SPLIT)
+  return i < 0 ? { system: null, user: String(prompt) } : { system: prompt.slice(0, i), user: prompt.slice(i + PROMPT_SPLIT.length) }
+}
+const messagesFor = (prompt) => {
+  const { system, user } = splitPrompt(prompt)
+  return system ? [{ role: 'system', content: system }, { role: 'user', content: user }] : [{ role: 'user', content: user }]
+}
+
 async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effort = 'low') {
   const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-system-ten.vercel.app', 'X-Title': 'Life System' },
     // opts.think: big asks (plans, reviews, reshuffles) get the model's reasoning.
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
+    body: JSON.stringify({ model, messages: messagesFor(prompt), ...(/^deepseek\//.test(model) ? { provider: { order: ['deepseek'], allow_fallbacks: true } } : {}), temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
     signal: AbortSignal.timeout(timeout)
   })
   const j = await r.json().catch(() => ({}))

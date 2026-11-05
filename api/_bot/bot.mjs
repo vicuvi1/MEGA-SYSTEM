@@ -650,7 +650,7 @@ function formatUrgeResponse() {
 	].join("\n");
 }
 // src/core/factTypes.ts
-var MONTHS$2 = {
+var MONTHS$3 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -680,9 +680,9 @@ function dateIn(text, today) {
 		return cand < addDays$4(today, -60) ? `${y + 1}${cand.slice(4)}` : cand;
 	};
 	const dm = /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.exec(text) ?? null;
-	if (dm) return pick(MONTHS$2[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
+	if (dm) return pick(MONTHS$3[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
 	const md = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i.exec(text);
-	if (md) return pick(MONTHS$2[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
+	if (md) return pick(MONTHS$3[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
 	const num = /\b(\d{1,2})[./](\d{1,2})\b/.exec(text);
 	if (num) return pick(Number(num[2]), Number(num[1]));
 	return null;
@@ -1638,6 +1638,33 @@ function findPatterns(p, weeks = 8) {
 		const worst = by.indexOf(Math.min(...by));
 		if (by[best] >= 20 && by[best] - by[worst] >= Math.max(20, by[best] * .4)) out.push(`Best focus day: ${WEEKDAYS$1[best]} (${Math.round(by[best])} min avg); weakest: ${WEEKDAYS$1[worst]} (${Math.round(by[worst])} min).`);
 	}
+	const wdays = [...wset].filter((d) => d >= from && d < p.today).sort();
+	if (wdays.length >= 6 && days.filter((d) => d >= wdays[0]).length >= 21) {
+		const span = days.filter((d) => d >= wdays[0]);
+		const ranked = WEEKDAYS$1.map((_, i) => ({
+			i,
+			of: span.filter((d) => wd(d) === i).length,
+			did: span.filter((d) => wd(d) === i && wset.has(d)).length
+		})).filter((x) => x.of >= 3).sort((a, b) => b.did / b.of - a.did / a.of);
+		const best = ranked[0];
+		const worst = ranked[ranked.length - 1];
+		if (best && worst && best.did >= 3 && worst.did / worst.of <= .25 && best.did / best.of - worst.did / worst.of >= .4) out.push(`Training: ${worst.did} of ${worst.of} ${WEEKDAYS$1[worst.i]}s vs ${best.did} of ${best.of} ${WEEKDAYS$1[best.i]}s. ${WEEKDAYS$1[worst.i]} is the day he skips.`);
+	}
+	if (p.mustdos?.length) {
+		const md = p.mustdos.filter((m) => m.day >= from && m.day < p.today);
+		const rate = WEEKDAYS$1.map((_, i) => {
+			const xs = md.filter((m) => wd(m.day) === i);
+			return {
+				i,
+				n: new Set(xs.map((m) => m.day)).size,
+				r: xs.length ? xs.filter((m) => m.done).length / xs.length : 0
+			};
+		}).filter((x) => x.n >= 3);
+		if (rate.length >= 3) {
+			const s = [...rate].sort((a, b) => b.r - a.r);
+			if (s[0].r - s[s.length - 1].r >= .3) out.push(`Must-dos: ${Math.round(s[0].r * 100)}% done on ${WEEKDAYS$1[s[0].i]}s vs ${Math.round(s[s.length - 1].r * 100)}% on ${WEEKDAYS$1[s[s.length - 1].i]}s.`);
+		}
+	}
 	if (p.spending?.length) {
 		const spend = /* @__PURE__ */ new Map();
 		for (const s of p.spending) if (s.day >= from && s.day < p.today) spend.set(s.day, (spend.get(s.day) ?? 0) + s.bani);
@@ -1817,7 +1844,7 @@ var DAYS = [
 	"Fri",
 	"Sat"
 ];
-var pad$4 = (n) => String(n % 24).padStart(2, "0");
+var pad$5 = (n) => String(n % 24).padStart(2, "0");
 var W = {
 	urge: 1,
 	reset: 3
@@ -1856,8 +1883,8 @@ function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
 	const win = (slot, weekday, a) => ({
 		slot,
 		weekday,
-		from: `${pad$4(slot * 2)}:00`,
-		to: `${pad$4(slot * 2 + 2)}:00`,
+		from: `${pad$5(slot * 2)}:00`,
+		to: `${pad$5(slot * 2 + 2)}:00`,
 		urges: a.urges,
 		resets: a.resets,
 		score: a.score
@@ -2854,6 +2881,7 @@ function moreContext(s, db, finance, today, input, todayRules, disc) {
 			quality: l.quality ?? null
 		})),
 		workouts: input.workouts,
+		mustdos: input.mustdos,
 		spending: financeSpending(finance)
 	});
 	if (pats.length) out.push(`What his own data shows (last 8 weeks):\n${pats.map((p) => `- ${p}`).join("\n")}`);
@@ -2868,40 +2896,24 @@ var PERSONA = {
 	waky: "You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.",
 	sport: "You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive."
 };
-var ACTIONS = `You can act. Put actions in "actions" (strings), only when Victor asked for it or clearly reported doing it:
+/**
+* Ben's action rules in groups (B8). The core (logging, memory, reminders,
+* the rules) is always sent and never changes, so it stays cached (B1); the
+* body, money, calendar and Todoist groups come along when the message or
+* the moment needs them.
+*/
+var ACT_CORE = `You can act. Put actions in "actions" (strings), only when Victor asked for it or clearly reported doing it:
 Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "focus: <minutes> <subject>" start a focus timer now: ONLY when he clearly says to start it now ("start 25 min", "go", "timer"). Otherwise never start it yourself: offer a button {"label": "▶ 25 min <subject>", "do": "focus:25:<subject>"} and let him tap. "fun: <minutes> <what>" spend points on fun.
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
-Body, sleep and habits (one shared log with Sport Track and Sporty):
-- "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
-- "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
-- "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
-- His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
-- "workout: <YYYY-MM-DD> | <what he did>" log a workout he did on a past day that is missing (counts for his streak); today's checklist uses reps/log instead.
-- "style: short|normal|detailed; tone=1-5" when he tells you how to talk ("be shorter", "go harder on me", "more detail"). 1 = gentle, 5 = drill sergeant.
-- He can see/tap his cards: button {"do": "workout"} shows today's workout checklist, {"do": "water"} the water card.
-Money records (use the M-numbers; this is how you FIX a wrong log):
-- "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
-- Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
-Points and the week:
-- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
-- "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
 Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
 - "person: <name> | <who they are to him, short>" when he mentions someone in his life (friend, family, teacher, partner).
 - "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
 His notebook (Obsidian-like notes he can read and edit; you see the ones that matter below):
 - "note: <note title> | <one line>" adds a dated line under that note (a new note if none has that title). Use it for anything worth keeping in his own words of record: facts about him and people ("note: People | Maxim, lab partner, ..."), exam dates and topics ("note: Etica | exam Friday, chapters 3-5"), decisions, what you learned. Prefer an existing title. One line, specific.
-Google Calendar (use the E-numbers from the list; never over another event unless he asks):
-- "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
-- "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
-- "shift: <+/-minutes> | E3, E4, E5" move several (e.g. he's running late: shift the rest of today's blocks).
-Todoist (use the T-numbers):
-- "task: <text>" new task (Todoist reads "friday 18:00", "p1", "#University").
-- "edit: T2 | title=<new>; priority=P1; due=<friday 18:00 | no date>; details=<notes>" any of these.
-- "taskmove: T2 | <area name>". "done: T2". "star: T2" / "unstar: T2" (today's must-do). "deltask: T2".
 Reminders (Telegram, sent by you later):
 - "remind: <YYYY-MM-DD HH:MM> | <message>" a reminder at that time.
 - "checkin: <minutes from now> | <question>" you ask him later, and keep asking every 45 min until he answers (use it when he says he'll do something: hold him to it).
@@ -2910,11 +2922,59 @@ Promises (use the P-numbers): when he answers a check-in, judge it: "kept: P1" (
 Default to ACTING: when an action clearly helps (he reports something done → tick/log it; he says he'll do X → a checkin; he's behind → put a block in the calendar), do it without asking. Exception: never start a focus timer unless he asks to start it now; offer the ▶ button instead. Ask first only before deleting things he didn't mention.
 When he says something is wrong ("that's not money", "wrong amount", "undo that", "delete it"), FIX it with actions now (delmoney / editmoney / water: -250 …). Never answer "ignore it" or "I won't count it": the data stays wrong unless you act.
 Never invent appointments, reviews or times: only use times from his calendar, his plan, his reminders or what he said.
-IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.`;
+IMPORTANT: something happens ONLY if you put an action for it. Never write "logged"/"added"/"moved"/"done" in your reply: the app adds a ✅ line under your reply for each thing it really did. The history shows ✅ lines for what was done before; if there is none, it was NOT done.
+Other action groups (body and habits, money records and points, Google Calendar with E-numbers, Todoist with T-numbers) are listed under "Actions for this message" when they apply.`;
+var ACT_GROUPS = {
+	body: `Body, sleep and habits (one shared log with Sport Track and Sporty):
+- "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
+- "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
+- "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+- His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
+- "workout: <YYYY-MM-DD> | <what he did>" log a workout he did on a past day that is missing (counts for his streak); today's checklist uses reps/log instead.
+- "style: short|normal|detailed; tone=1-5" when he tells you how to talk ("be shorter", "go harder on me", "more detail"). 1 = gentle, 5 = drill sergeant.
+- He can see/tap his cards: button {"do": "workout"} shows today's workout checklist, {"do": "water"} the water card.`,
+	money: `Money records (use the M-numbers; this is how you FIX a wrong log):
+- "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
+- Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
+Points and the week:
+- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
+- "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.`,
+	calendar: `Google Calendar (use the E-numbers from the list; never over another event unless he asks):
+- "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
+- "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
+- "shift: <+/-minutes> | E3, E4, E5" move several (e.g. he's running late: shift the rest of today's blocks).`,
+	todoist: `Todoist (use the T-numbers):
+- "task: <text>" new task (Todoist reads "friday 18:00", "p1", "#University").
+- "edit: T2 | title=<new>; priority=P1; due=<friday 18:00 | no date>; details=<notes>" any of these.
+- "taskmove: T2 | <area name>". "done: T2". "star: T2" / "unstar: T2" (today's must-do). "deltask: T2".`
+};
+var GROUP_WORDS = {
+	body: /\b(water|drink|glass|ml|pushups?|squats?|reps?|plank|workouts?|gym|train|run|sleep|slept|wake|woke|bed|habit|oath|clean|skincare|weight|exercise|target|tired|apa|somn)\b/i,
+	money: /\d|\b(lei|mdl|spent|spend|bought|paid|pay|money|expense|budget|salary|reward|points?|shop|week|big ?3|cash|card|bani)\b|\bM\d\b/i,
+	calendar: /\b(calendar|event|block|meeting|class|lecture|exam|move|resched\w*|shift|late|plan|book|tomorrow|today|tonight|morning|afternoon|evening|free|time|at|until|before|after)\b|\bE\d\b|\d{1,2}:\d{2}/i,
+	todoist: /\b(tasks?|todo|todoist|done|finish(ed)?|due|must-?dos?|priority|star|list|deadline|homework|assignment)\b|\bT\d\b/i
+};
+/** The optional action groups for this message: all of them for big asks, corrections and media. */
+function actionGroups(message, all = false) {
+	const keys = Object.keys(ACT_GROUPS).filter((k) => all || GROUP_WORDS[k].test(message));
+	return keys.length ? `== Actions for this message ==\n${keys.map((k) => ACT_GROUPS[k]).join("\n")}` : "";
+}
 var LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
 - "spending <YYYY-MM-DD> <YYYY-MM-DD> [category]" totals and top categories (or one category).
 - "focus <from> <to>", "workouts <from> <to>", "sleep <from> <to>", "tasks <from> <to>" (tasks done), "points <from> <to>".
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`;
+/** Splits the prompt: before it the fixed instructions (sent as the system message and cached), after it the live part. */
+var PROMPT_SPLIT = "\n<<<LIVE>>>\n";
+/** B5: Ben's "story so far" about Victor, rewritten every Sunday (about 600 characters). */
+var COACH_STORY = "coach_story";
+function loadStory(db) {
+	try {
+		const s = JSON.parse(getSetting(db, "coach_story") || "null");
+		return s && typeof s.text === "string" && s.text.trim() ? s : null;
+	} catch {
+		return null;
+	}
+}
 var WORD = /[\p{L}\p{N}]{4,}/gu;
 /**
 * Prompt diet: the facts that matter for this message (sharing a word with it
@@ -2939,23 +2999,26 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		PERSONA[persona],
 		"Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks \"why\"/\"how come\" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.",
 		UNTRUSTED_NOTE,
-		extra.stealth ? STEALTH_NOTE : "",
 		"Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don't have a number, don't make one up; ask for it with \"need\" or leave it out.",
 		"Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count (\"3rd promise missed this week\"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn't).",
-		(extra.tone ?? 4) >= 5 ? "Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits." : "Start the reply with ONE face: 😎/🔥 proud, 😄 happy, 🙂 chill, 🎯 focused (he is slipping: you help him move). NEVER angry faces or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. Then 1–2 more emoji at most. When he just chats, chat back like a friend, short.",
 		"Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see \"How he wants you to write\"; default short: 3–4 lines). Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language his chosen style says (English unless he picked another).",
 		"",
-		ACTIONS,
+		ACT_CORE,
 		DESK_ACTIONS,
 		"",
-		extra.found ? "" : LOOKUPS,
+		LOOKUPS,
 		"",
 		"Also put in \"remember\" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.",
 		"Interactive replies: \"buttons\" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. \"do\" is one of: \"focus:<minutes>:<subject>\" (start a focus timer), \"approve\" (approve today's plan), \"plan\" (make today's plan), \"book:<goal title>\" (book a goal's blocks), \"say:<his reply>\" (sends that as his message), \"open:plan|goals|score|about\". Example: {\"label\": \"▶ 25 min Algebra\", \"do\": \"focus:25:Algebra\"}. Prefer a button over telling him to type a command. \"show\" (0–2) puts a live mini-widget under your message when it helps him see it: \"focus-week\" (focus per day, 7 days), \"goals\" (goal progress), \"plan\" (today's plan), \"water\", \"mustdos\" (tickable list), \"promises\".",
 		"Put in \"chips\" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message (\"Done ✅\", \"Give me 10 min\", \"Why?\", \"Plan it\"). Never generic.",
 		"Put in \"steps\" 1–4 very short labels of what you did or checked, for the screen (\"Checked your calendar\", \"Found 2h free after 15:00\", \"Moved 3 blocks\").",
 		"",
-		`Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"focused"|"annoyed"|"angry"|"furious", "chips": string[], "buttons": {"label": string, "do": string}[], "show": string[], "actions": string[], "remember": string[], "steps": string[]${extra.found ? "" : ", \"need\": string[]"}}.`,
+		"Answer ONLY with JSON: {\"reply\": string, \"mood\": \"proud\"|\"happy\"|\"chill\"|\"focused\"|\"annoyed\"|\"angry\"|\"furious\", \"chips\": string[], \"buttons\": {\"label\": string, \"do\": string}[], \"show\": string[], \"actions\": string[], \"remember\": string[], \"steps\": string[], \"need\": string[]}.",
+		PROMPT_SPLIT,
+		extra.stealth ? STEALTH_NOTE : "",
+		(extra.tone ?? 4) >= 5 ? "Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits." : "Start the reply with ONE face: 😎/🔥 proud, 😄 happy, 🙂 chill, 🎯 focused (he is slipping: you help him move). NEVER angry faces or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. Then 1–2 more emoji at most. When he just chats, chat back like a friend, short.",
+		actionGroups(`${message} ${turns.slice(-2).map((c) => c.text).join(" ")}`, !!extra.allActions || !!media),
+		extra.found ? "You already have the answers to your lookups (below): answer now, leave \"need\" empty." : "",
 		"",
 		extra.style ? `== How he wants you to write ==\n${extra.style}` : "",
 		extra.feedback ? `== ${extra.feedback}` : "",
@@ -12760,7 +12823,7 @@ function group(n) {
 	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
 }
 // src/renderer/public/apps/finance/js/dates.js
-var MONTHS$1 = [
+var MONTHS$2 = [
 	"January",
 	"February",
 	"March",
@@ -12774,20 +12837,20 @@ var MONTHS$1 = [
 	"November",
 	"December"
 ];
-var pad$3 = (n) => String(n).padStart(2, "0");
+var pad$4 = (n) => String(n).padStart(2, "0");
 function toISO(d) {
-	return `${d.getFullYear()}-${pad$3(d.getMonth() + 1)}-${pad$3(d.getDate())}`;
+	return `${d.getFullYear()}-${pad$4(d.getMonth() + 1)}-${pad$4(d.getDate())}`;
 }
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
 	const [y, m] = key.split("-").map(Number);
-	const name = MONTHS$1[m - 1];
+	const name = MONTHS$2[m - 1];
 	return `${short ? name.slice(0, 3) : name} ${y}`;
 }
 function addMonths(key, n) {
 	const [y, m] = key.split("-").map(Number);
 	const idx = y * 12 + (m - 1) + n;
-	return `${Math.floor(idx / 12)}-${pad$3(idx % 12 + 1)}`;
+	return `${Math.floor(idx / 12)}-${pad$4(idx % 12 + 1)}`;
 }
 function daysInMonth(key) {
 	const [y, m] = key.split("-").map(Number);
@@ -12835,18 +12898,18 @@ function convert(cents, from, to, rates) {
 	return Math.round(cents / a * b);
 }
 // src/renderer/public/apps/finance/js/recurring.js
-var MONTHS = {
+var MONTHS$1 = {
 	month: 1,
 	"3months": 3,
 	year: 12
 };
-var pad$2 = (n) => String(n).padStart(2, "0");
+var pad$3 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays(rule.start, 14 * n);
-	const key = addMonths(monthKey(rule.start), (MONTHS[rule.every] || 1) * n);
-	return `${key}-${pad$2(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
+	const key = addMonths(monthKey(rule.start), (MONTHS$1[rule.every] || 1) * n);
+	return `${key}-${pad$3(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
 	const out = [];
@@ -13553,7 +13616,7 @@ function workText(state, amountBase, today) {
 	return formatWork(workHours(amountBase, r.rate));
 }
 // src/renderer/public/apps/finance/js/payyourself.js
-var pad$1 = (n) => String(n).padStart(2, "0");
+var pad$2 = (n) => String(n).padStart(2, "0");
 var toBase = (state, c, cur) => !cur || cur === state.settings.currency ? c : convert(c, cur, state.settings.currency, state.rates);
 function suggestSalary(state, today) {
 	const key = monthKey(today);
@@ -13577,7 +13640,7 @@ function suggestSalary(state, today) {
 		months: months.length
 	};
 }
-var salaryDate = (key, day = 1) => `${key}-${pad$1(Math.min(Math.max(1, day), daysInMonth(key)))}`;
+var salaryDate = (key, day = 1) => `${key}-${pad$2(Math.min(Math.max(1, day), daysInMonth(key)))}`;
 var salaryOf = (state, key) => state.tx.find((t) => t.type === "transfer" && t.salary === key) || null;
 function payStatus(state, today) {
 	if (!payOn(state)) return {
@@ -14949,6 +15012,208 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 		})()
 	};
 }
+// src/core/benQuick.ts
+var pad$1 = (n) => String(n).padStart(2, "0");
+var ymd = (d) => `${d.getFullYear()}-${pad$1(d.getMonth() + 1)}-${pad$1(d.getDate())}`;
+var at = (day) => /* @__PURE__ */ new Date(`${day}T12:00:00`);
+var plus = (day, n) => {
+	const d = at(day);
+	d.setDate(d.getDate() + n);
+	return ymd(d);
+};
+var MONTHS = [
+	"january",
+	"february",
+	"march",
+	"april",
+	"may",
+	"june",
+	"july",
+	"august",
+	"september",
+	"october",
+	"november",
+	"december"
+];
+var MONTH_RE = new RegExp(`\\b(${MONTHS.map((m) => m.slice(0, 3)).join("|")})[a-z]*\\b`);
+/** "today", "yesterday", "this/last week", "this/last month", "in October", "last 7 days" → a date range. */
+function rangeOf(text, today) {
+	const t = text.toLowerCase();
+	const monday = plus(today, -((at(today).getDay() + 6) % 7));
+	const first = `${today.slice(0, 8)}01`;
+	if (/\byesterday\b|\bieri\b/.test(t)) return {
+		from: plus(today, -1),
+		to: plus(today, -1),
+		label: "yesterday"
+	};
+	if (/\btoday\b|\bazi\b/.test(t)) return {
+		from: today,
+		to: today,
+		label: "today"
+	};
+	if (/\blast week\b|\bsaptamana trecuta\b|\bsăptămâna trecută\b/.test(t)) return {
+		from: plus(monday, -7),
+		to: plus(monday, -1),
+		label: "last week"
+	};
+	if (/\bthis week\b|\bweek\b|\bsaptamana\b|\bsăptămâna\b/.test(t)) return {
+		from: monday,
+		to: today,
+		label: "this week"
+	};
+	const lastN = /\b(?:last|past) (\d{1,3}) days\b/.exec(t);
+	if (lastN) return {
+		from: plus(today, -(Math.min(400, Number(lastN[1])) - 1)),
+		to: today,
+		label: `the last ${lastN[1]} days`
+	};
+	if (/\blast month\b|\bluna trecuta\b|\bluna trecută\b/.test(t)) {
+		const d = at(first);
+		d.setMonth(d.getMonth() - 1);
+		return {
+			from: ymd(d),
+			to: plus(first, -1),
+			label: "last month"
+		};
+	}
+	if (/\bthis month\b|\bmonth\b|\bluna\b/.test(t)) return {
+		from: first,
+		to: today,
+		label: "this month"
+	};
+	const m = MONTH_RE.exec(t);
+	if (m && /\b(in|during|for|from|of|on)\s+\w+/.test(t)) {
+		const idx = MONTHS.findIndex((x) => x.startsWith(m[1]));
+		let year = Number(today.slice(0, 4));
+		if (idx > Number(today.slice(5, 7)) - 1) year -= 1;
+		const from = `${year}-${pad$1(idx + 1)}-01`;
+		const end = new Date(year, idx + 1, 0);
+		return {
+			from,
+			to: ymd(end) > today ? today : ymd(end),
+			label: MONTHS[idx][0].toUpperCase() + MONTHS[idx].slice(1)
+		};
+	}
+	return null;
+}
+/** What a question is about. */
+function topicOf(text) {
+	const t = text.toLowerCase();
+	if (/\b(spen[td]|spending|spent|money|cheltuit|cheltuieli|bani|expenses?)\b/.test(t)) return "spending";
+	if (/\b(focus(ed)?|stud(y|ied|ying)|learn(ed|t)?|invatat|învățat)\b/.test(t)) return "focus";
+	if (/\b(workouts?|train(ed|ing)?|gym|exercis(e|ed)|antrenament)\b/.test(t)) return "workouts";
+	if (/\b(sleep|slept|wake[- ]?ups?|woke|somn|trezit)\b/.test(t)) return "sleep";
+	if (/\b(tasks?|must-?dos?|todos?|sarcini)\b/.test(t)) return "tasks";
+	if (/\b(points?|coins?|puncte)\b/.test(t)) return "points";
+	return null;
+}
+/** B9: lookups to run before the first AI call (a question about a time range). */
+function preLookups(text, today) {
+	if (!/\?|\b(how much|how many|how often|did i|have i|cat|câ[tț]|cate|câte)\b/i.test(text)) return [];
+	if (/\b(left|remaining|open|due|upcoming|tomorrow|still to)\b/i.test(text)) return [];
+	const topic = topicOf(text);
+	const r = rangeOf(text, today);
+	if (topic === "tasks" && !/\b(done|did|finished|completed|ticked)\b/i.test(text)) return [];
+	return topic && r ? [`${topic} ${r.from} ${r.to}`] : [];
+}
+/**
+* B3: a short, plain question Ben can answer from the data. Anything with a
+* number in it is a log ("spent 50"), never a question; anything longer or
+* asking "why"/"should"/"plan" goes to the AI.
+*/
+function quickKind(text, today) {
+	const t = text.trim().toLowerCase().replace(/\s+/g, " ");
+	if (!t || /\d/.test(t) || t.split(" ").length > 8 || /\b(why|should|plan|move|add|log|book|remind|help|but|because|and then)\b/.test(t)) return null;
+	const q = t.replace(/[?!.…]+$/g, "").trim();
+	if (/^(what now|now what|what('s| is) next|next|what should i do( now)?|what do i do( now)?|ce fac( acum)?|ce urmeaza)$/.test(q)) return { kind: "now" };
+	if (/^((how much )?water( today)?|how much water( have i (had|drunk))?( today)?|my water|apa( azi)?)$/.test(q)) return { kind: "water" };
+	if (/^((my |show my )?streaks?|how('s| is| are) my streaks?|seria( mea)?)$/.test(q)) return { kind: "streak" };
+	if (/\b(left|remaining|open|due|upcoming|next|tomorrow|still|to do|todo)\b/.test(q)) return null;
+	const topic = topicOf(q);
+	const r = rangeOf(q, today);
+	if (topic === "tasks" && !/\b(done|did|finished|completed|ticked)\b/.test(q)) return null;
+	if (topic && r && /^(how much |how many |what did i |did i |my |show (me )?(my )?)?[a-z\- ]*$/.test(q)) return {
+		kind: "lookup",
+		need: `${topic} ${r.from} ${r.to}`,
+		label: r.label,
+		topic
+	};
+	return null;
+}
+var ICON = {
+	spending: "💸",
+	focus: "⏱",
+	workouts: "💪",
+	sleep: "😴",
+	tasks: "✅",
+	points: "🪙"
+};
+/** The reply in Ben's voice, from templates. null when the data isn't there (then the AI answers). */
+function quickReply(q, d, now = /* @__PURE__ */ new Date()) {
+	if (q.kind === "now") {
+		const m = d.move;
+		if (!m) return null;
+		const buttons = m.kind === "focus" && m.subject && m.minutes ? [{
+			label: `▶ ${m.minutes} min ${m.subject}`.slice(0, 32),
+			do: `focus:${m.minutes}:${m.subject}`
+		}] : m.kind === "approve" ? [{
+			label: "✅ Approve",
+			do: "approve"
+		}] : m.kind === "plan" ? [{
+			label: "🗓 Plan my day",
+			do: "plan"
+		}] : [];
+		return {
+			reply: `🎯 ${m.title}. ${m.sub}`,
+			chips: m.kind === "answer" ? ["Done ✅", "Not yet"] : ["Something else?", "Give me 10 min"],
+			buttons
+		};
+	}
+	if (q.kind === "water") {
+		const w = d.water;
+		if (!w || !w.target) return null;
+		const h = now.getHours() + now.getMinutes() / 60;
+		const pace = Math.min(1, Math.max(0, (h - 8) / 13));
+		const behind = w.ml < w.target * pace - 250;
+		const left = Math.max(0, w.target - w.ml);
+		return {
+			reply: `💧 ${(w.ml / 1e3).toFixed(1)} of ${(w.target / 1e3).toFixed(1)} L today.${left ? behind ? ` You're behind: a glass now, and ${Math.ceil(left / 250)} more through the day.` : ` ${(left / 1e3).toFixed(1)} L to go, you're on pace.` : " Goal done 🔥"}`,
+			chips: left ? ["Water 250", "Water 500"] : ["Nice"],
+			buttons: []
+		};
+	}
+	if (q.kind === "streak") {
+		const s = d.streaks;
+		if (!s) return null;
+		const fh = s.focusWeekMin >= 60 ? `${Math.floor(s.focusWeekMin / 60)}h${s.focusWeekMin % 60 ? ` ${s.focusWeekMin % 60}m` : ""}` : `${s.focusWeekMin} min`;
+		const best = s.training >= 3 || s.clean >= 7 ? " 🔥 Keep it alive today." : " One good day starts the next streak.";
+		return {
+			reply: `🔥 Training ${s.training} day${s.training === 1 ? "" : "s"} · clean ${s.clean} day${s.clean === 1 ? "" : "s"} · focus this week ${fh}${s.wakeOnTime ? ` · wake-ups ${s.wakeOnTime}` : ""}.${best}`,
+			chips: ["What now?", "Plan my day"],
+			buttons: []
+		};
+	}
+	if (!d.found || /not available|give dates/.test(d.found)) return null;
+	return {
+		reply: `${ICON[q.topic]} ${d.found}`,
+		chips: q.topic === "spending" ? ["Where can I cut?", "Last week?"] : ["Compare last week", "What now?"],
+		buttons: []
+	};
+}
+/** B10: corrections Ben can do himself. */
+function codeFix(text) {
+	const t = text.trim().toLowerCase().replace(/[.!]+$/, "");
+	if (/^(undo( (that|it|the last( one)?))?|take (that|it) back|cancel (that|it)|anuleaz[aă]( asta)?|șterge asta|sterge asta)$/.test(t)) return "undo";
+	if (t.split(/\s+/).length <= 9 && (/\b(that|it|this) (was|is|'s) water\b|\bthat'?s water\b|\bwas water\b/.test(t) || /\bnot money\b|\bnot an expense\b/.test(t) && /\bwater\b/.test(t))) return "water";
+	return null;
+}
+/** The amount on a "done" line ("💸 Water 250 lei · Food" → 250). */
+function amountIn(line) {
+	const m = /(\d+(?:[.,]\d+)?)/.exec(line.replace(/\b\d{1,2}:\d{2}\b/g, ""));
+	if (!m) return null;
+	const n = Math.round(Number(m[1].replace(",", ".")));
+	return n >= 50 && n <= 3e3 ? n : null;
+}
 // src/core/coachImpact.ts
 var COACH_HISTORY = "coach_history";
 function cleanHistory(h) {
@@ -15181,10 +15446,22 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			return next;
 		});
 	}
-	/** Context for the model: the same picture the coach sees in chat. */
+	/**
+	* Context for the model: the same picture the coach sees in chat, plus what
+	* he said today, his promises, what Ben remembers and his notebook (B6), so
+	* the reviews quote his real words instead of sounding generic.
+	*/
 	async function contextFor(events, todoToday, upcoming) {
 		return mirror.read((db) => {
 			const svc = services.services(db);
+			const today = svc.wallet.today();
+			const safe = (f) => {
+				try {
+					return f();
+				} catch {
+					return "";
+				}
+			};
 			return [
 				lifeContext(svc, db, {
 					finance: financeStateFrom(db, null),
@@ -15194,11 +15471,64 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				}),
 				(() => {
 					const inp = svc.progress.input(null);
-					const today = svc.wallet.today();
 					return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist));
 				})(),
-				`His goals: ${loadProfile(db).goals.join("; ")}`
+				`His goals: ${loadProfile(db).goals.join("; ")}`,
+				safe(() => {
+					const story = loadStory(db);
+					return story ? `== Your story so far about him ==\n${story.text}` : "";
+				}),
+				safe(() => {
+					const chat = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-14);
+					return chat.length ? `== What you two said today ==\n${chat.map((e) => `${e.at.slice(11, 16)} ${e.role === "me" ? "Victor" : "Ben"}: ${e.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n")}` : "";
+				}),
+				safe(() => promiseLine(promiseStats(JSON.parse(getSetting(db, "coach_reminders") || "[]")))),
+				safe(() => {
+					const facts = pickFacts(loadMemory(db).facts, `${today} ${(loadProfile(db).goals ?? []).join(" ")}`, 12);
+					return facts.length ? `== What you remember about him ==\n${facts.map((f) => `- ${f.t}`).join("\n")}` : "";
+				}),
+				safe(() => deskPrompt(svc, financeStateFrom(db, null))),
+				safe(() => {
+					const n = notesForBen(listNotes(db), "review week goals");
+					return n ? `== His notebook ==\n${n}` : "";
+				})
 			].filter(Boolean).join("\n");
+		});
+	}
+	/** Ben's notes to himself (from the evening or the late self-review). */
+	async function saveSelfNotes(day, j) {
+		const notes = (Array.isArray(j?.notes) ? j.notes : []).map((x) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 4);
+		if (!notes.length) return [];
+		await mirror.write((db) => {
+			setSetting(db, COACH_SELFREVIEW, JSON.stringify({
+				day,
+				notes
+			}));
+			let m = loadMind(db);
+			if (String(j.works ?? "").trim()) m = applyMind(m, {
+				kind: "works",
+				text: String(j.works).trim().slice(0, 160)
+			}, day).mind;
+			if (String(j.fails ?? "").trim()) m = applyMind(m, {
+				kind: "fails",
+				text: String(j.fails).trim().slice(0, 160)
+			}, day).mind;
+			saveMind(db, m);
+		});
+		return notes;
+	}
+	/** Today's chat and feedback, for reviewing Ben's own coaching. */
+	async function todayTalk(since) {
+		return mirror.read((db) => {
+			const today = services.services(db).wallet.today();
+			const log = loadLog(db).filter((e) => e.at.slice(0, 10) === today && (!since || e.at > since)).slice(-40);
+			const fb = loadFeedback(db).filter((f) => f.at.slice(0, 10) === today && (!since || f.at > since));
+			return {
+				today,
+				n: log.length,
+				chat: log.map((e) => `${e.at.slice(11, 16)} ${e.role === "me" ? "Victor" : "Ben"}${e.proactive ? " (on his own)" : ""}: ${e.text.replace(/\s+/g, " ").slice(0, 220)}`).join("\n"),
+				feedback: fb.map((f) => `${f.kind}: "${f.text.slice(0, 100)}"`).join("\n")
+			};
 		});
 	}
 	/** A plan for today (a new version when you ask to change or redo it). */
@@ -15420,20 +15750,24 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		let top3 = [.../* @__PURE__ */ new Set([...open, ...nextUp])].slice(0, 3);
 		if (ai) try {
 			const context = await contextFor(null, null, tomorrowTasks);
+			const talk = await todayTalk();
 			const raw = await withTimeout(ai([
 				"You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
 				`Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join("; ") || "none"}. Due tomorrow in Todoist: ${nextUp.join("; ") || "nothing"}.`,
 				islandLine ? `From the desktop island: ${islandLine}.` : "",
-				"lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow's 3 most important things (short, as tasks).",
-				"Answer ONLY with JSON: {\"lesson\": string, \"top3\": string[]}",
+				"lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers, patterns or what he said today. top3: tomorrow's 3 most important things (short, as tasks).",
+				talk.chat ? "Also review YOUR OWN coaching today, honestly: notes = 2–4 short concrete notes to yourself for tomorrow (what helped him act, what he ignored, where you were too long/generic/soft/hard); works = one thing that worked with him (or \"\"); fails = one that did not (or \"\")." : "",
+				`Answer ONLY with JSON: {"lesson": string, "top3": string[]${talk.chat ? ", \"notes\": string[], \"works\": string, \"fails\": string" : ""}}`,
 				"",
-				context
+				context,
+				talk.feedback ? `\n== His feedback on your replies today ==\n${talk.feedback}` : ""
 			].join("\n"), {
 				json: true,
 				think: true,
 				strong: true
 			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
+			if (talk.chat) await saveSelfNotes(today, j).catch(() => []);
 			if (typeof j.lesson === "string" && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240);
 			const t = (Array.isArray(j.top3) ? j.top3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
 			if (t.length) top3 = t;
@@ -15628,16 +15962,12 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 	*/
 	async function selfReview() {
 		if (!ai) return null;
-		const data = await mirror.read((db) => {
-			const today = services.services(db).wallet.today();
-			const log = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-40);
-			const fb = loadFeedback(db).filter((f) => f.at.slice(0, 10) === today);
-			return {
-				today,
-				chat: log.map((e) => `${e.at.slice(11, 16)} ${e.role === "me" ? "Victor" : "Ben"}${e.proactive ? " (on his own)" : ""}: ${e.text.replace(/\s+/g, " ").slice(0, 220)}`).join("\n"),
-				feedback: fb.map((f) => `${f.kind}: "${f.text.slice(0, 100)}"`).join("\n")
-			};
-		});
+		const since = await mirror.read((db) => load(db, services.services(db).wallet.today()).evening?.sentAt);
+		if (since) {
+			const after = await todayTalk(since);
+			if (after.n < 4 && !after.feedback) return null;
+		}
+		const data = await todayTalk();
 		if (!data.chat) return null;
 		try {
 			const raw = await withTimeout(ai([
@@ -15652,25 +15982,48 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				think: true
 			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
-			const notes = (Array.isArray(j.notes) ? j.notes : []).map((x) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 4);
-			if (!notes.length) return null;
-			await mirror.write((db) => {
-				setSetting(db, COACH_SELFREVIEW, JSON.stringify({
-					day: data.today,
-					notes
-				}));
-				let m = loadMind(db);
-				if (String(j.works ?? "").trim()) m = applyMind(m, {
-					kind: "works",
-					text: String(j.works).trim().slice(0, 160)
-				}, data.today).mind;
-				if (String(j.fails ?? "").trim()) m = applyMind(m, {
-					kind: "fails",
-					text: String(j.fails).trim().slice(0, 160)
-				}, data.today).mind;
-				saveMind(db, m);
-			});
-			return notes;
+			const notes = await saveSelfNotes(data.today, j);
+			return notes.length ? notes : null;
+		} catch {
+			return null;
+		}
+	}
+	/**
+	* B5: every Sunday Ben rewrites his short "story so far" about Victor from
+	* the week's chat, what he remembers, the journal and the last story. One
+	* cheap call a week; the story then goes with every message.
+	*/
+	async function writeStory() {
+		if (!ai) return null;
+		const data = await mirror.read((db) => {
+			const today = services.services(db).wallet.today();
+			const from = addDays$3(today, -7);
+			return {
+				today,
+				chat: loadLog(db).filter((e) => e.at.slice(0, 10) >= from).slice(-60).map((e) => `${e.at.slice(5, 10)} ${e.role === "me" ? "Victor" : "Ben"}: ${e.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n"),
+				facts: loadMemory(db).facts.slice(-30).map((f) => `- ${f.t}`).join("\n"),
+				journal: listNotes(db).filter((n) => /^Journal\//.test(n.title ?? "") && String(n.title).slice(8) >= from).map((n) => `${n.title}: ${String(n.body ?? "").replace(/\s+/g, " ").slice(0, 200)}`).join("\n"),
+				story: loadStory(db)?.text ?? ""
+			};
+		});
+		if (!data.chat && !data.facts) return null;
+		try {
+			const raw = await withTimeout(ai([
+				"You are BEN, Victor's coach and friend. Rewrite your short STORY SO FAR about him: who he is now, what he is working toward, what stressed him and what went well lately, promises he made, what works with him and what doesn't. Keep what still matters from the old story, drop what is stale.",
+				"At most 600 characters, plain sentences, dates where they matter. No advice, just the story. Answer ONLY with JSON: {\"story\": string}",
+				"",
+				data.story ? `== Your old story ==\n${data.story}` : "",
+				data.facts ? `== What you remember ==\n${data.facts}` : "",
+				data.journal ? `== His journal this week ==\n${data.journal}` : "",
+				data.chat ? `== This week's chat ==\n${data.chat}` : ""
+			].join("\n"), { json: true }), 3e4);
+			const story = String(JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}").story ?? "").trim().slice(0, 700);
+			if (!story) return null;
+			await mirror.write((db) => setSetting(db, COACH_STORY, JSON.stringify({
+				week: data.today,
+				text: story
+			})));
+			return story;
 		} catch {
 			return null;
 		}
@@ -15749,6 +16102,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		setTop3,
 		weekly,
 		applyWeekly,
+		writeStory,
 		waterLine,
 		markWater,
 		trainingLine,
@@ -17472,6 +17826,63 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			return null;
 		}
 	}
+	/** Your history for lookups (focus sessions, wake-ups, points, money), from the local copy. */
+	function buildLook(db, svc, finance) {
+		let sessions = [];
+		try {
+			sessions = db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?").all(addDays$3(svc.wallet.today(), -400)).map((r) => ({
+				day: String(r.day),
+				subject: String(r.subject),
+				minutes: Number(r.minutes)
+			}));
+		} catch {
+			sessions = [];
+		}
+		return {
+			finance,
+			input: svc.progress.input(null, /* @__PURE__ */ new Date(), 400),
+			ledger: svc.wallet.entries().map((e) => ({
+				day: e.day,
+				coins: Number(e.coins),
+				kind: e.kind,
+				note: e.note
+			})),
+			sessions
+		};
+	}
+	/**
+	* B10: "undo that" and "that was water, not money" without the AI. Uses the
+	* newest reply of the last 30 minutes that can be undone.
+	*/
+	async function fixInCode(kind) {
+		const last = await mirror.read((db) => {
+			const log = loadLog(db);
+			for (let i = log.length - 1; i >= 0; i--) {
+				const e = log[i];
+				if (e.role !== "coach" || Date.now() - Date.parse(e.at) > 18e5) continue;
+				if (e.undo?.some((op, k) => op && !e.undone?.[k])) return e;
+			}
+			return null;
+		});
+		if (!last) return null;
+		if (kind === "undo") {
+			const r = await undoReply(last.at);
+			return r.ok ? {
+				reply: `↩️ Undone: ${r.lines.join(" · ")}`,
+				acts: []
+			} : null;
+		}
+		const k = last.undo.findIndex((op, i) => op?.k === "money" && !last.undone?.[i]);
+		if (k < 0) return null;
+		const ml = amountIn(last.done?.[k] ?? "");
+		if (!ml) return null;
+		if (!(await undoReply(last.at, k)).ok) return null;
+		const water = readAction(`water: ${ml}`);
+		return {
+			reply: `💧 Fixed: that was water, not money. Money record removed, ${ml} ml added.`,
+			acts: water ? [water] : []
+		};
+	}
 	async function think(persona, text, key, media, via = "telegram", onStep) {
 		const step = (s) => {
 			try {
@@ -17489,10 +17900,60 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				done: []
 			};
 		}
+		let preset = confirmed ? {
+			reply: "👍 Done.",
+			acts: [confirmed]
+		} : null;
+		if (!preset && !media && text) {
+			const fix = codeFix(text);
+			if (fix) preset = await fixInCode(fix).catch(() => null);
+		}
+		if (!preset && !media && text) {
+			const q = await mirror.read((db) => quickKind(text, services.services(db).wallet.today()));
+			if (q) {
+				const qr = await mirror.read((db) => {
+					const svc = services.services(db);
+					const today = svc.wallet.today();
+					if (q.kind === "lookup") return quickReply(q, { found: answerLocal(q.need, buildLook(db, svc, financeStateFrom(db, store))) });
+					const st = coachStatus(svc);
+					if (q.kind === "streak") {
+						const inp = svc.progress.input(null);
+						const monday = addDays$3(today, -(((/* @__PURE__ */ new Date(`${today}T12:00:00`)).getDay() + 6) % 7));
+						const wakes = inp.wakes.filter((w) => w.day >= monday);
+						return quickReply(q, { streaks: {
+							training: svc.body.state().streak ?? 0,
+							clean: svc.discipline.state().current ?? 0,
+							focusWeekMin: inp.focus.filter((x) => x.day >= monday).reduce((t, x) => t + x.minutes, 0),
+							wakeOnTime: wakes.length ? `${wakes.filter((w) => w.onTime).length}/${wakes.length} on time` : void 0
+						} });
+					}
+					return quickReply(q, {
+						move: st.move,
+						water: {
+							ml: st.today.waterMl,
+							target: st.today.waterTarget
+						}
+					});
+				}).catch(() => null);
+				if (qr) {
+					step("Answered from your data");
+					preset = {
+						reply: qr.reply,
+						acts: [],
+						chips: qr.chips,
+						buttons: qr.buttons
+					};
+				}
+			}
+		}
 		const dayStart = /* @__PURE__ */ new Date();
 		dayStart.setHours(0, 0, 0, 0);
 		step("Reading your day");
-		const [todoToday, upcoming, events] = await Promise.all([
+		const [todoToday, upcoming, events] = preset ? [
+			null,
+			null,
+			null
+		] : await Promise.all([
 			todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
 			todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
 			calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 6912e5).toISOString()).catch(() => null) : Promise.resolve(null)
@@ -17512,16 +17973,6 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
-			let sessions = [];
-			try {
-				sessions = db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?").all(addDays$3(svc.wallet.today(), -400)).map((r) => ({
-					day: String(r.day),
-					subject: String(r.subject),
-					minutes: Number(r.minutes)
-				}));
-			} catch {
-				sessions = [];
-			}
 			return {
 				context: lifeContext(svc, db, {
 					finance,
@@ -17534,7 +17985,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				mind: (() => {
 					const inp = svc.progress.input(null);
 					const today = svc.wallet.today();
-					return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist));
+					const story = loadStory(db);
+					return [story ? `Your story so far about him (${story.week}): ${story.text}` : "", mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))].filter(Boolean).join("\n");
 				})(),
 				talk: (() => {
 					const sr = loadSelfReview(db);
@@ -17599,17 +18051,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						return "";
 					}
 				})(),
-				look: {
-					finance,
-					input: svc.progress.input(null, /* @__PURE__ */ new Date(), 400),
-					ledger: svc.wallet.entries().map((e) => ({
-						day: e.day,
-						coins: Number(e.coins),
-						kind: e.kind,
-						note: e.note
-					})),
-					sessions
-				}
+				look: buildLook(db, svc, finance)
 			};
 		});
 		let allTasks = [...todoToday ?? [], ...upcoming ?? []].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i);
@@ -17619,7 +18061,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const moneyRefs = new Map(money.map((m, i) => [`M${i + 1}`, m.id]));
 		const moneyLines = money.length ? `Money records, newest first (use the M-number):\n${money.map((m, i) => `M${i + 1} ${m.line}`).join("\n")}` : "";
 		const correcting = isCorrection(text);
-		const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text);
+		const big = isBigAsk(text) || correcting;
 		if (big) step("Thinking it through");
 		const deadline = Date.now() + 38e3;
 		const ask = (found, extraNote = "") => withTimeout(ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
@@ -17637,7 +18079,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			selfReview: talk.selfReview,
 			notes,
 			desk,
-			stealth: talk.stealth
+			stealth: talk.stealth,
+			allActions: big
 		}), {
 			json: true,
 			think: big,
@@ -17649,8 +18092,18 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}), Math.max(4e3, deadline - Date.now()));
 		let out;
 		try {
-			if (confirmed) out = parseBrain("{\"reply\":\"👍 Done.\",\"actions\":[]}");
-			else out = parseBrain(await ask());
+			if (preset) out = {
+				reply: preset.reply,
+				actions: [],
+				remember: [],
+				chips: preset.chips,
+				buttons: preset.buttons
+			};
+			else {
+				const pre = media ? [] : preLookups(text, dayStart.toLocaleDateString("sv-SE")).map((n) => answerLocal(n, look)).filter((x) => !!x && !/not available|give dates/.test(x));
+				if (pre.length) step("Looked up your history");
+				out = parseBrain(await ask(pre.length ? pre.join("\n") : void 0));
+			}
 			if (out.need?.length && !out.actions.length) {
 				const found = [];
 				for (const need of out.need) {
@@ -17701,7 +18154,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		let keyboard;
 		let expense = false;
 		let acts = out.actions.map(readAction).filter((a) => !!a);
-		if (confirmed) acts = [confirmed];
+		if (preset) acts = preset.acts;
 		if (!startsNow(text)) {
 			for (const a of acts) {
 				if (a.kind !== "focus") continue;
@@ -17783,7 +18236,20 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							noCal();
 							continue;
 						}
-						const start = /* @__PURE__ */ new Date(`${a.day}T${a.time}:00`);
+						const todayKey = (/* @__PURE__ */ new Date()).toLocaleDateString("sv-SE");
+						let day = a.day < todayKey ? todayKey : a.day;
+						let time = a.time;
+						let note = "";
+						const s0 = Date.parse(`${day}T${time}:00`);
+						if (allEvents.some((x) => !x.allDay && !x.free && Date.parse(x.start) < s0 + a.minutes * 6e4 && Date.parse(x.end) > s0) && !text.includes(time) && !text.includes(time.replace(/^0/, ""))) {
+							const slot = nextSlot(allEvents, day, day === todayKey ? (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5) : time, a.minutes);
+							if (slot) {
+								note = ` (${time} was taken, so the next free time)`;
+								time = slot.start;
+							}
+						}
+						if (day !== a.day) note = ` (${a.day} has passed, so today)${note}`;
+						const start = /* @__PURE__ */ new Date(`${day}T${time}:00`);
 						const ev = await calendar.create({
 							title: a.title,
 							start: start.toISOString(),
@@ -17795,7 +18261,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							cal: ev.calendarId,
 							id: ev.id
 						};
-						done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`);
+						if (ev) allEvents = [...allEvents, ev];
+						done.push(`🗓 In your calendar: ${a.title} · ${day.slice(5)} ${time} (${a.minutes} min)${note}`);
 						continue;
 					}
 					if (a.kind === "move" || a.kind === "resize" || a.kind === "delevent") {
@@ -21862,6 +22329,7 @@ async function rhythmTick(env, now, send) {
 	}]] });
 	else if (job === "weekly") {
 		await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);
+		await bots.rhythm.writeStory().catch(() => null);
 		const letter = await bots.rhythm.letter().catch(() => null);
 		if (letter) await send(`💌 <b>A letter from Ben</b>\n\n${escapeHtml(letter)}`);
 	} else if (job === "evening" && await mirror.read((db) => (services.services(db).focus.state().plan.reasons?.length ?? 0) > 0).catch(() => false)) await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{

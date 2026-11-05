@@ -26,7 +26,11 @@ import {
   type RhythmPrefs,
   type RhythmState, blocksKept } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
-import { COACH_SELFREVIEW, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMind, loadProfile, saveLetter, saveMind, sportState } from './botBrain'
+import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStory, pickFacts, saveLetter, saveMind, sportState } from './botBrain'
+import { REMINDERS, promiseLine, promiseStats } from '@core/coachKit'
+import { deskPrompt } from './benDesk'
+import { notesForBen } from '@core/notebook'
+import { listNotes } from './notes'
 import { applyMind } from '@core/coachMind'
 import { mindText, weekSoFar } from '@core/coachMind'
 import { COACH_HISTORY, bump, cleanHistory, impactVerdict, mondayOf, recordDay, scorecard, type CoachDay } from '@core/coachImpact'
@@ -151,15 +155,79 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  /** Context for the model: the same picture the coach sees in chat. */
+  /**
+   * Context for the model: the same picture the coach sees in chat, plus what
+   * he said today, his promises, what Ben remembers and his notebook (B6), so
+   * the reviews quote his real words instead of sounding generic.
+   */
   async function contextFor(events: any[] | null, todoToday: TodoTask[] | null, upcoming: TodoTask[] | null) {
     return mirror.read((db) => {
       const svc = services.services(db)
-      return [lifeContext(svc, db, { finance: financeStateFrom(db, null), todoToday, upcoming, events }), (() => {
-        const inp = svc.progress.input(null)
-        const today = svc.wallet.today()
-        return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))
-      })(), `His goals: ${loadProfile(db).goals.join('; ')}`].filter(Boolean).join('\n')
+      const today = svc.wallet.today()
+      const safe = (f: () => string) => {
+        try {
+          return f()
+        } catch {
+          return ''
+        }
+      }
+      return [
+        lifeContext(svc, db, { finance: financeStateFrom(db, null), todoToday, upcoming, events }),
+        (() => {
+          const inp = svc.progress.input(null)
+          return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))
+        })(),
+        `His goals: ${loadProfile(db).goals.join('; ')}`,
+        safe(() => {
+          const story = loadStory(db)
+          return story ? `== Your story so far about him ==\n${story.text}` : ''
+        }),
+        safe(() => {
+          const chat = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-14)
+          return chat.length ? `== What you two said today ==\n${chat.map((e) => `${e.at.slice(11, 16)} ${e.role === 'me' ? 'Victor' : 'Ben'}: ${e.text.replace(/\s+/g, ' ').slice(0, 160)}`).join('\n')}` : ''
+        }),
+        safe(() => promiseLine(promiseStats(JSON.parse(getSetting(db as any, REMINDERS) || '[]')))),
+        safe(() => {
+          const facts = pickFacts(loadMemory(db).facts, `${today} ${(loadProfile(db).goals ?? []).join(' ')}`, 12)
+          return facts.length ? `== What you remember about him ==\n${facts.map((f) => `- ${f.t}`).join('\n')}` : ''
+        }),
+        safe(() => deskPrompt(svc, financeStateFrom(db, null))),
+        safe(() => {
+          const n = notesForBen(listNotes(db as any), 'review week goals')
+          return n ? `== His notebook ==\n${n}` : ''
+        })
+      ]
+        .filter(Boolean)
+        .join('\n')
+    })
+  }
+
+  /** Ben's notes to himself (from the evening or the late self-review). */
+  async function saveSelfNotes(day: string, j: any): Promise<string[]> {
+    const notes = (Array.isArray(j?.notes) ? j.notes : []).map((x: any) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 4)
+    if (!notes.length) return []
+    await mirror.write((db) => {
+      setSetting(db as any, COACH_SELFREVIEW, JSON.stringify({ day, notes }))
+      let m = loadMind(db)
+      if (String(j.works ?? '').trim()) m = applyMind(m, { kind: 'works', text: String(j.works).trim().slice(0, 160) }, day).mind
+      if (String(j.fails ?? '').trim()) m = applyMind(m, { kind: 'fails', text: String(j.fails).trim().slice(0, 160) }, day).mind
+      saveMind(db, m)
+    })
+    return notes
+  }
+
+  /** Today's chat and feedback, for reviewing Ben's own coaching. */
+  async function todayTalk(since?: string) {
+    return mirror.read((db) => {
+      const today = services.services(db).wallet.today()
+      const log = loadLog(db).filter((e) => e.at.slice(0, 10) === today && (!since || e.at > since)).slice(-40)
+      const fb = loadFeedback(db).filter((f) => f.at.slice(0, 10) === today && (!since || f.at > since))
+      return {
+        today,
+        n: log.length,
+        chat: log.map((e) => `${e.at.slice(11, 16)} ${e.role === 'me' ? 'Victor' : 'Ben'}${e.proactive ? ' (on his own)' : ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'),
+        feedback: fb.map((f) => `${f.kind}: "${f.text.slice(0, 100)}"`).join('\n')
+      }
     })
   }
 
@@ -348,19 +416,24 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     if (ai) {
       try {
         const context = await contextFor(null, null, tomorrowTasks)
+        // One call does the review AND Ben's notes on his own coaching (B4; the 23:15 self-review then usually skips).
+        const talk = await todayTalk()
         const raw = await withTimeout(ai(
           [
             "You are BEN, Victor's best friend and coach. It's his evening review. Be honest and short.",
             `Today: score ${score}/100. ${JSON.stringify(result)}. Open must-dos: ${open.join('; ') || 'none'}. Due tomorrow in Todoist: ${nextUp.join('; ') || 'nothing'}.`,
             islandLine ? `From the desktop island: ${islandLine}.` : '',
-            'lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers or patterns. top3: tomorrow\'s 3 most important things (short, as tasks).',
-            'Answer ONLY with JSON: {"lesson": string, "top3": string[]}',
+            'lesson: ONE sentence: what to do differently tomorrow, concrete, tied to his numbers, patterns or what he said today. top3: tomorrow\'s 3 most important things (short, as tasks).',
+            talk.chat ? 'Also review YOUR OWN coaching today, honestly: notes = 2–4 short concrete notes to yourself for tomorrow (what helped him act, what he ignored, where you were too long/generic/soft/hard); works = one thing that worked with him (or ""); fails = one that did not (or "").' : '',
+            `Answer ONLY with JSON: {"lesson": string, "top3": string[]${talk.chat ? ', "notes": string[], "works": string, "fails": string' : ''}}`,
             '',
-            context
+            context,
+            talk.feedback ? `\n== His feedback on your replies today ==\n${talk.feedback}` : ''
           ].join('\n'),
           { json: true, think: true, strong: true }
         ), 35_000)
         const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
+        if (talk.chat) await saveSelfNotes(today, j).catch(() => [])
         if (typeof j.lesson === 'string' && j.lesson.trim()) lesson = j.lesson.trim().slice(0, 240)
         const t = (Array.isArray(j.top3) ? j.top3 : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)
         if (t.length) top3 = t
@@ -509,16 +582,13 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
    */
   async function selfReview(): Promise<string[] | null> {
     if (!ai) return null
-    const data = await mirror.read((db) => {
-      const today = services.services(db).wallet.today()
-      const log = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-40)
-      const fb = loadFeedback(db).filter((f) => f.at.slice(0, 10) === today)
-      return {
-        today,
-        chat: log.map((e) => `${e.at.slice(11, 16)} ${e.role === 'me' ? 'Victor' : 'Ben'}${e.proactive ? ' (on his own)' : ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'),
-        feedback: fb.map((f) => `${f.kind}: "${f.text.slice(0, 100)}"`).join('\n')
-      }
-    })
+    // The evening review already wrote the notes (B4): only redo them after 4+ new messages or new feedback.
+    const since = await mirror.read((db) => load(db, services.services(db).wallet.today()).evening?.sentAt)
+    if (since) {
+      const after = await todayTalk(since)
+      if (after.n < 4 && !after.feedback) return null
+    }
+    const data = await todayTalk()
     if (!data.chat) return null
     try {
       const raw = await withTimeout(ai(
@@ -533,16 +603,53 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         { json: true, think: true }
       ), 35_000)
       const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
-      const notes = (Array.isArray(j.notes) ? j.notes : []).map((x: any) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 4)
-      if (!notes.length) return null
-      await mirror.write((db) => {
-        setSetting(db as any, COACH_SELFREVIEW, JSON.stringify({ day: data.today, notes }))
-        let m = loadMind(db)
-        if (String(j.works ?? '').trim()) m = applyMind(m, { kind: 'works', text: String(j.works).trim().slice(0, 160) }, data.today).mind
-        if (String(j.fails ?? '').trim()) m = applyMind(m, { kind: 'fails', text: String(j.fails).trim().slice(0, 160) }, data.today).mind
-        saveMind(db, m)
-      })
-      return notes
+      const notes = await saveSelfNotes(data.today, j)
+      return notes.length ? notes : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * B5: every Sunday Ben rewrites his short "story so far" about Victor from
+   * the week's chat, what he remembers, the journal and the last story. One
+   * cheap call a week; the story then goes with every message.
+   */
+  async function writeStory(): Promise<string | null> {
+    if (!ai) return null
+    const data = await mirror.read((db) => {
+      const today = services.services(db).wallet.today()
+      const from = addDays(today, -7)
+      const chat = loadLog(db)
+        .filter((e) => e.at.slice(0, 10) >= from)
+        .slice(-60)
+        .map((e) => `${e.at.slice(5, 10)} ${e.role === 'me' ? 'Victor' : 'Ben'}: ${e.text.replace(/\s+/g, ' ').slice(0, 160)}`)
+        .join('\n')
+      const facts = loadMemory(db).facts.slice(-30).map((f) => `- ${f.t}`).join('\n')
+      const journal = listNotes(db as any)
+        .filter((n: any) => /^Journal\//.test(n.title ?? '') && String(n.title).slice(8) >= from)
+        .map((n: any) => `${n.title}: ${String(n.body ?? '').replace(/\s+/g, ' ').slice(0, 200)}`)
+        .join('\n')
+      return { today, chat, facts, journal, story: loadStory(db)?.text ?? '' }
+    })
+    if (!data.chat && !data.facts) return null
+    try {
+      const raw = await withTimeout(ai(
+        [
+          "You are BEN, Victor's coach and friend. Rewrite your short STORY SO FAR about him: who he is now, what he is working toward, what stressed him and what went well lately, promises he made, what works with him and what doesn't. Keep what still matters from the old story, drop what is stale.",
+          'At most 600 characters, plain sentences, dates where they matter. No advice, just the story. Answer ONLY with JSON: {"story": string}',
+          '',
+          data.story ? `== Your old story ==\n${data.story}` : '',
+          data.facts ? `== What you remember ==\n${data.facts}` : '',
+          data.journal ? `== His journal this week ==\n${data.journal}` : '',
+          data.chat ? `== This week's chat ==\n${data.chat}` : ''
+        ].join('\n'),
+        { json: true }
+      ), 30_000)
+      const story = String(JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}').story ?? '').trim().slice(0, 700)
+      if (!story) return null
+      await mirror.write((db) => setSetting(db as any, COACH_STORY, JSON.stringify({ week: data.today, text: story })))
+      return story
     } catch {
       return null
     }
@@ -597,7 +704,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, writeStory, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

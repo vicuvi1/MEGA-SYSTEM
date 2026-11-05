@@ -43,11 +43,13 @@ import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, ref
 import { purchaseCheck, readPurchase } from '@core/benMoney'
 import { moodFace } from '@core/benKnows'
 import { benNote, listNotes, seedNotes } from './notes'
-import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { loadStory, answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus, waterToday } from './coachStatus'
+import { nextSlot } from '@core/benActs'
+import { amountIn, codeFix, preLookups, quickKind, quickReply } from '@core/benQuick'
 import { createRhythm } from './rhythmBot'
 import { addReps, addWater, parseWater, sharedView, sportForDay, sportToday } from '@core/sportShared'
 import { activeExercises, allDone, applyWorkoutTap, defaultSport, progression, recordWorkoutDay, removeExercise, setExercise, waterCard, workoutCard, type WorkoutLog } from '@core/sportCards'
@@ -1284,6 +1286,46 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
   }
 
+  /** Your history for lookups (focus sessions, wake-ups, points, money), from the local copy. */
+  function buildLook(db: any, svc: any, finance: any): LookupData {
+    let sessions: LookupData['sessions'] = []
+    try {
+      sessions = (db.prepare('SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?').all(addDays(svc.wallet.today(), -400)) as any[]).map((r) => ({ day: String(r.day), subject: String(r.subject), minutes: Number(r.minutes) }))
+    } catch {
+      sessions = []
+    }
+    return { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
+  }
+
+  /**
+   * B10: "undo that" and "that was water, not money" without the AI. Uses the
+   * newest reply of the last 30 minutes that can be undone.
+   */
+  async function fixInCode(kind: 'undo' | 'water'): Promise<{ reply: string; acts: BrainAction[] } | null> {
+    const last = await mirror.read((db) => {
+      const log = loadLog(db as any)
+      for (let i = log.length - 1; i >= 0; i--) {
+        const e = log[i] as any
+        if (e.role !== 'coach' || Date.now() - Date.parse(e.at) > 30 * 60000) continue
+        if (e.undo?.some((op: any, k: number) => op && !e.undone?.[k])) return e as { at: string; done?: string[]; undo: (UndoOp | null)[]; undone?: boolean[] }
+      }
+      return null
+    })
+    if (!last) return null
+    if (kind === 'undo') {
+      const r = await undoReply(last.at)
+      return r.ok ? { reply: `↩️ Undone: ${r.lines.join(' · ')}`, acts: [] } : null
+    }
+    const k = last.undo.findIndex((op, i) => op?.k === 'money' && !last.undone?.[i])
+    if (k < 0) return null
+    const ml = amountIn(last.done?.[k] ?? '')
+    if (!ml) return null
+    const r = await undoReply(last.at, k)
+    if (!r.ok) return null
+    const water = readAction(`water: ${ml}`)
+    return { reply: `💧 Fixed: that was water, not money. Money record removed, ${ml} ml added.`, acts: water ? [water] : [] }
+  }
+
   async function think(
     persona: Persona,
     text: string,
@@ -1308,10 +1350,42 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       // Tapped twice (or too late): never log it a second time.
       if (!confirmed) return { ok: true, reply: '✅ Already done.', done: [] }
     }
+    // What Ben can do without the AI: a stored confirm, a fix in code (B10), an instant answer (B3).
+    let preset: { reply: string; acts: BrainAction[]; chips?: string[]; buttons?: { label: string; do: string }[] } | null = confirmed ? { reply: '👍 Done.', acts: [confirmed] } : null
+    if (!preset && !media && text) {
+      const fix = codeFix(text)
+      if (fix) preset = await fixInCode(fix).catch(() => null)
+    }
+    if (!preset && !media && text) {
+      const q = await mirror.read((db) => quickKind(text, services.services(db).wallet.today()))
+      if (q) {
+        const qr = await mirror
+          .read((db) => {
+            const svc = services.services(db)
+            const today = svc.wallet.today()
+            if (q.kind === 'lookup') return quickReply(q, { found: answerLocal(q.need, buildLook(db, svc, financeStateFrom(db, store))) })
+            const st = coachStatus(svc)
+            if (q.kind === 'streak') {
+              const inp = svc.progress.input(null)
+              const dow = (new Date(`${today}T12:00:00`).getDay() + 6) % 7
+              const monday = addDays(today, -dow)
+              const wakes = inp.wakes.filter((w: any) => w.day >= monday)
+              return quickReply(q, { streaks: { training: svc.body.state().streak ?? 0, clean: svc.discipline.state().current ?? 0, focusWeekMin: inp.focus.filter((x: any) => x.day >= monday).reduce((t: number, x: any) => t + x.minutes, 0), wakeOnTime: wakes.length ? `${wakes.filter((w: any) => w.onTime).length}/${wakes.length} on time` : undefined } })
+            }
+            return quickReply(q, { move: st.move as any, water: { ml: st.today.waterMl, target: st.today.waterTarget } })
+          })
+          .catch(() => null)
+        if (qr) {
+          step('Answered from your data')
+          preset = { reply: qr.reply, acts: [], chips: qr.chips, buttons: qr.buttons }
+        }
+      }
+    }
     const dayStart = new Date()
     dayStart.setHours(0, 0, 0, 0)
     step('Reading your day')
-    const [todoToday, upcoming, events] = await Promise.all([
+    // An answer from the data needs no Todoist or calendar round trip.
+    const [todoToday, upcoming, events] = preset ? [null, null, null] : await Promise.all([
       todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
       todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
       calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 8 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
@@ -1339,12 +1413,6 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
-      let sessions: LookupData['sessions'] = []
-      try {
-        sessions = (db.prepare('SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?').all(addDays(svc.wallet.today(), -400)) as any[]).map((r) => ({ day: String(r.day), subject: String(r.subject), minutes: Number(r.minutes) }))
-      } catch {
-        sessions = []
-      }
       return {
         context: lifeContext(svc, db, { finance, todoToday, upcoming, events }),
         memory: loadMemory(db),
@@ -1352,7 +1420,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         mind: (() => {
           const inp = svc.progress.input(null)
           const today = svc.wallet.today()
-          return mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))
+          const story = loadStory(db)
+          return [story ? `Your story so far about him (${story.week}): ${story.text}` : '', mindText(loadMind(db), today, weekSoFar(today, inp.focus, inp.workouts, inp.todoist))].filter(Boolean).join('\n')
         })(),
         talk: (() => {
           const sr = loadSelfReview(db)
@@ -1415,7 +1484,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             return ''
           }
         })(),
-        look: { finance, input: svc.progress.input(null, new Date(), 400), ledger: svc.wallet.entries().map((e: any) => ({ day: e.day, coins: Number(e.coins), kind: e.kind, note: e.note })), sessions } as LookupData
+        look: buildLook(db, svc, finance)
       }
     })
     // Tasks and events the coach can point at (E1, T3); grows when it asks for more.
@@ -1426,19 +1495,24 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // Money records it can fix (M1 = newest).
     const moneyRefs = new Map(money.map((m, i) => [`M${i + 1}`, m.id]))
     const moneyLines = money.length ? `Money records, newest first (use the M-number):\n${money.map((m, i) => `M${i + 1} ${m.line}`).join('\n')}` : ''
-    // It thinks first for anything more than a quick log or a short chat line.
+    // Deep (paid) thinking only for big asks and corrections (B2); a "?" or a long line isn't a big ask.
     const correcting = isCorrection(text)
-    const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
+    const big = isBigAsk(text) || correcting
     if (big) step('Thinking it through')
     // One reply must fit Vercel's 60 s, actions and sending included: the model
     // gets what's left of a 38 s budget, so the reply is never cut off (T6).
     const deadline = Date.now() + 38_000
     const ask = (found?: string, extraNote = '') =>
-      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined }), Math.max(4_000, deadline - Date.now()))
+      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined }), Math.max(4_000, deadline - Date.now()))
     let out: BrainOut
     try {
-      if (confirmed) out = parseBrain('{"reply":"👍 Done.","actions":[]}')
-      else out = parseBrain(await ask())
+      if (preset) out = { reply: preset.reply, actions: [], remember: [], chips: preset.chips, buttons: preset.buttons }
+      else {
+        // A question about history: its numbers are looked up first, so one call answers it (B9).
+        const pre = media ? [] : preLookups(text, dayStart.toLocaleDateString('sv-SE')).map((n) => answerLocal(n, look)).filter((x): x is string => !!x && !/not available|give dates/.test(x))
+        if (pre.length) step('Looked up your history')
+        out = parseBrain(await ask(pre.length ? pre.join('\n') : undefined))
+      }
       // It asked for facts it didn't have: look them up, then it answers.
       if (out.need?.length && !out.actions.length) {
         const found: string[] = []
@@ -1489,7 +1563,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let keyboard: any
     let expense = false
     let acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
-    if (confirmed) acts = [confirmed]
+    if (preset) acts = preset.acts
     // A focus timer starts only when he asked for it now; otherwise it becomes a ▶ button he can tap.
     // "I'll start at 5" or "later" is not now (X10).
     const askedToStart = startsNow(text)
@@ -1584,10 +1658,27 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               noCal()
               continue
             }
-            const start = new Date(`${a.day}T${a.time}:00`)
+            // B11: repaired in code, no second AI call: a day in the past becomes today, and a time
+            // that clashes with another event (one he didn't name himself) snaps to the next free slot.
+            const todayKey = new Date().toLocaleDateString('sv-SE')
+            let day = a.day < todayKey ? todayKey : a.day
+            let time = a.time
+            let note = ''
+            const s0 = Date.parse(`${day}T${time}:00`)
+            const clash = allEvents.some((x) => !x.allDay && !(x as any).free && Date.parse(x.start) < s0 + a.minutes * 60000 && Date.parse(x.end) > s0)
+            if (clash && !text.includes(time) && !text.includes(time.replace(/^0/, ''))) {
+              const slot = nextSlot(allEvents, day, day === todayKey ? new Date().toTimeString().slice(0, 5) : time, a.minutes)
+              if (slot) {
+                note = ` (${time} was taken, so the next free time)`
+                time = slot.start
+              }
+            }
+            if (day !== a.day) note = ` (${a.day} has passed, so today)${note}`
+            const start = new Date(`${day}T${time}:00`)
             const ev = await calendar.create({ title: a.title, start: start.toISOString(), end: new Date(start.getTime() + a.minutes * 60000).toISOString(), description: 'Planned with your coach in Life System' })
             if (ev?.id) opNow = { k: 'event', cal: ev.calendarId, id: ev.id }
-            done.push(`🗓 In your calendar: ${a.title} · ${a.day.slice(5)} ${a.time} (${a.minutes} min)`)
+            if (ev) allEvents = [...allEvents, ev]
+            done.push(`🗓 In your calendar: ${a.title} · ${day.slice(5)} ${time} (${a.minutes} min)${note}`)
             continue
           }
           if (a.kind === 'move' || a.kind === 'resize' || a.kind === 'delevent') {

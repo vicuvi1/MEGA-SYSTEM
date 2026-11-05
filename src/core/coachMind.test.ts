@@ -49,6 +49,20 @@ describe('coach mind', () => {
     expect(findPatterns({ today, focus: focus.slice(0, 3), sleep: sleep.slice(0, 3), workouts: [], spending: null })).toEqual([])
   })
 
+  it('finds the weekday he skips training and when must-dos slip (B7)', () => {
+    const workouts: { day: string }[] = []
+    const mustdos: { day: string; done: boolean }[] = []
+    for (let i = 1; i <= 42; i++) {
+      const day = addDays(today, -i)
+      const w = new Date(`${day}T12:00:00Z`).getUTCDay()
+      if (w !== 1 && w !== 0) workouts.push({ day })
+      mustdos.push({ day, done: w !== 5 }, { day, done: w === 2 || w !== 5 })
+    }
+    const p = findPatterns({ today, focus: [], sleep: [], workouts, spending: null, mustdos })
+    expect(p.some((x) => /Monday is the day he skips|Sunday is the day he skips/.test(x))).toBe(true)
+    expect(p.some((x) => x.startsWith('Must-dos:') && x.includes('Fridays'))).toBe(true)
+  })
+
   it('spots weekend spending', () => {
     const spending: { day: string; bani: number }[] = []
     for (let i = 1; i <= 28; i++) {

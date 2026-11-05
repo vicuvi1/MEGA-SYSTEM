@@ -45,6 +45,7 @@ export function profileView(s: Services, now = new Date()): ProfileView {
     focus: input.focus,
     sleep: logs.map((l) => ({ day: l.day, onTime: !!l.onTime, bedOnTime: l.bedOnTime ?? null, quality: l.quality ?? null })),
     workouts: input.workouts,
+    mustdos: input.mustdos,
     spending: input.spending
   })
   // Wins: the best scored days, and the best focus day of the last 30.

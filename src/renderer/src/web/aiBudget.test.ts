@@ -43,3 +43,26 @@ describe('cost when the provider reports none (A7)', () => {
     expect(costOf('some/model', 0, 0, null)).toBeNull()
   })
 })
+
+describe('cheaper prompts (B1, B8)', () => {
+  it('the fixed instructions come first and split off as the cached system part', async () => {
+    const { brainPrompt, PROMPT_SPLIT } = await import('./botBrain')
+    // @ts-expect-error plain JS module without types
+    const { splitPrompt } = await import('../../../../api/ai.mjs')
+    const a = brainPrompt('mega' as any, 'ctx A', { facts: [], chat: [] } as any, 'water 250', undefined, undefined, { tone: 3 })
+    const b = brainPrompt('mega' as any, 'ctx B', { facts: [], chat: [] } as any, 'move my gym block to 19:00', undefined, undefined, { tone: 5, found: 'x' })
+    expect(a).toContain(PROMPT_SPLIT)
+    // The fixed part is byte-for-byte the same for different messages, moods and lookups.
+    expect(splitPrompt(a).system).toBe(splitPrompt(b).system)
+    expect(splitPrompt(a).user).toContain('ctx A')
+    expect(splitPrompt('no marker').system).toBeNull()
+  })
+  it('sends only the action groups a message needs', async () => {
+    const { actionGroups } = await import('./botBrain')
+    expect(actionGroups('water 250')).toContain('water: <ml>')
+    expect(actionGroups('water 250')).not.toContain('Todoist (use the T-numbers)')
+    expect(actionGroups('move E2 to 15:00')).toContain('Google Calendar')
+    expect(actionGroups('hey')).toBe('')
+    expect(actionGroups('hey', true)).toContain('Todoist')
+  })
+})

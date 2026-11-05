@@ -161,6 +161,8 @@ export interface PatternInput {
   workouts: { day: string }[]
   /** Everyday spending in bani, per expense. */
   spending: { day: string; bani: number }[] | null
+  /** Must-dos per day, done or not (B7). */
+  mustdos?: { day: string; done: boolean }[]
 }
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -211,6 +213,28 @@ export function findPatterns(p: PatternInput, weeks = 8): string[] {
     const best = by.indexOf(Math.max(...by))
     const worst = by.indexOf(Math.min(...by))
     if (by[best] >= 20 && by[best] - by[worst] >= Math.max(20, by[best] * 0.4)) out.push(`Best focus day: ${WEEKDAYS[best]} (${Math.round(by[best])} min avg); weakest: ${WEEKDAYS[worst]} (${Math.round(by[worst])} min).`)
+  }
+  // B7: the weekday he skips training ("0 of 6 Mondays vs 5 of 6 Thursdays"), once 3+ weeks of training exist.
+  const wdays = [...wset].filter((d) => d >= from && d < p.today).sort()
+  if (wdays.length >= 6 && days.filter((d) => d >= wdays[0]).length >= 21) {
+    const span = days.filter((d) => d >= wdays[0])
+    const per = WEEKDAYS.map((_, i) => ({ i, of: span.filter((d) => wd(d) === i).length, did: span.filter((d) => wd(d) === i && wset.has(d)).length }))
+    const ranked = per.filter((x) => x.of >= 3).sort((a, b) => b.did / b.of - a.did / a.of)
+    const best = ranked[0]
+    const worst = ranked[ranked.length - 1]
+    if (best && worst && best.did >= 3 && worst.did / worst.of <= 0.25 && best.did / best.of - worst.did / worst.of >= 0.4) out.push(`Training: ${worst.did} of ${worst.of} ${WEEKDAYS[worst.i]}s vs ${best.did} of ${best.of} ${WEEKDAYS[best.i]}s. ${WEEKDAYS[worst.i]} is the day he skips.`)
+  }
+  // B7: must-dos done by weekday (which day they slip).
+  if (p.mustdos?.length) {
+    const md = p.mustdos.filter((m) => m.day >= from && m.day < p.today)
+    const rate = WEEKDAYS.map((_, i) => {
+      const xs = md.filter((m) => wd(m.day) === i)
+      return { i, n: new Set(xs.map((m) => m.day)).size, r: xs.length ? xs.filter((m) => m.done).length / xs.length : 0 }
+    }).filter((x) => x.n >= 3)
+    if (rate.length >= 3) {
+      const s = [...rate].sort((a, b) => b.r - a.r)
+      if (s[0].r - s[s.length - 1].r >= 0.3) out.push(`Must-dos: ${Math.round(s[0].r * 100)}% done on ${WEEKDAYS[s[0].i]}s vs ${Math.round(s[s.length - 1].r * 100)}% on ${WEEKDAYS[s[s.length - 1].i]}s.`)
+    }
   }
   if (p.spending?.length) {
     const spend = new Map<string, number>()
