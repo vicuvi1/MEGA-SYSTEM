@@ -191,7 +191,10 @@ export class Mirror {
       } catch (e) {
         // Offline (the phone in a tunnel): keep the change here and send it when back online.
         if (isOffline(e)) {
-          this.queueOffline([...changes, ...trackStatements(touched, version), mark])
+          // With its checks (Y3): sent later, it must still find the rows as they were read
+          // here; if another device changed them meanwhile, it goes to "couldn't sync" (Y1)
+          // instead of overwriting their newer edit.
+          this.queueOffline([...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
           this.persist()
           this.emit()
           return result

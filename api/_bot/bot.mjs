@@ -5271,9 +5271,14 @@ var Mirror = class Mirror {
 				} catch (e) {
 					if (isOffline(e)) {
 						this.queueOffline([
+							...checks,
 							...changes,
 							...trackStatements(touched, version),
-							mark
+							mark,
+							...checks.length ? [{
+								sql: "DELETE FROM sys_cas",
+								args: []
+							}] : []
 						]);
 						this.persist();
 						this.emit();
