@@ -32,8 +32,13 @@ const ASKED: Record<RiskKind, RegExp> = {
 }
 
 /** Did his own message ask for this kind of action? */
+/** Text that tries to give Ben orders ("SYSTEM:", "ignore your rules", a quoted order) never counts as your own ask. */
+export const INJECTION = /(^|\n)\s*(system|assistant|developer)\s*:|ignore (all |any )?(your |the |previous )?(rules|instructions)|\bjailbreak\b|[“"«][^”"»]*\b(delete|remove|cancel)\b[^”"»]*[”"»]/i
+
 export function askedFor(text: string, risk: RiskKind): boolean {
-  return ASKED[risk].test(String(text ?? ''))
+  const t = String(text ?? '')
+  if (INJECTION.test(t)) return false
+  return ASKED[risk].test(t)
 }
 
 const LABEL: Record<RiskKind, string> = { delete: '🗑 Yes, delete', shift: '↪️ Yes, move them', reward: '🎁 Yes, add the reward', habit: '✅ Yes, mark it' }
