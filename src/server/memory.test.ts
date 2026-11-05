@@ -163,3 +163,21 @@ describe('the nightly tidy-up (BR2)', () => {
     expect(asked.length).toBe(1)
   }, 30_000)
 })
+
+describe('a warm server uses each request’s own model', () => {
+  it('the second message does not inherit the first one’s used-up time limit', async () => {
+    const w = world()
+    const reply = (text: string) => JSON.stringify({ reply: text, actions: [], remember: [] })
+    // The first request's model: its time is up after the first answer (as modelUntil(deadline) would be).
+    let firstUp = false
+    const first = async () => {
+      if (firstUp) throw new Error('Ben took too long to answer. Try again in a moment.')
+      firstUp = true
+      return reply('first answer')
+    }
+    const second = async () => reply('second answer')
+    const env = { tursoUrl: w.url, tursoToken: 'k', timeZone: 'UTC', defaults: {}, embed: null } as any
+    expect((await coachChat({ ...env, model: first }, 'hi')).reply).toContain('first answer')
+    expect((await coachChat({ ...env, model: second }, 'hi again')).reply).toContain('second answer')
+  }, 30_000)
+})

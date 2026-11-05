@@ -75,6 +75,17 @@ export function slot(limit, deadline) {
   if (left < 1500) throw new TimeUpError()
   return Math.min(limit, left)
 }
+/**
+ * The time a slow "thinking" model may take while still leaving room for the
+ * quick model if it fails or runs long (15 s kept back). 0 = not enough time
+ * to think: go straight to the quick model.
+ */
+export const QUICK_RESERVE_MS = 15_000
+export function thinkSlot(limit, deadline) {
+  if (!deadline) return limit
+  const left = deadline - Date.now() - 3000 - QUICK_RESERVE_MS
+  return left < 8000 ? 0 : Math.min(limit, left)
+}
 /** The model for one request (a webhook, a tick): every call shares its deadline. */
 export const modelUntil = (deadline, env = process.env, fetchImpl = fetch) => async (prompt, opts = {}) => (await askModel(prompt, { ...opts, deadline: opts.deadline ?? deadline }, env, fetchImpl)).text
 
@@ -309,27 +320,37 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
   // Your pick wins: the chat model for everything, the deep one for plans and reviews.
   const pick = opts.noPick || !plan.useChosen ? { chat: null, deep: null } : await chosenModels(env, fetchImpl)
   const mine = opts.strong ? pick.deep || pick.chat : pick.chat
-  if (mine) {
+  if (opts.strong) {
+    // A thinking model can run long (reviews, plans): it gets the time left minus
+    // 15 s, so the quick model can still answer when it fails or runs out of time.
+    const flash = pick.chat || (await openRouterModel(env, fetchImpl))
+    const deep = mine || (await strongModel(env, fetchImpl))
+    const t = thinkSlot(mine ? 60_000 : 35_000, opts.deadline)
+    if (deep && t) {
+      try {
+        return await callOpenRouter(key, deep, prompt, fetchImpl, { ...opts, think: deep !== flash || !!mine }, t, 'medium')
+      } catch (e) {
+        if (e.timeUp) throw e
+        console.warn(`thinking model ${deep} failed, using ${flash}:`, e.message)
+      }
+    }
+    if (deep !== flash || !t) {
+      try {
+        return await callOpenRouter(key, flash, prompt, fetchImpl, { ...opts, think: false }, slot(25_000, opts.deadline))
+      } catch (e) {
+        if (e.timeUp || !pick.chat) throw e
+        console.warn(`chosen model ${flash} failed, using automatic:`, e.message)
+      }
+    }
+  } else if (mine) {
     try {
-      return await callOpenRouter(key, mine, prompt, fetchImpl, { ...opts, think: !!opts.strong }, slot(opts.strong ? 60_000 : 45_000, opts.deadline), 'medium')
+      return await callOpenRouter(key, mine, prompt, fetchImpl, opts, slot(45_000, opts.deadline), 'medium')
     } catch (e) {
       if (e.timeUp) throw e
       console.warn(`chosen model ${mine} failed, using automatic:`, e.message)
     }
   }
-  if (opts.strong) {
-    const strong = await strongModel(env, fetchImpl)
-    const flash = await openRouterModel(env, fetchImpl)
-    if (strong && strong !== flash) {
-      try {
-        return await callOpenRouter(key, strong, prompt, fetchImpl, { ...opts, think: true }, slot(35_000, opts.deadline), 'medium')
-      } catch (e) {
-        if (e.timeUp) throw e
-        console.warn('strong model failed, using flash:', e.message)
-        return callOpenRouter(key, flash, prompt, fetchImpl, { ...opts, think: false }, slot(20_000, opts.deadline))
-      }
-    }
-  }
+  if (opts.strong) opts = { ...opts, think: false }
   const model = await openRouterModel(env, fetchImpl)
   try {
     return await callOpenRouter(key, model, prompt, fetchImpl, opts, slot(opts.think ? 40_000 : 30_000, opts.deadline))

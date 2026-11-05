@@ -29243,7 +29243,14 @@ var todoistFetch = (env) => {
 };
 var warm = null;
 var warmAt = 0;
+/**
+* The model of the request being served now. The bots are kept warm between
+* requests, but each request has its own time limit (modelUntil(deadline)), so
+* they must always call this one, never the first request's (whose time is long up).
+*/
+var liveModel = void 0;
 async function botsFor(env) {
+	liveModel = env.model;
 	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "") + "|" + (env.google ? "g" : "") + (env.embed === null ? "|noembed" : env.embed ? "|embed" : "");
 	if (warm && warm.key === key) {
 		if (Date.now() - warmAt > 3e3) {
@@ -29279,7 +29286,7 @@ async function botsFor(env) {
 	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
 	const model = env.model ? async (prompt, opts) => {
 		try {
-			const r = await env.model(prompt, opts);
+			const r = await (liveModel ?? env.model)(prompt, opts);
 			beat(healthDb, "ai", true);
 			return r;
 		} catch (e) {

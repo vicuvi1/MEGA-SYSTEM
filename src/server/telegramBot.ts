@@ -151,7 +151,15 @@ const todoistFetch = (env: BotEnv): typeof fetch => {
 let warm: { key: string; SQL: SqlJsStatic; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null; vectors: MemoryVectors | null } | null = null
 let warmAt = 0
 
+/**
+ * The model of the request being served now. The bots are kept warm between
+ * requests, but each request has its own time limit (modelUntil(deadline)), so
+ * they must always call this one, never the first request's (whose time is long up).
+ */
+let liveModel: BotEnv['model'] = undefined
+
 async function botsFor(env: BotEnv) {
+  liveModel = env.model
   const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '') + (env.embed === null ? '|noembed' : env.embed ? '|embed' : '')
   if (warm && warm.key === key) {
     // What the devices changed since the last message (one tiny read); not
@@ -186,7 +194,7 @@ async function botsFor(env: BotEnv) {
   const model: BotEnv['model'] = env.model
     ? async (prompt, opts) => {
         try {
-          const r = await env.model!(prompt, opts)
+          const r = await (liveModel ?? env.model)!(prompt, opts)
           void beat(healthDb, 'ai', true)
           return r
         } catch (e) {

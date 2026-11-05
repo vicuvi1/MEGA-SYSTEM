@@ -86,9 +86,28 @@ describe('OpenRouter first, Gemini as backup', () => {
     }) as unknown as typeof fetch
     const t0 = Date.now()
     await expect(askModel('plan my week', { strong: true, deadline: Date.now() + 5_000 }, env, hang)).rejects.toThrow(/too long/)
-    // The first try got the time that was left (less 3 s); then nothing else was tried.
+    // Too little time to think: straight to the quick model, which got the time left (less 3 s); nothing else after.
     expect(Date.now() - t0).toBeLessThan(3_500)
-    expect(tries).toEqual(['deepseek/y'])
+    expect(tries).toEqual(['deepseek/x'])
+  })
+
+  it('a slow thinking model always leaves time for the quick one (the evening review never goes missing)', async () => {
+    // @ts-expect-error plain JS module without types
+    const { askModel, thinkSlot } = await import('../../../../api/ai.mjs?think')
+    // 47 s left: thinking may take 29 s, keeping 15 s (plus 3 s to send) for the quick model.
+    const t = thinkSlot(60_000, Date.now() + 47_000)
+    expect(t).toBeGreaterThan(28_000)
+    expect(t).toBeLessThanOrEqual(29_000)
+    expect(thinkSlot(60_000, Date.now() + 20_000)).toBe(0)
+    const env = { OPENROUTER_API_KEY: 'or', OPENROUTER_MODEL: 'deepseek/x', OPENROUTER_STRONG_MODEL: 'deepseek/y' }
+    const tries: string[] = []
+    const slowDeep = (async (url: string, init?: any) => {
+      const model = JSON.parse(init.body).model
+      tries.push(model)
+      return model === 'deepseek/y' ? json(504, { error: { message: 'timed out' } }) : json(200, { model, choices: [{ message: { content: 'quick review' } }] })
+    }) as unknown as typeof fetch
+    expect((await askModel('evening review', { strong: true, deadline: Date.now() + 47_000 }, env, slowDeep)).text).toBe('quick review')
+    expect(tries).toEqual(['deepseek/y', 'deepseek/x'])
   })
 
   it('the coach prompt carries your goals and rules', async () => {
