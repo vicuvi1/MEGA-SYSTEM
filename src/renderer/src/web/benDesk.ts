@@ -102,7 +102,7 @@ function sessionsOf(db: any, from: string) {
   }
 }
 
-function moneyNumbers(finance: any, today: string): DeskView['money'] {
+export function moneyNumbers(finance: any, today: string): DeskView['money'] {
   const tx: any[] = Array.isArray(finance?.tx) ? finance.tx : []
   const B = (t: any) => Math.abs(Number(t.base ?? t.amount) || 0)
   const exp = tx.filter((t) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string')

@@ -5584,6 +5584,1550 @@ var TursoHttp = class {
 		}
 	}
 };
+// src/core/experiment.ts
+var EXPERIMENTS = [
+	{
+		id: "phone-out",
+		title: "Phone out of the bedroom at night",
+		how: "Charge it in another room from bedtime until you are up.",
+		metric: "sleep",
+		better: "up",
+		unit: "min slept"
+	},
+	{
+		id: "focus-first",
+		title: "50 minutes of focus before any social media",
+		how: "The first thing after breakfast is one focus block; feeds stay closed until it is done.",
+		metric: "focus",
+		better: "up",
+		unit: "min focus"
+	},
+	{
+		id: "train-before-noon",
+		title: "Train before noon",
+		how: "Put the workout in the morning, before the day gets busy.",
+		metric: "workouts",
+		better: "up",
+		unit: "workouts"
+	},
+	{
+		id: "cash-only",
+		title: "Pay only with what you planned",
+		how: "Write the day’s budget in the morning; anything else waits 24 hours.",
+		metric: "spend",
+		better: "down",
+		unit: "lei spent"
+	}
+];
+var addDays$2 = (d, n) => {
+	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
+	x.setUTCDate(x.getUTCDate() + n);
+	return x.toISOString().slice(0, 10);
+};
+var avg = (s, from, to, countEmpty) => {
+	const days = [];
+	for (let d = from; d <= to; d = addDays$2(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
+	return days.length ? days.reduce((a, b) => a + b, 0) / days.length : null;
+};
+/** The experiment for your weakest area: how far each area is below its usual level (0 = fine, 1 = far off). */
+function pickExperiment(gaps, skip = []) {
+	const options = EXPERIMENTS.filter((e) => !skip.includes(e.id));
+	return [...options.length ? options : EXPERIMENTS].sort((a, b) => (gaps[b.metric] ?? 0) - (gaps[a.metric] ?? 0))[0];
+}
+/** How it is going: day x of 7, before vs during, and after 7 days a verdict. */
+function measureExperiment(state, series, today) {
+	const exp = EXPERIMENTS.find((e) => e.id === state.id);
+	if (!exp) return null;
+	const day = Math.min(7, Math.max(1, Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${state.start}T12:00:00Z`)) / 864e5) + 1));
+	const counted = exp.metric === "workouts" || exp.metric === "spend" || exp.metric === "focus";
+	const before = avg(series, addDays$2(state.start, -14), addDays$2(state.start, -1), counted);
+	const end = addDays$2(state.start, 6) < today ? addDays$2(state.start, 6) : today;
+	const during = avg(series, state.start, end, counted);
+	const changePct = before && during != null ? Math.round((during - before) / before * 100) : null;
+	const done = addDays$2(state.start, 6) < today;
+	const good = changePct != null && (exp.better === "up" ? changePct >= 5 : changePct <= -5);
+	const bad = changePct != null && (exp.better === "up" ? changePct <= -5 : changePct >= 5);
+	const verdict = changePct == null ? "Not enough data yet to compare." : good ? `It works: ${Math.abs(changePct)}% ${exp.better === "up" ? "more" : "less"} ${exp.unit} than before. Keep it.` : bad ? `It didn't help (${changePct > 0 ? "+" : ""}${changePct}%). Drop it and try another.` : `About the same (${changePct > 0 ? "+" : ""}${changePct}%). Keep it if it felt good.`;
+	return {
+		exp,
+		day,
+		done,
+		before,
+		during,
+		changePct,
+		verdict: done ? verdict : `Day ${day} of 7 · so far: ${verdict}`
+	};
+}
+// src/core/lifeReview.ts
+var addDays$1 = (d, n) => {
+	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
+	x.setUTCDate(x.getUTCDate() + n);
+	return x.toISOString().slice(0, 10);
+};
+var sum = (s, today, from, to, counted) => {
+	const vals = [];
+	for (let k = from; k <= to; k++) {
+		const v = s[addDays$1(today, -k)];
+		if (v != null || counted) vals.push(v ?? 0);
+	}
+	return {
+		total: vals.reduce((a, b) => a + b, 0),
+		n: vals.length
+	};
+};
+var hm$1 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
+function lifeReview(series, urges, today) {
+	const out = [];
+	const gaps = {};
+	const area = (m, label, fmt, perDay, better) => {
+		const counted = m !== "sleep";
+		const w = sum(series[m], today, 0, 6, counted);
+		const u = sum(series[m], today, 7, 34, counted);
+		if (!w.n || !u.n) return;
+		const week = perDay ? w.total / w.n : w.total;
+		const usual = perDay ? u.total / u.n : u.total / u.n * 7;
+		if (!usual && !week) return;
+		const ch = usual ? (week - usual) / usual : 1;
+		const good = better === "up" ? ch >= 0 : ch <= 0;
+		gaps[m] = good ? 0 : Math.abs(ch);
+		out.push({
+			area: label,
+			good,
+			size: Math.abs(ch),
+			text: fmt(week, usual)
+		});
+	};
+	area("sleep", "Sleep", (w, u) => `${hm$1(w)} a night, ${Math.abs(Math.round(w - u))} min ${w >= u ? "more" : "less"} than usual`, true, "up");
+	area("workouts", "Training", (w, u) => `${Math.round(w)} workout${Math.round(w) === 1 ? "" : "s"} (usual ${u.toFixed(1)})`, false, "up");
+	area("focus", "Focus", (w, u) => `${hm$1(w)} of focus (usual ${hm$1(u)})`, false, "up");
+	area("spend", "Money", (w, u) => `${Math.round(w).toLocaleString("en-US")} lei spent, ${Math.abs(Math.round((w - u) / Math.max(1, u) * 100))}% ${w <= u ? "under" : "over"} usual`, false, "down");
+	if (urges.crushed || urges.slips || urges.prevCrushed) {
+		const good = urges.slips === 0;
+		out.push({
+			area: "Urges",
+			good,
+			size: urges.slips ? 1 : Math.min(1, urges.crushed / 5),
+			text: `${urges.crushed} crushed${urges.slips ? `, ${urges.slips} slip${urges.slips === 1 ? "" : "s"}` : ", no slips"}`
+		});
+	}
+	const sorted = [...out].sort((a, b) => b.size - a.size);
+	let top = sorted.slice(0, 3);
+	const bestGood = sorted.find((f) => f.good);
+	if (bestGood && !top.some((f) => f.good)) top = [...top.slice(0, 2), bestGood];
+	return {
+		findings: top,
+		experiment: pickExperiment(gaps)
+	};
+}
+// src/core/benKnows.ts
+var HOURS = Array.from({ length: 18 }, (_, i) => i + 6);
+var hourOf = (iso) => new Date(iso).getHours();
+/**
+* Your best hours from focus minutes (how much you do), focus quality (how
+* much of it you were really at it) and finished blocks (done/half/no).
+*/
+function energyMap(sessions, quality = [], blocks = []) {
+	const acc = /* @__PURE__ */ new Map();
+	const at = (h) => acc.get(h) ?? (acc.set(h, {
+		min: 0,
+		q: [],
+		b: [],
+		n: 0
+	}), acc.get(h));
+	for (const s of sessions) {
+		if (!s.startedAt || !(s.minutes > 0)) continue;
+		let t = Date.parse(s.startedAt);
+		let left = s.minutes;
+		while (left > 0 && Number.isFinite(t)) {
+			const h = new Date(t).getHours();
+			const into = new Date(t).getMinutes();
+			const take = Math.min(left, 60 - into);
+			const a = at(h);
+			a.min += take;
+			a.n += take >= 15 ? 1 : 0;
+			left -= take;
+			t += take * 6e4;
+		}
+	}
+	for (const q of quality) at(hourOf(q.at)).q.push(Math.max(0, Math.min(100, q.pct)));
+	for (const b of blocks) {
+		const a = at(hourOf(b.at));
+		a.b.push(b.result === "done" ? 100 : b.result === "half" ? 50 : 0);
+		a.n++;
+	}
+	const maxMin = Math.max(1, ...[...acc.values()].map((v) => v.min));
+	const avg = (xs) => xs.length ? xs.reduce((t, x) => t + x, 0) / xs.length : null;
+	const hours = HOURS.map((h) => {
+		const a = acc.get(h);
+		if (!a) return {
+			h,
+			score: 0,
+			minutes: 0,
+			n: 0
+		};
+		const volume = a.min / maxMin * 100;
+		const q = avg(a.q);
+		const b = avg(a.b);
+		const parts = [
+			volume,
+			...q != null ? [q] : [],
+			...b != null ? [b] : []
+		];
+		return {
+			h,
+			score: Math.round(avg(parts) ?? 0),
+			minutes: Math.round(a.min),
+			n: a.n
+		};
+	});
+	const ready = sessions.length + blocks.length >= 6;
+	const ranked = hours.filter((x) => x.n > 0).sort((a, b) => b.score - a.score || b.minutes - a.minutes);
+	return {
+		hours,
+		ready,
+		best: ready ? ranked.slice(0, Math.min(4, Math.max(2, Math.ceil(ranked.length / 4)))).map((x) => x.h) : [],
+		worst: ready && ranked.length >= 5 ? ranked.filter((x) => x.n >= 2).slice(-2).reverse().map((x) => x.h).filter((h) => !ranked.slice(0, Math.min(4, Math.max(2, Math.ceil(ranked.length / 4)))).some((b) => b.h === h)) : []
+	};
+}
+/** "09–11 and 16–17" from start hours. */
+function hoursText(hs) {
+	const s = [...hs].sort((a, b) => a - b);
+	const runs = [];
+	for (const h of s) {
+		const last = runs[runs.length - 1];
+		if (last && h === last[1] + 1) last[1] = h;
+		else runs.push([h, h]);
+	}
+	const p = (h) => String(h).padStart(2, "0");
+	return runs.map(([a, b]) => `${p(a)}–${p(b + 1)}`).join(" and ");
+}
+var DOW = [
+	"Sun",
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat"
+];
+var dow = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+var minsOf = (hm) => hm && /^\d{1,2}:\d{2}/.test(hm) ? Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)) : null;
+var sleepMin = (bed, wake) => (wake - bed + 1440) % 1440;
+/** What your own data shows, each with one change to try. Strongest first, at most 5. */
+function weeklyPatterns(i) {
+	const out = [];
+	const from = addDays$3(i.today, -55);
+	const ses = i.sessions.filter((s) => s.day >= from && s.day <= i.today && s.startedAt);
+	let am = 0;
+	let pm = 0;
+	for (const s of ses) hourOf(s.startedAt) < 12 ? am += s.minutes : pm += s.minutes;
+	if (am + pm >= 300) {
+		if (am >= pm * 1.8) out.push({
+			id: "am",
+			text: `Your focus is ${(am / Math.max(1, pm)).toFixed(1)}× stronger before noon.`,
+			change: "Put the hardest task of the day before 12:00.",
+			weight: am / Math.max(1, pm)
+		});
+		else if (pm >= am * 1.8) out.push({
+			id: "pm",
+			text: `You get ${(pm / Math.max(1, am)).toFixed(1)}× more focus done after noon.`,
+			change: "Keep mornings for light tasks; book deep work after lunch.",
+			weight: pm / Math.max(1, am)
+		});
+	}
+	const lateByDow = Array(7).fill(0);
+	const daysWithAny = new Set(ses.map((s) => s.day));
+	for (const s of ses) if (hourOf(s.startedAt) >= 15) lateByDow[dow(s.day)] += s.minutes;
+	const totalLate = lateByDow.reduce((t, x) => t + x, 0);
+	if (totalLate >= 240 && daysWithAny.size >= 10) {
+		const weekdays = [
+			1,
+			2,
+			3,
+			4,
+			5
+		];
+		const avgLate = totalLate / 7;
+		const lost = weekdays.filter((d) => lateByDow[d] < avgLate * .25);
+		if (lost.length && lost.length <= 3) out.push({
+			id: "lost-pm",
+			text: `You lose afternoons after 15:00 on ${lost.map((d) => DOW[d]).join("/")}.`,
+			change: `Book one 50-min block at 15:00 on ${lost.map((d) => DOW[d]).join(" and ")}, with the task named.`,
+			weight: 2.2
+		});
+	}
+	const perDow = Array(7).fill(0);
+	for (const s of ses) perDow[dow(s.day)] += s.minutes;
+	const wk = (perDow[1] + perDow[2] + perDow[3] + perDow[4] + perDow[5]) / 5;
+	const we = (perDow[0] + perDow[6]) / 2;
+	if (wk >= 60 && we < wk * .3) out.push({
+		id: "weekend",
+		text: `Weekends drop to ${Math.round(we / Math.max(1, wk) * 100)}% of a weekday's focus.`,
+		change: "One 50-min block Saturday morning keeps the streak alive without killing the weekend.",
+		weight: 1.6
+	});
+	const nights = i.sleep.filter((s) => s.day >= from).map((s) => {
+		const b = minsOf(s.bed);
+		const w = minsOf(s.wake);
+		return b != null && w != null ? {
+			day: s.day,
+			min: sleepMin(b, w)
+		} : null;
+	}).filter((x) => !!x && x.min >= 180 && x.min <= 720);
+	if (nights.length >= 6) {
+		const avgSleep = nights.reduce((t, n) => t + n.min, 0) / nights.length;
+		const examDays = new Set((i.exams ?? []).flatMap((d) => [d, addDays$3(d, -1)]));
+		const before = nights.filter((n) => examDays.has(n.day));
+		if (before.length >= 1) {
+			const b = before.reduce((t, n) => t + n.min, 0) / before.length;
+			if (avgSleep - b >= 25) out.push({
+				id: "exam-sleep",
+				text: `You sleep ${Math.round(avgSleep - b)} min less before exams.`,
+				change: "Two nights before an exam: lights out at your normal time, review in the morning instead.",
+				weight: 2
+			});
+		}
+		const focusOn = (day) => ses.filter((s) => s.day === day).reduce((t, s) => t + s.minutes, 0);
+		const short = nights.filter((n) => n.min < 390);
+		const long = nights.filter((n) => n.min >= 420);
+		if (short.length >= 3 && long.length >= 3) {
+			const fs = short.reduce((t, n) => t + focusOn(n.day), 0) / short.length;
+			const fl = long.reduce((t, n) => t + focusOn(n.day), 0) / long.length;
+			if (fl >= 30 && fl >= fs * 1.4) out.push({
+				id: "sleep-focus",
+				text: `After 7h+ of sleep you focus ${Math.round(fl)} min, after a short night only ${Math.round(fs)}.`,
+				change: "Protect the bedtime: it buys you about an extra focus block the next day.",
+				weight: fl / Math.max(1, fs)
+			});
+		}
+	}
+	const wset = new Set(i.workouts.filter((d) => d >= from));
+	const days = [.../* @__PURE__ */ new Set([...ses.map((s) => s.day), ...wset])];
+	if (wset.size >= 4 && days.length >= 14) {
+		const f = (d) => ses.filter((s) => s.day === d).reduce((t, s) => t + s.minutes, 0);
+		const on = [...wset].map(f);
+		const off = days.filter((d) => !wset.has(d)).map(f);
+		const a = on.reduce((t, x) => t + x, 0) / Math.max(1, on.length);
+		const b = off.reduce((t, x) => t + x, 0) / Math.max(1, off.length);
+		if (a >= b * 1.3 && a >= 40) out.push({
+			id: "sport-focus",
+			text: `On training days you focus ${Math.round(a)} min vs ${Math.round(b)} on other days.`,
+			change: "Train before your hardest study day, even 20 minutes.",
+			weight: a / Math.max(1, b)
+		});
+	}
+	const bl = (i.blocks ?? []).filter((b) => b.day >= from);
+	if (bl.length >= 8) {
+		const byH = /* @__PURE__ */ new Map();
+		for (const b of bl) byH.set(hourOf(b.at), [...byH.get(hourOf(b.at)) ?? [], b.result === "done" ? 1 : b.result === "half" ? .5 : 0]);
+		const bad = [...byH.entries()].filter(([, v]) => v.length >= 3 && v.reduce((t, x) => t + x, 0) / v.length < .4).sort((a, b) => a[0] - b[0]);
+		if (bad.length) out.push({
+			id: "bad-hour",
+			text: `Blocks at ${bad.map(([h]) => `${String(h).padStart(2, "0")}:00`).join(", ")} mostly don't get done.`,
+			change: "Stop booking hard work there: a walk, errands or easy tasks fit that hour better.",
+			weight: 1.8
+		});
+	}
+	for (const l of moodLinks(i.moods ?? [], i).slice(0, 1)) out.push({
+		id: `mood-${l.id}`,
+		text: l.text,
+		change: l.change,
+		weight: 1.5
+	});
+	return out.sort((a, b) => b.weight - a.weight).slice(0, 5);
+}
+var EXCUSE_RX = [
+	["sick", /\b(sick|ill|fever|headache|migraine|cold|flu|bolnav|răcit|racit|ma doare|mă doare|durere)\b/iu],
+	["tired", /\b(tired|exhausted|sleepy|no energy|drained|obosit|somnoros|n-am energie|nu am energie|fără energie|fara energie)\b/iu],
+	["busy", /\b(busy|no time|too much|work(ed)? late|class(es)? all day|ocupat|n-am timp|nu am timp|fără timp|prea mult)\b/iu],
+	["forgot", /\b(forgot|forget|didn'?t remember|am uitat|uitat)\b/iu],
+	["no mood", /\b(lazy|not in the mood|no motivation|don'?t feel like|didn'?t feel like|unmotivated|lene|nu am chef|n-am chef|fără chef|fara chef|nu-mi vine)\b/iu],
+	["phone", /\b(phone|tiktok|youtube|instagram|scroll(ed|ing)?|games?|gaming|netflix|series|telefon)\b/iu],
+	["friends", /\b(friends?|party|went out|guests|prieteni|petrecere|am ieșit|am iesit)\b/iu],
+	["later", /\b(tomorrow|later|next week|mâine|maine|mai târziu|mai tarziu|săptămâna viitoare)\b/iu]
+];
+/** The kind of excuse in a message, or null when it isn't one. */
+function classifyExcuse(text) {
+	const t = String(text ?? "");
+	if (!/\b(didn'?t|did not|couldn'?t|can'?t|won'?t|not|skip(ped)?|missed|no\b|nu|n-am|n-a|nu am|am sărit|am sarit)\b|\bbecause\b|\bpentru că\b|\bpt ca\b/iu.test(t)) return null;
+	for (const [k, rx] of EXCUSE_RX) if (rx.test(t)) return k;
+	return null;
+}
+function addExcuse(list, text, at) {
+	const kind = classifyExcuse(text);
+	if (!kind) return list;
+	if (list.some((e) => e.at.slice(0, 10) === at.slice(0, 10) && e.kind === kind)) return list;
+	return [...list, {
+		at,
+		kind,
+		text: String(text).slice(0, 160)
+	}].slice(-120);
+}
+/** Excuses in the last `days`, most repeated first. */
+function excuseCounts(list, today, days = 30) {
+	const from = addDays$3(today, -(days - 1));
+	const m = /* @__PURE__ */ new Map();
+	for (const e of list) {
+		if (e.at.slice(0, 10) < from) continue;
+		const c = m.get(e.kind) ?? {
+			kind: e.kind,
+			n: 0,
+			last: e.at
+		};
+		c.n++;
+		if (e.at > c.last) c.last = e.at;
+		m.set(e.kind, c);
+	}
+	return [...m.values()].sort((a, b) => b.n - a.n || b.last.localeCompare(a.last));
+}
+var EXCUSE_WORD = {
+	tired: "\"too tired\"",
+	busy: "\"no time\"",
+	sick: "\"sick\"",
+	forgot: "\"I forgot\"",
+	"no mood": "\"not in the mood\"",
+	phone: "the phone",
+	friends: "going out",
+	later: "\"tomorrow\""
+};
+var EXCUSE_FIX = {
+	tired: "Do the 10-minute version, then decide.",
+	busy: "Book 25 minutes now so it has a slot.",
+	sick: "Rest is fine, but say when you're back on.",
+	forgot: "Set a check-in at the time you will do it.",
+	"no mood": "Start for 5 minutes; mood follows action.",
+	phone: "Phone in another room for one block.",
+	friends: "Do the block before you go out.",
+	later: "Pick the exact time now."
+};
+/** Ben's kind call-out of a repeat ("3rd time this month it's 'too tired'"), or null. */
+function excuseCallout(list, kind, today) {
+	const c = excuseCounts(list, today).find((x) => x.kind === kind);
+	if (!c || c.n < 2) return null;
+	return `That's the ${c.n === 2 ? "2nd" : c.n === 3 ? "3rd" : `${c.n}th`} time this month it's ${EXCUSE_WORD[kind]}. ${EXCUSE_FIX[kind]}`;
+}
+/** One line for Ben's prompt. */
+function excuseLine(list, today) {
+	const c = excuseCounts(list, today);
+	return c.length ? `Excuses he gave in the last 30 days: ${c.map((x) => `${EXCUSE_WORD[x.kind]} ×${x.n}`).join(", ")}. Name a repeat kindly, with the count.` : "";
+}
+var MOOD_FACES = [
+	"😫",
+	"😕",
+	"😐",
+	"🙂",
+	"😄"
+];
+var moodFace = (m) => MOOD_FACES[Math.max(1, Math.min(5, Math.round(m))) - 1];
+function addMood(list, e) {
+	const mood = Math.max(1, Math.min(5, Math.round(e.mood)));
+	return [...list.filter((x) => !(x.day === e.day && x.slot === e.slot)), {
+		...e,
+		mood
+	}].sort((a, b) => a.at.localeCompare(b.at)).slice(-240);
+}
+/** Which check-in is due now (12–15 noon, 19–23 evening), if not done today. */
+function moodDue(list, now) {
+	const h = now.getHours();
+	const day = now.toLocaleDateString("sv-SE");
+	const slot = h >= 12 && h < 15 ? "noon" : h >= 19 && h < 23 ? "evening" : null;
+	return slot && !list.some((x) => x.day === day && x.slot === slot) ? slot : null;
+}
+/** How mood moves with sleep, training and spending (only with enough days). */
+function moodLinks(moods, i) {
+	const byDay = /* @__PURE__ */ new Map();
+	for (const m of moods) byDay.set(m.day, [...byDay.get(m.day) ?? [], m.mood]);
+	const dayMood = new Map([...byDay.entries()].map(([d, v]) => [d, v.reduce((t, x) => t + x, 0) / v.length]));
+	if (dayMood.size < 6) return [];
+	const out = [];
+	const split = (id, yes, text, change) => {
+		const a = [];
+		const b = [];
+		for (const [d, m] of dayMood) {
+			const y = yes(d);
+			if (y === null) continue;
+			(y ? a : b).push(m);
+		}
+		if (a.length < 3 || b.length < 3) return;
+		const ma = a.reduce((t, x) => t + x, 0) / a.length;
+		const mb = b.reduce((t, x) => t + x, 0) / b.length;
+		if (Math.abs(ma - mb) >= .5) out.push({
+			id,
+			text: text(ma, mb),
+			change: typeof change === "string" ? change : change(ma, mb),
+			diff: Math.abs(ma - mb)
+		});
+	};
+	const w = new Set(i.workouts);
+	split("sport", (d) => w.has(d), (a, b) => `Mood ${a.toFixed(1)} on training days vs ${b.toFixed(1)} without.`, "When the day feels heavy, train first: it lifts you.");
+	const night = new Map(i.sleep.map((s) => {
+		const b = minsOf(s.bed);
+		const wk = minsOf(s.wake);
+		return [s.day, b != null && wk != null ? sleepMin(b, wk) : null];
+	}));
+	split("sleep", (d) => night.get(d) == null ? null : night.get(d) >= 420, (a, b) => `Mood ${a.toFixed(1)} after 7h+ of sleep vs ${b.toFixed(1)} after less.`, "A bad mood is often a short night: go to bed on time tonight.");
+	if (i.spending?.length) {
+		const spent = /* @__PURE__ */ new Map();
+		for (const s of i.spending) spent.set(s.day, (spent.get(s.day) ?? 0) + s.bani);
+		const vals = [...spent.values()].sort((a, b) => a - b);
+		const high = vals[Math.floor(vals.length * .75)] ?? Infinity;
+		split("spend", (d) => (spent.get(d) ?? 0) >= high && high > 0, (a, b) => `On big spending days your mood is ${a.toFixed(1)} vs ${b.toFixed(1)}.`, (a, b) => a < b ? "Low days → impulse buys. Wait a day before buying when you feel down." : "Spending lifts you only for the day; plan treats instead.");
+	}
+	return out.sort((a, b) => b.diff - a.diff);
+}
+function moodLine(list, today) {
+	const recent = list.filter((m) => m.day >= addDays$3(today, -6));
+	if (!recent.length) return "";
+	const avg = recent.reduce((t, m) => t + m.mood, 0) / recent.length;
+	const todayM = list.filter((m) => m.day === today).map((m) => `${m.slot} ${moodFace(m.mood)} ${m.mood}/5`);
+	return `Mood check-ins: last 7 days average ${avg.toFixed(1)}/5${todayM.length ? `; today ${todayM.join(", ")}` : ""}.`;
+}
+var PROFILE_NOTE = "Ben's profile of you";
+var KEEP_MARK = "## Your corrections";
+/**
+* The profile note Ben keeps current: goals, exams, people, what works, what
+* fails, patterns, best hours, excuses. A "Your corrections" section at the end
+* is yours: it is kept as you wrote it on every refresh (and Ben reads it).
+*/
+function profileNote(p, previousBody = "") {
+	const keep = previousBody.includes(KEEP_MARK) ? previousBody.slice(previousBody.indexOf(KEEP_MARK)) : `${KEEP_MARK}\n\nWrite here anything above that's wrong or missing. Ben keeps this part and reads it.\n\n- \n`;
+	const left = (d) => Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${p.today}T12:00:00Z`)) / 864e5);
+	const list = (xs, empty) => xs.length ? xs.map((x) => `- ${x}`).join("\n") : `- ${empty}`;
+	return [
+		`# ${PROFILE_NOTE}`,
+		"",
+		`Ben updates this himself (last ${p.today}). Edit the last section to correct him.`,
+		"",
+		"## Goals",
+		list(p.goals.map((g) => `${g.title}${g.deadline ? ` (by ${g.deadline}, ${left(g.deadline)} days)` : ""}${g.weekly ? ` · ${g.weekly} a week` : ""}`), "none yet: tell Ben one with a date"),
+		"",
+		"## Exams & deadlines",
+		list(p.exams.filter((e) => left(e.deadline) >= 0).sort((a, b) => a.deadline.localeCompare(b.deadline)).map((e) => `${e.title}: ${e.deadline} (${left(e.deadline)} days)`), "none coming up"),
+		"",
+		"## People",
+		list(p.people.map((x) => `${x.name}: ${x.note}`), "none yet"),
+		"",
+		"## Best hours (energy map)",
+		p.energy.ready ? `- Best: ${hoursText(p.energy.best)}${p.energy.worst.length ? `\n- Weakest: ${hoursText(p.energy.worst)}` : ""}` : "- Not enough focus data yet (about a week of sessions).",
+		"",
+		"## What works",
+		list(p.works, "Ben is still learning"),
+		"",
+		"## What doesn't",
+		list(p.fails, "Ben is still learning"),
+		"",
+		"## Patterns",
+		list(p.patterns.map((x) => `${x.text} → ${x.change}`), "none strong enough yet"),
+		"",
+		"## Excuses (30 days)",
+		list(p.excuses.map((e) => `${EXCUSE_WORD[e.kind]} ×${e.n}`), "none: nice"),
+		p.moodAvg != null ? `\n## Mood\n- 7-day average ${p.moodAvg.toFixed(1)}/5` : "",
+		"",
+		keep.replace(/\n+$/, ""),
+		""
+	].join("\n");
+}
+/** What you wrote in "Your corrections" (for Ben's prompt). */
+function profileCorrections(body) {
+	if (!body.includes(KEEP_MARK)) return "";
+	return body.slice(body.indexOf(KEEP_MARK) + 19).split("\n").map((l) => l.trim()).filter((l) => /^-\s*\S/.test(l)).join("\n");
+}
+// src/core/benPlans.ts
+/** Review after 1, 3, 7, 14, 30 days (each from the previous review). */
+var SRS_STEPS = [
+	1,
+	3,
+	7,
+	14,
+	30
+];
+function nextReview(t) {
+	const n = t.reviews.length;
+	if (n >= SRS_STEPS.length) return null;
+	const base = n ? t.reviews[n - 1] : t.learned;
+	let due = addDays$3(base, SRS_STEPS[n]);
+	if (t.examDay && due >= t.examDay) due = addDays$3(t.examDay, -1) >= base ? addDays$3(t.examDay, -1) : t.examDay;
+	return due;
+}
+function dueTopics(list, today) {
+	return list.filter((t) => t.examDay ? t.examDay >= today : true).filter((t) => {
+		const d = nextReview(t);
+		return d != null && d <= today;
+	});
+}
+function addTopic(list, exam, topic, today, examDay) {
+	const key = `${exam}|${topic}`.toLowerCase();
+	if (list.some((t) => `${t.exam}|${t.topic}`.toLowerCase() === key)) return list;
+	return [...list, {
+		id: `s${Date.now().toString(36)}${list.length}`,
+		exam: exam.slice(0, 60),
+		topic: topic.slice(0, 80),
+		learned: today,
+		reviews: [],
+		examDay: examDay ?? null
+	}].slice(-200);
+}
+function reviewTopic(list, id, today) {
+	return list.map((t) => t.id === id && !t.reviews.includes(today) ? {
+		...t,
+		reviews: [...t.reviews, today]
+	} : t);
+}
+/** "after coffee → 10 pushups → plan review" (also > or ,) into a stack. */
+function parseStack(text, today) {
+	const parts = String(text ?? "").split(/\s*(?:→|->|>|,|\bthen\b|\bapoi\b)\s*/i).map((x) => x.trim()).filter(Boolean);
+	if (parts.length < 2) return null;
+	const cue = parts[0].replace(/^(after|când|cand|dupa|după)\s+/i, "").slice(0, 60);
+	return {
+		id: `h${Date.now().toString(36)}`,
+		cue,
+		steps: parts.slice(1, 6).map((s) => s.slice(0, 60)),
+		log: {},
+		createdAt: today
+	};
+}
+function tickStack(s, day, step) {
+	const cur = s.log[day] ?? [];
+	const next = cur.includes(step) ? cur.filter((x) => x !== step) : [...cur, step].sort((a, b) => a - b);
+	return {
+		...s,
+		log: {
+			...s.log,
+			[day]: next
+		}
+	};
+}
+/** Days in a row (ending today or yesterday) with every step done. */
+function stackStreak(s, today) {
+	const full = (d) => (s.log[d] ?? []).length >= s.steps.length;
+	let d = full(today) ? today : addDays$3(today, -1);
+	let n = 0;
+	while (full(d) && n < 400) {
+		n++;
+		d = addDays$3(d, -1);
+	}
+	return n;
+}
+/** Share of the last 14 days with the whole chain done. */
+function stackRate(s, today) {
+	const since = s.createdAt > addDays$3(today, -13) ? s.createdAt : addDays$3(today, -13);
+	let days = 0;
+	let full = 0;
+	for (let d = since; d <= today; d = addDays$3(d, 1)) {
+		days++;
+		if ((s.log[d] ?? []).length >= s.steps.length) full++;
+	}
+	return days ? Math.round(full / days * 100) : 0;
+}
+// src/core/coachKit.ts
+var hm = (iso) => {
+	const d = new Date(iso);
+	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+var dayOf = (iso) => {
+	const d = new Date(iso);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+/** E1… for events (time order), T1… for tasks; the lines the model sees. */
+function makeRefs(events, tasks) {
+	const refs = {
+		events: /* @__PURE__ */ new Map(),
+		tasks: /* @__PURE__ */ new Map()
+	};
+	const evLines = events.filter((e) => !e.allDay).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 40).map((e, i) => {
+		refs.events.set(`E${i + 1}`, e);
+		return `E${i + 1} ${dayOf(e.start).slice(5)} ${hm(e.start)}–${hm(e.end)} ${e.title}`;
+	});
+	const tLines = tasks.slice(0, 60).map((t, i) => {
+		refs.tasks.set(`T${i + 1}`, t);
+		return `T${i + 1} ${t.content}${t.due ? ` (due ${t.due}${t.dueTime ? ` ${t.dueTime}` : ""})` : ""}${t.priority > 1 ? ` P${5 - t.priority}` : ""}${t.section ? ` [${t.section}]` : ""}${t.labels?.includes("today") ? " ⭐" : ""}`;
+	});
+	return {
+		refs,
+		lines: [evLines.length ? `Calendar events (use the E-number):\n${evLines.join("\n")}` : "Calendar events: none (or not connected)", tLines.length ? `Todoist tasks (use the T-number):\n${tLines.join("\n")}` : "Todoist tasks: none (or not connected)"].join("\n")
+	};
+}
+/** Plans, reviews, reshuffles and "why" questions get the slower, deeper model. */
+function isBigAsk(text) {
+	const t = text.toLowerCase();
+	return t.length > 160 || /\b(plan|replan|re-plan|schedule|reschedule|shift|move everything|organi[sz]e|review|analy[sz]|why|strategy|week|month|budget|prioriti[sz]e|clean up|what should i|help me (decide|figure))\b/.test(t);
+}
+var REMINDERS = "coach_reminders";
+var NUDGES = "coach_nudges";
+function addReminder(list, r, now = /* @__PURE__ */ new Date()) {
+	const id = `${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+	return [...list.filter((x) => !x.done || Date.parse(x.at) > now.getTime() - 6912e5), {
+		...r,
+		id,
+		createdAt: now.toISOString()
+	}].slice(-60);
+}
+/** Reminders to send now. */
+function dueReminders(list, now = /* @__PURE__ */ new Date()) {
+	return list.filter((r) => !r.done && Date.parse(r.at) <= now.getTime() && Date.parse(r.at) > now.getTime() - 216e5);
+}
+/**
+* After sending: a plain reminder is done; a follow-up check-in comes back
+* in 45 minutes (up to 4 times) unless you answered since.
+*/
+function afterSend(list, id, now = /* @__PURE__ */ new Date()) {
+	return list.map((r) => {
+		if (r.id !== id) return r;
+		const tries = (r.tries ?? 0) + 1;
+		if (r.kind === "checkin" && r.follow && tries < 4) return {
+			...r,
+			tries,
+			sentAt: now.toISOString(),
+			at: new Date(now.getTime() + 27e5).toISOString()
+		};
+		return {
+			...r,
+			tries,
+			sentAt: now.toISOString(),
+			done: true,
+			...r.kind === "checkin" && r.follow ? { ignored: true } : {}
+		};
+	});
+}
+/** You wrote to the coach: open follow-ups stop. */
+function answered(list, now = /* @__PURE__ */ new Date()) {
+	return list.map((r) => !r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() ? {
+		...r,
+		done: true,
+		ignored: false,
+		answeredAt: now.toISOString()
+	} : r);
+}
+/**
+* "Follow up until I act": between 09:00 and 21:30, when nothing is running,
+* something is open and you've been idle 60+ minutes, nudge, then again every
+* 45 minutes. Never while paused or snoozed, at most 8 a day.
+*/
+function shouldNudge(st, f, now = /* @__PURE__ */ new Date()) {
+	if (st.pausedDay === f.today) return false;
+	if (st.snoozeUntil && Date.parse(st.snoozeUntil) > now.getTime()) return false;
+	if (f.time < "09:00" || f.time > "21:30") return false;
+	if (f.focusRunning) return false;
+	if (f.openMustDos === 0 && f.focusMinToday >= 50) return false;
+	if (f.idleMin < 60) return false;
+	if ((st.day === f.today ? st.count ?? 0 : 0) >= 12) return false;
+	if (st.lastAt && now.getTime() - Date.parse(st.lastAt) < 27e5) return false;
+	return true;
+}
+function nudged(st, today, now = /* @__PURE__ */ new Date()) {
+	return {
+		...st,
+		lastAt: now.toISOString(),
+		day: today,
+		count: (st.day === today ? st.count ?? 0 : 0) + 1,
+		announced: st.day === today ? st.announced : []
+	};
+}
+/** He's saying something went wrong ("that's not money", "undo", "wrong amount", "nu e bine"). */
+function isCorrection(text) {
+	const t = text.toLowerCase();
+	return /\b(wrong|mistake|not money|not an expense|that'?s water|undo|delete (it|that)|remove (it|that)|fix (it|that)|incorrect|shouldn'?t (be|have)|didn'?t (spend|buy|pay)|greșit|gresit|nu e (bine|corect)|nu sunt bani|șterge|sterge|неправильно|удали|ошибка|не деньги)\b/.test(t) || /\bnot money\b|\bthats water\b|\bthat's water\b/.test(t.replace(/[^\w' ]/g, ""));
+}
+/** Check-ins of the last 2 days without a verdict yet, as P1, P2… for the coach. */
+function promiseRefs(list, now = /* @__PURE__ */ new Date()) {
+	const refs = /* @__PURE__ */ new Map();
+	const lines = list.filter((r) => r.kind === "checkin" && r.sentAt && !r.outcome && Date.parse(r.createdAt) > now.getTime() - 1728e5).slice(-6).map((r, i) => {
+		refs.set(`P${i + 1}`, r.id);
+		const state = r.answeredAt ? "he answered" : r.ignored ? "IGNORED (no answer to any follow-up)" : `asked ${r.tries ?? 1}×, no answer yet`;
+		return `P${i + 1} "${r.text}" (${new Date(r.sentAt).toTimeString().slice(0, 5)}, ${state})`;
+	});
+	return {
+		refs,
+		lines: lines.length ? `Promises you're checking (use the P-number):\n${lines.join("\n")}` : ""
+	};
+}
+function setOutcome(list, id, outcome) {
+	return list.map((r) => r.id === id ? {
+		...r,
+		outcome,
+		done: true
+	} : r);
+}
+/** The last 7 days of promises: kept, broken, ignored. */
+function promiseStats(list, now = /* @__PURE__ */ new Date()) {
+	const week = list.filter((r) => r.kind === "checkin" && Date.parse(r.createdAt) > now.getTime() - 6048e5);
+	const missed = week.filter((r) => r.outcome === "broken" || r.ignored && r.outcome !== "kept");
+	return {
+		kept: week.filter((r) => r.outcome === "kept").length,
+		broken: week.filter((r) => r.outcome === "broken").length,
+		ignored: week.filter((r) => r.ignored && !r.outcome).length,
+		open: week.filter((r) => !r.done).length,
+		misses: missed.slice(-5).reverse().map((r) => r.text)
+	};
+}
+/** One line for the coach (and the escalating follow-ups). */
+function promiseLine(s) {
+	if (!s.kept && !s.broken && !s.ignored) return "";
+	return `Promises in the last 7 days: ${s.kept} kept, ${s.broken} broken, ${s.ignored} ignored${s.misses.length ? `. Missed: ${s.misses.map((m) => `"${m.slice(0, 60)}"`).join(", ")}` : ""}.`;
+}
+/**
+* Asking again about something you said you'd do. Below tone 5 it gets more
+* helpful each time (smaller step, move it); at tone 5 it gets sharper.
+*/
+function followUpText(r, s, tone = 4) {
+	const tries = r.tries ?? 0;
+	const misses = s.broken + s.ignored;
+	if (tries === 0) return `🔔 ${r.text}`;
+	if (tone < 5) {
+		if (tries === 1) return `🔔 ${r.text}\n<i>Still on? "Done", "not yet" or "later" all work.</i>`;
+		if (tries === 2) return `🎯 ${r.text}\nToo big right now? Tell me what's in the way and I'll make it smaller or move it.`;
+		return `🎯 Last check on: ${r.text}\nIf it's not happening today, just say so and I'll move it to tomorrow.`;
+	}
+	if (tries === 1) return `😤 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`;
+	if (tries === 2) return `😠 ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? "" : "s"} missed this week already.` : ""} Answer me.`;
+	return `😡 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ""}You said you'd do it. Do it now, or tell me why not.`;
+}
+/** 🎯 focused: a slipping day below tone 5 (Ben helps instead of glaring). */
+var MOOD_FACE = {
+	proud: "😎",
+	happy: "😄",
+	chill: "🙂",
+	focused: "🎯",
+	annoyed: "😤",
+	angry: "😠",
+	furious: "😡"
+};
+var isMood = (m) => typeof m === "string" && m in MOOD_FACE;
+/**
+* Proud when the day is strong, angry when you're slipping on purpose:
+* missed promises, goals falling behind, hours with nothing done.
+*/
+function coachMood(f) {
+	let heat = 0;
+	const why = [];
+	if (f.missedWeek >= 3) heat += 2, why.push(`${f.missedWeek} promises missed this week`);
+	else if (f.missedWeek >= 1) heat += 1, why.push(`${f.missedWeek} promise${f.missedWeek === 1 ? "" : "s"} missed this week`);
+	if (f.goalsBehind) heat += f.goalsBehind >= 2 ? 2 : 1, why.push(`${f.goalsBehind} goal${f.goalsBehind === 1 ? "" : "s"} behind`);
+	if (f.hour >= 11 && f.focusMinToday === 0) heat += f.hour >= 16 ? 2 : 1, why.push("no focus yet today");
+	if (f.hour >= 10 && f.idleMin >= 180 && f.openMustDos) heat += 1, why.push(`nothing done for ${Number.isFinite(f.idleMin) ? `${Math.round(f.idleMin / 60)}h` : "the whole day"}`);
+	let good = 0;
+	if (f.focusMinToday >= 100) good += 2, why.push(`${f.focusMinToday} min of focus today`);
+	else if (f.focusMinToday >= 50) good += 1;
+	if (f.mustDosDone >= 2 && f.openMustDos === 0) good += 2, why.push("every must-do done");
+	else if (f.mustDosDone >= 1) good += 1;
+	if (f.keptWeek >= 3 && f.missedWeek === 0) good += 1, why.push(`${f.keptWeek} promises kept`);
+	const score = good - heat;
+	return {
+		mood: heat >= 5 ? "furious" : heat >= 3 && good < 2 ? "angry" : score <= -1 ? "annoyed" : score >= 4 ? "proud" : score >= 2 ? "happy" : "chill",
+		why: why.join(", ") || "a normal day so far"
+	};
+}
+var read = (db) => {
+	try {
+		const v = JSON.parse(getSetting(db, "island_day_log") || "{}");
+		return v && typeof v === "object" ? v : {};
+	} catch {
+		return {};
+	}
+};
+var empty = () => ({
+	focus: [],
+	blocks: []
+});
+function dayLog(db, day) {
+	return read(db)[day] ?? empty();
+}
+/** One line for Ben: "Focus quality 82% (3 sessions). Blocks: 2 done, 1 half, 1 not done." */
+function dayLogLine(d) {
+	const parts = [];
+	if (d.focus.length) {
+		const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1;
+		const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins);
+		parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? "" : "s"} (share of the time he was really at the PC)`);
+	}
+	if (d.blocks.length) {
+		const n = (r) => d.blocks.filter((x) => x.result === r).length;
+		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
+	}
+	return parts.join(". ");
+}
+// src/core/notebook.ts
+/** Notes you start with (empty, for you to fill). */
+var STARTER_NOTES = [
+	{
+		title: "About me",
+		pinned: true,
+		body: "# About me\n\nWrite what Ben should always know: who you are, what you study or work on, your goals, what motivates you, what makes you procrastinate.\n\n- \n"
+	},
+	{
+		title: "Goals",
+		body: "# Goals\n\n- \n"
+	},
+	{
+		title: "People",
+		body: "# People\n\nThe people in your life Ben should know about.\n\n- \n"
+	},
+	{
+		title: "Ben's notes",
+		body: "# Ben's notes\n\nWhat Ben learned about you. He adds a dated line here; you can edit or delete any of it.\n"
+	}
+];
+var noteKey = (title) => title.trim().toLowerCase().replace(/\s+/g, " ");
+var words$1 = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2);
+/** Search: title words count most, then body; newest first on a tie. */
+function searchNotes(notes, q) {
+	const w = words$1(q);
+	if (!w.length) return [...notes].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
+	return notes.map((n) => {
+		const t = new Set(words$1(n.title));
+		const b = words$1(n.body);
+		return {
+			n,
+			score: w.reduce((s, x) => s + (t.has(x) ? 5 : 0) + (b.filter((y) => y.startsWith(x)).length ? 1 + Math.min(3, b.filter((y) => y.startsWith(x)).length) / 3 : 0), 0)
+		};
+	}).filter((x) => x.score > 0).sort((a, b) => b.score - a.score || b.n.updatedAt.localeCompare(a.n.updatedAt)).map((x) => x.n);
+}
+/**
+* What Ben reads before he answers: pinned notes (About me) and the notes
+* that match the message, then the latest journal days; within `budget` chars.
+*/
+function notesForBen(notes, message, budget = 3500) {
+	const picked = [];
+	const add = (n) => n && !picked.includes(n) && picked.push(n);
+	notes.filter((n) => n.pinned).forEach(add);
+	searchNotes(notes, message).slice(0, 4).forEach(add);
+	notes.filter((n) => /^journal\//i.test(n.title)).sort((a, b) => b.title.localeCompare(a.title)).slice(0, 2).forEach(add);
+	let left = budget;
+	const parts = [];
+	for (const n of picked) {
+		if (left < 120) break;
+		const body = n.body.replace(/\n{3,}/g, "\n\n").trim();
+		const cut = body.length > left - 40 ? `${body.slice(0, left - 60)}…` : body;
+		parts.push(`### ${n.title}${n.author === "me" ? " (written by Victor)" : ""}\n${cut}`);
+		left -= cut.length + n.title.length + 8;
+	}
+	return parts.join("\n\n");
+}
+/** Ben's notebook actions: "note: <Title> | <line>" adds a dated line (creates the note if needed). */
+function readNoteOp(action) {
+	const m = /^\s*note\s*:\s*([^|]{1,80})\|\s*([\s\S]{1,500})$/i.exec(action);
+	if (!m) return null;
+	const title = m[1].trim();
+	const line = m[2].trim().replace(/\s+/g, " ");
+	if (!title || !line) return null;
+	return {
+		title,
+		line
+	};
+}
+/** The note after Ben adds a line (new note when it doesn't exist yet). */
+function appendLine(note, title, line, day, now, id) {
+	const entry = `- ${line} _(Ben, ${day})_`;
+	if (!note) return {
+		id,
+		title,
+		body: `# ${title}\n\n${entry}\n`,
+		author: "ben",
+		pinned: false,
+		createdAt: now,
+		updatedAt: now
+	};
+	if (note.body.includes(line)) return note;
+	return {
+		...note,
+		body: `${note.body.replace(/\s*$/, "")}\n${entry}\n`,
+		updatedAt: now
+	};
+}
+/** The evening journal page, from Ben's review of the day. */
+function journalNote(day, lines) {
+	return {
+		title: `Journal/${day}`,
+		body: [
+			`# ${day}`,
+			"",
+			`**Day score:** ${lines.score}/100`,
+			"",
+			lines.result.trim(),
+			"",
+			`**Lesson:** ${lines.lesson.trim()}`,
+			"",
+			lines.top3.length ? `**Tomorrow's top 3:**\n${lines.top3.map((t, i) => `${i + 1}. ${t}`).join("\n")}` : ""
+		].join("\n").trim()
+	};
+}
+// src/renderer/src/web/notes.ts
+var newId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+var row = (r) => ({
+	id: String(r.id),
+	title: String(r.title),
+	body: String(r.body ?? ""),
+	author: r.author === "ben" ? "ben" : "me",
+	pinned: !!Number(r.pinned),
+	createdAt: String(r.created_at),
+	updatedAt: String(r.updated_at)
+});
+function listNotes(db) {
+	return db.prepare("SELECT id, title, body, author, pinned, created_at, updated_at FROM notes ORDER BY pinned DESC, updated_at DESC").all().map(row);
+}
+/** The first time: the starter notes (About me, Goals, People, Ben's notes). */
+function seedNotes(db, now = /* @__PURE__ */ new Date()) {
+	if (db.prepare("SELECT COUNT(*) AS n FROM notes").all()[0]?.n > 0) return;
+	for (const s of STARTER_NOTES) db.prepare("INSERT OR IGNORE INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(newId(), s.title, s.body, "me", s.pinned ? 1 : 0, now.toISOString(), now.toISOString());
+}
+var byTitle = (db, title) => {
+	const r = db.prepare("SELECT id, title, body, author, pinned, created_at, updated_at FROM notes WHERE lower(title) = ?").all(noteKey(title))[0];
+	return r ? row(r) : null;
+};
+/** Saves a note you wrote (new or edited). A title another note has is refused. */
+function saveNote(db, n, now = /* @__PURE__ */ new Date()) {
+	const title = n.title.trim().slice(0, 120) || "Untitled";
+	const clash = byTitle(db, title);
+	if (clash && clash.id !== n.id) throw new Error(`There is already a note called “${clash.title}”`);
+	const at = now.toISOString();
+	if (n.id) {
+		db.prepare("UPDATE notes SET title = ?, body = ?, pinned = COALESCE(?, pinned), updated_at = ? WHERE id = ?").run(title, n.body, n.pinned == null ? null : n.pinned ? 1 : 0, at, n.id);
+		return byTitle(db, title);
+	}
+	const id = newId();
+	db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(id, title, n.body, "me", n.pinned ? 1 : 0, at, at);
+	return byTitle(db, title);
+}
+/** Ben adds a dated line under a note (made if it doesn't exist). Returns the "done" line, or null. */
+function benNote(db, title, line, day, now = /* @__PURE__ */ new Date()) {
+	const cur = byTitle(db, title);
+	const next = appendLine(cur, cur?.title ?? title.trim().slice(0, 120), line.slice(0, 400), day, now.toISOString(), cur?.id ?? newId());
+	if (cur && next === cur) return null;
+	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(next.body, next.updatedAt, cur.id);
+	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(next.id, next.title, next.body, "ben", next.createdAt, next.updatedAt);
+	return `📓 Noted in “${next.title}”: ${line.slice(0, 80)}`;
+}
+/** The evening journal page (Journal/YYYY-MM-DD), written or replaced by Ben. */
+function writeJournal(db, day, r, now = /* @__PURE__ */ new Date()) {
+	const j = journalNote(day, r);
+	const cur = byTitle(db, j.title);
+	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(j.body, now.toISOString(), cur.id);
+	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(newId(), j.title, j.body, "ben", now.toISOString(), now.toISOString());
+}
+// src/renderer/src/web/benDesk.ts
+var DESK = "ben_desk";
+var EMPTY_DESK = {
+	excuses: [],
+	moods: [],
+	study: [],
+	stacks: [],
+	stakes: [],
+	calls: [],
+	letters: {}
+};
+function loadDesk(db) {
+	try {
+		const v = JSON.parse(getSetting(db, "ben_desk") || "null");
+		return v && typeof v === "object" ? {
+			...EMPTY_DESK,
+			...v
+		} : { ...EMPTY_DESK };
+	} catch {
+		return { ...EMPTY_DESK };
+	}
+}
+function saveDesk(db, d) {
+	setSetting(db, DESK, JSON.stringify(d));
+	return d;
+}
+function editDesk(db, f) {
+	return saveDesk(db, f(loadDesk(db)));
+}
+var json$1 = (db, key) => {
+	try {
+		return JSON.parse(getSetting(db, key) || "null");
+	} catch {
+		return null;
+	}
+};
+var EXP_KEY = "ben_experiment";
+function sessionsOf(db, from) {
+	try {
+		return db.prepare("SELECT day, started_at, minutes FROM focus_sessions WHERE day >= ?").all(from).map((r) => ({
+			day: String(r.day),
+			startedAt: String(r.started_at),
+			minutes: Number(r.minutes)
+		}));
+	} catch {
+		return [];
+	}
+}
+function moneyNumbers(finance, today) {
+	const tx = Array.isArray(finance?.tx) ? finance.tx : [];
+	const B = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
+	const exp = tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+	const from30 = addDays$3(today, -29);
+	const perDay = Math.round(exp.filter((t) => t.date >= from30 && t.date <= today).reduce((s, t) => s + B(t), 0) / 30);
+	const wh = finance?.settings?.workHour;
+	let hourly = wh?.mode === "manual" && Number(wh.rate) > 0 ? Number(wh.rate) : null;
+	if (hourly == null) {
+		const months = [
+			1,
+			2,
+			3
+		].map((k) => {
+			const d = /* @__PURE__ */ new Date(`${today.slice(0, 7)}-15T12:00:00Z`);
+			d.setUTCMonth(d.getUTCMonth() - k);
+			return d.toISOString().slice(0, 7);
+		});
+		const inc = tx.filter((t) => t && t.type === "income" && !t.deleted && !t.loan && typeof t.date === "string" && months.includes(t.date.slice(0, 7)));
+		const active = new Set(inc.map((t) => t.date.slice(0, 7))).size;
+		const sum = inc.reduce((s, t) => s + B(t), 0);
+		hourly = active && sum ? Math.round(sum / active / (Number(wh?.hoursPerMonth) || 160)) : null;
+	}
+	const limit = finance?.settings?.limit;
+	let limitLeft = null;
+	let safeToday = null;
+	if (limit?.on && Number(limit.amount) > 0) {
+		const month = today.slice(0, 7);
+		const spent = exp.filter((t) => t.date.startsWith(month)).reduce((s, t) => s + B(t), 0);
+		limitLeft = Number(limit.amount) - spent;
+		const dim = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+		safeToday = Math.max(0, Math.round(limitLeft / (dim - Number(today.slice(8)) + 1)));
+	}
+	const goals = (Array.isArray(finance?.goals) ? finance.goals : []).filter((g) => g && !g.deleted && Number(g.target) > 0).map((g) => ({
+		title: String(g.name ?? g.title ?? "Goal"),
+		left: Math.max(0, Number(g.target) - Number(g.saved ?? g.current ?? 0))
+	}));
+	return {
+		hourly,
+		safeToday,
+		limitLeft,
+		perDay,
+		balance: null,
+		goals
+	};
+}
+/** Everything the Coach page's desk shows (pure read). */
+function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
+	const db = s.db;
+	const today = s.wallet.today(now);
+	const d = loadDesk(db);
+	const sessions = sessionsOf(db, addDays$3(today, -62));
+	const dayLog = json$1(db, "island_day_log") ?? {};
+	const quality = Object.values(dayLog).flatMap((x) => x.focus ?? []).map((q) => ({
+		at: q.at,
+		pct: q.pct
+	}));
+	const blocks = Object.entries(dayLog).flatMap(([day, x]) => (x.blocks ?? []).map((b) => ({
+		day,
+		at: b.at,
+		result: b.result
+	})));
+	const energy = energyMap(sessions, quality, blocks);
+	let logs = [];
+	try {
+		logs = s.sleep.logs();
+	} catch {
+		logs = [];
+	}
+	const sleep = logs.map((l) => ({
+		day: l.day,
+		wake: l.wakeTime,
+		bed: l.bedTime,
+		onTime: !!l.onTime
+	}));
+	const input = s.progress.input(null, now, 70);
+	const workouts = [...new Set(input.workouts.map((w) => w.day))];
+	const f = s.focus.state(now);
+	const exams = f.goals.map((g) => ({
+		title: g.title,
+		deadline: g.deadline
+	}));
+	const spending = financeSpending(finance);
+	const patterns = weeklyPatterns({
+		today,
+		sessions,
+		sleep,
+		workouts,
+		moods: d.moods,
+		blocks,
+		exams: exams.map((e) => e.deadline),
+		spending
+	});
+	const recentMoods = d.moods.filter((m) => m.day >= addDays$3(today, -6));
+	const cats = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
+	const catName = (id) => cats.get(id) ?? id;
+	const ps = promiseStats(json$1(db, "coach_reminders") ?? [], now);
+	let restDays = [];
+	try {
+		restDays = s.body.restDays();
+	} catch {
+		restDays = [];
+	}
+	const month = today.slice(0, 7);
+	const story = monthStory({
+		month,
+		today,
+		focus: sessions.map((x) => ({
+			day: x.day,
+			minutes: x.minutes
+		})),
+		workouts,
+		restDays,
+		sleep,
+		spent: spending ?? [],
+		moods: d.moods,
+		stakes: stakeStats(d.stakes, now),
+		promises: {
+			kept: ps.kept,
+			missed: ps.broken + ps.ignored
+		}
+	});
+	const series = {
+		focus: {},
+		sleep: {},
+		workouts: {},
+		spend: {}
+	};
+	for (const x of sessions) series.focus[x.day] = (series.focus[x.day] ?? 0) + x.minutes;
+	for (const l of logs) {
+		const m = nightMinutes(l);
+		if (m != null) series.sleep[l.day] = m;
+	}
+	for (const w of input.workouts) series.workouts[w.day] = (series.workouts[w.day] ?? 0) + 1;
+	for (const x of spending ?? []) series.spend[x.day] = (series.spend[x.day] ?? 0) + x.bani / 100;
+	const mean = (m, from, to, counted = m !== "sleep") => {
+		const vals = [];
+		for (let k = from; k <= to; k++) {
+			const v = series[m][addDays$3(today, -k)];
+			if (v != null || counted) vals.push(v ?? 0);
+		}
+		return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+	};
+	const gap = (m) => {
+		const last = mean(m, 0, 6);
+		const usual = mean(m, 7, 34);
+		if (!usual) return 0;
+		return m === "spend" ? Math.max(0, (last - usual) / usual) : Math.max(0, (usual - last) / usual);
+	};
+	const expState = json$1(db, EXP_KEY);
+	const current = expState ? measureExperiment(expState, series[EXPERIMENTS.find((e) => e.id === expState.id)?.metric ?? "focus"], today) : null;
+	const experiment = {
+		current,
+		suggest: pickExperiment({
+			focus: gap("focus"),
+			sleep: gap("sleep"),
+			workouts: gap("workouts"),
+			spend: gap("spend")
+		}, current ? [current.exp.id] : [])
+	};
+	const ue = urgeEvents(db);
+	const inWeek = (ts, from, to) => {
+		const d = String(ts).slice(0, 10);
+		return d >= addDays$3(today, -to) && d <= addDays$3(today, -from);
+	};
+	const review = lifeReview(series, {
+		crushed: ue.filter((e) => e.kind === "urge" && inWeek(e.ts, 0, 6)).length,
+		slips: ue.filter((e) => e.kind === "reset" && inWeek(e.ts, 0, 6)).length,
+		prevCrushed: ue.filter((e) => e.kind === "urge" && inWeek(e.ts, 7, 13)).length
+	}, today);
+	const lastNight = logs.find((l) => l.day === today) ?? null;
+	const tx = Array.isArray(finance?.tx) ? finance.tx : null;
+	return {
+		today,
+		energy,
+		patterns,
+		excuses: excuseCounts(d.excuses, today),
+		moods: d.moods.filter((m) => m.day >= addDays$3(today, -13)),
+		moodDue: moodDue(d.moods, now),
+		moodAvg: recentMoods.length ? recentMoods.reduce((t, m) => t + m.mood, 0) / recentMoods.length : null,
+		study: d.study.filter((t) => !t.examDay || t.examDay >= addDays$3(today, -1)).map((t) => ({
+			...t,
+			next: nextReview(t),
+			due: dueTopics([t], today).length > 0
+		})).sort((a, b) => Number(b.due) - Number(a.due) || String(a.next).localeCompare(String(b.next))),
+		stacks: d.stacks.map((x) => ({
+			...x,
+			streak: stackStreak(x, today),
+			rate: stackRate(x, today),
+			today: x.log[today] ?? []
+		})),
+		stakes: [...d.stakes].sort((a, b) => Number(b.status === "open") - Number(a.status === "open") || b.at.localeCompare(a.at)).slice(0, 12),
+		stakeStats: stakeStats(d.stakes, now),
+		callDue: callDue(d.calls, now),
+		lastCall: d.calls[d.calls.length - 1] ?? null,
+		month: story,
+		letter: d.letters[month] ?? null,
+		spend: tx ? spendPace(tx, catName, today) : null,
+		recurring: tx ? recurringCharges(tx, catName, today) : [],
+		sleep: sleepLink(lastNight?.bedTime, lastNight?.wakeTime),
+		money: moneyNumbers(finance, today),
+		goals: f.goals.map((g) => ({
+			id: g.id,
+			title: g.title,
+			deadline: g.deadline,
+			hoursLeft: Math.max(0, Math.round((g.hours - g.doneMin / 60) * 10) / 10),
+			daysLeft: g.daysLeft,
+			behind: g.aheadH <= -1
+		})),
+		exams,
+		restDays,
+		experiment,
+		review
+	};
+}
+/** What the desk adds to Ben's prompt (short lines; only what's there). */
+function deskPrompt(s, finance, now = /* @__PURE__ */ new Date()) {
+	const v = deskView(s, finance, now);
+	const d = loadDesk(s.db);
+	const lines = [];
+	if (v.energy.ready) lines.push(`His energy map: best hours ${hoursText(v.energy.best)}${v.energy.worst.length ? `, weakest ${hoursText(v.energy.worst)}` : ""}. Put HARD tasks in the best hours when you plan or move blocks.`);
+	if (v.patterns.length) lines.push(`Weekly patterns (his data):\n${v.patterns.map((p) => `- ${p.text} → try: ${p.change}`).join("\n")}`);
+	const ex = excuseLine(d.excuses, v.today);
+	if (ex) lines.push(ex);
+	const ml = moodLine(d.moods, v.today);
+	if (ml) lines.push(ml);
+	if (v.sleep.slept != null && v.sleep.level !== "ok") lines.push(`Sleep link: ${v.sleep.title} ${v.sleep.tips.join(" ")} Plan today lighter before ${v.sleep.lightUntil}.`);
+	const due = v.study.filter((t) => t.due);
+	if (due.length) lines.push(`Study reviews due today: ${due.map((t) => `${t.exam} · ${t.topic}`).join("; ")}.`);
+	if (v.stacks.length) lines.push(`Habit stacks: ${v.stacks.map((x) => `after ${x.cue} → ${x.steps.join(" → ")} (today ${x.today.length}/${x.steps.length}, streak ${x.streak})`).join("; ")}.`);
+	const open = v.stakes.filter((x) => x.status === "open");
+	if (open.length) lines.push(`Open stakes (he loses the points if not done in time): ${open.map((x) => `"${x.text}" by ${new Date(x.due).toTimeString().slice(0, 5)} −${x.points}`).join("; ")}.`);
+	if (v.stakeStats.kept + v.stakeStats.lost) lines.push(`Stakes last 30 days: ${v.stakeStats.kept} won, ${v.stakeStats.lost} lost (−${v.stakeStats.pointsLost} points).`);
+	if (v.spend?.line) lines.push(`Spending coach: ${v.spend.line}`);
+	if (v.recurring.length) lines.push(`Monthly charges that repeat: ${v.recurring.slice(0, 4).map((r) => `${r.name} ${Math.round(r.amount / 100)} lei`).join(", ")}. Ask if he still uses them when money comes up.`);
+	if (v.lastCall) lines.push(`Last Sunday call (${v.lastCall.week}): change "${v.lastCall.answers.change}", big 3: ${v.lastCall.answers.big3.replace(/\n/g, " / ")}.`);
+	try {
+		const p = listNotes(s.db).find((n) => n.title === PROFILE_NOTE);
+		const corr = p ? profileCorrections(p.body) : "";
+		if (corr) lines.push(`His corrections to your profile of him (always true):\n${corr}`);
+	} catch {}
+	return lines.join("\n");
+}
+/** A message from him: if it's an excuse, it's counted; returns Ben's kind call-out of a repeat. */
+function noteExcuse(db, text, today, now = /* @__PURE__ */ new Date()) {
+	const kind = classifyExcuse(text);
+	if (!kind) return null;
+	return excuseCallout(editDesk(db, (x) => ({
+		...x,
+		excuses: addExcuse(x.excuses, text, now.toISOString())
+	})).excuses, kind, today);
+}
+function logMood(db, mood, now = /* @__PURE__ */ new Date()) {
+	const day = now.toLocaleDateString("sv-SE");
+	const slot = now.getHours() < 17 ? "noon" : "evening";
+	return editDesk(db, (x) => ({
+		...x,
+		moods: addMood(x.moods, {
+			day,
+			slot,
+			mood,
+			at: now.toISOString()
+		})
+	}));
+}
+function refreshProfile(s, finance, now = /* @__PURE__ */ new Date(), force = false) {
+	const db = s.db;
+	const d = loadDesk(db);
+	const today = s.wallet.today(now);
+	if (!force && d.profileDay === today) return false;
+	const v = deskView(s, finance, now);
+	const mind = loadMind(db);
+	const prof = loadProfile(db);
+	let notes = [];
+	try {
+		notes = listNotes(db);
+	} catch {
+		return false;
+	}
+	const prev = notes.find((n) => n.title === PROFILE_NOTE);
+	const body = profileNote({
+		today,
+		aboutMe: prof.about,
+		goals: [...mind.goals.map((g) => ({
+			title: g.title,
+			deadline: g.deadline ?? null,
+			weekly: g.weekly ?? null
+		})), ...prof.goals.filter((t) => !mind.goals.some((g) => g.title === t)).map((t) => ({ title: t }))],
+		exams: v.exams,
+		people: mind.people.map((p) => ({
+			name: p.name,
+			note: p.note
+		})),
+		works: mind.works.map((x) => x.t),
+		fails: mind.fails.map((x) => x.t),
+		patterns: v.patterns,
+		energy: v.energy,
+		excuses: v.excuses,
+		moodAvg: v.moodAvg
+	}, prev?.body ?? "");
+	if (prev?.body !== body) saveNote(db, {
+		id: prev?.id,
+		title: PROFILE_NOTE,
+		body,
+		pinned: true
+	}, now);
+	saveDesk(db, {
+		...loadDesk(db),
+		profileDay: today
+	});
+	return true;
+}
+/** One change on the desk (from the Coach page or Ben's actions). Returns a short line for the screen. */
+function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
+	const db = s.db;
+	const today = s.wallet.today(now);
+	if (o.op === "experiment") {
+		const e = EXPERIMENTS.find((x) => x.id === o.id);
+		if (!e) throw new Error("No such experiment");
+		setSetting(db, EXP_KEY, JSON.stringify({
+			id: e.id,
+			start: today
+		}));
+		return `Experiment on for 7 days: ${e.title}`;
+	}
+	if (o.op === "stopExperiment") {
+		setSetting(db, EXP_KEY, "");
+		return "Experiment ended";
+	}
+	if (o.op === "mood") {
+		logMood(db, o.mood, now);
+		return "Mood noted";
+	}
+	if (o.op === "stake") {
+		const due = readDue(o.due, now) ?? (Number.isFinite(Date.parse(o.due)) ? new Date(o.due).toISOString() : null);
+		if (!due) throw new Error("When? e.g. 18:00 or tomorrow 9");
+		editDesk(db, (x) => ({
+			...x,
+			stakes: addStake(x.stakes, o.text, due, o.points, now)
+		}));
+		return `Stake set: "${o.text}" by ${new Date(due).toTimeString().slice(0, 5)} or −${Math.round(o.points)} points`;
+	}
+	if (o.op === "keepStake") {
+		editDesk(db, (x) => ({
+			...x,
+			stakes: keepStake(x.stakes, o.id, now)
+		}));
+		return "Won it 💎";
+	}
+	if (o.op === "dropStake") {
+		editDesk(db, (x) => ({
+			...x,
+			stakes: x.stakes.filter((k) => !(k.id === o.id && k.status === "open" && Date.parse(k.at) > now.getTime() - 6e5))
+		}));
+		return "Removed (only within 10 minutes of setting it)";
+	}
+	if (o.op === "study") {
+		editDesk(db, (x) => ({
+			...x,
+			study: addTopic(x.study, o.exam, o.topic, today, o.examDay ?? s.focus.state(now).goals.find((g) => g.title.toLowerCase().includes(o.exam.toLowerCase()))?.deadline ?? null)
+		}));
+		return `Study topic added: ${o.exam} · ${o.topic} (first review tomorrow)`;
+	}
+	if (o.op === "reviewed") {
+		editDesk(db, (x) => ({
+			...x,
+			study: reviewTopic(x.study, o.id, today)
+		}));
+		return "Reviewed ✓";
+	}
+	if (o.op === "dropStudy") {
+		editDesk(db, (x) => ({
+			...x,
+			study: x.study.filter((t) => t.id !== o.id)
+		}));
+		return "Removed";
+	}
+	if (o.op === "stack") {
+		const st = parseStack(o.text, today);
+		if (!st) throw new Error("Write it like: after coffee → 10 pushups → plan review");
+		editDesk(db, (x) => ({
+			...x,
+			stacks: [...x.stacks, st].slice(-8)
+		}));
+		return `Habit stack: after ${st.cue} → ${st.steps.join(" → ")}`;
+	}
+	if (o.op === "tickStack") {
+		editDesk(db, (x) => ({
+			...x,
+			stacks: x.stacks.map((k) => k.id === o.id ? tickStack(k, today, o.step) : k)
+		}));
+		return "Ticked";
+	}
+	if (o.op === "dropStack") {
+		editDesk(db, (x) => ({
+			...x,
+			stacks: x.stacks.filter((k) => k.id !== o.id)
+		}));
+		return "Removed";
+	}
+	if (o.op === "call") {
+		const dow = now.getDay();
+		const week = addDays$3(today, -((dow + 6) % 7) - (dow === 1 && now.getHours() < 12 ? 7 : 0));
+		const call = {
+			week,
+			at: now.toISOString(),
+			answers: o.answers
+		};
+		editDesk(db, (x) => ({
+			...x,
+			calls: [...x.calls.filter((c) => c.week !== week), call].slice(-26)
+		}));
+		try {
+			const prev = listNotes(db).find((n) => n.title === "Weekly reviews");
+			saveNote(db, {
+				id: prev?.id,
+				title: "Weekly reviews",
+				body: `${prev?.body?.trim() || "# Weekly reviews\n\nYour Sunday calls with Ben."}\n\n${callNote(call)}\n`
+			}, now);
+		} catch {}
+		return "Coach call saved: next week is set";
+	}
+	editDesk(db, (x) => ({
+		...x,
+		letters: {
+			...x.letters,
+			[o.month]: o.text.slice(0, 3e3)
+		}
+	}));
+	return "Letter saved";
+}
+/**
+* Ben's desk actions (from his "actions"):
+*   "stake: <what> | <when: 18:00, tomorrow 9> | <points>"
+*   "study: <exam> | <topic>"   "reviewed: <topic>"
+*   "stack: after coffee → 10 pushups → plan review"
+*   "mood: 1-5"
+*/
+function readDeskOp(line, desk) {
+	const m = /^\s*(stake|study|reviewed|stack|mood)\s*:\s*([\s\S]+)$/i.exec(String(line ?? ""));
+	if (!m) return null;
+	const kind = m[1].toLowerCase();
+	const arg = m[2].trim().slice(0, 300);
+	const parts = arg.split("|").map((x) => x.trim());
+	if (kind === "stake") {
+		const points = Math.round(Number(parts[2] ?? 50));
+		return parts[0] && parts[1] && points > 0 ? {
+			op: "stake",
+			text: parts[0].slice(0, 120),
+			due: parts[1],
+			points: Math.min(500, points)
+		} : null;
+	}
+	if (kind === "study") return parts[0] && parts[1] ? {
+		op: "study",
+		exam: parts[0],
+		topic: parts[1]
+	} : null;
+	if (kind === "reviewed") {
+		const want = arg.toLowerCase();
+		const t = desk?.study.find((x) => x.topic.toLowerCase().includes(want) || want.includes(x.topic.toLowerCase()));
+		return t ? {
+			op: "reviewed",
+			id: t.id
+		} : null;
+	}
+	if (kind === "stack") return {
+		op: "stack",
+		text: arg
+	};
+	const mood = Math.round(Number(arg.match(/[1-5]/)?.[0]));
+	return mood >= 1 && mood <= 5 ? {
+		op: "mood",
+		mood
+	} : null;
+}
 // src/renderer/src/web/financeInbox.ts
 var SETTING$1 = "finance_inbox_json";
 var KEEP_DAYS = 60;
@@ -10320,7 +11864,25 @@ syncFinance: (recordDays) => write((s) => {
 			state: () => read((s) => s.shop.state()),
 			save: (r) => write((s) => (s.shop.save(r), s.shop.state())),
 			archive: (id) => write((s) => (s.shop.archive(id), s.shop.state())),
-			redeem: (id) => write((s) => (s.shop.redeem(id), s.shop.state()), W),
+			redeem: (id, opts = {}) => write((s) => {
+				const reward = s.shop.state().rewards.find((r) => r.id === id);
+				const lei = reward?.realCost ?? 0;
+				if (lei > 0 && !opts.force) {
+					const finance = financeStateFrom(s.db, typeof localStorage !== "undefined" ? localStorage : null);
+					const safe = finance ? moneyNumbers(finance, s.wallet.today()).safeToday : null;
+					if (safe != null && lei * 100 > safe) throw new LedgerError(`OVER_SAFE: ${reward.title} costs ${lei} lei and your Safe to spend today is ${Math.round(safe / 100)} lei.`);
+				}
+				s.shop.redeem(id);
+				if (lei > 0 && reward) queueFinanceExpense(s.db, {
+					id: `life-reward-${id}-${Date.now()}`,
+					amount: Math.round(lei * 100),
+					category: "fun",
+					note: `Reward: ${reward.title}`,
+					date: s.wallet.today(),
+					at: Date.now()
+				});
+				return s.shop.state();
+			}, W),
 			openChest: (level) => write((s) => ({
 				coins: s.shop.openChest(level),
 				state: s.shop.state()
@@ -10596,7 +12158,7 @@ function utc(iso) {
 	const [y, m, d] = iso.split("-").map(Number);
 	return new Date(Date.UTC(y, m - 1, d));
 }
-function addDays$2(iso, n) {
+function addDays(iso, n) {
 	const d = utc(iso);
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
@@ -10642,8 +12204,8 @@ var MONTHS = {
 var pad$2 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
-	if (rule.every === "week") return addDays$2(rule.start, 7 * n);
-	if (rule.every === "2weeks") return addDays$2(rule.start, 14 * n);
+	if (rule.every === "week") return addDays(rule.start, 7 * n);
+	if (rule.every === "2weeks") return addDays(rule.start, 14 * n);
 	const key = addMonths(monthKey(rule.start), (MONTHS[rule.every] || 1) * n);
 	return `${key}-${pad$2(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
 }
@@ -10662,7 +12224,7 @@ var sortItems = (a, b) => a.date.localeCompare(b.date) || (a.rule.note || "").lo
 function dueItems(state, today) {
 	const out = [];
 	for (const rule of active(state)) {
-		const from = rule.lastDone ? addDays$2(rule.lastDone, 1) : rule.start;
+		const from = rule.lastDone ? addDays(rule.lastDone, 1) : rule.start;
 		for (const date of occurrences(rule, from, today, 60)) out.push({
 			rule,
 			date
@@ -10672,9 +12234,9 @@ function dueItems(state, today) {
 }
 function upcomingItems(state, today, days = 30) {
 	const out = [];
-	const to = addDays$2(today, days);
+	const to = addDays(today, days);
 	for (const rule of active(state)) {
-		const from = addDays$2(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
+		const from = addDays(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
 		for (const date of occurrences(rule, from, to, 60)) out.push({
 			rule,
 			date
@@ -11209,7 +12771,7 @@ var KEYWORDS = {
 };
 var fold$2 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 var STOP = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store magazin".split(" "));
-var words$1 = (note) => [...new Set(fold$2(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP.has(w));
+var words = (note) => [...new Set(fold$2(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP.has(w));
 function matchRule(state, note, type) {
 	const n = fold$2(note);
 	if (!n) return null;
@@ -11225,7 +12787,7 @@ function wordStats(state, type) {
 	const out = /* @__PURE__ */ new Map();
 	for (const t of state.tx) {
 		if (t.type !== type || !t.note || t.category === "other" || t.category === "other-in") continue;
-		for (const w of words$1(t.note)) {
+		for (const w of words(t.note)) {
 			const m = out.get(w) || /* @__PURE__ */ new Map();
 			m.set(t.category, (m.get(t.category) || 0) + 1);
 			out.set(w, m);
@@ -11240,7 +12802,7 @@ function wordStats(state, type) {
 function learnedCategory(state, note, type) {
 	const stats = wordStats(state, type);
 	let best = null;
-	for (const w of words$1(note)) {
+	for (const w of words(note)) {
 		const m = stats.get(w);
 		if (!m) continue;
 		const total = [...m.values()].reduce((a, b) => a + b, 0);
@@ -11409,7 +12971,7 @@ function payStatus(state, today) {
 // src/renderer/public/apps/finance/js/forecast.js
 var isLiquid = (a) => !a.archived && !a.savings && a.kind !== "savings" && a.kind !== "crypto";
 function spentFrom(state, today, window = 60) {
-	const since = addDays$2(today, -window + 1);
+	const since = addDays(today, -window + 1);
 	const by = /* @__PURE__ */ new Map();
 	let total = 0;
 	for (const t of state.tx) {
@@ -11445,7 +13007,7 @@ function limitStatus(state, today) {
 	const amount = state.settings.limit.amount;
 	const key = monthKey(today);
 	const daysLeft = daysInMonth(key) - Number(today.slice(8)) + 1;
-	const before = everydaySpent(state, `${key}-01`, addDays$2(today, -1));
+	const before = everydaySpent(state, `${key}-01`, addDays(today, -1));
 	const spentToday = everydaySpent(state, today, today);
 	const leftBefore = amount - before;
 	const perDay = leftBefore > 0 ? lei(leftBefore / daysLeft) : 0;
@@ -11613,7 +13175,7 @@ function parseQuick(text, state) {
 		...daysAgo ? { daysAgo } : {}
 	};
 }
-var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays$2(sentDay, -f.daysAgo) : sentDay;
+var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays(sentDay, -f.daysAgo) : sentDay;
 function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = Date.now() }) {
 	return {
 		id: `tg-${updateId}`,
@@ -12386,204 +13948,6 @@ function nudgeText(n, idle, first, focusMin, tone) {
 	const step = first ? `Open <b>${esc(first)}</b> and do just the first 10 minutes.` : "Pick anything on your list and give it 10 minutes.";
 	return n === 1 ? `🎯 ${idle === "all day" ? "Nothing logged yet today." : `${idle} since your last thing.`} ${step}` : n <= 3 ? `🎯 Smallest next step: ${step} If something's in the way, tell me and I'll move it.` : `🎯 Still here when you're ready. ${step} Or pause me for today.`;
 }
-// src/core/coachKit.ts
-var hm$1 = (iso) => {
-	const d = new Date(iso);
-	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
-var dayOf = (iso) => {
-	const d = new Date(iso);
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-/** E1… for events (time order), T1… for tasks; the lines the model sees. */
-function makeRefs(events, tasks) {
-	const refs = {
-		events: /* @__PURE__ */ new Map(),
-		tasks: /* @__PURE__ */ new Map()
-	};
-	const evLines = events.filter((e) => !e.allDay).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 40).map((e, i) => {
-		refs.events.set(`E${i + 1}`, e);
-		return `E${i + 1} ${dayOf(e.start).slice(5)} ${hm$1(e.start)}–${hm$1(e.end)} ${e.title}`;
-	});
-	const tLines = tasks.slice(0, 60).map((t, i) => {
-		refs.tasks.set(`T${i + 1}`, t);
-		return `T${i + 1} ${t.content}${t.due ? ` (due ${t.due}${t.dueTime ? ` ${t.dueTime}` : ""})` : ""}${t.priority > 1 ? ` P${5 - t.priority}` : ""}${t.section ? ` [${t.section}]` : ""}${t.labels?.includes("today") ? " ⭐" : ""}`;
-	});
-	return {
-		refs,
-		lines: [evLines.length ? `Calendar events (use the E-number):\n${evLines.join("\n")}` : "Calendar events: none (or not connected)", tLines.length ? `Todoist tasks (use the T-number):\n${tLines.join("\n")}` : "Todoist tasks: none (or not connected)"].join("\n")
-	};
-}
-/** Plans, reviews, reshuffles and "why" questions get the slower, deeper model. */
-function isBigAsk(text) {
-	const t = text.toLowerCase();
-	return t.length > 160 || /\b(plan|replan|re-plan|schedule|reschedule|shift|move everything|organi[sz]e|review|analy[sz]|why|strategy|week|month|budget|prioriti[sz]e|clean up|what should i|help me (decide|figure))\b/.test(t);
-}
-var REMINDERS = "coach_reminders";
-var NUDGES = "coach_nudges";
-function addReminder(list, r, now = /* @__PURE__ */ new Date()) {
-	const id = `${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-	return [...list.filter((x) => !x.done || Date.parse(x.at) > now.getTime() - 6912e5), {
-		...r,
-		id,
-		createdAt: now.toISOString()
-	}].slice(-60);
-}
-/** Reminders to send now. */
-function dueReminders(list, now = /* @__PURE__ */ new Date()) {
-	return list.filter((r) => !r.done && Date.parse(r.at) <= now.getTime() && Date.parse(r.at) > now.getTime() - 216e5);
-}
-/**
-* After sending: a plain reminder is done; a follow-up check-in comes back
-* in 45 minutes (up to 4 times) unless you answered since.
-*/
-function afterSend(list, id, now = /* @__PURE__ */ new Date()) {
-	return list.map((r) => {
-		if (r.id !== id) return r;
-		const tries = (r.tries ?? 0) + 1;
-		if (r.kind === "checkin" && r.follow && tries < 4) return {
-			...r,
-			tries,
-			sentAt: now.toISOString(),
-			at: new Date(now.getTime() + 27e5).toISOString()
-		};
-		return {
-			...r,
-			tries,
-			sentAt: now.toISOString(),
-			done: true,
-			...r.kind === "checkin" && r.follow ? { ignored: true } : {}
-		};
-	});
-}
-/** You wrote to the coach: open follow-ups stop. */
-function answered(list, now = /* @__PURE__ */ new Date()) {
-	return list.map((r) => !r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() ? {
-		...r,
-		done: true,
-		ignored: false,
-		answeredAt: now.toISOString()
-	} : r);
-}
-/**
-* "Follow up until I act": between 09:00 and 21:30, when nothing is running,
-* something is open and you've been idle 60+ minutes, nudge, then again every
-* 45 minutes. Never while paused or snoozed, at most 8 a day.
-*/
-function shouldNudge(st, f, now = /* @__PURE__ */ new Date()) {
-	if (st.pausedDay === f.today) return false;
-	if (st.snoozeUntil && Date.parse(st.snoozeUntil) > now.getTime()) return false;
-	if (f.time < "09:00" || f.time > "21:30") return false;
-	if (f.focusRunning) return false;
-	if (f.openMustDos === 0 && f.focusMinToday >= 50) return false;
-	if (f.idleMin < 60) return false;
-	if ((st.day === f.today ? st.count ?? 0 : 0) >= 12) return false;
-	if (st.lastAt && now.getTime() - Date.parse(st.lastAt) < 27e5) return false;
-	return true;
-}
-function nudged(st, today, now = /* @__PURE__ */ new Date()) {
-	return {
-		...st,
-		lastAt: now.toISOString(),
-		day: today,
-		count: (st.day === today ? st.count ?? 0 : 0) + 1,
-		announced: st.day === today ? st.announced : []
-	};
-}
-/** He's saying something went wrong ("that's not money", "undo", "wrong amount", "nu e bine"). */
-function isCorrection(text) {
-	const t = text.toLowerCase();
-	return /\b(wrong|mistake|not money|not an expense|that'?s water|undo|delete (it|that)|remove (it|that)|fix (it|that)|incorrect|shouldn'?t (be|have)|didn'?t (spend|buy|pay)|greșit|gresit|nu e (bine|corect)|nu sunt bani|șterge|sterge|неправильно|удали|ошибка|не деньги)\b/.test(t) || /\bnot money\b|\bthats water\b|\bthat's water\b/.test(t.replace(/[^\w' ]/g, ""));
-}
-/** Check-ins of the last 2 days without a verdict yet, as P1, P2… for the coach. */
-function promiseRefs(list, now = /* @__PURE__ */ new Date()) {
-	const refs = /* @__PURE__ */ new Map();
-	const lines = list.filter((r) => r.kind === "checkin" && r.sentAt && !r.outcome && Date.parse(r.createdAt) > now.getTime() - 1728e5).slice(-6).map((r, i) => {
-		refs.set(`P${i + 1}`, r.id);
-		const state = r.answeredAt ? "he answered" : r.ignored ? "IGNORED (no answer to any follow-up)" : `asked ${r.tries ?? 1}×, no answer yet`;
-		return `P${i + 1} "${r.text}" (${new Date(r.sentAt).toTimeString().slice(0, 5)}, ${state})`;
-	});
-	return {
-		refs,
-		lines: lines.length ? `Promises you're checking (use the P-number):\n${lines.join("\n")}` : ""
-	};
-}
-function setOutcome(list, id, outcome) {
-	return list.map((r) => r.id === id ? {
-		...r,
-		outcome,
-		done: true
-	} : r);
-}
-/** The last 7 days of promises: kept, broken, ignored. */
-function promiseStats(list, now = /* @__PURE__ */ new Date()) {
-	const week = list.filter((r) => r.kind === "checkin" && Date.parse(r.createdAt) > now.getTime() - 6048e5);
-	const missed = week.filter((r) => r.outcome === "broken" || r.ignored && r.outcome !== "kept");
-	return {
-		kept: week.filter((r) => r.outcome === "kept").length,
-		broken: week.filter((r) => r.outcome === "broken").length,
-		ignored: week.filter((r) => r.ignored && !r.outcome).length,
-		open: week.filter((r) => !r.done).length,
-		misses: missed.slice(-5).reverse().map((r) => r.text)
-	};
-}
-/** One line for the coach (and the escalating follow-ups). */
-function promiseLine(s) {
-	if (!s.kept && !s.broken && !s.ignored) return "";
-	return `Promises in the last 7 days: ${s.kept} kept, ${s.broken} broken, ${s.ignored} ignored${s.misses.length ? `. Missed: ${s.misses.map((m) => `"${m.slice(0, 60)}"`).join(", ")}` : ""}.`;
-}
-/**
-* Asking again about something you said you'd do. Below tone 5 it gets more
-* helpful each time (smaller step, move it); at tone 5 it gets sharper.
-*/
-function followUpText(r, s, tone = 4) {
-	const tries = r.tries ?? 0;
-	const misses = s.broken + s.ignored;
-	if (tries === 0) return `🔔 ${r.text}`;
-	if (tone < 5) {
-		if (tries === 1) return `🔔 ${r.text}\n<i>Still on? "Done", "not yet" or "later" all work.</i>`;
-		if (tries === 2) return `🎯 ${r.text}\nToo big right now? Tell me what's in the way and I'll make it smaller or move it.`;
-		return `🎯 Last check on: ${r.text}\nIf it's not happening today, just say so and I'll move it to tomorrow.`;
-	}
-	if (tries === 1) return `😤 ${r.text}\n<i>Asking again. "Not yet" is an answer too.</i>`;
-	if (tries === 2) return `😠 ${r.text}\n<b>Third time.</b>${misses ? ` ${misses} promise${misses === 1 ? "" : "s"} missed this week already.` : ""} Answer me.`;
-	return `😡 Last call: ${r.text}\n${misses ? `This would be miss #${misses + 1} this week. ` : ""}You said you'd do it. Do it now, or tell me why not.`;
-}
-/** 🎯 focused: a slipping day below tone 5 (Ben helps instead of glaring). */
-var MOOD_FACE = {
-	proud: "😎",
-	happy: "😄",
-	chill: "🙂",
-	focused: "🎯",
-	annoyed: "😤",
-	angry: "😠",
-	furious: "😡"
-};
-var isMood = (m) => typeof m === "string" && m in MOOD_FACE;
-/**
-* Proud when the day is strong, angry when you're slipping on purpose:
-* missed promises, goals falling behind, hours with nothing done.
-*/
-function coachMood(f) {
-	let heat = 0;
-	const why = [];
-	if (f.missedWeek >= 3) heat += 2, why.push(`${f.missedWeek} promises missed this week`);
-	else if (f.missedWeek >= 1) heat += 1, why.push(`${f.missedWeek} promise${f.missedWeek === 1 ? "" : "s"} missed this week`);
-	if (f.goalsBehind) heat += f.goalsBehind >= 2 ? 2 : 1, why.push(`${f.goalsBehind} goal${f.goalsBehind === 1 ? "" : "s"} behind`);
-	if (f.hour >= 11 && f.focusMinToday === 0) heat += f.hour >= 16 ? 2 : 1, why.push("no focus yet today");
-	if (f.hour >= 10 && f.idleMin >= 180 && f.openMustDos) heat += 1, why.push(`nothing done for ${Number.isFinite(f.idleMin) ? `${Math.round(f.idleMin / 60)}h` : "the whole day"}`);
-	let good = 0;
-	if (f.focusMinToday >= 100) good += 2, why.push(`${f.focusMinToday} min of focus today`);
-	else if (f.focusMinToday >= 50) good += 1;
-	if (f.mustDosDone >= 2 && f.openMustDos === 0) good += 2, why.push("every must-do done");
-	else if (f.mustDosDone >= 1) good += 1;
-	if (f.keptWeek >= 3 && f.missedWeek === 0) good += 1, why.push(`${f.keptWeek} promises kept`);
-	const score = good - heat;
-	return {
-		mood: heat >= 5 ? "furious" : heat >= 3 && good < 2 ? "angry" : score <= -1 ? "annoyed" : score >= 4 ? "proud" : score >= 2 ? "happy" : "chill",
-		why: why.join(", ") || "a normal day so far"
-	};
-}
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
 /** Today on this device, YYYY-MM-DD in local time (a new day starts at your midnight). */
@@ -12625,1352 +13989,6 @@ function findExercise(s, name) {
 		const n = String(e.name ?? "").toLowerCase().replace(/[^a-z]/g, "");
 		return id.includes(key) || n.includes(key) || n.length > 3 && key.includes(n);
 	}) ?? null;
-}
-// src/core/notebook.ts
-/** Notes you start with (empty, for you to fill). */
-var STARTER_NOTES = [
-	{
-		title: "About me",
-		pinned: true,
-		body: "# About me\n\nWrite what Ben should always know: who you are, what you study or work on, your goals, what motivates you, what makes you procrastinate.\n\n- \n"
-	},
-	{
-		title: "Goals",
-		body: "# Goals\n\n- \n"
-	},
-	{
-		title: "People",
-		body: "# People\n\nThe people in your life Ben should know about.\n\n- \n"
-	},
-	{
-		title: "Ben's notes",
-		body: "# Ben's notes\n\nWhat Ben learned about you. He adds a dated line here; you can edit or delete any of it.\n"
-	}
-];
-var noteKey = (title) => title.trim().toLowerCase().replace(/\s+/g, " ");
-var words = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2);
-/** Search: title words count most, then body; newest first on a tie. */
-function searchNotes(notes, q) {
-	const w = words(q);
-	if (!w.length) return [...notes].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
-	return notes.map((n) => {
-		const t = new Set(words(n.title));
-		const b = words(n.body);
-		return {
-			n,
-			score: w.reduce((s, x) => s + (t.has(x) ? 5 : 0) + (b.filter((y) => y.startsWith(x)).length ? 1 + Math.min(3, b.filter((y) => y.startsWith(x)).length) / 3 : 0), 0)
-		};
-	}).filter((x) => x.score > 0).sort((a, b) => b.score - a.score || b.n.updatedAt.localeCompare(a.n.updatedAt)).map((x) => x.n);
-}
-/**
-* What Ben reads before he answers: pinned notes (About me) and the notes
-* that match the message, then the latest journal days; within `budget` chars.
-*/
-function notesForBen(notes, message, budget = 3500) {
-	const picked = [];
-	const add = (n) => n && !picked.includes(n) && picked.push(n);
-	notes.filter((n) => n.pinned).forEach(add);
-	searchNotes(notes, message).slice(0, 4).forEach(add);
-	notes.filter((n) => /^journal\//i.test(n.title)).sort((a, b) => b.title.localeCompare(a.title)).slice(0, 2).forEach(add);
-	let left = budget;
-	const parts = [];
-	for (const n of picked) {
-		if (left < 120) break;
-		const body = n.body.replace(/\n{3,}/g, "\n\n").trim();
-		const cut = body.length > left - 40 ? `${body.slice(0, left - 60)}…` : body;
-		parts.push(`### ${n.title}${n.author === "me" ? " (written by Victor)" : ""}\n${cut}`);
-		left -= cut.length + n.title.length + 8;
-	}
-	return parts.join("\n\n");
-}
-/** Ben's notebook actions: "note: <Title> | <line>" adds a dated line (creates the note if needed). */
-function readNoteOp(action) {
-	const m = /^\s*note\s*:\s*([^|]{1,80})\|\s*([\s\S]{1,500})$/i.exec(action);
-	if (!m) return null;
-	const title = m[1].trim();
-	const line = m[2].trim().replace(/\s+/g, " ");
-	if (!title || !line) return null;
-	return {
-		title,
-		line
-	};
-}
-/** The note after Ben adds a line (new note when it doesn't exist yet). */
-function appendLine(note, title, line, day, now, id) {
-	const entry = `- ${line} _(Ben, ${day})_`;
-	if (!note) return {
-		id,
-		title,
-		body: `# ${title}\n\n${entry}\n`,
-		author: "ben",
-		pinned: false,
-		createdAt: now,
-		updatedAt: now
-	};
-	if (note.body.includes(line)) return note;
-	return {
-		...note,
-		body: `${note.body.replace(/\s*$/, "")}\n${entry}\n`,
-		updatedAt: now
-	};
-}
-/** The evening journal page, from Ben's review of the day. */
-function journalNote(day, lines) {
-	return {
-		title: `Journal/${day}`,
-		body: [
-			`# ${day}`,
-			"",
-			`**Day score:** ${lines.score}/100`,
-			"",
-			lines.result.trim(),
-			"",
-			`**Lesson:** ${lines.lesson.trim()}`,
-			"",
-			lines.top3.length ? `**Tomorrow's top 3:**\n${lines.top3.map((t, i) => `${i + 1}. ${t}`).join("\n")}` : ""
-		].join("\n").trim()
-	};
-}
-// src/core/experiment.ts
-var EXPERIMENTS = [
-	{
-		id: "phone-out",
-		title: "Phone out of the bedroom at night",
-		how: "Charge it in another room from bedtime until you are up.",
-		metric: "sleep",
-		better: "up",
-		unit: "min slept"
-	},
-	{
-		id: "focus-first",
-		title: "50 minutes of focus before any social media",
-		how: "The first thing after breakfast is one focus block; feeds stay closed until it is done.",
-		metric: "focus",
-		better: "up",
-		unit: "min focus"
-	},
-	{
-		id: "train-before-noon",
-		title: "Train before noon",
-		how: "Put the workout in the morning, before the day gets busy.",
-		metric: "workouts",
-		better: "up",
-		unit: "workouts"
-	},
-	{
-		id: "cash-only",
-		title: "Pay only with what you planned",
-		how: "Write the day’s budget in the morning; anything else waits 24 hours.",
-		metric: "spend",
-		better: "down",
-		unit: "lei spent"
-	}
-];
-var addDays$1 = (d, n) => {
-	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
-	x.setUTCDate(x.getUTCDate() + n);
-	return x.toISOString().slice(0, 10);
-};
-var avg = (s, from, to, countEmpty) => {
-	const days = [];
-	for (let d = from; d <= to; d = addDays$1(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
-	return days.length ? days.reduce((a, b) => a + b, 0) / days.length : null;
-};
-/** The experiment for your weakest area: how far each area is below its usual level (0 = fine, 1 = far off). */
-function pickExperiment(gaps, skip = []) {
-	const options = EXPERIMENTS.filter((e) => !skip.includes(e.id));
-	return [...options.length ? options : EXPERIMENTS].sort((a, b) => (gaps[b.metric] ?? 0) - (gaps[a.metric] ?? 0))[0];
-}
-/** How it is going: day x of 7, before vs during, and after 7 days a verdict. */
-function measureExperiment(state, series, today) {
-	const exp = EXPERIMENTS.find((e) => e.id === state.id);
-	if (!exp) return null;
-	const day = Math.min(7, Math.max(1, Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${state.start}T12:00:00Z`)) / 864e5) + 1));
-	const counted = exp.metric === "workouts" || exp.metric === "spend" || exp.metric === "focus";
-	const before = avg(series, addDays$1(state.start, -14), addDays$1(state.start, -1), counted);
-	const end = addDays$1(state.start, 6) < today ? addDays$1(state.start, 6) : today;
-	const during = avg(series, state.start, end, counted);
-	const changePct = before && during != null ? Math.round((during - before) / before * 100) : null;
-	const done = addDays$1(state.start, 6) < today;
-	const good = changePct != null && (exp.better === "up" ? changePct >= 5 : changePct <= -5);
-	const bad = changePct != null && (exp.better === "up" ? changePct <= -5 : changePct >= 5);
-	const verdict = changePct == null ? "Not enough data yet to compare." : good ? `It works: ${Math.abs(changePct)}% ${exp.better === "up" ? "more" : "less"} ${exp.unit} than before. Keep it.` : bad ? `It didn't help (${changePct > 0 ? "+" : ""}${changePct}%). Drop it and try another.` : `About the same (${changePct > 0 ? "+" : ""}${changePct}%). Keep it if it felt good.`;
-	return {
-		exp,
-		day,
-		done,
-		before,
-		during,
-		changePct,
-		verdict: done ? verdict : `Day ${day} of 7 · so far: ${verdict}`
-	};
-}
-// src/core/lifeReview.ts
-var addDays = (d, n) => {
-	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
-	x.setUTCDate(x.getUTCDate() + n);
-	return x.toISOString().slice(0, 10);
-};
-var sum = (s, today, from, to, counted) => {
-	const vals = [];
-	for (let k = from; k <= to; k++) {
-		const v = s[addDays(today, -k)];
-		if (v != null || counted) vals.push(v ?? 0);
-	}
-	return {
-		total: vals.reduce((a, b) => a + b, 0),
-		n: vals.length
-	};
-};
-var hm = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
-function lifeReview(series, urges, today) {
-	const out = [];
-	const gaps = {};
-	const area = (m, label, fmt, perDay, better) => {
-		const counted = m !== "sleep";
-		const w = sum(series[m], today, 0, 6, counted);
-		const u = sum(series[m], today, 7, 34, counted);
-		if (!w.n || !u.n) return;
-		const week = perDay ? w.total / w.n : w.total;
-		const usual = perDay ? u.total / u.n : u.total / u.n * 7;
-		if (!usual && !week) return;
-		const ch = usual ? (week - usual) / usual : 1;
-		const good = better === "up" ? ch >= 0 : ch <= 0;
-		gaps[m] = good ? 0 : Math.abs(ch);
-		out.push({
-			area: label,
-			good,
-			size: Math.abs(ch),
-			text: fmt(week, usual)
-		});
-	};
-	area("sleep", "Sleep", (w, u) => `${hm(w)} a night, ${Math.abs(Math.round(w - u))} min ${w >= u ? "more" : "less"} than usual`, true, "up");
-	area("workouts", "Training", (w, u) => `${Math.round(w)} workout${Math.round(w) === 1 ? "" : "s"} (usual ${u.toFixed(1)})`, false, "up");
-	area("focus", "Focus", (w, u) => `${hm(w)} of focus (usual ${hm(u)})`, false, "up");
-	area("spend", "Money", (w, u) => `${Math.round(w).toLocaleString("en-US")} lei spent, ${Math.abs(Math.round((w - u) / Math.max(1, u) * 100))}% ${w <= u ? "under" : "over"} usual`, false, "down");
-	if (urges.crushed || urges.slips || urges.prevCrushed) {
-		const good = urges.slips === 0;
-		out.push({
-			area: "Urges",
-			good,
-			size: urges.slips ? 1 : Math.min(1, urges.crushed / 5),
-			text: `${urges.crushed} crushed${urges.slips ? `, ${urges.slips} slip${urges.slips === 1 ? "" : "s"}` : ", no slips"}`
-		});
-	}
-	const sorted = [...out].sort((a, b) => b.size - a.size);
-	let top = sorted.slice(0, 3);
-	const bestGood = sorted.find((f) => f.good);
-	if (bestGood && !top.some((f) => f.good)) top = [...top.slice(0, 2), bestGood];
-	return {
-		findings: top,
-		experiment: pickExperiment(gaps)
-	};
-}
-// src/core/benKnows.ts
-var HOURS = Array.from({ length: 18 }, (_, i) => i + 6);
-var hourOf = (iso) => new Date(iso).getHours();
-/**
-* Your best hours from focus minutes (how much you do), focus quality (how
-* much of it you were really at it) and finished blocks (done/half/no).
-*/
-function energyMap(sessions, quality = [], blocks = []) {
-	const acc = /* @__PURE__ */ new Map();
-	const at = (h) => acc.get(h) ?? (acc.set(h, {
-		min: 0,
-		q: [],
-		b: [],
-		n: 0
-	}), acc.get(h));
-	for (const s of sessions) {
-		if (!s.startedAt || !(s.minutes > 0)) continue;
-		let t = Date.parse(s.startedAt);
-		let left = s.minutes;
-		while (left > 0 && Number.isFinite(t)) {
-			const h = new Date(t).getHours();
-			const into = new Date(t).getMinutes();
-			const take = Math.min(left, 60 - into);
-			const a = at(h);
-			a.min += take;
-			a.n += take >= 15 ? 1 : 0;
-			left -= take;
-			t += take * 6e4;
-		}
-	}
-	for (const q of quality) at(hourOf(q.at)).q.push(Math.max(0, Math.min(100, q.pct)));
-	for (const b of blocks) {
-		const a = at(hourOf(b.at));
-		a.b.push(b.result === "done" ? 100 : b.result === "half" ? 50 : 0);
-		a.n++;
-	}
-	const maxMin = Math.max(1, ...[...acc.values()].map((v) => v.min));
-	const avg = (xs) => xs.length ? xs.reduce((t, x) => t + x, 0) / xs.length : null;
-	const hours = HOURS.map((h) => {
-		const a = acc.get(h);
-		if (!a) return {
-			h,
-			score: 0,
-			minutes: 0,
-			n: 0
-		};
-		const volume = a.min / maxMin * 100;
-		const q = avg(a.q);
-		const b = avg(a.b);
-		const parts = [
-			volume,
-			...q != null ? [q] : [],
-			...b != null ? [b] : []
-		];
-		return {
-			h,
-			score: Math.round(avg(parts) ?? 0),
-			minutes: Math.round(a.min),
-			n: a.n
-		};
-	});
-	const ready = sessions.length + blocks.length >= 6;
-	const ranked = hours.filter((x) => x.n > 0).sort((a, b) => b.score - a.score || b.minutes - a.minutes);
-	return {
-		hours,
-		ready,
-		best: ready ? ranked.slice(0, Math.min(4, Math.max(2, Math.ceil(ranked.length / 4)))).map((x) => x.h) : [],
-		worst: ready && ranked.length >= 5 ? ranked.filter((x) => x.n >= 2).slice(-2).reverse().map((x) => x.h).filter((h) => !ranked.slice(0, Math.min(4, Math.max(2, Math.ceil(ranked.length / 4)))).some((b) => b.h === h)) : []
-	};
-}
-/** "09–11 and 16–17" from start hours. */
-function hoursText(hs) {
-	const s = [...hs].sort((a, b) => a - b);
-	const runs = [];
-	for (const h of s) {
-		const last = runs[runs.length - 1];
-		if (last && h === last[1] + 1) last[1] = h;
-		else runs.push([h, h]);
-	}
-	const p = (h) => String(h).padStart(2, "0");
-	return runs.map(([a, b]) => `${p(a)}–${p(b + 1)}`).join(" and ");
-}
-var DOW = [
-	"Sun",
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat"
-];
-var dow = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
-var minsOf = (hm) => hm && /^\d{1,2}:\d{2}/.test(hm) ? Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)) : null;
-var sleepMin = (bed, wake) => (wake - bed + 1440) % 1440;
-/** What your own data shows, each with one change to try. Strongest first, at most 5. */
-function weeklyPatterns(i) {
-	const out = [];
-	const from = addDays$3(i.today, -55);
-	const ses = i.sessions.filter((s) => s.day >= from && s.day <= i.today && s.startedAt);
-	let am = 0;
-	let pm = 0;
-	for (const s of ses) hourOf(s.startedAt) < 12 ? am += s.minutes : pm += s.minutes;
-	if (am + pm >= 300) {
-		if (am >= pm * 1.8) out.push({
-			id: "am",
-			text: `Your focus is ${(am / Math.max(1, pm)).toFixed(1)}× stronger before noon.`,
-			change: "Put the hardest task of the day before 12:00.",
-			weight: am / Math.max(1, pm)
-		});
-		else if (pm >= am * 1.8) out.push({
-			id: "pm",
-			text: `You get ${(pm / Math.max(1, am)).toFixed(1)}× more focus done after noon.`,
-			change: "Keep mornings for light tasks; book deep work after lunch.",
-			weight: pm / Math.max(1, am)
-		});
-	}
-	const lateByDow = Array(7).fill(0);
-	const daysWithAny = new Set(ses.map((s) => s.day));
-	for (const s of ses) if (hourOf(s.startedAt) >= 15) lateByDow[dow(s.day)] += s.minutes;
-	const totalLate = lateByDow.reduce((t, x) => t + x, 0);
-	if (totalLate >= 240 && daysWithAny.size >= 10) {
-		const weekdays = [
-			1,
-			2,
-			3,
-			4,
-			5
-		];
-		const avgLate = totalLate / 7;
-		const lost = weekdays.filter((d) => lateByDow[d] < avgLate * .25);
-		if (lost.length && lost.length <= 3) out.push({
-			id: "lost-pm",
-			text: `You lose afternoons after 15:00 on ${lost.map((d) => DOW[d]).join("/")}.`,
-			change: `Book one 50-min block at 15:00 on ${lost.map((d) => DOW[d]).join(" and ")}, with the task named.`,
-			weight: 2.2
-		});
-	}
-	const perDow = Array(7).fill(0);
-	for (const s of ses) perDow[dow(s.day)] += s.minutes;
-	const wk = (perDow[1] + perDow[2] + perDow[3] + perDow[4] + perDow[5]) / 5;
-	const we = (perDow[0] + perDow[6]) / 2;
-	if (wk >= 60 && we < wk * .3) out.push({
-		id: "weekend",
-		text: `Weekends drop to ${Math.round(we / Math.max(1, wk) * 100)}% of a weekday's focus.`,
-		change: "One 50-min block Saturday morning keeps the streak alive without killing the weekend.",
-		weight: 1.6
-	});
-	const nights = i.sleep.filter((s) => s.day >= from).map((s) => {
-		const b = minsOf(s.bed);
-		const w = minsOf(s.wake);
-		return b != null && w != null ? {
-			day: s.day,
-			min: sleepMin(b, w)
-		} : null;
-	}).filter((x) => !!x && x.min >= 180 && x.min <= 720);
-	if (nights.length >= 6) {
-		const avgSleep = nights.reduce((t, n) => t + n.min, 0) / nights.length;
-		const examDays = new Set((i.exams ?? []).flatMap((d) => [d, addDays$3(d, -1)]));
-		const before = nights.filter((n) => examDays.has(n.day));
-		if (before.length >= 1) {
-			const b = before.reduce((t, n) => t + n.min, 0) / before.length;
-			if (avgSleep - b >= 25) out.push({
-				id: "exam-sleep",
-				text: `You sleep ${Math.round(avgSleep - b)} min less before exams.`,
-				change: "Two nights before an exam: lights out at your normal time, review in the morning instead.",
-				weight: 2
-			});
-		}
-		const focusOn = (day) => ses.filter((s) => s.day === day).reduce((t, s) => t + s.minutes, 0);
-		const short = nights.filter((n) => n.min < 390);
-		const long = nights.filter((n) => n.min >= 420);
-		if (short.length >= 3 && long.length >= 3) {
-			const fs = short.reduce((t, n) => t + focusOn(n.day), 0) / short.length;
-			const fl = long.reduce((t, n) => t + focusOn(n.day), 0) / long.length;
-			if (fl >= 30 && fl >= fs * 1.4) out.push({
-				id: "sleep-focus",
-				text: `After 7h+ of sleep you focus ${Math.round(fl)} min, after a short night only ${Math.round(fs)}.`,
-				change: "Protect the bedtime: it buys you about an extra focus block the next day.",
-				weight: fl / Math.max(1, fs)
-			});
-		}
-	}
-	const wset = new Set(i.workouts.filter((d) => d >= from));
-	const days = [.../* @__PURE__ */ new Set([...ses.map((s) => s.day), ...wset])];
-	if (wset.size >= 4 && days.length >= 14) {
-		const f = (d) => ses.filter((s) => s.day === d).reduce((t, s) => t + s.minutes, 0);
-		const on = [...wset].map(f);
-		const off = days.filter((d) => !wset.has(d)).map(f);
-		const a = on.reduce((t, x) => t + x, 0) / Math.max(1, on.length);
-		const b = off.reduce((t, x) => t + x, 0) / Math.max(1, off.length);
-		if (a >= b * 1.3 && a >= 40) out.push({
-			id: "sport-focus",
-			text: `On training days you focus ${Math.round(a)} min vs ${Math.round(b)} on other days.`,
-			change: "Train before your hardest study day, even 20 minutes.",
-			weight: a / Math.max(1, b)
-		});
-	}
-	const bl = (i.blocks ?? []).filter((b) => b.day >= from);
-	if (bl.length >= 8) {
-		const byH = /* @__PURE__ */ new Map();
-		for (const b of bl) byH.set(hourOf(b.at), [...byH.get(hourOf(b.at)) ?? [], b.result === "done" ? 1 : b.result === "half" ? .5 : 0]);
-		const bad = [...byH.entries()].filter(([, v]) => v.length >= 3 && v.reduce((t, x) => t + x, 0) / v.length < .4).sort((a, b) => a[0] - b[0]);
-		if (bad.length) out.push({
-			id: "bad-hour",
-			text: `Blocks at ${bad.map(([h]) => `${String(h).padStart(2, "0")}:00`).join(", ")} mostly don't get done.`,
-			change: "Stop booking hard work there: a walk, errands or easy tasks fit that hour better.",
-			weight: 1.8
-		});
-	}
-	for (const l of moodLinks(i.moods ?? [], i).slice(0, 1)) out.push({
-		id: `mood-${l.id}`,
-		text: l.text,
-		change: l.change,
-		weight: 1.5
-	});
-	return out.sort((a, b) => b.weight - a.weight).slice(0, 5);
-}
-var EXCUSE_RX = [
-	["sick", /\b(sick|ill|fever|headache|migraine|cold|flu|bolnav|răcit|racit|ma doare|mă doare|durere)\b/iu],
-	["tired", /\b(tired|exhausted|sleepy|no energy|drained|obosit|somnoros|n-am energie|nu am energie|fără energie|fara energie)\b/iu],
-	["busy", /\b(busy|no time|too much|work(ed)? late|class(es)? all day|ocupat|n-am timp|nu am timp|fără timp|prea mult)\b/iu],
-	["forgot", /\b(forgot|forget|didn'?t remember|am uitat|uitat)\b/iu],
-	["no mood", /\b(lazy|not in the mood|no motivation|don'?t feel like|didn'?t feel like|unmotivated|lene|nu am chef|n-am chef|fără chef|fara chef|nu-mi vine)\b/iu],
-	["phone", /\b(phone|tiktok|youtube|instagram|scroll(ed|ing)?|games?|gaming|netflix|series|telefon)\b/iu],
-	["friends", /\b(friends?|party|went out|guests|prieteni|petrecere|am ieșit|am iesit)\b/iu],
-	["later", /\b(tomorrow|later|next week|mâine|maine|mai târziu|mai tarziu|săptămâna viitoare)\b/iu]
-];
-/** The kind of excuse in a message, or null when it isn't one. */
-function classifyExcuse(text) {
-	const t = String(text ?? "");
-	if (!/\b(didn'?t|did not|couldn'?t|can'?t|won'?t|not|skip(ped)?|missed|no\b|nu|n-am|n-a|nu am|am sărit|am sarit)\b|\bbecause\b|\bpentru că\b|\bpt ca\b/iu.test(t)) return null;
-	for (const [k, rx] of EXCUSE_RX) if (rx.test(t)) return k;
-	return null;
-}
-function addExcuse(list, text, at) {
-	const kind = classifyExcuse(text);
-	if (!kind) return list;
-	if (list.some((e) => e.at.slice(0, 10) === at.slice(0, 10) && e.kind === kind)) return list;
-	return [...list, {
-		at,
-		kind,
-		text: String(text).slice(0, 160)
-	}].slice(-120);
-}
-/** Excuses in the last `days`, most repeated first. */
-function excuseCounts(list, today, days = 30) {
-	const from = addDays$3(today, -(days - 1));
-	const m = /* @__PURE__ */ new Map();
-	for (const e of list) {
-		if (e.at.slice(0, 10) < from) continue;
-		const c = m.get(e.kind) ?? {
-			kind: e.kind,
-			n: 0,
-			last: e.at
-		};
-		c.n++;
-		if (e.at > c.last) c.last = e.at;
-		m.set(e.kind, c);
-	}
-	return [...m.values()].sort((a, b) => b.n - a.n || b.last.localeCompare(a.last));
-}
-var EXCUSE_WORD = {
-	tired: "\"too tired\"",
-	busy: "\"no time\"",
-	sick: "\"sick\"",
-	forgot: "\"I forgot\"",
-	"no mood": "\"not in the mood\"",
-	phone: "the phone",
-	friends: "going out",
-	later: "\"tomorrow\""
-};
-var EXCUSE_FIX = {
-	tired: "Do the 10-minute version, then decide.",
-	busy: "Book 25 minutes now so it has a slot.",
-	sick: "Rest is fine, but say when you're back on.",
-	forgot: "Set a check-in at the time you will do it.",
-	"no mood": "Start for 5 minutes; mood follows action.",
-	phone: "Phone in another room for one block.",
-	friends: "Do the block before you go out.",
-	later: "Pick the exact time now."
-};
-/** Ben's kind call-out of a repeat ("3rd time this month it's 'too tired'"), or null. */
-function excuseCallout(list, kind, today) {
-	const c = excuseCounts(list, today).find((x) => x.kind === kind);
-	if (!c || c.n < 2) return null;
-	return `That's the ${c.n === 2 ? "2nd" : c.n === 3 ? "3rd" : `${c.n}th`} time this month it's ${EXCUSE_WORD[kind]}. ${EXCUSE_FIX[kind]}`;
-}
-/** One line for Ben's prompt. */
-function excuseLine(list, today) {
-	const c = excuseCounts(list, today);
-	return c.length ? `Excuses he gave in the last 30 days: ${c.map((x) => `${EXCUSE_WORD[x.kind]} ×${x.n}`).join(", ")}. Name a repeat kindly, with the count.` : "";
-}
-var MOOD_FACES = [
-	"😫",
-	"😕",
-	"😐",
-	"🙂",
-	"😄"
-];
-var moodFace = (m) => MOOD_FACES[Math.max(1, Math.min(5, Math.round(m))) - 1];
-function addMood(list, e) {
-	const mood = Math.max(1, Math.min(5, Math.round(e.mood)));
-	return [...list.filter((x) => !(x.day === e.day && x.slot === e.slot)), {
-		...e,
-		mood
-	}].sort((a, b) => a.at.localeCompare(b.at)).slice(-240);
-}
-/** Which check-in is due now (12–15 noon, 19–23 evening), if not done today. */
-function moodDue(list, now) {
-	const h = now.getHours();
-	const day = now.toLocaleDateString("sv-SE");
-	const slot = h >= 12 && h < 15 ? "noon" : h >= 19 && h < 23 ? "evening" : null;
-	return slot && !list.some((x) => x.day === day && x.slot === slot) ? slot : null;
-}
-/** How mood moves with sleep, training and spending (only with enough days). */
-function moodLinks(moods, i) {
-	const byDay = /* @__PURE__ */ new Map();
-	for (const m of moods) byDay.set(m.day, [...byDay.get(m.day) ?? [], m.mood]);
-	const dayMood = new Map([...byDay.entries()].map(([d, v]) => [d, v.reduce((t, x) => t + x, 0) / v.length]));
-	if (dayMood.size < 6) return [];
-	const out = [];
-	const split = (id, yes, text, change) => {
-		const a = [];
-		const b = [];
-		for (const [d, m] of dayMood) {
-			const y = yes(d);
-			if (y === null) continue;
-			(y ? a : b).push(m);
-		}
-		if (a.length < 3 || b.length < 3) return;
-		const ma = a.reduce((t, x) => t + x, 0) / a.length;
-		const mb = b.reduce((t, x) => t + x, 0) / b.length;
-		if (Math.abs(ma - mb) >= .5) out.push({
-			id,
-			text: text(ma, mb),
-			change: typeof change === "string" ? change : change(ma, mb),
-			diff: Math.abs(ma - mb)
-		});
-	};
-	const w = new Set(i.workouts);
-	split("sport", (d) => w.has(d), (a, b) => `Mood ${a.toFixed(1)} on training days vs ${b.toFixed(1)} without.`, "When the day feels heavy, train first: it lifts you.");
-	const night = new Map(i.sleep.map((s) => {
-		const b = minsOf(s.bed);
-		const wk = minsOf(s.wake);
-		return [s.day, b != null && wk != null ? sleepMin(b, wk) : null];
-	}));
-	split("sleep", (d) => night.get(d) == null ? null : night.get(d) >= 420, (a, b) => `Mood ${a.toFixed(1)} after 7h+ of sleep vs ${b.toFixed(1)} after less.`, "A bad mood is often a short night: go to bed on time tonight.");
-	if (i.spending?.length) {
-		const spent = /* @__PURE__ */ new Map();
-		for (const s of i.spending) spent.set(s.day, (spent.get(s.day) ?? 0) + s.bani);
-		const vals = [...spent.values()].sort((a, b) => a - b);
-		const high = vals[Math.floor(vals.length * .75)] ?? Infinity;
-		split("spend", (d) => (spent.get(d) ?? 0) >= high && high > 0, (a, b) => `On big spending days your mood is ${a.toFixed(1)} vs ${b.toFixed(1)}.`, (a, b) => a < b ? "Low days → impulse buys. Wait a day before buying when you feel down." : "Spending lifts you only for the day; plan treats instead.");
-	}
-	return out.sort((a, b) => b.diff - a.diff);
-}
-function moodLine(list, today) {
-	const recent = list.filter((m) => m.day >= addDays$3(today, -6));
-	if (!recent.length) return "";
-	const avg = recent.reduce((t, m) => t + m.mood, 0) / recent.length;
-	const todayM = list.filter((m) => m.day === today).map((m) => `${m.slot} ${moodFace(m.mood)} ${m.mood}/5`);
-	return `Mood check-ins: last 7 days average ${avg.toFixed(1)}/5${todayM.length ? `; today ${todayM.join(", ")}` : ""}.`;
-}
-var PROFILE_NOTE = "Ben's profile of you";
-var KEEP_MARK = "## Your corrections";
-/**
-* The profile note Ben keeps current: goals, exams, people, what works, what
-* fails, patterns, best hours, excuses. A "Your corrections" section at the end
-* is yours: it is kept as you wrote it on every refresh (and Ben reads it).
-*/
-function profileNote(p, previousBody = "") {
-	const keep = previousBody.includes(KEEP_MARK) ? previousBody.slice(previousBody.indexOf(KEEP_MARK)) : `${KEEP_MARK}\n\nWrite here anything above that's wrong or missing. Ben keeps this part and reads it.\n\n- \n`;
-	const left = (d) => Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${p.today}T12:00:00Z`)) / 864e5);
-	const list = (xs, empty) => xs.length ? xs.map((x) => `- ${x}`).join("\n") : `- ${empty}`;
-	return [
-		`# ${PROFILE_NOTE}`,
-		"",
-		`Ben updates this himself (last ${p.today}). Edit the last section to correct him.`,
-		"",
-		"## Goals",
-		list(p.goals.map((g) => `${g.title}${g.deadline ? ` (by ${g.deadline}, ${left(g.deadline)} days)` : ""}${g.weekly ? ` · ${g.weekly} a week` : ""}`), "none yet: tell Ben one with a date"),
-		"",
-		"## Exams & deadlines",
-		list(p.exams.filter((e) => left(e.deadline) >= 0).sort((a, b) => a.deadline.localeCompare(b.deadline)).map((e) => `${e.title}: ${e.deadline} (${left(e.deadline)} days)`), "none coming up"),
-		"",
-		"## People",
-		list(p.people.map((x) => `${x.name}: ${x.note}`), "none yet"),
-		"",
-		"## Best hours (energy map)",
-		p.energy.ready ? `- Best: ${hoursText(p.energy.best)}${p.energy.worst.length ? `\n- Weakest: ${hoursText(p.energy.worst)}` : ""}` : "- Not enough focus data yet (about a week of sessions).",
-		"",
-		"## What works",
-		list(p.works, "Ben is still learning"),
-		"",
-		"## What doesn't",
-		list(p.fails, "Ben is still learning"),
-		"",
-		"## Patterns",
-		list(p.patterns.map((x) => `${x.text} → ${x.change}`), "none strong enough yet"),
-		"",
-		"## Excuses (30 days)",
-		list(p.excuses.map((e) => `${EXCUSE_WORD[e.kind]} ×${e.n}`), "none: nice"),
-		p.moodAvg != null ? `\n## Mood\n- 7-day average ${p.moodAvg.toFixed(1)}/5` : "",
-		"",
-		keep.replace(/\n+$/, ""),
-		""
-	].join("\n");
-}
-/** What you wrote in "Your corrections" (for Ben's prompt). */
-function profileCorrections(body) {
-	if (!body.includes(KEEP_MARK)) return "";
-	return body.slice(body.indexOf(KEEP_MARK) + 19).split("\n").map((l) => l.trim()).filter((l) => /^-\s*\S/.test(l)).join("\n");
-}
-// src/core/benPlans.ts
-/** Review after 1, 3, 7, 14, 30 days (each from the previous review). */
-var SRS_STEPS = [
-	1,
-	3,
-	7,
-	14,
-	30
-];
-function nextReview(t) {
-	const n = t.reviews.length;
-	if (n >= SRS_STEPS.length) return null;
-	const base = n ? t.reviews[n - 1] : t.learned;
-	let due = addDays$3(base, SRS_STEPS[n]);
-	if (t.examDay && due >= t.examDay) due = addDays$3(t.examDay, -1) >= base ? addDays$3(t.examDay, -1) : t.examDay;
-	return due;
-}
-function dueTopics(list, today) {
-	return list.filter((t) => t.examDay ? t.examDay >= today : true).filter((t) => {
-		const d = nextReview(t);
-		return d != null && d <= today;
-	});
-}
-function addTopic(list, exam, topic, today, examDay) {
-	const key = `${exam}|${topic}`.toLowerCase();
-	if (list.some((t) => `${t.exam}|${t.topic}`.toLowerCase() === key)) return list;
-	return [...list, {
-		id: `s${Date.now().toString(36)}${list.length}`,
-		exam: exam.slice(0, 60),
-		topic: topic.slice(0, 80),
-		learned: today,
-		reviews: [],
-		examDay: examDay ?? null
-	}].slice(-200);
-}
-function reviewTopic(list, id, today) {
-	return list.map((t) => t.id === id && !t.reviews.includes(today) ? {
-		...t,
-		reviews: [...t.reviews, today]
-	} : t);
-}
-/** "after coffee → 10 pushups → plan review" (also > or ,) into a stack. */
-function parseStack(text, today) {
-	const parts = String(text ?? "").split(/\s*(?:→|->|>|,|\bthen\b|\bapoi\b)\s*/i).map((x) => x.trim()).filter(Boolean);
-	if (parts.length < 2) return null;
-	const cue = parts[0].replace(/^(after|când|cand|dupa|după)\s+/i, "").slice(0, 60);
-	return {
-		id: `h${Date.now().toString(36)}`,
-		cue,
-		steps: parts.slice(1, 6).map((s) => s.slice(0, 60)),
-		log: {},
-		createdAt: today
-	};
-}
-function tickStack(s, day, step) {
-	const cur = s.log[day] ?? [];
-	const next = cur.includes(step) ? cur.filter((x) => x !== step) : [...cur, step].sort((a, b) => a - b);
-	return {
-		...s,
-		log: {
-			...s.log,
-			[day]: next
-		}
-	};
-}
-/** Days in a row (ending today or yesterday) with every step done. */
-function stackStreak(s, today) {
-	const full = (d) => (s.log[d] ?? []).length >= s.steps.length;
-	let d = full(today) ? today : addDays$3(today, -1);
-	let n = 0;
-	while (full(d) && n < 400) {
-		n++;
-		d = addDays$3(d, -1);
-	}
-	return n;
-}
-/** Share of the last 14 days with the whole chain done. */
-function stackRate(s, today) {
-	const since = s.createdAt > addDays$3(today, -13) ? s.createdAt : addDays$3(today, -13);
-	let days = 0;
-	let full = 0;
-	for (let d = since; d <= today; d = addDays$3(d, 1)) {
-		days++;
-		if ((s.log[d] ?? []).length >= s.steps.length) full++;
-	}
-	return days ? Math.round(full / days * 100) : 0;
-}
-var read = (db) => {
-	try {
-		const v = JSON.parse(getSetting(db, "island_day_log") || "{}");
-		return v && typeof v === "object" ? v : {};
-	} catch {
-		return {};
-	}
-};
-var empty = () => ({
-	focus: [],
-	blocks: []
-});
-function dayLog(db, day) {
-	return read(db)[day] ?? empty();
-}
-/** One line for Ben: "Focus quality 82% (3 sessions). Blocks: 2 done, 1 half, 1 not done." */
-function dayLogLine(d) {
-	const parts = [];
-	if (d.focus.length) {
-		const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1;
-		const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins);
-		parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? "" : "s"} (share of the time he was really at the PC)`);
-	}
-	if (d.blocks.length) {
-		const n = (r) => d.blocks.filter((x) => x.result === r).length;
-		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
-	}
-	return parts.join(". ");
-}
-// src/renderer/src/web/notes.ts
-var newId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-var row = (r) => ({
-	id: String(r.id),
-	title: String(r.title),
-	body: String(r.body ?? ""),
-	author: r.author === "ben" ? "ben" : "me",
-	pinned: !!Number(r.pinned),
-	createdAt: String(r.created_at),
-	updatedAt: String(r.updated_at)
-});
-function listNotes(db) {
-	return db.prepare("SELECT id, title, body, author, pinned, created_at, updated_at FROM notes ORDER BY pinned DESC, updated_at DESC").all().map(row);
-}
-/** The first time: the starter notes (About me, Goals, People, Ben's notes). */
-function seedNotes(db, now = /* @__PURE__ */ new Date()) {
-	if (db.prepare("SELECT COUNT(*) AS n FROM notes").all()[0]?.n > 0) return;
-	for (const s of STARTER_NOTES) db.prepare("INSERT OR IGNORE INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(newId(), s.title, s.body, "me", s.pinned ? 1 : 0, now.toISOString(), now.toISOString());
-}
-var byTitle = (db, title) => {
-	const r = db.prepare("SELECT id, title, body, author, pinned, created_at, updated_at FROM notes WHERE lower(title) = ?").all(noteKey(title))[0];
-	return r ? row(r) : null;
-};
-/** Saves a note you wrote (new or edited). A title another note has is refused. */
-function saveNote(db, n, now = /* @__PURE__ */ new Date()) {
-	const title = n.title.trim().slice(0, 120) || "Untitled";
-	const clash = byTitle(db, title);
-	if (clash && clash.id !== n.id) throw new Error(`There is already a note called “${clash.title}”`);
-	const at = now.toISOString();
-	if (n.id) {
-		db.prepare("UPDATE notes SET title = ?, body = ?, pinned = COALESCE(?, pinned), updated_at = ? WHERE id = ?").run(title, n.body, n.pinned == null ? null : n.pinned ? 1 : 0, at, n.id);
-		return byTitle(db, title);
-	}
-	const id = newId();
-	db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(id, title, n.body, "me", n.pinned ? 1 : 0, at, at);
-	return byTitle(db, title);
-}
-/** Ben adds a dated line under a note (made if it doesn't exist). Returns the "done" line, or null. */
-function benNote(db, title, line, day, now = /* @__PURE__ */ new Date()) {
-	const cur = byTitle(db, title);
-	const next = appendLine(cur, cur?.title ?? title.trim().slice(0, 120), line.slice(0, 400), day, now.toISOString(), cur?.id ?? newId());
-	if (cur && next === cur) return null;
-	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(next.body, next.updatedAt, cur.id);
-	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(next.id, next.title, next.body, "ben", next.createdAt, next.updatedAt);
-	return `📓 Noted in “${next.title}”: ${line.slice(0, 80)}`;
-}
-/** The evening journal page (Journal/YYYY-MM-DD), written or replaced by Ben. */
-function writeJournal(db, day, r, now = /* @__PURE__ */ new Date()) {
-	const j = journalNote(day, r);
-	const cur = byTitle(db, j.title);
-	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(j.body, now.toISOString(), cur.id);
-	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(newId(), j.title, j.body, "ben", now.toISOString(), now.toISOString());
-}
-// src/renderer/src/web/benDesk.ts
-var DESK = "ben_desk";
-var EMPTY_DESK = {
-	excuses: [],
-	moods: [],
-	study: [],
-	stacks: [],
-	stakes: [],
-	calls: [],
-	letters: {}
-};
-function loadDesk(db) {
-	try {
-		const v = JSON.parse(getSetting(db, "ben_desk") || "null");
-		return v && typeof v === "object" ? {
-			...EMPTY_DESK,
-			...v
-		} : { ...EMPTY_DESK };
-	} catch {
-		return { ...EMPTY_DESK };
-	}
-}
-function saveDesk(db, d) {
-	setSetting(db, DESK, JSON.stringify(d));
-	return d;
-}
-function editDesk(db, f) {
-	return saveDesk(db, f(loadDesk(db)));
-}
-var json$1 = (db, key) => {
-	try {
-		return JSON.parse(getSetting(db, key) || "null");
-	} catch {
-		return null;
-	}
-};
-var EXP_KEY = "ben_experiment";
-function sessionsOf(db, from) {
-	try {
-		return db.prepare("SELECT day, started_at, minutes FROM focus_sessions WHERE day >= ?").all(from).map((r) => ({
-			day: String(r.day),
-			startedAt: String(r.started_at),
-			minutes: Number(r.minutes)
-		}));
-	} catch {
-		return [];
-	}
-}
-function moneyNumbers(finance, today) {
-	const tx = Array.isArray(finance?.tx) ? finance.tx : [];
-	const B = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
-	const exp = tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
-	const from30 = addDays$3(today, -29);
-	const perDay = Math.round(exp.filter((t) => t.date >= from30 && t.date <= today).reduce((s, t) => s + B(t), 0) / 30);
-	const wh = finance?.settings?.workHour;
-	let hourly = wh?.mode === "manual" && Number(wh.rate) > 0 ? Number(wh.rate) : null;
-	if (hourly == null) {
-		const months = [
-			1,
-			2,
-			3
-		].map((k) => {
-			const d = /* @__PURE__ */ new Date(`${today.slice(0, 7)}-15T12:00:00Z`);
-			d.setUTCMonth(d.getUTCMonth() - k);
-			return d.toISOString().slice(0, 7);
-		});
-		const inc = tx.filter((t) => t && t.type === "income" && !t.deleted && !t.loan && typeof t.date === "string" && months.includes(t.date.slice(0, 7)));
-		const active = new Set(inc.map((t) => t.date.slice(0, 7))).size;
-		const sum = inc.reduce((s, t) => s + B(t), 0);
-		hourly = active && sum ? Math.round(sum / active / (Number(wh?.hoursPerMonth) || 160)) : null;
-	}
-	const limit = finance?.settings?.limit;
-	let limitLeft = null;
-	let safeToday = null;
-	if (limit?.on && Number(limit.amount) > 0) {
-		const month = today.slice(0, 7);
-		const spent = exp.filter((t) => t.date.startsWith(month)).reduce((s, t) => s + B(t), 0);
-		limitLeft = Number(limit.amount) - spent;
-		const dim = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
-		safeToday = Math.max(0, Math.round(limitLeft / (dim - Number(today.slice(8)) + 1)));
-	}
-	const goals = (Array.isArray(finance?.goals) ? finance.goals : []).filter((g) => g && !g.deleted && Number(g.target) > 0).map((g) => ({
-		title: String(g.name ?? g.title ?? "Goal"),
-		left: Math.max(0, Number(g.target) - Number(g.saved ?? g.current ?? 0))
-	}));
-	return {
-		hourly,
-		safeToday,
-		limitLeft,
-		perDay,
-		balance: null,
-		goals
-	};
-}
-/** Everything the Coach page's desk shows (pure read). */
-function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
-	const db = s.db;
-	const today = s.wallet.today(now);
-	const d = loadDesk(db);
-	const sessions = sessionsOf(db, addDays$3(today, -62));
-	const dayLog = json$1(db, "island_day_log") ?? {};
-	const quality = Object.values(dayLog).flatMap((x) => x.focus ?? []).map((q) => ({
-		at: q.at,
-		pct: q.pct
-	}));
-	const blocks = Object.entries(dayLog).flatMap(([day, x]) => (x.blocks ?? []).map((b) => ({
-		day,
-		at: b.at,
-		result: b.result
-	})));
-	const energy = energyMap(sessions, quality, blocks);
-	let logs = [];
-	try {
-		logs = s.sleep.logs();
-	} catch {
-		logs = [];
-	}
-	const sleep = logs.map((l) => ({
-		day: l.day,
-		wake: l.wakeTime,
-		bed: l.bedTime,
-		onTime: !!l.onTime
-	}));
-	const input = s.progress.input(null, now, 70);
-	const workouts = [...new Set(input.workouts.map((w) => w.day))];
-	const f = s.focus.state(now);
-	const exams = f.goals.map((g) => ({
-		title: g.title,
-		deadline: g.deadline
-	}));
-	const spending = financeSpending(finance);
-	const patterns = weeklyPatterns({
-		today,
-		sessions,
-		sleep,
-		workouts,
-		moods: d.moods,
-		blocks,
-		exams: exams.map((e) => e.deadline),
-		spending
-	});
-	const recentMoods = d.moods.filter((m) => m.day >= addDays$3(today, -6));
-	const cats = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
-	const catName = (id) => cats.get(id) ?? id;
-	const ps = promiseStats(json$1(db, "coach_reminders") ?? [], now);
-	let restDays = [];
-	try {
-		restDays = s.body.restDays();
-	} catch {
-		restDays = [];
-	}
-	const month = today.slice(0, 7);
-	const story = monthStory({
-		month,
-		today,
-		focus: sessions.map((x) => ({
-			day: x.day,
-			minutes: x.minutes
-		})),
-		workouts,
-		restDays,
-		sleep,
-		spent: spending ?? [],
-		moods: d.moods,
-		stakes: stakeStats(d.stakes, now),
-		promises: {
-			kept: ps.kept,
-			missed: ps.broken + ps.ignored
-		}
-	});
-	const series = {
-		focus: {},
-		sleep: {},
-		workouts: {},
-		spend: {}
-	};
-	for (const x of sessions) series.focus[x.day] = (series.focus[x.day] ?? 0) + x.minutes;
-	for (const l of logs) {
-		const m = nightMinutes(l);
-		if (m != null) series.sleep[l.day] = m;
-	}
-	for (const w of input.workouts) series.workouts[w.day] = (series.workouts[w.day] ?? 0) + 1;
-	for (const x of spending ?? []) series.spend[x.day] = (series.spend[x.day] ?? 0) + x.bani / 100;
-	const mean = (m, from, to, counted = m !== "sleep") => {
-		const vals = [];
-		for (let k = from; k <= to; k++) {
-			const v = series[m][addDays$3(today, -k)];
-			if (v != null || counted) vals.push(v ?? 0);
-		}
-		return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-	};
-	const gap = (m) => {
-		const last = mean(m, 0, 6);
-		const usual = mean(m, 7, 34);
-		if (!usual) return 0;
-		return m === "spend" ? Math.max(0, (last - usual) / usual) : Math.max(0, (usual - last) / usual);
-	};
-	const expState = json$1(db, EXP_KEY);
-	const current = expState ? measureExperiment(expState, series[EXPERIMENTS.find((e) => e.id === expState.id)?.metric ?? "focus"], today) : null;
-	const experiment = {
-		current,
-		suggest: pickExperiment({
-			focus: gap("focus"),
-			sleep: gap("sleep"),
-			workouts: gap("workouts"),
-			spend: gap("spend")
-		}, current ? [current.exp.id] : [])
-	};
-	const ue = urgeEvents(db);
-	const inWeek = (ts, from, to) => {
-		const d = String(ts).slice(0, 10);
-		return d >= addDays$3(today, -to) && d <= addDays$3(today, -from);
-	};
-	const review = lifeReview(series, {
-		crushed: ue.filter((e) => e.kind === "urge" && inWeek(e.ts, 0, 6)).length,
-		slips: ue.filter((e) => e.kind === "reset" && inWeek(e.ts, 0, 6)).length,
-		prevCrushed: ue.filter((e) => e.kind === "urge" && inWeek(e.ts, 7, 13)).length
-	}, today);
-	const lastNight = logs.find((l) => l.day === today) ?? null;
-	const tx = Array.isArray(finance?.tx) ? finance.tx : null;
-	return {
-		today,
-		energy,
-		patterns,
-		excuses: excuseCounts(d.excuses, today),
-		moods: d.moods.filter((m) => m.day >= addDays$3(today, -13)),
-		moodDue: moodDue(d.moods, now),
-		moodAvg: recentMoods.length ? recentMoods.reduce((t, m) => t + m.mood, 0) / recentMoods.length : null,
-		study: d.study.filter((t) => !t.examDay || t.examDay >= addDays$3(today, -1)).map((t) => ({
-			...t,
-			next: nextReview(t),
-			due: dueTopics([t], today).length > 0
-		})).sort((a, b) => Number(b.due) - Number(a.due) || String(a.next).localeCompare(String(b.next))),
-		stacks: d.stacks.map((x) => ({
-			...x,
-			streak: stackStreak(x, today),
-			rate: stackRate(x, today),
-			today: x.log[today] ?? []
-		})),
-		stakes: [...d.stakes].sort((a, b) => Number(b.status === "open") - Number(a.status === "open") || b.at.localeCompare(a.at)).slice(0, 12),
-		stakeStats: stakeStats(d.stakes, now),
-		callDue: callDue(d.calls, now),
-		lastCall: d.calls[d.calls.length - 1] ?? null,
-		month: story,
-		letter: d.letters[month] ?? null,
-		spend: tx ? spendPace(tx, catName, today) : null,
-		recurring: tx ? recurringCharges(tx, catName, today) : [],
-		sleep: sleepLink(lastNight?.bedTime, lastNight?.wakeTime),
-		money: moneyNumbers(finance, today),
-		goals: f.goals.map((g) => ({
-			id: g.id,
-			title: g.title,
-			deadline: g.deadline,
-			hoursLeft: Math.max(0, Math.round((g.hours - g.doneMin / 60) * 10) / 10),
-			daysLeft: g.daysLeft,
-			behind: g.aheadH <= -1
-		})),
-		exams,
-		restDays,
-		experiment,
-		review
-	};
-}
-/** What the desk adds to Ben's prompt (short lines; only what's there). */
-function deskPrompt(s, finance, now = /* @__PURE__ */ new Date()) {
-	const v = deskView(s, finance, now);
-	const d = loadDesk(s.db);
-	const lines = [];
-	if (v.energy.ready) lines.push(`His energy map: best hours ${hoursText(v.energy.best)}${v.energy.worst.length ? `, weakest ${hoursText(v.energy.worst)}` : ""}. Put HARD tasks in the best hours when you plan or move blocks.`);
-	if (v.patterns.length) lines.push(`Weekly patterns (his data):\n${v.patterns.map((p) => `- ${p.text} → try: ${p.change}`).join("\n")}`);
-	const ex = excuseLine(d.excuses, v.today);
-	if (ex) lines.push(ex);
-	const ml = moodLine(d.moods, v.today);
-	if (ml) lines.push(ml);
-	if (v.sleep.slept != null && v.sleep.level !== "ok") lines.push(`Sleep link: ${v.sleep.title} ${v.sleep.tips.join(" ")} Plan today lighter before ${v.sleep.lightUntil}.`);
-	const due = v.study.filter((t) => t.due);
-	if (due.length) lines.push(`Study reviews due today: ${due.map((t) => `${t.exam} · ${t.topic}`).join("; ")}.`);
-	if (v.stacks.length) lines.push(`Habit stacks: ${v.stacks.map((x) => `after ${x.cue} → ${x.steps.join(" → ")} (today ${x.today.length}/${x.steps.length}, streak ${x.streak})`).join("; ")}.`);
-	const open = v.stakes.filter((x) => x.status === "open");
-	if (open.length) lines.push(`Open stakes (he loses the points if not done in time): ${open.map((x) => `"${x.text}" by ${new Date(x.due).toTimeString().slice(0, 5)} −${x.points}`).join("; ")}.`);
-	if (v.stakeStats.kept + v.stakeStats.lost) lines.push(`Stakes last 30 days: ${v.stakeStats.kept} won, ${v.stakeStats.lost} lost (−${v.stakeStats.pointsLost} points).`);
-	if (v.spend?.line) lines.push(`Spending coach: ${v.spend.line}`);
-	if (v.recurring.length) lines.push(`Monthly charges that repeat: ${v.recurring.slice(0, 4).map((r) => `${r.name} ${Math.round(r.amount / 100)} lei`).join(", ")}. Ask if he still uses them when money comes up.`);
-	if (v.lastCall) lines.push(`Last Sunday call (${v.lastCall.week}): change "${v.lastCall.answers.change}", big 3: ${v.lastCall.answers.big3.replace(/\n/g, " / ")}.`);
-	try {
-		const p = listNotes(s.db).find((n) => n.title === PROFILE_NOTE);
-		const corr = p ? profileCorrections(p.body) : "";
-		if (corr) lines.push(`His corrections to your profile of him (always true):\n${corr}`);
-	} catch {}
-	return lines.join("\n");
-}
-/** A message from him: if it's an excuse, it's counted; returns Ben's kind call-out of a repeat. */
-function noteExcuse(db, text, today, now = /* @__PURE__ */ new Date()) {
-	const kind = classifyExcuse(text);
-	if (!kind) return null;
-	return excuseCallout(editDesk(db, (x) => ({
-		...x,
-		excuses: addExcuse(x.excuses, text, now.toISOString())
-	})).excuses, kind, today);
-}
-function logMood(db, mood, now = /* @__PURE__ */ new Date()) {
-	const day = now.toLocaleDateString("sv-SE");
-	const slot = now.getHours() < 17 ? "noon" : "evening";
-	return editDesk(db, (x) => ({
-		...x,
-		moods: addMood(x.moods, {
-			day,
-			slot,
-			mood,
-			at: now.toISOString()
-		})
-	}));
-}
-function refreshProfile(s, finance, now = /* @__PURE__ */ new Date(), force = false) {
-	const db = s.db;
-	const d = loadDesk(db);
-	const today = s.wallet.today(now);
-	if (!force && d.profileDay === today) return false;
-	const v = deskView(s, finance, now);
-	const mind = loadMind(db);
-	const prof = loadProfile(db);
-	let notes = [];
-	try {
-		notes = listNotes(db);
-	} catch {
-		return false;
-	}
-	const prev = notes.find((n) => n.title === PROFILE_NOTE);
-	const body = profileNote({
-		today,
-		aboutMe: prof.about,
-		goals: [...mind.goals.map((g) => ({
-			title: g.title,
-			deadline: g.deadline ?? null,
-			weekly: g.weekly ?? null
-		})), ...prof.goals.filter((t) => !mind.goals.some((g) => g.title === t)).map((t) => ({ title: t }))],
-		exams: v.exams,
-		people: mind.people.map((p) => ({
-			name: p.name,
-			note: p.note
-		})),
-		works: mind.works.map((x) => x.t),
-		fails: mind.fails.map((x) => x.t),
-		patterns: v.patterns,
-		energy: v.energy,
-		excuses: v.excuses,
-		moodAvg: v.moodAvg
-	}, prev?.body ?? "");
-	if (prev?.body !== body) saveNote(db, {
-		id: prev?.id,
-		title: PROFILE_NOTE,
-		body,
-		pinned: true
-	}, now);
-	saveDesk(db, {
-		...loadDesk(db),
-		profileDay: today
-	});
-	return true;
-}
-/** One change on the desk (from the Coach page or Ben's actions). Returns a short line for the screen. */
-function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
-	const db = s.db;
-	const today = s.wallet.today(now);
-	if (o.op === "experiment") {
-		const e = EXPERIMENTS.find((x) => x.id === o.id);
-		if (!e) throw new Error("No such experiment");
-		setSetting(db, EXP_KEY, JSON.stringify({
-			id: e.id,
-			start: today
-		}));
-		return `Experiment on for 7 days: ${e.title}`;
-	}
-	if (o.op === "stopExperiment") {
-		setSetting(db, EXP_KEY, "");
-		return "Experiment ended";
-	}
-	if (o.op === "mood") {
-		logMood(db, o.mood, now);
-		return "Mood noted";
-	}
-	if (o.op === "stake") {
-		const due = readDue(o.due, now) ?? (Number.isFinite(Date.parse(o.due)) ? new Date(o.due).toISOString() : null);
-		if (!due) throw new Error("When? e.g. 18:00 or tomorrow 9");
-		editDesk(db, (x) => ({
-			...x,
-			stakes: addStake(x.stakes, o.text, due, o.points, now)
-		}));
-		return `Stake set: "${o.text}" by ${new Date(due).toTimeString().slice(0, 5)} or −${Math.round(o.points)} points`;
-	}
-	if (o.op === "keepStake") {
-		editDesk(db, (x) => ({
-			...x,
-			stakes: keepStake(x.stakes, o.id, now)
-		}));
-		return "Won it 💎";
-	}
-	if (o.op === "dropStake") {
-		editDesk(db, (x) => ({
-			...x,
-			stakes: x.stakes.filter((k) => !(k.id === o.id && k.status === "open" && Date.parse(k.at) > now.getTime() - 6e5))
-		}));
-		return "Removed (only within 10 minutes of setting it)";
-	}
-	if (o.op === "study") {
-		editDesk(db, (x) => ({
-			...x,
-			study: addTopic(x.study, o.exam, o.topic, today, o.examDay ?? s.focus.state(now).goals.find((g) => g.title.toLowerCase().includes(o.exam.toLowerCase()))?.deadline ?? null)
-		}));
-		return `Study topic added: ${o.exam} · ${o.topic} (first review tomorrow)`;
-	}
-	if (o.op === "reviewed") {
-		editDesk(db, (x) => ({
-			...x,
-			study: reviewTopic(x.study, o.id, today)
-		}));
-		return "Reviewed ✓";
-	}
-	if (o.op === "dropStudy") {
-		editDesk(db, (x) => ({
-			...x,
-			study: x.study.filter((t) => t.id !== o.id)
-		}));
-		return "Removed";
-	}
-	if (o.op === "stack") {
-		const st = parseStack(o.text, today);
-		if (!st) throw new Error("Write it like: after coffee → 10 pushups → plan review");
-		editDesk(db, (x) => ({
-			...x,
-			stacks: [...x.stacks, st].slice(-8)
-		}));
-		return `Habit stack: after ${st.cue} → ${st.steps.join(" → ")}`;
-	}
-	if (o.op === "tickStack") {
-		editDesk(db, (x) => ({
-			...x,
-			stacks: x.stacks.map((k) => k.id === o.id ? tickStack(k, today, o.step) : k)
-		}));
-		return "Ticked";
-	}
-	if (o.op === "dropStack") {
-		editDesk(db, (x) => ({
-			...x,
-			stacks: x.stacks.filter((k) => k.id !== o.id)
-		}));
-		return "Removed";
-	}
-	if (o.op === "call") {
-		const dow = now.getDay();
-		const week = addDays$3(today, -((dow + 6) % 7) - (dow === 1 && now.getHours() < 12 ? 7 : 0));
-		const call = {
-			week,
-			at: now.toISOString(),
-			answers: o.answers
-		};
-		editDesk(db, (x) => ({
-			...x,
-			calls: [...x.calls.filter((c) => c.week !== week), call].slice(-26)
-		}));
-		try {
-			const prev = listNotes(db).find((n) => n.title === "Weekly reviews");
-			saveNote(db, {
-				id: prev?.id,
-				title: "Weekly reviews",
-				body: `${prev?.body?.trim() || "# Weekly reviews\n\nYour Sunday calls with Ben."}\n\n${callNote(call)}\n`
-			}, now);
-		} catch {}
-		return "Coach call saved: next week is set";
-	}
-	editDesk(db, (x) => ({
-		...x,
-		letters: {
-			...x.letters,
-			[o.month]: o.text.slice(0, 3e3)
-		}
-	}));
-	return "Letter saved";
-}
-/**
-* Ben's desk actions (from his "actions"):
-*   "stake: <what> | <when: 18:00, tomorrow 9> | <points>"
-*   "study: <exam> | <topic>"   "reviewed: <topic>"
-*   "stack: after coffee → 10 pushups → plan review"
-*   "mood: 1-5"
-*/
-function readDeskOp(line, desk) {
-	const m = /^\s*(stake|study|reviewed|stack|mood)\s*:\s*([\s\S]+)$/i.exec(String(line ?? ""));
-	if (!m) return null;
-	const kind = m[1].toLowerCase();
-	const arg = m[2].trim().slice(0, 300);
-	const parts = arg.split("|").map((x) => x.trim());
-	if (kind === "stake") {
-		const points = Math.round(Number(parts[2] ?? 50));
-		return parts[0] && parts[1] && points > 0 ? {
-			op: "stake",
-			text: parts[0].slice(0, 120),
-			due: parts[1],
-			points: Math.min(500, points)
-		} : null;
-	}
-	if (kind === "study") return parts[0] && parts[1] ? {
-		op: "study",
-		exam: parts[0],
-		topic: parts[1]
-	} : null;
-	if (kind === "reviewed") {
-		const want = arg.toLowerCase();
-		const t = desk?.study.find((x) => x.topic.toLowerCase().includes(want) || want.includes(x.topic.toLowerCase()));
-		return t ? {
-			op: "reviewed",
-			id: t.id
-		} : null;
-	}
-	if (kind === "stack") return {
-		op: "stack",
-		text: arg
-	};
-	const mood = Math.round(Number(arg.match(/[1-5]/)?.[0]));
-	return mood >= 1 && mood <= 5 ? {
-		op: "mood",
-		mood
-	} : null;
 }
 // src/core/coachNext.ts
 function nextMove(m, now = Date.now()) {

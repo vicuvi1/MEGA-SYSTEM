@@ -1,6 +1,8 @@
 // The desktop services (src/main/*.ts) running on the web app's copy of the
 // Turso database. Same rules as the desktop: daily caps, cooldowns, undo,
 // quests, the shop, streaks. Each change is saved to Turso before it shows.
+import { moneyNumbers } from './benDesk'
+import { financeStateFrom } from './botBrain'
 import { queueFinanceExpense } from './financeInbox'
 import type { Exercise } from '@core/body'
 import type { Rule } from '@core/rules'
@@ -157,7 +159,20 @@ export function createWebServices(mirror: Mirror) {
       state: () => read((s) => s.shop.state()),
       save: (r: RewardInput) => write((s) => (s.shop.save(r), s.shop.state())),
       archive: (id: number) => write((s) => (s.shop.archive(id), s.shop.state())),
-      redeem: (id: number) => write((s) => (s.shop.redeem(id), s.shop.state()), W),
+      // A reward with a real cost (M1): checked against Safe to spend first, then logged in Finance Helper.
+      redeem: (id: number, opts: { force?: boolean } = {}) =>
+        write((s) => {
+          const reward = s.shop.state().rewards.find((r) => r.id === id)
+          const lei = reward?.realCost ?? 0
+          if (lei > 0 && !opts.force) {
+            const finance = financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
+            const safe = finance ? moneyNumbers(finance, s.wallet.today()).safeToday : null
+            if (safe != null && lei * 100 > safe) throw new LedgerError(`OVER_SAFE: ${reward!.title} costs ${lei} lei and your Safe to spend today is ${Math.round(safe / 100)} lei.`)
+          }
+          s.shop.redeem(id)
+          if (lei > 0 && reward) queueFinanceExpense(s.db as any, { id: `life-reward-${id}-${Date.now()}`, amount: Math.round(lei * 100), category: 'fun', note: `Reward: ${reward.title}`, date: s.wallet.today(), at: Date.now() })
+          return s.shop.state()
+        }, W),
       openChest: (level: number) => write((s) => ({ coins: s.shop.openChest(level), state: s.shop.state() }), W),
       setBudget: (amount: number) => write((s) => (s.shop.setBudget(amount), s.shop.state())),
       setCurrency: (cur: string) => write((s) => (s.shop.setCurrency(cur), s.shop.state()))

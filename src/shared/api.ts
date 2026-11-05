@@ -406,7 +406,8 @@ export interface LifeApi {
     state(): Promise<ShopState>
     save(reward: RewardInput): Promise<ShopState>
     archive(id: number): Promise<ShopState>
-    redeem(id: number): Promise<ShopState>
+    /** `force`: redeem even over Safe to spend (after you said yes). */
+    redeem(id: number, opts?: { force?: boolean }): Promise<ShopState>
     openChest(level: number): Promise<{ coins: number; state: ShopState }>
     setBudget(amount: number): Promise<ShopState>
     setCurrency(cur: string): Promise<ShopState>
