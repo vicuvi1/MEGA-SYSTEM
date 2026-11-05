@@ -14,16 +14,12 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
   const pts = usePoints()
   const f = state.finance
   const hasFinance = f.found && Boolean(f.connectedSince)
-  const [mode, setMode] = useState<'finance' | 'native'>(() => (hasFinance ? 'finance' : 'native'))
-
-  if (hasFinance && mode === 'finance') {
+  // One place for money (D2): with Finance Helper connected, only Finance
+  // Helper (no second expense list with its own budget). Without it, the
+  // simple expense list here.
+  if (hasFinance) {
     return (
       <div className="money">
-        <div className="row end-row">
-          <button className="btn small ghost" onClick={() => setMode('native')}>
-            Switch to Standalone Expense Hub
-          </button>
-        </div>
         <FinanceHelperView f={f} onState={onState} />
       </div>
     )
@@ -31,13 +27,6 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
 
   return (
     <div className="money">
-      {hasFinance && (
-        <div className="row end-row">
-          <button className="btn small ghost" onClick={() => setMode('finance')}>
-            Switch to Connected Finance Helper View
-          </button>
-        </div>
-      )}
       <NativeMoneyView onWallet={onWallet} />
       {!hasFinance && (
         <section className="panel" style={{ marginTop: '20px' }}>

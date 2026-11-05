@@ -40,6 +40,22 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
 
   if (!life.coach || hidden) return null
 
+  // "Plan my day" is the same plan as Today's card (D1), not a free chat.
+  const planDay = async () => {
+    setBusy(true)
+    const now = new Date().toISOString()
+    setLog((l) => [...l, { role: 'me', text: 'Plan my day', at: now }, { role: 'coach', text: '', at: now, pending: true, steps: [] }])
+    try {
+      const r = await life.coach!.rhythm!('propose')
+      const head = r.state.briefing?.plan?.headline
+      setLog((l) => [...l.filter((x) => !x.pending), { role: 'coach', text: head ? `Here's today: ${head}. It's on Today: approve it there, or tell me what to change.` : 'Your plan is on Today: approve it there, or tell me what to change.', at: new Date().toISOString() }])
+      window.dispatchEvent(new CustomEvent('life-coach-changed'))
+    } catch (e) {
+      setLog((l) => [...l.filter((x) => !x.pending), { role: 'coach', text: `I couldn't plan it: ${(e as Error).message}`, at: new Date().toISOString() }])
+    }
+    setBusy(false)
+  }
+
   const send = async (msg = text) => {
     const t = msg.trim()
     if (!t || busy) return
@@ -110,7 +126,7 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
           </div>
           <div className="bb-chips">
             {chips.slice(0, 3).map((c) => (
-              <button key={c} disabled={busy} onClick={() => void send(c)}>
+              <button key={c} disabled={busy} onClick={() => void (/^plan my day$/i.test(c) && life.coach?.rhythm ? planDay() : send(c))}>
                 {c}
               </button>
             ))}

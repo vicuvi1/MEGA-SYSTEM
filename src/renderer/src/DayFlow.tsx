@@ -5,6 +5,7 @@ import { askConfirm } from './confirmSheet'
 import { appHour } from '@core/dates'
 import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { capture } from './capture'
 import { nowActions, type NowAction } from '@core/nextAction'
 import { decideNow, type DoNow } from '@core/doNow'
 import { publishNow } from './nowStore'
@@ -73,7 +74,7 @@ function useTodoist() {
   return [tasks, load, setTasks] as const
 }
 
-function useHabits({ summary, discipline, connections, body, onChange, onGo, onOpenApp, rules }: Props, focusMin: number): Habit[] {
+function useHabits({ summary, discipline, connections, body, onChange, onGo, rules }: Props, focusMin: number, onSpend: () => void): Habit[] {
   const act = useAction()
   const r = summary.todayRules ?? []
   const pts = (id: string, fallback: number) => `+${rules?.find((x) => x.id === id)?.coins ?? fallback}`
@@ -89,7 +90,7 @@ function useHabits({ summary, discipline, connections, body, onChange, onGo, onO
     { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), done: !!(body?.workoutDoneToday || body?.restToday || r.includes('body.workout_done')), run: () => onGo('body') },
     { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', done: focusMin >= 50 || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', 50), 'Focus started: 50 minutes')) },
     { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
-    { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: () => onOpenApp('money') }
+    { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: onSpend }
   ]
 }
 
@@ -180,7 +181,30 @@ export function DayFlow(props: Props) {
   }, [])
   const today = summary.today
   const radar = deadlineRadar(upcoming, today)
-  const habits = useHabits(props, st?.todayMin ?? 0)
+  // Spending in one line (D2): "45 lunch" right here, through the capture pipeline.
+  const [spendOpen, setSpendOpen] = useState(false)
+  const [spendText, setSpendText] = useState('')
+  const [spendBusy, setSpendBusy] = useState(false)
+  const spendAct = useAction()
+  const habits = useHabits(props, st?.todayMin ?? 0, () => setSpendOpen(true))
+  const saveSpend = async () => {
+    const t = spendText.trim()
+    if (!t || spendBusy) return
+    // Just a number: "45" → "spent 45" so the money rules pick it up.
+    const text = /^\d+([.,]\d+)?$/.test(t) ? `spent ${t}` : /^\d/.test(t) ? `spent ${t}` : t
+    setSpendBusy(true)
+    const r = await spendAct(async () => {
+      const c = await capture(text)
+      if (!c.ok) throw new Error(c.said)
+      return c
+    })
+    setSpendBusy(false)
+    if (r) {
+      setSpendText('')
+      setSpendOpen(false)
+      props.onChange()
+    }
+  }
   // What one Todoist task pays (the real rule, shown on every row).
   const taskPts = props.rules?.find((x) => x.id === 'tasks.todoist_done')?.coins ?? 5
   // Skipped "Do this now" steps, remembered for the day (F3: the top row can skip too).
@@ -244,7 +268,13 @@ export function DayFlow(props: Props) {
   // and you haven't closed it today (F1); the evening shut-down opens when you
   // ask (Shut down here, Close my day in the top row).
   const auto = st ? autoMode(appHour(), st.plan.items.length > 0, reviewed, closed, today) : null
-  const mode: Mode = forced !== undefined ? forced : auto === 'morning' ? 'morning' : null
+  // One morning card (D1): when Ben's plan for today is on Today (the card
+  // above), this one doesn't open by itself; "Plan" still opens it.
+  const [benPlan, setBenPlan] = useState(false)
+  useEffect(() => {
+    life.coach?.rhythm?.('state').then((r) => setBenPlan(!!r.prefs.on && r.state.day === today && !!r.state.briefing)).catch(() => setBenPlan(false))
+  }, [today, tick])
+  const mode: Mode = forced !== undefined ? forced : auto === 'morning' && !benPlan ? 'morning' : null
   const closeMode = () => {
     storeSet('ls.modeClosed', today)
     setClosed(today)
@@ -910,6 +940,21 @@ export function DayFlow(props: Props) {
           ))}
         </div>
 
+        {spendOpen && (
+          <form
+            className="spend-line"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void saveSpend()
+            }}
+          >
+            <input autoFocus value={spendText} onChange={(e) => setSpendText(e.target.value)} placeholder="45 lunch · 120 groceries Linella · 30 taxi" aria-label="What you spent" onKeyDown={(e) => e.key === 'Escape' && setSpendOpen(false)} />
+            <button className="btn primary small" disabled={!spendText.trim() || spendBusy}>{spendBusy ? 'Saving…' : 'Log'}</button>
+            <button type="button" className="btn ghost small" onClick={() => props.onOpenApp('money')} title="Open Finance Helper">Finance Helper</button>
+            <button type="button" className="btn ghost small" onClick={() => setSpendOpen(false)} aria-label="Close">✕</button>
+          </form>
+        )}
+
         <div className="dl-tabs" role="tablist" aria-label="Which tasks">
           {TODO_TABS.map(([id, label]) => (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
@@ -1084,8 +1129,36 @@ function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, openTodo, 
   const [text, setText] = useState('')
   const [reasons, setReasons] = useState<string[]>([])
   const [moved, setMoved] = useState<string[]>([])
+  // Step 3 (D3): bedtime tonight and tomorrow's wake-up target.
+  const tomorrow = tomorrowOf(today)
+  const tomorrowWeekend = [0, 6].includes(new Date(`${tomorrow}T12:00:00Z`).getUTCDay())
+  const [sleepT, setSleepT] = useState<{ weekday: string; weekend: string; bed: string } | null>(null)
+  const [bed, setBed] = useState('')
+  const [wake, setWake] = useState('')
+  useEffect(() => {
+    life.sleep
+      .state()
+      .then((st: any) => {
+        const t = { weekday: st.weekdayTarget ?? '07:00', weekend: st.weekendTarget ?? '08:30', bed: st.bedTarget ?? '23:00' }
+        setSleepT(t)
+        setBed(t.bed)
+        setWake(tomorrowWeekend ? t.weekend : t.weekday)
+      })
+      .catch(() => {})
+  }, [tomorrowWeekend])
+  const sleepHours = (() => {
+    const m = (x: string) => (/^\d{2}:\d{2}$/.test(x) ? Number(x.slice(0, 2)) * 60 + Number(x.slice(3)) : null)
+    const b = m(bed)
+    const w = m(wake)
+    if (b == null || w == null) return null
+    const d = (w - b + 1440) % 1440
+    return `${Math.floor(d / 60)}h${d % 60 ? ` ${d % 60}m` : ''}`
+  })()
   const save = async () => {
-    if (await act(() => life.focus.review(text || null, reasons.length ? reasons : ['Reviewed']), 'Day closed. Sleep well.')) {
+    if (sleepT && (bed !== sleepT.bed || wake !== (tomorrowWeekend ? sleepT.weekend : sleepT.weekday))) {
+      await life.sleep.setTargets(tomorrowWeekend ? sleepT.weekday : wake, tomorrowWeekend ? wake : sleepT.weekend, bed).catch(() => null)
+    }
+    if (await act(() => life.focus.review(text || null, reasons.length ? reasons : ['Reviewed']), `Day closed. Bed by ${bed || '23:00'}, up at ${wake || '07:00'}. Sleep well.`)) {
       soundSuccess()
       onSaved()
     }
@@ -1164,6 +1237,19 @@ function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, openTodo, 
             ))}
           </div>
           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="One line about today (optional)" maxLength={300} />
+        </li>
+        <li>
+          <b>3. Bed and tomorrow</b>
+          <div className="mode-sleep">
+            <label>
+              Bed by <input type="time" value={bed} onChange={(e) => setBed(e.target.value)} />
+            </label>
+            <label>
+              Up at <input type="time" value={wake} onChange={(e) => setWake(e.target.value)} />
+            </label>
+            {sleepHours && <span className="hint">{sleepHours} of sleep</span>}
+          </div>
+          <span className="hint small">Changes your {tomorrowWeekend ? 'weekend' : 'weekday'} wake-up target and your bedtime target (Waky and reminders use them).</span>
         </li>
       </ol>
       <div className="row">

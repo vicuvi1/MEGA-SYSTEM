@@ -14596,9 +14596,10 @@ function movedText(title, slot) {
 	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	return slot ? `🔁 <b>${esc(title)}</b> slipped, no problem. I moved it to <b>${slot.start}–${slot.end}</b>, your next free time.\nStart now instead, or drop it for today?` : `🔁 <b>${esc(title)}</b> slipped and there's no free time left today. Start a shorter one now, or drop it?`;
 }
-function autoApprovedText(headline) {
+/** 10:00 and the plan is still waiting: a reminder (Ben never approves it for you, D1). */
+function planWaitingText(headline) {
 	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-	return `✅ <b>I locked in today's plan</b> so the day doesn't drift: ${esc(headline)}.\nChange anything, any time.`;
+	return `⏳ <b>Your plan for today is still waiting</b>: ${esc(headline)}.\nApprove it, change it, or ask for a new one. Nothing is booked until you say so.`;
 }
 var HOT = [
 	"annoyed",
@@ -21371,14 +21372,20 @@ async function benActs(env, now, send, state, on, time) {
 	});
 	if (autoApproveDue(state.briefing?.status, time, !!state.autoApproved)) {
 		await mark({ autoApproved: true });
-		const r = await bots.rhythm.approve();
-		if (r.ok && r.plan) await send(`${autoApprovedText(r.plan.headline)}\n${r.done.map(escapeHtml).join("\n")}`, { inline_keyboard: [[{
-			text: "✏️ Change",
-			callback_data: "rb|e"
-		}, {
-			text: "🔄 New plan",
-			callback_data: "rb|r"
-		}]] });
+		await send(planWaitingText(state.briefing?.plan?.headline ?? "your must-dos and blocks"), { inline_keyboard: [[
+			{
+				text: "✅ Approve",
+				callback_data: "rb|a"
+			},
+			{
+				text: "✏️ Change",
+				callback_data: "rb|e"
+			},
+			{
+				text: "🔄 New plan",
+				callback_data: "rb|r"
+			}
+		]] });
 	}
 	if (!calendar?.move) return;
 	const day = state.day;

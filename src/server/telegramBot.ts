@@ -43,7 +43,7 @@ import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered a
 import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { notifFromMessage } from '@core/notify'
 import { addNotif } from '../renderer/src/web/notifications'
-import { autoApproveDue, autoApprovedText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
+import { autoApproveDue, planWaitingText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
 import { loadStyle } from '../renderer/src/web/botBrain'
 import { deskChange, deskView, loadDesk, saveDesk } from '../renderer/src/web/benDesk'
 import { financeStateFrom, loadProfile } from '../renderer/src/web/botBrain'
@@ -843,10 +843,10 @@ async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unk
       const cur = rhythmFor(JSON.parse(getSetting(db as any, RHYTHM) || 'null'), state.day)
       setSetting(db as any, RHYTHM, JSON.stringify({ ...cur, ...patch, moved: [...new Set([...(cur.moved ?? []), ...(patch.moved ?? [])])] }))
     })
+  // 10:00 and the plan is still waiting: one reminder (it's your plan: Ben doesn't approve it for you).
   if (autoApproveDue(state.briefing?.status, time, !!state.autoApproved)) {
     await mark({ autoApproved: true })
-    const r = await bots.rhythm.approve()
-    if (r.ok && r.plan) await send(`${autoApprovedText(r.plan.headline)}\n${r.done.map(escapeHtml).join('\n')}`, { inline_keyboard: [[{ text: '✏️ Change', callback_data: 'rb|e' }, { text: '🔄 New plan', callback_data: 'rb|r' }]] })
+    await send(planWaitingText(state.briefing?.plan?.headline ?? 'your must-dos and blocks'), { inline_keyboard: [[{ text: '✅ Approve', callback_data: 'rb|a' }, { text: '✏️ Change', callback_data: 'rb|e' }, { text: '🔄 New plan', callback_data: 'rb|r' }]] })
   }
   if (!calendar?.move) return
   const day = state.day

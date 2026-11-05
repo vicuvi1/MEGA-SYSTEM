@@ -50,9 +50,10 @@ export function movedText(title: string, slot: { start: string; end: string } | 
     : `🔁 <b>${esc(title)}</b> slipped and there's no free time left today. Start a shorter one now, or drop it?`
 }
 
-export function autoApprovedText(headline: string): string {
+/** 10:00 and the plan is still waiting: a reminder (Ben never approves it for you, D1). */
+export function planWaitingText(headline: string): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return `✅ <b>I locked in today's plan</b> so the day doesn't drift: ${esc(headline)}.\nChange anything, any time.`
+  return `⏳ <b>Your plan for today is still waiting</b>: ${esc(headline)}.\nApprove it, change it, or ask for a new one. Nothing is booked until you say so.`
 }
 
 // ---- Tone: angry faces only for the drill sergeant ----------------------
