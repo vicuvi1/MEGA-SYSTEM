@@ -3,6 +3,8 @@
 // handled exactly like the app does (same services, same Turso transaction
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
+import { loadFeedback } from '../renderer/src/web/botBrain'
+import { quietNow, quietRules } from '../core/benTiming'
 import { neutral } from '../core/stealth'
 import { examSleepGuard, sleepRegularity } from '../core/sleepRegularity'
 import { createRequire } from 'node:module'
@@ -611,7 +613,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   const facts: NudgeFacts = { today: st.today, time, focusRunning: !!st.focus.running, focusMinToday: st.focus.todayMin, openMustDos: openMustDos.length, idleMin: st.idleMin, wakeLogged: true }
   // Never "nothing done for 1h" while he's in class or a meeting.
   if (!sent.length && inEvent && !paused && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', 'You were in a class or meeting', 'nudge')
-  if (!sent.length && !inEvent && shouldNudge(nudge, facts, now)) {
+  // Your 👎 at this time of the week became a quiet rule (N9).
+  const quiet = await mirror.read((db) => quietNow(quietRules(loadFeedback(db)), now)).catch(() => null)
+  if (!sent.length && !inEvent && quiet && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', `${quiet.text} (learned from your 👎)`, 'nudge')
+  if (!sent.length && !inEvent && !quiet && shouldNudge(nudge, facts, now)) {
     const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
     const first = openMustDos[0]?.text
     const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'
