@@ -59,6 +59,10 @@
       "destination": "/api/mcp"
     },
     {
+      "source": "/api/hook",
+      "destination": "/api/mcp?op=hook"
+    },
+    {
       "source": "/.well-known/oauth-protected-resource",
       "destination": "/api/mcp?wk=resource"
     },

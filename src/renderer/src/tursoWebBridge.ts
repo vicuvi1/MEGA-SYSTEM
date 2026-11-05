@@ -58,6 +58,8 @@ import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginKey, pluginsOn, set
 import { importBank, importText } from '../../plugins/bank'
 import { addBlockResult, addFocusQuality, setDoingLine, setPcLine, setWebLine } from './web/dayLog'
 import { cleanRecipes, type Recipe } from '@core/recipes'
+import { cleanPcState, setAskStatus, type PcAsk } from '@core/pcActions'
+import type { LastHour } from '@core/pcLastHour'
 import { createExtras } from './web/lifeExtras'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
@@ -1185,6 +1187,24 @@ export function createTursoWebBridge(): Bridge {
       },
       setDoing: async (day: string, line: string, hours: Record<string, Record<string, number>>) => {
         await (await mirrorP).write((db) => setDoingLine(db as any, day, line, hours))
+      }
+    },
+    pcAuto: {
+      state: async () => (await mirrorP).read((db) => cleanPcState(readSetting(db as any, 'pc_asks'), Date.now())),
+      answer: async (id: string, status: PcAsk['status'], why?: string) => {
+        await (await mirrorP).write((db) => {
+          const st = cleanPcState(readSetting(db as any, 'pc_asks'), Date.now())
+          writeSetting(db as any, 'pc_asks', { desk: st.desk, asks: setAskStatus(st.asks, id, status, why) })
+        })
+      },
+      desk: async (on: boolean) => {
+        await (await mirrorP).write((db) => {
+          const st = cleanPcState(readSetting(db as any, 'pc_asks'), Date.now())
+          writeSetting(db as any, 'pc_asks', { desk: { on, at: Date.now() }, asks: st.asks })
+        })
+      },
+      lastHour: async (h: LastHour | null) => {
+        await (await mirrorP).write((db) => writeSetting(db as any, 'pc_last_hour', h))
       }
     },
     recipes: {

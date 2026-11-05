@@ -63,6 +63,9 @@ import { missTwiceLine } from '@core/neverMissTwice'
 import { todayMode } from '../renderer/src/web/extrasContext'
 import { coachStatus } from '../renderer/src/web/coachStatus'
 import { handleMcp, type McpCtx, type McpLife } from './mcp'
+import { extToolsFor, hookFacts, hooksTick, loadAuto, ntfyAlso, type AutoConf } from './automation'
+import { inboundCall } from '@core/automation'
+import { localMinute as localMinuteOf } from '@core/dailyClock'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
 import { PLUGINS } from '../plugins'
 import { MIGRATIONS } from '@core/schema'
@@ -210,7 +213,8 @@ async function botsFor(env: BotEnv) {
   const embed = env.embed !== undefined ? env.embed : gKey ? geminiEmbedder(gKey) : null
   const vectors = embed ? new MemoryVectors(new TursoHttp(env.tursoUrl, env.tursoToken), embed) : null
   const recall = vectors ? (q: string, k: number) => vectors.search(q, k) : null
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall })
+  // AU10: the tools from your own MCP servers that you allowed (Settings → PC & automation).
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: extToolsFor(env) })
   warm = { key, SQL, bots, mirror, services, calendar, vectors }
   warmAt = Date.now()
   return warm
@@ -561,8 +565,16 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   const journal: BenLogEntry[] = []
   const note = (status: BenLogEntry['status'], text: string, reason?: string, kind?: string) =>
     journal.push({ at: new Date().toISOString(), status, kind: kind ?? messageKind(text) ?? (/^⏰/u.test(text.replace(/<[^>]+>/g, '').trim()) ? 'reminder' : 'message'), reason, text })
+  // AU8 / AU9: phone push by ntfy and your webhooks (Settings → PC & automation), one small read.
+  const auto: AutoConf | null = await loadAuto(healthDb).catch(() => null)
   try {
-    return await tickBody()
+    const out = await tickBody()
+    if (auto?.hooks.hooks.some((h) => h.on)) {
+      const today = dayKey(now, tz)
+      const facts = await mirror.read((db) => hookFacts(db, today, Math.floor(localMinuteOf(now, tz) / 60), auto.hooks.seen.ledger)).catch(() => null)
+      if (facts) await hooksTick(healthDb, auto, facts, now).catch((e) => console.error('hooks:', (e as Error).message))
+    }
+    return out
   } finally {
     await logBen(healthDb, journal, now)
   }
@@ -673,6 +685,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       body: JSON.stringify({ chat_id: env.chatId, text, parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) })
     }).catch((e) => ({ status: 0, json: async () => ({ ok: false, description: (e as Error).message }) }) as any)
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
+    // AU8: the same message to your phone by ntfy too (your reminders and urgent ones, or everything), also when Telegram fails.
+    if (auto?.ntfy) await ntfyAlso(auto.ntfy, text, !!opts.urgent).catch(() => false)
     if (!j.ok) {
       void beat(healthDb, 'telegram', false, j.description ?? `HTTP ${res.status}`)
       // Kept for the next ticks (up to 6 hours), so nothing is lost when Telegram hiccups.
@@ -1611,6 +1625,22 @@ export { handleMcp, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, NEEDS_WR
  * tools read this server's warm copy of the database and write through Ben's
  * own executor, so points, undo and the coach log match Ben exactly.
  */
+export { automationOp } from './automation'
+
+/**
+ * AU9: the one door in for n8n and other flows: {action: add_task | note |
+ * ask_ben | log_habit, …} runs as the same Life System tool an AI app would
+ * call (lands on the Coach page with Undo; a habit pays only when logged now).
+ */
+export async function hookIn(env: BotEnv, body: unknown): Promise<{ ok: boolean; status: number; result?: unknown; error?: string }> {
+  const call = inboundCall(body)
+  if ('error' in call) return { ok: false, status: 400, error: call.error }
+  const out = (await mcpCall(env, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: call }, { scope: 'write', client: 'n8n' })) as any
+  if (out?.error) return { ok: false, status: 400, error: String(out.error.message ?? 'failed') }
+  const r = out?.result
+  return { ok: !r?.isError, status: 200, result: r?.structuredContent ?? r?.content?.[0]?.text ?? null }
+}
+
 export async function mcpCall(env: BotEnv, body: unknown, ctx: McpCtx): Promise<unknown | null> {
   lifeTz(env)
   const life = async (): Promise<McpLife> => {

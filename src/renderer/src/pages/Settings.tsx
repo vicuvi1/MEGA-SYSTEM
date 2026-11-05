@@ -6,6 +6,7 @@ import { PcPrivacyPanel } from '../PcPrivacyPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
 import { HealthPanel } from '../HealthPanel'
 import { AiAppsPanel } from '../AiAppsPanel'
+import { PcAutomationPanel } from '../PcAutomationPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
 import { NotifSettings } from '../NotifSettings'
 import { PluginsPanel } from '../../../plugins/PluginsPanel'
@@ -86,6 +87,14 @@ export function Settings(props: SettingsProps) {
       hint: 'Claude, ChatGPT and other AI apps',
       keywords: 'ai app claude chatgpt mcp connector token connect desktop code phone',
       body: <AiAppsPanel />
+    },
+    {
+      id: 'automation',
+      label: 'PC & automation',
+      icon: 'link',
+      hint: 'Music during focus, ActivityWatch, Ben on your PC, phone push, n8n, outside tools',
+      keywords: 'automation pc music spotify pause media activitywatch actions ntfy push phone n8n webhook zapier make mcp tools server',
+      body: <PcAutomationPanel />
     },
     ...(window.desktop
       ? [

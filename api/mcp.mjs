@@ -11,10 +11,15 @@
 //   POST /api/mcp?oauth=register        dynamic client registration (signed, no table)
 //   GET/POST /api/mcp?oauth=authorize   the PIN page, then back to the app with a code
 //   POST /api/mcp?oauth=token           code + PKCE verifier → a personal token
+//   POST /api/mcp?op=automation (Authorization: Bearer <app session>)
+//        Settings → PC & automation: ntfy, webhooks, MCP servers for Ben (AU8–AU10).
+//        Kept in sys_kv; tokens, topics and full addresses never come back.
+//   POST /api/hook (→ /api/mcp?op=hook)  (Authorization: Bearer <personal token, read and write>)
+//        n8n and other flows: {action: "add_task"|"note"|"ask_ben"|"log_habit", text, title, habit} (AU9).
 // Tool results are never logged.
 import { bearer, botDefaults, checkPin, clientIp, config, gate, readBody, requireSession, send } from './_lib.mjs'
 import { authorizePage, authorizeRequest, createToken, exchangeCode, listTokens, makeCode, rateOk, registerClient, resourceMeta, revokeToken, serverMeta, tokenAuth } from './_mcpauth.mjs'
-import { mcpCall } from './_bot/bot.mjs'
+import { automationOp, hookIn, mcpCall } from './_bot/bot.mjs'
 import { deadlineIn, modelUntil } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
@@ -154,6 +159,54 @@ async function tokens(req, res, cfg) {
   }
 }
 
+/** Settings → PC & automation (your app session): AU8 ntfy, AU9 webhooks, AU10 MCP servers. */
+async function automation(req, res, cfg) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
+  if (!(await requireSession(res, cfg, bearer(req)))) return
+  let body
+  try {
+    body = await readBody(req)
+  } catch {
+    return send(res, 400, { error: 'Bad request' })
+  }
+  try {
+    return send(res, 200, await automationOp({ tursoUrl: cfg.url, tursoToken: cfg.token }, body))
+  } catch (e) {
+    return send(res, e.status || 503, { error: e.status ? e.message : 'Database not reachable: try again in a moment' })
+  }
+}
+
+/** AU9: the one door in for n8n (a personal token with read and write). */
+async function hook(req, res, cfg) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
+  let who
+  try {
+    who = await tokenAuth(cfg, bearer(req))
+  } catch {
+    return send(res, 503, { error: 'Database not reachable: try again in a moment' })
+  }
+  if (!who) return send(res, 401, { error: 'Use a token from Settings → Connect an AI app (read and write)' })
+  if (who.scope !== 'write') return send(res, 403, { error: 'This token is read-only: make a "read and write" one' })
+  if (!rateOk(who.id)) {
+    res.setHeader('Retry-After', '30')
+    return send(res, 429, { error: 'Too many calls: wait a minute' })
+  }
+  let body
+  try {
+    body = await readBody(req)
+  } catch {
+    return send(res, 400, { error: 'Bad request' })
+  }
+  if (body?.action === 'ask_ben' && !(await gate(cfg, `mcp_ask:${who.id}`, 4000).catch(() => true))) return send(res, 429, { error: 'One message to Ben at a time: wait a few seconds' })
+  try {
+    const r = await hookIn(botEnv(cfg), body)
+    return send(res, r.status, r.ok ? { ok: true, result: r.result } : { ok: false, error: r.error })
+  } catch (e) {
+    console.error('hook: failed', e?.message)
+    return send(res, 503, { ok: false, error: 'Life System could not do it: try again in a moment' })
+  }
+}
+
 export default async function handler(req, res) {
   cors(res)
   if (req.method === 'OPTIONS') {
@@ -169,6 +222,8 @@ export default async function handler(req, res) {
   const kind = url.searchParams.get('oauth')
   if (kind) return oauth(req, res, cfg, kind)
   if (url.searchParams.get('op') === 'tokens') return tokens(req, res, cfg)
+  if (url.searchParams.get('op') === 'automation') return automation(req, res, cfg)
+  if (url.searchParams.get('op') === 'hook') return hook(req, res, cfg)
 
   // ---- MCP itself ----
   if (req.method !== 'POST') {

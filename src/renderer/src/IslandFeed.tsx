@@ -30,6 +30,7 @@ import { WATER_TARGET_ML } from '@core/defaults'
 import { preferSlot, workHours } from '@core/bestHours'
 import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart, shareGoalWords, smartAct, smartNotice, smartOn, smartSuggestion, smartTick, startSmart } from './smartIsland'
 import { breakOverAlert, controlAct, flowTick, islandRunning, loadBreakPref, mustdoUndo, rememberUndo } from './islandControlsFeed'
+import { pcAskAct, pcAskAlert, pcAutoTick } from './pcAutomation'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
@@ -382,6 +383,8 @@ export function IslandFeed() {
     }
     // Smart island: switches and recipes (once a minute), focus/blocks/meetings into the stream, your goal words to the desktop.
     await refreshSmart().catch(() => {})
+    // PC & automation: Ben's asks for this PC, the last hour for Ben (each on its own slow clock).
+    await pcAutoTick(now).catch(() => {})
     smartTick({ now, running, blocks: blocks.current.list })
     if (smartOn()) shareGoalWords([...focus.goals.flatMap((g) => [g.title, g.subject]), ...(focus.subjects ?? [])])
     // Focus state for the PC (P19 site blocker, P20 holding notifications).
@@ -470,6 +473,7 @@ export function IslandFeed() {
           return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
         }
         return (
+          pcAskAlert(now, dismissed) ??
           backAlert(focusRun, now, dismissed) ??
           driftAlert(focusRun, now, dismissed) ??
           distractAlert(focusRun, now, dismissed) ??
@@ -690,6 +694,14 @@ export function IslandFeed() {
             d[a.alertId] = Date.now() + 864e5
             put(DISMISSED, d)
             said = `✓ ${a.app} counts as work now`
+            break
+          }
+          case 'pcAsk': {
+            // AU7: Allow runs it (the desktop checks it again), Deny says no; the card goes either way.
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[a.alertId] = Date.now() + 864e5
+            put(DISMISSED, d)
+            said = await pcAskAct(a)
             break
           }
           case 'lockPc': {

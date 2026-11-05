@@ -13,6 +13,7 @@ import { PROFILE_IDS, PROFILE_LABEL } from '../core/islandControlPrefs'
 import { createBackups } from './backups'
 import { createVault } from './vault'
 import { createPc } from './pc'
+import { registerPcExtras } from './pc/index'
 import { installNow, memoryReloadDue } from '../core/nightCare'
 
 const origin = 'life-system://app'
@@ -246,6 +247,8 @@ if (firstCopy) void app.whenReady().then(async () => {
     }
   })
   pcRef.current = pc
+  // Settings → PC & automation: music, ActivityWatch, Ben's actions (all off until switched on).
+  await registerPcExtras({ dir, win, origin }).catch(() => {})
   let pcPrefsNow = pc.prefs()
   pcAction = (a) => {
     if (a === 'talk') island.voice()

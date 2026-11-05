@@ -194,6 +194,9 @@ export const SETTINGS = {
   bank_last_interest_day: text('day interest was last paid'),
   bank_staked_coins: num('points in the bank'),
   bank_total_interest_earned: num('interest earned so far'),
+  // ---- PC & automation (AU2, AU7) ----
+  pc_asks: json<unknown>("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
+  pc_last_hour: json<unknown>('the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)', null),
   // ---- plugins ----
   plugins_on: json<Record<string, boolean>>('which plugins are switched on', {}),
   plugins_status: json<Record<string, unknown>>("how each plugin's last job went", {}),

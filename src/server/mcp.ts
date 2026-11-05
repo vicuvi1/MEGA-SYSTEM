@@ -454,6 +454,14 @@ export const TOOLS: Tool[] = [
     handle: (life, a, ctx) => doLines(life, ctx, `note "${field(a.title, 80)}"`, [`note: ${field(a.title, 80)} | ${field(a.line, 500)}`])
   },
   {
+    name: 'log_habit',
+    title: 'Log a habit',
+    description: 'Logs one of the built-in habits done now: "oath" (morning oath), "clean" (clean-day check-in) or "skincare". Pays like ticking it in the app, once a day.',
+    inputSchema: obj({ habit: { type: 'string', enum: ['oath', 'clean', 'skincare'] } }, ['habit']),
+    write: true,
+    handle: (life, a, ctx) => doLines(life, ctx, `habit ${a.habit}`, [`habit: ${a.habit}`])
+  },
+  {
     name: 'start_focus',
     title: 'Start a focus timer',
     description: 'Starts a focus timer (5 to 180 minutes) on a subject. Points come when it is stopped, like in the app.',

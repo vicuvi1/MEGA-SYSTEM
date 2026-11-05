@@ -66,6 +66,8 @@ export interface DesktopApi {
   pcDoing?(): Promise<{ now: { label: string; context: import('../core/activityContext').ContextKind; conf: number; detail?: string } | null; ctx: Record<string, number>; line: string; hours: Record<string, Record<string, number>>; week: { day: string; ctx: Record<string, number>; hours: Record<string, Record<string, number>> }[] } | null>
   /** Smart island: the block on now (its title) and whether a meeting is on. */
   pcSmartState?(s: { block: string | null; meeting: boolean }): void
+  /** Settings → PC & automation (AU1 music, AU2 ActivityWatch, AU7 Ben's actions): one channel, ops in src/desktop/pc/index.ts. */
+  pcx?(op: 'media' | 'prefs' | 'setPrefs' | 'log' | 'clearLog' | 'lastHour' | 'awCheck' | 'run' | 'deny', arg?: unknown): Promise<any>
   /** The PC locked / unlocked. */
   onLock?(cb: (l: { locked: boolean; at: number }) => void): void
   /** A taskbar shortcut (P17): "focus25". */

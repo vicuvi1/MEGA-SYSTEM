@@ -86,6 +86,8 @@ const api: DesktopApi = {
   onActivity: (cb) => void ipcRenderer.on('desktop:activity', (_e, ev) => cb(ev)),
   pcDoing: () => ipcRenderer.invoke('pc:doing'),
   pcSmartState: (s) => ipcRenderer.send('pc:smartState', s),
+  // Settings → PC & automation (AU1, AU2, AU7): one channel.
+  pcx: (op, arg) => ipcRenderer.invoke('pcx', op, arg),
   onLock: (cb) => void ipcRenderer.on('desktop:lock', (_e, l) => cb(l)),
   onJump: (cb) => void ipcRenderer.on('desktop:jump', (_e, a) => cb(String(a))),
   onIslandCapture: (cb) => void ipcRenderer.on('island:capture', () => cb()),

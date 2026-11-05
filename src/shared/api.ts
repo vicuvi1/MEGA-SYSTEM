@@ -404,6 +404,14 @@ export interface LifeApi {
     /** SI8/SI22: the day by kind of doing ("coding 3h10, study 1h05") and minutes per hour (only if you share totals). */
     setDoing?(day: string, line: string, hours: Record<string, Record<string, number>>): Promise<void>
   }
+  /** AU2 / AU7: Ben's asks for the PC and the last hour's summary (synced settings pc_asks, pc_last_hour). */
+  pcAuto?: {
+    state(): Promise<import('@core/pcActions').PcState>
+    answer(id: string, status: import('@core/pcActions').PcAsk['status'], why?: string): Promise<void>
+    /** This desktop app can (or can no longer) answer Ben's asks. */
+    desk(on: boolean): Promise<void>
+    lastHour(h: import('@core/pcLastHour').LastHour | null): Promise<void>
+  }
   /** SI7: your Smart island recipes (synced; they run only in the desktop app). */
   recipes?: {
     list(): Promise<import('@core/recipes').Recipe[]>

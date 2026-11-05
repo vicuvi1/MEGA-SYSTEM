@@ -337,6 +337,9 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 /* SI1: what you're doing (tap to fix). */
 .di-doing { align-self: flex-start; margin: 0; padding: 3px 10px; border: 0; border-radius: 999px; font: inherit; font-size: 12px; color: var(--sub); background: var(--line); cursor: pointer; }
 .di-doing:hover { color: var(--text, inherit); }
+.di-media { display: flex; align-items: center; gap: 2px; margin: 0; padding: 2px 4px 2px 10px; border-radius: 999px; font-size: 12px; color: var(--sub); background: var(--line); }
+.di-media-t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.di-media .di-icon { width: 26px; height: 26px; font-size: 12px; }
 
 /* ---- Make it yours (IF1, IF3, IP3, IP4) ---- */
 /* Top left / top right: the shape hugs that corner (the window sits there). */

@@ -113,6 +113,8 @@ export function shareGoalWords(words: string[]) {
 }
 
 export const spans = (now = Date.now()) => sessionize(events, now)
+/** AU2: the last two hours of events (app names only), for the "last hour" summary. */
+export const recentEvents = () => events.slice()
 
 /** SI1: what you're doing, for the island's chip (a kind and the app's friendly name). */
 export function doingNow(): NonNullable<import('@core/islandModel').IslandSnapshot['doing']> | null {

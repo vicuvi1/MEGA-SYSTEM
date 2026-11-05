@@ -75,6 +75,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'recipeAnswer'; recipeId: string; answer: 'always' | 'now' | 'off'; acts: SafeAction[] }
   /** SI24: Ben proposed a recipe: add it (off until you turn it on) or not. */
   | { kind: 'recipeAdd'; recipe: unknown; answer: 'add' | 'no'; alertId: string }
+  /** AU7: your answer to Ben's ask to do something on this PC. */
+  | { kind: 'pcAsk'; askId: string; answer: 'allow' | 'deny'; alertId: string }
   /** SI27: close the day in one go (ends timers, unfinished blocks to tomorrow or dropped, drafts the note). */
   | { kind: 'closeAll'; blocks: 'move' | 'drop' }
 )

@@ -18,6 +18,7 @@ import { FeelContext, bump, feelFor, flyId, onFrame, ringColor, setFrameMode, us
 import { dropOldIslandUiLog, logIslandUi } from './islandLog'
 import { finalShapeRect, inRects, roundOut, SHIELD_OFF, SHIELD_PAD, shieldStep, unionRect, type Rect, type Shield } from '@core/islandClicks'
 import { installTaps, isPressed, onPress, tp } from './islandTap'
+import { IslandMedia } from './IslandMedia'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
 import { play, playReminder } from './soundKit'
@@ -1730,6 +1731,8 @@ export function DesktopIsland() {
           {s.doing.detail ? ` · ${s.doing.detail}` : ''}
         </button>
       )}
+      {/* AU1: what's playing (only with that switch on in PC & automation). */}
+      <IslandMedia />
       {quietMenu && !quiet && (
         <div className="di-quiet">
           <span>Quiet for</span>

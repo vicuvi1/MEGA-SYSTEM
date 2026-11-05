@@ -88,6 +88,10 @@ Today, Calendar, Tasks (Todoist), Goals, Focus, Progress, Reviews (month/year), 
 
 Small add-ons, each off until switched on in Settings → Plugins (`plugins_on`). A plugin can add a line to `lifeContext()`, actions, Telegram commands, a file reader, server jobs (morning/tick/evening via `src/plugins/run.ts`) and read-only `mcpTools`. Settings keys: `plugin_<id>`, `plugin_<id>_data`, `plugins_status`. Now: weather, github, gmail, bank (CSV import), health (phone numbers by Shortcut, keys hashed in `sys_health_keys`), notes (Obsidian in the desktop app, Notion optional).
 
+### PC & automation
+
+Settings → PC & automation (all off by default, all free): pause music during focus and what's playing on the island, ActivityWatch / the last hour for Ben (`pc_last_hour`), Ben's PC actions with Allow/Deny on the island (`pc_asks`), phone push by ntfy, n8n webhooks out and `/api/hook` in, Ben's outside MCP tools. Server parts keep their settings in `sys_kv` (`auto:*`). Details: `docs/pc-automation.md`.
+
 ### Database
 
 - Tables: see `src/core/schema.ts` (**append-only**: never edit a shipped migration, add a new one and bump `SCHEMA_VERSION` in `api/_schema.mjs`; a test checks they match). Pages built for an older schema may read but `/api/db` refuses their writes ("A new version is out — please reload"). A migration that MOVES data must run once on the server, never in each browser.

@@ -36,6 +36,8 @@ import { pluginActionsHelp, pluginContext, readPluginAction, type PluginActionCa
 import { WATER_MAX_ML } from '@core/defaults'
 import { dayLog } from './dayLog'
 import { parseRecipeLine, type Recipe } from '@core/recipes'
+import { readPcAction, type PcAct } from '@core/pcActions'
+import { cleanLastHour, lastHourContext } from '@core/pcLastHour'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -328,6 +330,13 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     if (doing) lines.push(`On his PC today by activity (from the desktop app): ${doing}.`)
   } catch {
     /* no day log yet */
+  }
+  // AU2: the last hour on his PC (app names, sites, minutes), only when he shares it from the desktop app.
+  try {
+    const lh = lastHourContext(cleanLastHour(readSetting(db as any, 'pc_last_hour')), now.getTime())
+    if (lh) lines.push(lh)
+  } catch {
+    /* not shared */
   }
   if (extra.todoToday) {
     const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? ' (late)' : ''}${t.priority >= 3 ? ` P${5 - t.priority}` : ''}${t.section ? ` [${t.section}]` : ''}`)
@@ -879,6 +888,8 @@ export type BrainAction =
   | { kind: 'editmoney'; ref: string; amount?: number; category?: string; account?: string; note?: string; date?: string }
   /** SI24: Ben proposes a Smart island recipe: a card to accept, never switched on by itself. */
   | { kind: 'recipe'; recipe: Recipe }
+  /** AU7: something on his PC, asked first on the desktop island (never run by itself). */
+  | { kind: 'pc'; act: PcAct }
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -892,6 +903,11 @@ export function readAction(line: string): BrainAction | null {
   // Plugin verbs first ("steps: 8000"); the built-ins after.
   const plugin = readPluginAction(line)
   if (plugin) return plugin
+  // AU7: "pc: open spotify": an ask for the desktop island (Allow / Deny).
+  if (/^\s*pc\s*:/i.test(line)) {
+    const act = readPcAction(line)
+    return act ? { kind: 'pc', act } : null
+  }
   // SI24: "RECIPE: {json}": a Smart island recipe to offer (whitelisted actions only, off until he says yes).
   if (/^\s*RECIPE\s*:/i.test(line)) {
     const recipe = parseRecipeLine(line.replace(/^\s*recipe\s*:/i, 'RECIPE:'))
