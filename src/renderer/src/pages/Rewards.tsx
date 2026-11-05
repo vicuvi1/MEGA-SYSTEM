@@ -132,7 +132,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
                     <button className="btn small ghost" onClick={() => void archive(r)}>
                       Remove
                     </button>
-                    <button className={`btn small ${sure === r.id ? 'primary' : ''}`} disabled={!!blocked} onClick={() => void redeem(r)} onBlur={() => setSure(null)}>
+                    <button className={`btn small ${sure === r.id || !blocked ? 'primary' : ''}`} disabled={!!blocked} onClick={() => void redeem(r)} onBlur={() => setSure(null)}>
                       {sure === r.id ? `Confirm −${r.price}` : 'Get it'}
                     </button>
                   </span>

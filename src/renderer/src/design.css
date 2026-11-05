@@ -2023,3 +2023,11 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 /* Tasks use the full width (V12): the area columns grow to fill the row
    instead of three fixed 370 px columns with empty space beside them. */
 :root .ta-cols { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+
+/* Rewards tidy-up (V13): the balance shows once at the top of the page (not
+   again in "Treat yourself"), and every reward card keeps its buttons on one
+   aligned row at the bottom. */
+.rw .fun-card .fun-bal { display: none; }
+.rw-card { display: flex; flex-direction: column; }
+.rw-card .rw-foot { margin-top: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.rw-card .rw-foot .row { gap: 6px; flex-wrap: nowrap; }

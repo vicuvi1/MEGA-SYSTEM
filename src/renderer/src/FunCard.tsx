@@ -96,7 +96,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
             {canGet.map((r) => (
               <li key={r.id}>
                 <span className="fun-title">{r.title}</span>
-                <button className={`btn small ${sure === r.id ? 'primary' : 'ghost'}`} onClick={() => void redeem(r)} onBlur={() => setSure(null)}>
+                <button className={`btn small ${sure === r.id ? 'primary' : ''}`} onClick={() => void redeem(r)} onBlur={() => setSure(null)}>
                   {sure === r.id ? `Confirm −${r.price}` : `Get it · ${r.price}`}
                 </button>
               </li>
