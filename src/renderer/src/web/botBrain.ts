@@ -5,6 +5,7 @@ import { parseTelegramText } from '@core/botCommands'
 // and can act: log things, add must-dos, start focus, add Todoist tasks, set
 // goals. Each bot is a specialist (Mega: head + training, Finance: money,
 // Waky: sleep). Pure helpers here; webBots.ts runs it.
+import { cleanFacts, factLine, toRecord, type Fact } from '@core/factTypes'
 import { STEALTH_NOTE } from '@core/stealth'
 import type { BotBridgeConfig } from '@shared/api'
 import { addDays } from '@core/dates'
@@ -30,7 +31,7 @@ export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
 export interface Memory {
   /** Things worth remembering ("exam on 7 Nov", "wants to wake at 7"). */
-  facts: { t: string; at: string }[]
+  facts: Fact[]
   /** The last messages, all bots together (one coach team). */
   chat: { role: 'me' | 'coach'; bot: Persona; text: string; at: string }[]
 }
@@ -61,10 +62,12 @@ export function updateMemory(m: Memory, add: { facts?: string[]; turns?: Memory[
     if (!t) continue
     const n = norm(t)
     const i = facts.findIndex((x) => norm(x.t) === n || norm(x.t).includes(n) || n.includes(norm(x.t)))
-    if (i >= 0) facts.splice(i, 1)
-    facts.push({ t, at: now.toISOString().slice(0, 10) })
+    const prev = i >= 0 ? facts.splice(i, 1)[0] : undefined
+    // A typed record (person, exam, preference…), surer each time it comes up again.
+    facts.push(toRecord(t, now.toISOString().slice(0, 10), prev))
   }
-  return { facts: facts.slice(-MAX_FACTS), chat: [...m.chat, ...(add.turns ?? [])].slice(-MAX_CHAT) }
+  // The clean-up (expired exams, old unconfirmed guesses) runs with every save.
+  return { facts: cleanFacts(facts, now.toISOString().slice(0, 10)).slice(-MAX_FACTS), chat: [...m.chat, ...(add.turns ?? [])].slice(-MAX_CHAT) }
 }
 
 /** What you tell the coach to push you on (Coach page → Goals & rules). */
@@ -652,7 +655,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     extra.desk ? `== What you know about how he works (use it: plan with his energy map, name repeat excuses, respect a short night) ==\n${extra.desk}` : '',
     '',
     '== What you remember about him ==',
-    facts.length ? facts.map((f) => `- ${f.t} (noted ${f.at})`).join('\n') : '- nothing yet',
+    facts.length ? facts.map((f) => `- ${factLine(f)}`).join('\n') : '- nothing yet',
     '',
     '== Recent conversation ==',
     chat.length ? chat.join('\n') : '(none)',
