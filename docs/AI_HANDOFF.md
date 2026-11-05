@@ -92,6 +92,19 @@ Off until switched on in Settings → Voice (saved per device in localStorage `l
 - **Web / phone** (`CoachMic.tsx`): 🎙 push-to-talk on the Coach page (the browser's speech recognition; else on-device speech to text on a strong device with Voice on) and 🔊 read-aloud. No wake word.
 - **Licences:** sherpa-onnx, Zipformer KWS, Transformers.js, Kokoro: Apache-2.0; Silero VAD, Moonshine, Whisper, ONNX Runtime: MIT. Kokoro's phonemizer (eSpeak NG) is **GPL-3.0**: never bundled; the worker imports it from jsdelivr at run time (pinned URL, allowed in the CSP's `script-src`). The CSP's `connect-src` allows `huggingface.co`, `*.hf.co`, `cdn.jsdelivr.net` for the downloads.
 
+### Island pages (PL6) and the page API
+
+The opened island has pages (Day, Music, Home, PC, Fun…) with dots on top: swipe or drag sideways, scroll sideways (or Shift + wheel; a plain wheel over the dots), Ctrl+← / Ctrl+→ or `[` `]`. Only the page you see is mounted, so nothing on the others runs or animates. Pages can open by the time of day or the island profile (synced setting, see Widgets). Pure logic: `src/core/widgets/pages.ts`; the pager and the API: `src/renderer/src/widgets/islandPages.tsx`.
+
+To add a page (another builder, e.g. the Music tab), call once at import time:
+
+```tsx
+import { registerIslandPage } from './widgets/islandPages'
+registerIslandPage({ id: 'music', title: 'Music', icon: '🎵', render: (ctx) => <MyMusicPage snap={ctx.snap} tap={ctx.tap} /> })
+```
+
+`id` is lower-case letters, digits or `-`; registering the same id again replaces the page (the built-in `music` page is a placeholder for exactly that). `ctx` = `{ snap, tap, now, day }` (`snap`: the island snapshot; `tap(action)`: send an island action; `day`: the Day page's own content). Optional `order` places a new page before you reorder (Day 0, Music 10, others 50). It returns a function that removes the page.
+
 ### Plugins (`src/plugins/`)
 
 Small add-ons, each off until switched on in Settings → Plugins (`plugins_on`). A plugin can add a line to `lifeContext()`, actions, Telegram commands, a file reader, server jobs (morning/tick/evening via `src/plugins/run.ts`) and read-only `mcpTools`. Settings keys: `plugin_<id>`, `plugin_<id>_data`, `plugins_status`. Now: weather, github, gmail, bank (CSV import), health (phone numbers by Shortcut, keys hashed in `sys_health_keys`), notes (Obsidian in the desktop app, Notion optional).

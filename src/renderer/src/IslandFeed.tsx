@@ -34,6 +34,7 @@ import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart,
 import { breakOverAlert, controlAct, flowTick, islandRunning, loadBreakPref, mustdoUndo, rememberUndo } from './islandControlsFeed'
 import { pcAskAct, pcAskAlert, pcAutoTick } from './pcAutomation'
 import { kitAct, kitForIsland } from './islandKitFeed'
+import { weatherAlert, widgetsForIsland } from './widgets/widgetsFeed'
 import { MOVE_CARD_EVENT, moveCardAlert } from '@core/islandMoveCard'
 
 const SEEN = 'ls.coachSeen'
@@ -524,6 +525,8 @@ export function IslandFeed() {
           windDownAlert(wd, now, dismissed) ??
           (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
           moveCardAlert(moveAsk, now, dismissed) ??
+          // LF1 / LF2: rain in 30 minutes, the light going (weather plugin).
+          (call ? null : weatherAlert(now, dismissed, busy)) ??
           nudges.body ??
           nudgeWater(waterAlert(body), now) ??
           (busy ? null : recapAlert({ now, eveningAt: evAt, dismissed, recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget: status.today.waterTarget || WATER_TARGET_ML, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined } })) ??
@@ -540,6 +543,8 @@ export function IslandFeed() {
       move: nudges.move,
       // Island 2: your tiles and buttons, today's blocks for the mini calendar, the music's focus pause.
       ...(await kitForIsland(blocks.current.list)),
+      // PL1–PL8, LF1/LF2: your widgets and layout, today's rain and sunset.
+      ...(await widgetsForIsland(now)),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,

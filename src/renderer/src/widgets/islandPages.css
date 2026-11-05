@@ -1,0 +1,18 @@
+/* PL6: the opened island's pages. Only transform and opacity move (the
+   motion budget); a page slides in once (200 ms) and stops. */
+.ip-pager { display: flex; flex-direction: column; gap: 10px; touch-action: pan-y; }
+.ip-dots { position: sticky; top: -12px; z-index: 2; display: flex; justify-content: center; gap: 4px; padding: 4px 0; background: var(--bg, transparent); }
+.ip-dots button { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--sub); font: inherit; font-size: 12px; cursor: pointer; opacity: 0.7; transition: opacity 0.15s ease, transform 0.12s ease; }
+.ip-dots button i { font-style: normal; display: none; }
+.ip-dots button.on { opacity: 1; color: var(--fg); background: rgb(var(--ink) / 0.08); }
+.ip-dots button.on i { display: inline; }
+.ip-dots button:hover { opacity: 1; }
+.ip-dots button:active { transform: scale(0.94); }
+.ip-page { display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
+.ip-page.from-right { animation: ip-in-right 0.2s ease-out both; }
+.ip-page.from-left { animation: ip-in-left 0.2s ease-out both; }
+@keyframes ip-in-right { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes ip-in-left { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.ip-empty { display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; text-align: center; padding: 24px 12px; border: 1px dashed var(--line); border-radius: 14px; color: var(--sub); }
+.ip-empty b { color: var(--fg); font-size: 13px; }
+.ip-empty small { font-size: 12px; max-width: 300px; }

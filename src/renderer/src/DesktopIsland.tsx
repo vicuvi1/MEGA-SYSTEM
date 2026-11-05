@@ -30,6 +30,7 @@ import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from '
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
 import { MusicPanel, ScHost, ScPillBadge } from './IslandMusic'
+import { IslandPager } from './widgets/islandPages'
 import { lookClasses } from '@core/islandTiles'
 import './island.css'
 import './island-motion.css'
@@ -185,6 +186,8 @@ function ActIcon({ a, face, small = false, size: px }: { a: Activity; face: stri
   if (a.kind === 'points') return <span className="di-act-ico">⭐</span>
   if (a.kind === 'mustdos') return <span className="di-act-ico">☑️</span>
   if (a.kind === 'tasks') return <span className="di-act-ico">✓</span>
+  if (a.kind === 'rain') return <span className="di-act-ico">🌧</span>
+  if (a.kind === 'sun') return <span className="di-act-ico">🌇</span>
   return <span className="di-face-sm">{face}</span>
 }
 /** The time, ticking on its own (the rest of the island doesn't re-render every second). */
@@ -1876,13 +1879,16 @@ export function DesktopIsland() {
           )}
         </section>
       )}
-      {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
-      {/* Island 2: your tiles and buttons, today's strip, music, the clipboard tray, the file shelf. */}
-      <KitTiles k={k} s={s} />
-      <MiniCalendar s={s} tap={tap} now={now} />
-      <MusicPanel k={k} />
-      <ClipTray k={k} tap={tap} />
-      <FileShelf k={k} tap={tap} />
+      {/* PL6: pages (Day, Music, Home, PC, Fun…): swipe, Shift + wheel, Ctrl+← → or the dots. */}
+      <IslandPager snap={s} tap={tap} now={now} profile={(basePrefs as { profile?: string }).profile ?? null} day={<>
+        {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
+        {/* Island 2: your tiles and buttons, today's strip, music, the clipboard tray, the file shelf. */}
+        <KitTiles k={k} s={s} />
+        <MiniCalendar s={s} tap={tap} now={now} />
+        <MusicPanel k={k} />
+        <ClipTray k={k} tap={tap} />
+        <FileShelf k={k} tap={tap} />
+      </>} />
       <PanelCorner root={rootEl} scale={scale} />
       {/* IC17: edit what the pill shows, like a phone's home screen. */}
       {editing ? (

@@ -6,6 +6,7 @@ import { normalizeAccelerator } from './islandKeys'
 import type { ContextKind } from './activityContext'
 import type { SafeAction } from './recipes'
 import { cleanControls, DEFAULT_CONTROLS, type IslandControls } from './islandControlPrefs'
+import { rainItem, sunItem } from './widgets/weatherPill'
 
 export interface IslandBlock {
   title: string
@@ -91,7 +92,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather'
   title: string
   text: string
   face?: string
@@ -169,6 +170,10 @@ export interface IslandSnapshot {
   day?: IslandBlock[]
   /** IN-SC: pause the island's music during focus (PC & automation → Pause music during focus). */
   musicPause?: boolean
+  /** PL1–PL8: your widgets, pages and layout (synced setting island_widgets) and the read-only widget data (src/core/widgets). */
+  widgets?: unknown
+  /** LF1/LF2: today's rain and daylight from the weather plugin (src/core/widgets/weatherPill.ts). */
+  weather?: import('./widgets/weatherPill').IslandWeather | null
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {
@@ -388,9 +393,9 @@ export type AlertRule = 'peek' | 'dot' | 'never'
 export type ClickAction = 'panel' | 'timer' | 'app' | 'quiet' | 'menu'
 export const CLICK_LABEL: Record<ClickAction, string> = { panel: 'Open the panel', timer: 'Start / stop the timer', app: 'Open Life System', quiet: 'Quiet menu', menu: 'Menu for this' }
 /** What the pill can show (IF4). The streak flame is gone on purpose. */
-export type PillItem = 'timer' | 'now' | 'next' | 'ben' | 'bed' | 'water' | 'points' | 'mustdos' | 'tasks'
-export const PILL_LABEL: Record<PillItem, string> = { timer: 'Focus timer', now: 'What’s on now', next: 'What’s next', ben: 'Ben’s new message', bed: 'Bedtime', water: 'Water today', points: 'Points', mustdos: 'Must-dos left', tasks: 'Next Todoist task' }
-export const DEFAULT_PILL_ORDER: { id: PillItem; on: boolean }[] = (['timer', 'now', 'next', 'ben', 'bed', 'water', 'points', 'mustdos', 'tasks'] as PillItem[]).map((id) => ({ id, on: !['points', 'mustdos', 'tasks'].includes(id) }))
+export type PillItem = 'timer' | 'now' | 'next' | 'ben' | 'bed' | 'water' | 'points' | 'mustdos' | 'tasks' | 'rain' | 'sun'
+export const PILL_LABEL: Record<PillItem, string> = { timer: 'Focus timer', now: 'What’s on now', next: 'What’s next', ben: 'Ben’s new message', bed: 'Bedtime', water: 'Water today', points: 'Points', mustdos: 'Must-dos left', tasks: 'Next Todoist task', rain: 'Rain soon', sun: 'Sunset and light left' }
+export const DEFAULT_PILL_ORDER: { id: PillItem; on: boolean }[] = (['timer', 'now', 'next', 'ben', 'bed', 'water', 'points', 'mustdos', 'tasks', 'rain', 'sun'] as PillItem[]).map((id) => ({ id, on: !['points', 'mustdos', 'tasks'].includes(id) }))
 /** The quick picks for "Tucks away" (seconds the panel stays after the mouse leaves). */
 export const HIDE_SEC: Record<'fast' | 'normal' | 'slow', number> = { fast: 1, normal: 2, slow: 4 }
 /** What the size sliders allow (CSS px before the size setting) (IF3). */
@@ -557,7 +562,7 @@ export function cleanOrder(v: unknown): { id: PillItem; on: boolean }[] {
 // ---- Live activities: everything worth showing in the pill right now ----
 
 export interface Activity extends Omit<Pill, 'kind'> {
-  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed' | 'winddown' | 'points' | 'mustdos' | 'tasks'
+  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed' | 'winddown' | 'points' | 'mustdos' | 'tasks' | 'rain' | 'sun'
   /** Stable id, so a chosen activity stays chosen as numbers tick. */
   key: string
   /** When it starts (ms): a live countdown in the last 10 minutes (P7). */
@@ -607,6 +612,15 @@ export function activities(s: IslandSnapshot, now: number, order: { id: PillItem
     tasks: () => {
       const t = s.tasks?.[0]
       return t ? { key: `task:${t.id}`, kind: 'tasks', text: t.content, sub: t.time ?? 'Todoist', pct: 0, over: false, dot } : null
+    },
+    // LF1 / LF2: from the weather plugin (src/core/widgets/weatherPill.ts).
+    rain: () => {
+      const w = rainItem(s.weather, now)
+      return w ? { ...w, kind: 'rain', over: false, dot } : null
+    },
+    sun: () => {
+      const w = sunItem(s.weather, now)
+      return w ? { ...w, kind: 'sun', over: false, dot } : null
     }
   }
   const out: Activity[] = []
