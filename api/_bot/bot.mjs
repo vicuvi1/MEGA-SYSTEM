@@ -15636,30 +15636,17 @@ function addRepsToSportTrack(name, amount) {
 * for the server: reps land there and every device picks them up.
 */
 function addRepsInDb(db, name, amount) {
-	const st = (() => {
-		try {
-			return JSON.parse(getSetting(db, "sport_tracker_json") || "null");
-		} catch {
-			return null;
-		}
-	})()?.data;
+	const st = sportState(db);
 	if (!st || !Array.isArray(st.exercises)) return null;
-	const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-	if (st.lastDate !== today) {
-		st.lastDate = today;
-		st.exercises.forEach((e) => e.doneToday = 0);
-		if (st.water) st.water.currentMl = 0;
-	}
-	const ex = findExercise(st, name);
-	if (!ex) return null;
-	ex.doneToday = (Number(ex.doneToday) || 0) + amount;
+	const r = addReps(st, name, amount, sportToday());
+	if (!r) return null;
 	setSetting(db, "sport_tracker_json", JSON.stringify({
 		savedAt: Date.now(),
-		data: st
+		data: r.st
 	}));
 	return {
-		done: ex.doneToday,
-		target: Number(ex.target) || 0
+		done: r.exercise.done,
+		target: r.exercise.target
 	};
 }
 /** Which Life System expense a Finance Helper record from Telegram made (for Undo). */
