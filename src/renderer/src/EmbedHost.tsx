@@ -261,6 +261,44 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     }
   }, [appKey])
 
+  // One wallet (Waky inside Life System): your points, what a wake-up and a
+  // bedtime really pay, and your next reward go into Waky's page, which then
+  // shows them instead of its own coins (public/apps/waky/life-points.js).
+  useEffect(() => {
+    if (appKey !== 'waky') return
+    const el = ref.current as any
+    if (!el) return
+    let gone = false
+    const push = async () => {
+      try {
+        const [sum, rules, shop] = await Promise.all([life.wallet.summary(), life.rules.list().catch(() => []), life.shop.state().catch(() => null)])
+        const pts = (id: string, d: number) => rules.find((r) => r.id === id && r.enabled !== false)?.coins ?? d
+        const next = ((shop as any)?.rewards ?? []).filter((r: any) => !r.archived && r.price > sum.balance).sort((a: any, b: any) => a.price - b.price)[0]
+        const data = JSON.stringify({ balance: sum.balance, wake: pts('sleep.up_on_time', 2), bed: pts('sleep.bed_on_time', 2), goal: next ? { title: String(next.title), price: Number(next.price) } : null, at: Date.now() })
+        if (gone) return
+        // Same site (website): one storage, ready before Waky's first read.
+        try {
+          localStorage.setItem('life_points', data)
+        } catch {
+          /* private window */
+        }
+        // The desktop app keeps Waky's storage apart: write it there too.
+        void runIn(el, `localStorage.setItem('life_points', ${JSON.stringify(data)}); window.dispatchEvent(new Event('life-points'))`).catch(() => null)
+      } catch {
+        /* not unlocked yet: the next wallet change tries again */
+      }
+    }
+    void push()
+    const ev = typeof el.insertCSS === 'function' ? 'dom-ready' : 'load'
+    el.addEventListener(ev, push)
+    window.addEventListener('life-wallet-changed', push)
+    return () => {
+      gone = true
+      el.removeEventListener(ev, push)
+      window.removeEventListener('life-wallet-changed', push)
+    }
+  }, [appKey])
+
   // Bi-directional synchronization for MAN Spartan Discipline app
   useEffect(() => {
     if (appKey !== 'man') return

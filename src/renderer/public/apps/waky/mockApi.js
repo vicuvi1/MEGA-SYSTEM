@@ -176,6 +176,17 @@
     } catch {}
   }
 
+  // Inside Life System there is ONE wallet: Life System writes your points,
+  // what a wake-up and a bedtime really pay, and your next reward here
+  // (localStorage 'life_points'). Waky then shows those instead of its own
+  // coins, and its own shop is closed (rewards live in Life System).
+  function lifeWallet() {
+    try {
+      const v = JSON.parse(localStorage.getItem('life_points') || 'null');
+      return v && typeof v.balance === 'number' ? v : null;
+    } catch { return null; }
+  }
+
   function computeStats(data, todayDateStr) {
     const days = data.days || {};
     const nights = data.nights || {};
@@ -255,6 +266,7 @@
 
     const rewards = data.rewards || [];
     const goal = rewards.find(r => r.cost > balance) || rewards[0];
+    const L = lifeWallet();
 
     // Build 14-day chart
     const chart = [];
@@ -311,8 +323,8 @@
         weekend: today.getDay() === 0 || today.getDay() === 6,
         record: todayRec,
         ontime: isTodayOnTime,
-        coins: 20,
-        coinReasons: ['early', 'still up'],
+        coins: L ? (isTodayOnTime ? L.wake : 0) : 20,
+        coinReasons: L ? ['on time'] : ['early', 'still up'],
         quote: QUOTES[Math.abs(today.getDate()) % QUOTES.length],
         stillUp: {
           state: todayRec?.stillUp ? 'done' : 'none',
@@ -330,15 +342,20 @@
       journey,
       hit: currentStage,
       levelUp: goodTotal === 5,
-      coins: {
+      coins: L ? {
+        balance: L.balance,
+        earned: 0,
+        spent: 0,
+        goal: L.goal ? { id: 'life', emoji: '🎁', name: L.goal.title, cost: L.goal.price } : null
+      } : {
         balance,
         earned: earnedCoins,
         spent: spentCoins,
         goal
       },
       preview: {
-        onTime: 10,
-        early: 15,
+        onTime: L ? L.wake : 10,
+        early: L ? L.wake : 15,
         stage: nextStage,
         levelUp: false,
         streak: streak + 1,
@@ -355,7 +372,7 @@
         onTime: false,
         sleepIfNow: 840,
         enabled: true,
-        coins: 5
+        coins: L ? L.bed : 5
       },
       sleep: {
         last: 442,
@@ -562,13 +579,15 @@
       try { body = JSON.parse(options.body || '{}'); } catch {}
       const chestId = body.id || 'rank-5';
       data.opened = data.opened || {};
-      const prize = { rarity: 'rare', items: [{ type: 'coins', amount: 35 }] };
+      // In Life System, points come only from what you did: a chest gives a streak shield, not coins.
+      const prize = lifeWallet() ? { rarity: 'rare', items: [{ type: 'shield' }] } : { rarity: 'rare', items: [{ type: 'coins', amount: 35 }] };
       data.opened[chestId] = { prize, openedOn: today };
       save(data);
       return reply({ ok: true, prize });
     }
 
     if (u.includes('/api/redeem')) {
+      if (lifeWallet()) return new Response(JSON.stringify({ error: 'Rewards live in Life System now: open Rewards there.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       let body = {};
       try { body = JSON.parse(options.body || '{}'); } catch {}
       data.spent = data.spent || [];
