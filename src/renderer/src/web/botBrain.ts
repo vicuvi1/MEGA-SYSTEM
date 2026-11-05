@@ -17,6 +17,7 @@ import { activePlan } from '@core/weekPlan'
 import { deadlineRadar, whenText, type TodoTask } from '@core/todoist'
 import { financeSpending } from '@core/progress'
 import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
+import { canBeNow, isTentative, takesTime } from '@core/calResponse'
 import { getSetting, setSetting } from '../../../main/settings'
 import type { Services } from './webServices'
 import { planGoal, planLine } from '@core/goalPlan'
@@ -336,11 +337,12 @@ export function nowContext(s: Services, db: any, events: CalEvent[] | null, fina
   const t = now.getTime()
   const today = s.wallet.today(now)
   if (events) {
-    const timed = events.filter((e) => !e.allDay)
-    const cur = timed.find((e) => Date.parse(e.start) <= t && Date.parse(e.end) > t)
+    // IS6: only what he said yes to is "now"; a maybe is named as one; unanswered invites are left out.
+    const timed = events.filter((e) => !e.allDay && takesTime(e))
+    const cur = timed.filter(canBeNow).find((e) => Date.parse(e.start) <= t && Date.parse(e.end) > t)
     const next = timed.filter((e) => Date.parse(e.start) > t).sort((a, b) => a.start.localeCompare(b.start))[0]
     out.push(
-      `RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : 'nothing in his calendar'}${next ? `; next: "${next.title}" at ${hmOf(new Date(next.start))} (in ${Math.round((Date.parse(next.start) - t) / 60000)} min)` : '; nothing else today'}.`
+      `RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : 'nothing in his calendar'}${next ? `; next: "${next.title}"${isTentative(next) ? ' (he said maybe)' : ''} at ${hmOf(new Date(next.start))} (in ${Math.round((Date.parse(next.start) - t) / 60000)} min)` : '; nothing else today'}.`
     )
   } else out.push(`RIGHT NOW (${hmOf(now)}): his calendar is not connected, so you don't know where he is; ask if it matters.`)
   const items: { at: number; text: string }[] = []

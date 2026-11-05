@@ -11,12 +11,21 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, ISLAND_SHAPE, ISLAND_UI, activities, alertGate, alertPref, clock, islandStep, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, clock, islandStep, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
 import type { IslandPlacement } from '../../shared/desktop'
 import { AlertScene, TypeIn } from './IslandScenes'
+import { logIslandUi } from './islandLog'
+import { plainError } from '@core/islandErrors'
 import './island.css'
 
 const desk = () => window.desktop
+/** A clickable area in CSS px of this page (the desktop applies the page zoom) (IS2). */
+export interface HotRect { x: number; y: number; w: number; h: number }
+/** After this long without a fresh snapshot the island dims and says "Reconnecting…" (IS18). */
+export const STALE_MS = 60_000
+/** A press becomes a drag only after moving this far and being held this long (IS3). */
+export const DRAG_PX = 8
+export const DRAG_MS = 120
 
 /** One note: frequency, start (s), length (s), type. */
 type Note = [number, number, number, OscillatorType?]
@@ -129,13 +138,14 @@ function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
 
 const SPRING_OPEN = { type: 'spring', stiffness: 340, damping: 28, mass: 0.9 } as const
 const SPRING_CLOSE = { type: 'spring', stiffness: 520, damping: 44, mass: 0.8 } as const
-const PAD = 6 // the shape's distance from the window edge
 
 export function DesktopIsland() {
   const [s, setS] = useState<IslandSnapshot>(EMPTY_ISLAND)
   const now = useNow(s.running ? 5000 : 15_000)
   const [place, setPlace] = useState<IslandPlacement>('top')
   const [prefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
+  // The size setting: the desktop sends a scale and the page scales itself (its zoom stays locked).
+  const [scale, setScale] = useState(1)
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
   const [text, setText] = useState('')
@@ -158,6 +168,8 @@ export function DesktopIsland() {
   }, [])
   const dispatch = useCallback((e: IslandUiEvent) => {
     const step = islandStep(uiRef.current, e, prefsRef.current.hide)
+    // IS23: every change of view, and what caused it.
+    if (step.ui.view !== uiRef.current.view) logIslandUi('view', `${uiRef.current.view} → ${step.ui.view} (${e.type})`)
     uiRef.current = step.ui
     setUi(step.ui)
     if (step.timer !== undefined) {
@@ -176,9 +188,19 @@ export function DesktopIsland() {
     document.documentElement.classList.add('di-root')
     desk()?.onIslandState?.(setS)
     // The desktop watches the real pointer and says when it is over the shape.
-    desk()?.onIslandHover?.((on) => dispatch({ type: 'hover', on }))
+    desk()?.onIslandHover?.((on) => {
+      logIslandUi('hover', on ? 'mouse in' : 'mouse out')
+      dispatch({ type: 'hover', on })
+    })
+    // IS23: the desktop's own lines (click-through, zoom, why it's hidden) go in the island log.
+    desk()?.onIslandDiag?.((d) => logIslandUi('desktop', String(d?.line ?? d), { local: true }))
+    // IS21: the desktop ended a drag that got stuck.
+    desk()?.onIslandDragCancel?.(() => window.dispatchEvent(new Event('island-drag-cancel')))
     desk()?.onIslandPlacement?.(setPlace)
-    desk()?.onIslandPrefs?.(setPrefs)
+    desk()?.onIslandPrefs?.((p) => {
+      setPrefs(p)
+      setScale(Number.isFinite(p.scale) && p.scale! > 0 ? p.scale! : ISLAND_ZOOM[p.size] ?? 1)
+    })
     desk()?.onIslandToggle?.(() => dispatch({ type: 'toggle' }))
     // P4: Ctrl+Alt+N from any app: a box to add a task.
     desk()?.onIslandCapture?.(() => {
@@ -207,12 +229,23 @@ export function DesktopIsland() {
   }, [ui.view])
 
   // Quiet for a while (Q1) and what Windows says (a call, a full-screen app: Q2, Q3).
-  const [q, setQ] = useState<{ until: number; call: boolean; fullscreen: boolean }>({ until: 0, call: false, fullscreen: false })
+  const [q, setQ] = useState<{ until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: 'hide' | 'dot' | 'show' }>({ until: 0, call: false, fullscreen: false })
   useEffect(() => {
     desk()?.onIslandQuiet?.(setQ)
   }, [])
   const quiet = q.until > Date.now()
   const inCall = !!s.call || q.call
+  // IS12: tell the desktop when a meeting from your calendar is on (by its data: a call link or other people, accepted).
+  const meetingOn = !!s.inMeeting
+  useEffect(() => {
+    desk()?.islandCall?.(meetingOn)
+    logIslandUi('meeting', meetingOn ? 'a meeting is on (calendar)' : 'no meeting on')
+  }, [meetingOn])
+  // IS23: why it is hidden, shrunk or dimmed, as it changes.
+  const why = [quiet && `quiet until ${new Date(q.until).toTimeString().slice(0, 5)}`, s.call && 'meeting in the calendar', q.call && 'microphone or camera on', q.fullscreen && 'a full-screen app', s.locked && 'locked (PIN) or loading', s.stale && 'last update failed'].filter(Boolean).join(', ')
+  useEffect(() => {
+    logIslandUi('state', why || 'normal')
+  }, [why])
   const setQuiet = (choice: number | 'tomorrow' | null) => {
     desk()?.islandQuiet?.(choice)
     if (choice != null) close()
@@ -284,70 +317,141 @@ export function DesktopIsland() {
     return () => ro.disconnect()
   }, [ui.view])
 
-  // Tell the desktop where the shape is: clicks elsewhere pass through.
-  // While it grows, the bigger of now and the target; exact when it settles.
-  const rectFor = useCallback((w: number, h: number) => {
-    const W = window.innerWidth
-    const x = place === 'left' ? PAD : place === 'right' ? W - PAD - w : (W - w) / 2
-    const y = place === 'left' || place === 'right' ? 40 - 19 : PAD
-    return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) }
-  }, [place])
+  // Tell the desktop where the shape is: clicks elsewhere pass through (IS2).
+  // The real box on screen (getBoundingClientRect, so the squish counts),
+  // every frame while it moves, on every size change, and once it settles.
   const [moving, setMoving] = useState(false)
-  const reportNow = () => {
-    const r = shape.current?.getBoundingClientRect()
-    if (r) desk()?.islandHot?.({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) })
-  }
+  const movingRef = useRef(false)
+  const lastHot = useRef('')
+  const sendHot = useCallback((settled = false) => {
+    const el = shape.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    if (!r.width || !r.height) return
+    const x = Math.floor(r.left)
+    const y = Math.floor(r.top)
+    const rects: HotRect[] = [{ x, y, w: Math.ceil(r.right) - x, h: Math.ceil(r.bottom) - y }]
+    const key = rects.map((b) => `${b.x},${b.y} ${b.w}×${b.h}`).join(' ')
+    if (key !== lastHot.current) {
+      lastHot.current = key
+      desk()?.islandHot?.({ rects })
+    }
+    if (settled) logIslandUi('click area', key)
+  }, [])
+  const pumpUntil = useRef(0)
+  const raf = useRef(0)
+  /** Report the box every frame for `ms` (and as long as the shape is moving). */
+  const pump = useCallback((ms: number) => {
+    pumpUntil.current = Math.max(pumpUntil.current, performance.now() + ms)
+    if (raf.current) return
+    const tick = () => {
+      sendHot()
+      if (movingRef.current || performance.now() < pumpUntil.current) raf.current = requestAnimationFrame(tick)
+      else {
+        raf.current = 0
+        sendHot(true)
+      }
+    }
+    raf.current = requestAnimationFrame(tick)
+  }, [sendHot])
+  useEffect(() => () => cancelAnimationFrame(raf.current), [])
   const onStart = () => {
+    movingRef.current = true
     setMoving(true)
-    const r = shape.current?.getBoundingClientRect()
-    const t = rectFor(size.w, size.h)
-    if (!r) return desk()?.islandHot?.(t)
-    const x = Math.min(r.left, t.x)
-    const y = Math.min(r.top, t.y)
-    desk()?.islandHot?.({ x: Math.round(x), y: Math.round(y), width: Math.round(Math.max(r.right, t.x + t.width) - x), height: Math.round(Math.max(r.bottom, t.y + t.height) - y) })
+    pump(50)
   }
   const onDone = () => {
+    movingRef.current = false
     setMoving(false)
-    reportNow()
+    pump(50)
   }
+  // Any size change (content growing, fonts loading) and the squish (0.55 s of CSS scale).
   useEffect(() => {
-    desk()?.islandHot?.(rectFor(size.w, size.h))
-  }, [rectFor]) // eslint-disable-line react-hooks/exhaustive-deps
+    const el = shape.current
+    if (!el) return
+    const ro = new ResizeObserver(() => pump(80))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [pump])
+  useEffect(() => {
+    if (squish) pump(650)
+  }, [squish, pump])
+  useEffect(() => {
+    lastHot.current = ''
+    pump(400)
+  }, [place, prefs.size, scale, pump])
+  // IS23: the zoom the click areas are measured in.
+  useEffect(() => {
+    logIslandUi('zoom', `size ${prefs.size} (page scale ×${scale}), screen scale ×${window.devicePixelRatio}, window ${window.innerWidth}×${window.innerHeight}`)
+  }, [prefs.size, scale])
 
-  // ---- drag (the pill or the panel's header); a plain click still opens ----
+  // ---- drag (the pill, the peek or the panel's header); a plain click still opens ----
+  // IS3: a drag needs 8 px and 120 ms held, so a small wobble while clicking is a click.
+  // IS21: it always ends (pointer up anywhere, lost capture, the window losing focus).
   const dragged = useRef(false)
   const dragProps = {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      // Every press starts clean: an old drag never eats the next click.
+      dragged.current = false
       if (e.button !== 0 || !desk()?.islandDrag) return
-      const hit = (e.target as HTMLElement).closest('button, input, textarea, a')
+      const hit = (e.target as HTMLElement).closest('button, input, textarea, a, select, label')
       if (hit && hit !== e.currentTarget) return
       const el = e.currentTarget
       const id = e.pointerId
       const sx = e.screenX
       const sy = e.screenY
+      const t0 = performance.now()
       let started = false
-      dragged.current = false
+      let ended = false
       const move = (ev: PointerEvent) => {
-        if (started || Math.hypot(ev.screenX - sx, ev.screenY - sy) < 5) return
+        if (started || ev.pointerId !== id) return
+        if (Math.hypot(ev.screenX - sx, ev.screenY - sy) < DRAG_PX || performance.now() - t0 < DRAG_MS) return
         started = true
         dragged.current = true
         try { el.setPointerCapture(id) } catch { /* fine */ }
         document.documentElement.classList.add('di-dragging')
         desk()?.islandDrag?.(true)
+        logIslandUi('drag', 'started')
       }
-      const up = () => {
+      const end = (why: string) => () => {
+        if (ended) return
+        ended = true
         el.removeEventListener('pointermove', move)
-        el.removeEventListener('pointerup', up)
-        el.removeEventListener('pointercancel', up)
+        el.removeEventListener('pointerup', onUp)
+        el.removeEventListener('pointercancel', onCancel)
+        el.removeEventListener('lostpointercapture', onLost)
+        window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('blur', onBlur)
+        window.removeEventListener('island-drag-cancel', onStuck)
+        try { if (el.hasPointerCapture?.(id)) el.releasePointerCapture(id) } catch { /* fine */ }
         if (started) {
           document.documentElement.classList.remove('di-dragging')
           desk()?.islandDrag?.(false)
+          logIslandUi('drag', `ended (${why})`)
+          pump(400)
         }
       }
+      const onUp = end('let go')
+      const onCancel = end('cancelled')
+      const onLost = end('lost the pointer')
+      const onBlur = end('window lost focus')
+      const onStuck = end('the desktop ended it')
       el.addEventListener('pointermove', move)
-      el.addEventListener('pointerup', up)
-      el.addEventListener('pointercancel', up)
+      el.addEventListener('pointerup', onUp)
+      el.addEventListener('pointercancel', onCancel)
+      el.addEventListener('lostpointercapture', onLost)
+      window.addEventListener('pointerup', onUp)
+      window.addEventListener('blur', onBlur)
+      window.addEventListener('island-drag-cancel', onStuck)
     }
+  }
+  /** A click that wasn't the end of a drag (IS3). */
+  const clicked = () => {
+    if (dragged.current) {
+      dragged.current = false
+      return false
+    }
+    return true
   }
 
   // ---- taps: every one shows what happened ("Saving…", then ✓ or why not) ----
@@ -380,7 +484,7 @@ export function DesktopIsland() {
   }
   useEffect(() => {
     desk()?.onIslandAck?.((ack) => {
-      setToast((t) => (t && t.id === ack.id ? { ...t, state: ack.ok ? 'ok' : 'err', text: ack.ok ? (ack.text ?? `✓ ${t.text}`) : `⚠ ${ack.error ?? 'It did not work'}` } : t))
+      setToast((t) => (t && t.id === ack.id ? { ...t, state: ack.ok ? 'ok' : 'err', text: ack.ok ? (ack.text ?? `✓ ${t.text}`) : `⚠ ${plainError(ack.error)}` } : t))
       clearToastLater(ack.ok ? (ack.text ? 4500 : 2200) : 7000)
     })
   }, [])
@@ -423,12 +527,32 @@ export function DesktopIsland() {
       send({ kind: 'clipSave', to: 'task', text: t, alertId: 'capture' })
       return
     }
-    if (s.ben.busy) return
+    if (s.ben.busy) {
+      // IS24: say why nothing happened (your text stays in the box).
+      setToast({ id: 'busy', state: 'err', text: 'Ben is still answering' })
+      clearToastLater(3000)
+      return
+    }
     setText('')
     dispatch({ type: 'typing', on: false })
     send({ kind: 'chat', text: t })
   }
 
+  // IS18: no fresh picture for a minute: dim and say so; the next snapshot brings it back.
+  const old = !s.locked && s.at > 0 && now - s.at > STALE_MS
+  // IS7: a scene that finishes (the eye break's 20 s) only answers its reminder;
+  // it never closes the panel or clears what you pinned or typed.
+  const alertDone = (id: string) => {
+    send({ kind: 'dismiss', id })
+    if (uiRef.current.byAlert && uiRef.current.view === 'peek') dispatch({ type: 'alertEnd' })
+  }
+  // IS11: a meeting without a call link: quiet until it ends.
+  const muteForMeeting = () => {
+    const end = s.now?.end ?? Date.now() + 30 * 60_000
+    desk()?.islandQuiet?.(Math.max(1, Math.round((end - Date.now()) / 60_000)))
+    setToast({ id: 'mute', state: 'ok', text: `🔕 Reminders off until ${hhmm(end)}` })
+    clearToastLater(3000)
+  }
   const water = s.water
   const mustOpen = s.mustdos.filter((m) => !m.done).length
   const [moon, setMoon] = useState(false)
@@ -513,7 +637,7 @@ export function DesktopIsland() {
 
     const blocks: Record<IslandSection, ReactNode> = {
     tasks: s.tasks?.length ? (<section className="di-tasks">
-                  <span className="di-label">Todoist · next up</span>
+                  <span className="di-label">Todoist · next up{s.tasksStale && s.tasksAt ? ` · updated ${Math.max(1, Math.round((now - s.tasksAt) / 60000))} min ago` : ''}</span>
                   {s.tasks.map((t) => (
                     <button key={t.id} className="di-task" onClick={() => send({ kind: 'todoDone', id: t.id, content: t.content })} title="Done: tick it in Todoist">
                       <i />
@@ -587,9 +711,14 @@ export function DesktopIsland() {
                       <small>{s.ben.move?.sub ?? 'Nothing planned right now.'}</small>
                     </div>
                   )}
-                  {!run && s.now && (
+                  {!run && s.now && !s.now.call && (
                     <button className="di-go" onClick={() => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) })}>
                       Start
+                    </button>
+                  )}
+                  {s.now?.call && s.now.meet && (
+                    <button className="di-go" onClick={() => tap({ kind: 'join', url: s.now!.meet! })}>
+                      Join
                     </button>
                   )}
                 </div>
@@ -604,7 +733,20 @@ export function DesktopIsland() {
                     </div>
                   </div>
                 )}
-                <label className="di-auto" title="When a block from your calendar begins, its focus timer starts by itself (not for calls)">
+                {(s.maybe ?? []).map((b) => (
+                  <div key={`${b.id ?? b.title}:${b.start}`} className="di-row di-maybe" title={b.maybe === 'invite' ? "You haven't answered this invite: it doesn't count until you accept it in your calendar" : 'You said maybe: it shows here, but never as Now'}>
+                    <span className="di-label">{b.maybe === 'invite' ? 'Invite' : 'Maybe'}</span>
+                    <div className="di-block">
+                      <b>{b.title}</b>
+                      <small>
+                        {hhmm(b.start)}
+                        {b.start > now ? ` · in ${minsText(b.start - now)}` : ''}
+                        {b.maybe === 'invite' ? ' · Invite: accept?' : ' · maybe'}
+                      </small>
+                    </div>
+                  </div>
+                ))}
+                <label className="di-auto" title="When a block from your calendar begins, its focus timer starts by itself (not for meetings)">
                   <input type="checkbox" checked={!!s.autoFocus} onChange={(e) => send({ kind: 'autoFocus', on: e.target.checked })} />
                   <span>⚡ Start focus by itself when a block begins</span>
                 </label>
@@ -677,7 +819,7 @@ export function DesktopIsland() {
       tabIndex={0}
       {...dragProps}
       onClick={() => {
-        if (dragged.current) return void (dragged.current = false)
+        if (!clicked()) return
         if (s.locked) desk()?.showApp?.()
         else dispatch({ type: 'click' })
       }}
@@ -695,17 +837,18 @@ export function DesktopIsland() {
     >
       {s.locked ? (
         <span className="di-pill-text">🔒 Open Life System</span>
-      ) : !main ? (
+      ) : old ? (
         <>
           <span className="di-face-sm">{s.ben.face}</span>
-          {s.streak && <span className={`di-flame ${s.streak.atRisk ? 'risk' : ''}`}>🔥<b>{s.streak.days}</b></span>}
+          <span className="di-pill-text di-reconnect">Reconnecting…</span>
         </>
+      ) : !main ? (
+        <span className="di-face-sm">{s.ben.face}</span>
       ) : (
         <>
           {icon(main)}
           <span className="di-pill-text">{main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text}</span>
           {pillTime(main)}
-          {s.streak && <span className={`di-flame ${s.streak.atRisk ? 'risk' : ''}`} title={`${s.streak.days}-day ${s.streak.kind} streak${s.streak.atRisk ? ' · at risk today!' : ''}`}>🔥<b>{s.streak.days}</b></span>}
         </>
       )}
       {pop && <span key={pop.key} className="di-pop" aria-live="polite">+{pop.n} ⭐</span>}
@@ -731,8 +874,8 @@ export function DesktopIsland() {
   const a = s.alert && gateOf(s.alert.kind) !== 'drop' ? s.alert : null
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main) ? (
-    <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} onClick={(e) => e.target === e.currentTarget && dispatch({ type: 'click' })}>
-      <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onDone={close} />
+    <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} onClick={() => clicked() && dispatch({ type: 'click' })} {...dragProps}>
+      <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onAlertDone={() => alertDone(a.id)} />
       <div className="di-peek-top">
         <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
         <div className="di-peek-mid">
@@ -743,13 +886,13 @@ export function DesktopIsland() {
       {a.actions.length > 0 && (
         <div className="di-actions">
           {a.actions.slice(0, 3).map((x) => (
-            <button key={x.label} className={x.primary ? 'primary' : ''} onClick={() => tap(x.action, x.label)}>{x.label}</button>
+            <button key={x.label} className={x.primary ? 'primary' : ''} onClick={(e) => (e.stopPropagation(), tap(x.action, x.label))}>{x.label}</button>
           ))}
         </div>
       )}
     </div>
   ) : (
-    <div className="di-peek" onClick={() => dispatch({ type: 'click' })} {...dragProps}>
+    <div className="di-peek" onClick={() => clicked() && dispatch({ type: 'click' })} {...dragProps}>
       <div className="di-peek-top">
         {main ? (run && main.kind === 'timer' ? <LiveRing run={run} size={34} /> : <span className="di-peek-face">{main.kind === 'ben' ? s.ben.face : <ActIcon a={main} face={s.ben.face} />}</span>) : <span className="di-peek-face">{s.ben.face}</span>}
         <div className="di-peek-mid">
@@ -758,13 +901,20 @@ export function DesktopIsland() {
         </div>
         {run ? (
           <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'stop' }))}>Stop & log</button>
+        ) : s.now?.call ? (
+          // IS11: a meeting is joined, not started as focus.
+          s.now.meet ? (
+            <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'join', url: s.now!.meet! }))}>🎥 Join</button>
+          ) : (
+            <button className="primary" onClick={(e) => (e.stopPropagation(), muteForMeeting())}>🔕 Mute reminders</button>
+          )
         ) : s.now ? (
           <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>▶ Start</button>
         ) : (
           <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'start', subject: 'Focus', minutes: 25 }))}>▶ Focus 25</button>
         )}
       </div>
-      {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span>{benLine}</p>}
+      {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><span className="di-peek-ben-text">{benLine}</span></p>}
     </div>
   )
 
@@ -784,6 +934,7 @@ export function DesktopIsland() {
         <button className="di-icon" onClick={close} aria-label="Close" title="Close (Esc)">✕</button>
       </header>
 
+      {old && <p className="di-reconnect-line">Reconnecting… this is from {hhmm(s.at)}</p>}
       {quietMenu && !quiet && (
         <div className="di-quiet">
           <span>Quiet for</span>
@@ -817,13 +968,13 @@ export function DesktopIsland() {
       <div className="di-chips">
         <button onClick={() => tap({ kind: 'water', ml: 250 })}>💧 +250 ml</button>
         {firstRep && <button onClick={() => tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n: 10 })}>💪 +10 {firstRep.name}</button>}
-        {!run && <button onClick={() => tap({ kind: 'start', subject: s.now?.title ?? 'Focus', minutes: 25 })}>▶ Focus 25</button>}
+        {!run && <button onClick={() => tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: 25 })}>▶ Focus 25</button>}
         {run && <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>}
       </div>
 
       {a && (
         <section className={`di-alert kind-${a.kind}`}>
-          <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onDone={close} />
+          <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onAlertDone={() => alertDone(a.id)} />
           <div className="di-alert-top">
             <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
             <b>{a.title}</b>
@@ -842,19 +993,22 @@ export function DesktopIsland() {
 
   // Quiet (Q7) or a call in "dot" mode (Q5): a small moon / dot; hold it to see why.
   const until = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
-  const hushed = quiet || (inCall && prefs.callMode === 'dot')
+  // A full-screen app with "Small dot" (the desktop hides it for "Hide it").
+  const fsDot = q.fullscreen && q.fullscreenMode === 'dot' && !quiet && !(inCall && prefs.callMode === 'dot')
+  const hushed = quiet || (inCall && prefs.callMode === 'dot') || fsDot
+  const hushIcon = quiet ? '🌙' : fsDot ? '🎬' : '📞'
   const moonPill = (
-    <div className="di-moon-pill" role="button" tabIndex={0} {...dragProps} onClick={() => !dragged.current && dispatch({ type: 'click' })} aria-label={quiet ? `Quiet until ${until(q.until)}` : 'In a call'}>
-      <span>{quiet ? '🌙' : '📞'}</span>
+    <div className="di-moon-pill" role="button" tabIndex={0} {...dragProps} onClick={() => clicked() && dispatch({ type: 'click' })} aria-label={quiet ? `Quiet until ${until(q.until)}` : fsDot ? 'A full-screen app is open' : 'In a call'}>
+      <span>{hushIcon}</span>
     </div>
   )
   const moonPeek = (
     <div className="di-peek">
       <div className="di-peek-top">
-        <span className="di-peek-face">{quiet ? '🌙' : '📞'}</span>
+        <span className="di-peek-face">{hushIcon}</span>
         <div className="di-peek-mid">
-          <b>{quiet ? `Quiet until ${until(q.until)}` : 'In a call'}</b>
-          <small>{quiet ? 'No reminders until then. Time-up still waits for you here.' : s.call ? `${s.call.title} · until ${until(s.call.end)}` : 'Your microphone or camera is on.'}</small>
+          <b>{quiet ? `Quiet until ${until(q.until)}` : fsDot ? 'Full-screen app' : 'In a call'}</b>
+          <small>{quiet ? 'No reminders until then. Time-up still waits for you here.' : fsDot ? 'It stays small while a full-screen app is open on this screen.' : s.call ? `${s.call.title} · until ${until(s.call.end)}` : 'Your microphone or camera is on.'}</small>
         </div>
         {quiet && <button className="primary" onClick={() => setQuiet(null)}>Wake now</button>}
       </div>
@@ -866,8 +1020,8 @@ export function DesktopIsland() {
   return (
     <div
       {...dropProps}
-      style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
-      className={`di at-${place} look-${prefs.look} view-${ui.view} mood-${s.ben.mood} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
+      style={{ ['--di-alpha' as string]: String(prefs.opacity), scale: scale === 1 ? undefined : String(scale) }}
+      className={`di at-${place} look-${prefs.look} view-${ui.view} mood-${s.ben.mood} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
     >
       <motion.div
         ref={shape}

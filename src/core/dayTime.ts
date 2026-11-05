@@ -2,6 +2,7 @@ import { calendarDay } from './dates'
 // Your day in time: Google Calendar events, the free gaps between them
 // (07:00–23:00) and time blocks that fit your must-dos and big tasks into
 // those gaps. Pure: the app, the bots and the coach use it.
+import { isTentative, takesTime } from './calResponse'
 
 export interface CalEvent {
   id: string
@@ -25,6 +26,14 @@ export interface CalEvent {
   attendees?: number
   /** You said no to it: it doesn't block your time. */
   declined?: boolean
+  /**
+   * Your answer to the invite (IS6): accepted, maybe (tentative), not answered
+   * yet (needsAction) or no. null: you made it, or nobody else is invited.
+   * Missing on older data: treated as yours.
+   */
+  response?: 'accepted' | 'tentative' | 'needsAction' | 'declined' | null
+  /** Google's event type: 'default', 'focusTime', 'outOfOffice', 'workingLocation', 'birthday', … */
+  eventType?: string | null
   /** Marked "free" in Google (it doesn't block your time). */
   free?: boolean
   /** The event in Google Calendar (web link). */
@@ -76,7 +85,7 @@ function busy(events: CalEvent[], day: string, from: string, to: string): [numbe
   const lo = toMin(from)
   const hi = toMin(to)
   return events
-    .filter((e) => !e.allDay && localDay(e.start) === day)
+    .filter((e) => !e.allDay && localDay(e.start) === day && takesTime(e))
     .map((e): [number, number] => {
       const s = toMin(localHM(e.start))
       const endDay = localDay(e.end)
@@ -124,9 +133,9 @@ export function suggestBlocks(gaps: Gap[], items: { title: string; minutes: numb
 
 /** "09:00–10:30 Lecture; 14:00–15:00 Gym" for the coach. */
 export function agendaText(events: CalEvent[], day: string): string {
-  const list = events.filter((e) => localDay(e.start) === day).sort((a, b) => (a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1))
+  const list = events.filter((e) => localDay(e.start) === day && takesTime(e)).sort((a, b) => (a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1))
   if (!list.length) return 'nothing in the calendar'
-  return list.map((e) => (e.allDay ? `all day: ${e.title}` : `${localHM(e.start)}–${localHM(e.end)} ${e.title}`)).join('; ')
+  return list.map((e) => (e.allDay ? `all day: ${e.title}` : `${localHM(e.start)}–${localHM(e.end)} ${e.title}${isTentative(e) ? ' (maybe)' : ''}`)).join('; ')
 }
 
 // ---- The timeline: focus blocks, done vs planned, what's next ----------

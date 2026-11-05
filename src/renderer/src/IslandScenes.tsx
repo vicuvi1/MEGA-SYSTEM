@@ -90,7 +90,7 @@ export function MoveScene() {
   )
 }
 
-/** A3: eyes blink while a 20-second ring runs; then it closes itself. */
+/** A3: eyes blink while a 20-second ring runs; then the break counts as done (IS7: the reminder goes, the island never closes itself). */
 export function EyesScene({ onDone }: { onDone: () => void }) {
   return (
     <div className="sc sc-eyes" aria-hidden>
@@ -177,11 +177,14 @@ export function RewardScene({ title }: { title: string }) {
   )
 }
 
-/** The scene for an alert kind, or null. */
-export function AlertScene({ kind, water, splash, title, onDone }: { kind: string; water: { ml: number; target: number }; splash: number; title: string; onDone: () => void }) {
+/**
+ * The scene for an alert kind, or null. `onAlertDone`: the scene finished
+ * (the eye break's 20 s): it may only dismiss that reminder, never close the panel (IS7).
+ */
+export function AlertScene({ kind, water, splash, title, onAlertDone }: { kind: string; water: { ml: number; target: number }; splash: number; title: string; onAlertDone: () => void }) {
   if (kind === 'water') return <WaterScene pct={water.target ? water.ml / water.target : 0} splash={splash} />
   if (kind === 'move') return <MoveScene />
-  if (kind === 'eyes') return <EyesScene onDone={onDone} />
+  if (kind === 'eyes') return <EyesScene onDone={onAlertDone} />
   if (kind === 'bed' || kind === 'winddown') return <BedScene />
   if (kind === 'over') return <OverScene good={false} />
   if (kind === 'quality' || kind === 'end') return <OverScene good />

@@ -19,6 +19,7 @@ import { life } from './bridge'
 import { useLive } from './live'
 import { useFocus } from './pages/Focus'
 import { localToday, calendarToday, reloadToday, useTodayEvents } from './todayEvents'
+import { isDeclined, isInvite, isMarker, isTentative } from '@core/calResponse'
 import { soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
 import { travelFor } from '@core/eventAlerts'
@@ -296,7 +297,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
       {!connected && <p className="hint small">Connect Google Calendar in Settings to see and move your blocks here.</p>}
       {(() => {
         // All-day events and birthdays (E1), as chips above the timeline.
-        const allDay = events.filter((e) => e.allDay && !e.declined && e.start.slice(0, 10) <= today && (e.end.slice(0, 10) > today || e.end.slice(0, 10) === e.start.slice(0, 10)))
+        const allDay = events.filter((e) => e.allDay && !isDeclined(e) && !isMarker(e) && e.start.slice(0, 10) <= today && (e.end.slice(0, 10) > today || e.end.slice(0, 10) === e.start.slice(0, 10)))
         return allDay.length ? (
           <div className="ds-allday" aria-label="All day">
             {allDay.map((e) => (
@@ -364,13 +365,14 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
                 key={b.key}
                 data-key={b.key}
                 id={b.event ? `event-${b.event.id}` : undefined}
-                className={`ds-block ${backdrop ? 'band' : ''} ${b.task ? 'task' : ''} ${done ? 'done' : ''} ${st === 'skipped' ? 'skipped' : ''} ${st === 'now' ? 'now' : ''} ${g ? 'dragging' : ''} ${yOf(e) - yOf(s) < 38 ? 'short' : ''} ${dropAt?.key === b.key ? 'drop' : ''}`}
+                className={`ds-block ${backdrop ? 'band' : ''} ${b.task ? 'task' : ''} ${b.event && isInvite(b.event) ? 'invite' : ''} ${b.event && isTentative(b.event) ? 'maybe' : ''} ${done ? 'done' : ''} ${st === 'skipped' ? 'skipped' : ''} ${st === 'now' ? 'now' : ''} ${g ? 'dragging' : ''} ${yOf(e) - yOf(s) < 38 ? 'short' : ''} ${dropAt?.key === b.key ? 'drop' : ''}`}
                 style={{ top: yOf(s) + 1, height: Math.max(16, yOf(e) - yOf(s) - 2), left: lane(left), width: `calc((100% - ${LANE_LEFT + LANE_RIGHT}px) * ${w / 100} - 3px)`, ['--c' as string]: b.color }}
                 onPointerDown={(ev) => startDrag(ev, b, 'move')}
                 title={`${b.title} · ${hmOf(s)}–${hmOf(e)}${bt.length ? ` · ${bt.length} tasks` : ''}`}
               >
                 <b>{b.title}</b>
                 <small>
+                  {b.event && isInvite(b.event) ? 'Invite: accept? · ' : b.event && isTentative(b.event) ? 'Maybe · ' : ''}
                   {hmOf(s)}
                   {bt.length ? ` · ✓${bt.filter((t) => t.done).length}/${bt.length}` : ''}
                 </small>

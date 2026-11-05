@@ -9,12 +9,17 @@ import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@c
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
 import { eyesAlert, morningAlert, moveAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
 import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
-import { bestStreak, dayHighlight, highlightAlert, rewardAlert, runOf } from '@core/islandFeel'
+import { dayHighlight, highlightAlert, rewardAlert } from '@core/islandFeel'
 import { liveScore } from '@core/liveScore'
+import { isDeclined, isInvite, isMarker, isRealMeeting, isTentative } from '@core/calResponse'
+import type { TodoTask } from '@core/todoist'
+import { currentSession, sessionValid } from './web/session'
 import { life } from './bridge'
 import { capture } from './capture'
 import { parseCapture } from '@core/capture'
 import { useLive } from './live'
+import { logIsland } from './islandLog'
+import { todoistErrorText } from '@core/islandErrors'
 import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
 import { calendarDay } from '@core/dates'
@@ -43,7 +48,8 @@ const EYES = 'ls.eyeBreaks'
 const CLIP = 'ls.islandClip'
 /** Phase 4: rewards already celebrated (id → first shown). */
 const CELEBRATED = 'ls.rewardCelebrated'
-let todoCache: { at: number; list: { id: string; content: string; time: string | null }[] } = { at: 0, list: [] }
+/** IS19: the list, when it was last fetched fine, whether the last try failed, and the real tasks (completing passes those). */
+let todoCache: { at: number; okAt: number; failed: boolean; list: { id: string; content: string; time: string | null }[]; full: Record<string, TodoTask> } = { at: 0, okAt: 0, failed: false, list: [], full: {} }
 function bodyTick(sec: number) {
   const now = Date.now()
   if (sec >= 300) activeSince = null
@@ -220,16 +226,18 @@ const put = (k: string, v: unknown) => {
   }
 }
 
+/** Today's calendar as island blocks (IS6): what you said yes to, plus "maybe"s and unanswered invites marked as such. */
 async function todayBlocks(): Promise<IslandBlock[]> {
   const d = new Date()
   const day = calendarDay(d)
   const on = !!(await life.google?.status().catch(() => null))?.connected
   if (on) {
     const events = await life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => [])
-    // Declined and "free" events don't count; a call link or other people make it a meeting (Q4).
+    // Declined, "free" and marker events (working location, out of office) don't count;
+    // a call link or other people make it a meeting (Q4, IS11); a maybe or an unanswered invite is greyed (IS6).
     const blocks = events
-      .filter((e) => !e.allDay && !e.declined && !e.free)
-      .map((e) => ({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), id: e.id, calendarId: e.calendarId, call: !!e.meet || (e.attendees ?? 0) > 1 }))
+      .filter((e) => !e.allDay && !isDeclined(e) && !e.free && !isMarker(e))
+      .map((e): IslandBlock => ({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), id: e.id, calendarId: e.calendarId, call: isRealMeeting(e), meet: e.meet ?? null, ...(isInvite(e) ? { maybe: 'invite' as const } : isTentative(e) ? { maybe: 'tentative' as const } : {}) }))
       .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end))
     if (blocks.length) return blocks
   }
@@ -240,16 +248,7 @@ async function todayBlocks(): Promise<IslandBlock[]> {
 
 let listening = false
 
-export const ISLAND_LOG = 'ls.islandLog'
-export interface IslandLogEntry { at: string; kind: string; ok: boolean; error?: string }
-function logIsland(e: IslandLogEntry) {
-  try {
-    const list: IslandLogEntry[] = JSON.parse(localStorage.getItem(ISLAND_LOG) || '[]')
-    localStorage.setItem(ISLAND_LOG, JSON.stringify([...list, e].slice(-30)))
-  } catch {
-    /* fine */
-  }
-}
+export { ISLAND_LOG, type IslandLogEntry } from './islandLog'
 
 /** Logs the bedtime by itself (once a night), and leaves a note for the island. */
 async function onAway(w: { from: string; to: string }): Promise<void> {
@@ -288,14 +287,19 @@ export function IslandFeed() {
   const desk = window.desktop
   const busy = useRef<{ on: boolean; steps: string[] }>({ on: false, steps: [] })
   const last = useRef<IslandSnapshot>(EMPTY_ISLAND)
-  const blocks = useRef<{ at: number; list: IslandBlock[] }>({ at: 0, list: [] })
+  // list: what you said yes to (Now, alerts, auto-start); maybe: greyed "maybe"s and invites (IS6).
+  const blocks = useRef<{ at: number; list: IslandBlock[]; maybe: IslandBlock[] }>({ at: 0, list: [], maybe: [] })
 
   const build = useCallback(async (): Promise<IslandSnapshot> => {
     const now = Date.now()
     if (!life.coach?.status) return { ...EMPTY_ISLAND, at: now }
     const body = await life.body.state().catch(() => null)
     const [status, focus, log, sleep, shop] = await Promise.all([life.coach.status(), life.focus.state(), life.coach.log().catch(() => []), life.sleep.state().catch(() => null), life.shop?.state().catch(() => null) ?? Promise.resolve(null)])
-    if (now - blocks.current.at > 60_000) blocks.current = { at: now, list: await todayBlocks().catch(() => blocks.current.list) }
+    if (now - blocks.current.at > 60_000) {
+      const all = await todayBlocks().catch(() => null)
+      if (all) blocks.current = { at: now, list: all.filter((b) => !b.maybe), maybe: all.filter((b) => !!b.maybe) }
+      else blocks.current = { ...blocks.current, at: now - 45_000 }
+    }
     const run = focus.running
     let running = run ? { subject: run.subject, startedAt: Date.parse(run.startedAt), endsAt: Date.parse(run.startedAt) + run.planned * 60000 } : null
     // Focus guard: start watching a new session; a finished one gets its quality.
@@ -359,22 +363,21 @@ export function IslandFeed() {
     const localWater = sport?.water ? Number(sport.water.currentMl) || 0 : status.today.waterMl
     const { now: cur, next } = nowNext(blocks.current.list, now)
     const dismissed = get<Record<string, number>>(DISMISSED, {})
-    // Phase 4: the reward you're working toward, your best streak, today's ring and highlight.
+    // Phase 4: the reward you're working toward, today's ring and highlight.
     const rewards = (shop?.rewards ?? []).filter((r) => !r.archived && r.price > 0)
     const goal = shop ? rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b) => a.price - b.price).find((r) => r.price > shop.balance) ?? [...rewards].sort((a, b) => a.price - b.price)[0] ?? null : null
     const todayKey = localDayOf(now)
-    const streak = bestStreak({
-      now,
-      sport: { days: body?.streak ?? 0, todayDone: !!body?.workoutDoneToday || !!body?.restToday },
-      focus: runOf(status.week.map((d) => ({ day: d.day, ok: d.min >= 25 })), todayKey)
-    })
     const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusMin: status.today.focusMin, focusGoal: Math.max(50, status.goals.reduce((t, g) => t + g.perDayMin, 0)), waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone })
     const highlight = dayHighlight({ focusMin: status.today.focusMin, focusBefore: status.week.filter((d) => d.day < todayKey).map((d) => d.min), mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone, sportStreak: body?.streak ?? 0 })
     const celebrated = get<Record<string, number>>(CELEBRATED, {})
-    if (now - todoCache.at > 60_000 && life.todoist?.today) {
-      todoCache = { at: now, list: todoCache.list }
+    // IS19: fresh every minute; a failed fetch keeps the old list marked stale and tries again in 15 s.
+    if (now - todoCache.at > (todoCache.failed ? 15_000 : 60_000) && life.todoist?.today) {
+      todoCache.at = now
       const list = await life.todoist.today().catch(() => null)
-      if (list) todoCache.list = list.slice(0, 3).map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null }))
+      if (list) {
+        const top = list.slice(0, 3)
+        todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), full: Object.fromEntries(top.map((t) => [t.id, t])) }
+      } else todoCache.failed = true
     }
     return {
       at: now,
@@ -392,6 +395,8 @@ export function IslandFeed() {
       running,
       now: cur,
       next,
+      // IS6: later today, a maybe or an invite (greyed in the Next list).
+      maybe: blocks.current.maybe.filter((b) => b.end > now).sort((x, y) => x.start - y.start).slice(0, 3),
       mustdos: status.mustdos,
       water: { ml: localWater, target: status.today.waterTarget || Number(sport?.water?.targetMl) || WATER_TARGET_ML },
       reps,
@@ -441,10 +446,12 @@ export function IslandFeed() {
         const c = running ? null : callNow(blocks.current.list, now)
         return c ? { title: c.title, end: c.end } : null
       })(),
+      inMeeting: !!callNow(blocks.current.list, now),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
-      streak,
+      tasksAt: todoCache.okAt || undefined,
+      tasksStale: todoCache.failed,
       dayPct: live.score,
       windDown: (() => {
         const logs = sleep?.recentLogs ?? []
@@ -472,14 +479,26 @@ export function IslandFeed() {
     }
   }, [])
 
+  // IS16: builds run at once (the 15 s tick, live updates, Ben's steps, taps);
+  // each gets a number and an older one that finishes last is dropped.
+  const seq = useRef(0)
+  const shown = useRef(0)
   const send = useCallback(async () => {
     if (!desk?.islandState) return
+    const n = ++seq.current
+    let snap: IslandSnapshot
     try {
-      last.current = await build()
+      snap = await build()
     } catch {
-      last.current = { ...last.current, at: Date.now(), locked: true }
+      // IS4: a hiccup keeps the last good picture (marked stale); only a real
+      // sign-out (no valid PIN session) shows "Open Life System".
+      const gone = !sessionValid(currentSession())
+      snap = gone ? { ...last.current, at: Date.now(), locked: true, stale: false } : { ...last.current, stale: true }
     }
-    desk.islandState(last.current)
+    if (n < shown.current) return
+    shown.current = n
+    last.current = snap
+    desk.islandState(snap)
   }, [build, desk])
 
   const act = useCallback(
@@ -488,7 +507,8 @@ export function IslandFeed() {
       let said: string | null = null
       try {
         // Locked (PIN) or still loading: say so instead of doing nothing.
-        if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss') throw new Error('Life System is locked: open it and enter your PIN')
+        // IS4: only when the PIN session is really gone (a hiccup is not a lock).
+        if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss' && a.kind !== 'join' && !sessionValid(currentSession())) throw new Error('Life System is locked: open it and enter your PIN')
         switch (a.kind) {
           case 'water': {
             put(LAST_WATER, Date.now())
@@ -543,7 +563,7 @@ export function IslandFeed() {
             const b = a.block
             if (!b.id || !b.calendarId || !life.google?.move) throw new Error('Only blocks from Google Calendar can be moved')
             await life.google.move(b.calendarId, b.id, new Date(b.start + a.minutes * 60000).toISOString(), new Date(b.end + a.minutes * 60000).toISOString())
-            blocks.current = { at: 0, list: blocks.current.list }
+            blocks.current = { ...blocks.current, at: 0 }
             const d = get<Record<string, number>>(DISMISSED, {})
             d[`drift:${blockKey(b)}`] = Date.now() + 15 * 60000
             put(DISMISSED, d)
@@ -606,14 +626,18 @@ export function IslandFeed() {
             break
           }
           case 'todoDone': {
+            // IS19: the real task (its priority pays the points), never made-up fields.
+            const task = todoCache.full[a.id]
             try {
-              await life.todoist!.complete({ id: a.id, content: a.content, priority: 1, due: null, dueTime: null, project: null, recurring: false } as any)
+              if (!task) throw new Error('not found')
+              await life.todoist!.complete(task)
             } catch (e) {
-              // The list may be stale (a task done elsewhere): fetch it fresh next time.
+              // The list may be stale (a task done elsewhere): fetch it fresh now.
               todoCache.at = 0
-              throw e
+              throw new Error(todoistErrorText(e))
             }
-            todoCache = { at: 0, list: todoCache.list.filter((t) => t.id !== a.id) }
+            const { [a.id]: _done, ...full } = todoCache.full
+            todoCache = { ...todoCache, at: 0, list: todoCache.list.filter((t) => t.id !== a.id), full }
             window.dispatchEvent(new CustomEvent('life-external-changed'))
             said = `✓ ${a.content}`
             break
@@ -649,7 +673,7 @@ export function IslandFeed() {
               break
             }
             await life.google!.create({ title: text.replace(/\s*\d{1,3}\s*(?:m|min|mins|minutes|h|hr|hours?)\b/i, '').trim() || text, start: new Date(slot.start).toISOString(), end: new Date(slot.end).toISOString(), description: 'Booked from the island' })
-            blocks.current = { at: 0, list: blocks.current.list }
+            blocks.current = { ...blocks.current, at: 0 }
             window.dispatchEvent(new CustomEvent('life-external-changed'))
             const hhmm = (t: number) => new Date(t).toTimeString().slice(0, 5)
             said = `📅 Booked ${hhmm(slot.start)}–${hhmm(slot.end)}: ${text}`
@@ -680,6 +704,13 @@ export function IslandFeed() {
             await life.sleep.logWake(a.time)
             window.dispatchEvent(new CustomEvent('life-sleep-changed'))
             break
+          case 'join': {
+            // IS11: the meeting's video link, through the app window's open-external path.
+            if (!/^https:\/\//.test(a.url)) throw new Error('That meeting has no call link')
+            window.open(a.url, '_blank', 'noopener')
+            said = '🎥 Opening the call'
+            break
+          }
           case 'open':
             if (a.page === 'coach') put(SEEN, Date.now())
             if (a.page) window.dispatchEvent(new CustomEvent('life-open-page', { detail: a.page }))

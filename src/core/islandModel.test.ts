@@ -49,7 +49,8 @@ describe('island prefs', () => {
     expect(p.look).toBe('black')
     expect(p.sections.map((s) => s.id)).toEqual(['ben', 'logs', 'timer', 'sleep', 'plan', 'tasks', 'mustdos', 'points'])
     expect(p.sections[1].on).toBe(false)
-    expect(p.shortcut).toBe('Control+Alt+Space')
+    expect(p.shortcut).toBe('Control+Shift+Space')
+    expect(p.quietShortcut).toBe('Alt+Shift+Q')
     expect(cleanIslandPrefs(null).sections).toHaveLength(8)
   })
 })
@@ -139,5 +140,57 @@ describe('island quiet and priorities (Q1, P1, P3, P4)', () => {
     expect(alertGate({ ...base, kind: 'over', quiet: true })).toBe('silent')
     const off = { ...DEFAULT_ISLAND_PREFS, kinds: { ...DEFAULT_ISLAND_PREFS.kinds, eyes: { on: false, sound: true } } }
     expect(alertGate({ ...base, prefs: off, kind: 'eyes' })).toBe('drop')
+  })
+})
+
+describe('a click always opens it (IS1)', () => {
+  it('opens from the pill, the peek, a reminder peek, hovered or not', async () => {
+    const { ISLAND_UI, islandStep } = await import('./islandModel')
+    const views = [
+      ISLAND_UI,
+      { ...ISLAND_UI, view: 'peek' as const },
+      { ...ISLAND_UI, view: 'peek' as const, byAlert: true },
+      { ...ISLAND_UI, view: 'peek' as const, byAlert: true, over: true },
+      { ...ISLAND_UI, view: 'compact' as const, over: true }
+    ]
+    for (const ui of views) {
+      const s = islandStep(ui, { type: 'click' })
+      expect(s.ui.view).toBe('expanded')
+      expect(s.ui.byAlert).toBe(false)
+      // The reminder's own 5 s timer can't close what you opened.
+      expect(s.timer).toBeNull()
+      expect(islandStep(s.ui, { type: 'alertEnd' }).ui.view).toBe('expanded')
+    }
+    // Already open: a click keeps it open (pinned and typing stay).
+    const open = { ...ISLAND_UI, view: 'expanded' as const, pinned: true, typing: true }
+    expect(islandStep(open, { type: 'click' }).ui).toMatchObject({ view: 'expanded', pinned: true, typing: true })
+  })
+  it('a reminder finishing (alertEnd) never clears what you pinned or typed (IS7)', async () => {
+    const { ISLAND_UI, islandStep } = await import('./islandModel')
+    const open = { ...ISLAND_UI, view: 'expanded' as const, pinned: true, typing: true }
+    expect(islandStep(open, { type: 'alertEnd' }).ui).toMatchObject({ view: 'expanded', pinned: true, typing: true })
+  })
+})
+
+describe('the right event is "Now" (IS10, IS6)', () => {
+  const work = { title: 'Work', start: at(9), end: at(17) }
+  const meeting = { title: 'Design review', start: at(15), end: at(15, 30), call: true }
+  const block = { title: 'Emails', start: at(14, 45), end: at(15, 45) }
+  it('a meeting beats a long plain block', () => {
+    expect(nowNext([work, meeting], at(15, 10)).now?.title).toBe('Design review')
+    expect(nowNext([work, meeting], at(16)).now?.title).toBe('Work')
+  })
+  it('then the one that started last, then the shortest', () => {
+    expect(nowNext([work, block], at(15)).now?.title).toBe('Emails')
+    const a = { title: 'A', start: at(10), end: at(12) }
+    const b = { title: 'B', start: at(10), end: at(10, 30) }
+    expect(nowNext([a, b], at(10, 10)).now?.title).toBe('B')
+    expect(nowNext([work, meeting, block], at(15, 5)).now?.title).toBe('Design review')
+  })
+  it('a maybe or an unanswered invite is never Now or Next', () => {
+    const maybe = { ...meeting, maybe: 'tentative' as const }
+    const invite = { title: 'Offsite', start: at(16), end: at(17), maybe: 'invite' as const }
+    expect(nowNext([work, maybe, invite], at(15, 10)).now?.title).toBe('Work')
+    expect(nowNext([maybe, invite], at(15, 10))).toEqual({ now: null, next: null })
   })
 })

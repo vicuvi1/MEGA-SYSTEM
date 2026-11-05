@@ -3,7 +3,19 @@
 // the tray) sends it a snapshot of your moment; the island sends back taps.
 // This file is the pure part: what it shows, and when it drops down.
 
-export interface IslandBlock { title: string; start: number; end: number; id?: string; calendarId?: string; /** A meeting by its data (a call link or other people), whatever its name (Q4). */ call?: boolean }
+export interface IslandBlock {
+  title: string
+  start: number
+  end: number
+  id?: string
+  calendarId?: string
+  /** A meeting by its data (a call link or other people, and you said yes), whatever its name (Q4, IS11). */
+  call?: boolean
+  /** The meeting's video link (Join opens it). */
+  meet?: string | null
+  /** IS6: you said "maybe", or haven't answered the invite yet: shown greyed, never "Now". */
+  maybe?: 'tentative' | 'invite'
+}
 
 /** Every tap gets an answer from the app window: done, or why not. */
 export interface IslandAck { id: string; ok: boolean; error?: string; /** What happened, in words (the command bar's answer). */ text?: string }
@@ -34,6 +46,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'pcWork'; app: string; alertId: string }
   /** P14: lock the PC for a real break. */
   | { kind: 'lockPc'; alertId: string }
+  /** IS11: join the meeting on now (opens its video link). */
+  | { kind: 'join'; url: string }
 )
 
 export interface IslandAlert {
@@ -49,10 +63,14 @@ export interface IslandSnapshot {
   at: number
   /** The app is locked (PIN) or still loading. */
   locked?: boolean
+  /** IS4: the last update failed (a hiccup): this is the last good picture. */
+  stale?: boolean
   ben: { face: string; mood: string; why: string; move: { title: string; sub: string } | null; last: { text: string; at: string; face: string } | null; unread: number; busy: boolean; steps: string[] }
   running: { subject: string; startedAt: number; endsAt: number } | null
   now: IslandBlock | null
   next: IslandBlock | null
+  /** IS6: later today, a "maybe" or an invite you haven't answered (greyed in the Next list). */
+  maybe?: IslandBlock[]
   mustdos: { i: number; text: string; done: boolean }[]
   water: { ml: number; target: number }
   reps: { id: string; name: string; done: number; target: number }[]
@@ -61,6 +79,8 @@ export interface IslandSnapshot {
   sleep?: { bed: boolean; wake: boolean; target: string | null }
   /** In a call/meeting from your calendar: the island stays quiet. */
   call?: { title: string; end: number } | null
+  /** A meeting from your calendar is on right now (even with a timer running): the desktop is told (IS12). */
+  inMeeting?: boolean
   /** Wind-down: the hour before your bedtime target. */
   windDown?: { bedAt: string; minutesLeft: number } | null
   /** Your best streak right now (sport / focus / water), and whether it's at risk today. */
@@ -69,6 +89,9 @@ export interface IslandSnapshot {
   dayPct?: number
   /** Todoist: your next tasks for today (tick them on the island). */
   tasks?: { id: string; content: string; time: string | null }[]
+  /** IS19: when the Todoist list was last fetched fine (ms), and whether the last try failed. */
+  tasksAt?: number
+  tasksStale?: boolean
   /** 20-20-20 eye breaks on? */
   eyeBreaks?: boolean
   /** Start focus by itself when a calendar block begins. */
@@ -106,10 +129,20 @@ export function blocksFromPlan(plan: { title: string; start: string; minutes: nu
     .sort((a, b) => a.start - b.start)
 }
 
-/** The block happening now and the next one. */
+/**
+ * The block happening now and the next one (IS10). When several are on at
+ * once, a meeting beats a plain block (a 15:00 call inside a 9–17 "Work"
+ * block is what's on), then the one that started last, then the shortest.
+ * A "maybe" or an unanswered invite is never "now" (IS6); the next one is
+ * the next thing you said yes to.
+ */
 export function nowNext(blocks: IslandBlock[], now: number): { now: IslandBlock | null; next: IslandBlock | null } {
-  const sorted = [...blocks].sort((a, b) => a.start - b.start)
-  return { now: sorted.find((b) => b.start <= now && now < b.end) ?? null, next: sorted.find((b) => b.start > now) ?? null }
+  const firm = blocks.filter((b) => !b.maybe)
+  const on = firm
+    .filter((b) => b.start <= now && now < b.end)
+    .sort((a, b) => Number(!!b.call) - Number(!!a.call) || b.start - a.start || a.end - a.start - (b.end - b.start))
+  const next = firm.filter((b) => b.start > now).sort((a, b) => a.start - b.start)[0] ?? null
+  return { now: on[0] ?? null, next }
 }
 
 export interface AlertInput {
@@ -252,7 +285,8 @@ export interface IslandPrefs {
 /** The reminder kinds you can turn on/off (P4). */
 export type AlertKindPref = 'water' | 'move' | 'eyes' | 'ben' | 'block' | 'bed' | 'morning' | 'highlight' | 'reward' | 'over'
 export const KIND_LABEL: Record<AlertKindPref, string> = { water: 'Water', move: 'Stretch breaks', eyes: 'Eye breaks (20-20-20)', ben: "Ben's messages", block: 'Blocks starting / ending', bed: 'Bedtime & wind-down', morning: 'Morning', highlight: 'Highlights', reward: 'Rewards', over: 'Focus time is up' }
-export const QUIET_SHORTCUTS = ['Control+Alt+Q', 'Control+Shift+Q', 'Alt+Shift+Q', ''] as const
+// Not Ctrl+Alt+<key> by default: that's AltGr on many keyboards (@, ł…) (IS15).
+export const QUIET_SHORTCUTS = ['Alt+Shift+Q', 'Control+Shift+Q', 'Control+Alt+Q', ''] as const
 
 /** Which preference an alert kind falls under. */
 export function alertPref(kind: string): AlertKindPref | null {
@@ -281,7 +315,7 @@ export function quietUntil(choice: number | 'tomorrow', now: number): number {
 }
 
 export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', sleep: 'Bedtime', plan: 'Now & next', tasks: 'Todoist', mustdos: 'Must-dos', logs: 'Water & reps', points: 'Points & reward', ben: 'Ben' }
-export const SHORTCUTS = ['Control+Alt+Space', 'Control+Shift+Space', 'Alt+Q', 'Control+Alt+L', ''] as const
+export const SHORTCUTS = ['Control+Shift+Space', 'Alt+Shift+Space', 'Control+Alt+Space', 'Alt+Q', ''] as const
 export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   size: 'normal',
   opacity: 1,
@@ -289,9 +323,9 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   sections: (['timer', 'sleep', 'plan', 'tasks', 'mustdos', 'logs', 'points', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
   sound: true,
   hide: 'normal',
-  shortcut: 'Control+Alt+Space',
+  shortcut: 'Control+Shift+Space',
   callMode: 'hide',
-  quietShortcut: 'Control+Alt+Q',
+  quietShortcut: 'Alt+Shift+Q',
   kinds: { water: { on: true, sound: true }, move: { on: true, sound: true }, eyes: { on: true, sound: true }, ben: { on: true, sound: true }, block: { on: true, sound: true }, bed: { on: true, sound: true }, morning: { on: true, sound: true }, highlight: { on: true, sound: false }, reward: { on: true, sound: true }, over: { on: true, sound: true } },
   volume: 0.7
 }
@@ -346,7 +380,7 @@ export function activities(s: IslandSnapshot, now: number): Activity[] {
     const left = (s.running.endsAt - now) / 1000
     out.push({ key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot })
   }
-  if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: `${s.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
+  if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: `${s.now.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
   if (s.next && s.next.start - now <= 3 * 3600_000) {
     const next: Activity = { key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot, at: s.next.start }
     // Starting within 10 minutes: it goes first (after a running timer), with a live countdown (P7).

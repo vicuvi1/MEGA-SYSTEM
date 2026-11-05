@@ -2,15 +2,17 @@
 // - drift: a planned block is on, no timer runs and you've been away from
 //   the PC for a while → "Algorithms · 25 min left · back to it?"
 // - end-of-block check: a block just ended → "Did you finish it?"
-// - call mode: a meeting/call in your calendar keeps the island quiet
+// - call mode: a meeting in your calendar (by its data: a call link or other
+//   people, and you said yes) keeps the island quiet
 // - focus guard: how much of a focus session you were really at the PC.
 import type { IslandAlert, IslandBlock } from './islandModel'
 
-/** Calendar titles that are calls or meetings (EN / RO / RU). */
-export const CALL = /(?<![\p{L}\p{N}])(call|calls|meet|meeting|zoom|teams|google meet|interview|standup|stand-up|1:1|sync|apel|ședință|sedinta|întâlnire|intalnire|interviu|звонок|созвон|встреча)(?![\p{L}\p{N}])/iu
-export const isCall = (title: string) => CALL.test(title)
-/** A meeting: marked by its data (link, people) or named like one. */
-const meeting = (b: IslandBlock) => !!b.call || isCall(b.title)
+/**
+ * A meeting: marked by its data (a call link or other people), never by its
+ * name (IS11): "Call mom" in your own plan is a block you do, not a meeting.
+ */
+export const isMeetingBlock = (b: IslandBlock) => !!b.call && !b.maybe
+const meeting = isMeetingBlock
 
 /** Away this long (seconds of no mouse/keys) during a block counts as drifting. */
 export const DRIFT_IDLE_SEC = 8 * 60
@@ -26,7 +28,7 @@ export function callNow(blocks: IslandBlock[], now: number): IslandBlock | null 
 
 /** The work block going on now (not a call). */
 export function workNow(blocks: IslandBlock[], now: number): IslandBlock | null {
-  return blocks.filter((b) => b.start <= now && now < b.end && !meeting(b)).sort((a, b) => a.end - a.start - (b.end - b.start))[0] ?? null
+  return blocks.filter((b) => b.start <= now && now < b.end && !meeting(b) && !b.maybe).sort((a, b) => a.end - a.start - (b.end - b.start))[0] ?? null
 }
 
 export const blockKey = (b: IslandBlock) => b.id ?? `${b.start}:${b.title}`
@@ -48,7 +50,7 @@ export function smartAlert(a: SmartInput): IslandAlert | null {
   // A block ended in the last 20 minutes, and nothing else is on: did you finish it?
   if (!a.running && !callNow(a.blocks, a.now)) {
     const ended = a.blocks
-      .filter((b) => !isCall(b.title) && b.end <= a.now && a.now - b.end <= 20 * 60_000 && b.end - b.start >= 15 * 60_000 && !a.answered[blockKey(b)])
+      .filter((b) => !meeting(b) && !b.maybe && b.end <= a.now && a.now - b.end <= 20 * 60_000 && b.end - b.start >= 15 * 60_000 && !a.answered[blockKey(b)])
       .sort((x, y) => y.end - x.end)[0]
     const id = ended && `end:${blockKey(ended)}`
     if (ended && id && !hidden(id))
@@ -96,5 +98,5 @@ export function focusQuality(elapsedSec: number, idleSec: number): number {
 /** Should this block start a focus timer by itself (auto-start on)? */
 export function autoStartBlock(blocks: IslandBlock[], now: number, running: boolean, started: Record<string, true>): IslandBlock | null {
   if (running) return null
-  return blocks.find((b) => !isCall(b.title) && b.start <= now && now - b.start <= 3 * 60_000 && now < b.end && !started[blockKey(b)]) ?? null
+  return blocks.find((b) => !meeting(b) && !b.maybe && b.start <= now && now - b.start <= 3 * 60_000 && now < b.end && !started[blockKey(b)]) ?? null
 }

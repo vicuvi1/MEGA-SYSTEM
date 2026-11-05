@@ -3,6 +3,7 @@
 // now for Gym (15 min)", "Bed in 30 min", water behind pace. Each warning has
 // a fixed id per event and day, so many devices (and the server) add it once.
 import type { CalEvent } from './dayTime'
+import { canBeNow } from './calResponse'
 import type { Notif } from './notify'
 import { inQuietHours } from './notifyRules'
 import { calendarDay } from './dates'
@@ -58,8 +59,8 @@ const hhmm = (iso: string) => {
 }
 const dayOf = (iso: string) => calendarDay(new Date(iso))
 
-/** Events that count: timed, not yours (focus blocks warn on their own), not declined or free. */
-export const warnable = (e: CalEvent) => !e.allDay && !e.ours && !e.declined && !e.free
+/** Events that count: timed, not yours (focus blocks warn on their own), accepted (IS6: not a maybe or an unanswered invite), not free. */
+export const warnable = (e: CalEvent) => !e.allDay && !e.ours && canBeNow(e)
 
 /**
  * The warnings due now (from their time until 10 minutes after, so a device

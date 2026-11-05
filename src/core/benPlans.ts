@@ -4,6 +4,8 @@
 // these return.
 
 import { addDays } from './dates'
+import { takesTime } from './calResponse'
+import type { CalEvent } from './dayTime'
 import type { EnergyMap } from './benKnows'
 
 export interface Busy {
@@ -184,9 +186,10 @@ export interface Rescue {
  * W1: today's calendar as rescue blocks: Ben's own blocks can shrink or move,
  * everything else (classes, meetings) is fixed. Training blocks (💪) stay put.
  */
-export function rescueFromEvents(events: { id: string; title: string; start: string; end: string; allDay?: boolean; ours?: boolean; declined?: boolean }[], now: number, endOfDay: number): Rescue & { blocks: DayBlock[] } {
+export function rescueFromEvents(events: { id: string; title: string; start: string; end: string; allDay?: boolean; ours?: boolean; declined?: boolean; response?: CalEvent['response']; eventType?: string | null }[], now: number, endOfDay: number): Rescue & { blocks: DayBlock[] } {
+  // IS6: an invite you haven't answered doesn't take your time (a "maybe" does).
   const blocks: DayBlock[] = events
-    .filter((e) => !e.allDay && !e.declined && Date.parse(e.end) > now - 6 * 3600_000)
+    .filter((e) => !e.allDay && takesTime(e) && Date.parse(e.end) > now - 6 * 3600_000)
     .map((e) => ({ id: e.id, title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), fixed: !e.ours || e.title.includes('💪') }))
   // Missed blocks of Ben's (ended, not done) come back too, to fit them in what's left.
   const r = rescueDay(blocks.map((b) => (b.fixed || b.end > now ? b : { ...b, must: true })), now, endOfDay)

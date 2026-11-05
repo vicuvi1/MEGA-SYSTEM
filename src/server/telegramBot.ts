@@ -22,6 +22,7 @@ import { GOOGLE_SETTING as GSET, createCalendarApi as makeCal, type GoogleEnv, t
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
+import { canBeNow } from '@core/calResponse'
 import { nightMinutes } from '@core/readiness'
 import { bedtimeNudge, coachFacts, coachPrompt, coachText, deadlineFacts, wakeSlipping, weekFocusFact, windDownText, worthSaying } from '@core/coach'
 import { deadlineRadar } from '@core/todoist'
@@ -396,7 +397,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
     })
     const cal = calendarFor(env, mirror)
     const tomorrowStart = new Date(`${addDays(input.today, 1)}T00:00:00`)
-    const firstEv = cal ? (await cal.events(tomorrowStart.toISOString(), new Date(tomorrowStart.getTime() + 13 * 3600_000).toISOString()).catch(() => [])).filter((e) => !e.allDay && !e.ours && !e.declined).sort((a, b) => a.start.localeCompare(b.start))[0] : null
+    const firstEv = cal ? (await cal.events(tomorrowStart.toISOString(), new Date(tomorrowStart.getTime() + 13 * 3600_000).toISOString()).catch(() => [])).filter((e) => !e.allDay && !e.ours && canBeNow(e)).sort((a, b) => a.start.localeCompare(b.start))[0] : null
     const firstEvent = firstEv ? { title: firstEv.title, time: new Date(firstEv.start).toTimeString().slice(0, 5) } : null
     if (slip || night.debt >= 60 || firstEvent) {
       const { bed, wake } = night

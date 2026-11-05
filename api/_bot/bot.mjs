@@ -1223,6 +1223,27 @@ function todayText(tasks, today) {
 	});
 	return `📋 <b>Todoist today</b> (${list.length})\n\n${lines.join("\n")}${list.length > 15 ? `\n…and ${list.length - 15} more` : ""}\n\n<i>Done one? Send</i> <code>/done 1</code> · <i>add:</i> <code>/task …</code>`;
 }
+// src/core/calResponse.ts
+/** Your answer from a Google event: the self attendee's responseStatus; null when you made it or nobody is invited. */
+function selfResponse(e) {
+	if (e.organizer?.self) return null;
+	if (!Array.isArray(e.attendees) || !e.attendees.length) return null;
+	const r = e.attendees.find((a) => a?.self)?.responseStatus;
+	return r === "accepted" || r === "tentative" || r === "needsAction" || r === "declined" ? r : null;
+}
+var isDeclined = (e) => !!e.declined || e.response === "declined";
+/** An invite you haven't answered yet. */
+var isInvite = (e) => e.response === "needsAction";
+/** You said "maybe". */
+var isTentative = (e) => e.response === "tentative";
+/** Not a thing you do: a working-location or out-of-office marker. */
+var isMarker = (e) => e.eventType === "workingLocation" || e.eventType === "outOfOffice";
+/** Yours for sure: made by you, nobody else invited, or you said yes. */
+var isAccepted = (e) => !isDeclined(e) && !isInvite(e) && !isTentative(e);
+/** Takes your time in planning and Ben's picture of the day: yes or maybe (not unanswered invites, not markers). */
+var takesTime = (e) => !isDeclined(e) && !isInvite(e) && e.eventType !== "workingLocation";
+/** Can be what's on "Now", alert you, or start a focus timer by itself. */
+var canBeNow = (e) => isAccepted(e) && !e.free && !isMarker(e);
 var toMin$2 = (hm) => {
 	const [h, m] = hm.split(":").map(Number);
 	return h * 60 + (m || 0);
@@ -1243,7 +1264,7 @@ function localDay$1(iso) {
 function busy(events, day, from, to) {
 	const lo = toMin$2(from);
 	const hi = toMin$2(to);
-	return events.filter((e) => !e.allDay && localDay$1(e.start) === day).map((e) => {
+	return events.filter((e) => !e.allDay && localDay$1(e.start) === day && takesTime(e)).map((e) => {
 		const s = toMin$2(localHM(e.start));
 		const en = localDay$1(e.end) > day ? 1440 : toMin$2(localHM(e.end));
 		return [Math.max(lo, s), Math.min(hi, en)];
@@ -1300,9 +1321,9 @@ function suggestBlocks(gaps, items, breather = 10) {
 }
 /** "09:00–10:30 Lecture; 14:00–15:00 Gym" for the coach. */
 function agendaText(events, day) {
-	const list = events.filter((e) => localDay$1(e.start) === day).sort((a, b) => a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1);
+	const list = events.filter((e) => localDay$1(e.start) === day && takesTime(e)).sort((a, b) => a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1);
 	if (!list.length) return "nothing in the calendar";
-	return list.map((e) => e.allDay ? `all day: ${e.title}` : `${localHM(e.start)}–${localHM(e.end)} ${e.title}`).join("; ");
+	return list.map((e) => e.allDay ? `all day: ${e.title}` : `${localHM(e.start)}–${localHM(e.end)} ${e.title}${isTentative(e) ? " (maybe)" : ""}`).join("; ");
 }
 /** Calendar blocks meant for deep work: they become focus sessions. */
 var FOCUS_WORDS = /\b(deep|focus|study|studiu|learn\w*|lab\w*|homework|teme?|curs\w*|course\w*|project\w*|proiect\w*|revis\w*|exam\w*|ctf\w*|picoctf|rust|crypto\w*|code|coding|practice|write|writing|read(?:ing)?|cv|portfolio)\b/i;
@@ -4912,10 +4933,10 @@ function nowContext(s, db, events, finance, now = /* @__PURE__ */ new Date()) {
 	const t = now.getTime();
 	const today = s.wallet.today(now);
 	if (events) {
-		const timed = events.filter((e) => !e.allDay);
-		const cur = timed.find((e) => Date.parse(e.start) <= t && Date.parse(e.end) > t);
+		const timed = events.filter((e) => !e.allDay && takesTime(e));
+		const cur = timed.filter(canBeNow).find((e) => Date.parse(e.start) <= t && Date.parse(e.end) > t);
 		const next = timed.filter((e) => Date.parse(e.start) > t).sort((a, b) => a.start.localeCompare(b.start))[0];
-		out.push(`RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : "nothing in his calendar"}${next ? `; next: "${next.title}" at ${hmOf(new Date(next.start))} (in ${Math.round((Date.parse(next.start) - t) / 6e4)} min)` : "; nothing else today"}.`);
+		out.push(`RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : "nothing in his calendar"}${next ? `; next: "${next.title}"${isTentative(next) ? " (he said maybe)" : ""} at ${hmOf(new Date(next.start))} (in ${Math.round((Date.parse(next.start) - t) / 6e4)} min)` : "; nothing else today"}.`);
 	} else out.push(`RIGHT NOW (${hmOf(now)}): his calendar is not connected, so you don't know where he is; ask if it matters.`);
 	const items = [];
 	try {
@@ -8753,7 +8774,7 @@ function profileCorrections(body) {
 * everything else (classes, meetings) is fixed. Training blocks (💪) stay put.
 */
 function rescueFromEvents(events, now, endOfDay) {
-	const blocks = events.filter((e) => !e.allDay && !e.declined && Date.parse(e.end) > now - 216e5).map((e) => ({
+	const blocks = events.filter((e) => !e.allDay && takesTime(e) && Date.parse(e.end) > now - 216e5).map((e) => ({
 		id: e.id,
 		title: e.title,
 		start: Date.parse(e.start),
@@ -22486,6 +22507,8 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 		meet: e.hangoutLink ?? (e.conferenceData?.entryPoints ?? []).find((p) => p?.entryPointType === "video")?.uri ?? null,
 		attendees: Array.isArray(e.attendees) ? e.attendees.length : 0,
 		declined: Array.isArray(e.attendees) && e.attendees.some((a) => a?.self && a?.responseStatus === "declined"),
+		response: selfResponse(e),
+		eventType: typeof e.eventType === "string" ? e.eventType : null,
 		free: e.transparency === "transparent",
 		htmlLink: e.htmlLink ?? null,
 		reminder: e.reminders?.useDefault === false ? e.reminders.overrides?.[0]?.minutes ?? 0 : null
@@ -24850,8 +24873,8 @@ var hhmm = (iso) => {
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 var dayOf = (iso) => calendarDay(new Date(iso));
-/** Events that count: timed, not yours (focus blocks warn on their own), not declined or free. */
-var warnable = (e) => !e.allDay && !e.ours && !e.declined && !e.free;
+/** Events that count: timed, not yours (focus blocks warn on their own), accepted (IS6: not a maybe or an unanswered invite), not free. */
+var warnable = (e) => !e.allDay && !e.ours && canBeNow(e);
 /**
 * The warnings due now (from their time until 10 minutes after, so a device
 * that checks every minute or the server every few minutes catches each once).
@@ -25903,7 +25926,7 @@ async function runDaily(env, job) {
 		});
 		const cal = calendarFor(env, mirror);
 		const tomorrowStart = /* @__PURE__ */ new Date(`${addDays$5(input.today, 1)}T00:00:00`);
-		const firstEv = cal ? (await cal.events(tomorrowStart.toISOString(), new Date(tomorrowStart.getTime() + 468e5).toISOString()).catch(() => [])).filter((e) => !e.allDay && !e.ours && !e.declined).sort((a, b) => a.start.localeCompare(b.start))[0] : null;
+		const firstEv = cal ? (await cal.events(tomorrowStart.toISOString(), new Date(tomorrowStart.getTime() + 468e5).toISOString()).catch(() => [])).filter((e) => !e.allDay && !e.ours && canBeNow(e)).sort((a, b) => a.start.localeCompare(b.start))[0] : null;
 		const firstEvent = firstEv ? {
 			title: firstEv.title,
 			time: new Date(firstEv.start).toTimeString().slice(0, 5)

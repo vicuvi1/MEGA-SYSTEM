@@ -4,6 +4,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import type { CalEvent } from '@core/dayTime'
 import { DEFAULT_TZ } from '@core/defaults'
+import { selfResponse } from '@core/calResponse'
 
 export interface GoogleEnv {
   clientId: string
@@ -156,6 +157,9 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
     meet: e.hangoutLink ?? (e.conferenceData?.entryPoints ?? []).find((p: any) => p?.entryPointType === 'video')?.uri ?? null,
     attendees: Array.isArray(e.attendees) ? e.attendees.length : 0,
     declined: Array.isArray(e.attendees) && e.attendees.some((a: any) => a?.self && a?.responseStatus === 'declined'),
+    // IS6: your answer (null when you made it or nobody is invited) and the kind of event.
+    response: selfResponse(e),
+    eventType: typeof e.eventType === 'string' ? e.eventType : null,
     free: e.transparency === 'transparent',
     htmlLink: e.htmlLink ?? null,
     reminder: e.reminders?.useDefault === false ? (e.reminders.overrides?.[0]?.minutes ?? 0) : null

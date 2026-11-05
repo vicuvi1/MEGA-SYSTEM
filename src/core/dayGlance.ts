@@ -2,16 +2,17 @@
 // summary line ("3 events · 2 blocks · 4h free · done at 18:30 · bed 23:30"),
 // and whether you're in a class or meeting right now.
 import { isFocusBlock, type CalEvent } from './dayTime'
+import { canBeNow, takesTime } from './calResponse'
 
 const hm = (iso: string) => {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
-/** Counts in your day: timed, not declined, not "free". */
-const counts = (e: CalEvent) => !e.allDay && !e.declined && !e.free
+/** Counts in your day: timed, not declined, not "free", not an invite you haven't answered (IS6). */
+const counts = (e: CalEvent) => !e.allDay && !e.free && takesTime(e) && e.eventType !== 'outOfOffice'
 
-/** A class or meeting (not one of your own focus blocks). */
-export const isMeeting = (e: CalEvent) => counts(e) && !isFocusBlock(e)
+/** A class or meeting (not one of your own focus blocks), accepted: a "maybe" is never "now" (IS6). */
+export const isMeeting = (e: CalEvent) => counts(e) && canBeNow(e) && !isFocusBlock(e)
 
 /** The class/meeting going on now, if any. */
 export function meetingNow(events: CalEvent[], now: number): CalEvent | null {
