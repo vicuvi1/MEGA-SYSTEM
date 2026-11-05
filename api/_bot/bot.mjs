@@ -20156,7 +20156,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 					await send(ch.text, ch.kind === "cancelled" && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{
 						text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`,
 						callback_data: `fo|${subject}`
-					}]] } : void 0).catch(() => null);
+					}]] } : void 0, { always: true }).catch(() => null);
 				}
 			}
 		} catch (e) {

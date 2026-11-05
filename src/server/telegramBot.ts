@@ -598,7 +598,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
         })
         for (const ch of calendarChanges(prev, seenNow, now, must)) {
           const subject = (must ?? 'Focus').split(/\s+/).slice(0, 3).join(' ').slice(0, 28)
-          await send(ch.text, ch.kind === 'cancelled' && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{ text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`, callback_data: `fo|${subject}` }]] } : undefined).catch(() => null)
+          await send(ch.text, ch.kind === 'cancelled' && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{ text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`, callback_data: `fo|${subject}` }]] } : undefined, { always: true }).catch(() => null)
         }
       }
     } catch (e) {
