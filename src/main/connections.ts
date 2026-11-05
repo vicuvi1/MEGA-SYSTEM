@@ -141,15 +141,12 @@ export class Connections {
 
   private pay(ruleId: string, day: string, ref: string, handled: Set<string>, now: Date, note: string): number {
     if (handled.has(ref)) return 0
-    try {
-      this.wallet.awardRule(ruleId, { now, day, ref, note })
-      handled.add(ref)
-      return 1
-    } catch (e) {
-      if (e instanceof LedgerError) return 0 // rule off or that day's limit used
-      throw e
-    }
+    // The wallet's one pay-once helper (P4).
+    const id = this.wallet.payOnce(ruleId, { day, ref, now, note })
+    if (id) handled.add(ref)
+    return id ? 1 : 0
   }
+
 
   /** Waky's reward list, once, so its goals carry over into the Shop. */
   wakyRewardsToImport(): WakyData['rewards'] {

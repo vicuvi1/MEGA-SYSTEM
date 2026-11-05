@@ -112,8 +112,7 @@ export class SleepService {
     let awarded = false
     if (onTime) {
       try {
-        this.wallet.award('sleep.up_on_time', `Up at ${wakeTime} (target ${target})`, now)
-        awarded = true
+        awarded = !!this.wallet.payOnce('sleep.up_on_time', { day: today, ref: `up:${today}`, note: `Up at ${wakeTime} (target ${target})`, now })
       } catch {
         // already awarded today or daily cap reached
       }
@@ -205,8 +204,7 @@ export class SleepService {
     let awarded = false
     if (onTime) {
       try {
-        this.wallet.award('sleep.bed_on_time', `In bed at ${bedTime} (target ${target})`, now)
-        awarded = true
+        awarded = !!this.wallet.payOnce('sleep.bed_on_time', { day: this.wallet.today(now), ref: `bed:${today}`, note: `In bed at ${bedTime} (target ${target})`, now })
       } catch {
         // already awarded today
       }

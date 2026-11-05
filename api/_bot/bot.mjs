@@ -9800,8 +9800,12 @@ var SleepService = class {
 		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)").run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString());
 		let awarded = false;
 		if (onTime) try {
-			this.wallet.award("sleep.up_on_time", `Up at ${wakeTime} (target ${target})`, now);
-			awarded = true;
+			awarded = !!this.wallet.payOnce("sleep.up_on_time", {
+				day: today,
+				ref: `up:${today}`,
+				note: `Up at ${wakeTime} (target ${target})`,
+				now
+			});
 		} catch {}
 		return {
 			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)),
@@ -9859,8 +9863,12 @@ var SleepService = class {
 		}
 		let awarded = false;
 		if (onTime) try {
-			this.wallet.award("sleep.bed_on_time", `In bed at ${bedTime} (target ${target})`, now);
-			awarded = true;
+			awarded = !!this.wallet.payOnce("sleep.bed_on_time", {
+				day: this.wallet.today(now),
+				ref: `bed:${today}`,
+				note: `In bed at ${bedTime} (target ${target})`,
+				now
+			});
 		} catch {}
 		return {
 			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)),
@@ -12011,6 +12019,30 @@ var Wallet = class {
 				ref: opts.ref ?? null
 			});
 		}).immediate();
+	}
+	/**
+	* The one way to pay a reward for a thing that happened (P4): rule, the day
+	* it counts for, and a ref naming the thing ("bed:2026-11-04", "fin:logged:…").
+	* Paid at most once per ref (a ref whose payment was undone can be paid
+	* again); a rule that is off or a day's limit used returns 0. Returns the
+	* ledger id, or 0 when nothing was paid.
+	*/
+	payOnce(ruleId, opts) {
+		const now = opts.now ?? /* @__PURE__ */ new Date();
+		return this.db.transaction(() => {
+			if (this.db.prepare("SELECT id FROM ledger WHERE ref = ? AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)").all(opts.ref).length) return 0;
+			try {
+				return this.awardRule(ruleId, {
+					now,
+					day: opts.day,
+					ref: opts.ref,
+					note: opts.note
+				});
+			} catch (e) {
+				if (e instanceof LedgerError) return 0;
+				throw e;
+			}
+		})();
 	}
 	quests(now = /* @__PURE__ */ new Date()) {
 		return questState(this.today(now), this.entries());

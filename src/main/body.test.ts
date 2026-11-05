@@ -115,3 +115,13 @@ describe('one workout record per day (P2)', () => {
     expect(wallet.summary().balance).toBeLessThan(before)
   })
 })
+
+describe('wallet.payOnce (P4)', () => {
+  it('pays a ref once', () => {
+    const now = new Date('2026-10-26T08:00:00Z')
+    const id = wallet.payOnce('sleep.up_on_time', { ref: 'up:2026-10-26', now })
+    expect(id).toBeGreaterThan(0)
+    expect(wallet.payOnce('sleep.up_on_time', { ref: 'up:2026-10-26', now })).toBe(0)
+    expect(wallet.payOnce('sleep.bed_on_time', { ref: 'bed:2026-10-26', now })).toBeGreaterThan(0)
+  })
+})
