@@ -29,6 +29,8 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'money.no_spend', module: 'money', title: 'No-spend day', coins: 8, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'money.cooked_home', module: 'money', title: 'Cooked at home', coins: 5, xp: 8, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'general.full_house', module: 'general', title: 'Weekly full house', coins: 40, xp: 60, dailyCap: 1, cooldownMin: 0, enabled: true },
+  // Your own habits (Today): +2 a tap, paid once per habit and day, at most 6 a day.
+  { id: 'habit.own', module: 'tasks', title: 'Your own habit', coins: 2, xp: 5, dailyCap: 6, cooldownMin: 0, enabled: true },
   { id: 'grand_slam.all_four', module: 'general', title: '4-Pillar Grand Slam (Sovereign Day)', coins: 50, xp: 100, dailyCap: 1, cooldownMin: 0, enabled: true }
 ]
 
@@ -39,7 +41,8 @@ export const DEFAULT_RULES: Rule[] = [
  */
 export function isFlowRule(id: string): boolean {
   // tasks.todoist_done pays only for a real Todoist completion, never a tap.
-  return ['discipline.', 'study.', 'sleep.', 'money.', 'tasks.todoist'].some((p) => id.startsWith(p))
+  // habit.own pays only through your habit list (once per habit and day).
+  return ['discipline.', 'study.', 'sleep.', 'money.', 'tasks.todoist', 'habit.'].some((p) => id.startsWith(p))
 }
 
 /** Checks caps and cooldowns and returns the row to insert for this rule. */

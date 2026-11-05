@@ -55,6 +55,7 @@ import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginKey, pluginsOn, setOn as setPluginOn, configKey as pluginConfigKey } from '../../plugins/store'
 import { importBank, importText } from '../../plugins/bank'
 import { addBlockResult, addFocusQuality, setPcLine, setWebLine } from './web/dayLog'
+import { createExtras } from './web/lifeExtras'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 
 /**
@@ -764,6 +765,7 @@ export function createTursoWebBridge(): Bridge {
         })
     },
     weekPlan: S('weekPlan'),
+    extras: createExtras(svcP),
     system: {
       health: async () => {
         const h = await readHealth(turso)

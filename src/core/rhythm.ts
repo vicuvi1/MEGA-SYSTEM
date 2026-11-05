@@ -96,6 +96,8 @@ export interface RhythmFacts {
   waterTarget: number
   workoutDone: boolean
   paused: boolean
+  /** A life mode today (exam week, sick, travel): fewer nudges (FT4). */
+  mode?: { waterMax: number; training: boolean; replan: boolean } | null
 }
 
 export type RhythmJob = 'briefing' | 'replan' | 'midweek' | 'evening' | 'weekly' | 'water' | 'training'
@@ -111,9 +113,9 @@ export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts
   const start = Math.max(toMin('06:00'), Math.min(f.wakeAt ? toMin(f.wakeAt) + 5 : toMin(f.wakeTarget) + 45, auto))
   if (!state.briefing && t >= start && t < toMin('12:00')) out.push('briefing')
   // W8: no plan by noon → half a day left, still worth planning (until 16:00).
-  else if (!state.briefing && !f.paused && t >= Math.max(start, toMin('12:00')) && t < toMin('16:00')) out.push('replan')
-  if (!f.paused && prefs.water && waterBehind(state, f)) out.push('water')
-  if (!f.paused && prefs.training && !f.workoutDone && !state.training && t >= toMin('18:00') && t < toMin('21:00')) out.push('training')
+  else if (!state.briefing && !f.paused && f.mode?.replan !== false && t >= Math.max(start, toMin('12:00')) && t < toMin('16:00')) out.push('replan')
+  if (!f.paused && prefs.water && waterBehind(state, f, f.mode?.waterMax ?? 5)) out.push('water')
+  if (!f.paused && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin('18:00') && t < toMin('21:00')) out.push('training')
   if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push('weekly')
   // W14: Wednesday, 90 minutes before the evening review: where the week stands.
   if (f.weekday === 3 && !state.midweek && t >= toMin(prefs.evening) - 90 && t < toMin(prefs.evening)) out.push('midweek')
@@ -122,10 +124,10 @@ export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts
 }
 
 /** Water well behind the day's pace (08:00→21:00), at most 5 nudges, 1h50 apart, 11:00–20:30. */
-export function waterBehind(state: RhythmState, f: RhythmFacts): boolean {
+export function waterBehind(state: RhythmState, f: RhythmFacts, max = 5): boolean {
   const t = toMin(f.time)
   if (t < toMin('11:00') || t > toMin('20:30') || f.waterTarget <= 0) return false
-  if (state.water.length >= 5) return false
+  if (state.water.length >= max) return false
   const last = state.water[state.water.length - 1]
   if (last && t - toMin(last) < 110) return false
   const pace = Math.min(1, Math.max(0, (t - toMin('08:00')) / (toMin('21:00') - toMin('08:00'))))

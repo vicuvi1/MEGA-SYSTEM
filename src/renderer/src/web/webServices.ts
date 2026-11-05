@@ -35,6 +35,8 @@ import { addDays } from '@core/dates'
 import { LedgerError } from '@core/ledger'
 import { isFlowRule } from '@core/rules'
 import { getSetting, setSetting } from '../../../main/settings'
+import { loadUnlocks, unlockFacts } from './lifeExtras'
+import { unlockBlocker } from '@core/unlocks'
 import type { BrowserDb } from './browserDb'
 import type { Mirror } from './mirror'
 
@@ -193,6 +195,10 @@ export function createWebServices(mirror: Mirror) {
             const safe = finance ? moneyNumbers(finance, s.wallet.today()).safeToday : null
             if (safe != null && lei * 100 > safe) throw new LedgerError(`OVER_SAFE: ${reward!.title} costs ${lei} lei and your Safe to spend today is ${Math.round(safe / 100)} lei.`)
           }
+          // A reward locked to a goal or a streak (FT21) waits until that is met.
+          const lock = loadUnlocks(s.db)[String(id)]
+          const locked = lock ? unlockBlocker(lock, unlockFacts(s)) : null
+          if (locked) throw new LedgerError(locked)
           s.shop.redeem(id)
           if (lei > 0 && reward) queueFinanceExpense(s.db as any, { id: `life-reward-${id}-${Date.now()}`, amount: Math.round(lei * 100), category: 'fun', note: `Reward: ${reward.title}`, date: s.wallet.today(), at: Date.now() })
           return s.shop.state()

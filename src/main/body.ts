@@ -18,6 +18,7 @@ import {
 } from '@core/body'
 import { strengthSummary } from '@core/strength'
 import { skillStatus } from '@core/skills'
+import { cleanModes, LIFE_MODE, modeRestDays } from '@core/lifeMode'
 import { LedgerError } from '@core/ledger'
 import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
@@ -72,6 +73,14 @@ export class Body {
   }
 
   /** Marks a day (default today) as a rest day, or takes it back. */
+  private modeRest(today: string): string[] {
+    try {
+      return modeRestDays(cleanModes(JSON.parse(getSetting(this.db, LIFE_MODE) || 'null'), today), today)
+    } catch {
+      return []
+    }
+  }
+
   setRest(day: string | null, on: boolean, now = new Date(), shieldPaid = false): BodySummary {
     const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : this.wallet.today(now)
     const set = new Set(this.restDays())
@@ -156,7 +165,9 @@ export class Body {
     const exercises = this.exercises()
 
     const restDays = this.restDays()
-    const stats = computeWorkoutStats(allWorkouts, today, restDays)
+    // Sick and travel days (a life mode) keep the streak like rest days, without using the rest budget.
+    const modeRest = this.modeRest(today).filter((d) => !restDays.includes(d))
+    const stats = computeWorkoutStats(allWorkouts, today, [...restDays, ...modeRest])
     const weeklyAverages = computeWeeklyAverages(allMetrics, 12)
 
     const withWeight = allMetrics.filter((m) => m.weight != null)
@@ -176,6 +187,7 @@ export class Body {
       workoutDoneToday: stats.workoutDoneToday,
       restToday: stats.restToday,
       restDays,
+      modeRest,
       restLeftThisWeek: Math.max(0, FREE_REST_DAYS - restInWeek(restDays, today) - (restDays.includes(today) ? 1 : 0)),
       latestWeight,
       previousWeight,

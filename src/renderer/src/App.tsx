@@ -26,6 +26,7 @@ import { NewVersionBar } from './newVersion'
 import { FocusIsland } from './FocusIsland'
 import { DisciplineMoments } from './DisciplineMoments'
 import { BenBubble } from './BenBubble'
+import { DeepLinks } from './DeepLinks'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { reloadToday } from './todayEvents'
@@ -51,6 +52,7 @@ const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
 const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
 const Notebook = lazyNamed(() => import('./pages/Notebook'), 'Notebook')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
+const Goals = lazyNamed(() => import('./pages/Goals'), 'Goals')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
@@ -465,6 +467,24 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     }),
     actions: [
       ...(features.ai ? [{ id: 'a:oracle', label: 'Ask the coach', hint: 'Ctrl+J', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setPage('coach') } as const] : []),
+      { id: 'a:year', label: 'Your year', hint: 'Insights', group: 'Actions', icon: 'trophy', run: () => {
+        try {
+          localStorage.setItem('ls.insightsTab', 'year')
+        } catch {
+          /* this visit only */
+        }
+        window.dispatchEvent(new CustomEvent('life-insights-tab', { detail: 'year' }))
+        setPage('progress')
+      } },
+      { id: 'a:month', label: 'Month review', hint: 'Insights', group: 'Actions', icon: 'calendar', run: () => {
+        try {
+          localStorage.setItem('ls.insightsTab', 'month')
+        } catch {
+          /* this visit only */
+        }
+        window.dispatchEvent(new CustomEvent('life-insights-tab', { detail: 'month' }))
+        setPage('progress')
+      } },
       { id: 'a:sidebar', label: 'Collapse or expand the sidebar', hint: 'Ctrl+B', group: 'Actions', icon: 'list', run: toggleSidebar },
       { id: 'a:full', label: 'Full screen', hint: 'F11', group: 'Actions', icon: 'spark', run: () => life.app.toggleFullScreen() },
       { id: 'a:urge', label: 'Urge crusher', hint: 'Ctrl+Alt+U', group: 'Actions', icon: 'bolt', color: '#FF8A3D', run: () => {
@@ -554,6 +574,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       <div className="main">
         {/* The desktop app has its own island at the top of the screen: one is enough. */}
         {!window.desktop?.islandState && <FocusIsland />}
+        <DeepLinks onGo={setPage} />
         {/* UI7: not on pages with their own full-screen app or a floating + button. */}
         <BenBubble hidden={page === 'coach' || page === 'today' || page === 'calendar' || !!embed} unread={coachUnread} onOpenChat={() => setPage('coach')} />
         <DisciplineMoments onOpenChat={() => setPage('coach')} />
@@ -687,6 +708,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
             {(page === 'progress' || page === 'focus') && <Progress onGo={setPage} onWallet={onWallet} />}
             {page === 'calendar' && <CalendarPage onGo={setPage} />}
+            {page === 'goals' && <Goals onGo={setPage} />}
             {page === 'coach' && <Coach onWallet={onWallet} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}

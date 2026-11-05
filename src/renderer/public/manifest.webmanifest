@@ -14,10 +14,17 @@
     { "src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
   "shortcuts": [
+    { "name": "+250 ml water", "short_name": "+250 ml", "description": "Add a glass of water", "url": "/?do=water&ml=250", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
+    { "name": "Start 25 min focus", "short_name": "Focus 25", "description": "Start a 25-minute focus timer", "url": "/?do=focus&min=25", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
+    { "name": "Log spending", "short_name": "Spending", "description": "Write what you spent", "url": "/?page=today&do=spend", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
+    { "name": "Talk to Ben", "short_name": "Ben", "description": "Open the chat with Ben", "url": "/?page=coach&do=ben", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
     { "name": "Today", "url": "/?page=today", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
-    { "name": "Tasks", "url": "/?page=tasks", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
-    { "name": "Coach", "url": "/?page=coach", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] },
-    { "name": "Calendar", "url": "/?page=calendar", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] }
+    { "name": "Tasks", "url": "/?page=tasks", "icons": [{ "src": "/icon.png", "sizes": "512x512" }] }
   ]
 }

@@ -2,7 +2,7 @@
 // area: the last 7 days against last week, a bar toward a good week, the 7
 // days one by one and your last 6 weeks (numbers from @core/progress).
 import { dayRange } from '@core/dates'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Metric, ProgressReport } from '@core/progress'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -14,6 +14,8 @@ import { FocusInsights } from './Focus'
 import { PageSkeleton } from '../blocks'
 import { useLive } from '../live'
 import { GrowthSections } from './Growth'
+import { MonthReview, MoodLinksCard, PlannedVsReal, YearRecapView, saveTab, savedTab, type InsightsTab } from './Reviews'
+export { YearOffer, openYear } from './Reviews'
 
 export function useProgress(): ProgressReport | null | undefined {
   const [r, setR] = useState<ProgressReport | null | undefined>(undefined)
@@ -283,7 +285,41 @@ function Streaks({ ins }: { ins: Insights }) {
   )
 }
 
+/** Week, Month or Year at the top of Insights. */
+function InsightsTabs({ tab, setTab }: { tab: InsightsTab; setTab: (t: InsightsTab) => void }) {
+  return (
+    <div className="rv-tabs" role="tablist" aria-label="Insights view">
+      {(['week', 'month', 'year'] as InsightsTab[]).map((t) => (
+        <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
+          {t === 'week' ? 'Week' : t === 'month' ? 'Month' : 'Your year'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWallet?: () => void }) {
+  const [tab, setTabRaw] = useState<InsightsTab>(savedTab)
+  const setTab = (t: InsightsTab) => {
+    setTabRaw(t)
+    saveTab(t)
+  }
+  useEffect(() => {
+    const on = (e: Event) => setTabRaw(((e as CustomEvent).detail as InsightsTab) || 'week')
+    window.addEventListener('life-insights-tab', on)
+    return () => window.removeEventListener('life-insights-tab', on)
+  }, [])
+  if (tab !== 'week')
+    return (
+      <div className="pg">
+        <InsightsTabs tab={tab} setTab={setTab} />
+        {tab === 'month' ? <MonthReview /> : <YearRecapView />}
+      </div>
+    )
+  return <WeekInsights onGo={onGo} onWallet={onWallet} tabs={<InsightsTabs tab={tab} setTab={setTab} />} />
+}
+
+function WeekInsights({ onGo, onWallet, tabs }: { onGo?: (p: PageId) => void; onWallet?: () => void; tabs: ReactNode }) {
   const ins = useInsights()
   const r = useProgress()
   const [plan] = useWeekPlan()
@@ -297,6 +333,7 @@ export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWal
   const planNow = plan !== undefined && (editing || shouldPlan(plan, r.to))
   return (
     <div className="pg">
+      {tabs}
       <section className="panel pg-hero">
         <ScoreRing score={r.score} />
         <div className="pg-hero-text">
@@ -315,6 +352,10 @@ export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWal
       {/* The score first, then planning the week (V6). */}
       {planNow && <WeekPlanner report={r} plan={plan ?? null} today={r.to} onDone={() => setEditing(false)} />}
       {!planNow && active && <WeekCard plan={active} report={r} onEdit={() => setEditing(true)} />}
+      <div className="rv-pair">
+        <PlannedVsReal />
+        <MoodLinksCard />
+      </div>
       <GrowthSections />
       {ins && <Streaks ins={ins} />}
       {ins && <YearHeatmap ins={ins} />}

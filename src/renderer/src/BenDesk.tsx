@@ -18,6 +18,7 @@ import { isFocusBlock, type CalEvent } from '@core/dayTime'
 import { addDays } from '@core/dates'
 import { PROFILE_NOTE } from '@core/benKnows'
 import { BenLog } from './BenLog'
+import { LifeModeCard } from './LifeMode'
 
 export type DeskTab = 'today' | 'sunday' | 'plan' | 'you' | 'money' | 'month' | 'log'
 export const DESK_TABS: { id: DeskTab; label: string; icon: string }[] = [
@@ -189,6 +190,7 @@ function TodayTab({ v, now, status, change, onSay }: { v: DeskView; now: number;
   const todayMoods = v.moods.filter((m) => m.day === v.today)
   return (
     <>
+      <LifeModeCard />
       <SleepCard v={v} />
       <RescueCard status={status} />
       <Card title={v.moodDue ? (v.moodDue === 'noon' ? 'How do you feel right now?' : 'How was today, really?') : 'Mood'} icon="🙂" tone={v.moodDue ? 'accent' : undefined} sub={todayMoods.length ? `Today: ${todayMoods.map((m) => `${m.slot} ${moodFace(m.mood)}`).join(' · ')}` : '5 seconds. Ben links it to sleep, training and spending.'}>

@@ -31,6 +31,10 @@ import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
 import { PLAN_ITEM_COINS, isPlanFor, type PlanItem } from '@core/focus'
 import { BIG3_POINTS } from '../../main/points'
+import { HabitEditor, MissTwiceNote, useMyHabits, useTapHabit } from './MyHabits'
+import { useLifeMode } from './LifeMode'
+import { modeTarget } from '@core/lifeMode'
+import type { HabitsView } from './web/lifeExtras'
 
 interface Props {
   summary: Summary
@@ -74,8 +78,12 @@ function useTodoist() {
   return [tasks, load, setTasks] as const
 }
 
-function useHabits({ summary, discipline, connections, body, onChange, onGo, rules }: Props, focusMin: number, onSpend: () => void): Habit[] {
+function useHabits({ summary, discipline, connections, body, onChange, onGo, rules }: Props, focusMin: number, onSpend: () => void, own: HabitsView | null, reloadOwn: () => void, focusTarget = 50): Habit[] {
   const act = useAction()
+  const tapOwn = useTapHabit(() => {
+    reloadOwn()
+    onChange()
+  })
   const r = summary.todayRules ?? []
   const pts = (id: string, fallback: number) => `+${rules?.find((x) => x.id === id)?.coins ?? fallback}`
   const done = async (p: Promise<unknown> | undefined) => {
@@ -88,9 +96,11 @@ function useHabits({ summary, discipline, connections, body, onChange, onGo, rul
     { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
     { id: 'clean', label: 'Clean day check-in', hint: discipline?.setup ? `day ${discipline.day ?? discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
     { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), done: !!(body?.workoutDoneToday || body?.restToday || r.includes('body.workout_done')), run: () => onGo('body') },
-    { id: 'focus', label: '50 minutes of focus', hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', done: focusMin >= 50 || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', 50), 'Focus started: 50 minutes')) },
+    { id: 'focus', label: `${focusTarget} minutes of focus`, hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', done: focusMin >= focusTarget || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', Math.min(90, focusTarget)), `Focus started: ${Math.min(90, focusTarget)} minutes`)) },
     { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
-    { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: onSpend }
+    { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: onSpend },
+    // Your own habits (FT1): +2 only for the tap, once a day each.
+    ...(own?.rows ?? []).map((h) => ({ id: `own:${h.id}`, label: h.name, hint: `${own?.pays ? `+${own.pays}` : ''}${h.streak ? ` · 🔥${h.streak}` : ''}`.replace(/^ · /, '') || 'tap when done', done: h.done, run: () => void tapOwn(h.id, h.name) }))
   ]
 }
 
@@ -184,7 +194,16 @@ export function DayFlow(props: Props) {
   const [spendText, setSpendText] = useState('')
   const [spendBusy, setSpendBusy] = useState(false)
   const spendAct = useAction()
-  const habits = useHabits(props, st?.todayMin ?? 0, () => setSpendOpen(true))
+  const [own, reloadOwn] = useMyHabits()
+  const [habitEdit, setHabitEdit] = useState(false)
+  const [lifeMode] = useLifeMode()
+  const habits = useHabits(props, st?.todayMin ?? 0, () => setSpendOpen(true), own, reloadOwn, modeTarget(50, lifeMode?.current ?? null))
+  // "Log spending" from a home-screen shortcut (FT15) opens the line here.
+  useEffect(() => {
+    const on = () => setSpendOpen(true)
+    window.addEventListener('life-open-spend', on)
+    return () => window.removeEventListener('life-open-spend', on)
+  }, [])
   const saveSpend = async () => {
     const t = spendText.trim()
     if (!t || spendBusy) return
@@ -938,7 +957,14 @@ export function DayFlow(props: Props) {
               {!h.done && <small>{h.hint}</small>}
             </button>
           ))}
+          {life.extras && (
+            <button type="button" className="chip habit mh-edit" onClick={() => setHabitEdit((x) => !x)} title="Add, rename or remove your own habits" aria-expanded={habitEdit}>
+              {own?.rows.length ? '✎ Habits' : '+ Your habit'}
+            </button>
+          )}
         </div>
+        <MissTwiceNote v={own} />
+        {habitEdit && own && <HabitEditor v={own} onClose={() => setHabitEdit(false)} onChange={() => { reloadOwn(); props.onChange() }} />}
 
         {spendOpen && (
           <form

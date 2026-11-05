@@ -58,6 +58,7 @@ import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState, missedTwiceText } from '@core/rhythm'
 import { missTwiceLine } from '@core/neverMissTwice'
+import { todayMode } from '../renderer/src/web/extrasContext'
 import { coachStatus } from '../renderer/src/web/coachStatus'
 import { handleMcp, type McpCtx, type McpLife } from './mcp'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
@@ -774,7 +775,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     const last = Math.max(0, ...lastLedger, ...lastFocus, ...extra)
     // Up yet? From today's sleep log, not assumed (T2).
     const woke = (db.prepare('SELECT wake_time FROM sleep_logs WHERE day = ?').get(today) as any)?.wake_time
-    return { nudge, today, focus: f, idleMin: last ? (now.getTime() - last) / 60000 : Infinity, tone: loadStyle(db).tone, wakeLogged: !!woke }
+    return { nudge, today, focus: f, idleMin: last ? (now.getTime() - last) / 60000 : Infinity, tone: loadStyle(db).tone, wakeLogged: !!woke, mode: todayMode(db, today) }
   })
   let nudge: NudgeState = st.nudge.day === st.today ? st.nudge : { ...st.nudge, day: st.today, count: 0, announced: [] }
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -834,7 +835,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // Your 👎 at this time of the week became a quiet rule (N9).
   const quiet = await mirror.read((db) => quietNow(quietRules(loadFeedback(db)), now)).catch(() => null)
   if (!sent.length && !inEvent && quiet && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', `${quiet.text} (learned from your 👎)`, 'nudge')
-  if (!sent.length && !inEvent && !quiet && !blockNow && shouldNudge(nudge, facts, now)) {
+  // Sick or travelling (a life mode): no "nothing done" nudges (FT4).
+  if (!sent.length && !inEvent && !quiet && st.mode && !st.mode.idle && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', `Life mode: ${st.mode.label}`, 'nudge')
+  if (!sent.length && !inEvent && !quiet && !blockNow && !(st.mode && !st.mode.idle) && shouldNudge(nudge, facts, now)) {
     const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
     const first = openMustDos[0]?.text
     const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'
@@ -1101,6 +1104,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     } catch {
       paused = false
     }
+    const mode = todayMode(db, today)
     return {
       prefs,
       state,
@@ -1114,7 +1118,8 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
         waterMl: water.ml,
         waterTarget: water.target,
         workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done') || !!svc.body.state().restToday,
-        paused
+        paused,
+        mode: mode ? { waterMax: mode.waterMax, training: mode.training, replan: mode.replan } : null
       }
     }
   })

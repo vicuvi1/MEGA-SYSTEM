@@ -10,7 +10,8 @@ import { todayLayout, useUiPrefs, type TodaySectionId } from '../uiPrefs'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { DayFlow } from '../DayFlow'
 import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
-import { ProgressCard } from './Progress'
+import { ProgressCard, YearOffer, openYear } from './Progress'
+import { LifeModeCard } from '../LifeMode'
 import { FunCard } from '../FunCard'
 import { DayStrip } from '../DayStrip'
 import { localToday, calendarToday, reloadToday } from '../todayEvents'
@@ -112,6 +113,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     ),
     day: () => (
       <>
+      <LifeModeCard compact />
+      <YearOffer onOpen={() => openYear(onGo)} />
       <MissTwiceCard />
       <CoachPlan oneApprove hideReview onChange={() => onChange()} />
       <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} />

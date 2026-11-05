@@ -30,6 +30,10 @@ import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedb
 import { REMINDERS, promiseLine, promiseStats } from '@core/coachKit'
 import { deskPrompt, deskView } from './benDesk'
 import { notesForBen } from '@core/notebook'
+import { todayMode } from './extrasContext'
+import { moodReviewLine, weekTimeFor } from './lifeExtras'
+import { weekOf } from '@core/benStakes'
+import type { CalEvent } from '@core/dayTime'
 import { listNotes } from './notes'
 import { applyMind } from '@core/coachMind'
 import { mindText, weekSoFar } from '@core/coachMind'
@@ -273,12 +277,15 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           return ''
         }
       })()
-      return { today, st, water, workoutDone, slept, yday }
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today) }
     })
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
     // Goal blocks already in today's calendar are busy time; only the rest still needs a slot.
     const bookedToday = (p: GoalPlan) => events.some((e) => isGoalBlock(e, p))
-    const goalItems = plans.filter((p) => p.todayLeftMin >= 20 && !bookedToday(p)).map((p) => ({ title: `${p.subject}: ${p.title}`, minutes: Math.min(90, p.todayLeftMin) }))
+    const allGoalItems = plans.filter((p) => p.todayLeftMin >= 20 && !bookedToday(p)).map((p) => ({ title: `${p.subject}: ${p.title}`, minutes: Math.min(90, p.todayLeftMin) }))
+    // A life mode (FT4): sick = no study blocks, travel = one short one, exam week = longer ones.
+    const mode = base.mode
+    const goalItems = !mode ? allGoalItems : mode.kind === 'sick' ? [] : mode.kind === 'travel' ? allGoalItems.slice(0, 1).map((g) => ({ ...g, minutes: Math.min(45, g.minutes) })) : allGoalItems.map((g) => ({ ...g, minutes: Math.min(90, Math.round((g.minutes * mode.focus) / 5) * 5) }))
     const fallback = localProposal({
       goals: goalItems,
       today: base.today,
@@ -325,6 +332,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const prompt = [
           "You are BEN, Victor's best friend and coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
           `It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
+          mode ? `LIFE MODE today: ${mode.label}. ${mode.kind === 'sick' ? 'Keep it tiny: rest, water, sleep; at most one easy must-do; no focus blocks unless he asks; training null.' : mode.kind === 'travel' ? 'A light plan: one or two small must-dos, at most one short block; training null.' : 'Exam week: more and longer study blocks for the exam goals; a short walk instead of a full workout is fine.'}` : '',
           'Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits ("Algebra set (exam 15 Dec)").',
           'headline: one short line with numbers ("3 must-dos · 2h40 focus · gym 18:00").',
           note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : '',
@@ -646,7 +654,17 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const adapt = await adaptIfNotWorking(coachCheck.verdict).catch(() => null)
     const money = await moneyLine()
     const goalLines = (await goalPlans().catch(() => [] as GoalPlan[])).filter((p) => p.status !== 'done').map((p) => `🎯 ${planLine(p)}`)
-    const lines = [...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`), ...goalLines, coachCheck.text, ...(adapt ? [adapt] : []), ...(money ? [`💸 ${money}`] : [])]
+    // Planned vs real time per subject (FT10) and how mood moves with sleep and training (FT13).
+    const monday = weekOf(today)
+    const weekEvents = calendar ? await calendar.events(new Date(`${monday}T00:00:00`).toISOString(), new Date().toISOString()).catch(() => [] as CalEvent[]) : []
+    const extraLines = await mirror
+      .read((db) => {
+        const svc = services.services(db)
+        const fin = financeStateFrom(db, null)
+        return [weekTimeFor(svc, weekEvents, today).line, moodReviewLine(svc, fin)].filter(Boolean)
+      })
+      .catch(() => [] as string[])
+    const lines = [...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`), ...goalLines, ...extraLines, coachCheck.text, ...(adapt ? [adapt] : []), ...(money ? [`💸 ${money}`] : [])]
     const ranked = report.metrics.filter((m) => m.target && m.id !== 'spend').map((m) => ({ m, k: m.now / (m.target as number) })).sort((a, b) => b.k - a.k)
     const upcoming = todoist?.upcoming ? await todoist.upcoming(8).catch(() => [] as TodoTask[]) : []
     let out = {

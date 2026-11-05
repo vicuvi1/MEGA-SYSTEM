@@ -110,6 +110,8 @@ export type Bridge = LifeApi & {
     healthKeys(op: { op: 'list' } | { op: 'new'; label: string } | { op: 'drop'; id: string }): Promise<{ keys?: { id: string; label: string; created: number; lastUsed: number | null }[]; key?: string; id?: string; label?: string }>
     connectGmail(): Promise<void>
   }
+  /** Your own habits, goals list, life modes, learning path, month and year reviews, reward locks (web). */
+  extras?: import('./web/lifeExtras').ExtrasApi
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
   todoist?: {

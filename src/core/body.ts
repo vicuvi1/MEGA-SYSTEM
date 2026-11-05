@@ -67,6 +67,8 @@ export interface BodySummary {
   workoutDoneToday: boolean
   /** You marked today a rest day (keeps the streak, no training nudges). */
   restToday?: boolean
+  /** Sick or travel days (life mode): they keep the streak too. */
+  modeRest?: string[]
   /** The rest days you marked (recent). */
   restDays?: string[]
   /** Free rest days left this week (2 a week; more cost a shield). */

@@ -128,7 +128,7 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
     missTwice: (() => {
       try {
         const b = s.body.state(now)
-        return neverMissTwice({ today, focus: s.progress.input(null, now, 8).focus, workoutDays: b.recentWorkouts.map((w) => w.day), restDays: b.restDays ?? [] })
+        return neverMissTwice({ today, focus: s.progress.input(null, now, 8).focus, workoutDays: b.recentWorkouts.map((w) => w.day), restDays: [...(b.restDays ?? []), ...(b.modeRest ?? [])] })
       } catch {
         return []
       }
