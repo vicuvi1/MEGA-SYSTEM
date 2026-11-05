@@ -51,8 +51,7 @@ export class MoneyService {
   }
 
   dailyBudget(): number {
-    const val = getSetting(this.db, 'money_daily_budget')
-    return val ? parseInt(val, 10) : 10000 // default 100 MDL / EUR in bani/cents
+    return budgetBani(getSetting(this.db, 'money_daily_budget'))
   }
 
   setBudget(budgetBani: number): NativeMoneySummary {
@@ -140,4 +139,15 @@ export class MoneyService {
 
   /** Where expenses go when Finance Helper isn't on this machine (the web app's inbox). */
   toFinance?: (e: { id: string; amount: number; category: string; note: string; date: string; at: number; remove?: boolean }) => void
+}
+
+/**
+ * money_daily_budget is kept in bani (P1). Finance's screen once saved it in
+ * whole lei ("150"); a value under 1 000 bani (10 lei) can only be that, so it
+ * reads as lei. Empty: 100 lei.
+ */
+export function budgetBani(raw: string | null | undefined): number {
+  const n = parseInt(String(raw ?? ''), 10)
+  if (!Number.isFinite(n) || n < 0 || raw === '' || raw == null) return 10000
+  return n > 0 && n < 1000 ? n * 100 : n
 }

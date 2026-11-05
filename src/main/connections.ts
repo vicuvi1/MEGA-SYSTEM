@@ -1,3 +1,4 @@
+import { budgetBani } from './money'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -85,13 +86,15 @@ export class Connections {
     setSetting(this.db, `conn_${kind}_since`, '')
   }
 
+  /** The daily budget in whole lei (stored in bani, the same setting Money uses: P1). */
   dailyBudget(): number {
-    return Number(getSetting(this.db, 'money_daily_budget') ?? 0)
+    const raw = getSetting(this.db, 'money_daily_budget')
+    return raw ? Math.round(budgetBani(raw) / 100) : 0
   }
 
   setDailyBudget(amount: number): void {
     if (!Number.isInteger(amount) || amount < 0) throw new LedgerError('Budget must be a whole number, 0 or more')
-    setSetting(this.db, 'money_daily_budget', String(amount))
+    setSetting(this.db, 'money_daily_budget', String(amount * 100))
   }
 
   private readWaky(): { data: WakyData | null; error: string | null } {

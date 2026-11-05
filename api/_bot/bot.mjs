@@ -8223,8 +8223,7 @@ var MoneyService = class {
 		return this.state();
 	}
 	dailyBudget() {
-		const val = getSetting(this.db, "money_daily_budget");
-		return val ? parseInt(val, 10) : 1e4;
+		return budgetBani(getSetting(this.db, "money_daily_budget"));
 	}
 	setBudget(budgetBani) {
 		setSetting(this.db, "money_daily_budget", String(Math.max(0, budgetBani)));
@@ -8297,6 +8296,16 @@ var MoneyService = class {
 	/** Where expenses go when Finance Helper isn't on this machine (the web app's inbox). */
 	toFinance;
 };
+/**
+* money_daily_budget is kept in bani (P1). Finance's screen once saved it in
+* whole lei ("150"); a value under 1 000 bani (10 lei) can only be that, so it
+* reads as lei. Empty: 100 lei.
+*/
+function budgetBani(raw) {
+	const n = parseInt(String(raw ?? ""), 10);
+	if (!Number.isFinite(n) || n < 0 || raw === "" || raw == null) return 1e4;
+	return n > 0 && n < 1e3 ? n * 100 : n;
+}
 function weekdayIndex(day) {
 	const [y, m, d] = day.split("-").map(Number);
 	return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;

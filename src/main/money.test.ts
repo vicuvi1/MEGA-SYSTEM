@@ -83,3 +83,13 @@ describe('MoneyService backend', () => {
     })
   })
 })
+
+import { budgetBani } from './money'
+describe('one daily budget, in bani (P1)', () => {
+  it('reads bani, and an old whole-lei value as lei', () => {
+    expect(budgetBani('15000')).toBe(15000)
+    expect(budgetBani('150')).toBe(15000)
+    expect(budgetBani('0')).toBe(0)
+    expect(budgetBani(null)).toBe(10000)
+  })
+})
