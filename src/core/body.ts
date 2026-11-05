@@ -69,6 +69,8 @@ export interface BodySummary {
   restToday?: boolean
   /** The rest days you marked (recent). */
   restDays?: string[]
+  /** Free rest days left this week (2 a week; more cost a shield). */
+  restLeftThisWeek?: number
   latestWeight: number | null
   previousWeight: number | null
   latestWaist: number | null
@@ -179,4 +181,20 @@ export function computeWeeklyAverages(metrics: BodyMetric[], weeks = 12): { week
       count: weights.length
     }
   })
+}
+
+/** Rest days a week that keep the streak for free; each one more costs a shield. */
+export const FREE_REST_DAYS = 2
+
+/** Monday of the week a day is in. */
+export function weekStart(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7))
+  return d.toISOString().slice(0, 10)
+}
+
+/** Rest days already taken in that day's week (Mon–Sun), not counting the day itself. */
+export function restInWeek(restDays: string[], day: string): number {
+  const ws = weekStart(day)
+  return restDays.filter((d) => d !== day && weekStart(d) === ws).length
 }

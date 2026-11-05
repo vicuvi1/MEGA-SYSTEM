@@ -45,6 +45,7 @@ function servicesFor(db: BrowserDb) {
   // Expenses logged here reach Finance Helper through the synced inbox (deletes too).
   money.toFinance = (e) => queueFinanceExpense(d as any, e)
   const body = new Body(d, wallet)
+  body.setShields(shields)
   const shop = new Shop(d, wallet)
   return {
     db: d,

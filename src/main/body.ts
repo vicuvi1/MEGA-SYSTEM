@@ -1,5 +1,7 @@
 import {
   computeWeeklyAverages,
+  FREE_REST_DAYS,
+  restInWeek,
   computeWorkoutStats,
   DEFAULT_EXERCISES,
   validateWaist,
@@ -52,6 +54,11 @@ const REST_DAYS = 'sport_rest_days'
 
 export class Body {
   constructor(private db: DB, private wallet: Wallet) {}
+  /** Streak shields: a 3rd rest day in a week uses one. */
+  private shields: { consume(): boolean; count(): number } | null = null
+  setShields(s: { consume(): boolean; count(): number }): void {
+    this.shields = s
+  }
 
   /** Rest days you chose (synced setting, the last 120). */
   restDays(): string[] {
@@ -67,6 +74,10 @@ export class Body {
   setRest(day: string | null, on: boolean, now = new Date()): BodySummary {
     const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : this.wallet.today(now)
     const set = new Set(this.restDays())
+    // Rest budget: 2 a week keep the streak; a 3rd (or more) costs a shield.
+    if (on && !set.has(d) && restInWeek([...set], d) >= FREE_REST_DAYS) {
+      if (!this.shields || !this.shields.consume()) throw new LedgerError(`${FREE_REST_DAYS} rest days this week already: one more costs a streak shield, and you have none (buy one in the Shop)`)
+    }
     if (on) set.add(d)
     else set.delete(d)
     setSetting(this.db, REST_DAYS, JSON.stringify([...set].sort().slice(-120)))
@@ -163,6 +174,7 @@ export class Body {
       workoutDoneToday: stats.workoutDoneToday,
       restToday: stats.restToday,
       restDays,
+      restLeftThisWeek: Math.max(0, FREE_REST_DAYS - restInWeek(restDays, today) - (restDays.includes(today) ? 1 : 0)),
       latestWeight,
       previousWeight,
       latestWaist,

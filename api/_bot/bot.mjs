@@ -773,6 +773,17 @@ function computeWeeklyAverages(metrics, weeks = 12) {
 		};
 	});
 }
+/** Monday of the week a day is in. */
+function weekStart(day) {
+	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
+	d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+	return d.toISOString().slice(0, 10);
+}
+/** Rest days already taken in that day's week (Mon–Sun), not counting the day itself. */
+function restInWeek(restDays, day) {
+	const ws = weekStart(day);
+	return restDays.filter((d) => d !== day && weekStart(d) === ws).length;
+}
 // src/renderer/src/web/browserDb.ts
 var isPlainObject = (v) => !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Uint8Array);
 var toParam = (v) => {
@@ -2265,6 +2276,11 @@ var Body = class {
 		this.db = db;
 		this.wallet = wallet;
 	}
+	/** Streak shields: a 3rd rest day in a week uses one. */
+	shields = null;
+	setShields(s) {
+		this.shields = s;
+	}
 	/** Rest days you chose (synced setting, the last 120). */
 	restDays() {
 		try {
@@ -2278,6 +2294,9 @@ var Body = class {
 	setRest(day, on, now = /* @__PURE__ */ new Date()) {
 		const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : this.wallet.today(now);
 		const set = new Set(this.restDays());
+		if (on && !set.has(d) && restInWeek([...set], d) >= 2) {
+			if (!this.shields || !this.shields.consume()) throw new LedgerError(`2 rest days this week already: one more costs a streak shield, and you have none (buy one in the Shop)`);
+		}
 		if (on) set.add(d);
 		else set.delete(d);
 		setSetting(this.db, REST_DAYS, JSON.stringify([...set].sort().slice(-120)));
@@ -2357,6 +2376,7 @@ var Body = class {
 			workoutDoneToday: stats.workoutDoneToday,
 			restToday: stats.restToday,
 			restDays,
+			restLeftThisWeek: Math.max(0, 2 - restInWeek(restDays, today) - (restDays.includes(today) ? 1 : 0)),
 			latestWeight,
 			previousWeight,
 			latestWaist,
@@ -7059,6 +7079,7 @@ function servicesFor(db) {
 	const money = new MoneyService(d, wallet);
 	money.toFinance = (e) => queueFinanceExpense(d, e);
 	const body = new Body(d, wallet);
+	body.setShields(shields);
 	return {
 		db: d,
 		wallet,

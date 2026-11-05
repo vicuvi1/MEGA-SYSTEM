@@ -105,6 +105,7 @@ function open(): void {
   schedule = new Schedule(db, wallet)
   discipline = new Discipline(db, wallet)
   body = new Body(db, wallet)
+  body.setShields(shieldService)
   sleepService = new SleepService(db, wallet)
   focusService = new FocusService(db, wallet)
   moneyService = new MoneyService(db, wallet)

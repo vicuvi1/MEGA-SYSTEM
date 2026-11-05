@@ -53,6 +53,9 @@ export function RestDayCard() {
       <div>
         <b>😴 Rest day</b>
         <small>{on ? 'Today is a rest day. Your streak stays, Ben lets you recover.' : st.workoutDoneToday ? 'You trained today.' : 'Resting today? Keep your streak and skip the training nudges.'}</small>
+        <small className="rest-budget">
+          {st.restLeftThisWeek != null && (st.restLeftThisWeek > 0 ? `${st.restLeftThisWeek} free rest day${st.restLeftThisWeek === 1 ? '' : 's'} left this week` : 'Free rest days used this week: one more costs a streak shield')}
+        </small>
       </div>
       {!st.workoutDoneToday && (
         <button className={`btn small ${on ? '' : 'primary'}`} onClick={() => void set(null, !on)}>
