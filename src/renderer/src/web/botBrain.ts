@@ -105,7 +105,7 @@ export function saveProfile(db: any, p: CoachProfile): CoachProfile {
 /** How to take back one thing the coach did (the Undo on its action cards). */
 export type UndoOp =
   | { k: 'water'; ml: number }
-  | { k: 'reps'; ex: string; amount: number }
+  | { k: 'reps'; ex: string; amount: number; workout?: number }
   | { k: 'money'; id: string }
   | { k: 'event'; cal: string; id: string }
   | { k: 'task'; id: string }

@@ -17492,16 +17492,19 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								ex: a.exercise,
 								amount: -a.amount
 							};
-							if (a.amount > 0) services.services(db).body.logWorkout({
-								title: `${r.exercise.name} (+${a.amount})`,
-								items: [{
-									exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, "_"),
-									name: r.exercise.name,
-									amount: a.amount,
-									unit: "reps"
-								}],
-								note: "Logged by the coach"
-							});
+							if (a.amount > 0) {
+								const svc = services.services(db);
+								opNow.workout = svc.body.logWorkout({
+									title: `${r.exercise.name} (+${a.amount})`,
+									items: [{
+										exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, "_"),
+										name: r.exercise.name,
+										amount: a.amount,
+										unit: "reps"
+									}],
+									note: "Logged by the coach"
+								}).workout.id;
+							}
 							return `💪 ${r.exercise.name} ${a.amount > 0 ? "+" : ""}${a.amount} · ${r.exercise.done}${r.exercise.target ? `/${r.exercise.target}` : ""} today`;
 						});
 						done.push(line);
@@ -17763,7 +17766,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								savedAt: Date.now(),
 								data: r.st
 							}));
-							return `↩ ${r.exercise.name} back to ${r.exercise.done}`;
+							let gone = "";
+							if (op.workout) try {
+								svc.body.deleteWorkout(op.workout);
+								gone = " · workout and its points removed";
+							} catch {}
+							return `↩ ${r.exercise.name} back to ${r.exercise.done}${gone}`;
 						}
 						if (op.k === "money") {
 							const what = deleteMoney(db, op.id);

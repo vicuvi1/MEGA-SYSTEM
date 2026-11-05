@@ -1755,9 +1755,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               save(r.st)
               opNow = { k: 'reps', ex: a.exercise, amount: -a.amount }
               // Real reps also count as a workout (streak and points), like "30 pushups".
+              // Undo removes that workout and its points too (X7).
               if (a.amount > 0) {
                 const svc = services.services(db)
-                svc.body.logWorkout({ title: `${r.exercise.name} (+${a.amount})`, items: [{ exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, '_'), name: r.exercise.name, amount: a.amount, unit: 'reps' }], note: 'Logged by the coach' })
+                opNow.workout = svc.body.logWorkout({ title: `${r.exercise.name} (+${a.amount})`, items: [{ exerciseId: r.exercise.name.toLowerCase().replace(/\s+/g, '_'), name: r.exercise.name, amount: a.amount, unit: 'reps' }], note: 'Logged by the coach' }).workout.id
               }
               return `💪 ${r.exercise.name} ${a.amount > 0 ? '+' : ''}${a.amount} · ${r.exercise.done}${r.exercise.target ? `/${r.exercise.target}` : ''} today`
             })
@@ -1957,7 +1958,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const r = addReps(st, op.ex, op.amount, day)
               if (!r) return '⚠️ Exercise not found'
               setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: r.st }))
-              return `↩ ${r.exercise.name} back to ${r.exercise.done}`
+              let gone = ''
+              if (op.workout) {
+                try {
+                  svc.body.deleteWorkout(op.workout)
+                  gone = ' · workout and its points removed'
+                } catch {
+                  /* already deleted */
+                }
+              }
+              return `↩ ${r.exercise.name} back to ${r.exercise.done}${gone}`
             }
             if (op.k === 'money') {
               const what = deleteMoney(db as any, op.id)
