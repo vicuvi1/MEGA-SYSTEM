@@ -171,8 +171,11 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     await life.timeline?.mark(today, id, v).catch(() => null)
   }
   const shiftRest = (minutes: number) => {
-    const later = blocks.filter((b) => b.event && b.start >= nowMin)
-    if (!later.length) return toast('Nothing left to shift today', 'info')
+    // Only your own blocks move (focus, study, must-dos you planned); lectures,
+    // meetings and other people's events stay where they are (F2).
+    const later = blocks.filter((b) => b.event && b.start >= nowMin && isFocusBlock(b.event))
+    const fixed = blocks.filter((b) => b.event && b.start >= nowMin && !isFocusBlock(b.event)).length
+    if (!later.length) return toast(fixed ? 'Only meetings and classes left: those stay put' : 'Nothing left to shift today', 'info')
     const before = later.map((b) => ({ b, start: b.start, end: b.end }))
     for (const b of later) {
       const e = b.event!
@@ -180,7 +183,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
       setOver((o) => ({ ...o, [e.id]: next }))
       void life.google!.move(e.calendarId, e.id, next.start, next.end).catch(() => null)
     }
-    toast(`${later.length} block${later.length === 1 ? '' : 's'} pushed ${minutes} min later`, 'good', {
+    toast(`${later.length} block${later.length === 1 ? '' : 's'} pushed ${minutes} min later${fixed ? ` (${fixed} meeting${fixed === 1 ? '' : 's'} kept)` : ''}`, 'good', {
       label: 'Undo',
       run: () => {
         for (const x of before) {
