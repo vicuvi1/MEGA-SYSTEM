@@ -33,6 +33,8 @@ import { preferSlot, workHours } from '@core/bestHours'
 import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart, shareGoalWords, smartAct, smartNotice, smartOn, smartSuggestion, smartTick, startSmart } from './smartIsland'
 import { breakOverAlert, controlAct, flowTick, islandRunning, loadBreakPref, mustdoUndo, rememberUndo } from './islandControlsFeed'
 import { pcAskAct, pcAskAlert, pcAutoTick } from './pcAutomation'
+import { kitAct, kitForIsland } from './islandKitFeed'
+import { MOVE_CARD_EVENT, moveCardAlert } from '@core/islandMoveCard'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
@@ -119,6 +121,15 @@ function distractAlert(running: { subject: string; startedAt: number } | null, n
       { label: '⏹ Stop & log', action: { kind: 'stop' } }
     ]
   }
+}
+/** IN36: a recipe asked to show the move-break card (the island shows it; you confirm what you did). */
+let moveAsk: { at: number; why: string } | null = null
+if (typeof window !== 'undefined') {
+  window.addEventListener(MOVE_CARD_EVENT, (e) => {
+    const d = (e as CustomEvent).detail ?? {}
+    moveAsk = { at: Number(d.at) || Date.now(), why: String(d.why ?? '').slice(0, 60) }
+    window.dispatchEvent(new Event('life-island-refresh'))
+  })
 }
 /** MC10: drifted 2+ minutes in distracting apps during focus: one word, once per session. */
 const DRIFT = 'ls.pcDrift'
@@ -512,6 +523,7 @@ export function IslandFeed() {
           (running ? null : lateAlert(now, target, dismissed)) ??
           windDownAlert(wd, now, dismissed) ??
           (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
+          moveCardAlert(moveAsk, now, dismissed) ??
           nudges.body ??
           nudgeWater(waterAlert(body), now) ??
           (busy ? null : recapAlert({ now, eveningAt: evAt, dismissed, recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget: status.today.waterTarget || WATER_TARGET_ML, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined } })) ??
@@ -526,6 +538,8 @@ export function IslandFeed() {
       inMeeting: !!callNow(blocks.current.list, now),
       doing: doingNow(),
       move: nudges.move,
+      // Island 2: your tiles and buttons, today's blocks for the mini calendar, the music's focus pause.
+      ...(await kitForIsland(blocks.current.list)),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
@@ -818,6 +832,11 @@ export function IslandFeed() {
             await life.sleep.logWake(a.time)
             window.dispatchEvent(new CustomEvent('life-sleep-changed'))
             break
+          case 'kit':
+          case 'kitCount':
+          case 'kitLink':
+            said = await kitAct(a)
+            break
           case 'join': {
             // IS11: the meeting's video link, through the app window's open-external path.
             if (!/^https:\/\//.test(a.url)) throw new Error('That meeting has no call link')
@@ -1018,10 +1037,12 @@ export function IslandFeed() {
     const on = () => void send()
     window.addEventListener('life-focus-changed', on)
     window.addEventListener('life-sport-changed', on)
+    window.addEventListener('life-island-refresh', on)
     return () => {
       clearInterval(t)
       window.removeEventListener('life-focus-changed', on)
       window.removeEventListener('life-sport-changed', on)
+      window.removeEventListener('life-island-refresh', on)
     }
   }, [act, desk, send])
   useLive(() => void send())

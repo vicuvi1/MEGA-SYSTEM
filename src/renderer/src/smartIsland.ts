@@ -11,6 +11,7 @@ import { addContextRule, CONTEXT_ICON, CONTEXT_LABEL, type ContextKind } from '@
 import { answerSuggestion, cleanSuggestState, markShown, pausedKinds, pickSuggestion, resetSuggestKind, suggestAlert, type SuggestState, type SuggestStats, type Suggestion } from '@core/suggest'
 import { backToBlock, bedtimeFromClose, comeBack, contextPicker, emailBox, gamingBedtime, meetingNote, nextMustdo, spendAfterBank, startFromOpened } from '@core/smartSuggest'
 import { cleanRecipes, evaluate, recipeText, safeLink, type Recipe, type RecipeEvent, type SafeAction } from '@core/recipes'
+import { MOVE_CARD_EVENT } from '@core/islandMoveCard'
 import { blockKey, blockReality, callNow, realityLine, workNow } from '@core/islandSmart'
 import type { PcPrefs } from '@core/pcActivity'
 import { calendarDay } from '@core/dates'
@@ -293,6 +294,11 @@ export async function runSafe(acts: SafeAction[], why: string, recipeId?: string
         case 'offerNote':
           note = lastMeeting ?? { endedAt: Date.now(), title: 'The meeting' }
           did.push('offered a meeting note')
+          break
+        case 'moveCard':
+          // IN36: only asks; the card's buttons log what you really did.
+          window.dispatchEvent(new CustomEvent(MOVE_CARD_EVENT, { detail: { why, at: Date.now() } }))
+          did.push('showed the move-break card')
           break
       }
     } catch (err) {

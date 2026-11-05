@@ -81,6 +81,12 @@ export type IslandAction = { id?: string } & (
   | { kind: 'closeAll'; blocks: 'move' | 'drop' }
   /** Island 2: a tap on a nudge card (move break, eye break, mood, people…: src/core/islandNudges.ts). */
   | { kind: 'nudge'; op: import('./islandNudges').NudgeOp }
+  /** Island 2: save your tiles, buttons, profiles and colours (synced settings). */
+  | { kind: 'kit'; kit: unknown }
+  /** IN34: a counter tile went up (or down). */
+  | { kind: 'kitCount'; tile: string; by: number }
+  /** IN34: a link tile (https only). */
+  | { kind: 'kitLink'; url: string }
 )
 
 export interface IslandAlert {
@@ -157,6 +163,12 @@ export interface IslandSnapshot {
   doing?: { ctx: ContextKind; label: string; icon: string; detail?: string; app: string; conf: number } | null
   /** Island 2: today's movement ring, the daily challenge and the move streak. */
   move?: import('./islandNudges').MovePill | null
+  /** Island 2: your tiles, buttons, profiles and colours (IslandKit, from your synced settings). */
+  kit?: unknown
+  /** IN46: today's blocks, for the mini calendar. */
+  day?: IslandBlock[]
+  /** IN-SC: pause the island's music during focus (PC & automation → Pause music during focus). */
+  musicPause?: boolean
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {

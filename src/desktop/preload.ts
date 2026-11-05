@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { DesktopApi } from '../shared/desktop'
 import { eyesPreload } from './eyes/preloadEyes'
 
@@ -82,6 +82,10 @@ const api: DesktopApi = {
   // Island 2 (IN34–IN48): one channel for tiles' shortcuts, the dock, the clipboard tray and the file shelf.
   islandKit: (op, arg) => ipcRenderer.invoke('islandKit', String(op), arg),
   onIslandKit: (cb) => void ipcRenderer.on('islandKit', (_e, ev) => cb(ev)),
+  // IN48: a dropped file's place on disk (a reference for the shelf, never its contents).
+  islandFilePath: (f) => { try { return webUtils.getPathForFile(f) || '' } catch { return '' } },
+  // IN39: the panel's own size (drag its corner): start (room to grow) and end (keep it for this screen).
+  islandPanelSize: (phase, size) => ipcRenderer.send('island:panelSize', phase === 'end' ? 'end' : 'start', { w: Number(size?.w) || 0, h: Number(size?.h) || 0 }),
   showApp: (page) => ipcRenderer.send('island:showApp', page),
   // Ben on this PC (P1–P20)
   pcGetPrefs: () => ipcRenderer.invoke('pc:getPrefs'),

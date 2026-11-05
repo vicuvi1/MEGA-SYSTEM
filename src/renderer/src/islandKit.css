@@ -1,0 +1,123 @@
+/* Island 2: your tiles and buttons, the editor, the mini calendar, music,
+   the clipboard tray, the file shelf, the mini dock and the colour sets.
+   Animations move only transform and opacity (the motion budget). */
+.di-kit { display: flex; flex-direction: column; gap: 6px; }
+.di-kit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.di-kit-head b { font-size: 12px; font-weight: 600; color: var(--sub); }
+.di-kit-head small { font-size: 11px; color: var(--sub); }
+.di-kit-edit, .di-kit-start { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.di-kit-edit.on { background: var(--lime); color: #11140a; border-color: transparent; }
+.di-kit-start { align-self: flex-start; color: var(--sub); }
+.di-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.di-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 52px; padding: 7px 9px; border-radius: 12px; border: 1px solid var(--line); background: rgb(var(--ink) / 0.04); color: var(--fg); font: inherit; text-align: left; cursor: pointer; transition: transform 0.12s ease, opacity 0.12s ease; }
+.di-tile:active { transform: scale(0.96); }
+.di-tile i { font-style: normal; font-size: 16px; line-height: 1; }
+.di-tile span { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.di-tile small { font-size: 11px; color: var(--acc-text); font-variant-numeric: tabular-nums; }
+.di-tile.kind-note span { white-space: normal; color: var(--sub); }
+.di-kit-btns, .di-kit-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.di-kit-btn, .di-kit-presets button { border: 1px solid var(--line); background: rgb(var(--ink) / 0.06); color: var(--fg); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; transition: transform 0.12s ease; }
+.di-kit-btn:active { transform: scale(0.95); }
+/* Your buttons on the pill: only while the mouse is on it. */
+.di-pill-kit { display: inline-flex; gap: 3px; margin-left: 2px; }
+.di-peek > .di-pill-kit { margin: 6px 0 0 0; }
+.di-pill-kbtn { display: inline-flex; align-items: center; gap: 1px; height: 24px; padding: 0 6px; border: 0; border-radius: 999px; background: rgb(var(--ink) / 0.1); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; transition: transform 0.12s ease; }
+.di-pill-kbtn small { font-size: 10px; color: var(--acc-text); }
+.di-pill-kbtn:active { transform: scale(0.92); }
+
+/* The editor. */
+.di-kit-editor { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.di-kit-tabs { display: flex; gap: 4px; }
+.di-kit-tabs button { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--sub); border-radius: 8px; padding: 3px 4px; font: inherit; font-size: 11.5px; cursor: pointer; }
+.di-kit-tabs button.on { color: var(--fg); background: rgb(var(--ink) / 0.08); }
+.di-kit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.di-kit-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 8px; background: rgb(var(--ink) / 0.04); }
+.di-kit-list li.pinned { box-shadow: inset 0 0 0 1px var(--lime); }
+.di-kit-list li > span { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.di-kit-list button { border: 0; background: transparent; color: var(--fg); width: 24px; height: 22px; border-radius: 6px; cursor: pointer; font: inherit; }
+.di-kit-list button:hover { background: rgb(var(--ink) / 0.1); }
+.di-kit-key { width: 92px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: inherit; font-size: 11px; }
+.di-kit-check { display: inline-flex; align-items: center; gap: 4px; color: var(--sub); font-size: 11.5px; cursor: pointer; }
+.di-kit-check input { accent-color: var(--lime); margin: 0; }
+.di-kit-warn { flex-basis: 100%; font-style: normal; font-size: 11px; color: var(--amber); }
+.di-kit-hint { margin: 0; font-size: 11.5px; color: var(--sub); }
+.di-kit-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+.di-kit-add select, .di-kit-pick select { padding: 3px 4px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 11.5px; }
+.di-kit-field { display: inline-flex; flex-direction: column; gap: 2px; font-size: 10.5px; color: var(--sub); }
+.di-kit-field input { padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: inherit; font-size: 12px; }
+.di-kit-plus { border: 0; background: var(--lime); color: #11140a; border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.di-kit-profiles { display: flex; flex-direction: column; gap: 8px; }
+.di-kit-profile { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; }
+.di-kit-profile.on { border-color: var(--lime); }
+.di-kit-profile legend { padding: 0 4px; font-size: 12px; }
+.di-kit-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex-basis: 100%; }
+.di-kit-pick > span { font-size: 10.5px; color: var(--sub); margin-right: 2px; }
+.di-kit-del { border: 0; background: transparent; color: var(--red); font: inherit; font-size: 11.5px; cursor: pointer; padding: 0; }
+.di-kit-look { display: flex; flex-direction: column; gap: 6px; }
+.di-kit-swatches { display: flex; gap: 6px; }
+.di-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; background: var(--sw, #d4ff3f); cursor: pointer; padding: 0; }
+.di-swatch.on { border-color: var(--fg); }
+.di-swatch.acc-lime { --sw: #d4ff3f; }
+.di-swatch.acc-ocean { --sw: #4cc3ff; }
+.di-swatch.acc-rose { --sw: #ff7aa8; }
+.di-swatch.acc-amber { --sw: #ffb547; }
+.di-swatch.acc-violet { --sw: #a98bff; }
+.di-swatch.acc-mint { --sw: #5ff2b4; }
+
+/* IN40: colour sets on the island (on top of the look you picked). */
+.di.acc-ocean { --lime: #4cc3ff; --glow: rgb(76 195 255 / 0.3); }
+.di.acc-rose { --lime: #ff7aa8; --glow: rgb(255 122 168 / 0.3); }
+.di.acc-amber { --lime: #ffb547; --glow: rgb(255 181 71 / 0.3); }
+.di.acc-violet { --lime: #a98bff; --glow: rgb(169 139 255 / 0.3); }
+.di.acc-mint { --lime: #5ff2b4; --glow: rgb(95 242 180 / 0.3); }
+.di.acc-ocean, .di.acc-rose, .di.acc-amber, .di.acc-violet, .di.acc-mint { --acc-text: var(--lime); }
+/* High contrast: solid black, white text, clear edges. */
+.di.hi-contrast { --bg: #000; --fg: #fff; --sub: rgb(255 255 255 / 0.85); --line: rgb(255 255 255 / 0.5); }
+.di.hi-contrast .di-shade { box-shadow: 0 0 0 2px #fff, 0 8px 24px rgb(0 0 0 / 0.6); }
+/* Seasonal skins: a soft ring in the season's colour. */
+.di.season-winter .di-shade { box-shadow: 0 10px 30px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(180 215 255 / 0.55), 0 0 18px -6px rgb(180 215 255 / 0.8); }
+.di.season-spring .di-shade { box-shadow: 0 10px 30px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 170 210 / 0.5), 0 0 18px -6px rgb(160 240 150 / 0.7); }
+.di.season-summer .di-shade { box-shadow: 0 10px 30px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 210 90 / 0.55), 0 0 18px -6px rgb(255 170 60 / 0.7); }
+.di.season-autumn .di-shade { box-shadow: 0 10px 30px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(230 130 60 / 0.55), 0 0 18px -6px rgb(200 90 40 / 0.7); }
+
+/* IN46: the mini calendar. */
+.di-minical-bar { position: relative; height: 38px; border-radius: 8px; background: rgb(var(--ink) / 0.04); overflow: hidden; }
+.di-minical-tick { position: absolute; bottom: 1px; font-style: normal; font-size: 9px; color: var(--sub); transform: translateX(2px); }
+.di-minical-b { position: absolute; top: 4px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 6px; background: rgb(var(--ink) / 0.14); font-size: 10.5px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; touch-action: none; }
+.di-minical-b.movable { background: color-mix(in srgb, var(--lime) 30%, transparent); cursor: grab; }
+.di-minical-b.call { background: rgb(76 160 255 / 0.3); }
+.di-minical-b.now { box-shadow: inset 0 0 0 1px var(--lime); }
+.di-minical-now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); transform: translateX(-1px); }
+
+/* IN-SC: SoundCloud. The player itself is hidden. */
+.di-sc-host { position: fixed; left: -4000px; top: 0; width: 320px; height: 120px; border: 0; opacity: 0; pointer-events: none; }
+.di-sc-now { display: flex; gap: 10px; align-items: center; }
+.di-sc-now img, .di-sc-art { width: 44px; height: 44px; border-radius: 8px; flex: none; object-fit: cover; background: rgb(var(--ink) / 0.08); display: grid; place-items: center; }
+.di-sc-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.di-sc-mid b { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.di-sc-mid small { font-size: 10.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.di-sc-bar { height: 6px; border-radius: 3px; background: rgb(var(--ink) / 0.12); overflow: hidden; cursor: pointer; }
+.di-sc-bar i { display: block; height: 100%; background: var(--lime); transform-origin: left center; transition: transform 1s linear; }
+.di-sc-ctl { display: flex; align-items: center; gap: 4px; }
+.di-sc-ctl input[type='range'] { flex: 1; accent-color: var(--lime); }
+/* The pill's equalizer: three bars, moving only while it plays. */
+.di-sc-pill { display: inline-flex; flex: none; align-items: center; }
+.di-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.di-eq b { display: block; width: 3px; height: 12px; border-radius: 1px; background: var(--lime); transform-origin: bottom center; transform: scaleY(0.3); }
+.di-sc-pill.playing .di-eq b { animation: di-eq 0.9s ease-in-out infinite; }
+.di-sc-pill.playing .di-eq b:nth-child(2) { animation-delay: -0.3s; }
+.di-sc-pill.playing .di-eq b:nth-child(3) { animation-delay: -0.6s; }
+@keyframes di-eq { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+.di.motion-off .di-eq b { animation: none !important; }
+
+/* IN38: the mini dock window. */
+html.di-dock-page, html.di-dock-page body { background: transparent; margin: 0; overflow: hidden; }
+.di-dock { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px 5px 4px; border-radius: 14px; background: rgb(4 4 5 / 0.92); color: #f5f5f6; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08); font: 12px/1.2 Geist, Inter, 'Segoe UI', system-ui, sans-serif; user-select: none; }
+.di-dock-grip { -webkit-app-region: drag; cursor: grab; padding: 0 4px; color: rgb(255 255 255 / 0.4); letter-spacing: -2px; }
+.di-dock-timer { padding: 0 6px; color: #d4ff3f; font-variant-numeric: tabular-nums; font-weight: 600; }
+.di-dock-timer.paused { opacity: 0.6; }
+.di-dock-tile { -webkit-app-region: no-drag; display: inline-flex; align-items: center; gap: 3px; height: 30px; padding: 0 8px; border: 0; border-radius: 10px; background: rgb(255 255 255 / 0.08); color: inherit; font: inherit; cursor: pointer; transition: transform 0.12s ease; }
+.di-dock-tile:active { transform: scale(0.94); }
+.di-dock-tile i { font-style: normal; }
+.di-dock-tile small { color: #d4ff3f; font-variant-numeric: tabular-nums; }
+.di-dock-empty { color: rgb(255 255 255 / 0.55); padding: 0 6px; }

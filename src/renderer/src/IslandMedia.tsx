@@ -5,11 +5,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { mediaLine, type MediaNow, type MediaOp } from '@core/pcMedia'
 import { tp } from './islandTap'
+import { ScMediaRow, useSc } from './IslandMusic'
 
 export function IslandMedia() {
   const [now, setNow] = useState<MediaNow | null>(null)
   const [on, setOn] = useState(true)
   const busy = useRef(false)
+  // IN-SC: while SoundCloud plays on the island, these buttons drive it.
+  const scNow = useSc()
   const ask = async (op: MediaOp) => {
     const pcx = window.desktop?.pcx
     if (!pcx || busy.current) return
@@ -30,6 +33,7 @@ export function IslandMedia() {
     }, 30_000)
     return () => clearInterval(t)
   }, [])
+  if (scNow.loaded && scNow.station) return <ScMediaRow />
   if (!on || !now || (!now.title && !now.playing)) return null
   return (
     <div className="di-media" role="group" aria-label="Music">

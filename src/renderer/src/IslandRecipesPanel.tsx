@@ -10,7 +10,7 @@ import { life } from './bridge'
 import { pausedSuggestions, resumeSuggestion, setRecipes } from './smartIsland'
 import { useAction } from './ui'
 
-const ACTS: SafeAction['do'][] = ['focus', 'focusPack', 'blockSites', 'dnd', 'quiet', 'stopFocus', 'note', 'task', 'open', 'windDown', 'offerNote']
+const ACTS: SafeAction['do'][] = ['focus', 'focusPack', 'blockSites', 'dnd', 'quiet', 'stopFocus', 'note', 'task', 'open', 'windDown', 'offerNote', 'moveCard']
 const DAYS: { label: string; days: number[] | undefined }[] = [
   { label: 'Every day', days: undefined },
   { label: 'Weekdays', days: [1, 2, 3, 4, 5] },

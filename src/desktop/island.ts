@@ -32,7 +32,7 @@ import { applyProfile, autoProfile } from '../core/islandProfiles'
 import { typingFade } from '../core/islandCommands'
 import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
 import { cursorNear, snapBounce } from './islandPlace'
-import { clampFree, dragTo, dropSpot, fitShift, hideFor, hideText, hideTick, rememberSpot, rushing, screenKey, SHOWN, toggleHide, DODGE_MS, type HideChoice, type Rect, type Sample } from '../core/islandMove'
+import { clampFree, PANEL_MAX, resizePanel, dragTo, dropSpot, fitShift, hideFor, hideText, hideTick, rememberSpot, rushing, screenKey, SHOWN, toggleHide, DODGE_MS, type HideChoice, type Rect, type Sample } from '../core/islandMove'
 import {
   chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
   noteRecentApp, overRects, parseWatcherLine, placeIsland, QUNS_PRESENTATION, rateLimit, rectsToDip, rememberLayout, sampleSeconds, SHORTCUTS_VERSION,
@@ -55,6 +55,7 @@ const LEVEL = 'pop-up-menu' as const
 const DEBUG_MS = 30 * 60_000
 
 type Slot = 'island' | 'quiet' | 'capture' | 'voice' | 'hide'
+const SLOT_LABEL: Record<Slot, string> = { island: 'open the island', quiet: 'quiet', capture: 'add a task', voice: 'talk to Ben', hide: 'hide the island' }
 
 export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null, seconds: number) => void; onFg?: (proc: string) => void }) {
   const prefFile = join(o.dir, 'island.json')
@@ -174,7 +175,17 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   /** The size setting, done by the page itself with CSS. */
   const cssScale = () => ISLAND_ZOOM[prefs.size] ?? 1
   /** IF3: room for your widest view (the peek / panel width sliders). */
-  const base = () => islandBase(prefs)
+  // IN39: the panel's own size on this screen (drag its corner); while you drag it, room for the largest.
+  let resizing = false
+  const panelNow = (): { w: number; h: number } | null => {
+    if (resizing) return PANEL_MAX
+    try { return desk.spots[screenKey(display())]?.size ?? null } catch { return null }
+  }
+  const base = () => {
+    const p = panelNow()
+    const b = islandBase(p ? { ...prefs, panelWidth: p.w } : prefs)
+    return { width: b.width, height: Math.max(b.height, Math.round((p?.h ?? 0) + 100)) }
+  }
   const sizeNow = () => islandSize(base(), cssScale() * pageZoom(), display().workArea)
 
   // H1: the pill's part of the window (DIP) when it floats: it stays on the screen, the rest may hang off.
@@ -231,7 +242,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const profileNow = (): IslandProfileId => autoProfile(prefs.controls, { now: new Date(), app: fgProc || null })
   const sendPrefs = () => {
     activeProfile = profileNow()
-    win?.webContents.send('island:prefs', { ...applyProfile(prefs, activeProfile), ...desk, place, displayId: savedDisplay, scale: cssScale(), theme: appTheme, profile: activeProfile })
+    const panel = panelNow()
+    win?.webContents.send('island:prefs', { ...applyProfile(prefs, activeProfile), ...desk, ...(panel && !resizing ? { panelWidth: panel.w, panelMaxH: panel.h } : {}), place, displayId: savedDisplay, scale: cssScale(), theme: appTheme, profile: activeProfile })
   }
   /** The profile changed by itself (the time, the app in front): the island hears it. */
   const checkProfile = () => {
@@ -412,7 +424,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * cssScale() * pageZoom() - wa.y) / wa.height))
     pos.cx = Math.min(1, Math.max(0, (b.x + b.width / 2 - wa.x) / wa.width))
     pos.top = Math.max(0, b.y - wa.y)
-    desk = { ...desk, spots: rememberSpot(desk.spots, screenKey(d), { place, pos: { ...pos } }) }
+    desk = { ...desk, spots: rememberSpot(desk.spots, screenKey(d), { ...desk.spots[screenKey(d)], place, pos: { ...pos } }) }
     fit = { x: 0, y: 0 }
     savePrefs()
     sendPlacement()
@@ -541,6 +553,28 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     win.setBounds({ ...np, width: b.width, height: b.height })
   })
   ipcMain.on('island:moveEnd', (e, save) => { if (fromIsland(e)) endMove(save === true) })
+  // IN39: the panel resized by its corner: room to grow while you drag, then the size is kept for this screen.
+  ipcMain.on('island:panelSize', (e, phase, size) => {
+    if (!fromIsland(e) || !win || win.isDestroyed()) return
+    if (phase === 'start') {
+      resizing = true
+      placeWin()
+      return
+    }
+    resizing = false
+    try {
+      const d = display()
+      const key = screenKey(d)
+      const sp = desk.spots[key] ?? { place, pos: { ...pos } }
+      const wa = d.workArea
+      const k = cssScale() * pageZoom()
+      const sz = resizePanel({ w: Number(size?.w) || 460, h: Number(size?.h) || 520 }, { x: 0, y: 0 }, { w: Math.floor(wa.width / k) - 40, h: Math.floor(wa.height / k) - 100 })
+      desk = { ...desk, spots: rememberSpot(desk.spots, key, { ...sp, size: sz }) }
+    } catch { /* fine */ }
+    savePrefs()
+    placeWin()
+    sendPrefs()
+  })
 
   // ---- H1: hide it (for an hour, until tomorrow, until you bring it back) or tuck it into a dot ----
   const sendHide = () => { if (win && !win.isDestroyed()) win.webContents.send('island:hideState', desk.hidden) }
@@ -1164,6 +1198,13 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     voice: () => openFor('voice'),
     restartWatcher,
     enabled: () => enabled,
+    /** Island 2 (islandKit.ts): an event for the page, is this the page, the island's own shortcuts, shown now. */
+    kit: {
+      send: (ev: Record<string, unknown>) => { if (win && !win.isDestroyed() && ready) win.webContents.send('islandKit', ev) },
+      isIsland: (wc: Electron.WebContents) => !!win && !win.isDestroyed() && wc === win.webContents,
+      reserved: () => (Object.entries(bound) as [Slot, string][]).map(([what, accelerator]) => ({ what: SLOT_LABEL[what], accelerator: accelerator || wanted(what) })).filter((x) => x.accelerator),
+      shown: () => enabled && !!win && !win.isDestroyed() && win.isVisible() && desk.hidden.mode !== 'hidden'
+    },
     /** H1: hidden / a dot / shown, and until when. */
     hideState: () => desk.hidden,
     hideLabel: () => hideText(desk.hidden, Date.now()),
@@ -1188,7 +1229,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       if (p === 'top') pos.cx = 0.5
       desk = { ...desk, offset: { x: 0, y: 0 } }
       fit = { x: 0, y: 0 }
-      try { const d = display(); spotDisplay = d.id; desk = { ...desk, spots: rememberSpot(desk.spots, screenKey(d), { place, pos: { ...pos } }) } } catch { /* fine */ }
+      try { const d = display(); spotDisplay = d.id; desk = { ...desk, spots: rememberSpot(desk.spots, screenKey(d), { ...desk.spots[screenKey(d)], place, pos: { ...pos } }) } } catch { /* fine */ }
       savePrefs()
       sendPlacement()
       placeWin()

@@ -35,6 +35,8 @@ export type SafeAction =
   | { do: 'windDown' }
   /** A meeting ended: offer a note (a suggestion, never writes by itself). */
   | { do: 'offerNote' }
+  /** IN36: show the move-break card (you still tap what you really did). */
+  | { do: 'moveCard' }
 
 export const SAFE_LABEL: Record<SafeAction['do'], string> = {
   focus: 'Start a focus timer',
@@ -48,7 +50,8 @@ export const SAFE_LABEL: Record<SafeAction['do'], string> = {
   link: 'Open an allowed link',
   focusPack: 'Focus pack (sites away, Do Not Disturb, quiet)',
   windDown: 'Wind-down reminder',
-  offerNote: 'Offer a meeting note'
+  offerNote: 'Offer a meeting note',
+  moveCard: 'Show the move-break card (you still confirm)'
 }
 
 export interface RecipeWhen { on: RecipeOn; ctx?: ContextKind; at?: string }
@@ -112,6 +115,7 @@ export function cleanAction(a: any): SafeAction | null {
     case 'dnd':
     case 'windDown':
     case 'offerNote':
+    case 'moveCard':
       return { do: a.do }
     default:
       return null

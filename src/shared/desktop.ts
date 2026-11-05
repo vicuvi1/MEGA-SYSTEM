@@ -207,6 +207,10 @@ export interface DesktopApi {
   /** Island 2 (IN34–IN48): tiles' shortcuts, the dock, the clipboard tray, the file shelf. */
   islandKit?(op: string, arg?: unknown): Promise<any>
   onIslandKit?(cb: (ev: { type: string; [k: string]: unknown }) => void): void
+  /** IN48: where a dropped file is on disk ('' when not known). */
+  islandFilePath?(f: File): string
+  /** IN39: resizing the panel by its corner: 'start' (the window makes room), 'end' (the size is kept for this screen). */
+  islandPanelSize?(phase: 'start' | 'end', size: { w: number; h: number }): void
 }
 
 declare global {

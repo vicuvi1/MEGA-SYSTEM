@@ -9,6 +9,7 @@ import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
 import { islandMoveMenu } from './islandMenu'
+import { createIslandKit } from './islandKit'
 import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
 import { PROFILE_IDS, PROFILE_LABEL } from '../core/islandControlPrefs'
 import { createBackups } from './backups'
@@ -282,8 +283,10 @@ if (firstCopy) void app.whenReady().then(async () => {
       pcRef.current?.sample(proc, title, seconds)
       eyes.noteWindow(proc, title)
     },
-    onFg: (proc) => eyes.noteWindow(proc, null)
+    onFg: (proc) => (eyes.noteWindow(proc, null), islandKit?.noteFg(proc))
   })
+  // Island 2: tiles' shortcuts, your own profiles, the mini dock, the clipboard tray, the file shelf.
+  const islandKit = createIslandKit({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, dir, island: island.kit })
   // AF1: a light clock for the island. While the app window is hidden its own
   // timers are slowed down, but a message from here still runs at once, so
   // every 15 s it sends the island a fresh snapshot (only if the island is on).

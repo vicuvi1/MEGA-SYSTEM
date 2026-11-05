@@ -484,6 +484,11 @@ export interface LifeApi {
     list(): Promise<import('@core/recipes').Recipe[]>
     save(list: import('@core/recipes').Recipe[]): Promise<import('@core/recipes').Recipe[]>
   }
+  /** Island 2: your island tiles, buttons, profiles, colours and stations (synced settings). */
+  islandKit?: {
+    get(): Promise<import('@core/islandTiles').IslandKit>
+    save(kit: import('@core/islandTiles').IslandKit): Promise<import('@core/islandTiles').IslandKit>
+  }
   /** The notebook (Obsidian-like): your notes and Ben's. */
   notes?: {
     list(): Promise<import('@core/notebook').Note[]>

@@ -1830,6 +1830,7 @@ var SETTINGS = {
 	island_day_log: json$4("the island's log of the day", null),
 	island_nudges: json$4("Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)", null),
 	island_recipes: json$4("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
+	island_kit: json$4("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations (src/core/islandTiles.ts)", null),
 	sport_tracker_json: json$4("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
 	sport_sync_seen: json$4("when Sporty last synced water and workouts", null),
 	sporty_status: json$4("Sporty's last status", null),
@@ -5489,7 +5490,8 @@ var SAFE_LABEL = {
 	link: "Open an allowed link",
 	focusPack: "Focus pack (sites away, Do Not Disturb, quiet)",
 	windDown: "Wind-down reminder",
-	offerNote: "Offer a meeting note"
+	offerNote: "Offer a meeting note",
+	moveCard: "Show the move-break card (you still confirm)"
 };
 var HM$1 = /^([01]\d|2[0-3]):[0-5]\d$/;
 var clip = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
@@ -5550,7 +5552,8 @@ function cleanAction(a) {
 		case "blockSites":
 		case "dnd":
 		case "windDown":
-		case "offerNote": return { do: a.do };
+		case "offerNote":
+		case "moveCard": return { do: a.do };
 		default: return null;
 	}
 }
@@ -6601,7 +6604,7 @@ Logging and the day:
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "stop" ends the running focus timer and logs it (he says he's done); "extend: <minutes>" adds time to it ("5 more minutes"). Only when a timer is running.
 - "focus: <minutes> <subject>" start a focus timer now: ONLY when he clearly says to start it now ("start 25 min", "go", "timer"). Otherwise never start it yourself: offer a button {"label": "▶ 25 min <subject>", "do": "focus:25:<subject>"} and let him tap. "fun: <minutes> <what>" spend points on fun.
-- Desktop island recipes (small automations; only when a pattern keeps repeating or he asks): one line RECIPE: {"name":"Study evenings","when":{"on":"context","ctx":"study"},"if":{"days":[1,2,3,4,5],"from":"18:00","to":"21:00","noTimer":true},"then":[{"do":"focus","subject":"Study","minutes":45}]}. when.on: context (ctx: coding|study|writing|ctf|email|video|gaming|social|meeting|browsing), time (at "HH:MM"), focus:start, focus:end, meeting:start, meeting:end, block:start. then.do: focus, stopFocus, blockSites, dnd, quiet (minutes), note (text), task (text), open (page), focusPack, windDown, offerNote. It is saved OFF: he turns it on.
+- Desktop island recipes (small automations; only when a pattern keeps repeating or he asks): one line RECIPE: {"name":"Study evenings","when":{"on":"context","ctx":"study"},"if":{"days":[1,2,3,4,5],"from":"18:00","to":"21:00","noTimer":true},"then":[{"do":"focus","subject":"Study","minutes":45}]}. when.on: context (ctx: coding|study|writing|ctf|email|video|gaming|social|meeting|browsing), time (at "HH:MM"), focus:start, focus:end, meeting:start, meeting:end, block:start. then.do: focus, stopFocus, blockSites, dnd, quiet (minutes), note (text), task (text), open (page), focusPack, windDown, offerNote, moveCard (shows the move-break card; the user still confirms). It is saved OFF: he turns it on.
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
@@ -19520,7 +19523,13 @@ function normalizeState(raw) {
 			updatedAt: a.updatedAt || 0
 		})),
 		deleted,
-		rates: raw.rates || null,
+		rates: raw.rates || (raw.lastRates?.usd?.MDL ? {
+			usd: { ...raw.lastRates.usd },
+			crypto: {},
+			history: {},
+			fetchedAt: Date.parse(`${raw.lastRates.date}T12:00:00`) || null,
+			synced: true
+		} : null),
 		meta: {
 			...base.meta,
 			...raw.meta || {}
@@ -19541,6 +19550,33 @@ function sortTx(list) {
 }
 var category = (state, id) => state.settings.categories.find((c) => c.id === id);
 var account = (state, id) => state.settings.accounts.find((a) => a.id === id);
+function knownRates(state) {
+	const r = state.rates || null;
+	const baseCur = state.settings.currency || "MDL";
+	const need = new Set([baseCur, ...state.settings.accounts.map((a) => a.currency)].filter((c) => c && c !== "USD"));
+	const usd = { ...r?.usd || {} };
+	const missing = () => [...need].filter((c) => !(usd[c] > 0));
+	if (!missing().length) return r;
+	const hist = r?.history || {};
+	for (const d of Object.keys(hist).sort().reverse()) {
+		for (const c of missing()) if (hist[d][c] > 0) usd[c] = hist[d][c];
+		if (!missing().length) break;
+	}
+	if (missing().length) {
+		const perBase = {};
+		for (const t of sortTx(state.tx)) if (t.currency && t.currency !== baseCur && t.rate > 0 && !perBase[t.currency]) perBase[t.currency] = t.rate;
+		const basePerUsd = usd[baseCur] > 0 ? usd[baseCur] : perBase.USD;
+		if (basePerUsd > 0) {
+			usd[baseCur] = basePerUsd;
+			for (const c of missing()) if (perBase[c] > 0) usd[c] = basePerUsd / perBase[c];
+		}
+	}
+	return {
+		...r || {},
+		usd,
+		crypto: r?.crypto || {}
+	};
+}
 var savingsJar = (state) => state.settings.jars.find((j) => j.savings) || state.settings.jars[0];
 function accountBalances(state, upTo = null) {
 	const bal = Object.fromEntries(state.settings.accounts.map((a) => [a.id, a.start || 0]));
@@ -19558,13 +19594,14 @@ function accountBalances(state, upTo = null) {
 function accountValues(state, upTo = null) {
 	const baseCur = state.settings.currency;
 	const bal = accountBalances(state, upTo);
+	const rates = knownRates(state);
 	return state.settings.accounts.map((a) => {
 		const own = bal[a.id] || 0;
-		let inBase = convert(own, a.currency, baseCur, state.rates);
+		let inBase = convert(own, a.currency, baseCur, rates);
 		let coins = 0;
 		let coinsKnown = true;
 		for (const h of a.holdings || []) {
-			const v = coinValue(Number(h.qty), h.asset, baseCur, state.rates);
+			const v = coinValue(Number(h.qty), h.asset, baseCur, rates);
 			if (v == null) coinsKnown = false;
 			else coins += v;
 		}
@@ -20246,6 +20283,7 @@ var dayShort = (iso) => `${DOW_SHORT[dowIndex(iso)]} ${Number(iso.slice(8))}`;
 // src/renderer/public/apps/finance/js/sync.js
 var LOCAL_SETTINGS = [
 	"theme",
+	"themeInLife",
 	"themeMotion",
 	"logView"
 ];
@@ -20266,8 +20304,32 @@ function toCloud(state, deviceId, now = Date.now()) {
 			netWorth: state.netWorth || [],
 			goals: state.goals || [],
 			goalAllocations: state.goalAllocations || [],
-			deleted: state.deleted
+			deleted: state.deleted,
+			...sharedRates(state.rates) ? { lastRates: sharedRates(state.rates) } : {}
 		}
+	};
+}
+var FIAT_CODES = [
+	"MDL",
+	"USD",
+	"EUR",
+	"RON",
+	"GBP",
+	"UAH",
+	"CHF",
+	"PLN",
+	"TRY",
+	"CAD"
+];
+function sharedRates(rates) {
+	if (!rates?.usd || !rates.fetchedAt) return null;
+	const usd = {};
+	for (const c of FIAT_CODES) if (rates.usd[c] > 0) usd[c] = Math.round(rates.usd[c] * 1e4) / 1e4;
+	if (!usd.MDL) return null;
+	const d = new Date(rates.fetchedAt);
+	return {
+		date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+		usd
 	};
 }
 // src/core/moneyHub.ts

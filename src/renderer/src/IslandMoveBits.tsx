@@ -4,7 +4,7 @@
 // rushes at it, and shows the small dot it tucks into. Only transform and
 // opacity move (island-move.css), and nothing runs while it is hidden.
 import { useEffect, useState } from 'react'
-import { moveModeKey, type HideState } from '@core/islandMove'
+import { moveModeKey, resizePanel, type HideState } from '@core/islandMove'
 
 const desk = () => (typeof window !== 'undefined' ? window.desktop : undefined)
 
@@ -74,4 +74,51 @@ export function ParkedDot() {
 /** The grip on the pill: press and drag at once (no hold needed, no round menu). */
 export function GripHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent<HTMLElement>) => void }) {
   return <span className="di-grip" role="presentation" title="Drag to move" aria-hidden onPointerDown={onPointerDown}>⋮⋮</span>
+}
+
+/**
+ * IN39: the panel's corner: drag it to make the panel wider or taller. The
+ * window makes room while you drag; the size is kept for this screen.
+ */
+export function PanelCorner({ root, scale }: { root: React.RefObject<HTMLElement | null>; scale: number }) {
+  return (
+    <span
+      className="di-panel-corner"
+      role="separator"
+      aria-label="Drag to resize the panel"
+      title="Drag to resize"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.preventDefault()
+        e.stopPropagation()
+        const el = root.current
+        const panel = (e.currentTarget.closest('.di-panel') as HTMLElement | null) ?? null
+        if (!el || !panel) return
+        const k = scale || 1
+        const start = { w: panel.offsetWidth, h: panel.offsetHeight }
+        const x0 = e.clientX
+        const y0 = e.clientY
+        const target = e.currentTarget
+        try { target.setPointerCapture(e.pointerId) } catch { /* fine */ }
+        desk()?.islandPanelSize?.('start', start)
+        let size = start
+        const move = (ev: PointerEvent) => {
+          size = resizePanel(start, { x: (ev.clientX - x0) / k, y: (ev.clientY - y0) / k })
+          el.style.setProperty('--di-panel-w', `${size.w}px`)
+          el.style.setProperty('--di-panel-maxh', `${size.h}px`)
+          el.style.setProperty('--di-panel-minh', `${size.h}px`)
+        }
+        const up = () => {
+          target.removeEventListener('pointermove', move)
+          target.removeEventListener('pointerup', up)
+          target.removeEventListener('pointercancel', up)
+          el.style.removeProperty('--di-panel-minh')
+          desk()?.islandPanelSize?.('end', size)
+        }
+        target.addEventListener('pointermove', move)
+        target.addEventListener('pointerup', up)
+        target.addEventListener('pointercancel', up)
+      }}
+    />
+  )
 }

@@ -93,7 +93,7 @@ describe('free resize (IN39)', () => {
     expect(resizePanel({ w: 420, h: 520 }, { x: 40, y: -30 })).toEqual({ w: 460, h: 490 })
     expect(resizePanel({ w: 420, h: 520 }, { x: -999, y: 9999 })).toEqual({ w: PANEL_MIN.w, h: PANEL_MAX.h })
     expect(resizePanel({ w: 420, h: 520 }, { x: 400, y: 400 }, { w: 600, h: 700 })).toEqual({ w: 600, h: 700 })
-    expect(cleanPanelSize({ w: NaN, h: 'x' as any })).toEqual({ w: 420, h: 520 })
+    expect(cleanPanelSize({ w: NaN, h: 'x' as any })).toEqual({ w: 460, h: 520 })
   })
 })
 

@@ -61,6 +61,7 @@ import { importBank, importText } from '../../plugins/bank'
 import { addBlockResult, addFocusCheck, addFocusQuality, setDoingLine, setEyesLine, setPcLine, setWebLine } from './web/dayLog'
 import { cleanNudgeStore, type NudgeStore } from '@core/islandNudges'
 import { cleanRecipes, type Recipe } from '@core/recipes'
+import { cleanKit } from '@core/islandTiles'
 import { cleanPcState, setAskStatus, type PcAsk } from '@core/pcActions'
 import type { LastHour } from '@core/pcLastHour'
 import { createExtras } from './web/lifeExtras'
@@ -1241,6 +1242,15 @@ export function createTursoWebBridge(): Bridge {
       save: async (list: Recipe[]) => {
         const clean = cleanRecipes(list)
         await (await mirrorP).write((db) => writeSetting(db as any, 'island_recipes', clean))
+        return clean
+      }
+    },
+    // Island 2: tiles, buttons, profiles, colours and stations, one synced setting.
+    islandKit: {
+      get: async () => (await mirrorP).read((db) => cleanKit(readSetting(db as any, 'island_kit'))),
+      save: async (kit: unknown) => {
+        const clean = cleanKit(kit)
+        await (await mirrorP).write((db) => writeSetting(db as any, 'island_kit', clean as unknown as Record<string, unknown>))
         return clean
       }
     },

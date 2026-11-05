@@ -26,7 +26,11 @@ import { play, playReminder } from './soundKit'
 import { useIslandSounds } from './focusSound'
 import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
 import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
-import { GripHandle, MoveModeBar, ParkedDot, useIslandMove } from './IslandMoveBits'
+import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from './IslandMoveBits'
+import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
+import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
+import { MusicPanel, ScHost, ScPillBadge } from './IslandMusic'
+import { lookClasses } from '@core/islandTiles'
 import './island.css'
 import './island-motion.css'
 import './island-move.css'
@@ -319,7 +323,11 @@ export function DesktopIsland() {
   const [place, setPlace] = useState<IslandPlacement>('top')
   // H1: hidden / tucked into a dot / move mode / out of the way.
   const mv = useIslandMove()
-  const [prefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
+  const [basePrefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
+  // Island 2: your tiles, buttons, profiles and colours (from the snapshot); a profile's own reminders on top of your settings.
+  const tapRef = useRef<(a: IslandAction, lbl?: string) => void>(() => {})
+  const k = useKit(s, (a, lbl) => tapRef.current(a, lbl))
+  const prefs = useMemo(() => k.prefsFor(basePrefs), [basePrefs, k.profile])
   // The size setting: the desktop sends a scale and the page scales itself (its zoom stays locked).
   const [scale, setScale] = useState(1)
   // IP4: the app's colours, for the "Match the app" look.
@@ -979,7 +987,7 @@ export function DesktopIsland() {
     : a.kind === 'extend' ? `+${a.minutes} min`
     : a.kind === 'bed' ? (a.time ? `Bed at ${a.time} · Waky` : 'Good night 🌙 · logged in Waky')
     : a.kind === 'wake' ? 'Good morning ☀️ · wake-up logged'
-    : a.kind === 'push' ? `${a.block.title}: moved ${a.minutes} min later`
+    : a.kind === 'push' ? `${a.block.title}: moved ${Math.abs(a.minutes)} min ${a.minutes < 0 ? 'earlier' : 'later'}`
     : a.kind === 'blockResult' ? (a.result === 'done' ? `✓ ${a.block.title}: done` : a.result === 'half' ? `½ ${a.block.title}: half done` : `${a.block.title}: not done, noted`)
     : a.kind === 'autoFocus' ? (a.on ? 'Focus starts by itself with each block' : 'Auto-start off')
     : a.kind === 'moveBreak' ? `💪 +${a.n} ${a.name} · nice break`
@@ -1056,6 +1064,7 @@ export function DesktopIsland() {
   }
   doUndoRef.current = doUndo
   const tap = (a: IslandAction, lbl?: string) => {
+    if (a.kind === 'kit' || a.kind === 'kitCount') return send(a)
     if (a.kind === 'water') (setSplash((x) => ({ n: x.n + 1, ml: a.ml })), play('water'))
     if (lbl === 'Reply') {
       dispatch({ type: 'click' })
@@ -1070,6 +1079,7 @@ export function DesktopIsland() {
     // Answered the thing that peeked: it goes back to the pill.
     if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'moveBreak', 'clipSave', 'water'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)))) close()
   }
+  tapRef.current = tap
   // IC4: what Enter will do, live while you type (the same rules as the command bar).
   const [sel, setSel] = useState(0)
   const sugg = useMemo<Suggestion[]>(() => {
@@ -1273,6 +1283,14 @@ export function DesktopIsland() {
       setDropping(false)
       const dt = e.dataTransfer
       const file = dt.files?.[0] ?? null
+      // IN48: with the file shelf on, dropped files are kept there (their place on disk, never a copy).
+      if (file && k.kit.shelf) {
+        void shelfDrop(dt.files).then((ok) => {
+          setToast({ id: 'drop', state: ok ? 'ok' : 'err', text: ok ? '🗂 On the file shelf' : '⚠ That file can’t go on the shelf' })
+          clearToastLater(2500)
+        })
+        return
+      }
       const uris = (dt.getData('text/uri-list') || '').split(/\r?\n/)
       const text = dt.getData('text/plain').trim()
       const d = classifyDrop({ uris, text, files: file ? [{ name: file.name, type: file.type, size: file.size }] : [] })
@@ -1497,7 +1515,7 @@ export function DesktopIsland() {
   }
   // IC3: hold the pill for the round menu; slide and let go to fire.
   // H1: Move and Hide in the round menu too.
-  const ringList = useMemo(() => [...ringItems(s, prefs.chips), { id: 'ring:move', icon: '✥', label: 'Move', act: 'move' as const }, { id: 'ring:hide', icon: '🙈', label: 'Hide 1 h', act: 'hide' as const }], [s, prefs.chips])
+  const ringList = useMemo(() => [...ringItems(s, prefs.chips), ...ringKitItems(k), { id: 'ring:move', icon: '✥', label: 'Move', act: 'move' as const }, { id: 'ring:hide', icon: '🙈', label: 'Hide 1 h', act: 'hide' as const }], [s, prefs.chips, k.buttons])
   const ringCtl = useRing({
     on: prefs.controls.ring && !s.locked && uiRef.current.view !== 'expanded',
     items: ringList,
@@ -1575,6 +1593,7 @@ export function DesktopIsland() {
       aria-label="Open the island (drag to move it, double-click to tuck it away, arrows or the mouse wheel switch)"
     >
       <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
+      <ScPillBadge />
       {s.locked ? (
         <span className="di-pill-text">🔒 Open Life System</span>
       ) : old ? (
@@ -1627,6 +1646,8 @@ export function DesktopIsland() {
           ))}
         </span>
       )}
+      {/* IN35: your one-tap buttons (shown while the mouse is on the pill). */}
+      {!s.locked && <PillKitButtons k={k} />}
     </div>
   )
 
@@ -1696,6 +1717,7 @@ export function DesktopIsland() {
   ) : (
     <div className="di-peek" {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps} onPointerDown={(e) => (dragProps.onPointerDown(e), earlyOpen(e))} onWheel={onWheel}>
       <div className="di-peek-top">
+        <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
         {main ? (
           <Fly id={`ic-${main.key}`} className="di-peek-ico">
             {(main.kind === 'timer' && run) || main.kind === 'now' ? icon(main, 34) : <span className="di-peek-face">{main.kind === 'ben' ? s.ben.face : icon(main, 24)}</span>}
@@ -1744,6 +1766,8 @@ export function DesktopIsland() {
         )}
       </div>
       {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
+      {/* IN35: your one-tap buttons. */}
+      {!s.locked && <PillKitButtons k={k} />}
       {/* IC5: today in three numbers (the rings' colours). */}
       {(s.mustdos.length > 0 || s.water.target > 0 || !!s.today) && (
         <p className="di-peek-today">
@@ -1853,6 +1877,13 @@ export function DesktopIsland() {
         </section>
       )}
       {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
+      {/* Island 2: your tiles and buttons, today's strip, music, the clipboard tray, the file shelf. */}
+      <KitTiles k={k} s={s} />
+      <MiniCalendar s={s} tap={tap} now={now} />
+      <MusicPanel k={k} />
+      <ClipTray k={k} tap={tap} />
+      <FileShelf k={k} tap={tap} />
+      <PanelCorner root={rootEl} scale={scale} />
       {/* IC17: edit what the pill shows, like a phone's home screen. */}
       {editing ? (
         <PillEditor order={prefs.pillOrder} onChange={savePillOrder} onDone={() => setEditing(false)} />
@@ -2063,10 +2094,12 @@ export function DesktopIsland() {
               ['--di-pill-h' as string]: `${prefs.pillHeight}px`,
               ['--di-peek-w' as string]: `${prefs.peekWidth}px`,
               ['--di-panel-w' as string]: `${prefs.panelWidth}px`,
+              // IN39: the panel's own height on this screen (drag its corner).
+              ...((prefs as { panelMaxH?: number }).panelMaxH ? { ['--di-panel-maxh' as string]: `${(prefs as { panelMaxH?: number }).panelMaxH}px` } : {}),
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: radius, scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2137,6 +2170,8 @@ export function DesktopIsland() {
           </div>
         </LayoutGroup>
         <IslandParticles />
+        {/* IN-SC: the SoundCloud player, hidden, outside the panel so it keeps playing. */}
+        <ScHost call={!!s.call || inCall} running={!!s.running && !s.running.brk} pauseInFocus={!!s.musicPause} />
         {debugOn && <IslandDebug peek={peekBox()} />}
       </MotionConfig>
       </ViewContext.Provider>

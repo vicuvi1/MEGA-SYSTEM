@@ -29,7 +29,10 @@ window.addEventListener('vite:preloadError', (e) => {
 
 // The desktop island is its own small window: it loads only itself (never the
 // data layer), so the app window stays the one owner of your data.
-if (isIsland) {
+if (isIsland && search.includes('dock=1')) {
+  // IN38: the island's mini dock (its own small window).
+  void import('./IslandDock').then(({ IslandDock }) => root.render(<IslandDock />))
+} else if (isIsland) {
   void import('./DesktopIsland').then(({ DesktopIsland }) => root.render(<DesktopIsland />))
 } else if (isHud) {
   void Promise.all([import('./appStyles'), import('./HudBar')]).then(([, { HudBar }]) => root.render(<StrictMode><HudBar /></StrictMode>))
