@@ -5,6 +5,7 @@
 // running: a dot (or nothing until you move the mouse to the top), and a
 // quick start. Time up: it flashes and chimes. Everything is customizable
 // (gear inside), saved on this device only.
+import { focusEndsAt } from '@core/focus'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, m, useReducedMotion } from 'framer-motion'
 import type { FocusState } from '@shared/api'
@@ -123,16 +124,19 @@ export function FocusIsland() {
 
   const run = focus?.running ?? null
   const startMs = run ? Date.parse(run.startedAt) : 0
-  const endMs = run ? startMs + run.planned * 60000 : 0
+  // IC1: a paused timer ends later by its pauses; while paused its clock stands still.
+  const pausedAt = run?.pausedAt ? Date.parse(run.pausedAt) : null
+  const endMs = run ? focusEndsAt(run) : 0
   // A second tick while running (a slow one otherwise, for "next block in …").
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), run ? 1000 : 30_000)
     return () => clearInterval(t)
   }, [run])
 
-  const leftSec = run ? (endMs - now) / 1000 : 0
+  const at = pausedAt ?? now
+  const leftSec = run ? (endMs - at) / 1000 : 0
   const over = !!run && leftSec < 0
-  const pct = run ? Math.min(1, (now - startMs) / (endMs - startMs)) : 0
+  const pct = run ? Math.min(1, (at - startMs) / (endMs - startMs)) : 0
 
   // Time's up: flash, open for a moment, chime once per session.
   useEffect(() => {
@@ -212,6 +216,12 @@ export function FocusIsland() {
       setOpen(false)
     }
   }
+  const pauseOrGo = async () => {
+    const f = pausedAt ? life.focus.resume : life.focus.pause
+    if (!f) return
+    const r = await act(() => f(), pausedAt ? 'Going on' : "Paused · this time doesn't count")
+    if (r) setFocus(r)
+  }
   const extend = async (m: number) => {
     if (!life.focus.extend) return
     const r = await act(() => life.focus.extend!(m), `+${m} min`)
@@ -254,7 +264,7 @@ export function FocusIsland() {
             {run ? (
               <>
                 <Ring pct={pct} over={over} size={prefs.size === 'large' ? 26 : 20} />
-                <span className="isl-subj">{run.subject}</span>
+                <span className="isl-subj">{pausedAt ? `⏸ ${run.subject}` : run.subject}</span>
                 <span className="isl-time">
                   {over ? '+' : ''}
                   {clockText(Math.abs(leftSec), prefs.seconds)}
@@ -283,7 +293,7 @@ export function FocusIsland() {
                   <div className="isl-big">
                     <Ring pct={pct} over={over} size={64} />
                     <div>
-                      <small>{over ? 'Time is up: log it' : 'Focus'}</small>
+                      <small>{pausedAt ? 'Paused' : over ? 'Time is up: log it' : 'Focus'}</small>
                       <b>{run.subject}</b>
                       <span className="isl-bigtime">
                         {over ? '+' : ''}
@@ -298,6 +308,11 @@ export function FocusIsland() {
                     <button className="btn primary small" onClick={() => void stop()}>
                       ⏹ Stop & log
                     </button>
+                    {life.focus.pause && (
+                      <button className="btn ghost small" onClick={() => void pauseOrGo()} title={pausedAt ? 'Go on with the timer' : "Pause: this time doesn't count"}>
+                        {pausedAt ? '▶ Resume' : '⏸ Pause'}
+                      </button>
+                    )}
                     {life.focus.extend && (
                       <>
                         <button className="btn ghost small" onClick={() => void extend(5)}>

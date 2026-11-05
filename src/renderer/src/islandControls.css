@@ -1,0 +1,77 @@
+/* The island's controls (IC1–IC10, IC19): quick buttons, the round menu,
+   suggestions, the activity menu, the wheel's number, stage dots, undo,
+   focus rings. Only transform and opacity animate. */
+
+/* IC1: quick buttons on the peek */
+.di-quick { display: flex; gap: 6px; flex: none; align-items: center; }
+.di-quick button { border: 0; border-radius: 999px; padding: 7px 11px; background: rgb(var(--ink) / 0.1); color: var(--fg); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.di-quick button:hover { background: rgb(var(--ink) / 0.18); }
+.di-quick button.primary { background: var(--lime); color: #101300; }
+.di-qcheck { display: flex; align-items: center; gap: 8px; max-width: 210px; }
+.di-qcheck i { flex: none; width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1.6px rgb(var(--ink) / 0.45); }
+.di-qcheck span { overflow: hidden; text-overflow: ellipsis; }
+.di-quick .di-qcheck:hover i { background: rgb(212 255 63 / 0.3); }
+
+/* IC1: paused */
+.di.is-paused .di-pill-time, .di.is-paused .di-clock { opacity: 0.6; }
+.di.is-paused .di-ring.live { animation: none; }
+.di-paused-tag { font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--amber); }
+
+/* IC11: stage dots */
+.di-stages { display: inline-flex; gap: 3px; align-items: center; margin-left: 2px; }
+.di-stages i { width: 5px; height: 5px; border-radius: 50%; background: rgb(var(--ink) / 0.25); }
+.di-stages i.done { background: rgb(var(--ink) / 0.55); }
+.di-stages i.on { background: var(--lime); transform: scale(1.25); }
+
+/* IC3: the round menu (inside .di-follow: it hangs under the pill) */
+.di-ringmenu { position: absolute; pointer-events: auto; z-index: 30; }
+.di-ring-hub { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: rgb(var(--ink) / 0.12); box-shadow: 0 0 0 1px var(--line); }
+.di-ring-item { position: absolute; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; display: grid; place-content: center; justify-items: center; gap: 1px; background: var(--bg); color: var(--fg); box-shadow: 0 8px 22px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line); text-align: center; animation: di-ring-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; transition: transform 0.12s ease-out, background 0.12s; user-select: none; }
+.di-ring-item b { font-size: 18px; line-height: 1; }
+.di-ring-item small { font-size: 9.5px; max-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sub); }
+.di-ring-item.on { transform: scale(1.18); background: var(--lime); color: #101300; }
+.di-ring-item.on small { color: #101300; }
+.di-ring-item.off { opacity: 0.4; }
+@keyframes di-ring-in { from { opacity: 0; scale: 0.4; } to { opacity: 1; scale: 1; } }
+.di.motion-off .di-ring-item { animation: none; transition: none; }
+
+/* IC4: suggestions under the command bar */
+.di-suggest { list-style: none; margin: -4px 0 0; padding: 4px; display: grid; gap: 2px; border-radius: 14px; background: rgb(var(--ink) / 0.04); box-shadow: inset 0 0 0 1px var(--line); }
+.di-suggest button { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; border-radius: 10px; padding: 6px 8px; background: none; color: var(--fg); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.di-suggest button b { flex: 1; min-width: 0; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.di-suggest button small { color: var(--sub); font-size: 11px; }
+.di-suggest button.on, .di-suggest button:hover { background: rgb(var(--ink) / 0.09); }
+.di-suggest kbd { font: inherit; font-size: 11px; color: var(--sub); padding: 0 5px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--line); }
+
+/* IC7: the menu for one activity (under the pill) */
+.di-actmenu { position: absolute; top: 8px; left: 50%; translate: -50% 0; z-index: 30; display: grid; gap: 2px; min-width: 180px; padding: 6px 6px 6px; border-radius: 16px; background: var(--bg); box-shadow: 0 12px 30px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line); animation: di-menu-in 0.16s ease-out both; }
+.di.at-left .di-actmenu, .di.at-top-left .di-actmenu { left: 0; translate: none; }
+.di.at-right .di-actmenu, .di.at-top-right .di-actmenu { left: auto; right: 0; translate: none; }
+.di-actmenu > button { border: 0; border-radius: 10px; padding: 7px 30px 7px 10px; background: none; color: var(--fg); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.di-actmenu > button:hover:not([disabled]) { background: rgb(var(--ink) / 0.09); }
+.di-actmenu > button[disabled] { opacity: 0.4; cursor: default; }
+.di-actmenu .di-actmenu-x { position: absolute; top: 6px; right: 6px; padding: 4px 8px; color: var(--sub); }
+.di-rename { display: flex; gap: 6px; padding: 2px 26px 2px 2px; }
+.di-rename input { flex: 1; min-width: 0; border: 0; border-radius: 8px; padding: 6px 8px; background: rgb(var(--ink) / 0.08); color: var(--fg); font: inherit; }
+@keyframes di-menu-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+.di.motion-off .di-actmenu { animation: none; }
+
+/* IC6: the wheel's floating number */
+.di-wheelnum { position: absolute; top: 6px; left: 50%; translate: -50% 0; z-index: 25; padding: 4px 10px; border-radius: 999px; background: var(--lime); color: #101300; font-weight: 750; font-size: 13px; box-shadow: 0 6px 16px rgb(0 0 0 / 0.45); animation: di-menu-in 0.12s ease-out both; }
+
+/* IC10: undo inside the toast */
+.di-toast:has(.di-undo) { display: flex; align-items: center; gap: 10px; padding-right: 6px; }
+.di-undo { border: 0; border-radius: 999px; padding: 4px 10px; background: rgb(var(--ink) / 0.12); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.di-undo:hover { background: rgb(var(--ink) / 0.22); }
+
+/* IC9: keyboard mode: clear focus rings */
+.di.kbd :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; border-radius: 10px; }
+.di.kbd .di-cmd input:focus-visible { outline-offset: 0; }
+
+/* IC19: you're typing in another app: fade back */
+
+.di.typing-away { opacity: 0.2; transition: opacity 0.35s ease; }
+.di.typing-away:hover { opacity: 1; }
+
+/* IC20: the panel kept ready (laid out, never seen or clicked) */
+.di-prewarm { position: absolute; left: -10000px; top: 0; width: var(--di-panel-w, 460px); visibility: hidden; pointer-events: none; contain: strict; height: 1px; overflow: hidden; }

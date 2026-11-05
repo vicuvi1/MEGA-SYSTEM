@@ -541,7 +541,12 @@ export interface LifeApi {
   }
   focus: {
     state(): Promise<FocusState>
-    start(subject: string, planned?: number, task?: FocusTask | null): Promise<FocusState>
+    start(subject: string, planned?: number, task?: FocusTask | null, stages?: import('@core/focusFlow').FocusStage[] | null): Promise<FocusState>
+    /** IC1: pause the running timer (paused time doesn't count) and go on. */
+    pause?(): Promise<FocusState>
+    resume?(): Promise<FocusState>
+    /** IC7: a new name for the running timer. */
+    rename?(subject: string): Promise<FocusState>
     stop(): Promise<{ session: FocusSession; coins: number; state: FocusState; task?: FocusTask | null }>
     cancel(): Promise<FocusState>
     /** Adds minutes to the running timer (web app). */

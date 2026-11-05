@@ -22,6 +22,8 @@ import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
 import { play, playReminder } from './soundKit'
 import { useIslandSounds } from './focusSound'
+import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
+import { ActMenu, cacheSnap, cachedSnap, QuickRow, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
 import './island.css'
 import './island-motion.css'
 
@@ -62,7 +64,7 @@ function Ring({ pct, over, size = 22, stroke = 2.6 }: { pct: number; over?: bool
  * timer's ring (`timer`) also breathes and gives a soft pulse each minute.
  * Off: it moves once a second.
  */
-function SmoothRing({ from, to, size = 22, stroke = 2.6, timer = false }: { from: number; to: number; size?: number; stroke?: number; timer?: boolean }) {
+function SmoothRing({ from, to, size = 22, stroke = 2.6, timer = false, freeze = null }: { from: number; to: number; size?: number; stroke?: number; timer?: boolean; freeze?: number | null }) {
   const f = useFeel()
   const svg = useRef<SVGSVGElement>(null)
   const fg = useRef<SVGCircleElement>(null)
@@ -72,7 +74,9 @@ function SmoothRing({ from, to, size = 22, stroke = 2.6, timer = false }: { from
     let lastOff = -1
     let lastColor = '-'
     let lastMin = -1
-    const draw = (t: number) => {
+    const draw = (t0: number) => {
+      // IC1: paused, the ring stands still where the pause began.
+      const t = freeze ?? t0
       const el = fg.current
       if (!el) return
       const pct = Math.min(1, Math.max(0, (t - from) / Math.max(1, to - from)))
@@ -99,7 +103,7 @@ function SmoothRing({ from, to, size = 22, stroke = 2.6, timer = false }: { from
       return () => clearInterval(i)
     }
     return onFrame(draw)
-  }, [from, to, c, timer, f])
+  }, [from, to, c, timer, f, freeze])
   return (
     <svg ref={svg} className={`di-ring live ${timer ? 'breathe' : ''}`} width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
       <circle cx={size / 2} cy={size / 2} r={r} className="bg" strokeWidth={stroke} />
@@ -109,13 +113,14 @@ function SmoothRing({ from, to, size = 22, stroke = 2.6, timer = false }: { from
 }
 
 /** IL1: the current block's (or timer's) progress, a thin line sweeping along the bottom edge. */
-function Sweep({ from, to }: { from: number; to: number }) {
+function Sweep({ from, to, freeze = null }: { from: number; to: number; freeze?: number | null }) {
   const f = useFeel()
   const el = useRef<HTMLElement>(null)
   useEffect(() => {
     let last = -1
     let lastColor = '-'
-    const draw = (t: number) => {
+    const draw = (t0: number) => {
+      const t = freeze ?? t0
       const pct = Math.min(1, Math.max(0, (t - from) / Math.max(1, to - from)))
       if (el.current && Math.abs(pct - last) >= 0.0005) {
         el.current.style.transform = `scaleX(${pct.toFixed(4)})`
@@ -133,7 +138,7 @@ function Sweep({ from, to }: { from: number; to: number }) {
       return () => clearInterval(i)
     }
     return onFrame(draw)
-  }, [from, to, f])
+  }, [from, to, f, freeze])
   return <i ref={el} className="di-sweep" aria-hidden />
 }
 
@@ -181,7 +186,9 @@ function useNow(ms: number) {
 
 type Run = NonNullable<IslandSnapshot['running']>
 function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard?: IslandSnapshot['focusGuard'] }) {
-  const now = useNow(1000)
+  const tick = useNow(1000)
+  // IC1: paused, the time left stands still.
+  const now = run.pausedAt ?? tick
   const left = (run.endsAt - now) / 1000
   const over = left < 0
   const text = `${over ? '+' : ''}${clock(left)}`
@@ -189,14 +196,14 @@ function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard
   return (
     <>
       <Fly id="ic-timer">
-        <SmoothRing from={run.startedAt} to={run.endsAt} size={58} stroke={4} timer />
+        <SmoothRing from={run.startedAt} to={run.endsAt} size={58} stroke={4} timer freeze={run.pausedAt} />
       </Fly>
       <div className="di-timer-mid">
         <Fly id="tm-timer" className="di-clock-fly">
           <Roll className={`di-clock ${over ? 'over' : ''}`} text={text} />
         </Fly>
         <Fly id="ti-timer" pos className="di-sub-fly">
-          <small>{run.subject}</small>
+          <small>{run.pausedAt && <b className="di-paused-tag">Paused · </b>}{run.subject} <StageDots dots={run.dots} /></small>
         </Fly>
         {guard && (
           <small className={`di-guard ${guard.pct >= 85 ? 'good' : guard.pct < 60 ? 'low' : ''}`} title="How much of this session you've been at the PC (no mouse/keys for 2+ min counts as away)">
@@ -214,7 +221,7 @@ function LiveCountdown({ at }: { at: number }) {
   return <Roll className={`di-pill-time ${left <= 300 ? 'soon' : ''}`} text={`in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`} />
 }
 function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
-  return <SmoothRing from={run.startedAt} to={run.endsAt} size={size} timer />
+  return <SmoothRing from={run.startedAt} to={run.endsAt} size={size} timer freeze={run.pausedAt} />
 }
 
 /** A +N reps button: the count runs up and the button gives a small bounce. */
@@ -290,7 +297,12 @@ function FlyIn({ fl, f }: { fl: Flight; f: Feel }) {
 }
 
 export function DesktopIsland() {
-  const [s, setS] = useState<IslandSnapshot>(EMPTY_ISLAND)
+  // IC20: the first frame shows the last picture (this session), not an empty pill.
+  const [raw, setS] = useState<IslandSnapshot>(() => cachedSnap() ?? EMPTY_ISLAND)
+  useEffect(() => cacheSnap(raw), [raw])
+  // IC2: a tap shows at once; it shakes back if the app says no.
+  const exp = useExpected(raw, () => shake(shape.current, fRef.current.mode !== 'off'))
+  const s = exp.snap
   const now = useNow(s.running ? 5000 : 15_000)
   const [place, setPlace] = useState<IslandPlacement>('top')
   const [prefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
@@ -323,6 +335,18 @@ export function DesktopIsland() {
   const pointerLeft = useRef<() => void>(() => {})
   // ---- states: one reducer, one timer ----
   const [ui, setUi] = useState<IslandUi>(ISLAND_UI)
+  // IC9: keyboard mode; IC19: faded while you type in another app; the panel's element.
+  const [kbd, setKbd] = useState(false)
+  const [typingAway, setTypingAway] = useState(false)
+  const panelEl = useRef<HTMLDivElement>(null)
+  const undoRef = useRef<{ id: string; until: number } | null>(null)
+  const doUndoRef = useRef<(id: string) => void>(() => {})
+  useEffect(() => {
+    if (!kbd) return
+    const off = () => setKbd(false)
+    window.addEventListener('pointerdown', off, { once: true })
+    return () => window.removeEventListener('pointerdown', off)
+  }, [kbd])
   const uiRef = useRef(ui)
   // P4: the input adds a Todoist task (Ctrl+Alt+N) instead of talking to Ben.
   const [capture, setCapture] = useState(false)
@@ -395,7 +419,13 @@ export function DesktopIsland() {
       setScale(Number.isFinite(p.scale) && p.scale! > 0 ? p.scale! : ISLAND_ZOOM[p.size] ?? 1)
       if (p.theme !== undefined) setTheme(p.theme ?? null)
     })
-    desk()?.onIslandToggle?.(() => dispatch({ type: 'toggle' }))
+    desk()?.onIslandToggle?.(() => {
+      // IC9: opened from the keyboard: keyboard mode (the mouse ends it).
+      setKbd(uiRef.current.view !== 'expanded')
+      dispatch({ type: 'toggle' })
+    })
+    // IC19: you're typing in another app: it fades back.
+    desk()?.onIslandTyping?.((on) => setTypingAway(!!on))
     // P4: Ctrl+Alt+N from any app: a box to add a task.
     desk()?.onIslandCapture?.(() => {
       setCapture(true)
@@ -410,7 +440,20 @@ export function DesktopIsland() {
     })
     desk()?.onIslandBlur?.(() => dispatch({ type: 'blur' }))
     desk()?.islandReady?.()
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && dispatch({ type: 'close' })
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenu(null)
+        dispatch({ type: 'close' })
+      }
+      // IC10: Ctrl+Z takes back the last log (while "↶ Undo" shows).
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !(document.activeElement instanceof HTMLInputElement && document.activeElement.value)) {
+        const u = undoRef.current
+        if (u && u.until > Date.now()) {
+          e.preventDefault()
+          doUndoRef.current(u.id)
+        }
+      }
+    }
     window.addEventListener('keydown', esc)
     return () => window.removeEventListener('keydown', esc)
   }, [dispatch])
@@ -511,7 +554,40 @@ export function DesktopIsland() {
     setDir(acts.findIndex((x) => x.key === key) > acts.indexOf(main) ? 1 : -1)
     setPick(key)
   }
+  // IC6: Shift + wheel over the timer: ±1 min a notch (sent once you stop); over water: the amount to log.
+  const wheelAcc = useRef(0)
+  const wheelMin = useRef(0)
+  const wheelT = useRef(0)
+  const [wheelText, setWheelText] = useState<string | null>(null)
+  const [wheelWater, setWheelWater] = useState<number | null>(null)
+  const adjustWheel = (e: React.WheelEvent): boolean => {
+    if (!e.shiftKey || !main || s.locked) return false
+    const r = s.running
+    if (!(main.kind === 'timer' && r) && main.kind !== 'water') return false
+    const w = wheelSteps(wheelAcc.current, Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX)
+    wheelAcc.current = w.acc
+    if (!w.steps) return true
+    clearTimeout(wheelT.current)
+    if (main.kind === 'water') {
+      const ml = waterPick(wheelWater ?? prefs.chips.water[0] ?? 250, w.steps)
+      setWheelWater(ml)
+      setWheelText(`💧 ${ml} ml`)
+      wheelT.current = window.setTimeout(() => setWheelText(null), 1200)
+      return true
+    }
+    const m = timerAdjust(r!.endsAt, wheelMin.current + w.steps, r!.pausedAt ?? Date.now())
+    wheelMin.current = m
+    setWheelText(`${m > 0 ? '+' : m < 0 ? '−' : '±'}${Math.abs(m)} min`)
+    wheelT.current = window.setTimeout(() => {
+      const total = wheelMin.current
+      wheelMin.current = 0
+      setWheelText(null)
+      if (total && r) tap({ kind: 'setEnd', at: r.endsAt + total * 60_000 })
+    }, 700)
+    return true
+  }
   const onWheel = (e: React.WheelEvent) => {
+    if (adjustWheel(e)) return
     const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY)
     // A trackpad swipe adds up; a mouse wheel notch switches once (then a short pause).
     swipeAcc.current += sideways ? e.deltaX : e.deltaY
@@ -805,7 +881,7 @@ export function DesktopIsland() {
       let started = false
       let ended = false
       const move = (ev: PointerEvent) => {
-        if (started || ev.pointerId !== id) return
+        if (started || ev.pointerId !== id || document.documentElement.classList.contains('di-ring-open')) return
         if (Math.hypot(ev.screenX - sx, ev.screenY - sy) < DRAG_PX || performance.now() - t0 < DRAG_MS) return
         started = true
         dragged.current = true
@@ -878,6 +954,12 @@ export function DesktopIsland() {
     : a.kind === 'clipSave' ? (a.to === 'task' ? 'Adding to Todoist…' : 'Saving to Notebook…')
     : a.kind === 'book' ? 'Finding a free slot…'
     : a.kind === 'voice' ? '🎤 Sent to Ben'
+    : a.kind === 'pause' ? '⏸ Paused'
+    : a.kind === 'resume' ? '▶ Going on'
+    : a.kind === 'setEnd' ? 'New end time'
+    : a.kind === 'rename' ? `✎ ${a.subject}`
+    : a.kind === 'undo' ? '↶ Undoing'
+    : a.kind === 'drop' ? (a.file ? 'Adding to today’s note' : 'Saving the link')
     : null
   const clearToastLater = (ms: number) => {
     if (toastT.current) clearTimeout(toastT.current)
@@ -891,9 +973,23 @@ export function DesktopIsland() {
         dbgEvent('tap answered', { kind: lt.kind, roundTripMs: dbg.lastTap.rtt, appMs: ack.tookMs ?? null, ok: ack.ok })
       }
       setToast((t) => (t && t.id === ack.id ? { ...t, state: ack.ok ? 'ok' : 'err', text: ack.ok ? (ack.text ?? `✓ ${t.text}`) : `⚠ ${plainError(ack.error)}` } : t))
-      clearToastLater(ack.ok ? (ack.text ? 4500 : 2200) : 7000)
+      exp.ack(ack)
+      // IC10: a log that went through: "↶ Undo" for 5 s (and Ctrl+Z).
+      const u = ack.ok && undoCand.current?.id === ack.id
+      if (u) setUndo({ id: ack.id, until: Date.now() + UNDO_SHOW_MS })
+      clearToastLater(ack.ok ? (u ? UNDO_SHOW_MS : ack.text ? 4500 : 2200) : 7000)
     })
   }, [])
+  // IC10: the last log you can take back, and the last water tap (the menu's "Undo last").
+  const undoCand = useRef<{ id: string } | null>(null)
+  const lastWater = useRef<string | null>(null)
+  const [undo, setUndo] = useState<{ id: string; until: number } | null>(null)
+  undoRef.current = undo
+  useEffect(() => {
+    if (!undo) return
+    const t = window.setTimeout(() => setUndo(null), Math.max(0, undo.until - Date.now()))
+    return () => clearTimeout(t)
+  }, [undo])
   const send = (a: IslandAction) => {
     const t = label(a)
     dbgEvent('tap', { kind: a.kind })
@@ -910,8 +1006,19 @@ export function DesktopIsland() {
       () => setToast((x) => (x && x.id === id && x.state === 'busy' ? { id, state: 'err', text: "⚠ The app didn't answer. Is Life System running? Open it from the tray." } : x)),
       a.kind === 'chat' ? 120_000 : 12_000
     )
-    desk()?.islandAction?.({ ...a, id })
+    // IC2: what it changes shows now. Reps keep their exercise id in `ex` (the tap's id takes `id`).
+    exp.add(id, a)
+    if (canUndo(a)) undoCand.current = { id }
+    if (a.kind === 'water') lastWater.current = id
+    desk()?.islandAction?.(a.kind === 'reps' ? { ...a, ex: a.ex ?? a.id, id } : { ...a, id })
   }
+  const doUndo = (of: string) => {
+    setUndo(null)
+    undoCand.current = null
+    if (lastWater.current === of) lastWater.current = null
+    send({ kind: 'undo', of })
+  }
+  doUndoRef.current = doUndo
   const tap = (a: IslandAction, lbl?: string) => {
     if (a.kind === 'water') (setSplash((x) => ({ n: x.n + 1, ml: a.ml })), play('water'))
     if (lbl === 'Reply') {
@@ -927,9 +1034,28 @@ export function DesktopIsland() {
     // Answered the thing that peeked: it goes back to the pill.
     if (uiRef.current.byAlert && ['dismiss', 'start', 'stop', 'push', 'blockResult', 'moveBreak', 'clipSave', 'water'].includes(a.kind)) close()
   }
-  const chat = () => {
+  // IC4: what Enter will do, live while you type (the same rules as the command bar).
+  const [sel, setSel] = useState(0)
+  const sugg = useMemo<Suggestion[]>(() => {
+    if (capture || !text.trim()) return []
+    const t = Date.now()
+    const meet = (s.now?.call && s.now.meet) || (s.next?.call && s.next.meet && s.next.start - t < 15 * 60_000 ? s.next.meet : null) || null
+    const list = commandPreview(text, { now: t, running: s.running, tasks: s.tasks ?? [], meet, chips: prefs.chips, reps: s.reps, subject: s.now && !s.now.call ? s.now.title : 'Focus' })
+    // Only "Ask Ben": no list (Enter sends it, as always).
+    return list.length === 1 && list[0].action.kind === 'chat' ? [] : list
+  }, [text, capture, s, prefs.chips])
+  useEffect(() => setSel(0), [text])
+  const runSuggestion = (x: Suggestion) => {
+    if (x.action.kind === 'chat') return chat(true)
+    setText('')
+    dispatch({ type: 'typing', on: false })
+    tap(x.action)
+  }
+  const chat = (asIs = false): void => {
     const t = text.trim()
     if (!t) return
+    const pick = asIs ? null : sugg[sel]
+    if (pick && pick.action.kind !== 'chat') return runSuggestion(pick)
     // P4: in capture mode it's a Todoist task, not a message to Ben.
     if (capture) {
       setText('')
@@ -1050,9 +1176,10 @@ export function DesktopIsland() {
   }, [])
   // Drop a task (text) on the island: booked in the next free slot today.
   const [dropping, setDropping] = useState(false)
+  // IC8: a link (to Notebook, a Todoist task: focus on it), an image or a PDF (today's note) too.
   const dropProps = {
     onDragOver: (e: React.DragEvent) => {
-      if ([...e.dataTransfer.types].some((t) => t === 'text/plain')) {
+      if ([...e.dataTransfer.types].some((t) => t === 'text/plain' || t === 'text/uri-list' || t === 'Files')) {
         e.preventDefault()
         setDropping(true)
       }
@@ -1061,8 +1188,21 @@ export function DesktopIsland() {
     onDrop: (e: React.DragEvent) => {
       e.preventDefault()
       setDropping(false)
-      const t = e.dataTransfer.getData('text/plain').trim()
-      if (t) send({ kind: 'book', text: t })
+      const dt = e.dataTransfer
+      const file = dt.files?.[0] ?? null
+      const uris = (dt.getData('text/uri-list') || '').split(/\r?\n/)
+      const text = dt.getData('text/plain').trim()
+      const d = classifyDrop({ uris, text, files: file ? [{ name: file.name, type: file.type, size: file.size }] : [] })
+      if (d.kind === 'refuse') {
+        setToast({ id: 'drop', state: 'err', text: `⚠ ${d.why}` })
+        return clearToastLater(4000)
+      }
+      if (d.kind === 'text') return send({ kind: 'book', text: d.text })
+      if (d.kind === 'link' || d.kind === 'todoist') return send({ kind: 'drop', link: d.url })
+      if (!file) return
+      const fr = new FileReader()
+      fr.onload = () => send({ kind: 'drop', file: { name: d.name, mime: d.mime, size: d.size, data: String(fr.result).split(',')[1] ?? '' } })
+      fr.readAsDataURL(file)
     }
   }
 
@@ -1250,14 +1390,59 @@ export function DesktopIsland() {
     if (what === 'panel') return dispatch({ type: 'click' })
     if (what === 'app') return desk()?.showApp?.()
     if (what === 'timer') return run ? tap({ kind: 'stop' }) : tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: focusMin })
+    // IC7: the menu for what the pill shows (nothing to offer: the panel).
+    if (what === 'menu') {
+      const items = menuFor(main, s, prefs.chips, !!lastWater.current)
+      return items.length ? setMenu(items) : dispatch({ type: 'click' })
+    }
     if (quiet) return setQuiet(null)
     dispatch({ type: 'click' })
     setQuietMenu(true)
   }
+  // IC7: the menu's picks.
+  const [menu, setMenu] = useState<MenuItem[] | null>(null)
+  const meetOf = () => (main?.kind === 'next' ? s.next : s.now)?.meet ?? null
+  const pickMenu = (m: MenuItem) => {
+    setMenu(null)
+    if (m.act === 'copyLink') {
+      const url = meetOf()
+      if (url) desk()?.islandCopy?.(url)
+      setToast({ id: 'copy', state: url ? 'ok' : 'err', text: url ? '🔗 Link copied' : '⚠ That meeting has no call link' })
+      return clearToastLater(2500)
+    }
+    if (m.act === 'mute') return muteForMeeting()
+    if (m.act === 'undoWater') return void (lastWater.current && doUndo(lastWater.current))
+    if (m.act !== 'rename') tap(m.act)
+  }
+  // IC3: hold the pill for the round menu; slide and let go to fire.
+  const ringList = useMemo(() => ringItems(s, prefs.chips), [s, prefs.chips])
+  const ringCtl = useRing({
+    on: prefs.controls.ring && !s.locked && uiRef.current.view !== 'expanded',
+    items: ringList,
+    fire: (it: RingItem) => {
+      logIslandUi('click', `round menu: ${it.id}`)
+      if (it.act === 'ask') {
+        dispatch({ type: 'click' })
+        return focusInput()
+      }
+      if (it.act === 'quiet') return clickAction('quiet')
+      tap(it.act)
+    },
+    toLocal: (x, y) => {
+      const b = rootEl.current?.getBoundingClientRect()
+      const k = scaleRef.current || 1
+      return b ? { x: (x - b.left) / k, y: (y - b.top) / k } : { x, y }
+    }
+  })
   // IC4: the left click fires on release (the browser's click can get lost while the pill redraws).
   const clickProps = {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      dragProps.onPointerDown(e)
+      ringCtl.onPointerDown(e)
+    },
     ...tp('pill', () => {
-      if (!clicked()) return
+      // The round menu's release is its own (it fires what you slid to).
+      if (!clicked() || ringCtl.ringOpen()) return
       if (s.locked) desk()?.showApp?.()
       else clickAction(prefs.clicks.left)
     }),
@@ -1314,6 +1499,7 @@ export function DesktopIsland() {
               <Marquee className="di-pill-text" text={main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text} />
             </Fly>
             <Fly id={`tm-${main.key}`}>{pillTime(main)}</Fly>
+            {main.kind === 'timer' && <StageDots dots={run?.dots} />}
           </motion.span>
         </AnimatePresence>
       )}
@@ -1366,6 +1552,9 @@ export function DesktopIsland() {
   ) : null
 
   // ---- peek: the alert, or what's on with one action and Ben's last line ----
+  // IC20: a press held still opens the panel before the release (a drag still drags).
+  const earlyOpen = useEarlyOpen(() => dispatch({ type: 'click' }), DRAG_MS + 60, DRAG_PX)
+  const quick = quickButtons(main, s, prefs.chips, now)
   const a = s.alert && gateOf(s.alert.kind) !== 'drop' ? s.alert : null
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main) ? (
@@ -1387,7 +1576,7 @@ export function DesktopIsland() {
       )}
     </div>
   ) : (
-    <div className="di-peek" {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps} onWheel={onWheel}>
+    <div className="di-peek" {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps} onPointerDown={(e) => (dragProps.onPointerDown(e), earlyOpen(e))} onWheel={onWheel}>
       <div className="di-peek-top">
         {main ? (
           <Fly id={`ic-${main.key}`} className="di-peek-ico">
@@ -1416,7 +1605,10 @@ export function DesktopIsland() {
             )}
           </small>
         </div>
-        {run ? (
+        {quick.length ? (
+          // IC1: the live thing's own buttons (pause / +5 / done, water amounts, a tick box, join / start early).
+          <QuickRow btns={quick} onTap={(x) => (tap(x), x.kind === 'water' && setWheelWater(null))} water={wheelWater} />
+        ) : run ? (
           <button className="primary" {...tp('peek:stop', () => tap({ kind: 'stop' }))}>Stop & log</button>
         ) : s.now?.call ? (
           // IS11: a meeting is joined, not started as focus.
@@ -1437,8 +1629,10 @@ export function DesktopIsland() {
 
   // ---- expanded: the command center ----
   const firstRep = s.reps[0]
+  // IC9: opened with the shortcut: the keyboard moves around it.
+  useKeyboardMode({ on: kbd && ui.view === 'expanded', panel: () => panelEl.current, input: () => input.current, suggesting: () => sugg.length > 0 })
   const expanded = (
-    <div className="di-panel" role="dialog" aria-label="Life System command center">
+    <div className="di-panel" ref={panelEl} role="dialog" aria-label="Life System command center">
       <header className="di-head" {...dragProps}>
         <span className={`di-face mood-${s.ben.mood}`}>{s.ben.face}</span>
         <div className="di-who">
@@ -1479,7 +1673,13 @@ export function DesktopIsland() {
           value={text}
           onChange={(e) => (setText(e.target.value), uiRef.current.typing || dispatch({ type: 'typing', on: true }))}
           placeholder={capture ? 'Add a task: call bank friday 10:00 · Esc to cancel' : 'spent 40 taxi · water 500 · 30 pushups · ask Ben'}
-          onKeyDown={(e) => e.key === 'Escape' && setCapture(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setCapture(false)
+            if (sugg.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault()
+              setSel((i) => moveChoice(i, sugg.length, e.key === 'ArrowDown' ? 1 : -1))
+            }
+          }}
           onPointerDown={() => desk()?.islandFocus?.()}
           onFocus={() => dispatch({ type: 'typing', on: true })}
           onBlur={() => dispatch({ type: 'typing', on: !!text.trim() })}
@@ -1487,8 +1687,9 @@ export function DesktopIsland() {
         <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
           {rec ? '●' : '🎤'}
         </button>
-        <button type="button" className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send" {...tp('send', chat)}>↑</button>
+        <button type="button" className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send" {...tp('send', () => chat())}>↑</button>
       </form>
+      <Suggest list={sugg} sel={sel} onPick={runSuggestion} />
       <div className="di-chips">
         {prefs.chips.water.map((ml) => (
           <button key={`w${ml}`} {...tp(`chip:w${ml}`, (t) => (tap({ kind: 'water', ml }), bump(t.el, f)))}>💧 +{ml} ml</button>
@@ -1621,7 +1822,7 @@ export function DesktopIsland() {
   // The click area follows every new shape: the stretch, the bubble, the toast (IA1).
   useEffect(() => {
     pump(700)
-  }, [stretch, dropping2, bubbleOn, toast?.id, toast?.state, pump])
+  }, [stretch, dropping2, bubbleOn, toast?.id, toast?.state, pump, ringCtl.ring == null, menu, wheelText, undo])
   // IP1: the glow pauses while the island is hidden.
   const [docHidden, setDocHidden] = useState(false)
   useEffect(() => {
@@ -1657,7 +1858,7 @@ export function DesktopIsland() {
   }
   const benUnread = s.ben.unread > 0 && !hushed && !s.locked
   const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
-  const sweep = ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old ? (run ? <Sweep from={run.startedAt} to={run.endsAt} /> : s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null) : null
+  const sweep = ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old ? (run ? <Sweep from={run.startedAt} to={run.endsAt} freeze={run.pausedAt} /> : s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null) : null
   return (
     <FeelContext.Provider value={f}>
       <ViewContext.Provider value={ui.view}>
@@ -1676,7 +1877,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: radius, scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -1707,16 +1908,30 @@ export function DesktopIsland() {
             <motion.div className={`di-beside at-${anchor}`} style={{ x: besideX }}>
               <AnimatePresence>{bubbleEl}</AnimatePresence>
             </motion.div>
+            {/* IC20: while the mouse is on the pill, the panel's sections are kept laid out (hidden), so opening has nothing to build. */}
+            {ui.over && ui.view !== 'expanded' && !s.locked && (
+              <LayoutGroup id="di-warm">
+                <div className="di-prewarm" aria-hidden inert>
+                  {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
+                </div>
+              </LayoutGroup>
+            )}
             <div className="di-flights" aria-hidden={!flights.length}>
               {flights.map((fl) => (
                 <FlyIn key={fl.id} fl={fl} f={f} />
               ))}
             </div>
+            {/* IC3: the round menu, around where you hold. */}
+            {ringCtl.ring && <RingMenu ring={ringCtl.ring} items={ringList} />}
             <motion.div className="di-follow" style={{ y: mh }}>
+            {/* IC7: the menu for this; IC6: the wheel's number. */}
+            {menu && <ActMenu items={menu} subject={run?.subject} onPick={pickMenu} onRename={(n) => (setMenu(null), tap({ kind: 'rename', subject: n }))} onClose={() => setMenu(null)} />}
+            <WheelBadge text={wheelText} />
             <AnimatePresence>
               {toast && (
                 <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)} onAnimationComplete={() => sendHot(true)}>
                   {toast.state === 'busy' ? `${toast.text}…` : toast.text}
+                  {undo && undo.id === toast.id && toast.state === 'ok' && <UndoButton id={undo.id} onUndo={() => doUndo(undo.id)} />}
                 </motion.div>
               )}
             </AnimatePresence>

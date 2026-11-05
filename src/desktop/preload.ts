@@ -61,6 +61,7 @@ const api: DesktopApi = {
   onIslandShortcutFailed: (cb) => void ipcRenderer.on('island:shortcutFailed', (_e, f) => cb({ accelerator: String(f?.accelerator ?? ''), what: String(f?.what ?? '') })),
   islandDrag: (on) => ipcRenderer.send(on ? 'island:dragStart' : 'island:dragEnd'),
   onIslandHover: (cb) => void ipcRenderer.on('island:hover', (_e, over) => cb(!!over)),
+  onIslandTyping: (cb) => void ipcRenderer.on('island:typing', (_e, on) => cb(!!on)),
   onIslandPlacement: (cb) => void ipcRenderer.on('island:placement', (_e, p) => cb(p)),
   onIslandToggle: (cb) => void ipcRenderer.on('island:toggle', () => cb()),
   islandReady: () => ipcRenderer.send('island:ready'),

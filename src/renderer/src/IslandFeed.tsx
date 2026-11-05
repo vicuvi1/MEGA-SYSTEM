@@ -28,6 +28,7 @@ import { calendarDay } from '@core/dates'
 import { WATER_TARGET_ML } from '@core/defaults'
 import { preferSlot, workHours } from '@core/bestHours'
 import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart, shareGoalWords, smartAct, smartNotice, smartOn, smartSuggestion, smartTick, startSmart } from './smartIsland'
+import { breakOverAlert, controlAct, flowTick, islandRunning, loadBreakPref, mustdoUndo, rememberUndo } from './islandControlsFeed'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
@@ -295,6 +296,7 @@ export function IslandFeed() {
   const last = useRef<IslandSnapshot>(EMPTY_ISLAND)
   // list: what you said yes to (Now, alerts, auto-start); maybe: greyed "maybe"s and invites (IS6).
   const blocks = useRef<{ at: number; list: IslandBlock[]; maybe: IslandBlock[] }>({ at: 0, list: [], maybe: [] })
+  const breakPrefAt = useRef(0)
 
   const build = useCallback(async (): Promise<IslandSnapshot> => {
     const now = Date.now()
@@ -306,22 +308,29 @@ export function IslandFeed() {
       if (all) blocks.current = { at: now, list: all.filter((b) => !b.maybe), maybe: all.filter((b) => !!b.maybe) }
       else blocks.current = { ...blocks.current, at: now - 45_000 }
     }
-    const run = focus.running
-    let running = run ? { subject: run.subject, startedAt: Date.parse(run.startedAt), endsAt: Date.parse(run.startedAt) + run.planned * 60000 } : null
+    // IC11: a flow timer that is up hands off to its break; a break that is over may start the next block.
+    if (now - breakPrefAt.current > 60_000) {
+      breakPrefAt.current = now
+      void loadBreakPref()
+    }
+    const flowed = await flowTick({ run: focus.running, now, idleSec, blocks: blocks.current.list, autoFocus: get<boolean>(AUTO, false) }).catch(() => null)
+    const run = flowed ? (await life.focus.state()).running : focus.running
+    // IC1: paused timers keep their time left; a break shows as the timer (never a focus session).
+    let running = islandRunning(run, now)
     // Focus guard: start watching a new session; a finished one gets its quality.
     const g = get<Guard | null>(GUARD, null)
-    if (g && (!running || running.startedAt !== g.startedAt)) await finishGuard(g)
-    if (running && (!g || g.startedAt !== running.startedAt)) put(GUARD, { startedAt: running.startedAt, endsAt: running.endsAt, subject: running.subject, idle: 0, last: now })
+    if (g && (!running || running.brk || running.startedAt !== g.startedAt)) await finishGuard(g)
+    if (running && !running.brk && (!g || g.startedAt !== running.startedAt)) put(GUARD, { startedAt: running.startedAt, endsAt: running.endsAt, subject: running.subject, idle: 0, last: now })
     // Auto-start (if you turned it on): a work block begins → its focus timer starts.
     if (get<boolean>(AUTO, false)) {
       const started = get<Record<string, true>>(AUTO_DONE, {})
-      const b = autoStartBlock(blocks.current.list, now, !!running, started)
+      const b = autoStartBlock(blocks.current.list, now, !!run, started)
       if (b) {
         put(AUTO_DONE, { ...Object.fromEntries(Object.entries(started).slice(-40)), [blockKey(b)]: true })
         const minutes = Math.max(5, Math.min(180, Math.round((b.end - now) / 60000)))
         const f = await life.focus.start(b.title, minutes, null).catch(() => null)
         if (f?.running) {
-          running = { subject: f.running.subject, startedAt: Date.parse(f.running.startedAt), endsAt: Date.parse(f.running.startedAt) + f.running.planned * 60000 }
+          running = islandRunning(f.running, now)!
           put(GUARD, { startedAt: running.startedAt, endsAt: running.endsAt, subject: running.subject, idle: 0, last: now })
           window.dispatchEvent(new Event('life-focus-changed'))
         }
@@ -365,7 +374,9 @@ export function IslandFeed() {
     smartTick({ now, running, blocks: blocks.current.list })
     if (smartOn()) shareGoalWords([...focus.goals.flatMap((g) => [g.title, g.subject]), ...(focus.subjects ?? [])])
     // Focus state for the PC (P19 site blocker, P20 holding notifications).
-    window.desktop?.pcFocus?.({ running: !!running, subject: running?.subject ?? '', endsAt: running?.endsAt ?? 0, startedAt: running?.startedAt ?? 0 })
+    // A break (IC11) is not focus: sites aren't blocked during it.
+    const focusRun = running && !running.brk ? running : null
+    window.desktop?.pcFocus?.({ running: !!focusRun, subject: focusRun?.subject ?? '', endsAt: focusRun?.endsAt ?? 0, startedAt: focusRun?.startedAt ?? 0 })
     const seen = get<number>(SEEN, 0) || now
     const faceOf = (m?: string) => (m && MOOD_FACE[m as Mood]) || status.face
     const coach = log.filter((e) => e.role === 'coach')
@@ -419,7 +430,8 @@ export function IslandFeed() {
       water: { ml: localWater, target: status.today.waterTarget || Number(sport?.water?.targetMl) || WATER_TARGET_ML },
       reps,
       alert: (() => {
-        const pick = pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
+        // Paused: its time is never up (the end moves on with the pause).
+        const pick = pickAlert({ now, running: focusRun?.pausedAt ? { ...focusRun, endsAt: focusRun.endsAt + now - focusRun.pausedAt } : focusRun, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
         if (pick?.kind === 'over') return pick
         const answered = get<Record<string, string>>(ANSWERED, {})
         const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered, reality: realityOf })
@@ -443,10 +455,11 @@ export function IslandFeed() {
           return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
         }
         return (
-          backAlert(running, now, dismissed) ??
-          driftAlert(running, now, dismissed) ??
-          distractAlert(running, now, dismissed) ??
+          backAlert(focusRun, now, dismissed) ??
+          driftAlert(focusRun, now, dismissed) ??
+          distractAlert(focusRun, now, dismissed) ??
           bedAlert(dismissed, now, !!running) ??
+          breakOverAlert(now, dismissed, !!run) ??
           qualityAlert(dismissed, now) ??
           (() => {
             // A reward you can now afford: celebrate it (for 3 minutes, once).
@@ -561,36 +574,49 @@ export function IslandFeed() {
         // Locked (PIN) or still loading: say so instead of doing nothing.
         // IS4: only when the PIN session is really gone (a hiccup is not a lock).
         if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss' && a.kind !== 'join' && !sessionValid(currentSession())) throw new Error('Life System is locked: open it and enter your PIN')
-        switch (a.kind) {
+        // IC1, IC6–IC8, IC10, IC11: pause, the wheel's end, rename, undo, drops, breaks and flow timers.
+        const ctl = await controlAct(a, { blocks: blocks.current.list, findTask: (id) => todoCache.full[id] ?? null })
+        if (ctl != null) said = ctl || null
+        else switch (a.kind) {
           case 'water': {
             put(LAST_WATER, Date.now())
             // The one shared water path (water.ts, N9): the shared log, then this
             // device's copy set to its answer (never added twice), and every screen told.
             await addWater(a.ml)
+            rememberUndo(a.id, { kind: 'water', ml: a.ml })
             break
           }
           case 'reps': {
+            // The exercise's id (the tap's own id can take `id`'s place on the way).
+            const exId = a.ex ?? a.id
             updateSport((d) => {
-              const ex = findExercise(d, a.id) ?? findExercise(d, a.name)
+              const ex = findExercise(d, exId) ?? findExercise(d, a.name)
               if (ex) ex.doneToday = (Number(ex.doneToday) || 0) + a.n
             })
-            await life.body.logWorkout({ title: `${a.name} (+${a.n})`, items: [{ exerciseId: a.id, name: a.name, amount: a.n, unit: 'reps' as any }], note: 'Logged from the desktop island' })
+            const w = await life.body.logWorkout({ title: `${a.name} (+${a.n})`, items: [{ exerciseId: exId, name: a.name, amount: a.n, unit: 'reps' as any }], note: 'Logged from the desktop island' })
+            rememberUndo(a.id, { kind: 'reps', ex: exId, name: a.name, n: a.n, workoutId: w?.workout?.id ?? null })
             window.dispatchEvent(new CustomEvent('life-body-changed'))
             break
           }
-          case 'mustdo':
-            await life.focus.togglePlan(a.i)
+          case 'mustdo': {
+            const t = Date.now()
+            const r = await life.focus.togglePlan(a.i)
+            rememberUndo(a.id, await mustdoUndo(a.i, r?.coins ?? 0, t))
             break
-          case 'start':
-            await life.focus.start(a.subject, a.minutes, null)
+          }
+          case 'start': {
+            const st = await life.focus.start(a.subject, a.minutes, null)
+            rememberUndo(a.id, st.running ? { kind: 'start', startedAt: st.running.startedAt } : null)
             window.dispatchEvent(new Event('life-focus-changed'))
             break
+          }
           case 'stop':
             await life.focus.stop()
             window.dispatchEvent(new Event('life-focus-changed'))
             break
           case 'extend':
             await life.focus.extend?.(a.minutes)
+            rememberUndo(a.id, { kind: 'extend', minutes: a.minutes })
             window.dispatchEvent(new Event('life-focus-changed'))
             break
           case 'dismiss': {

@@ -13,10 +13,37 @@ export function focusCoins(minutes: number): number {
 }
 /** At most this many focus coins a day (beyond that, minutes still count). */
 export const FOCUS_DAILY_COINS = 80
-/** A session longer than planned counts up to 30 minutes extra; never more than 4 hours. */
-export function sessionMinutes(startedAt: string, planned: number, now: Date): number {
-  const elapsed = Math.round((now.getTime() - Date.parse(startedAt)) / 60000)
+/** A session longer than planned counts up to 30 minutes extra; never more than 4 hours. Paused time never counts. */
+export function sessionMinutes(startedAt: string, planned: number, now: Date, pausedMs = 0): number {
+  const elapsed = Math.round((now.getTime() - Date.parse(startedAt) - Math.max(0, pausedMs || 0)) / 60000)
   return Math.max(1, Math.min(elapsed, planned + 30, 240))
+}
+
+/** A running timer's pause (IC1): when the pause began (null: not paused) and the time paused before it. */
+export interface FocusPause {
+  startedAt: string
+  planned: number
+  pausedAt?: string | null
+  /** Milliseconds paused before the pause going on now. */
+  pausedMs?: number
+}
+/** All the time paused so far (ms), the pause going on now included. */
+export function pausedMsOf(run: FocusPause, now: number): number {
+  const before = Math.max(0, Number(run.pausedMs) || 0)
+  const at = run.pausedAt ? Date.parse(run.pausedAt) : NaN
+  return before + (Number.isFinite(at) ? Math.max(0, now - at) : 0)
+}
+/**
+ * When the timer ends (ms): start + planned + the time paused before now.
+ * While paused it is the end as it stood when the pause began (the island
+ * shows the time left frozen: `endsAt - pausedAt`).
+ */
+export function focusEndsAt(run: FocusPause): number {
+  return Date.parse(run.startedAt) + run.planned * 60000 + Math.max(0, Number(run.pausedMs) || 0)
+}
+/** Real focused minutes so far (paused time left out), whole minutes. */
+export function focusedMinutes(run: FocusPause, now: number): number {
+  return Math.max(0, Math.floor((now - Date.parse(run.startedAt) - pausedMsOf(run, now)) / 60000))
 }
 /** Fun (games, YouTube, scrolling) costs 1 coin a minute. */
 export const funCost = (minutes: number) => Math.max(1, Math.round(minutes))

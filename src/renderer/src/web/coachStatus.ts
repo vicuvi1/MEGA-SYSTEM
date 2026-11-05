@@ -2,6 +2,7 @@
 // device's copy of the data (instant, no server call).
 import { MOOD_FACE, REMINDERS, coachMood, promiseStats, type Mood, type Reminder } from '@core/coachKit'
 import { nextMove, type Move } from '@core/coachNext'
+import { focusEndsAt } from '@core/focus'
 import { planGoal } from '@core/goalPlan'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
 import { waterTargetFor, sharedView, sportToday } from '@core/sportShared'
@@ -88,7 +89,7 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
       hour: now.getHours(),
       awaiting,
       planStatus,
-      running: f.running ? { subject: f.running.subject, endsAt: Date.parse(f.running.startedAt) + f.running.planned * 60000 } : null,
+      running: f.running ? { subject: f.running.subject, endsAt: focusEndsAt(f.running) + (f.running.pausedAt ? Math.max(0, Date.now() - Date.parse(f.running.pausedAt)) : 0) } : null,
       goals: plans
         .filter((p) => p.status !== 'done' && p.status !== 'late')
         .sort((a, b) => a.daysLeft - b.daysLeft)

@@ -28,6 +28,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IslandPlacement } from '../shared/desktop'
 import { cleanIslandPrefs, ISLAND_ZOOM, quietUntil, type IslandPrefs } from '../core/islandModel'
+import { applyProfile, autoProfile } from '../core/islandProfiles'
+import { typingFade } from '../core/islandCommands'
+import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
 import {
   chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
   noteRecentApp, overRects, parseWatcherLine, placeIsland, QUNS_PRESENTATION, rateLimit, rectsToDip, rememberLayout, sampleSeconds, SHORTCUTS_VERSION,
@@ -88,6 +91,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       prefs = cleanIslandPrefs(p.prefs)
       desk = cleanDeskPrefs(p.desk)
       if (Number.isFinite(p.v)) version = p.v
+      // IC7: a right click now opens the menu for what the pill shows (it was the quiet menu by default).
+      if (!p.clicksV && prefs.clicks.right === 'quiet') prefs = { ...prefs, clicks: { ...prefs.clicks, right: 'menu' } }
       appTheme = cleanTheme(p.theme)
     }
   } catch { /* defaults */ }
@@ -100,7 +105,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const layoutNow = (): IslandLayout => ({ place, pos: { ...pos }, offset: { ...desk.offset }, displayId: savedDisplay, size: prefs.size })
   const savePrefs = () => {
     if (desk.perScreen && screensKey) desk = { ...desk, layouts: rememberLayout(desk.layouts, screensKey, layoutNow()) }
-    try { writeFileSync(prefFile, JSON.stringify({ v: SHORTCUTS_VERSION, enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs, desk, theme: appTheme })) } catch { /* fine */ }
+    try { writeFileSync(prefFile, JSON.stringify({ v: SHORTCUTS_VERSION, clicksV: 1, enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs, desk, theme: appTheme })) } catch { /* fine */ }
   }
   if (needsSave) savePrefs()
   const allPrefs = () => ({ ...prefs, ...desk, place, displayId: savedDisplay })
@@ -177,7 +182,28 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (b.x !== x || b.y !== y || b.width !== width || b.height !== height) win.setBounds({ x, y, width, height })
   }
 
-  const sendPrefs = () => win?.webContents.send('island:prefs', { ...allPrefs(), scale: cssScale(), theme: appTheme })
+  // IC18: the island gets your settings with the profile in use on top (Settings keeps editing your own).
+  let fgProc = ''
+  let activeProfile: IslandProfileId = 'none'
+  const profileNow = (): IslandProfileId => autoProfile(prefs.controls, { now: new Date(), app: fgProc || null })
+  const sendPrefs = () => {
+    activeProfile = profileNow()
+    win?.webContents.send('island:prefs', { ...applyProfile(prefs, activeProfile), ...desk, place, displayId: savedDisplay, scale: cssScale(), theme: appTheme, profile: activeProfile })
+  }
+  /** The profile changed by itself (the time, the app in front): the island hears it. */
+  const checkProfile = () => {
+    if (prefs.controls.profileAuto === 'off' || profileNow() === activeProfile) return
+    diag('profile', `Island profile: ${profileNow()} (by itself)`, true)
+    sendPrefs()
+    o.onChange?.()
+  }
+  setInterval(checkProfile, 60_000)
+  const setControls = (c: Partial<IslandControls>) => {
+    prefs = cleanIslandPrefs({ ...prefs, controls: { ...prefs.controls, ...c } })
+    savePrefs()
+    sendPrefs()
+    o.onChange?.()
+  }
   /** Shown or hidden: the page pauses its animations while hidden (IC10). */
   const sendVisible = () => { if (win && !win.isDestroyed() && ready) win.webContents.send('island:visible', win.isVisible()) }
   const sendPlacement = () => win?.webContents.send('island:placement', place)
@@ -710,6 +736,11 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       lastSample = now
       fgPoint = w.fg ?? null
       if (w.proc) recentApps = noteRecentApp(recentApps, w.proc)
+      // IC18: the app in front can pick the profile.
+      if ((w.proc ?? '') !== fgProc) {
+        fgProc = w.proc ?? ''
+        checkProfile()
+      }
       // Full screen counts only on the island's own screen; presentation mode everywhere.
       const fsHere = !!w.fs && onIslandScreen(w.fs)
       // IF6: an app you hide it over is in front (on the island's screen, when known).
@@ -860,6 +891,39 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     o.onChange?.()
   }
 
+  // ---- IC19: typing in another app: the island fades back ----
+  // Twice a second: input in the last second (the system's idle time is 0)
+  // with the mouse not moving means typing; far from the pill (160 px) it
+  // fades to ~20%; moving near it or two seconds without typing brings it back.
+  let typing = false
+  let lastTypeAt = 0
+  let lastCur = { x: -1, y: -1 }
+  setInterval(() => {
+    if (!win || win.isDestroyed() || !ready) return
+    const on = prefs.controls.fadeTyping && win.isVisible() && !drag
+    if (!on) {
+      if (typing) win.webContents.send('island:typing', (typing = false))
+      return
+    }
+    try {
+      const c = screen.getCursorScreenPoint()
+      const moved = Math.abs(c.x - lastCur.x) + Math.abs(c.y - lastCur.y) > 2
+      lastCur = c
+      const now = Date.now()
+      if (powerMonitor.getSystemIdleTime() < 1 && !moved) lastTypeAt = now
+      const b = win.getBounds()
+      const z = pageZoom()
+      const r = rectsToDip(hot, z)[0] ?? { x: b.width / 2 - 60, y: 0, w: 120, h: 40 }
+      const dx = Math.max(r.x - (c.x - b.x), 0, c.x - b.x - (r.x + r.w))
+      const dy = Math.max(r.y - (c.y - b.y), 0, c.y - b.y - (r.y + r.h))
+      const next = typingFade({ idleMs: now - lastTypeAt, cursorDist: Math.hypot(dx, dy), faded: typing, islandActive: win.isFocused() || !ignoring })
+      if (next !== typing) {
+        typing = next
+        win.webContents.send('island:typing', typing)
+      }
+    } catch { /* fine */ }
+  }, 500)
+
   if (enabled) open()
   return {
     /** CL9: memory the island's page uses (bytes; 0 when it isn't open). */
@@ -870,6 +934,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     },
     /** CL9: a fresh page (the window stays where it is). */
     reload: () => { if (win && !win.isDestroyed()) win.webContents.reload() },
+    /** IC18: the profile in use, your pick, and how it switches by itself. */
+    profile: () => ({ active: profileNow(), pick: prefs.controls.profile, auto: prefs.controls.profileAuto }),
+    setProfile: (id: IslandProfileId) => setControls({ profile: id }),
+    setProfileAuto: (mode: IslandControls['profileAuto']) => setControls({ profileAuto: mode }),
     capture: () => openFor('capture'),
     voice: () => openFor('voice'),
     restartWatcher,

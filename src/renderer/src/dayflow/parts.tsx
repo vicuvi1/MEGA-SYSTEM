@@ -52,11 +52,13 @@ export function TabList({ tasks, empty, groupOf, row, quick }: { tasks: TodoTask
 }
 
 /** The running timer's moving parts, each redrawing itself every second (the list around them doesn't). */
-export function RunningClock({ run, part }: { run: { startedAt: string; planned: number }; part: 'left' | 'clock' | 'bar' }) {
-  const tick = useTicker(true)
-  const elapsed = tick - new Date(run.startedAt).getTime()
+export function RunningClock({ run, part }: { run: { startedAt: string; planned: number; pausedAt?: string | null; pausedMs?: number }; part: 'left' | 'clock' | 'bar' }) {
+  const tick = useTicker(!run.pausedAt)
+  // IC1: paused time doesn't count; while paused the clock stands still.
+  const elapsed = (run.pausedAt ? Date.parse(run.pausedAt) : tick) - new Date(run.startedAt).getTime() - Math.max(0, Number(run.pausedMs) || 0)
   const leftMs = run.planned * 60000 - elapsed
-  if (part === 'clock') return <span className="now-clock">{clock(elapsed)}</span>
+  if (part === 'clock') return <span className="now-clock">{run.pausedAt ? `⏸ ${clock(elapsed)}` : clock(elapsed)}</span>
+  if (part === 'left' && run.pausedAt) return <>Paused · {clock(Math.max(0, leftMs))} left of {run.planned} min</>
   if (part === 'bar')
     return (
       <div className="now-bar pbar">

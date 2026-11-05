@@ -88,7 +88,7 @@ describe('your settings are cleaned (IF3, IF7, IF8, IF10, IF11, IP3)', () => {
   it('defaults', () => {
     const p = cleanIslandPrefs(null)
     expect(p).toMatchObject({ openOn: 'hover', hoverMs: 350, peekSec: 5, gapMin: 3, leaveSec: 2, idleMin: 0, idleLook: 'dot', pillHeight: 38, peekWidth: 400, panelWidth: 460, meetingOpenMin: 0 })
-    expect(p.clicks).toEqual({ left: 'panel', middle: 'timer', right: 'quiet' })
+    expect(p.clicks).toEqual({ left: 'panel', middle: 'timer', right: 'menu' }) // IC7: the menu for what the pill shows
     expect(p.chips).toEqual({ water: [250, 500], reps: [10], focus: [25] })
   })
   it('clamps numbers and drops nonsense', () => {

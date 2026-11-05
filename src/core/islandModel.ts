@@ -5,6 +5,7 @@
 import { normalizeAccelerator } from './islandKeys'
 import type { ContextKind } from './activityContext'
 import type { SafeAction } from './recipes'
+import { cleanControls, DEFAULT_CONTROLS, type IslandControls } from './islandControlPrefs'
 
 export interface IslandBlock {
   title: string
@@ -25,10 +26,23 @@ export interface IslandAck { id: string; ok: boolean; error?: string; /** What h
 
 export type IslandAction = { id?: string } & (
   | { kind: 'water'; ml: number }
-  | { kind: 'reps'; id: string; name: string; n: number }
+  /** `ex`: the exercise id again (the tap's own id may take `id`'s place on the way). */
+  | { kind: 'reps'; id: string; name: string; n: number; ex?: string }
   | { kind: 'mustdo'; i: number }
   | { kind: 'chat'; text: string }
-  | { kind: 'start'; subject: string; minutes: number }
+  /** `flow`: a break and the next block follow (IC11). `task`: what it's for (a Todoist task dropped on it, IC8). */
+  | { kind: 'start'; subject: string; minutes: number; flow?: boolean; task?: { kind: 'todoist'; ref: string; title: string } }
+  /** IC1: pause / go on with the running timer. */
+  | { kind: 'pause' }
+  | { kind: 'resume' }
+  /** IC6: the running timer ends at this time (ms). */
+  | { kind: 'setEnd'; at: number }
+  /** IC7: a new name for the running timer. */
+  | { kind: 'rename'; subject: string }
+  /** IC10: take back the tap with this id (only what it just logged). */
+  | { kind: 'undo'; of: string }
+  /** IC8: a link or a file dropped on the island. */
+  | { kind: 'drop'; link?: string; file?: { name: string; mime: string; size: number; data: string } }
   | { kind: 'stop' }
   | { kind: 'extend'; minutes: number }
   | { kind: 'dismiss'; id: string; snoozeMin?: number }
@@ -85,7 +99,12 @@ export interface IslandSnapshot {
   /** IS4: the last update failed (a hiccup): this is the last good picture. */
   stale?: boolean
   ben: { face: string; mood: string; why: string; move: { title: string; sub: string } | null; last: { text: string; at: string; face: string } | null; unread: number; busy: boolean; steps: string[] }
-  running: { subject: string; startedAt: number; endsAt: number } | null
+  /**
+   * endsAt includes the pauses before now; while paused (pausedAt) the time
+   * left stays `endsAt - pausedAt` (IC1). brk: a break between two blocks
+   * (IC11), never a focus session. dots: the stage dots (n parts, at = now).
+   */
+  running: { subject: string; startedAt: number; endsAt: number; pausedAt?: number | null; brk?: boolean; dots?: { n: number; at: number } | null; next?: { subject: string; minutes: number } | null } | null
   now: IslandBlock | null
   next: IslandBlock | null
   /** IS6: later today, a "maybe" or an invite you haven't answered (greyed in the Next list). */
@@ -269,9 +288,10 @@ export interface Pill {
 export function pill(s: IslandSnapshot, now: number): Pill {
   const dot = s.ben.unread > 0 || !!s.alert
   if (s.running) {
-    const left = (s.running.endsAt - now) / 1000
+    const t = s.running.pausedAt ?? now
+    const left = (s.running.endsAt - t) / 1000
     const over = left < 0
-    return { kind: 'timer', text: `${over ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over, dot }
+    return { kind: 'timer', text: `${over ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (t - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over, dot }
   }
   if (s.now) return { kind: 'now', text: s.now.title, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot }
   if (s.next && s.next.start - now <= 60 * 60_000) return { kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot }
@@ -329,13 +349,15 @@ export interface IslandPrefs {
   panelWidth: number
   /** Animations: full (springs, flights, water bubbles), calm (gentle fades) or off. */
   motion: 'full' | 'calm' | 'off'
+  /** IC3–IC19: the round menu, the break after focus, fading while you type, profiles. */
+  controls: IslandControls
 }
 
 /** peek: it drops down; dot: a dot only (it waits in the panel); never: not shown (IF5). */
 export type AlertRule = 'peek' | 'dot' | 'never'
 /** What a click on the pill does (IF8). */
-export type ClickAction = 'panel' | 'timer' | 'app' | 'quiet'
-export const CLICK_LABEL: Record<ClickAction, string> = { panel: 'Open the panel', timer: 'Start / stop the timer', app: 'Open Life System', quiet: 'Quiet menu' }
+export type ClickAction = 'panel' | 'timer' | 'app' | 'quiet' | 'menu'
+export const CLICK_LABEL: Record<ClickAction, string> = { panel: 'Open the panel', timer: 'Start / stop the timer', app: 'Open Life System', quiet: 'Quiet menu', menu: 'Menu for this' }
 /** What the pill can show (IF4). The streak flame is gone on purpose. */
 export type PillItem = 'timer' | 'now' | 'next' | 'ben' | 'bed' | 'water' | 'points' | 'mustdos' | 'tasks'
 export const PILL_LABEL: Record<PillItem, string> = { timer: 'Focus timer', now: 'What’s on now', next: 'What’s next', ben: 'Ben’s new message', bed: 'Bedtime', water: 'Water today', points: 'Points', mustdos: 'Must-dos left', tasks: 'Next Todoist task' }
@@ -396,7 +418,7 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   meetingOpenMin: 0,
   openOn: 'hover',
   hoverMs: 350,
-  clicks: { left: 'panel', middle: 'timer', right: 'quiet' },
+  clicks: { left: 'panel', middle: 'timer', right: 'menu' },
   chips: { water: [250, 500], reps: [10], focus: [25] },
   peekSec: 5,
   gapMin: 3,
@@ -406,7 +428,8 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   pillHeight: 38,
   peekWidth: 400,
   panelWidth: 460,
-  motion: 'full'
+  motion: 'full',
+  controls: DEFAULT_CONTROLS
 }
 export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { compact: 0.88, normal: 1, large: 1.15 }
 export const HIDE_MS: Record<IslandPrefs['hide'], number> = { fast: 250, normal: 450, slow: 1200 }
@@ -462,7 +485,8 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
     pillHeight: num(p?.pillHeight, SIZE_LIMITS.pillHeight[0], SIZE_LIMITS.pillHeight[1], d.pillHeight, true),
     peekWidth: num(p?.peekWidth, SIZE_LIMITS.peekWidth[0], SIZE_LIMITS.peekWidth[1], d.peekWidth, true),
     panelWidth: num(p?.panelWidth, SIZE_LIMITS.panelWidth[0], SIZE_LIMITS.panelWidth[1], d.panelWidth, true),
-    motion: ['full', 'calm', 'off'].includes(p?.motion) ? p.motion : d.motion
+    motion: ['full', 'calm', 'off'].includes(p?.motion) ? p.motion : d.motion,
+    controls: cleanControls(p?.controls)
   }
 }
 
@@ -524,8 +548,10 @@ export function activities(s: IslandSnapshot, now: number, order: { id: PillItem
   const make: Record<PillItem, () => Activity | null> = {
     timer: () => {
       if (!s.running) return null
-      const left = (s.running.endsAt - now) / 1000
-      return { key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot }
+      // IC1: paused, the time left stands still.
+      const t = s.running.pausedAt ?? now
+      const left = (s.running.endsAt - t) / 1000
+      return { key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.pausedAt ? `Paused · ${s.running.subject}` : s.running.subject, pct: Math.min(1, (t - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot }
     },
     now: () => (s.now ? { key: `now:${s.now.start}`, kind: 'now', text: `${s.now.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot } : null),
     next: () => (s.next && s.next.start - now <= 3 * 3600_000 ? { key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot, at: s.next.start } : null),

@@ -172,6 +172,8 @@ export interface DesktopApi {
   islandReady?(): void
   /** Island window: the real mouse pointer entered / left the pill. */
   onIslandHover?(cb: (over: boolean) => void): void
+  /** IC19: Island window: you are typing in another app (true), or stopped / came near (false). */
+  onIslandTyping?(cb: (typing: boolean) => void): void
   /** Island window: bring the app window up. */
   showApp?(page?: string): void
 }

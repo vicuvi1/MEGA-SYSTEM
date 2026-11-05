@@ -247,7 +247,10 @@ export function createWebServices(mirror: Mirror) {
     },
     focus: {
       state: () => read((s) => s.focus.state()),
-      start: (subject: string, planned?: number, task?: FocusTask | null) => write((s) => s.focus.start(subject, planned, new Date(), task ?? null)),
+      start: (subject: string, planned?: number, task?: FocusTask | null, stages?: import('@core/focusFlow').FocusStage[] | null) => write((s) => s.focus.start(subject, planned, new Date(), task ?? null, stages ?? null)),
+      pause: () => write((s) => s.focus.pause()),
+      resume: () => write((s) => s.focus.resume()),
+      rename: (subject: string) => write((s) => s.focus.rename(subject)),
       stop: () => write((s) => s.focus.stop(), W),
       cancel: () => write((s) => s.focus.cancel()),
       extend: (minutes: number) => write((s) => s.focus.extend(minutes)),

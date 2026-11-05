@@ -9,6 +9,7 @@ import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
 import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
+import { PROFILE_IDS, PROFILE_LABEL } from '../core/islandControlPrefs'
 import { createBackups } from './backups'
 import { createVault } from './vault'
 import { createPc } from './pc'
@@ -265,6 +266,15 @@ if (firstCopy) void app.whenReady().then(async () => {
     island.quietUntil()
       ? { label: `Island quiet until ${new Date(island.quietUntil()).toTimeString().slice(0, 5)} · Wake now`, click: () => { island.setQuiet(null); tray.setContextMenu(menu()) } }
       : { label: 'Quiet the island for…', submenu: ([[30, '30 minutes'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'Until tomorrow 06:00']] as const).map(([c, label]) => ({ label, click: () => { island.setQuiet(c); tray.setContextMenu(menu()) } })) },
+    // IC18: Work, Study, Gaming, Night: each changes a few island settings; or it switches by itself.
+    {
+      label: `Island profile: ${PROFILE_LABEL[island.profile().active]}`,
+      submenu: [
+        ...PROFILE_IDS.map((id) => ({ label: PROFILE_LABEL[id], type: 'radio' as const, checked: island.profile().pick === id, click: () => { island.setProfile(id); tray.setContextMenu(menu()) } })),
+        { type: 'separator' as const },
+        ...([['off', 'Only the one I pick'], ['time', 'Switch by the time of day'], ['app', 'Switch by the app in front']] as const).map(([m, label]) => ({ label, type: 'radio' as const, checked: island.profile().auto === m, click: () => { island.setProfileAuto(m); tray.setContextMenu(menu()) } }))
+      ]
+    },
     // IF1: top left / center / right, docked on a side, or floating.
     { label: 'Island position', submenu: PLACEMENTS.map((p) => ({ label: PLACEMENT_LABEL[p], type: 'radio' as const, checked: island.placement() === p, click: () => { island.setPlacement(p); tray.setContextMenu(menu()) } })) },
     // IF2: which screen: the main one, one you pick, or it follows the mouse / the window you work in.

@@ -859,10 +859,24 @@ function strengthSummary(workouts) {
 function focusCoins(minutes) {
 	return Math.floor(Math.max(0, Math.floor(minutes)) / 10) * 3;
 }
-/** A session longer than planned counts up to 30 minutes extra; never more than 4 hours. */
-function sessionMinutes(startedAt, planned, now) {
-	const elapsed = Math.round((now.getTime() - Date.parse(startedAt)) / 6e4);
+/** A session longer than planned counts up to 30 minutes extra; never more than 4 hours. Paused time never counts. */
+function sessionMinutes(startedAt, planned, now, pausedMs = 0) {
+	const elapsed = Math.round((now.getTime() - Date.parse(startedAt) - Math.max(0, pausedMs || 0)) / 6e4);
 	return Math.max(1, Math.min(elapsed, planned + 30, 240));
+}
+/** All the time paused so far (ms), the pause going on now included. */
+function pausedMsOf(run, now) {
+	const before = Math.max(0, Number(run.pausedMs) || 0);
+	const at = run.pausedAt ? Date.parse(run.pausedAt) : NaN;
+	return before + (Number.isFinite(at) ? Math.max(0, now - at) : 0);
+}
+/**
+* When the timer ends (ms): start + planned + the time paused before now.
+* While paused it is the end as it stood when the pause began (the island
+* shows the time left frozen: `endsAt - pausedAt`).
+*/
+function focusEndsAt(run) {
+	return Date.parse(run.startedAt) + run.planned * 6e4 + Math.max(0, Number(run.pausedMs) || 0);
 }
 /** Fun (games, YouTube, scrolling) costs 1 coin a minute. */
 var funCost = (minutes) => Math.max(1, Math.round(minutes));
@@ -13769,6 +13783,24 @@ var SleepService = class {
 		};
 	}
 };
+// src/core/focusFlow.ts
+/** Only known stage kinds, sane lengths, at most 4 (anything else is dropped). */
+function cleanStages(v) {
+	if (!Array.isArray(v)) return [];
+	const out = [];
+	for (const x of v) {
+		if (!x || x.kind !== "break" && x.kind !== "next") continue;
+		const minutes = Math.min(180, Math.max(1, Math.round(Number(x.minutes)) || 5));
+		const subject = typeof x.subject === "string" ? x.subject.trim().slice(0, 40) : "";
+		out.push({
+			kind: x.kind,
+			minutes,
+			...subject ? { subject } : {}
+		});
+		if (out.length >= 4) break;
+	}
+	return out;
+}
 // src/main/focus.ts
 var RUNNING = "focus_running";
 var FocusService = class {
@@ -13871,7 +13903,7 @@ var FocusService = class {
 		};
 	}
 	/** Starts the timer (one at a time; it keeps running across devices). */
-	start(subject, planned = 50, now = /* @__PURE__ */ new Date(), task = null) {
+	start(subject, planned = 50, now = /* @__PURE__ */ new Date(), task = null, stages = null) {
 		const name = String(subject || "").trim().slice(0, 40);
 		if (!name) throw new LedgerError("What are you focusing on? e.g. Math");
 		if (this.running()) throw new LedgerError("A focus session is already running: stop it first");
@@ -13881,11 +13913,50 @@ var FocusService = class {
 			ref: String(task.ref).slice(0, 200),
 			title: String(task.title).slice(0, 200)
 		} : null;
+		const st = cleanStages(stages);
 		writeSetting(this.db, RUNNING, {
 			subject: name,
 			startedAt: now.toISOString(),
 			planned: minutes,
-			task: t
+			task: t,
+			...st.length ? { stages: st } : {}
+		});
+		return this.state(now);
+	}
+	/** IC1: pauses the running timer; paused time doesn't count (and earns nothing). */
+	pause(now = /* @__PURE__ */ new Date()) {
+		const run = this.running();
+		if (!run) throw new LedgerError("No focus session is running");
+		if (run.pausedAt) return this.state(now);
+		writeSetting(this.db, RUNNING, {
+			...run,
+			pausedAt: now.toISOString(),
+			pausedMs: Math.max(0, Number(run.pausedMs) || 0)
+		});
+		return this.state(now);
+	}
+	/** IC1: goes on after a pause; the end moves later by the time paused. */
+	resume(now = /* @__PURE__ */ new Date()) {
+		const run = this.running();
+		if (!run) throw new LedgerError("No focus session is running");
+		if (!run.pausedAt) return this.state(now);
+		const pausedMs = Math.min(144e5, pausedMsOf(run, now.getTime()));
+		writeSetting(this.db, RUNNING, {
+			...run,
+			pausedAt: null,
+			pausedMs
+		});
+		return this.state(now);
+	}
+	/** IC7: a new name for the running timer (its minutes go to the new subject). */
+	rename(subject, now = /* @__PURE__ */ new Date()) {
+		const run = this.running();
+		if (!run) throw new LedgerError("No focus session is running");
+		const name = String(subject || "").trim().slice(0, 40);
+		if (!name) throw new LedgerError("What are you focusing on? e.g. Math");
+		writeSetting(this.db, RUNNING, {
+			...run,
+			subject: name
 		});
 		return this.state(now);
 	}
@@ -13894,7 +13965,7 @@ var FocusService = class {
 		return this.db.transaction(() => {
 			const run = this.running();
 			if (!run) throw new LedgerError("No focus session is running");
-			const minutes = sessionMinutes(run.startedAt, run.planned, now);
+			const minutes = sessionMinutes(run.startedAt, run.planned, now, pausedMsOf(run, now.getTime()));
 			writeSetting(this.db, RUNNING, null);
 			return {
 				...this.log(run.subject, minutes, now, run.startedAt),
@@ -16448,7 +16519,10 @@ syncFinance: (recordDays) => write((s) => {
 		},
 		focus: {
 			state: () => read((s) => s.focus.state()),
-			start: (subject, planned, task) => write((s) => s.focus.start(subject, planned, /* @__PURE__ */ new Date(), task ?? null)),
+			start: (subject, planned, task, stages) => write((s) => s.focus.start(subject, planned, /* @__PURE__ */ new Date(), task ?? null, stages ?? null)),
+			pause: () => write((s) => s.focus.pause()),
+			resume: () => write((s) => s.focus.resume()),
+			rename: (subject) => write((s) => s.focus.rename(subject)),
 			stop: () => write((s) => s.focus.stop(), W),
 			cancel: () => write((s) => s.focus.cancel()),
 			extend: (minutes) => write((s) => s.focus.extend(minutes)),
@@ -18933,7 +19007,7 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 		planStatus,
 		running: f.running ? {
 			subject: f.running.subject,
-			endsAt: Date.parse(f.running.startedAt) + f.running.planned * 6e4
+			endsAt: focusEndsAt(f.running) + (f.running.pausedAt ? Math.max(0, Date.now() - Date.parse(f.running.pausedAt)) : 0)
 		} : null,
 		goals: plans.filter((p) => p.status !== "done" && p.status !== "late").sort((a, b) => a.daysLeft - b.daysLeft).map((p) => ({
 			title: p.title,

@@ -86,6 +86,11 @@ export interface FocusRunning {
   startedAt: string
   planned?: number
   task?: unknown
+  /** IC1: paused since (ISO), and the time paused before it (ms). */
+  pausedAt?: string | null
+  pausedMs?: number
+  /** IC11: a break and the next block after it (from the island). */
+  stages?: unknown[]
 }
 
 export const SETTINGS = {

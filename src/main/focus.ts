@@ -8,6 +8,7 @@ import {
   focusCoins,
   funCost,
   goalProgress,
+  pausedMsOf,
   sessionMinutes,
   weekReport,
   type DayPlan,
@@ -17,6 +18,7 @@ import {
   type GoalProgress,
   type WeekReport
 } from '@core/focus'
+import { cleanStages, type FocusStage } from '@core/focusFlow'
 import type { DB } from './db'
 import { getSetting, setSetting, readSetting, writeSetting } from './settings'
 import type { Wallet } from './wallet'
@@ -34,6 +36,12 @@ export interface RunningFocus {
   startedAt: string
   planned: number
   task?: FocusTask | null
+  /** IC1: paused since (ISO), or null / missing while it runs. */
+  pausedAt?: string | null
+  /** IC1: milliseconds paused before the pause going on now (paused time never counts). */
+  pausedMs?: number
+  /** IC11: what comes after this timer (a break, then the next block), set by the island. */
+  stages?: FocusStage[]
 }
 
 export interface FocusState {
@@ -143,13 +151,44 @@ export class FocusService {
   }
 
   /** Starts the timer (one at a time; it keeps running across devices). */
-  start(subject: string, planned = 50, now = new Date(), task: FocusTask | null = null): FocusState {
+  start(subject: string, planned = 50, now = new Date(), task: FocusTask | null = null, stages: FocusStage[] | null = null): FocusState {
     const name = String(subject || '').trim().slice(0, 40)
     if (!name) throw new LedgerError('What are you focusing on? e.g. Math')
     if (this.running()) throw new LedgerError('A focus session is already running: stop it first')
     const minutes = Math.min(180, Math.max(5, Math.round(planned) || 50))
     const t = task && (task.kind === 'mustdo' || task.kind === 'todoist') ? { kind: task.kind, ref: String(task.ref).slice(0, 200), title: String(task.title).slice(0, 200) } : null
-    writeSetting(this.db, RUNNING, { subject: name, startedAt: now.toISOString(), planned: minutes, task: t })
+    const st = cleanStages(stages)
+    writeSetting(this.db, RUNNING, { subject: name, startedAt: now.toISOString(), planned: minutes, task: t, ...(st.length ? { stages: st } : {}) })
+    return this.state(now)
+  }
+
+  /** IC1: pauses the running timer; paused time doesn't count (and earns nothing). */
+  pause(now = new Date()): FocusState {
+    const run = this.running()
+    if (!run) throw new LedgerError('No focus session is running')
+    if (run.pausedAt) return this.state(now)
+    writeSetting(this.db, RUNNING, { ...run, pausedAt: now.toISOString(), pausedMs: Math.max(0, Number(run.pausedMs) || 0) })
+    return this.state(now)
+  }
+
+  /** IC1: goes on after a pause; the end moves later by the time paused. */
+  resume(now = new Date()): FocusState {
+    const run = this.running()
+    if (!run) throw new LedgerError('No focus session is running')
+    if (!run.pausedAt) return this.state(now)
+    // At most 4 hours of pauses in all (a forgotten pause doesn't hold a timer for days).
+    const pausedMs = Math.min(4 * 3600_000, pausedMsOf(run, now.getTime()))
+    writeSetting(this.db, RUNNING, { ...run, pausedAt: null, pausedMs })
+    return this.state(now)
+  }
+
+  /** IC7: a new name for the running timer (its minutes go to the new subject). */
+  rename(subject: string, now = new Date()): FocusState {
+    const run = this.running()
+    if (!run) throw new LedgerError('No focus session is running')
+    const name = String(subject || '').trim().slice(0, 40)
+    if (!name) throw new LedgerError('What are you focusing on? e.g. Math')
+    writeSetting(this.db, RUNNING, { ...run, subject: name })
     return this.state(now)
   }
 
@@ -159,7 +198,8 @@ export class FocusService {
       // Read inside the change: a second stop (another device, the bot) finds nothing running.
       const run = this.running()
       if (!run) throw new LedgerError('No focus session is running')
-      const minutes = sessionMinutes(run.startedAt, run.planned, now)
+      // IC1: paused time never counts (a pause going on now included).
+      const minutes = sessionMinutes(run.startedAt, run.planned, now, pausedMsOf(run, now.getTime()))
       writeSetting(this.db, RUNNING, null)
       return { ...this.log(run.subject, minutes, now, run.startedAt), task: run.task ?? null }
     })()

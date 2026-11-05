@@ -169,34 +169,36 @@ try {
     await ip.waitForSelector('.di-peek', { timeout: 3000 })
     await ip.evaluate(() => window.__island.send('hover', false))
     await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
-    // Right click: the quiet menu (the default).
+    // Right click: the menu for what the pill shows (IC7, the default): the timer's Pause, +5, +15, Stop, Rename.
     await ip.click('.di-pill', { button: 'right' })
-    await ip.waitForSelector('.di-quiet', { timeout: 5000 })
+    await ip.waitForSelector('.di-actmenu', { timeout: 5000 })
+    const items = await ip.$$eval('.di-actmenu > button[role="menuitem"]', (b) => b.map((x) => x.textContent))
+    if (!items.some((t) => /Pause/.test(t)) || !items.some((t) => /Rename/.test(t))) throw new Error(`the timer's menu has ${items.join(', ')}`)
     await ip.keyboard.press('Escape')
-    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    await ip.waitForSelector('.di-actmenu', { state: 'detached', timeout: 5000 })
     // IC1: the page itself takes clicks as soon as the pointer comes onto the shape.
     await ip.mouse.move(8, 640)
     await ip.evaluate(() => { window.__island.take = [] })
     const pill = await ip.locator('.di-pill').boundingBox()
     await ip.mouse.move(pill.x + pill.width / 2, pill.y + pill.height / 2, { steps: 5 })
     await ip.waitForFunction(() => window.__island.take.includes(true), null, { timeout: 3000 })
-    // IC4: "Stop & log" in the peek fires on release and sends a stop (and doesn't open the panel).
     await ip.evaluate(() => window.__island.send('hover', true))
-    await ip.waitForSelector('.di-peek [data-tap="peek:stop"]', { timeout: 4000 })
+    await ip.waitForSelector('.di-peek [data-tap="q:done"]', { timeout: 4000 })
     await ip.waitForTimeout(400)
-    await ip.click('.di-peek [data-tap="peek:stop"]')
-    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'stop'), null, { timeout: 3000 })
-    if (await ip.$('.di-panel')) throw new Error('Stop & log also opened the panel')
-    // A release whose press got lost (Windows can swallow it) still fires the button.
-    await ip.waitForTimeout(300)
+    // A release whose press got lost (Windows can swallow it) still fires the button (here: +5).
     const n = await ip.evaluate(() => {
       window.__island.actions = []
-      const b = document.querySelector('.di-peek [data-tap="peek:stop"]')?.getBoundingClientRect()
+      const b = document.querySelector('.di-peek [data-tap="q:ext5"]')?.getBoundingClientRect()
       if (!b) return -1
       window.dispatchEvent(new PointerEvent('pointerup', { clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, button: 0, bubbles: true }))
-      return window.__island.actions.filter((a) => a.kind === 'stop').length
+      return window.__island.actions.filter((a) => a.kind === 'extend').length
     })
-    if (n !== 1) throw new Error(`a release without a press fired ${n} stops`)
+    if (n !== 1) throw new Error(`a release without a press fired ${n} taps`)
+    // IC4: "✓ Done" (Stop & log) in the peek fires on release and sends a stop (and doesn't open the panel).
+    await ip.waitForTimeout(600)
+    await ip.click('.di-peek [data-tap="q:done"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'stop'), null, { timeout: 3000 })
+    if (await ip.$('.di-panel')) throw new Error('Stop & log also opened the panel')
     // Off the shape: clicks pass through again (after the short shield).
     await ip.mouse.move(8, 640, { steps: 3 })
     await ip.waitForFunction(() => window.__island.take[window.__island.take.length - 1] === false, null, { timeout: 3000 })
@@ -225,6 +227,104 @@ try {
     await ip.waitForTimeout(400)
     await ip.click('.di-peek.alert [data-tap="peek:alert:Not now"]')
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'suggest' && a.answer === 'later'), null, { timeout: 3000 })
+    await ip.context().close()
+  })
+  // The island's controls (IC1–IC4, IC10): pause from the peek (it shows at once,
+  // and shakes back when the app says no), the round menu, live suggestions in
+  // the command bar, and undo after a log.
+  await step('Desktop island controls: pause on the peek, hold for the round menu, command suggestions, undo a log', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: { subject: 'Write the essay', startedAt: now - 5 * 60_000, endsAt: now + 20 * 60_000, dots: { n: 3, at: 0 } },
+        now: null, next: null,
+        mustdos: [{ i: 0, text: 'Call the bank', done: false }], water: { ml: 500, target: 2000 },
+        reps: [{ id: 'push', name: 'Pushups', done: 10, target: 50 }], alert: null,
+        tasks: [{ id: 't1', content: 'Write the lab report', time: null }]
+      }
+      // The stand-in app window answers every tap: ok, except a "pause" while __island.refuse is set.
+      window.__island = { actions: [], refuse: false, send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandAction: (a) => {
+          window.__island.actions.push(a)
+          if (a.id) setTimeout(() => cbs.ack?.({ id: a.id, ok: !(window.__island.refuse && a.kind === 'pause'), error: 'Not now', tookMs: 5 }), 120)
+        },
+        islandHot: () => {},
+        islandTakeClicks: () => {},
+        onIslandAck: on('ack'),
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
+    // Stage dots of the focus → break → next flow.
+    if (!(await ip.$('.di-pill .di-stages'))) throw new Error('no stage dots on a flow timer')
+    // IC1: the peek's quick buttons for the timer: Pause, +5, Done.
+    await ip.evaluate(() => window.__island.send('hover', true))
+    await ip.waitForSelector('.di-peek .di-quick [data-tap="q:pause"]', { timeout: 4000 })
+    const labels = await ip.$$eval('.di-peek .di-quick button', (b) => b.map((x) => x.textContent))
+    if (labels.join('|') !== '⏸ Pause|+5|✓ Done') throw new Error(`quick buttons: ${labels.join(', ')}`)
+    await ip.waitForTimeout(400)
+    // IC2: Pause shows "Paused" at once (before any new snapshot), then Resume.
+    await ip.click('[data-tap="q:pause"]')
+    await ip.waitForSelector('.di.is-paused [data-tap="q:resume"]', { timeout: 3000 })
+    if (!(await ip.evaluate(() => window.__island.actions.some((a) => a.kind === 'pause')))) throw new Error('Pause sent no pause')
+    await ip.screenshot({ path: process.env.ISLAND_SHOTS ? `${process.env.ISLAND_SHOTS}/controls-paused.png` : '/dev/null' }).catch(() => {})
+    // The app window's next snapshot says paused too; then a pause that fails rolls back.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() }))
+    await ip.waitForSelector('[data-tap="q:pause"]', { timeout: 3000 })
+    await ip.evaluate(() => { window.__island.refuse = true })
+    await ip.waitForTimeout(300)
+    await ip.click('[data-tap="q:pause"]')
+    await ip.waitForSelector('.di-toast.err', { timeout: 3000 })
+    await ip.waitForSelector('.di:not(.is-paused) [data-tap="q:pause"]', { timeout: 3000 })
+    await ip.evaluate(() => { window.__island.refuse = false })
+    await ip.evaluate(() => window.__island.send('hover', false))
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
+    // IC3: hold the pill: the round menu opens; slide to Water and let go: +250 ml.
+    await ip.waitForTimeout(300)
+    const pill = await ip.locator('.di-pill').boundingBox()
+    const cx = pill.x + pill.width / 2
+    const cy = pill.y + pill.height / 2
+    await ip.mouse.move(cx, cy)
+    await ip.mouse.down()
+    await ip.waitForSelector('.di-ringmenu', { timeout: 3000 })
+    const water = await ip.locator('.di-ring-item').nth(1).boundingBox()
+    await ip.mouse.move(water.x + water.width / 2, water.y + water.height / 2, { steps: 4 })
+    await ip.waitForSelector('.di-ring-item.on', { timeout: 2000 })
+    await ip.screenshot({ path: process.env.ISLAND_SHOTS ? `${process.env.ISLAND_SHOTS}/controls-ring.png` : '/dev/null' }).catch(() => {})
+    await ip.mouse.up()
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'water' && a.ml === 250), null, { timeout: 3000 })
+    await ip.waitForSelector('.di-ringmenu', { state: 'detached', timeout: 3000 })
+    if (await ip.$('.di-panel')) throw new Error('the round menu also opened the panel')
+    // IC10: after a log, "↶ Undo" in the toast sends an undo for that tap.
+    await ip.waitForSelector('.di-toast .di-undo', { timeout: 3000 })
+    const waterId = await ip.evaluate(() => window.__island.actions.find((a) => a.kind === 'water')?.id)
+    await ip.click('.di-toast .di-undo')
+    await ip.waitForFunction((id) => window.__island.actions.some((a) => a.kind === 'undo' && a.of === id), waterId, { timeout: 3000 })
+    // IC4: the command bar suggests while you type: "water 500" → Log 500 ml, Enter logs it.
+    await ip.mouse.move(8, 640)
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel .di-cmd input', { timeout: 5000 })
+    await ip.fill('.di-cmd input', 'water 500')
+    await ip.waitForSelector('.di-suggest button.on', { timeout: 3000 })
+    const first = await ip.textContent('.di-suggest button.on')
+    if (!/Log 500 ml/.test(first ?? '')) throw new Error(`first suggestion: ${first}`)
+    await ip.fill('.di-cmd input', 'lab report')
+    await ip.waitForFunction(() => /Done: Write the lab report/.test(document.querySelector('.di-suggest button.on')?.textContent ?? ''), null, { timeout: 3000 })
+    await ip.screenshot({ path: process.env.ISLAND_SHOTS ? `${process.env.ISLAND_SHOTS}/controls-suggest.png` : '/dev/null' }).catch(() => {})
+    await ip.fill('.di-cmd input', 'water 500')
+    await ip.waitForSelector('.di-suggest button.on', { timeout: 3000 })
+    await ip.press('.di-cmd input', 'Enter')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'water' && a.ml === 500), null, { timeout: 3000 })
+    if (await ip.evaluate(() => window.__island.actions.some((a) => a.kind === 'chat'))) throw new Error('Enter sent the line to Ben instead of logging the water')
     await ip.context().close()
   })
   await step('no uncaught page errors', async () => {

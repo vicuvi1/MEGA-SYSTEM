@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cleanIslandPrefs, CLICK_LABEL, HIDE_SEC, KIND_LABEL, PILL_LABEL, SECTION_LABEL, SIZE_LIMITS, type AlertKindPref, type AlertRule, type ClickAction, type IslandPrefs } from '@core/islandModel'
 import { isAltGrCombo, keyLabel, pressToAccelerator, shortcutClash } from '@core/islandKeys'
+import { PROFILE_IDS, PROFILE_LABEL, type IslandControls, type IslandProfileId } from '@core/islandControlPrefs'
 import { PLACEMENT_LABEL, PLACEMENTS, type IslandDeskPrefs, type MonitorMode, type Placement } from '../../desktop/islandWin'
 import type { IslandAllPrefs } from '../../shared/desktop'
 import { Icon } from './Icon'
@@ -212,6 +213,8 @@ export function IslandSettingsPanel() {
       </Row>
     )
   }
+  // IC3, IC11, IC18, IC19: the island's controls.
+  const setCtl = (c: Partial<IslandControls>) => save({ controls: { ...p.controls, ...c } })
   const clickRow = (k: 'left' | 'middle' | 'right', title: string) => (
     <Row title={title}>
       <select className="sx-select" aria-label={title} value={p.clicks[k]} onChange={(e) => void save({ clicks: { ...p.clicks, [k]: e.target.value as ClickAction } })}>
@@ -444,6 +447,40 @@ export function IslandSettingsPanel() {
       {keyRow('quietShortcut', 'Quiet', "Quiet for an hour, or back on (also in the tray and the island's 🌙)")}
       {p.captureShortcut != null && keyRow('captureShortcut', 'Add a task', 'A box to add a Todoist task from any app')}
       {p.voiceShortcut != null && keyRow('voiceShortcut', 'Talk to Ben', 'Press to record a voice note to Ben, press again to send it')}
+
+      <h3 className="is-sec">Controls</h3>
+      <Row title="Round menu" hint="Hold the pill for a moment: six quick actions fan out; slide to one and let go">
+        <Switch label="Round menu" on={p.controls.ring} onChange={(v) => void setCtl({ ring: v })} />
+      </Row>
+      <Row title="Break after focus" hint="A timer you start from the island ends in a short break, then the next block from your plan starts (with “Start focus by itself” on). Breaks never count as focus.">
+        <Segmented label="Break after focus" value={p.controls.breakMin} options={[[0, 'None'], [5, '5 min'], [10, '10 min'], [15, '15 min']]} onChange={(v) => void setCtl({ breakMin: v })} />
+      </Row>
+      <Row title="Fade while I type" hint="Typing in another app, far from the island: it fades to 20% until you stop or move the mouse near it">
+        <Switch label="Fade while I type" on={p.controls.fadeTyping} onChange={(v) => void setCtl({ fadeTyping: v })} />
+      </Row>
+      <Row title="Profile" hint="Work, Study, Gaming and Night each change what the pill shows first, which reminders drop down, sound and motion. Also in the tray menu.">
+        <select className="sx-select" aria-label="Profile" value={p.controls.profile} onChange={(e) => void setCtl({ profile: e.target.value as IslandProfileId })}>
+          {PROFILE_IDS.map((id) => (
+            <option key={id} value={id}>
+              {PROFILE_LABEL[id]}
+            </option>
+          ))}
+        </select>
+      </Row>
+      <Row title="Switch the profile by itself" hint="By the time of day (Night 22–06, Work on weekdays 9–18), or by the app in front (e.g. Steam → Gaming)">
+        <Segmented label="Switch the profile by itself" value={p.controls.profileAuto} options={[['off', 'No'], ['time', 'Time of day'], ['app', 'App in front']]} onChange={(v) => void setCtl({ profileAuto: v })} />
+      </Row>
+      {p.controls.profileAuto === 'app' &&
+        (['work', 'study', 'gaming'] as const).map((id) => (
+          <Row key={id} title={`${PROFILE_LABEL[id]} apps`} hint="Program names, separated by commas (as in Task Manager, without .exe)">
+            <input
+              className="sx-input"
+              aria-label={`${PROFILE_LABEL[id]} apps`}
+              defaultValue={(p.controls.profileApps[id] ?? []).join(', ')}
+              onBlur={(e) => void setCtl({ profileApps: { ...p.controls.profileApps, [id]: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) } })}
+            />
+          </Row>
+        ))}
 
       <h3 className="is-sec">Look</h3>
       <Row title="Colours" hint="Black like an iPhone, glass, a glow in Ben's mood, or the app's own colours (light or dark)">
