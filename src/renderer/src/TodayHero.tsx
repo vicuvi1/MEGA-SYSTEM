@@ -163,7 +163,9 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
         </button>
       </div>
       <button className={`thb-reward ${goal && balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title="Your rewards: add your own (1h manga, a film…) and redeem them">
-        <span className="thb-pts">⭐ {balance}</span>
+        <span className="thb-pts">
+          <i className="coin-dot" aria-hidden="true" /> {balance} pts
+        </span>
         {goal ? (
           <span className="thb-goal">
             <i style={{ ['--p' as string]: `${Math.min(100, (balance / goal.price) * 100)}%` }} />

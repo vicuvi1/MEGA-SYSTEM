@@ -91,7 +91,7 @@ function WakeEditor({ state, onState, onWallet, openSignal = 0 }: { state: Conne
   async function save() {
     const res = await act(
       () => life.sleep.setWake(day, time),
-      day === today ? 'Wake-up saved' : 'Saved (past days count for your streak, without coins)'
+      day === today ? 'Wake-up saved' : 'Saved (past days count for your streak, without points)'
     )
     if (!res) return
     if (res.awarded) {

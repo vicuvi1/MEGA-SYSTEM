@@ -108,7 +108,7 @@ export function Body({
   const handleUndoLast = async () => {
     if (state.recentWorkouts.length === 0) return
     const last = state.recentWorkouts[0]
-    if (!confirm(`Undo last workout "${last.title}" and refund coins?`)) return
+    if (!confirm(`Undo last workout "${last.title}" and give the points back?`)) return
     const next = await act(() => life.body.deleteWorkout(last.id), `Reverted "${last.title}"`)
     if (next) {
       onState(next)
@@ -127,7 +127,7 @@ export function Body({
       : null
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this workout record? Any coins earned from it will be returned.')) return
+    if (!confirm('Delete this workout record? Any points earned from it will be taken back.')) return
     const next = await act(() => life.body.deleteWorkout(id), 'Workout removed')
     if (next) {
       onState(next)
@@ -620,7 +620,7 @@ function WorkoutModal({
             disabled={!title.trim() || items.length === 0}
             onClick={() => onSave({ title, items, note: note || undefined })}
           >
-            Finish & Earn +10 Coins
+            Finish & earn +10 points
           </button>
         </div>
       </div>

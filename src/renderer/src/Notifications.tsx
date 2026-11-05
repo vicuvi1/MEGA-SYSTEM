@@ -39,7 +39,7 @@ const hm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digi
 /**
  * The notification center: what needs you now (live), Ben's messages and
  * what he did (synced: read on one device is read everywhere), and the
- * coins in and out under Activity.
+ * points in and out under Activity.
  */
 export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[]; summary: Summary | null; rules: Rule[]; onGo: (p: PageId) => void }) {
   const [open, setOpen] = useState(false)
@@ -217,7 +217,7 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
               )}
               {tab === 'activity' && (
                 <>
-                  {activity.length === 0 && <div className="notif-empty">No coins in or out yet.</div>}
+                  {activity.length === 0 && <div className="notif-empty">No points in or out yet.</div>}
                   {activity.slice(0, 30).map((e) => {
                     const isNew = Date.parse(e.ts) > seen
                     return (

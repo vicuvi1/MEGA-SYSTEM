@@ -250,7 +250,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       icon: '👑',
       name: 'Master / Central Life System Bot',
       badge: 'Hub Leader',
-      desc: 'Central brain & orchestrator: executes /today status overview, /checkin streak confirmations, /vault surplus balance, /tasks, and emergency /panic protocols.'
+      desc: 'Central brain & orchestrator: executes /today status overview, /checkin streak confirmations, /tasks, and emergency /panic protocols.'
     },
     {
       key: 'finance',

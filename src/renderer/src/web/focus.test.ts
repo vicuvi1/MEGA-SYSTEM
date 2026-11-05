@@ -114,9 +114,9 @@ describe('focus, plans and goals (saved in Turso)', () => {
     const day = await w.read((s) => s.wallet.today())
     const tap = await bots.handleUpdate('1:x', { update_id: ++id, callback_query: { id: 'c1', data: `pp|${day}|0`, message: { chat: { id: 42 }, message_id: 3, text: 'plan' } } })
     expect(tap).toMatch(/✅ 1\. Essay/)
-    expect(await say('/fun 10 youtube')).toMatch(/−10 coins/)
+    expect(await say('/fun 10 youtube')).toMatch(/−10 points/)
     expect(await say('/week')).toMatch(/Your week[\s\S]*Must-dos: <b>1\/2/)
-    expect(sent.some((m) => m.method === 'answerCallbackQuery' && /\+10 coins/.test(m.body.text))).toBe(true)
+    expect(sent.some((m) => m.method === 'answerCallbackQuery' && /\+10 points/.test(m.body.text))).toBe(true)
     // ▶ under the coach starts a session on the must-do; ⏹ stops it and offers to tick it.
     const cb = (data: string) => bots.handleUpdate('1:x', { update_id: ++id, callback_query: { id: `c${id}`, data, message: { chat: { id: 42 }, message_id: 9, text: 'coach' } } })
     expect(await cb('fo|Gym')).toMatch(/Focus started:<\/b> Gym · 50 min/)

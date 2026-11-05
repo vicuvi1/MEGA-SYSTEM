@@ -9,7 +9,6 @@ export function HudBar() {
   const [query, setQuery] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const [balance, setBalance] = useState<number>(0)
-  const [vaultSurplus, setVaultSurplus] = useState<number>(0)
   const [budgetRemaining, setBudgetRemaining] = useState<number>(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -23,7 +22,6 @@ export function HudBar() {
 
       if (walletRes) setBalance(walletRes.balance || 0)
       if (moneyRes?.today) setBudgetRemaining(Math.max(0, moneyRes.today.remaining || 0) / 100)
-      if (econRes) setVaultSurplus(econRes.vaultBalance || 0)
     } catch {
       // ignore
     }
@@ -198,13 +196,9 @@ export function HudBar() {
       </div>
 
       <div className="hud-stats">
-        <div className="hud-stat" title="Wallet Coin Balance">
-          <span className="hud-stat-label">Coins</span>
+        <div className="hud-stat" title="Your points">
+          <span className="hud-stat-label">Points</span>
           <span className="hud-stat-val gold">{balance}</span>
-        </div>
-        <div className="hud-stat" title="Reward Vault Surplus">
-          <span className="hud-stat-label">Vault</span>
-          <span className="hud-stat-val cyan">{vaultSurplus.toFixed(0)} L</span>
         </div>
         <div className="hud-stat" title="Daily Budget Remaining">
           <span className="hud-stat-label">Budget</span>

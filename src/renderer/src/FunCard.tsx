@@ -119,7 +119,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
         </div>
       )}
 
-      {!live.length && <p className="hint">Add rewards you really want in the Shop (a game, headphones, a dinner out), with a coin price.</p>}
+      {!live.length && <p className="hint">Add rewards you really want in the Shop (a game, headphones, a dinner out), with a price in points.</p>}
       <button className="btn small ghost fun-shop" onClick={onOpenShop}>
         Edit rewards
       </button>

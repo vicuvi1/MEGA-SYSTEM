@@ -40,13 +40,13 @@ export function buildCommands(s: Sources): Command[] {
     { id: 'go:man', label: 'MAN', hint: 'Open the app', group: 'Go to', icon: 'shield', color: '#FF8A3D', run: () => s.go('discipline', 'app') }
   )
   for (const r of s.rules.filter((r) => r.enabled && !isFlowRule(r.id))) {
-    out.push({ id: `log:${r.id}`, label: r.title, hint: `${r.coins > 0 ? '+' : ''}${r.coins} coins`, group: 'Log', icon: 'plus', run: () => s.award(r) })
+    out.push({ id: `log:${r.id}`, label: r.title, hint: `${r.coins > 0 ? '+' : ''}${r.coins} points`, group: 'Log', icon: 'plus', run: () => s.award(r) })
   }
   for (const t of s.todo ?? []) {
     out.push({ id: `todo:${t.id}`, label: t.content, hint: `Done in Todoist${t.dueTime ? ` · ${t.dueTime}` : ''}`, group: 'Tasks', icon: 'check', run: () => s.completeTodo(t) })
   }
   for (const r of s.shop?.rewards ?? []) {
-    out.push({ id: `reward:${r.id}`, label: r.title, hint: `${r.price} coins`, group: 'Shop', icon: 'gift', run: () => s.go('shop') })
+    out.push({ id: `reward:${r.id}`, label: r.title, hint: `${r.price} points`, group: 'Shop', icon: 'gift', run: () => s.go('shop') })
   }
   return [...out, ...s.actions]
 }

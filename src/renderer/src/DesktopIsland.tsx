@@ -457,7 +457,7 @@ export function DesktopIsland() {
                   )}
                 </section>) : null,
     points: pts ? (<section className="di-points">
-                  <span className="di-pts">⭐ {pts.balance}</span>
+                  <span className="di-pts">{pts.balance} pts</span>
                   {pts.goal ? (
                     <div className="di-pts-mid">
                       <div className="di-bar gold"><i style={{ width: `${Math.min(100, (pts.balance / pts.goal.price) * 100)}%` }} /></div>

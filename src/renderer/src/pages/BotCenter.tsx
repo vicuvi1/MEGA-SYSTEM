@@ -18,7 +18,7 @@ const COMMAND_CODEX = [
     syntax: '/checkin clean',
     badge: 'Discipline',
     coins: '+10',
-    desc: 'Log daily streak check-in. Validates your daily discipline and awards streak coins.'
+    desc: 'Log daily streak check-in. Validates your daily discipline and awards streak points.'
   },
   {
     cmd: '/oath',
@@ -53,7 +53,7 @@ const COMMAND_CODEX = [
     syntax: '/balance',
     badge: 'Assets',
     coins: '0',
-    desc: 'Displays all Finance Helper accounts, Life System Coins wallet, and Reward Vault surplus balances.'
+    desc: 'Displays all Finance Helper accounts, and your Life System points.'
   },
   {
     cmd: '/tasks',
@@ -74,7 +74,7 @@ const COMMAND_CODEX = [
     syntax: '/wake',
     badge: 'Circadian',
     coins: '+10',
-    desc: 'Log morning wake-up time. Awards bonus coins if up on or before your target time.'
+    desc: 'Log morning wake-up time. Awards bonus points if up on or before your target time.'
   },
   {
     cmd: '/bed',

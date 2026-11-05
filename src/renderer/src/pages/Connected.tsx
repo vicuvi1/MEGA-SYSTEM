@@ -75,7 +75,7 @@ export function Connected({ state, onState, onWallet }: { state: ConnectionsStat
       <section className="panel slim">
         <div className="row spread">
           <span className="hint">
-            Life System reads these apps' files on this PC and pays coins for what they record, from the day you connect. Nothing is sent anywhere.
+            Life System reads these apps' files on this PC and pays points for what they record, from the day you connect. Nothing is sent anywhere.
             {state.lastSync && ` Last checked ${timeAgo(state.lastSync)}.`}
           </span>
           <button

@@ -125,7 +125,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
           <header className="panel-head">
             <h2>Quick log</h2>
             <button className="btn small ghost" onClick={() => onGo('rules')} title="Add your own habits, change coins, limits and cooldowns">
-              <Icon name="edit" size={13} /> Edit habits & coins
+              <Icon name="edit" size={13} /> Edit habits & points
             </button>
           </header>
           <p className="hint block">Tap what you just did. Limits and cooldowns apply.</p>
@@ -166,7 +166,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
                   <span className="when">{timeAgo(e.ts)}</span>
                   {e.kind !== 'undo' && <Coins n={e.coins} sign />}
                   {e.kind !== 'undo' && !undoneIds.has(e.id) && (
-                    <button className="icon-btn feed-undo" title="Undo this (the coins go back)" aria-label="Undo" onClick={() => undo(e.id)}>
+                    <button className="icon-btn feed-undo" title="Undo this (the points go back)" aria-label="Undo" onClick={() => undo(e.id)}>
                       ↩
                     </button>
                   )}

@@ -251,7 +251,7 @@ export function focusKeyboard(subjects: string[]): any {
 
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r: { session: { minutes: number; subject: string }; coins: number; state: { todayMin: number }; task?: FocusTask | null }, plan: DayPlan): { reply: string; keyboard?: any } {
-  const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} coins` : ''}\nToday: ${hm(r.state.todayMin)}`
+  const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ''}\nToday: ${hm(r.state.todayMin)}`
   // How did it go? (1–5): a low one asks what got in the way.
   const rate = [1, 2, 3, 4, 5].map((n) => ({ text: ['😣', '😕', '😐', '🙂', '🔥'][n - 1], callback_data: `fq|${plan.day}|${n}|${r.session.minutes}` }))
   const t = r.task
@@ -476,7 +476,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (!minutes) return { reply: '🎮 How long? e.g. <code>/fun 30 youtube</code> (1 coin a minute)' }
       const what = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, '').trim() || 'Fun'
       const r = f.fun(minutes, what)
-      return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} coins (left: ${r.balance})` }
+      return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} points (left: ${r.balance})` }
     }
     if (cmd === 'review') {
       if (!arg) return { reply: '📝 Send one line about today, e.g. <code>/review good focus, phone was the problem</code>' }
@@ -628,7 +628,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           if (!time) return { reply: '⏰ What time? e.g. <code>/wake yesterday 06:30</code>' }
           const day = addDays(s.wallet.today(), -back)
           const res = s.sleep.setWake(day, time)
-          return { reply: `🌅 <b>Wake-up ${back ? 'for yesterday ' : ''}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.up_on_time', 10)} points</b>` : res.log.onTime ? (back ? 'On time · no coins for past days.' : 'On time.') : 'Saved to your sleep history.'}` }
+          return { reply: `🌅 <b>Wake-up ${back ? 'for yesterday ' : ''}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.up_on_time', 10)} points</b>` : res.log.onTime ? (back ? 'On time · no points for past days.' : 'On time.') : 'Saved to your sleep history.'}` }
         }
         const res = s.sleep.logWake(new Date().toTimeString().slice(0, 5)) // local time (the server runs in your time zone)
         return {
@@ -673,10 +673,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           reply: [
             '🏛️ <b>Reward vault</b>',
             '',
-            `🪙 Coins: <b>${v.coinsBalance}</b> (≈ ${v.coinsRealValue} ${v.currency})`,
+            `🪙 Points: <b>${v.coinsBalance}</b> (≈ ${v.coinsRealValue} ${v.currency})`,
             `💰 Vault: <b>${v.vaultBalance} ${v.currency}</b>`,
             `🔥 Multiplier: ${v.multiplier.label}`,
-            v.pinnedGoal ? `🌟 Goal: ${esc(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} coins)` : ''
+            v.pinnedGoal ? `🌟 Goal: ${esc(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} points)` : ''
           ].filter(Boolean).join('\n')
         }
       }
@@ -684,7 +684,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const goals = s.economy.goals().filter((g: any) => !g.completed)
         return {
           reply: goals.length
-            ? `🎯 <b>Goals</b>\n\n${goals.map((g: any, i: number) => `${i + 1}. ${g.pinned ? '⭐ ' : ''}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} coins`).join('\n')}`
+            ? `🎯 <b>Goals</b>\n\n${goals.map((g: any, i: number) => `${i + 1}. ${g.pinned ? '⭐ ' : ''}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} points`).join('\n')}`
             : '🎯 No open goals. Add one in the Shop.'
         }
       }
@@ -885,7 +885,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         if (!todoist) throw new Error('Todoist is not connected')
         await todoist.close(id)
         const paid = await mirror.write((db) => payTodoist(services.services(db), [{ id, content: title }]))
-        await answer(paid ? '+8 coins' : 'Done')
+        await answer(paid ? '+8 points' : 'Done')
         const text = `${String(cq.message?.text ?? '').split('\n\nFinished')[0]}\n\n✅ <b>Done in Todoist:</b> ${esc(title)}${paid ? ' · 🪙 +8' : ''}`
         await edit(text)
         return text
@@ -1029,7 +1029,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           const r = f.stop()
           focusEnded.push({ subject: r.session.subject, minutes: r.session.minutes })
           const out = stoppedReply(r, f.plan(services.services(db).wallet.today()))
-          return { text: out.reply, keyboard: out.keyboard, toast: r.coins ? `+${r.coins} coins` : 'Logged' }
+          return { text: out.reply, keyboard: out.keyboard, toast: r.coins ? `+${r.coins} points` : 'Logged' }
         } catch (e) {
           return { text: '', keyboard: undefined, toast: (e as Error).message.slice(0, 190) }
         }
@@ -1055,7 +1055,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           let toast = ''
           if (kind === 'pp') {
             const r = svc.focus.togglePlan(Number(n), new Date(), day)
-            toast = r.coins ? `+${r.coins} coins` : '✓'
+            toast = r.coins ? `+${r.coins} points` : '✓'
           } else {
             const reason = REASONS[Number(n)]
             const cur = svc.focus.plan(day).reasons
@@ -1141,7 +1141,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           else {
             await todoist.close(t.id)
             const paid = await mirror.write((db) => payTodoist(services.services(db), [t]))
-            reply = `✅ <b>Done in Todoist:</b> ${esc(t.content)}${paid ? '\n🪙 <b>+8 coins</b>' : ''}`
+            reply = `✅ <b>Done in Todoist:</b> ${esc(t.content)}${paid ? '\n🪙 <b>+8 points</b>' : ''}`
           }
         } else {
           reply = todayText(await todoist.today(), today)

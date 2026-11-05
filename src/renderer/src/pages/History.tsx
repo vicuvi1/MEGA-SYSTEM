@@ -30,7 +30,7 @@ export function History({ rules, onChange }: { rules: Rule[]; onChange: (s: Summ
   return (
     <section className="panel">
       <header className="panel-head">
-        <h2>Every coin in and out</h2>
+        <h2>Every point in and out</h2>
         <span className="hint">Nothing is ever deleted. An undo needs a reason and shows up here.</span>
       </header>
       <table className="table">
@@ -39,7 +39,7 @@ export function History({ rules, onChange }: { rules: Rule[]; onChange: (s: Summ
             <th>When</th>
             <th>Section</th>
             <th>What</th>
-            <th className="num">Coins</th>
+            <th className="num">Points</th>
             <th className="num">XP</th>
             <th />
           </tr>

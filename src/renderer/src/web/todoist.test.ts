@@ -157,7 +157,7 @@ describe('Todoist in Life System', () => {
     const say = (id: number, text: string) => bots.handleUpdate('1:x', { update_id: id, message: { chat: { id: 42 }, text } })
     expect(await say(1, '/todo')).toMatch(/1\. 🔴 <b>task b<\/b>[\s\S]*2\. ⚪ <b>task a/)
     expect(await say(2, '/task call Leo tomorrow 17:00 p1')).toMatch(/Added to Todoist/)
-    expect(await say(3, '/done 1')).toMatch(/Done in Todoist:<\/b> task b[\s\S]*\+8 coins/)
+    expect(await say(3, '/done 1')).toMatch(/Done in Todoist:<\/b> task b[\s\S]*\+8 points/)
     expect(todoist.close).toHaveBeenCalledWith('b')
     expect(await say(3, '/done 1')).toBeNull() // the same message again is not handled twice
   })

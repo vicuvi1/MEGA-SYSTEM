@@ -55,9 +55,9 @@ const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickComma
 
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
-  money: { kind: 'finance', system: 'Coins & budget' },
-  sleep: { kind: 'waky', system: 'Coins & stats' },
-  discipline: { kind: 'man', system: 'Streak & coins' },
+  money: { kind: 'finance', system: 'Points & budget' },
+  sleep: { kind: 'waky', system: 'Points & stats' },
+  discipline: { kind: 'man', system: 'Streak & points' },
   body: { kind: 'sport', system: 'Metrics & Workouts' }
 }
 
@@ -99,7 +99,7 @@ function WindowErrors() {
   useEffect(() => {
     const on = (e: Event) => {
       const n = Number((e as CustomEvent).detail?.paid) || 0
-      if (n) toast(`✅ ${n} Todoist task${n > 1 ? 's' : ''} done: coins added`, 'good')
+      if (n) toast(`✅ ${n} Todoist task${n > 1 ? 's' : ''} done: points added`, 'good')
     }
     window.addEventListener('life-todoist-paid', on)
     return () => window.removeEventListener('life-todoist-paid', on)
@@ -495,7 +495,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // On the desktop the title bar offers 'Restart to update' itself.
   if (updateReady && !window.desktop) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
   if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Backups are off', body: backup.lastError, page: 'settings' })
-  if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current} · +20 coins`, page: 'discipline' })
+  if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current} · +20 points`, page: 'discipline' })
   if (overdue) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
   const nextBlock = schedule && schedule.day === schedule.today ? schedule.blocks.find((b) => b.status === 'pending' && Date.parse(b.startsAt) > Date.now()) : undefined
   if (nextBlock && Date.parse(nextBlock.startsAt) - Date.now() < 60 * 60_000) {
