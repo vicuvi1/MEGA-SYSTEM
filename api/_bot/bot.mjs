@@ -7307,6 +7307,274 @@ function writeJournal(db, day, r, now = /* @__PURE__ */ new Date()) {
 	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(j.body, now.toISOString(), cur.id);
 	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(newId(), j.title, j.body, "ben", now.toISOString(), now.toISOString());
 }
+// src/core/sportCards.ts
+var DEFAULT_EXERCISES = [
+	{
+		id: "ex_pushups",
+		name: "Push-ups",
+		target: 100,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_situps",
+		name: "Sit-ups",
+		target: 60,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_squats",
+		name: "Squats",
+		target: 60,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_press",
+		name: "Press",
+		target: 50,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	}
+];
+/** A fresh Sport Track state when there is none yet (so Ben works from day one). */
+function defaultSport(today) {
+	return {
+		lastDate: today,
+		exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })),
+		water: {
+			currentMl: 0,
+			targetMl: 2700,
+			glassSizeMl: 250
+		},
+		history: [],
+		sportySettings: { autoProgression: true }
+	};
+}
+function bar(done, target, len = 8) {
+	if (target <= 0) return "█".repeat(len);
+	const r = Math.min(1, Math.max(0, done / target));
+	const f = Math.round(r * len);
+	return "█".repeat(f) + "░".repeat(len - f);
+}
+var esc$3 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** target: the one goal every screen shows (coachStatus waterToday), else Sport Track's. */
+function waterCard(st, today, goal) {
+	const s = sportForDay(st, today);
+	const ml = Math.round(Number(s.water.currentMl) || 0);
+	const target = goal || Number(s.water.targetMl) || 2700;
+	const glass = Number(s.water.glassSizeMl) || 250;
+	const left = Math.max(0, target - ml);
+	return {
+		text: [
+			"💧 <b>Water today</b>",
+			`<code>${bar(ml, target, 11)}</code> ${(ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(target / 1e3).toFixed(1)} L`,
+			`${Math.floor(ml / glass)} of ${Math.ceil(target / glass)} glasses (${glass} ml)`,
+			left ? `<b>${left} ml</b> to go.` : "🎯 <b>Target reached.</b> Nice.",
+			"<i>Or just type: water 250</i>"
+		].join("\n"),
+		keyboard: { inline_keyboard: [
+			[{
+				text: `💧 +${glass} (glass)`,
+				callback_data: `wa|${glass}`
+			}, {
+				text: "💧 +500 (bottle)",
+				callback_data: "wa|500"
+			}],
+			[{
+				text: "💧 +1000",
+				callback_data: "wa|1000"
+			}, {
+				text: `➖ −${glass}`,
+				callback_data: `wa|-${glass}`
+			}],
+			[{
+				text: "🏋️ Workout",
+				callback_data: "wk|show"
+			}]
+		] }
+	};
+}
+var activeExercises = (s) => (s.exercises ?? []).filter((e) => e.active !== false);
+var allDone = (s) => {
+	const a = activeExercises(s);
+	return a.length > 0 && a.every((e) => (Number(e.doneToday) || 0) >= (Number(e.target) || 0));
+};
+function workoutCard(st, today, extra = "") {
+	const s = sportForDay(st, today);
+	const list = activeExercises(s);
+	const done = allDone(s);
+	const lines = list.map((e) => {
+		const d = Number(e.doneToday) || 0;
+		const t = Number(e.target) || 0;
+		return `${d >= t ? "✅" : "▫️"} <b>${esc$3(e.name)}</b> ${d}/${t} ${esc$3(e.unit || "reps")}\n<code>${bar(d, t)}</code> ${t ? Math.round(Math.min(1, d / t) * 100) : 100}%`;
+	});
+	const total = list.reduce((a, e) => a + Math.min(Number(e.doneToday) || 0, Number(e.target) || 0), 0);
+	const goal = list.reduce((a, e) => a + (Number(e.target) || 0), 0);
+	const head = done ? "🔥 <b>Workout done for today!</b>" : `🏋️ <b>Today's workout</b> · ${goal ? Math.round(total / goal * 100) : 0}%`;
+	const rows = list.map((e, i) => ({
+		e,
+		i
+	})).filter(({ e }) => (Number(e.doneToday) || 0) < (Number(e.target) || 0)).slice(0, 6).map(({ e, i }) => [
+		{
+			text: `${String(e.name).slice(0, 12)} +10`,
+			callback_data: `wk|${i}|10`
+		},
+		{
+			text: "+25",
+			callback_data: `wk|${i}|25`
+		},
+		{
+			text: "✓ All",
+			callback_data: `wk|${i}|all`
+		}
+	]);
+	const tail = done ? [[{
+		text: "💧 Water",
+		callback_data: "wa|show"
+	}]] : [[{
+		text: "✅ Complete all",
+		callback_data: "wk|all"
+	}, {
+		text: "💧 Water",
+		callback_data: "wa|show"
+	}]];
+	return {
+		text: [
+			head,
+			"",
+			...lines,
+			...extra ? ["", extra] : [],
+			...done ? [] : ["", "<i>Or type: 30 pushups</i>"]
+		].join("\n"),
+		keyboard: { inline_keyboard: [...rows, ...tail] }
+	};
+}
+/** Applies a button: "3|10", "3|all", "all". Returns the new state. */
+function applyWorkoutTap(st, today, data) {
+	const s = sportForDay(st, today);
+	const list = activeExercises(s);
+	if (data === "all") {
+		for (const e of list) e.doneToday = Math.max(Number(e.doneToday) || 0, Number(e.target) || 0);
+		return s;
+	}
+	const [i, amt] = data.split("|");
+	const e = list[Number(i)];
+	if (!e) return s;
+	e.doneToday = amt === "all" ? Math.max(Number(e.doneToday) || 0, Number(e.target) || 0) : Math.max(0, (Number(e.doneToday) || 0) + (Number(amt) || 0));
+	return s;
+}
+function recordWorkoutDay(log, st, today) {
+	const s = sportForDay(st, today);
+	const days = { ...log?.days ?? {} };
+	days[today] = activeExercises(s).map((e) => ({
+		name: String(e.name),
+		target: Number(e.target) || 0,
+		done: Number(e.doneToday) || 0
+	}));
+	const keep = Object.keys(days).sort().slice(-60);
+	return { days: Object.fromEntries(keep.map((d) => [d, days[d]])) };
+}
+/**
+* Real progression, per exercise:
+* - harder: the full target done on the last 2 days it was trained at this
+*   target → +5% (at least +1); the next step needs 2 more full days at the
+*   new target, so it only climbs while you keep up;
+* - lighter: not trained for real (half the target) in the last 14 days,
+*   though you trained before → −10%, so coming back is doable.
+*/
+function progression(log, st, today, needed = 2, pct = 5) {
+	const days = Object.keys(log.days ?? {}).sort();
+	const out = [];
+	const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+	for (const e of activeExercises(st)) {
+		const cur = Number(e.target) || 0;
+		if (!cur) continue;
+		const name = String(e.name);
+		const rows = days.map((d) => ({
+			d,
+			r: log.days[d].find((x) => same(x.name, name))
+		})).filter((x) => x.r);
+		if (today) {
+			const from = isoAdd(today, -14);
+			const real = rows.some((x) => x.d >= from && x.d < today && x.r.done >= x.r.target * .5);
+			const before = rows.some((x) => x.d < from && x.r.done > 0);
+			if (!real && before) {
+				const to = Math.max(1, Math.round(cur * .9));
+				if (to < cur) out.push({
+					name,
+					from: cur,
+					to,
+					why: "2 weeks without it: a bit lighter to come back"
+				});
+				continue;
+			}
+		}
+		const atTarget = rows.filter((x) => x.r.target >= cur && x.r.done > 0).slice(-needed);
+		if (atTarget.length >= needed && atTarget.every((x) => x.r.done >= x.r.target)) out.push({
+			name,
+			from: cur,
+			to: cur + Math.max(1, Math.ceil(cur * pct / 100)),
+			why: `full target ${needed} times`
+		});
+	}
+	return out;
+}
+var isoAdd = (day, n) => {
+	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+};
+/** Exercise plan changes from Ben: set a target, add an exercise, remove one. */
+function setExercise(st, today, name, target, unit = "reps") {
+	const s = sportForDay(st, today);
+	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key || String(x.id).toLowerCase().replace(/[^a-z0-9]/g, "").includes(key));
+	if (e) {
+		const from = Number(e.target) || 0;
+		if (target && target > 0) e.target = Math.round(target);
+		e.active = true;
+		return {
+			st: s,
+			line: `🏋️ ${e.name}: target ${from} → ${e.target} ${e.unit || unit}`
+		};
+	}
+	if (!(target && target > 0)) return {
+		st: s,
+		line: ""
+	};
+	s.exercises.push({
+		id: `ex_${key || Date.now()}`,
+		name: name.slice(0, 30),
+		target: Math.round(target),
+		unit,
+		active: true,
+		doneToday: 0
+	});
+	return {
+		st: s,
+		line: `🏋️ New exercise: ${name} · ${Math.round(target)} ${unit} a day`
+	};
+}
+function removeExercise(st, today, name) {
+	const s = sportForDay(st, today);
+	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key);
+	if (!e) return {
+		st: s,
+		line: ""
+	};
+	e.active = false;
+	return {
+		st: s,
+		line: `🏋️ ${e.name} off the daily list`
+	};
+}
 // src/renderer/src/web/benDesk.ts
 var DESK = "ben_desk";
 var EMPTY_DESK = {
@@ -7712,6 +7980,18 @@ function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
 	if (o.op === "mood") {
 		logMood(db, o.mood, now);
 		return "Mood noted";
+	}
+	if (o.op === "water") {
+		const ml = Math.round(o.ml);
+		if (!(ml > 0 && ml <= 2e3)) throw new Error("Water: between 1 and 2000 ml");
+		const day = sportToday(now);
+		const next = addWater(sportState(db) ?? defaultSport(day), ml, day);
+		setSetting(db, "sport_tracker_json", JSON.stringify({
+			savedAt: Date.now(),
+			data: next
+		}));
+		const v = sharedView(next, day);
+		return `💧 +${ml} ml · ${(v.water.ml / 1e3).toFixed(1)} of ${(v.water.target / 1e3).toFixed(1)} L today`;
 	}
 	if (o.op === "stake") {
 		const due = readDue(o.due, now) ?? (Number.isFinite(Date.parse(o.due)) ? new Date(o.due).toISOString() : null);
@@ -14239,12 +14519,12 @@ function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = D
 		source: "telegram"
 	};
 }
-var esc$3 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
+var esc$2 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;"
 })[c]);
-var fm = (state, c) => esc$3(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
+var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
 var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
@@ -14252,15 +14532,15 @@ function loggedText(state, t, today = null) {
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
 	const work = t.type === "expense" ? workText(state, B(t), t.date) : "";
-	const lines = [`✅ <b>${sign}${esc$3(formatMoney(t.amount, t.currency))}</b> · ${esc$3(t.note || c)}`, `${esc$3(c)} · ${esc$3(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
-	if (work) lines.push(`⏱ ${esc$3(work)} of your work`);
+	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
+	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
 		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
-		lines.push(`${esc$3(c || "This category")} this month: ${fm(state, catMonth)}`);
+		lines.push(`${esc$2(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
-	if (alert) lines.push(`⚠️ ${esc$3(alert.text)}`);
+	if (alert) lines.push(`⚠️ ${esc$2(alert.text)}`);
 	if (today && t.type === "expense" && (state.recurring?.length || state.tx.length > 10)) lines.push(safeLine(state, today, (c) => fm(state, c)));
 	return lines.join("\n");
 }
@@ -14572,7 +14852,7 @@ function payTodoist(s, done) {
 	return n;
 }
 // src/core/focusBot.ts
-var esc$2 = (s) => s.replace(/[<>&]/g, (c) => ({
+var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
 	">": "&gt;",
 	"&": "&amp;"
@@ -14582,7 +14862,7 @@ var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
 	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$3(o.focusYesterdayMin)}</b> of focus.`);
-	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$2(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
+	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$1(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
 	lines.push(o.planAlready ? "You already have a plan for today: /plan to see it." : `<b>${PLAN_ASK}</b>\nReply to this message, one per line.`);
@@ -14591,7 +14871,7 @@ function morningText(o) {
 function planText(plan, title = "📝 <b>Today's must-dos</b>") {
 	if (!plan.items.length) return `${title}\n\nNo plan yet. Send <code>/plan essay; gym; call Leo</code>.`;
 	const done = plan.items.filter((i) => i.done).length;
-	const lines = plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$2(it.text)}`);
+	const lines = plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`);
 	return `${title} (${done}/${plan.items.length})\n\n${lines.join("\n")}\n\n<i>Tap to tick · +10 coins each</i>`;
 }
 /** Buttons under a plan: tick each must-do; in the evening, what got in the way. */
@@ -14614,7 +14894,7 @@ function eveningText(plan, focusMin) {
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
-	return `${head}\n\n${plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$2(it.text)}`).join("\n")}\n\n${verdict}`;
+	return `${head}\n\n${plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`).join("\n")}\n\n${verdict}`;
 }
 function weekText(w, goals) {
 	const lines = [
@@ -14622,17 +14902,17 @@ function weekText(w, goals) {
 		"",
 		`⏱ Focus: <b>${hm$3(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$2(s.subject)}: ${hm$3(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm$3(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
-	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$2(r.reason)} ×${r.count}`).join(", ")}`);
+	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$1(r.reason)} ×${r.count}`).join(", ")}`);
 	if (w.funMin) lines.push(`🎮 Fun: ${hm$3(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$2(g.title)}: ${hm$3(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm$3(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$2(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$3(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$3(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/rhythm.ts
 var RHYTHM = "coach_rhythm";
@@ -16985,274 +17265,6 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		bookGoals,
 		rebookGoals,
 		countPromise: (day, key) => mirror.write((db) => countPromise(db, day, key))
-	};
-}
-// src/core/sportCards.ts
-var DEFAULT_EXERCISES = [
-	{
-		id: "ex_pushups",
-		name: "Push-ups",
-		target: 100,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	},
-	{
-		id: "ex_situps",
-		name: "Sit-ups",
-		target: 60,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	},
-	{
-		id: "ex_squats",
-		name: "Squats",
-		target: 60,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	},
-	{
-		id: "ex_press",
-		name: "Press",
-		target: 50,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	}
-];
-/** A fresh Sport Track state when there is none yet (so Ben works from day one). */
-function defaultSport(today) {
-	return {
-		lastDate: today,
-		exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })),
-		water: {
-			currentMl: 0,
-			targetMl: 2700,
-			glassSizeMl: 250
-		},
-		history: [],
-		sportySettings: { autoProgression: true }
-	};
-}
-function bar(done, target, len = 8) {
-	if (target <= 0) return "█".repeat(len);
-	const r = Math.min(1, Math.max(0, done / target));
-	const f = Math.round(r * len);
-	return "█".repeat(f) + "░".repeat(len - f);
-}
-var esc$1 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-/** target: the one goal every screen shows (coachStatus waterToday), else Sport Track's. */
-function waterCard(st, today, goal) {
-	const s = sportForDay(st, today);
-	const ml = Math.round(Number(s.water.currentMl) || 0);
-	const target = goal || Number(s.water.targetMl) || 2700;
-	const glass = Number(s.water.glassSizeMl) || 250;
-	const left = Math.max(0, target - ml);
-	return {
-		text: [
-			"💧 <b>Water today</b>",
-			`<code>${bar(ml, target, 11)}</code> ${(ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(target / 1e3).toFixed(1)} L`,
-			`${Math.floor(ml / glass)} of ${Math.ceil(target / glass)} glasses (${glass} ml)`,
-			left ? `<b>${left} ml</b> to go.` : "🎯 <b>Target reached.</b> Nice.",
-			"<i>Or just type: water 250</i>"
-		].join("\n"),
-		keyboard: { inline_keyboard: [
-			[{
-				text: `💧 +${glass} (glass)`,
-				callback_data: `wa|${glass}`
-			}, {
-				text: "💧 +500 (bottle)",
-				callback_data: "wa|500"
-			}],
-			[{
-				text: "💧 +1000",
-				callback_data: "wa|1000"
-			}, {
-				text: `➖ −${glass}`,
-				callback_data: `wa|-${glass}`
-			}],
-			[{
-				text: "🏋️ Workout",
-				callback_data: "wk|show"
-			}]
-		] }
-	};
-}
-var activeExercises = (s) => (s.exercises ?? []).filter((e) => e.active !== false);
-var allDone = (s) => {
-	const a = activeExercises(s);
-	return a.length > 0 && a.every((e) => (Number(e.doneToday) || 0) >= (Number(e.target) || 0));
-};
-function workoutCard(st, today, extra = "") {
-	const s = sportForDay(st, today);
-	const list = activeExercises(s);
-	const done = allDone(s);
-	const lines = list.map((e) => {
-		const d = Number(e.doneToday) || 0;
-		const t = Number(e.target) || 0;
-		return `${d >= t ? "✅" : "▫️"} <b>${esc$1(e.name)}</b> ${d}/${t} ${esc$1(e.unit || "reps")}\n<code>${bar(d, t)}</code> ${t ? Math.round(Math.min(1, d / t) * 100) : 100}%`;
-	});
-	const total = list.reduce((a, e) => a + Math.min(Number(e.doneToday) || 0, Number(e.target) || 0), 0);
-	const goal = list.reduce((a, e) => a + (Number(e.target) || 0), 0);
-	const head = done ? "🔥 <b>Workout done for today!</b>" : `🏋️ <b>Today's workout</b> · ${goal ? Math.round(total / goal * 100) : 0}%`;
-	const rows = list.map((e, i) => ({
-		e,
-		i
-	})).filter(({ e }) => (Number(e.doneToday) || 0) < (Number(e.target) || 0)).slice(0, 6).map(({ e, i }) => [
-		{
-			text: `${String(e.name).slice(0, 12)} +10`,
-			callback_data: `wk|${i}|10`
-		},
-		{
-			text: "+25",
-			callback_data: `wk|${i}|25`
-		},
-		{
-			text: "✓ All",
-			callback_data: `wk|${i}|all`
-		}
-	]);
-	const tail = done ? [[{
-		text: "💧 Water",
-		callback_data: "wa|show"
-	}]] : [[{
-		text: "✅ Complete all",
-		callback_data: "wk|all"
-	}, {
-		text: "💧 Water",
-		callback_data: "wa|show"
-	}]];
-	return {
-		text: [
-			head,
-			"",
-			...lines,
-			...extra ? ["", extra] : [],
-			...done ? [] : ["", "<i>Or type: 30 pushups</i>"]
-		].join("\n"),
-		keyboard: { inline_keyboard: [...rows, ...tail] }
-	};
-}
-/** Applies a button: "3|10", "3|all", "all". Returns the new state. */
-function applyWorkoutTap(st, today, data) {
-	const s = sportForDay(st, today);
-	const list = activeExercises(s);
-	if (data === "all") {
-		for (const e of list) e.doneToday = Math.max(Number(e.doneToday) || 0, Number(e.target) || 0);
-		return s;
-	}
-	const [i, amt] = data.split("|");
-	const e = list[Number(i)];
-	if (!e) return s;
-	e.doneToday = amt === "all" ? Math.max(Number(e.doneToday) || 0, Number(e.target) || 0) : Math.max(0, (Number(e.doneToday) || 0) + (Number(amt) || 0));
-	return s;
-}
-function recordWorkoutDay(log, st, today) {
-	const s = sportForDay(st, today);
-	const days = { ...log?.days ?? {} };
-	days[today] = activeExercises(s).map((e) => ({
-		name: String(e.name),
-		target: Number(e.target) || 0,
-		done: Number(e.doneToday) || 0
-	}));
-	const keep = Object.keys(days).sort().slice(-60);
-	return { days: Object.fromEntries(keep.map((d) => [d, days[d]])) };
-}
-/**
-* Real progression, per exercise:
-* - harder: the full target done on the last 2 days it was trained at this
-*   target → +5% (at least +1); the next step needs 2 more full days at the
-*   new target, so it only climbs while you keep up;
-* - lighter: not trained for real (half the target) in the last 14 days,
-*   though you trained before → −10%, so coming back is doable.
-*/
-function progression(log, st, today, needed = 2, pct = 5) {
-	const days = Object.keys(log.days ?? {}).sort();
-	const out = [];
-	const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-	for (const e of activeExercises(st)) {
-		const cur = Number(e.target) || 0;
-		if (!cur) continue;
-		const name = String(e.name);
-		const rows = days.map((d) => ({
-			d,
-			r: log.days[d].find((x) => same(x.name, name))
-		})).filter((x) => x.r);
-		if (today) {
-			const from = isoAdd(today, -14);
-			const real = rows.some((x) => x.d >= from && x.d < today && x.r.done >= x.r.target * .5);
-			const before = rows.some((x) => x.d < from && x.r.done > 0);
-			if (!real && before) {
-				const to = Math.max(1, Math.round(cur * .9));
-				if (to < cur) out.push({
-					name,
-					from: cur,
-					to,
-					why: "2 weeks without it: a bit lighter to come back"
-				});
-				continue;
-			}
-		}
-		const atTarget = rows.filter((x) => x.r.target >= cur && x.r.done > 0).slice(-needed);
-		if (atTarget.length >= needed && atTarget.every((x) => x.r.done >= x.r.target)) out.push({
-			name,
-			from: cur,
-			to: cur + Math.max(1, Math.ceil(cur * pct / 100)),
-			why: `full target ${needed} times`
-		});
-	}
-	return out;
-}
-var isoAdd = (day, n) => {
-	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
-	d.setUTCDate(d.getUTCDate() + n);
-	return d.toISOString().slice(0, 10);
-};
-/** Exercise plan changes from Ben: set a target, add an exercise, remove one. */
-function setExercise(st, today, name, target, unit = "reps") {
-	const s = sportForDay(st, today);
-	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key || String(x.id).toLowerCase().replace(/[^a-z0-9]/g, "").includes(key));
-	if (e) {
-		const from = Number(e.target) || 0;
-		if (target && target > 0) e.target = Math.round(target);
-		e.active = true;
-		return {
-			st: s,
-			line: `🏋️ ${e.name}: target ${from} → ${e.target} ${e.unit || unit}`
-		};
-	}
-	if (!(target && target > 0)) return {
-		st: s,
-		line: ""
-	};
-	s.exercises.push({
-		id: `ex_${key || Date.now()}`,
-		name: name.slice(0, 30),
-		target: Math.round(target),
-		unit,
-		active: true,
-		doneToday: 0
-	});
-	return {
-		st: s,
-		line: `🏋️ New exercise: ${name} · ${Math.round(target)} ${unit} a day`
-	};
-}
-function removeExercise(st, today, name) {
-	const s = sportForDay(st, today);
-	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key);
-	if (!e) return {
-		st: s,
-		line: ""
-	};
-	e.active = false;
-	return {
-		st: s,
-		line: `🏋️ ${e.name} off the daily list`
 	};
 }
 // src/renderer/src/web/webBots.ts
@@ -23579,6 +23591,12 @@ async function rhythmTick(env, now, send) {
 		const line = await bots.rhythm.waterLine();
 		if (line) {
 			await send(line, { inline_keyboard: [[{
+				text: "+250 ml",
+				callback_data: "wa|250"
+			}, {
+				text: "+500 ml",
+				callback_data: "wa|500"
+			}], [{
 				text: "😴 30 min",
 				callback_data: "ns|"
 			}, {
@@ -23590,13 +23608,20 @@ async function rhythmTick(env, now, send) {
 	} else if (job === "training") {
 		const water = mergeWater ? await bots.rhythm.waterLine().catch(() => null) : null;
 		const due = !!water;
-		await send(`${await bots.rhythm.trainingLine()}${due ? `\n\n${water}` : ""}`, { inline_keyboard: [[{
-			text: "🏋️ Start workout",
-			callback_data: "wk|show"
-		}, {
-			text: "😴 30 min",
-			callback_data: "ns|"
-		}]] });
+		await send(`${await bots.rhythm.trainingLine()}${due ? `\n\n${water}` : ""}`, { inline_keyboard: [[
+			{
+				text: "🏋️ Start workout",
+				callback_data: "wk|show"
+			},
+			...due ? [{
+				text: "+250 ml",
+				callback_data: "wa|250"
+			}] : [],
+			{
+				text: "😴 30 min",
+				callback_data: "ns|"
+			}
+		]] });
 		if (due) await bots.rhythm.markWater();
 	} else if (job === "weekly") {
 		await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);

@@ -9,10 +9,11 @@ import { readDo } from '@core/coachButtons'
 import { CoachPlan } from './CoachPlan'
 
 /** One chat message (the Coach page's log entry). */
-export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; proactive?: boolean; streamed?: boolean }
+export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; proactive?: boolean; streamed?: boolean; quote?: string }
 
 /** Coach text with numbers in bold (and search hits marked); a new reply types itself out. */
-export function Rich({ text, reveal = false, highlight = '' }: { text: string; reveal?: boolean; highlight?: string }) {
+/** CL5: at most `maxBold` numbers in bold (the ones that matter come first). */
+export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity }: { text: string; reveal?: boolean; highlight?: string; maxBold?: number }) {
   const [n, setN] = useState(reveal ? 0 : text.length)
   useEffect(() => {
     if (!reveal || typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setN(text.length)
@@ -29,7 +30,8 @@ export function Rich({ text, reveal = false, highlight = '' }: { text: string; r
     <span className="cx-rich">
       {parts.map((p, i) => {
         const hit = h && p.toLowerCase().includes(h)
-        if (i % 2 === 1) return <b key={i} className={hit ? 'hit' : ''}>{p}</b>
+        if (i % 2 === 1 && (i - 1) / 2 < maxBold) return <b key={i} className={hit ? 'hit' : ''}>{p}</b>
+        if (i % 2 === 1 && !hit) return p
         if (!hit) return p
         const k = p.toLowerCase().indexOf(h)
         return (

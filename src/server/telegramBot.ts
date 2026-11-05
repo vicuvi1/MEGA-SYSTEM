@@ -1165,14 +1165,15 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       // Up to 5 a day when you're behind (K2): the cap and spacing live in waterBehind, so it's not "once a day".
       const line = await bots.rhythm.waterLine()
       if (line) {
-        await send(line, { inline_keyboard: [[{ text: '😴 30 min', callback_data: 'ns|' }, { text: '⏸ Pause today', callback_data: 'np|' }]] }, { always: true })
+        // CF4: the same buttons as the water card in the app.
+        await send(line, { inline_keyboard: [[{ text: '+250 ml', callback_data: 'wa|250' }, { text: '+500 ml', callback_data: 'wa|500' }], [{ text: '😴 30 min', callback_data: 'ns|' }, { text: '⏸ Pause today', callback_data: 'np|' }]] }, { always: true })
         await bots.rhythm.markWater()
       }
     } else if (job === 'training') {
       // W21: water due at the same time rides along in one message.
       const water = mergeWater ? await bots.rhythm.waterLine().catch(() => null) : null
       const due = !!water
-      await send(`${await bots.rhythm.trainingLine()}${due ? `\n\n${water}` : ''}`, { inline_keyboard: [[{ text: '🏋️ Start workout', callback_data: 'wk|show' }, { text: '😴 30 min', callback_data: 'ns|' }]] })
+      await send(`${await bots.rhythm.trainingLine()}${due ? `\n\n${water}` : ''}`, { inline_keyboard: [[{ text: '🏋️ Start workout', callback_data: 'wk|show' }, ...(due ? [{ text: '+250 ml', callback_data: 'wa|250' }] : []), { text: '😴 30 min', callback_data: 'ns|' }]] })
       if (due) await bots.rhythm.markWater()
     } else if (job === 'weekly') {
       const w = await bots.rhythm.weekly()

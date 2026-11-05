@@ -17,6 +17,8 @@ import type { DeskView } from '../web/benDesk'
 import { readDo } from '@core/coachButtons'
 import { BenDesk, type DeskTab } from '../BenDesk'
 import { Feedback, ReplyExtras, Rich, type Entry } from '../BenThread'
+import { BenMark, FoldLine, Meta, NowCard, NudgeCard, Receipts } from '../CoachFeed'
+import { buildFeed, momentChips, readSlash, SLASH, type Filter } from '@core/chatFeed'
 import '../ben.css'
 
 type Profile = { about: string; goals: string[]; rules: string[] }
@@ -133,7 +135,52 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     setPhoto({ url, data: url.split(',')[1] })
   }
   // The info drawer: open by default on wide screens, a slide-over on phones.
-  const [info, setInfo] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1200)
+  // CL2: closed by default; it remembers if you leave it open on a wide screen.
+  const [info, setInfoRaw] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && window.innerWidth >= 1200 && localStorage.getItem('ls.coachDrawer') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setInfo = (v: boolean | ((x: boolean) => boolean)) =>
+    setInfoRaw((cur) => {
+      const next = typeof v === 'function' ? v(cur) : v
+      try {
+        localStorage.setItem('ls.coachDrawer', next ? '1' : '0')
+      } catch {
+        /* fine */
+      }
+      return next
+    })
+  // CM5: what the chat shows; CN1: which folded runs are open; CM4: the message you reply to.
+  const [filter, setFilter] = useState<Filter>('all')
+  const [openFolds, setOpenFolds] = useState<Record<string, boolean>>({})
+  const [quote, setQuote] = useState<Entry | null>(null)
+  const [menu, setMenu] = useState(false)
+  // CN8: when you last had the chat open (fixed for this visit), saved when you leave.
+  const [seenAt] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('ls.coachSeen')
+    } catch {
+      return null
+    }
+  })
+  useEffect(() => {
+    const save = () => {
+      try {
+        localStorage.setItem('ls.coachSeen', new Date().toISOString())
+      } catch {
+        /* fine */
+      }
+    }
+    const onVis = () => document.hidden && save()
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      save()
+    }
+  }, [])
   const [tab, setTabRaw] = useState<DeskTab>(() => {
     try {
       // Sunday: the weekly review first (D6), once per Sunday.
@@ -237,14 +284,19 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   })
 
   const send = async (msg = text) => {
-    const t = msg.trim()
+    // CM3: "/water 500" and friends; CM4: a reply says what it's about.
+    const slashed = readSlash(msg)
+    const q = quote
+    setQuote(null)
+    const base = (slashed ?? msg).trim()
+    const t = q && base ? `About your message "${q.text.replace(/\s+/g, ' ').slice(0, 120)}": ${base}` : base
     const pic = photo
     if ((!t && !pic) || busy || !life.coach) return
     setText('')
     setPhoto(null)
     setBusy(true)
     const now = new Date().toISOString()
-    setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: t, at: now, photo: pic?.url }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
+    setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: q && base ? base : t, at: now, photo: pic?.url, ...(q ? { quote: q.text.slice(0, 140) } : {}) }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
     try {
       const seen: string[] = []
       let streamed = false
@@ -307,7 +359,6 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     } else if (m.kind === 'answer') void send(`Done: ${m.promise}`)
     else void send(m.kind === 'ask' && new Date().getHours() >= 21 ? 'How did today go? Review my day.' : 'What should I do right now? One thing.')
   }
-  const moveLabel: Record<string, string> = { focus: '▶ Start', running: '⏹ Stop & log', approve: '✓ Approve', plan: 'Plan it', answer: '✅ Done', ask: 'Ask' }
   const face = status?.face ?? '✦'
   // U10: search hits (indexes in the log), newest first.
   const hits = query?.trim() ? (log ?? []).map((m, k) => (m.text.toLowerCase().includes(query.trim().toLowerCase()) ? k : -1)).filter((k) => k >= 0).reverse() : []
@@ -331,56 +382,88 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     return -1
   })()
 
+  // Night 7: the feed (folded nudges, cards, groups, parts of the day, the "new" line).
+  const feed = buildFeed(log ?? [], { seenAt, filter: query?.trim() ? 'raw' : filter })
+  const latestOf: Record<string, number> = {}
+  for (const it of feed) if (it.t === 'msg' && it.kind !== 'talk') latestOf[it.kind] = it.i
+  const soon = (() => {
+    for (let k = feed.length - 1; k >= 0; k--) {
+      const it = feed[k]
+      if (it.t === 'msg' && (it.kind === 'block' || it.kind === 'calendar') && !it.settled && it.info.time && new Date(log![it.i].at).toDateString() === new Date().toDateString()) return `the ${it.info.time} block`
+    }
+    return null
+  })()
+  const lastEntry = lastReply >= 0 ? log![lastReply] : null
+  const chips = momentChips({
+    hour: new Date().getHours(),
+    planStatus: status?.plan.status ?? 'none',
+    blockSoon: soon,
+    mustLeft: status ? status.today.mustTotal - status.today.mustDone : 0,
+    replyChips: lastEntry && Date.now() - Date.parse(lastEntry.at) < 20 * 60000 ? lastEntry.chips : undefined
+  })
+  const slashOpen = text.startsWith('/') && !/\s/.test(text)
+  const slashHits = slashOpen ? SLASH.filter((x) => x.cmd.startsWith(text.toLowerCase())) : []
+  const openBrain = () => {
+    try {
+      localStorage.setItem('ls.settingsTab', 'ben')
+    } catch {
+      /* fine */
+    }
+    window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'settings' }))
+    setTimeout(() => window.dispatchEvent(new CustomEvent('life-settings-tab', { detail: 'ben' })), 300)
+  }
+  const addWater = async () => {
+    if (life.coach?.deskDo && (await act(() => life.coach!.deskDo!({ op: 'water', ml: 250 }), '💧 +250 ml'))) loadStatus()
+  }
+  const statusLine = busy ? 'typing…' : status ? (status.move.kind === 'running' ? status.move.title : `Next: ${status.move.title}`) : 'your coach'
+
   return (
-    <div className={`cx ${info ? 'info-open' : ''} ${typing ? 'typing' : ''}`}>
+    <div className={`cx cf ${info ? 'info-open' : ''} ${typing ? 'typing' : ''}`}>
       <section className="cx-chat">
-        <header className="cx-head">
-          <button className={`cx-face mood-${status?.mood ?? 'chill'}`} onClick={() => setInfo((v) => !v)} title="Coach info" aria-label="Coach info">
-            {face}
-          </button>
-          <div className="cx-who">
-            <b>Ben</b>
-            <span className="cx-status">
-              {busy ? (
-                <span className="cx-typing-label">thinking…</span>
-              ) : status ? (
-                <>
-                  <i className={`cx-dot mood-${status.mood}`} /> {status.mood} · {status.why}
-                </>
-              ) : (
-                'your coach'
-              )}
+        {/* CL6: a calm header; CL7: today's numbers as small chips. */}
+        <header className="cf-head">
+          <button className="cf-who" onClick={() => setInfo((v) => !v)} title="Ben's desk: plan, goals, about you">
+            <BenMark big />
+            <span>
+              <b>Ben</b>
+              <small className={busy ? 'typing' : ''}>{statusLine}</small>
             </span>
+          </button>
+          {status && (
+            <div className="cf-chips" role="list" aria-label="Today">
+              <button role="listitem" onClick={() => (setTab('plan'), setInfo(true))} title="Must-dos: open the plan">
+                Must-dos <b>{status.today.mustTotal ? `${status.today.mustDone}/${status.today.mustTotal}` : 'none'}</b>
+              </button>
+              {!!status.today.waterTarget && (
+                <button role="listitem" onClick={() => void addWater()} title="Tap to add 250 ml">
+                  Water <b>{(status.today.waterMl / 1000).toFixed(1)}/{(status.today.waterTarget / 1000).toFixed(1)} L</b>
+                </button>
+              )}
+              <button role="listitem" onClick={() => (status.move.kind === 'focus' || status.move.kind === 'running' ? void doMove() : (setTab('today'), setInfo(true)))} title={status.move.kind === 'focus' ? 'Start focus' : 'Focus today'}>
+                Focus <b>{status.today.focusMin >= 60 ? `${Math.floor(status.today.focusMin / 60)}h ${status.today.focusMin % 60}m` : `${status.today.focusMin} min`}</b>
+              </button>
+            </div>
+          )}
+          <div className="cf-head-tools">
+            <button className={`icon-btn ${query != null ? 'on' : ''}`} onClick={() => setQuery((q) => (q == null ? '' : null))} aria-label="Search the chat" title="Search and filter">
+              <Icon name="search" />
+            </button>
+            <button className={`icon-btn ${menu ? 'on' : ''}`} onClick={() => setMenu((v) => !v)} aria-label="More" aria-expanded={menu} title="More">
+              ⋯
+            </button>
+            {menu && (
+              <div className="cf-menu" role="menu" onClick={() => setMenu(false)}>
+                <button role="menuitem" onClick={() => setInfo(true)}>Plan, goals and about you</button>
+                <button role="menuitem" onClick={() => setExtras((v) => !v)}>{extras ? 'Hide shortcuts' : 'Show shortcuts'}</button>
+                <button role="menuitem" onClick={openBrain}>Ben's brain (model and cost)</button>
+                <button role="menuitem" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'notebook' }))}>Notebook</button>
+              </div>
+            )}
           </div>
-          <button
-            className="cx-model"
-            title="Ben's brain: change the model and see what it costs"
-            onClick={() => {
-              try {
-                localStorage.setItem('ls.settingsTab', 'ben')
-              } catch {
-                /* fine */
-              }
-              window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'settings' }))
-              setTimeout(() => window.dispatchEvent(new CustomEvent('life-settings-tab', { detail: 'ben' })), 300)
-            }}
-          >
-            {/* The model's name and cost live in Settings → Ben (V8); here just the way there. */}
-            🧠 Ben's brain
-          </button>
-          <button className="cx-model" title="Your notebook: what Ben knows about you, his notes, your journal" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'notebook' }))}>
-            📓 Notebook
-          </button>
-          <button className={`icon-btn ${query != null ? 'on' : ''}`} onClick={() => setQuery((q) => (q == null ? '' : null))} aria-label="Search the chat" title="Search the chat">
-            <Icon name="search" />
-          </button>
-          <button className={`icon-btn cx-info-btn ${info ? 'on' : ''}`} onClick={() => setInfo((v) => !v)} aria-label="Show plan, goals and more" title="Plan, goals, score, about you">
-            <Icon name="sliders" />
-          </button>
         </header>
 
         {query != null && (
-          <div className="cx-search">
+          <div className="cx-search cf-search">
             <input
               autoFocus
               value={query}
@@ -403,6 +486,21 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 </button>
               </>
             )}
+            {/* CM5: filters */}
+            <div className="cf-filters" role="tablist" aria-label="Show">
+              {(
+                [
+                  ['all', 'All'],
+                  ['talk', 'Conversation'],
+                  ['nudges', "Ben's nudges"],
+                  ['logged', 'Logged']
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {query != null && query.trim() && hits.length > 0 && (
@@ -428,36 +526,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           </ul>
         )}
 
-        {status && query == null && (
-          <div className={`cx-pin move-${status.move.kind} ${log?.length ? 'slim' : ''}`}>
-            <div className="cx-pin-text">
-              <small>Do this now</small>
-              <b>{status.move.title}</b>
-              <span>{status.move.sub}</span>
-            </div>
-            <div className="cx-pin-actions">
-              {status.move.kind === 'answer' && (
-                <button className="btn ghost small" disabled={busy} onClick={() => void send(`Not yet: ${(status.move as any).promise}`)}>
-                  Not yet
-                </button>
-              )}
-              <button className="btn primary" disabled={busy} onClick={() => void doMove()}>
-                {moveLabel[status.move.kind]}
-              </button>
-              {!!log?.length && (
-                <button className={`btn ghost small cx-more-btn ${extras ? 'on' : ''}`} onClick={() => setExtras((v) => !v)} aria-expanded={extras} title={extras ? 'Fold away' : 'Plan, promises, goals and shortcuts'}>
-                  ⋯
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
         {status && query == null && (!log?.length || extras) && (
-          <div className="cx-strip" role="list">
+          <div className="cx-strip cf-wide" role="list">
             <button role="listitem" className="cx-card" onClick={() => (setTab('plan'), setInfo(true))}>
               <small>Plan</small>
-              <b>{status.plan.status === 'approved' ? '✓ Approved' : status.plan.status === 'proposed' ? 'Waiting for you' : 'Not yet'}</b>
+              <b>{status.plan.status === 'approved' ? 'Approved' : status.plan.status === 'proposed' ? 'Waiting for you' : 'Not yet'}</b>
               <span>{status.plan.score != null ? `Day score ${status.plan.score}/100` : status.plan.status === 'none' ? 'Tap “Plan it”' : `${status.plan.mustdos} must-dos · ${status.plan.blocks} blocks`}</span>
             </button>
             <button role="listitem" className={`cx-card ${status.promises.missed ? 'warn' : ''}`} onClick={() => (setTab('today'), setInfo(true))}>
@@ -469,57 +542,30 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             </button>
             <button role="listitem" className="cx-card" onClick={() => (setTab('goals'), setInfo(true))}>
               <small>Goals</small>
-              {status.goals.length ? (
-                <div className="cx-rings">
-                  {status.goals.slice(0, 3).map((g) => (
-                    <span key={g.id} className="cx-ring-wrap" title={`${g.title}: ${g.pct}% · ${g.perDayMin} min/day · ${g.daysLeft} days left`}>
-                      <span className={`cx-ring ${g.status.replace(' ', '-')}`} style={{ ['--p' as string]: `${g.pct}%` }}>
-                        <i>{g.pct}%</i>
-                      </span>
-                      <em>{g.subject}</em>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <b>None yet</b>
-                  <span>Add one with a deadline</span>
-                </>
-              )}
+              <b>{status.goals.length ? `${status.goals.length} active` : 'None yet'}</b>
+              <span>{status.goals.length ? status.goals.slice(0, 2).map((g) => `${g.subject} ${g.pct}%`).join(' · ') : 'Add one with a deadline'}</span>
             </button>
-            <div role="listitem" className="cx-card static">
-              <small>Today</small>
-              <b>
-                {Math.floor(status.today.focusMin / 60) ? `${Math.floor(status.today.focusMin / 60)}h ` : ''}
-                {status.today.focusMin % 60}m focus
-              </b>
-              <span>
-                {status.today.mustTotal ? `${status.today.mustDone}/${status.today.mustTotal} must-dos` : 'No must-dos'}
-                {status.today.waterTarget ? ` · 💧 ${(status.today.waterMl / 1000).toFixed(1)}/${(status.today.waterTarget / 1000).toFixed(1)} L` : ''}
-              </span>
-            </div>
           </div>
         )}
 
         {query == null && (!log?.length || extras) && (
-          <div className="cx-deck" role="toolbar" aria-label="Ben's big moves">
+          <div className="cx-deck cf-wide" role="toolbar" aria-label="Ben's big moves">
             {(
               [
-                ['today', '🛟', 'Rescue my day', false],
-                ['plan', '🗓', 'Plan my week', false],
-                ['today', '💎', 'Stake a promise', false],
-                ['plan', '🎙', 'Coach call', !!deck?.callDue],
-                ['money', '🛍', 'Should I buy it?', false],
-                ['you', '🔍', 'My patterns', false],
-                ['month', '📖', 'My month', false]
+                ['today', 'Rescue my day', false],
+                ['plan', 'Plan my week', false],
+                ['today', 'Stake a promise', false],
+                ['plan', 'Coach call', !!deck?.callDue],
+                ['money', 'Should I buy it?', false],
+                ['you', 'My patterns', false],
+                ['month', 'My month', false]
               ] as const
-            ).map(([t, icon, label, hot]) => (
+            ).map(([t, label, hot]) => (
               <button
                 key={label}
                 className={hot ? 'hot' : ''}
                 disabled={busy}
                 onClick={() => {
-                  // U14: the big moves start a short talk in the chat; stakes and the call open the desk.
                   const say: Record<string, string> = {
                     'Rescue my day': 'Rescue my day: shrink the rest of today to fit what I can still do.',
                     'Plan my week': 'Plan my week: my big 3 and blocks in my free time.',
@@ -537,7 +583,6 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                   setInfo(true)
                 }}
               >
-                <span>{icon}</span>
                 {label}
                 {label === 'Stake a promise' && !!deck?.stakes.filter((x) => x.status === 'open').length && <i className="n">{deck.stakes.filter((x) => x.status === 'open').length}</i>}
               </button>
@@ -545,119 +590,63 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           </div>
         )}
 
-        <div className="co-stream cx-stream" ref={streamRef}>
-          {log === null && (
-            <div className="cx-skel" aria-label="Loading your conversation">
-              <i />
-              <i className="me" />
-              <i />
-            </div>
-          )}
-          {log?.length === 0 && (
-            <div className="co-hero">
-              <span className="co-avatar">{face}</span>
-              <h3>Talk to me like a friend.</h3>
-              <p>I see your day, calendar, Todoist, sleep, training and money, and I can act: log things, plan blocks, book goals, hold you to promises.</p>
-              {/* One starter, not four (V5): "Do this now" above already offers the plan. */}
-              <div className="co-cards">
-                {starters.map((c) => (
-                  <button key={c.title} className="co-card" disabled={busy} onClick={() => void send(c.ask)}>
-                    <b>{c.title}</b>
-                    <small>{c.sub}</small>
-                  </button>
-                ))}
+        <div className="co-stream cx-stream cf-stream" ref={streamRef}>
+          <div className="cf-col">
+            {log === null && (
+              <div className="cx-skel" aria-label="Loading your conversation">
+                <i />
+                <i className="me" />
+                <i />
               </div>
-            </div>
-          )}
-          {log?.map((m, i) => {
-            const prev = log[i - 1]
-            const day = new Date(m.at).toDateString()
-            const newDay = !prev || new Date(prev.at).toDateString() !== day
-            const grouped = !newDay && prev && prev.role === m.role && Date.parse(m.at) - Date.parse(prev.at) < 5 * 60000
-            return (
-              <div key={i} id={`cx-m${i}`} className={`cx-item ${hits[hit] === i && query?.trim() ? 'flash' : ''}`}>
-                {newDay && <div className="cx-day">{dayLabel(m.at)}</div>}
-                {m.role === 'coach' && m.proactive && (
-                  <div className="cx-own-label">
-                    {/^(🔔|⏰)/u.test(m.text) ? '⏰ Reminder' : /^(📅|🚶)/u.test(m.text) ? '📅 Calendar' : /^(💧|💪)/u.test(m.text) ? '💧 Check-in' : '🎯 Ben, on his own'} · {m.via === 'app' ? 'app' : 'Telegram'} {new Date(m.at).toTimeString().slice(0, 5)}
-                  </div>
-                )}
-                <div className={`co-row ${m.role} ${grouped ? 'grouped' : ''} ${m.proactive ? 'own' : ''}`}>
-                  {m.role === 'coach' && (
-                    <span className={`co-avatar ${m.mood && MOOD_FACE[m.mood as Mood] ? `mood mood-${m.mood}` : ''} ${grouped ? 'ghost' : ''}`} title={m.mood ? `Coach was ${m.mood}` : undefined}>
-                      {(m.mood && MOOD_FACE[m.mood as Mood]) || '✦'}
-                    </span>
-                  )}
-                  <div className={`co-msg ${m.role} ${m.pending ? 'pending' : ''}`}>
-                    <div className="co-bubble">
-                      {m.pending ? (
-                        <div className="co-thinking">
-                          <span className="co-typing">
-                            <i />
-                            <i />
-                            <i />
-                          </span>
-                          {m.streamed && m.text ? <Rich text={m.text} /> : null}
-                          {!!m.steps?.length && !m.streamed && (
-                            <ul className="co-steps live">
-                              {m.steps.map((st, k) => (
-                                <li key={k} className={k === m.steps!.length - 1 ? 'now' : 'ok'}>
-                                  {st}
-                                  {k === m.steps!.length - 1 ? '…' : ''}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          {!!m.steps?.length && (
-                            <details className="co-steps-pill">
-                              <summary>
-                                ✓ {m.steps.length} step{m.steps.length === 1 ? '' : 's'}
-                              </summary>
-                              <ul>
-                                {m.steps.map((st, k) => (
-                                  <li key={k}>{st}</li>
-                                ))}
-                              </ul>
-                            </details>
-                          )}
-                          {m.photo && <img className="cx-photo" src={m.photo} alt="Your photo" />}
-                          {m.role === 'coach' ? <Rich text={m.text} reveal={!!m.fresh} highlight={query ?? ''} /> : <Rich text={m.text} highlight={query ?? ''} />}
-                        </>
-                      )}
-                      {!!m.done?.length && (
-                        <ul className="cx-actions cx-receipt">
-                          {m.done.length > 1 && (m.undo ?? []).filter((op, k) => op && !m.undone?.[k]).length > 1 && (
-                            <li className="cx-receipt-head">
-                              <span>
-                                {m.done.length} things done
-                              </span>
-                              <button className="cx-undo" onClick={() => void undoLine(m)} title="Take all of it back">
-                                ↩ Undo all
-                              </button>
-                            </li>
-                          )}
-                          {m.done.map((d, k) => {
-                            const can = !!m.undo?.[k] && !m.undone?.[k]
-                            return (
-                              <li key={k} className={`cx-action ${m.undone?.[k] ? 'undone' : ''} ${d.startsWith('⚠️') ? 'warn' : ''}`}>
-                                <span>{d}</span>
-                                {can && (
-                                  <button className="cx-undo" onClick={() => void undoLine(m, k)} title="Take this back">
-                                    ↩ Undo
-                                  </button>
-                                )}
-                                {m.undone?.[k] && <em>undone</em>}
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                      {!m.pending && (!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
-                      {!m.pending && m.role === 'coach' && life.coach?.feedback && <Feedback m={m} latest={i === lastReply} />}
-                      {m.failed && (
+            )}
+            {log?.length === 0 && (
+              <div className="co-hero cf-hero">
+                <BenMark big />
+                <h3>Talk to me like a friend.</h3>
+                <p>I see your day, calendar, Todoist, sleep, training and money, and I can act: log things, plan blocks, book goals, hold you to promises.</p>
+                <div className="co-cards">
+                  {starters.map((c) => (
+                    <button key={c.title} className="co-card" disabled={busy} onClick={() => void send(c.ask)}>
+                      <b>{c.title}</b>
+                      <small>{c.sub}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!!log?.length && !feed.some((x) => x.t === 'msg') && <p className="cf-empty">Nothing here with this filter.</p>}
+            {log &&
+              feed.map((it) => {
+                if (it.t === 'divider')
+                  return (
+                    <div key={it.key} className="cf-divider">
+                      <span>{it.label}</span>
+                    </div>
+                  )
+                if (it.t === 'new')
+                  return (
+                    <div key={it.key} className="cf-new">
+                      <span>New since {it.since}</span>
+                    </div>
+                  )
+                if (it.t === 'fold') return <FoldLine key={it.key} item={it} log={log} open={!!openFolds[it.key]} onToggle={() => setOpenFolds((o) => ({ ...o, [it.key]: !o[it.key] }))} />
+                const i = it.i
+                const m = log[i]
+                const flash = hits[hit] === i && query?.trim() ? 'flash' : ''
+                const replyBtn = !m.pending && (
+                  <button className="cf-reply" onClick={() => (setQuote(m), setTimeout(() => (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus(), 30))} title="Reply to this message">
+                    ↩ Reply
+                  </button>
+                )
+                if (m.role === 'me')
+                  return (
+                    <div key={it.key} id={`cx-m${i}`} className={`cf-row me ${it.grouped ? 'grouped' : ''} ${flash}`}>
+                      <div className="cf-me">
+                        {m.quote && <blockquote>{m.quote}</blockquote>}
+                        {m.photo && <img className="cx-photo" src={m.photo} alt="Your photo" />}
+                        <Rich text={m.text} highlight={query ?? ''} />
+                      </div>
+                      {m.failed ? (
                         <span className="cx-failed" title={m.failed}>
                           Not sent ·{' '}
                           <button
@@ -672,81 +661,171 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                             Retry
                           </button>
                         </span>
+                      ) : (
+                        !it.grouped && <Meta m={m} />
                       )}
-                      {!m.pending && (
-                        <span className="cx-time">
-                          {m.via === 'app' ? '' : 'Telegram · '}
-                          {new Date(m.at).toTimeString().slice(0, 5)}
-                        </span>
+                    </div>
+                  )
+                if (it.kind !== 'talk')
+                  return (
+                    <div key={it.key} id={`cx-m${i}`} className={`cf-row ben nudge ${it.grouped ? 'grouped' : ''} ${flash}`}>
+                      <BenMark ghost={it.grouped} />
+                      <div className="cf-ben">
+                        <NudgeCard m={m} kind={it.kind} info={it.info} repeats={it.repeats} settled={it.settled} latest={latestOf[it.kind] === i} status={status} deck={deck} onChange={() => (loadStatus(), onWallet())} />
+                        <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
+                        <div className="cf-foot">
+                          <Meta m={m} />
+                          {replyBtn}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                return (
+                  <div key={it.key} id={`cx-m${i}`} className={`cf-row ben ${it.grouped ? 'grouped' : ''} ${flash}`}>
+                    <BenMark ghost={it.grouped} />
+                    <div className={`cf-ben ${m.pending ? 'pending' : ''}`}>
+                      {m.pending ? (
+                        // CM6: typing, with one short line about what Ben is doing.
+                        <div className="cf-thinking">
+                          <span className="co-typing">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                          {!!m.steps?.length && <span className="cf-step">{m.steps[m.steps.length - 1]}…</span>}
+                          {m.streamed && m.text ? (
+                            <div className="cf-text">
+                              <Rich text={m.text} maxBold={2} />
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <>
+                          {m.photo && <img className="cx-photo" src={m.photo} alt="" />}
+                          <div className="cf-text">
+                            <Rich text={m.text} reveal={!!m.fresh} highlight={query ?? ''} maxBold={2} />
+                          </div>
+                          <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
+                          {(!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
+                          <div className="cf-foot">
+                            {!it.grouped && <Meta m={m} />}
+                            {!!m.steps?.length && (
+                              <details className="cf-steps">
+                                <summary>
+                                  {m.steps.length} step{m.steps.length === 1 ? '' : 's'}
+                                </summary>
+                                <ul>
+                                  {m.steps.map((st, k) => (
+                                    <li key={k}>{st}</li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                            {replyBtn}
+                            {life.coach?.feedback && <Feedback m={m} latest={i === lastReply} />}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
-                </div>
-              </div>
-            )
-          })}
-          <div ref={end} />
+                )
+              })}
+            <div ref={end} />
+          </div>
         </div>
         {unseen > 0 && (
           <button className="cx-newbtn" onClick={toBottom}>
             ↓ {unseen} new
           </button>
         )}
-        {!!log?.length && !busy && (
-          <div className="co-quick cx-quick">
-            {([...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)?.chips?.length ? [...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)!.chips! : QUICK).slice(0, 3).map((q) => (
-              <button key={q} className="wp-chip" disabled={busy} onClick={() => void send(q)}>
-                {q}
-              </button>
-            ))}
-          </div>
-        )}
-        <form
-          className="co-composer cx-composer"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void send()
-          }}
-        >
-          {photo && (
-            <span className="cx-attach">
-              <img src={photo.url} alt="" />
-              <button type="button" onClick={() => setPhoto(null)} aria-label="Remove photo">
-                ✕
-              </button>
-            </span>
+
+        <div className="cf-dock">
+          {status && query == null && filter === 'all' && !!log?.length && <NowCard status={status} busy={busy} onDo={() => void doMove()} onNotYet={() => void send(`Not yet: ${(status.move as any).promise}`)} />}
+          {!!log?.length && !busy && (
+            <div className="cf-sugg">
+              {chips.map((q) => (
+                <button key={q} disabled={busy} onClick={() => void send(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
           )}
-          <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0]).then(() => (e.target.value = ''))} />
-          <button type="button" className="cx-tool" onClick={() => fileRef.current?.click()} aria-label="Send a photo" title="Photo (a receipt, a meal…)">
-            📷
-          </button>
-          <textarea
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value)
-              e.target.style.height = 'auto'
-              e.target.style.height = `${Math.min(180, e.target.scrollHeight)}px`
-            }}
-            placeholder={listening ? 'Listening…' : 'Message Ben…'}
-            rows={1}
-            onFocus={() => setTyping(true)}
-            onBlur={() => setTyping(false)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                void send()
-              }
-            }}
-          />
-          {Speech && (
-            <button type="button" className={`cx-tool ${listening ? 'rec' : ''}`} onClick={toggleMic} aria-label={listening ? 'Stop dictation' : 'Dictate'} title={listening ? 'Listening… tap to stop' : 'Speak instead of typing'}>
-              🎤
-            </button>
+          {slashHits.length > 0 && (
+            <ul className="cf-slash" role="listbox" aria-label="Shortcuts">
+              {slashHits.map((x) => (
+                <li key={x.cmd}>
+                  <button type="button" onClick={() => (setText(`${x.cmd} `), (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus())}>
+                    <b>{x.cmd}</b> {x.hint}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-          <button className="co-send" disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter)">
-            {busy ? '…' : '↑'}
-          </button>
-        </form>
+          <form
+            className="co-composer cx-composer cf-composer"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void send()
+            }}
+          >
+            {quote && (
+              <div className="cf-quote">
+                <span>
+                  Replying to {quote.role === 'me' ? 'yourself' : 'Ben'}: {quote.text.replace(/\s+/g, ' ').slice(0, 90)}
+                </span>
+                <button type="button" onClick={() => setQuote(null)} aria-label="Cancel the reply">
+                  ✕
+                </button>
+              </div>
+            )}
+            <div className="cf-input">
+              {photo && (
+                <span className="cx-attach">
+                  <img src={photo.url} alt="" />
+                  <button type="button" onClick={() => setPhoto(null)} aria-label="Remove photo">
+                    ✕
+                  </button>
+                </span>
+              )}
+              <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0]).then(() => (e.target.value = ''))} />
+              <button type="button" className="cx-tool" onClick={() => fileRef.current?.click()} aria-label="Send a photo" title="Photo (a receipt, a meal…)">
+                <Icon name="plus" />
+              </button>
+              <textarea
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = `${Math.min(200, e.target.scrollHeight)}px`
+                }}
+                placeholder={listening ? 'Listening…' : typeof window !== 'undefined' && window.innerWidth < 600 ? 'Message Ben…' : 'Message Ben…  (type / for shortcuts)'}
+                rows={1}
+                aria-label="Message Ben"
+                onFocus={() => setTyping(true)}
+                onBlur={() => setTyping(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && quote) setQuote(null)
+                  if (e.key === 'Tab' && slashHits.length) {
+                    e.preventDefault()
+                    setText(`${slashHits[0].cmd} `)
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    void send()
+                  }
+                }}
+              />
+              {Speech && (
+                <button type="button" className={`cx-tool ${listening ? 'rec' : ''}`} onClick={toggleMic} aria-label={listening ? 'Stop dictation' : 'Dictate'} title={listening ? 'Listening… tap to stop' : 'Speak instead of typing'}>
+                  🎙
+                </button>
+              )}
+              <button className="cf-send" disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter) · new line: Shift+Enter">
+                {busy ? '…' : '↑'}
+              </button>
+            </div>
+          </form>
+        </div>
       </section>
 
       <div className="cx-scrim" onClick={() => setInfo(false)} aria-hidden />

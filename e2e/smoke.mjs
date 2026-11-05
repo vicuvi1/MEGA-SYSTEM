@@ -62,6 +62,16 @@ try {
     await pg.waitForSelector('.discipline, .setup, .stealth-cover', { timeout: 10000 })
     if (await pg.evaluate(() => !![...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent && /man/.test(e.getAttribute('src') ?? '')))) throw new Error('MAN is still embedded')
   })
+  // Night 7: Ben's chat folds his automatic messages and shows cards and the Now card.
+  await step("Coach: Ben's chat with folded updates and cards", async () => {
+    await open('coach')
+    await pg.waitForSelector('.cf-col .cf-row', { timeout: 15000 })
+    if (!(await pg.$('.cf-fold'))) throw new Error('no folded updates line')
+    if (!(await pg.$('.cf-card'))) throw new Error('no card')
+    await pg.fill('.cf-input textarea', '/wa')
+    if (!(await pg.$('.cf-slash'))) throw new Error('no / shortcuts')
+    await pg.fill('.cf-input textarea', '')
+  })
   await step('Settings: every section opens with content', async () => {
     await open('settings')
     await pg.waitForSelector('.st-item', { timeout: 10000 })

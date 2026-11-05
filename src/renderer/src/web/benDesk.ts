@@ -20,7 +20,9 @@ import { recurringCharges, sleepLink, spendPace, type Recurring, type SleepLink,
 import { REMINDERS, promiseStats, type Reminder } from '@core/coachKit'
 import { DAY_LOG, type DayLogDay } from './dayLog'
 import { listNotes, saveNote } from './notes'
-import { loadMind, loadProfile } from './botBrain'
+import { loadMind, loadProfile, sportState } from './botBrain'
+import { addWater, sharedView, sportToday } from '@core/sportShared'
+import { defaultSport } from '@core/sportCards'
 import type { Services } from './webServices'
 
 export const DESK = 'ben_desk'
@@ -348,6 +350,8 @@ export function refreshProfile(s: Services, finance: any, now = new Date(), forc
 
 export type DeskOp =
   | { op: 'mood'; mood: number }
+  /** CC2: water from the chat's water card (the same record as "water 250"). */
+  | { op: 'water'; ml: number }
   | { op: 'stake'; text: string; due: string; points: number }
   | { op: 'keepStake'; id: string }
   | { op: 'dropStake'; id: string }
@@ -388,6 +392,15 @@ export function deskChange(s: Services, o: DeskOp, now = new Date()): string {
   if (o.op === 'mood') {
     logMood(db, o.mood, now)
     return 'Mood noted'
+  }
+  if (o.op === 'water') {
+    const ml = Math.round(o.ml)
+    if (!(ml > 0 && ml <= 2000)) throw new Error('Water: between 1 and 2000 ml')
+    const day = sportToday(now)
+    const next = addWater(sportState(db) ?? defaultSport(day), ml, day)
+    setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+    const v = sharedView(next, day)
+    return `💧 +${ml} ml · ${(v.water.ml / 1000).toFixed(1)} of ${(v.water.target / 1000).toFixed(1)} L today`
   }
   if (o.op === 'stake') {
     const due = readDue(o.due, now) ?? (Number.isFinite(Date.parse(o.due)) ? new Date(o.due).toISOString() : null)

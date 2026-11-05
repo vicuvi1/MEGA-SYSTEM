@@ -18,6 +18,24 @@ const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
 db.run("INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES (?, ?, 'quests', 'adjust', 500, 0, 'starting coins')", [new Date().toISOString(), day(3)])
 db.run("INSERT INTO discipline_events (kind, day, ts) VALUES ('start', ?, ?)", [day(10), new Date().toISOString()])
 db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
+// A made-up chat with Ben (Night 7 smoke): his automatic messages and a short talk.
+{
+  const ago = (min) => new Date(Date.now() - min * 60000).toISOString()
+  const hmIn = (min) => new Date(Date.now() + min * 60000).toTimeString().slice(0, 5)
+  const ben = (min, text) => ({ role: 'coach', bot: 'mega', via: 'telegram', text, at: ago(min), proactive: true, mood: 'chill' })
+  const log = [
+    { role: 'me', bot: 'mega', via: 'telegram', text: '30 pushups', at: ago(420) },
+    { role: 'coach', bot: 'mega', via: 'telegram', text: 'Good. Water 750/2700, push-ups 30/130. 3 sets of 10 more today.', at: ago(419), done: ['💪 Push-ups +30 · 30/130 today'] },
+    ben(400, '🌅 Your day · 45-min study focus first; 20-min sport, 10-min read\n\nMust-dos\n1. 45-min focus block on the study project\n2. Sport 20 min\n3. Read 10 min\n\nApprove, change it, or ask for another one.'),
+    ben(240, '⏳ Your plan for today is still waiting: 45-min study focus first.\nApprove it, change it, or ask for a new one.'),
+    ben(200, '🔗 Yesterday slipped (no focus yesterday). Today just do the small version: 15 minutes of focus.'),
+    ben(90, '💧 Water 0.3 of 2.7 L and the day is going. Drink 4 glasses now.'),
+    ben(60, '😐 Lunch check-in: how do you feel right now?'),
+    ben(30, '🎯 3h 10m since your last thing. Pick anything on your list and give it 10 minutes.'),
+    ben(5, `📚 🎯 Deep block (afternoon) starts at ${hmIn(9)} · 100 min · +30 points if you focus.\nStart the timer?`)
+  ]
+  db.run("INSERT INTO settings (key, value) VALUES ('coach_log', ?)", [JSON.stringify(log)])
+}
 
 Object.assign(process.env, { TURSO_URL: `http://127.0.0.1:${port}`, TURSO_TOKEN: 'fake-turso-key', SESSION_SECRET: 'e2e-secret' })
 const api = {}
