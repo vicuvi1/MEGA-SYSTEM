@@ -1976,3 +1976,12 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
   .bb-bubble { width: 44px; height: 44px; font-size: 22px; opacity: 0.92; }
   :root .content { padding-bottom: 150px; }
 }
+
+/* Phone: on pages with a two-way switch (Sport Track · Metrics, MAN · Streak),
+   the switch replaces the title (it names the page anyway) and shrinks to fit (U6). */
+@media (max-width: 760px) {
+  .main > .topbar:has(.seg-switch) { flex-wrap: wrap !important; row-gap: 8px; }
+  .main > .topbar:has(.seg-switch) .title { display: none; }
+  .main > .topbar .seg-switch { order: 20; flex: 1 1 100%; min-width: 0; }
+  .main > .topbar .seg-switch button { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline: 8px; font-size: 13px; }
+}

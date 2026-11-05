@@ -16,7 +16,7 @@ const MAN_FIT_CSS = `
   .audio-banner, .version-footer { display: none !important; }
 `
 import { addDays } from '@core/dates'
-import { embedThemeCss, readTokens } from '@core/embedTheme'
+import { embedPhoneCss, embedThemeCss, readTokens } from '@core/embedTheme'
 import { hostCall, parseBridgeLine, parseBridgeMessage } from '@core/embedBridge'
 import { Icon } from './Icon'
 
@@ -205,11 +205,11 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     const apply = () => {
       // Finance Helper keeps its own look; on a phone inside Life System its
       // robot buddy and calculator button go (they covered the numbers: U3).
-      if (appKey !== 'finance' && !on) return
+      // Colours follow "match app themes"; the phone layouts always apply (U6).
       const root = document.documentElement
       const cs = getComputedStyle(root)
       const light = root.dataset.theme === 'light' || (root.dataset.theme !== 'dark' && window.matchMedia?.('(prefers-color-scheme: light)').matches)
-      const css = appKey === 'finance' ? FINANCE_IN_LIFE : embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light))
+      const css = appKey === 'finance' ? FINANCE_IN_LIFE : `${on ? embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light)) : ''}${embedPhoneCss(appKey)}`
       try {
         if (typeof el.insertCSS === 'function') {
           // Desktop webview: replace the previous sheet.
