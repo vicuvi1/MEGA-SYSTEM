@@ -175,6 +175,12 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
                   setConfirmReset(false)
                   if (s) {
                     setComeback(true)
+                    // The 72-hour plan as real things: Ben's check-ins, and Todoist tasks.
+                    void life.discipline.comeback?.()
+                      .then(async (plan) => {
+                        for (const st of plan.filter((x) => x.kind === 'task')) await life.todoist?.quickAdd(`${st.text} ${st.due ?? 'today'}`).catch(() => null)
+                      })
+                      .catch(() => {})
                     window.dispatchEvent(new Event('life-discipline-reset-done'))
                   }
                 }}
@@ -196,6 +202,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
               <li>Use the urge crusher the next time it hits.</li>
               <li>Check in tomorrow. Day 3 pays a comeback bonus.</li>
             </ul>
+            <p className="hint small">Ben will check in tonight, tomorrow and on day 3 with your if-then plan, and the steps are in Todoist.</p>
             <p className="hint">One slip doesn't erase the work. Your best of {state.best} days is still yours to beat.</p>
             <div className="sheet-actions">
               <button className="btn primary" onClick={() => setComeback(false)}>

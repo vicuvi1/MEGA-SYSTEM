@@ -441,6 +441,8 @@ export interface LifeApi {
     setStealth(on: boolean): Promise<DisciplineState>
     /** What set off an urge / a reset (Ben learns your patterns from it). */
     note?(kind: 'urge' | 'reset', trigger: string, extra?: { before?: number; after?: number; action?: string }): Promise<void>
+    /** After a reset: the 72-hour comeback plan (Ben's check-ins are set; tasks are returned for Todoist). */
+    comeback?(): Promise<import('@core/comeback').ComebackStep[]>
     /** Your risky times and top triggers, in words. */
     patterns?(): Promise<{ windows: string[]; triggers: string[] }>
   }

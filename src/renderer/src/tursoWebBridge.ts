@@ -39,6 +39,8 @@ import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
 import { healthChecks } from '@core/health'
 import { beat, logError, logErrors, readBenLog, readHealth, type ErrorReport } from './web/systemHealth'
 import { addTrigger, loadTriggers, urgeEvents } from './web/disciplinePatterns'
+import { addReminder, REMINDERS, type Reminder } from '@core/coachKit'
+import { comebackPlan } from '@core/comeback'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport } from '@core/sportCards'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
@@ -1037,6 +1039,21 @@ export function createTursoWebBridge(): Bridge {
     discipline: S('discipline', {
       state: async () => withMan(await (await svcP).discipline.state()),
       note: async (kind: 'urge' | 'reset', trigger: string, extra?: { before?: number; after?: number; action?: string }) => (await svcP).write((s) => addTrigger(s.db, { at: new Date().toISOString(), kind, trigger, ...(extra ?? {}) })),
+      // After a reset: Ben's check-ins for the 72-hour comeback plan (H13); the app adds the Todoist tasks.
+      comeback: async () =>
+        (await svcP).write((s) => {
+          const trig = topTriggers(loadTriggers(s.db))[0]?.trigger ?? null
+          const plan = comebackPlan(new Date(), trig, s.sleep.bedtimeTarget())
+          let list: Reminder[] = []
+          try {
+            list = JSON.parse(getSetting(s.db as any, REMINDERS) || '[]')
+          } catch {
+            list = []
+          }
+          for (const st of plan.filter((x) => x.kind === 'checkin')) list = addReminder(list, { at: st.at, text: st.text, kind: 'checkin', follow: false })
+          setSetting(s.db as any, REMINDERS, JSON.stringify(list))
+          return plan
+        }),
       patterns: async () =>
         (await svcP).read((s) => ({
           windows: riskWindows(urgeEvents(s.db)).map(windowLabel),
