@@ -123,10 +123,17 @@ async function page(e) {
   try {
     // A weak connection: after 6 s the saved copy opens instead of a blank
     // screen (Y11). The network answer still updates the copy if it comes.
-    const res = await Promise.race([
-      fetch(e.request),
-      new Promise((_, no) => setTimeout(() => no(new Error('slow')), 6000))
-    ])
+    const net = fetch(e.request)
+    let late = false
+    // If it arrives after the 6 s, it still refreshes the saved page for next time.
+    e.waitUntil(
+      net
+        .then(async (r) => {
+          if (late && r.ok) await cache.put('/', new Response(await r.clone().text(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } }))
+        })
+        .catch(() => null)
+    )
+    const res = await Promise.race([net, new Promise((_, no) => setTimeout(() => ((late = true), no(new Error('slow'))), 6000))])
     if (res.ok) {
       const before = await cache.match('/')
       const html = await res.clone().text()
