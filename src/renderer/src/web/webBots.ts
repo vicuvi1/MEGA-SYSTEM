@@ -3,6 +3,7 @@
 // recorded in bot_seen_updates in the same Turso transaction as what it
 // logged, so the phone and the PC never log one message twice, and a message
 // is never marked done without its record (or the other way round).
+import { addWhy, whyText, WHY_KEY, type WhyEntry } from '@core/benWhy'
 import { withTimeout } from '@core/ai'
 import type { BotBridgeConfig, BotLogEntry, FocusTask } from '@shared/api'
 import {
@@ -520,6 +521,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     switch (parsed.type) {
       case 'help':
         return { reply: formatHelpMessage() }
+      case 'why': {
+        let list: WhyEntry[] = []
+        try {
+          list = JSON.parse(getSetting(s.db as any, WHY_KEY) || '[]')
+        } catch {
+          list = []
+        }
+        return { reply: whyText(Array.isArray(list) ? list : []) }
+      }
       case 'today': {
         const sum = s.wallet.summary()
         return {
@@ -1818,6 +1828,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             ]
           })
         )
+        // /why: each thing done keeps your words that led to it and where it came from (N7).
+        try {
+          const prev = JSON.parse(getSetting(db as any, WHY_KEY) || '[]')
+          setSetting(db as any, WHY_KEY, JSON.stringify(addWhy(Array.isArray(prev) ? prev : [], done, text || `[${media?.kind ?? 'message'}]`, via === 'telegram' ? 'your Telegram message' : 'your message in the app', at)))
+        } catch {
+          /* the action still counts */
+        }
         appendLog(db, [
           { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : text, at },
           { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at, ...(undo.some(Boolean) ? { undo } : {}), ...(out.chips?.length ? { chips: out.chips } : {}), ...(out.buttons?.length ? { buttons: out.buttons } : {}), ...(out.show?.length ? { show: out.show } : {}) }

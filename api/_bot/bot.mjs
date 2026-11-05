@@ -7521,6 +7521,24 @@ syncFinance: (recordDays) => write((s) => {
 		}
 	};
 }
+// src/core/benWhy.ts
+var WHY_KEY = "ben_why";
+function addWhy(list, actions, because, source, at = (/* @__PURE__ */ new Date()).toISOString()) {
+	const real = actions.filter((a) => a && !/^⚠️/.test(a));
+	if (!real.length) return list;
+	return [...list, ...real.map((action) => ({
+		at,
+		action: action.slice(0, 160),
+		because: because.replace(/\s+/g, " ").trim().slice(0, 160),
+		source
+	}))].slice(-40);
+}
+/** The answer to /why: the last few actions, each with its reason and source. */
+function whyText(list, n = 5) {
+	if (!list.length) return "🤔 Nothing to explain yet: I haven't done anything for you lately.";
+	const hm = (iso) => new Date(iso).toTimeString().slice(0, 5);
+	return ["🤔 <b>Why I did it</b>", ...list.slice(-n).reverse().map((w) => `• ${w.action}\n   <i>because you said:</i> “${w.because}” · ${hm(w.at)} · ${w.source}`)].join("\n");
+}
 // src/core/ai.ts
 /** A promise that gives up after `ms` (the server has 60 s per request: never wait past it). */
 function withTimeout(p, ms, what = "The AI") {
@@ -7840,6 +7858,11 @@ function parseTelegramText(text) {
 	};
 	if (cmd === "goals" || cmd === "wishlist") return {
 		type: "goals",
+		args,
+		raw: trimmed
+	};
+	if (cmd === "why") return {
+		type: "why",
 		args,
 		raw: trimmed
 	};
@@ -15463,6 +15486,15 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}
 		switch (parsed.type) {
 			case "help": return { reply: formatHelpMessage() };
+			case "why": {
+				let list = [];
+				try {
+					list = JSON.parse(getSetting(s.db, "ben_why") || "[]");
+				} catch {
+					list = [];
+				}
+				return { reply: whyText(Array.isArray(list) ? list : []) };
+			}
 			case "today": {
 				const sum = s.wallet.summary();
 				return { reply: formatTodayStatus({
@@ -16980,6 +17012,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					at
 				}]
 			}));
+			try {
+				const prev = JSON.parse(getSetting(db, "ben_why") || "[]");
+				setSetting(db, WHY_KEY, JSON.stringify(addWhy(Array.isArray(prev) ? prev : [], done, text || `[${media?.kind ?? "message"}]`, via === "telegram" ? "your Telegram message" : "your message in the app", at)));
+			} catch {}
 			appendLog(db, [{
 				role: "me",
 				bot: persona,

@@ -1,5 +1,6 @@
 export type BotCommandType =
   | 'today'
+  | 'why'
   | 'checkin'
   | 'oath'
   | 'workout'
@@ -334,6 +335,7 @@ export function parseTelegramText(text: string): ParsedCommand {
     return { type: 'goals', args, raw: trimmed }
   }
 
+  if (cmd === 'why') return { type: 'why', args, raw: trimmed }
   if (cmd === 'today' || cmd === 'status' || cmd === 'stat') {
     return { type: 'today', args, raw: trimmed }
   }
