@@ -1704,7 +1704,8 @@
    it uses the full width, and Your day stands on the right at the window's
    full height (06–24 fits without its own scrolling). */
 .td2, .today.cmd { max-width: none; }
-.td2 > .cmd { grid-template-columns: minmax(0, 1fr) clamp(380px, 32%, 560px); }
+/* Two columns only on wide screens; phones and tablets keep one (U1). */
+@media (min-width: 1100px) { .td2 > .cmd { grid-template-columns: minmax(0, 1fr) clamp(380px, 32%, 560px); } }
 @media (min-width: 1100px) and (min-height: 700px) {
   .content:has(> .td2) { display: block; overflow-y: auto; }
   .td2 > .cmd { align-items: start; grid-template-rows: none; }
