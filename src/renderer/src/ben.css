@@ -302,3 +302,16 @@
 .bd-review { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; font-size: 13px; }
 .bd-review li.good b { color: var(--accent-text, var(--accent)); }
 .bd-review li.bad b { color: var(--orange); }
+
+/* Phone (U2): the chat fits between the header and the tab bar, so the
+   message box is always visible (the desktop height rule above overrode it). */
+@media (max-width: 760px) {
+  .cx { height: calc(100dvh - 56px - 96px - 24px); min-height: 360px; }
+  .cx-head { padding: 10px 12px; gap: 10px; }
+  .cx-face { width: 38px; height: 38px; font-size: 21px; }
+  /* The plan / promises / goals cards are on Today; here they'd push the box away. */
+  .cx-strip { display: none; }
+  .cx-pin { padding-block: 10px; }
+  /* While the "Install the app" banner shows, the chat is that much shorter. */
+  .main:has(.pwa-install-banner) .cx { height: calc(100dvh - 56px - 96px - 24px - 150px); min-height: 300px; }
+}
