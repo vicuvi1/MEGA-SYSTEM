@@ -5627,11 +5627,10 @@ var Mirror = class Mirror {
 		return ref;
 	}
 	async rebuild() {
-		const [preDv, preTv] = await this.turso.readMany(READ_VERSIONS).catch(() => [/* @__PURE__ */ new Error("offline"), /* @__PURE__ */ new Error("offline")]);
-		const schema = (await this.turso.readMany([{
+		const [preDv, preTv, schema] = await this.turso.readMany([...READ_VERSIONS, {
 			sql: "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, rowid",
 			args: []
-		}]))[0];
+		}]);
 		if (schema instanceof Error) throw schema;
 		const objects = schema.rows.map(([type, name, tbl, sql]) => ({
 			type: String(type),
@@ -5686,8 +5685,9 @@ var Mirror = class Mirror {
 			args: []
 		});
 		const loaded = /* @__PURE__ */ new Map();
-		for (let i = 0; i < tables.length; i += 8) {
-			const group = tables.slice(i, i + 8);
+		const groups = [];
+		for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8));
+		await Promise.all(groups.map(async (group) => {
 			const first = await this.turso.readMany(group.map((t) => page(t, 0)));
 			for (let k = 0; k < group.length; k++) {
 				const t = group[k];
@@ -5705,7 +5705,7 @@ var Mirror = class Mirror {
 				}
 				loaded.set(t, all);
 			}
-		}
+		}));
 		raw.run("BEGIN");
 		for (const t of tables) {
 			const res = loaded.get(t);
@@ -20563,10 +20563,14 @@ var todoistFetch = (env) => {
 	});
 };
 var warm = null;
+var warmAt = 0;
 async function botsFor(env) {
 	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "") + "|" + (env.google ? "g" : "");
 	if (warm && warm.key === key) {
-		await warm.mirror.refresh();
+		if (Date.now() - warmAt > 3e3) {
+			await warm.mirror.refresh();
+			warmAt = Date.now();
+		}
 		return warm;
 	}
 	const require = createRequire(import.meta.url);
@@ -20614,6 +20618,7 @@ async function botsFor(env) {
 		services,
 		calendar
 	};
+	warmAt = Date.now();
 	return warm;
 }
 var todoistCheckedAt = 0;

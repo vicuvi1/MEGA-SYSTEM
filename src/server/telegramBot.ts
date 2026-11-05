@@ -123,11 +123,17 @@ const todoistFetch = (env: BotEnv): typeof fetch => {
 }
 
 let warm: { key: string; SQL: SqlJsStatic; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null } | null = null
+let warmAt = 0
 
 async function botsFor(env: BotEnv) {
   const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '')
   if (warm && warm.key === key) {
-    await warm.mirror.refresh() // what the devices changed since the last message
+    // What the devices changed since the last message (one tiny read); not
+    // again within the same few seconds (a tick calls this several times: S2).
+    if (Date.now() - warmAt > 3000) {
+      await warm.mirror.refresh()
+      warmAt = Date.now()
+    }
     return warm
   }
   const require = createRequire(import.meta.url)
@@ -161,6 +167,7 @@ async function botsFor(env: BotEnv) {
   const calendar = calendarFor(env, mirror)
   const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar })
   warm = { key, SQL, bots, mirror, services, calendar }
+  warmAt = Date.now()
   return warm
 }
 

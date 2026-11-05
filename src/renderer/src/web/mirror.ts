@@ -572,11 +572,11 @@ export class Mirror {
 
   private async rebuild(): Promise<void> {
     // The versions first: the data read after them is at least this new.
-    const [preDv, preTv] = await this.turso.readMany(READ_VERSIONS).catch(() => [new Error('offline'), new Error('offline')] as (Error)[])
-    const schemaRes = await this.turso.readMany([
+    // The versions and the schema in one round trip (S2).
+    const [preDv, preTv, schema] = await this.turso.readMany([
+      ...READ_VERSIONS,
       { sql: "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, rowid", args: [] }
     ])
-    const schema = schemaRes[0]
     if (schema instanceof Error) throw schema
     const objects = schema.rows
       .map(([type, name, tbl, sql]) => ({ type: String(type), name: String(name), tbl: String(tbl), sql: String(sql) }))
@@ -624,8 +624,11 @@ export class Mirror {
     const PAGE = 1500
     const page = (t: string, offset: number) => ({ sql: `SELECT * FROM "${t}" ORDER BY rowid LIMIT ${PAGE} OFFSET ${offset}`, args: [] })
     const loaded = new Map<string, { cols: string[]; rows: unknown[][] }>()
-    for (let i = 0; i < tables.length; i += 8) {
-      const group = tables.slice(i, i + 8)
+    // Groups of 8 tables, fetched side by side (S2): the same request sizes as
+    // before, without waiting for one group before asking for the next.
+    const groups: string[][] = []
+    for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8))
+    await Promise.all(groups.map(async (group) => {
       const first = await this.turso.readMany(group.map((t) => page(t, 0)))
       for (let k = 0; k < group.length; k++) {
         const t = group[k]
@@ -640,7 +643,7 @@ export class Mirror {
         }
         loaded.set(t, all)
       }
-    }
+    }))
     raw.run('BEGIN')
     for (const t of tables) {
       const res = loaded.get(t)
