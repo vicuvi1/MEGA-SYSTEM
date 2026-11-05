@@ -4,7 +4,7 @@
 //   plugin_<id>_data    any                what its job fetched last (the cache)
 //   plugins_status      {id: {at, ok, note, need}}  how its last job went
 // Never secrets: tokens stay in Vercel environment variables.
-import { getSetting, setSetting } from '../main/settings'
+import { getSetting, setSetting, readSetting, writeSetting } from '../main/settings'
 import type { PluginDb } from './types'
 
 export const PLUGINS_ON = 'plugins_on'
@@ -23,14 +23,14 @@ export function parseJson<T>(raw: string | null | undefined, fallback: T): T {
 }
 
 export function pluginsOn(db: PluginDb): Record<string, boolean> {
-  const v = parseJson<Record<string, boolean>>(getSetting(db, PLUGINS_ON), {})
+  const v = readSetting(db, PLUGINS_ON)
   return v && typeof v === 'object' ? v : {}
 }
 
 export const isOn = (db: PluginDb, id: string): boolean => pluginsOn(db)[id] === true
 
 export function setOn(db: PluginDb, id: string, on: boolean): void {
-  setSetting(db, PLUGINS_ON, JSON.stringify({ ...pluginsOn(db), [id]: on }))
+  writeSetting(db, PLUGINS_ON, { ...pluginsOn(db), [id]: on })
 }
 
 export function readConfig<T extends Record<string, unknown>>(db: PluginDb, id: string): Partial<T> {

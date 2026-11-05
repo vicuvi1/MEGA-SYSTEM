@@ -3,6 +3,7 @@
 // something stays broken for 30+ minutes and sends a weekly check on Sundays.
 import { useCallback, useEffect, useState } from 'react'
 import type { Check, ErrorEntry } from '@core/health'
+import { storageUse, storageWarning } from '@core/storageUse'
 import { life } from './bridge'
 import { Icon } from './Icon'
 
@@ -39,6 +40,7 @@ export function HealthPanel() {
         <span className={`sporty-dot ${bad.length ? 'idle' : 'on'}`}>{bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} a look` : 'Everything works'}</span>
       </header>
       <p className="muted bk-note">Ben messages you on Telegram when something stays broken for 30+ minutes, and says when it works again. A short report comes on Sunday evenings.</p>
+      <StorageNote />
       <ul className="hp-list">
         {h.checks.map((c) => (
           <li key={c.id} className={c.ok ? 'ok' : 'bad'}>
@@ -80,6 +82,23 @@ export function HealthPanel() {
       )}
       <ReminderTimer tick={h.checks.find((c) => c.id === 'tick') ?? null} />
     </section>
+  )
+}
+
+/** LT5: a warning when this browser's localStorage (the embedded apps' data) is nearly full. */
+function StorageNote() {
+  const [note] = useState(() => {
+    try {
+      return typeof localStorage === 'undefined' ? null : storageWarning(storageUse(localStorage))
+    } catch {
+      return null
+    }
+  })
+  if (!note) return null
+  return (
+    <p className="bk-note hp-storage" role="alert">
+      ⚠️ {note}
+    </p>
   )
 }
 

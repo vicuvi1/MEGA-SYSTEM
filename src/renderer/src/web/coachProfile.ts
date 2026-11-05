@@ -5,7 +5,7 @@ import { COACH_HISTORY, cleanHistory } from '@core/coachImpact'
 import { findPatterns, type CoachMind } from '@core/coachMind'
 import { addDays } from '@core/dates'
 import { financeSpending } from '@core/progress'
-import { getSetting } from '../../../main/settings'
+import { getSetting, readSetting } from '../../../main/settings'
 import { financeStateFrom, loadLetters, loadMind, loadSelfReview, type Letter } from './botBrain'
 import type { Services } from './webServices'
 
@@ -25,7 +25,7 @@ export function profileView(s: Services, now = new Date()): ProfileView {
   const today = s.wallet.today(now)
   let reminders: Reminder[] = []
   try {
-    reminders = JSON.parse(getSetting(db, REMINDERS) || '[]')
+    reminders = readSetting(db, REMINDERS)
   } catch {
     reminders = []
   }

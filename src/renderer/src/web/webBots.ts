@@ -21,7 +21,7 @@ import {
 } from '@core/botCommands'
 import { addDays, calendarDay } from '@core/dates'
 import { formatMoney } from '@core/money'
-import { getSetting, setSetting } from '../../../main/settings'
+import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import { queueFinanceExpense } from './financeInbox'
 import { deleteMoney, editMoney, keepMoneyAsk, logMoney, moneyButton, previewMoney, recentMoney, takeMoneyAsk } from './financeBot'
 import { payTodoist } from './todoistCoins'
@@ -142,7 +142,7 @@ function addRepsInDb(db: any, name: string, amount: number): { done: number; tar
   // Your local day, like Sport Track and the rest of the bot (was the UTC date: N7).
   const r = addReps(st, name, amount, sportToday())
   if (!r) return null
-  setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: r.st }))
+  writeSetting(db, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
   return { done: r.exercise.done, target: r.exercise.target }
 }
 
@@ -512,7 +512,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (cmd) {
       const day = sportToday()
       const st = sportState(s.db) ?? defaultSport(day)
-      if (!sportState(s.db)) setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
+      if (!sportState(s.db)) writeSetting(s.db, 'sport_tracker_json', { savedAt: Date.now(), data: st })
       const c = /^water$/i.test(cmd[1]) ? waterCard(st, day) : workoutCard(st, day)
       return { reply: c.text, keyboard: c.keyboard }
     }
@@ -522,7 +522,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const day = sportToday()
       const st = sportState(s.db) ?? defaultSport(day)
       const next = addWater(st, ml, day)
-      setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+      writeSetting(s.db, 'sport_tracker_json', { savedAt: Date.now(), data: next })
       const c = waterCard(next, day, waterToday(s.db, s).target)
       return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> logged.\n\n${c.text}`, keyboard: c.keyboard }
     }
@@ -757,7 +757,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const svc = services.services(db)
         const day = sportToday()
         let st = sportState(db) ?? defaultSport(day)
-        const save = (x: any) => setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: x }))
+        const save = (x: any) => writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: x })
         if (data.startsWith('wa|')) {
           if (!show) {
             st = addWater(st, Number(data.slice(3)) || 0, day)
@@ -1560,7 +1560,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             tone: loadStyle(db).tone,
             feedback: feedbackText(loadFeedback(db)),
             selfReview: sr && sr.day >= addDays(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join('\n') : '',
-            stealth: getSetting(db as any, 'discipline_stealth') === '1'
+            stealth: readSetting(db as any, 'discipline_stealth')
           }
         })(),
         feel: (() => {
@@ -1568,7 +1568,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           const f = svc.focus.state()
           let list: Reminder[] = []
           try {
-            list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+            list = readSetting(db as any, REMINDERS)
           } catch {
             list = []
           }
@@ -1592,7 +1592,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         promises: (() => {
           let list: Reminder[] = []
           try {
-            list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+            list = readSetting(db as any, REMINDERS)
           } catch {
             list = []
           }
@@ -1888,13 +1888,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             await mirror.write((db) => {
               let list: Reminder[] = []
               try {
-                list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+                list = readSetting(db as any, REMINDERS)
               } catch {
                 list = []
               }
               const next = addReminder(list, { at: at.toISOString(), text: a.text, kind: a.kind, follow: a.kind === 'checkin' })
               opNow = { k: 'remind', id: next[next.length - 1].id }
-              setSetting(db as any, REMINDERS, JSON.stringify(next))
+              writeSetting(db as any, REMINDERS, next)
             })
             done.push(a.kind === 'remind' ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== new Date().toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ''}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`)
             continue
@@ -1916,11 +1916,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             await mirror.write((db) => {
               let list: Reminder[] = []
               try {
-                list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+                list = readSetting(db as any, REMINDERS)
               } catch {
                 list = []
               }
-              setSetting(db as any, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)))
+              writeSetting(db as any, REMINDERS, setOutcome(list, id, a.outcome))
             })
             await rhythm.countPromise(await services.read((sv) => sv.wallet.today()), a.outcome).catch(() => null)
             done.push(a.outcome === 'kept' ? '✅ Promise kept' : '❌ Promise broken (counted)')
@@ -1974,7 +1974,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const st = sportState(db) ?? defaultSport(day)
               const r = a.kind === 'exercise' ? setExercise(st, day, a.name, a.target, a.unit) : removeExercise(st, day, a.name)
               if (!r.line) return a.kind === 'exercise' ? `⚠️ Give "${a.name}" a daily target` : `⚠️ No exercise "${a.name}" on your list`
-              setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: r.st }))
+              writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
               return r.line
             })
             done.push(line)
@@ -2000,7 +2000,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             const line = await mirror.write((db) => {
               const day = sportToday()
               const st = sportState(db) ?? defaultSport(day)
-              const save = (next: any) => setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+              const save = (next: any) => writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: next })
               if (a.kind === 'water') {
                 const next = addWater(st, a.ml, day)
                 save(next)
@@ -2245,12 +2245,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               // are closed; taking them off today would be wrong.
               if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`
               if (op.k === 'water') {
-                setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: addWater(st, op.ml, day) }))
+                writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: addWater(st, op.ml, day) })
                 return `↩ Water ${op.ml > 0 ? '+' : ''}${op.ml} ml`
               }
               const r = addReps(st, op.ex, op.amount, day)
               if (!r) return '⚠️ Exercise not found'
-              setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: r.st }))
+              writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
               let gone = ''
               if (op.workout) {
                 try {
@@ -2278,11 +2278,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             if (op.k === 'remind') {
               let list: Reminder[] = []
               try {
-                list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+                list = readSetting(db as any, REMINDERS)
               } catch {
                 list = []
               }
-              setSetting(db as any, REMINDERS, JSON.stringify(list.filter((r) => r.id !== op.id)))
+              writeSetting(db as any, REMINDERS, list.filter((r) => r.id !== op.id))
               return '↩ Reminder cancelled'
             }
             if (op.k === 'plugin') return undoPluginAction({ db: db as any, now: new Date() }, op.plugin, op.verb, op.data)

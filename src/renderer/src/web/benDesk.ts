@@ -10,7 +10,7 @@ import { lifeReview, type LifeReview } from '@core/lifeReview'
 import { urgeEvents } from './disciplinePatterns'
 import { EXPERIMENTS, measureExperiment, pickExperiment, type ExpMetric, type ExpResult, type ExpState, type Experiment, type Series } from '@core/experiment'
 import { nightMinutes } from '@core/readiness'
-import { getSetting, setSetting } from '../../../main/settings'
+import { getSetting, setSetting, writeSetting, readSetting } from '../../../main/settings'
 import { addDays, calendarDay } from '@core/dates'
 import { financeSpending } from '@core/progress'
 import { addExcuse, addMood, energyMap, excuseCallout, excuseCounts, excuseLine, hoursText, moodDue, moodLine, profileCorrections, profileNote, PROFILE_NOTE, weeklyPatterns, classifyExcuse, type EnergyMap, type Excuse, type ExcuseCount, type MoodEntry, type MoodSlot, type Pattern } from '@core/benKnows'
@@ -44,14 +44,14 @@ export const EMPTY_DESK: Desk = { excuses: [], moods: [], study: [], stacks: [],
 
 export function loadDesk(db: any): Desk {
   try {
-    const v = JSON.parse(getSetting(db, DESK) || 'null')
+    const v = readSetting(db, DESK)
     return v && typeof v === 'object' ? { ...EMPTY_DESK, ...v } : { ...EMPTY_DESK }
   } catch {
     return { ...EMPTY_DESK }
   }
 }
 export function saveDesk(db: any, d: Desk): Desk {
-  setSetting(db, DESK, JSON.stringify(d))
+  writeSetting(db, DESK, d)
   return d
 }
 export function editDesk(db: any, f: (d: Desk) => Desk): Desk {
@@ -399,7 +399,7 @@ export function deskChange(s: Services, o: DeskOp, now = new Date()): string {
     if (!(ml > 0 && ml <= WATER_MAX_ML)) throw new Error(`Water: between 1 and ${WATER_MAX_ML} ml`)
     const day = sportToday(now)
     const next = addWater(sportState(db) ?? defaultSport(day), ml, day)
-    setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+    writeSetting(db, 'sport_tracker_json', { savedAt: Date.now(), data: next })
     const v = sharedView(next, day)
     return `💧 +${ml} ml · ${(v.water.ml / 1000).toFixed(1)} of ${(v.water.target / 1000).toFixed(1)} L today`
   }

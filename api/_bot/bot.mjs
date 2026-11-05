@@ -793,13 +793,13 @@ function monthKey$1(day) {
 	return day.slice(0, 7);
 }
 // src/core/strength.ts
-var num$1 = (s) => Number(s.replace(",", "."));
+var num$2 = (s) => Number(s.replace(",", "."));
 function parseSets(raw) {
 	const t = raw.trim().replace(/\s+/g, " ");
 	const m = /^(.+?)\s+(?:(\d+(?:[.,]\d+)?)\s*kg\s+)?(\d{1,2})\s*[x×]\s*(\d{1,3})(?:\s*(?:[x×]|@)\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?)?$/i.exec(t);
 	if (!m) return null;
 	const name = m[1].trim();
-	const kg = m[2] ? num$1(m[2]) : m[5] ? num$1(m[5]) : void 0;
+	const kg = m[2] ? num$2(m[2]) : m[5] ? num$2(m[5]) : void 0;
 	const sets = Number(m[3]);
 	const reps = Number(m[4]);
 	if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 200 || kg != null && !(kg > 0 && kg < 1e3)) return null;
@@ -1340,12 +1340,172 @@ function isFocusBlock(e) {
 function overlapMin(aStart, aEnd, bStart, bEnd) {
 	return Math.max(0, (Math.min(aEnd, bEnd) - Math.max(aStart, bStart)) / 6e4);
 }
+// src/core/settingsKeys.ts
+function json$4(about, fallback) {
+	return {
+		about,
+		type: "json",
+		fallback,
+		parse: (raw) => {
+			if (raw == null || raw === "") return fallback;
+			try {
+				const v = JSON.parse(raw);
+				return v == null ? fallback : v;
+			} catch {
+				return fallback;
+			}
+		},
+		serialize: (v) => JSON.stringify(v)
+	};
+}
+function text(about) {
+	return {
+		about,
+		type: "text",
+		fallback: null,
+		parse: (raw) => raw,
+		serialize: (v) => v ?? ""
+	};
+}
+function num$1(about, fallback = 0) {
+	return {
+		about,
+		type: "number",
+		fallback,
+		parse: (raw) => {
+			const n = raw == null || raw === "" ? NaN : Number(raw);
+			return Number.isFinite(n) ? n : fallback;
+		},
+		serialize: (v) => String(v)
+	};
+}
+/** '1' on, anything else off. */
+function flag(about) {
+	return {
+		about,
+		type: "flag",
+		fallback: false,
+		parse: (raw) => raw === "1",
+		serialize: (v) => v ? "1" : "0"
+	};
+}
+var SETTINGS = {
+	data_version: num$1("bumped on every write; devices refresh when it changes"),
+	coach_tick_at: num$1("old place of the tick clock (now in sys_kv); never written to settings"),
+	pin_hash: text("old device PIN hash (the PIN lives on the server now)"),
+	theme: text("the app look (dark / light)"),
+	bot_bridge_config: json$4("Telegram bot tokens and chat ids saved in the app", null),
+	notif_settings: json$4("quiet hours, event warnings, travel times (N2, N3, N6)", null),
+	milestones_seen: json$4("milestones already celebrated", []),
+	island_day_log: json$4("the island's log of the day", null),
+	sport_tracker_json: json$4("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
+	sport_sync_seen: json$4("when Sporty last synced water and workouts", null),
+	sporty_status: json$4("Sporty's last status", null),
+	sporty_update_request: json$4("a change waiting for Sporty to pick up", null),
+	sport_rest_days: json$4("days marked as rest days", []),
+	ben_workouts: json$4("workouts Ben logged", []),
+	app_sync_finance: json$4("Finance Helper data synced into Life System", null),
+	app_sync_waky: json$4("Waky (sleep) data synced into Life System", null),
+	finance_backup_json: json$4("older copy of the Finance Helper data", null),
+	waky_backup_json: json$4("older copy of the Waky data", null),
+	finance_inbox_json: json$4("bank lines waiting to be sorted in Finance Helper", []),
+	fin_tx_links: json$4("money entries linked to Finance Helper transactions", null),
+	tg_expense_links: json$4("Telegram messages linked to the expenses they logged", null),
+	conn_finance_since: text("when Finance Helper was first connected"),
+	money_ask: json$4("a money question Ben is waiting on", null),
+	money_currency: text("currency for money (MDL)"),
+	money_daily_budget: num$1("daily spending budget"),
+	coach_log: json$4("Ben's chat (newest 200 entries)", []),
+	coach_memory: json$4("Ben's memory: facts and recent chat", null),
+	coach_profile: json$4("about you, as Ben knows it", null),
+	coach_mind: json$4("long-term memory: goals, people, what works", null),
+	coach_reminders: json$4("reminders and check-ins Ben will send", []),
+	coach_nudges: json$4("nudge state (paused today, last sent)", null),
+	coach_rhythm: json$4("the daily rhythm: morning plan, reviews", null),
+	coach_rhythm_prefs: json$4("daily rhythm settings", null),
+	coach_history: json$4("past days Ben looks back on", []),
+	coach_letters: json$4("Ben's weekly letters", []),
+	coach_feedback: json$4("your thumbs up / down on replies", []),
+	coach_selfreview: json$4("Ben's review of his own week", null),
+	coach_story: json$4("the story of your weeks", null),
+	coach_style: json$4("Ben's tone and style", null),
+	coach_adapt: json$4("how Ben adapts the plan to how it went", null),
+	goal_booking: json$4("goal blocks booked into the calendar", null),
+	ben_desk: json$4("Ben's desk: excuses, moods, study, stakes, calls, letters", null),
+	ben_experiment: json$4("the experiment running now", null),
+	ben_why: json$4("why Ben did what he did", []),
+	ben_confirm: json$4("an action waiting for your yes", null),
+	ben_cal_seen: json$4("old place of the calendar events Ben saw (now in sys_kv)", []),
+	ben_outbox: json$4("messages Telegram refused, tried again for 6 hours", []),
+	ben_sent_count: json$4("messages Ben sent on his own today (app day)", null),
+	ben_sent_today: json$4("kinds of message already sent today (app day)", null),
+	ben_misstwice_day: text("app day of the last \"never miss twice\" message"),
+	voiced_kinds: json$4("nudge kinds Ben already wrote in his own words today", null),
+	morning_sent_day: text("day the morning message went out"),
+	wind_down_day: text("day the wind-down message went out"),
+	plan_suggestion: json$4("Ben's suggested plan for today", null),
+	area_words: json$4("words that map tasks to life areas", null),
+	task_area_colors: json$4("colours of the life areas", null),
+	focus_running: json$4("the focus session running now, or null", null),
+	focus_ratings: json$4("how each focus session felt", []),
+	block_marks: json$4("calendar blocks marked done / skipped", null),
+	blocks_settled_day: text("day the blocks were last settled"),
+	cal_templates: json$4("saved calendar templates", []),
+	today_order: json$4("the order of Today's cards", []),
+	week_plan: json$4("this week's plan", null),
+	week_plans: json$4("past week plans", null),
+	my_habits: json$4("your own habits", []),
+	month_aims: json$4("the month's aims", null),
+	learn_log: json$4("learning path log", []),
+	life_mode: json$4("life mode (exam, holiday, sick…)", null),
+	sleep_bed_target: text("bedtime target (HH:MM)"),
+	sleep_weekday_target: text("weekday wake target (HH:MM)"),
+	sleep_weekend_target: text("weekend wake target (HH:MM)"),
+	discipline_stealth: flag("stealth mode: neutral words everywhere (\"1\" on)"),
+	discipline_triggers: json$4("urge triggers you logged", []),
+	discipline_undone_resets: json$4("resets you took back", []),
+	discipline_warned: json$4("risk warnings already sent", null),
+	urge_started_at: text("when the current urge started (ISO), or empty"),
+	points_v2: text("marker: points moved to version 2"),
+	points_v3: text("marker: points moved to version 3"),
+	"perk.shadow_monarch.p1_streak": num$1("perk: P1 task streak"),
+	"hunter.stat_allocation": json$4("points put into each stat", null),
+	streak_shields: num$1("streak shields you hold"),
+	reward_budget: num$1("monthly money for rewards"),
+	reward_unlocks: json$4("rewards that unlock with a goal or streak", null),
+	currency: text("old name of the money currency"),
+	coin_exchange_rate: num$1("lei per point"),
+	bank_base_rate: num$1("points bank interest rate"),
+	bank_cap_per_level: num$1("points bank cap per level"),
+	bank_last_interest_day: text("day interest was last paid"),
+	bank_staked_coins: num$1("points in the bank"),
+	bank_total_interest_earned: num$1("interest earned so far"),
+	plugins_on: json$4("which plugins are switched on", {}),
+	plugins_status: json$4("how each plugin's last job went", {}),
+	plugin_notes_notion: json$4("the notes plugin: Notion settings", null)
+};
+function parseSetting(key, raw) {
+	return SETTINGS[key].parse(raw);
+}
+function serializeSetting(key, value) {
+	return SETTINGS[key].serialize(value);
+}
 // src/main/settings.ts
+/** The raw text of a key (prefer readSetting for a listed key). */
 function getSetting(db, key) {
 	return db.prepare("SELECT value FROM settings WHERE key = ?").get(key)?.value ?? null;
 }
+/** Saves raw text under a key (prefer writeSetting for a listed key). */
 function setSetting(db, key, value) {
 	db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
+/** LT5: a listed key, parsed to its type (its default when missing or unreadable). */
+function readSetting(db, key) {
+	return parseSetting(key, getSetting(db, key));
+}
+/** LT5: saves a listed key in its own format (JSON, '1'/'0', a number or text). */
+function writeSetting(db, key, value) {
+	setSetting(db, key, serializeSetting(key, value));
 }
 // src/core/goalPlan.ts
 var round5 = (m) => Math.ceil(m / 5) * 5;
@@ -2789,7 +2949,7 @@ var Discipline = class {
 			milestones: this.milestones(events, today),
 			urgeStartedAt: getSetting(this.db, "urge_started_at") || null,
 			urgesThisWeek: events.filter((e) => e.kind === "urge" && e.day >= weekAgo).length,
-			stealth: getSetting(this.db, "discipline_stealth") === "1",
+			stealth: readSetting(this.db, "discipline_stealth"),
 			quote: quoteFor(today),
 			checkIn: (() => {
 				const w = checkInWindow(events, today, now.getHours());
@@ -2949,7 +3109,7 @@ var Discipline = class {
 		setSetting(this.db, "urge_started_at", "");
 	}
 	setStealth(on) {
-		setSetting(this.db, "discipline_stealth", on ? "1" : "0");
+		writeSetting(this.db, "discipline_stealth", on);
 	}
 };
 function loadTriggers(db) {
@@ -3491,7 +3651,7 @@ function parseJson$1(raw, fallback) {
 	}
 }
 function pluginsOn(db) {
-	const v = parseJson$1(getSetting(db, PLUGINS_ON), {});
+	const v = readSetting(db, PLUGINS_ON);
 	return v && typeof v === "object" ? v : {};
 }
 var isOn = (db, id) => pluginsOn(db)[id] === true;
@@ -4768,20 +4928,20 @@ function loadProfile(db) {
 	}
 }
 function saveLog(db, entries) {
-	setSetting(db, LOG, JSON.stringify(entries.slice(-MAX_LOG)));
+	writeSetting(db, LOG, entries.slice(-MAX_LOG));
 }
 var LOG = "coach_log";
 var MAX_LOG = 200;
 function loadLog(db) {
 	try {
-		const l = JSON.parse(getSetting(db, LOG) || "[]");
+		const l = readSetting(db, LOG);
 		return Array.isArray(l) ? l : [];
 	} catch {
 		return [];
 	}
 }
 function appendLog(db, entries) {
-	setSetting(db, LOG, JSON.stringify([...loadLog(db), ...entries].slice(-200)));
+	writeSetting(db, LOG, [...loadLog(db), ...entries].slice(-200));
 }
 /** Which coach a bot is, from its token's id. */
 function personaFor(botId, cfg) {
@@ -4973,7 +5133,7 @@ function nowContext(s, db, events, finance, now = /* @__PURE__ */ new Date()) {
 	else out.push("HIS DAY SO FAR: nothing logged and no messages yet today.");
 	const fresh = [];
 	try {
-		const saved = JSON.parse(getSetting(db, "sport_tracker_json") || "null");
+		const saved = readSetting(db, "sport_tracker_json");
 		if (saved?.savedAt) fresh.push(`water/reps last changed ${new Date(saved.savedAt).toDateString() === now.toDateString() ? hmOf(new Date(saved.savedAt)) : new Date(saved.savedAt).toISOString().slice(0, 10)}`);
 		else fresh.push("water/reps: nothing logged yet");
 	} catch {}
@@ -5102,7 +5262,7 @@ function saveMind(db, m) {
 /** Sport Track's shared state (water and reps), if it exists. */
 function sportState(db) {
 	try {
-		return JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+		return readSetting(db, "sport_tracker_json")?.data ?? null;
 	} catch {
 		return null;
 	}
@@ -9697,7 +9857,7 @@ var EMPTY_DESK = {
 };
 function loadDesk(db) {
 	try {
-		const v = JSON.parse(getSetting(db, "ben_desk") || "null");
+		const v = readSetting(db, DESK);
 		return v && typeof v === "object" ? {
 			...EMPTY_DESK,
 			...v
@@ -9707,7 +9867,7 @@ function loadDesk(db) {
 	}
 }
 function saveDesk(db, d) {
-	setSetting(db, DESK, JSON.stringify(d));
+	writeSetting(db, DESK, d);
 	return d;
 }
 function editDesk(db, f) {
@@ -10095,10 +10255,10 @@ function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
 		if (!(ml > 0 && ml <= 3e3)) throw new Error(`Water: between 1 and ${WATER_MAX_ML} ml`);
 		const day = sportToday(now);
 		const next = addWater(sportState(db) ?? defaultSport(day), ml, day);
-		setSetting(db, "sport_tracker_json", JSON.stringify({
+		writeSetting(db, "sport_tracker_json", {
 			savedAt: Date.now(),
 			data: next
-		}));
+		});
 		const v = sharedView(next, day);
 		return `💧 +${ml} ml · ${(v.water.ml / 1e3).toFixed(1)} of ${(v.water.target / 1e3).toFixed(1)} L today`;
 	}
@@ -12533,7 +12693,7 @@ var FocusService = class {
 	}
 	running() {
 		try {
-			return JSON.parse(getSetting(this.db, RUNNING) || "null");
+			return readSetting(this.db, RUNNING);
 		} catch {
 			return null;
 		}
@@ -12627,12 +12787,12 @@ var FocusService = class {
 			ref: String(task.ref).slice(0, 200),
 			title: String(task.title).slice(0, 200)
 		} : null;
-		setSetting(this.db, RUNNING, JSON.stringify({
+		writeSetting(this.db, RUNNING, {
 			subject: name,
 			startedAt: now.toISOString(),
 			planned: minutes,
 			task: t
-		}));
+		});
 		return this.state(now);
 	}
 	/** Stops the timer and logs the minutes; coins for them (up to the daily limit). */
@@ -12641,7 +12801,7 @@ var FocusService = class {
 			const run = this.running();
 			if (!run) throw new LedgerError("No focus session is running");
 			const minutes = sessionMinutes(run.startedAt, run.planned, now);
-			setSetting(this.db, RUNNING, "null");
+			writeSetting(this.db, RUNNING, null);
 			return {
 				...this.log(run.subject, minutes, now, run.startedAt),
 				task: run.task ?? null
@@ -12655,15 +12815,15 @@ var FocusService = class {
 		const m = Math.round(Number(minutes) || 0);
 		if (!m) return this.state(now);
 		const planned = Math.min(240, Math.max(5, run.planned + m));
-		setSetting(this.db, RUNNING, JSON.stringify({
+		writeSetting(this.db, RUNNING, {
 			...run,
 			planned
-		}));
+		});
 		return this.state(now);
 	}
 	/** Drops the running timer without logging it. */
 	cancel(now = /* @__PURE__ */ new Date()) {
-		setSetting(this.db, RUNNING, "null");
+		writeSetting(this.db, RUNNING, null);
 		return this.state(now);
 	}
 	/** A session you did without the timer: it counts in your stats, but only timed sessions pay (BG11). */
@@ -18261,7 +18421,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					const chat = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-14);
 					return chat.length ? `== What you two said today ==\n${chat.map((e) => `${e.at.slice(11, 16)} ${e.role === "me" ? "Victor" : "Ben"}: ${e.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n")}` : "";
 				}),
-				safe(() => promiseLine(promiseStats(JSON.parse(getSetting(db, "coach_reminders") || "[]")))),
+				safe(() => promiseLine(promiseStats(readSetting(db, REMINDERS)))),
 				safe(() => {
 					const facts = pickFacts(loadMemory(db).facts, `${today} ${(loadProfile(db).goals ?? []).join(" ")}`, 12);
 					return facts.length ? `== What you remember about him ==\n${facts.map((f) => `- ${f.t}`).join("\n")}` : "";
@@ -19274,10 +19434,10 @@ function addRepsInDb(db, name, amount) {
 	if (!st || !Array.isArray(st.exercises)) return null;
 	const r = addReps(st, name, amount, sportToday());
 	if (!r) return null;
-	setSetting(db, "sport_tracker_json", JSON.stringify({
+	writeSetting(db, "sport_tracker_json", {
 		savedAt: Date.now(),
 		data: r.st
-	}));
+	});
 	return {
 		done: r.exercise.done,
 		target: r.exercise.target
@@ -19681,10 +19841,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (cmd) {
 			const day = sportToday();
 			const st = sportState(s.db) ?? defaultSport(day);
-			if (!sportState(s.db)) setSetting(s.db, "sport_tracker_json", JSON.stringify({
+			if (!sportState(s.db)) writeSetting(s.db, "sport_tracker_json", {
 				savedAt: Date.now(),
 				data: st
-			}));
+			});
 			const c = /^water$/i.test(cmd[1]) ? waterCard(st, day) : workoutCard(st, day);
 			return {
 				reply: c.text,
@@ -19695,10 +19855,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (ml) {
 			const day = sportToday();
 			const next = addWater(sportState(s.db) ?? defaultSport(day), ml, day);
-			setSetting(s.db, "sport_tracker_json", JSON.stringify({
+			writeSetting(s.db, "sport_tracker_json", {
 				savedAt: Date.now(),
 				data: next
-			}));
+			});
 			const c = waterCard(next, day, waterToday(s.db, s).target);
 			return {
 				reply: `💧 <b>${ml > 0 ? "+" : ""}${ml} ml</b> logged.\n\n${c.text}`,
@@ -19976,10 +20136,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				const svc = services.services(db);
 				const day = sportToday();
 				let st = sportState(db) ?? defaultSport(day);
-				const save = (x) => setSetting(db, "sport_tracker_json", JSON.stringify({
+				const save = (x) => writeSetting(db, "sport_tracker_json", {
 					savedAt: Date.now(),
 					data: x
-				}));
+				});
 				if (data.startsWith("wa|")) {
 					if (!show) {
 						st = addWater(st, Number(data.slice(3)) || 0, day);
@@ -20953,14 +21113,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						tone: loadStyle(db).tone,
 						feedback: feedbackText(loadFeedback(db)),
 						selfReview: sr && sr.day >= addDays$5(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join("\n") : "",
-						stealth: getSetting(db, "discipline_stealth") === "1"
+						stealth: readSetting(db, "discipline_stealth")
 					};
 				})(),
 				feel: (() => {
 					const f = svc.focus.state();
 					let list = [];
 					try {
-						list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+						list = readSetting(db, REMINDERS);
 					} catch {
 						list = [];
 					}
@@ -20984,7 +21144,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				promises: (() => {
 					let list = [];
 					try {
-						list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+						list = readSetting(db, REMINDERS);
 					} catch {
 						list = [];
 					}
@@ -21324,7 +21484,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						await mirror.write((db) => {
 							let list = [];
 							try {
-								list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+								list = readSetting(db, REMINDERS);
 							} catch {
 								list = [];
 							}
@@ -21338,7 +21498,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								k: "remind",
 								id: next[next.length - 1].id
 							};
-							setSetting(db, REMINDERS, JSON.stringify(next));
+							writeSetting(db, REMINDERS, next);
 						});
 						done.push(a.kind === "remind" ? `⏰ Reminder ${fmtHM(at.toISOString())}${at.toDateString() !== (/* @__PURE__ */ new Date()).toDateString() ? ` (${at.toISOString().slice(5, 10)})` : ""}: ${a.text}` : `⏰ I'll check on you at ${fmtHM(at.toISOString())} (and keep asking until you answer)`);
 						continue;
@@ -21360,11 +21520,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						await mirror.write((db) => {
 							let list = [];
 							try {
-								list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+								list = readSetting(db, REMINDERS);
 							} catch {
 								list = [];
 							}
-							setSetting(db, REMINDERS, JSON.stringify(setOutcome(list, id, a.outcome)));
+							writeSetting(db, REMINDERS, setOutcome(list, id, a.outcome));
 						});
 						await rhythm.countPromise(await services.read((sv) => sv.wallet.today()), a.outcome).catch(() => null);
 						done.push(a.outcome === "kept" ? "✅ Promise kept" : "❌ Promise broken (counted)");
@@ -21427,10 +21587,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							const st = sportState(db) ?? defaultSport(day);
 							const r = a.kind === "exercise" ? setExercise(st, day, a.name, a.target, a.unit) : removeExercise(st, day, a.name);
 							if (!r.line) return a.kind === "exercise" ? `⚠️ Give "${a.name}" a daily target` : `⚠️ No exercise "${a.name}" on your list`;
-							setSetting(db, "sport_tracker_json", JSON.stringify({
+							writeSetting(db, "sport_tracker_json", {
 								savedAt: Date.now(),
 								data: r.st
-							}));
+							});
 							return r.line;
 						});
 						done.push(line);
@@ -21465,10 +21625,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						const line = await mirror.write((db) => {
 							const day = sportToday();
 							const st = sportState(db) ?? defaultSport(day);
-							const save = (next) => setSetting(db, "sport_tracker_json", JSON.stringify({
+							const save = (next) => writeSetting(db, "sport_tracker_json", {
 								savedAt: Date.now(),
 								data: next
-							}));
+							});
 							if (a.kind === "water") {
 								const next = addWater(st, a.ml, day);
 								save(next);
@@ -21787,18 +21947,18 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							const day = sportToday();
 							if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`;
 							if (op.k === "water") {
-								setSetting(db, "sport_tracker_json", JSON.stringify({
+								writeSetting(db, "sport_tracker_json", {
 									savedAt: Date.now(),
 									data: addWater(st, op.ml, day)
-								}));
+								});
 								return `↩ Water ${op.ml > 0 ? "+" : ""}${op.ml} ml`;
 							}
 							const r = addReps(st, op.ex, op.amount, day);
 							if (!r) return "⚠️ Exercise not found";
-							setSetting(db, "sport_tracker_json", JSON.stringify({
+							writeSetting(db, "sport_tracker_json", {
 								savedAt: Date.now(),
 								data: r.st
-							}));
+							});
 							let gone = "";
 							if (op.workout) try {
 								svc.body.takeBackSet(op.workout, r.exercise.name, -op.amount);
@@ -21817,11 +21977,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						if (op.k === "remind") {
 							let list = [];
 							try {
-								list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+								list = readSetting(db, REMINDERS);
 							} catch {
 								list = [];
 							}
-							setSetting(db, REMINDERS, JSON.stringify(list.filter((r) => r.id !== op.id)));
+							writeSetting(db, REMINDERS, list.filter((r) => r.id !== op.id));
 							return "↩ Reminder cancelled";
 						}
 						if (op.k === "plugin") return undoPluginAction({
@@ -25834,7 +25994,7 @@ async function runDaily(env, job) {
 			return [];
 		}
 	}
-	const stealth = await mirror.read((db) => getSetting(db, "discipline_stealth") === "1").catch(() => false);
+	const stealth = await mirror.read((db) => readSetting(db, "discipline_stealth")).catch(() => false);
 	const send = async (text, reply_markup, token = env.botToken) => {
 		if (stealth) text = neutral(text);
 		const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -26168,7 +26328,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				note("skipped", original, "Already sent one like it today");
 				return false;
 			}
-			if (await mirror.read((db) => getSetting(db, "discipline_stealth") === "1").catch(() => false)) text = neutral(text);
+			if (await mirror.read((db) => readSetting(db, "discipline_stealth")).catch(() => false)) text = neutral(text);
 			text = await voiced(text);
 			const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
 				method: "POST",
@@ -26263,7 +26423,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const tone = await mirror.read((db) => loadStyle(db).tone);
 		const reminders = await mirror.read((db) => {
 			try {
-				return JSON.parse(getSetting(db, "coach_reminders") || "[]");
+				return readSetting(db, REMINDERS);
 			} catch {
 				return [];
 			}
@@ -26288,7 +26448,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
 			} catch {}
 		}
-		if (list !== reminders) await mirror.write((db) => setSetting(db, REMINDERS, JSON.stringify(list)));
+		if (list !== reminders) await mirror.write((db) => writeSetting(db, REMINDERS, list));
 		try {
 			await rhythmTick(env, now, send);
 		} catch (e) {
@@ -26369,7 +26529,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 			let sportAt = 0;
 			try {
-				sportAt = num(JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.savedAt);
+				sportAt = num(readSetting(db, "sport_tracker_json")?.savedAt);
 			} catch {
 				sportAt = 0;
 			}
@@ -26796,7 +26956,7 @@ async function rhythmTick(env, now, send) {
 		const sl = svc.sleep;
 		let sport = null;
 		try {
-			sport = JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+			sport = readSetting(db, "sport_tracker_json")?.data ?? null;
 		} catch {
 			sport = null;
 		}
@@ -26845,7 +27005,7 @@ async function rhythmTick(env, now, send) {
 		const day = sportToday(now);
 		const card = workoutCard(await mirror.read((db) => {
 			try {
-				return JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+				return readSetting(db, "sport_tracker_json")?.data ?? null;
 			} catch {
 				return null;
 			}
@@ -26870,7 +27030,7 @@ async function rhythmTick(env, now, send) {
 			if (getSetting(db, "discipline_warned") === key) return null;
 			return {
 				key,
-				text: warningText(w, topTriggers(loadTriggers(db), now)[0]?.trigger ?? null, getSetting(db, "discipline_stealth") === "1")
+				text: warningText(w, topTriggers(loadTriggers(db), now)[0]?.trigger ?? null, readSetting(db, "discipline_stealth"))
 			};
 		});
 		if (risk) {
@@ -27010,15 +27170,15 @@ async function sportShared(env, body) {
 	const today = sportToday();
 	const read = (db) => {
 		try {
-			return JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.data ?? null;
+			return readSetting(db, "sport_tracker_json")?.data ?? null;
 		} catch {
 			return null;
 		}
 	};
-	const save = (db, st) => setSetting(db, "sport_tracker_json", JSON.stringify({
+	const save = (db, st) => writeSetting(db, "sport_tracker_json", {
 		savedAt: Date.now(),
 		data: st
-	}));
+	});
 	const op = String(body?.op ?? "state");
 	if (op === "poll") {
 		const r = await mirror.read((db) => pollSporty(parseJson(getSetting(db, SPORTY_STATUS)), parseJson(getSetting(db, SPORTY_REQUEST)), body, /* @__PURE__ */ new Date()));

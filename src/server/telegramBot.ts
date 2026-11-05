@@ -30,7 +30,7 @@ import { shouldPlan } from '@core/weekPlan'
 import { targetForDay } from '@core/sleep'
 import { addDays, calendarDay, dayKey } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
-import { getSetting, setSetting } from '../main/settings'
+import { getSetting, setSetting, readSetting, writeSetting } from '../main/settings'
 import { messageKind, sendOnce, type SentToday } from '../core/benOnce'
 import { cleanVoice, voiceKind, voicePrompt } from '../core/benVoice'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
@@ -290,7 +290,7 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       return []
     }
   }
-  const stealth = await mirror.read((db) => getSetting(db as any, 'discipline_stealth') === '1').catch(() => false)
+  const stealth = await mirror.read((db) => readSetting(db as any, 'discipline_stealth')).catch(() => false)
   const send = async (text: string, reply_markup?: unknown, token = env.botToken) => {
     if (stealth) text = neutral(text)
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -582,7 +582,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       return false
     }
     // Stealth mode: neutral words in everything Ben sends on his own (H14).
-    if (await mirror.read((db) => getSetting(db as any, 'discipline_stealth') === '1').catch(() => false)) text = neutral(text)
+    if (await mirror.read((db) => readSetting(db as any, 'discipline_stealth')).catch(() => false)) text = neutral(text)
     // Nudges in Ben's own words for this moment of your day (the fixed line if that fails).
     text = await voiced(text)
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
@@ -661,7 +661,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // 1) Reminders and check-ins that are due.
   const reminders = await mirror.read((db) => {
     try {
-      return JSON.parse(getSetting(db as any, REMINDERS_KEY) || '[]') as Reminder[]
+      return readSetting(db as any, REMINDERS_KEY)
     } catch {
       return [] as Reminder[]
     }
@@ -691,7 +691,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       /* Telegram hiccup: next tick */
     }
   }
-  if (list !== reminders) await mirror.write((db) => setSetting(db as any, REMINDERS_KEY, JSON.stringify(list)))
+  if (list !== reminders) await mirror.write((db) => writeSetting(db as any, REMINDERS_KEY, list))
 
   // The daily rhythm: morning plan, water and training nudges, evening and Sunday reviews.
   try {
@@ -783,7 +783,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
     let sportAt = 0
     try {
-      sportAt = num(JSON.parse(getSetting(db as any, 'sport_tracker_json') || 'null')?.savedAt)
+      sportAt = num(readSetting(db as any, 'sport_tracker_json')?.savedAt)
     } catch {
       sportAt = 0
     }
@@ -1112,7 +1112,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     const sl = svc.sleep
     let sport: any = null
     try {
-      sport = JSON.parse(getSetting(db as any, 'sport_tracker_json') || 'null')?.data ?? null
+      sport = readSetting(db as any, 'sport_tracker_json')?.data ?? null
     } catch {
       sport = null
     }
@@ -1152,7 +1152,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     const day = sportToday(now)
     const st = await mirror.read((db) => {
       try {
-        return JSON.parse(getSetting(db as any, 'sport_tracker_json') || 'null')?.data ?? null
+        return readSetting(db as any, 'sport_tracker_json')?.data ?? null
       } catch {
         return null
       }
@@ -1175,7 +1175,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       if (!w) return null
       const key = `${f.facts.today}:${w.weekday ?? 'd'}:${w.slot}`
       if (getSetting(db as any, 'discipline_warned') === key) return null
-      return { key, text: warningText(w, topTriggers(loadTriggers(db), now)[0]?.trigger ?? null, getSetting(db as any, 'discipline_stealth') === '1') }
+      return { key, text: warningText(w, topTriggers(loadTriggers(db), now)[0]?.trigger ?? null, readSetting(db as any, 'discipline_stealth')) }
     })
     if (risk) {
       await mirror.write((db) => setSetting(db as any, 'discipline_warned', risk.key))
@@ -1305,12 +1305,12 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   const today = sportToday()
   const read = (db: any) => {
     try {
-      return JSON.parse(getSetting(db, 'sport_tracker_json') || 'null')?.data ?? null
+      return readSetting(db, 'sport_tracker_json')?.data ?? null
     } catch {
       return null
     }
   }
-  const save = (db: any, st: any) => setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: st }))
+  const save = (db: any, st: any) => writeSetting(db, 'sport_tracker_json', { savedAt: Date.now(), data: st })
   const op = String(body?.op ?? 'state')
   // Self-update: Sporty polls every minute; the Update Sporty button leaves a request.
   if (op === 'poll') {

@@ -18,7 +18,7 @@ import { deadlineRadar, whenText, type TodoTask } from '@core/todoist'
 import { financeSpending } from '@core/progress'
 import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
 import { canBeNow, isTentative, takesTime } from '@core/calResponse'
-import { getSetting, setSetting } from '../../../main/settings'
+import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import type { Services } from './webServices'
 import { planGoal, planLine } from '@core/goalPlan'
 import { readButtons, readShow } from '@core/coachButtons'
@@ -148,22 +148,22 @@ export interface LogEntry {
 }
 
 export function saveLog(db: any, entries: LogEntry[]): void {
-  setSetting(db, LOG, JSON.stringify(entries.slice(-MAX_LOG)))
+  writeSetting(db, LOG, entries.slice(-MAX_LOG))
 }
 const LOG = 'coach_log'
 const MAX_LOG = 200
 
 export function loadLog(db: any): LogEntry[] {
   try {
-    const l = JSON.parse(getSetting(db, LOG) || '[]')
-    return Array.isArray(l) ? l : []
+    const l = readSetting(db, LOG)
+    return Array.isArray(l) ? (l as LogEntry[]) : []
   } catch {
     return []
   }
 }
 
 export function appendLog(db: any, entries: LogEntry[]): void {
-  setSetting(db, LOG, JSON.stringify([...loadLog(db), ...entries].slice(-MAX_LOG)))
+  writeSetting(db, LOG, [...loadLog(db), ...entries].slice(-MAX_LOG))
 }
 
 /** Which coach a bot is, from its token's id. */
@@ -375,7 +375,7 @@ export function nowContext(s: Services, db: any, events: CalEvent[] | null, fina
   // Where each number comes from and how fresh it is.
   const fresh: string[] = []
   try {
-    const saved = JSON.parse(getSetting(db, 'sport_tracker_json') || 'null')
+    const saved = readSetting(db, 'sport_tracker_json')
     if (saved?.savedAt) fresh.push(`water/reps last changed ${new Date(saved.savedAt).toDateString() === now.toDateString() ? hmOf(new Date(saved.savedAt)) : new Date(saved.savedAt).toISOString().slice(0, 10)}`)
     else fresh.push('water/reps: nothing logged yet')
   } catch {
@@ -501,7 +501,7 @@ export function saveMind(db: any, m: CoachMind): void {
 /** Sport Track's shared state (water and reps), if it exists. */
 export function sportState(db: any): any | null {
   try {
-    return JSON.parse(getSetting(db, 'sport_tracker_json') || 'null')?.data ?? null
+    return readSetting(db, 'sport_tracker_json')?.data ?? null
   } catch {
     return null
   }

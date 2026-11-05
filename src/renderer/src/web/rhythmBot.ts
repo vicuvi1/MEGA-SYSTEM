@@ -25,7 +25,7 @@ import {
   type DayResult,
   type RhythmPrefs,
   type RhythmState, blocksKept, editPlan, lightenForSleep, draftFits, bookBig3, fromMin, toMin } from '@core/rhythm'
-import { getSetting, setSetting } from '../../../main/settings'
+import { getSetting, setSetting, readSetting } from '../../../main/settings'
 import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStory, pickFacts, saveLetter, saveMind, sportState, loadStyle, saveStyle } from './botBrain'
 import { REMINDERS, promiseLine, promiseStats } from '@core/coachKit'
 import { deskPrompt, deskView } from './benDesk'
@@ -191,7 +191,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           const chat = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-14)
           return chat.length ? `== What you two said today ==\n${chat.map((e) => `${e.at.slice(11, 16)} ${e.role === 'me' ? 'Victor' : 'Ben'}: ${e.text.replace(/\s+/g, ' ').slice(0, 160)}`).join('\n')}` : ''
         }),
-        safe(() => promiseLine(promiseStats(JSON.parse(getSetting(db as any, REMINDERS) || '[]')))),
+        safe(() => promiseLine(promiseStats(readSetting(db as any, REMINDERS)))),
         safe(() => {
           const facts = pickFacts(loadMemory(db).facts, `${today} ${(loadProfile(db).goals ?? []).join(' ')}`, 12)
           return facts.length ? `== What you remember about him ==\n${facts.map((f) => `- ${f.t}`).join('\n')}` : ''

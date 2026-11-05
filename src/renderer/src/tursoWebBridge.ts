@@ -22,7 +22,7 @@ import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
 import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
-import { getSetting, setSetting } from '../../main/settings'
+import { getSetting, setSetting, readSetting, writeSetting } from '../../main/settings'
 import { financeSpending } from '@core/progress'
 
 /** What every screen listens to; sent when live data arrived. */
@@ -603,7 +603,7 @@ export function createTursoWebBridge(): Bridge {
         (await svcP).write((s) => {
           const day = sportToday()
           const next = addWater(sportState(s.db) ?? defaultSport(day), ml, day)
-          setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
+          writeSetting(s.db, 'sport_tracker_json', { savedAt: Date.now(), data: next })
           return sharedView(next, day).water
         }),
       // Sporty on the server: status, and the Update Sporty button (picked up within a minute).
@@ -1184,16 +1184,16 @@ export function createTursoWebBridge(): Bridge {
       comeback: async () =>
         (await svcP).write((s) => {
           const trig = topTriggers(loadTriggers(s.db))[0]?.trigger ?? null
-          const stealth = getSetting(s.db as any, 'discipline_stealth') === '1'
+          const stealth = readSetting(s.db as any, 'discipline_stealth')
           const plan = comebackPlan(new Date(), trig, s.sleep.bedtimeTarget()).map((x) => (stealth ? { ...x, text: neutral(x.text) } : x))
           let list: Reminder[] = []
           try {
-            list = JSON.parse(getSetting(s.db as any, REMINDERS) || '[]')
+            list = readSetting(s.db as any, REMINDERS)
           } catch {
             list = []
           }
           for (const st of plan.filter((x) => x.kind === 'checkin')) list = addReminder(list, { at: st.at, text: st.text, kind: 'checkin', follow: false })
-          setSetting(s.db as any, REMINDERS, JSON.stringify(list))
+          writeSetting(s.db as any, REMINDERS, list)
           return plan
         }),
       patterns: async () =>

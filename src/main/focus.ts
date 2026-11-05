@@ -18,7 +18,7 @@ import {
   type WeekReport
 } from '@core/focus'
 import type { DB } from './db'
-import { getSetting, setSetting } from './settings'
+import { getSetting, setSetting, readSetting, writeSetting } from './settings'
 import type { Wallet } from './wallet'
 
 /** What a session is for, so its end can tick it off (a must-do or a Todoist task). */
@@ -67,7 +67,7 @@ export class FocusService {
 
   private running(): RunningFocus | null {
     try {
-      return JSON.parse(getSetting(this.db, RUNNING) || 'null')
+      return readSetting(this.db, RUNNING) as RunningFocus | null
     } catch {
       return null
     }
@@ -149,7 +149,7 @@ export class FocusService {
     if (this.running()) throw new LedgerError('A focus session is already running: stop it first')
     const minutes = Math.min(180, Math.max(5, Math.round(planned) || 50))
     const t = task && (task.kind === 'mustdo' || task.kind === 'todoist') ? { kind: task.kind, ref: String(task.ref).slice(0, 200), title: String(task.title).slice(0, 200) } : null
-    setSetting(this.db, RUNNING, JSON.stringify({ subject: name, startedAt: now.toISOString(), planned: minutes, task: t }))
+    writeSetting(this.db, RUNNING, { subject: name, startedAt: now.toISOString(), planned: minutes, task: t })
     return this.state(now)
   }
 
@@ -160,7 +160,7 @@ export class FocusService {
       const run = this.running()
       if (!run) throw new LedgerError('No focus session is running')
       const minutes = sessionMinutes(run.startedAt, run.planned, now)
-      setSetting(this.db, RUNNING, 'null')
+      writeSetting(this.db, RUNNING, null)
       return { ...this.log(run.subject, minutes, now, run.startedAt), task: run.task ?? null }
     })()
   }
@@ -172,13 +172,13 @@ export class FocusService {
     const m = Math.round(Number(minutes) || 0)
     if (!m) return this.state(now)
     const planned = Math.min(240, Math.max(5, run.planned + m))
-    setSetting(this.db, RUNNING, JSON.stringify({ ...run, planned }))
+    writeSetting(this.db, RUNNING, { ...run, planned })
     return this.state(now)
   }
 
   /** Drops the running timer without logging it. */
   cancel(now = new Date()): FocusState {
-    setSetting(this.db, RUNNING, 'null')
+    writeSetting(this.db, RUNNING, null)
     return this.state(now)
   }
 

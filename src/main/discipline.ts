@@ -6,7 +6,7 @@ import {
 import { effective, LedgerError } from '@core/ledger'
 import type { DisciplineState } from '@shared/api'
 import type { DB } from './db'
-import { getSetting, setSetting } from './settings'
+import { getSetting, setSetting, readSetting, writeSetting } from './settings'
 import type { Wallet } from './wallet'
 
 const UNDONE_KEY = 'discipline_undone_resets'
@@ -66,7 +66,7 @@ export class Discipline {
       milestones: this.milestones(events, today),
       urgeStartedAt: getSetting(this.db, 'urge_started_at') || null,
       urgesThisWeek: events.filter((e) => e.kind === 'urge' && e.day >= weekAgo).length,
-      stealth: getSetting(this.db, 'discipline_stealth') === '1',
+      stealth: readSetting(this.db, 'discipline_stealth'),
       quote: quoteFor(today),
       checkIn: (() => {
         const w = checkInWindow(events, today, now.getHours())
@@ -228,6 +228,6 @@ export class Discipline {
   }
 
   setStealth(on: boolean): void {
-    setSetting(this.db, 'discipline_stealth', on ? '1' : '0')
+    writeSetting(this.db, 'discipline_stealth', on)
   }
 }
