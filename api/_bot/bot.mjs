@@ -18162,7 +18162,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}
 			]] : []
 		];
-		const markup = r.keyboard ?? (rows.length ? { inline_keyboard: rows } : null);
+		const all = [...r.keyboard?.inline_keyboard ?? [], ...rows].slice(0, 12);
+		const markup = all.length ? { inline_keyboard: all } : null;
 		const widgets = r.ok && r.show?.length ? await widgetText(r.show).catch(() => "") : "";
 		const full = widgets ? `${reply}\n\n${widgets}` : reply;
 		await tg(update.__token, "sendMessage", {

@@ -2051,7 +2051,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       // Feedback: Ben learns what you like.
       ...(r.ok && r.at ? [[{ text: '👍', callback_data: `bf|${Date.parse(r.at)}|up` }, { text: '👎', callback_data: `bf|${Date.parse(r.at)}|down` }, { text: '📏 Too long', callback_data: `bf|${Date.parse(r.at)}|long` }, { text: '❌ Wrong', callback_data: `bf|${Date.parse(r.at)}|wrong` }]] : [])
     ]
-    const markup = r.keyboard ?? (rows.length ? { inline_keyboard: rows } : null)
+    // The action's own keyboard (a money record's buttons, ⏹ Stop) first, then
+    // Ben's buttons, Undo and feedback: never one instead of the other (T5).
+    const all = [...((r.keyboard?.inline_keyboard ?? []) as any[][]), ...rows].slice(0, 12)
+    const markup = all.length ? { inline_keyboard: all } : null
     const widgets = r.ok && r.show?.length ? await widgetText(r.show).catch(() => '') : ''
     const full = widgets ? `${reply}\n\n${widgets}` : reply
     await tg(update.__token, 'sendMessage', { chat_id: chat, text: full, parse_mode: 'HTML', ...(markup ? { reply_markup: markup } : {}) }).catch(() => null)
