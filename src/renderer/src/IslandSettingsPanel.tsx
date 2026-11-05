@@ -115,12 +115,40 @@ function NumberList({ value, label, onChange }: { value: number[]; label: string
   )
 }
 
+/** A size slider: it shows each step at once but saves only once you pause (~250 ms), so dragging doesn't rewrite the file and move the window on every step. */
 function Slider({ label, value, min, max, step = 1, unit, onChange }: { label: string; value: number; min: number; max: number; step?: number; unit: string; onChange: (v: number) => void }) {
+  const [v, setV] = useState(value)
+  const t = useRef<number | null>(null)
+  const send = useRef(onChange)
+  send.current = onChange
+  useEffect(() => {
+    if (t.current == null) setV(value)
+  }, [value])
+  useEffect(() => () => {
+    if (t.current != null) clearTimeout(t.current)
+  }, [])
   return (
     <span className="is-slider">
-      <input className="sx-range" type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={label} />
+      <input
+        className="sx-range"
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={v}
+        onChange={(e) => {
+          const n = Number(e.target.value)
+          setV(n)
+          if (t.current != null) clearTimeout(t.current)
+          t.current = window.setTimeout(() => {
+            t.current = null
+            send.current(n)
+          }, 250)
+        }}
+        aria-label={label}
+      />
       <output>
-        {value}
+        {v}
         {unit}
       </output>
     </span>
@@ -420,6 +448,13 @@ export function IslandSettingsPanel() {
       <h3 className="is-sec">Look</h3>
       <Row title="Colours" hint="Black like an iPhone, glass, a glow in Ben's mood, or the app's own colours (light or dark)">
         {opt('look', 'Look', [['black', 'Black'], ['glass', 'Glass'], ['mood', 'Mood glow'], ['app', 'Match the app']])}
+      </Row>
+      <Row title="Animations" hint="Full: springs, water that sloshes, things that fly into the pill. Calm: gentle fades. Off: no motion">
+        <select className="sx-select" aria-label="Animations" value={p.motion} onChange={(e) => void save({ motion: e.target.value as IslandPrefs['motion'] })}>
+          <option value="full">Full</option>
+          <option value="calm">Calm</option>
+          <option value="off">Off</option>
+        </select>
       </Row>
       <Row title="See-through" hint={`${Math.round(p.opacity * 100)}% solid`}>
         <input className="sx-range" type="range" min={55} max={100} step={5} value={Math.round(p.opacity * 100)} onChange={(e) => void save({ opacity: Number(e.target.value) / 100 })} aria-label="See-through" />

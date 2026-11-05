@@ -9,6 +9,7 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di {
   --ink: 255 255 255; --bg: rgb(4 4 5 / var(--di-alpha, 1)); --fg: #f5f5f6; --sub: rgb(var(--ink) / 0.56); --line: rgb(var(--ink) / 0.08);
   --lime: #d4ff3f; --acc-text: var(--lime); --red: #ff5a5f; --glow: rgb(212 255 63 / 0.3);
+  --amber: #ffb547; --gold: #ffd451; --water: #2f8fe6; --water-hi: #8fdcff; --ben-glow: rgb(140 200 255 / 0.55);
   position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
   font: 13px/1.35 Geist, Inter, 'Segoe UI', system-ui, sans-serif; color: var(--fg);
 }
@@ -251,21 +252,14 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-mic.on { background: var(--red); color: #fff; animation: di-rec 1s ease-in-out infinite; }
 @keyframes di-rec { 50% { box-shadow: 0 0 0 6px rgb(255 90 95 / 0.25); } }
 .di-alert.kind-clip { background: linear-gradient(135deg, rgb(var(--ink) / 0.08), rgb(0 0 0 / 0)); }
-/* Points that pop: '+15 ⭐' floats up from the pill. */
-.di-pop { position: absolute; right: 18px; top: -4px; font-weight: 800; font-size: 13px; color: #ffd451; text-shadow: 0 0 10px rgb(255 212 81 / 0.7); pointer-events: none; animation: di-popup 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
-@keyframes di-popup { 0% { opacity: 0; transform: translateY(8px) scale(0.6); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px) scale(1); } }
 /* A reward unlocking: confetti bursts out of the island. */
 .di-confetti { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 5; }
 .di-confetti i { position: absolute; left: 50%; top: 40px; font-style: normal; font-size: 16px; animation: di-burst 1.6s cubic-bezier(0.15, 0.7, 0.3, 1) both; animation-delay: calc(var(--i) * 25ms); --a: calc(var(--i) * 20deg); }
 @keyframes di-burst { 0% { opacity: 0; transform: translate(-50%, 0) rotate(0) scale(0.4); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(-50% + cos(var(--a)) * 170px), calc(sin(var(--a)) * 120px + 40px)) rotate(var(--a)) scale(1.1); } }
 .di-alert.kind-reward { background: linear-gradient(135deg, rgb(255 212 81 / 0.28), rgb(255 120 200 / 0.14)); }
 .di-alert.kind-highlight { background: linear-gradient(135deg, rgb(255 212 81 / 0.22), rgb(212 255 63 / 0.12)); }
-@keyframes di-popdown { 0% { opacity: 0; transform: translateY(-8px) scale(0.6); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(20px) scale(1); } }
 
 @media (prefers-reduced-motion: reduce) { .di *, .di-shape { animation: none !important; transition: none !important; } }
-/* Inside the shape (it clips): the points pop in place, next to the time. */
-.di .di-pop { top: 10px; right: 46px; animation: di-popin 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
-@keyframes di-popin { 0% { opacity: 0; transform: scale(0.5); } 15% { opacity: 1; transform: scale(1.2); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: translateX(8px); } }
 .di-panel .di-confetti i { top: 30px; }
 
 /* Quiet (Q7) and call-dot (Q5): a small moon / phone; hold the mouse on it to see why. */
@@ -285,11 +279,6 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 @keyframes di-soon { 50% { opacity: 0.65; } }
 
 /* ===== Scenes (A1–A7) ===== */
-/* Something new drops in: the shape squishes like a drop landing. */
-.di-shape.sq0 { animation: di-squish0 0.55s cubic-bezier(0.3, 1.4, 0.5, 1); }
-.di-shape.sq1 { animation: di-squish1 0.55s cubic-bezier(0.3, 1.4, 0.5, 1); }
-@keyframes di-squish0 { 0% { transform: scale(1, 1); } 30% { transform: scale(1.06, 0.9); } 60% { transform: scale(0.97, 1.04); } 100% { transform: scale(1, 1); } }
-@keyframes di-squish1 { 0% { transform: scale(1, 1); } 30% { transform: scale(1.06, 0.9); } 60% { transform: scale(0.97, 1.04); } 100% { transform: scale(1, 1); } }
 .sc { width: 100%; position: relative; display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 64px; margin: -2px 0 4px; border-radius: 18px; overflow: hidden; }
 .sc-cap { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
 .sc-ring { position: relative; display: inline-grid; place-items: center; }
@@ -359,3 +348,101 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di.look-app.theme-light.view-expanded .di-shape { box-shadow: 0 24px 60px rgb(20 25 34 / 0.22), 0 0 0 1px var(--line); }
 .di.look-app.theme-light .di-pill-text { color: rgb(var(--ink) / 0.9); }
 .di.look-app.theme-light .di-cmd input:focus { box-shadow: 0 0 0 1.5px var(--acc-text); }
+
+/* ===== Motion (IA1–IA6, IL1–IL6, IP1–IP2, WATER) =====
+   How much moves follows Settings → Animations: .motion-full / .motion-calm / .motion-off
+   (the system's reduce-motion is Off). Only transform and opacity animate; no blur. */
+.di.motion-off, .di.motion-off * { animation: none !important; transition: none !important; }
+.di.motion-calm :is(.tick, .di-moon, .di-moon-sm, .di-sun, .sc-fig, .sc-arms, .sc-over b, .sc-burst, .di-moon-pill span, .di-alert-top span, .di-peek-face.ben-in, .di-alert.kind-drift) { animation: none !important; }
+
+/* IA5: the pill lifts (scale comes from framer) and its shadow deepens while the mouse is on it. */
+.di.is-hover.view-compact .di-shape { box-shadow: 0 16px 40px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.12), 0 0 28px -4px var(--glow); }
+.di.is-hover.has-timer.view-compact .di-shape { animation: none; }
+
+/* IA2: what flies between the pill, the peek and the panel. */
+.di-flyer { display: inline-flex; align-items: center; min-width: 0; flex: none; }
+.di-pill-main { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.di-flyer.di-pill-title { flex: 1 1 auto; }
+.di-flyer.di-title-fly { display: flex; max-width: 100%; }
+.di-flyer.di-clock-fly, .di-flyer.di-sub-fly { justify-self: start; max-width: 100%; }
+.di-peek-mid small .di-flyer { max-width: 100%; }
+.di-peek-ico { flex: none; }
+
+/* IL1: the live ring is drawn every frame by script (no CSS stepping); it warms in the last 5 minutes. */
+.di-ring.live .fg { transition: none; }
+.di-ring.live.warm .fg { filter: drop-shadow(0 0 3px rgb(255 181 71 / 0.6)); }
+.di-ring.live.over .fg { filter: drop-shadow(0 0 4px rgb(255 90 95 / 0.7)); }
+/* A focus timer's ring breathes, very slightly. */
+.di.motion-full .di-ring.breathe { transform-origin: center; animation: di-ringbreathe 4.2s ease-in-out infinite; }
+@keyframes di-ringbreathe { 50% { transform: scale(1.05); } }
+/* The current block's progress along the bottom edge. */
+.di-sweep { position: absolute; left: 18px; right: 18px; bottom: 0; height: 2px; border-radius: 2px; transform-origin: left center; transform: scaleX(0); background: var(--lime); opacity: 0.75; pointer-events: none; z-index: 2; }
+.di.at-right .di-sweep { transform-origin: right center; }
+.di.view-peek .di-sweep { left: 26px; right: 26px; opacity: 0.6; }
+
+/* IL5: rolling digits. Each character has its own slot; the new one slides in. */
+.roll { display: inline-flex; white-space: pre; }
+.roll-slot { position: relative; display: inline-block; overflow: hidden; vertical-align: bottom; }
+.roll-size { visibility: hidden; }
+.roll-ch { position: absolute; inset: 0; text-align: center; }
+
+/* IP2: long text fades at the right edge and scrolls slowly while the mouse is on the island (Full). */
+.mq { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@supports (mask-image: linear-gradient(#000, #000)) {
+  .mq.long { text-overflow: clip; mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent); }
+  .mq.long .mq-in { display: inline-block; }
+  .di.motion-full.is-hover .mq.long .mq-in { animation: di-marquee var(--mq-t, 6s) ease-in-out 0.5s infinite alternate; }
+}
+@keyframes di-marquee { 0%, 12% { transform: none; } 88%, 100% { transform: translateX(var(--mq-d, 0)); } }
+
+/* IL2: the second live thing, a small round bubble beside the pill. */
+.di-bubble { position: absolute; top: 2px; left: calc(100% + 6px); width: calc(var(--di-pill-h, 38px) - 4px); height: calc(var(--di-pill-h, 38px) - 4px); padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; box-shadow: 0 8px 22px rgb(0 0 0 / 0.45), 0 0 0 1px var(--line); }
+.di.at-right .di-bubble { left: auto; right: calc(100% + 6px); }
+.di-bubble > * { grid-area: 1 / 1; }
+.di-bubble-num { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--lime); }
+.di-bubble-num.soon { color: var(--amber); font-size: 11px; }
+.di-bubble-dot { width: 7px; height: 7px; margin: 3px; border-radius: 50%; background: var(--red); place-self: start end; }
+
+/* A meeting starting soon: a gentle tick-tock on its icon and the dot. */
+.di.motion-full .tick { display: inline-block; animation: di-tick 2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+@keyframes di-tick { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+.di-dot.tick { background: var(--amber); }
+.di.motion-full .di-dot.tick { animation: di-tickdot 1s ease-in-out infinite; }
+@keyframes di-tickdot { 50% { transform: scale(1.35); box-shadow: 0 0 0 4px rgb(255 181 71 / 0.2); } }
+
+/* IP1: Ben has something unread: a very slow, faint glow around the shape (Full; paused while hidden). */
+.di-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: 0 0 18px 3px var(--ben-glow), 0 0 0 1px rgb(150 205 255 / 0.3); }
+.di.motion-full.ben-unread .di-glow { animation: di-benglow 5.5s ease-in-out infinite; }
+.di.doc-hidden .di-glow { animation-play-state: paused; }
+@keyframes di-benglow { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.7; } }
+
+/* IL6: points and water fly into the pill. */
+.di-flights { position: absolute; top: 0; right: 30px; width: 0; height: var(--di-pill-h, 38px); pointer-events: none; z-index: 6; }
+.di.at-right .di-flights { right: auto; left: 60px; }
+.di-flyin { position: absolute; right: -6px; top: calc(var(--di-pill-h, 38px) / 2 - 9px); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; font-weight: 800; font-size: 12.5px; pointer-events: none; }
+.di-flyin.coin { color: var(--gold); text-shadow: 0 0 10px rgb(255 212 81 / 0.7); }
+.di-flyin.drop { color: var(--water-hi); text-shadow: 0 0 10px rgb(71 181 255 / 0.7); }
+.di-flyin-ico { display: inline-block; font-size: 15px; }
+
+/* WATER: the glass. Two waves slide past each other (transform only). */
+.glass { position: relative; display: inline-block; flex: none; line-height: 0; }
+.glass svg { display: block; overflow: visible; }
+.glass.live .gl-w { transform-box: fill-box; animation: gl-wave 2.6s linear infinite; }
+.glass.live .gl-w.back { animation-duration: 3.9s; animation-direction: reverse; }
+@keyframes gl-wave { to { transform: translateX(-50%); } }
+.glass.full .gl-edge { stroke: rgb(191 234 255 / 0.85); }
+.gl-label { position: absolute; left: 50%; top: 0; translate: -50% 0; white-space: nowrap; font-size: 11px; line-height: 1; font-weight: 800; color: var(--water-hi); text-shadow: 0 0 8px rgb(71 181 255 / 0.8); pointer-events: none; z-index: 3; }
+.di-water { position: relative; }
+.di-water > .glass { margin: -4px 2px -4px 0; }
+.di-bar.water i { width: 100%; transform-origin: left center; transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.di-wbtn { position: relative; overflow: hidden; }
+.di-ripple { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: rgb(143 220 255 / 0.55); pointer-events: none; animation: di-ripple 0.55s ease-out forwards; }
+@keyframes di-ripple { to { transform: scale(9); opacity: 0; } }
+.sc-water { gap: 10px; }
+.sc-water .sc-cap { font-size: 13px; font-weight: 700; color: var(--water-hi); }
+.di.at-top-right .di-bubble { left: auto; right: calc(100% + 6px); }
+.di.at-top-right .di-flights { right: auto; left: 60px; }
+.di.at-top-right .di-sweep { transform-origin: right center; }
+.di.look-app.theme-light .di-glow { box-shadow: 0 0 18px 3px rgb(60 130 220 / 0.35), 0 0 0 1px rgb(60 130 220 / 0.25); }
+.di.look-app.theme-light .di-bubble { box-shadow: 0 8px 20px rgb(20 25 34 / 0.18), 0 0 0 1px var(--line); }
+.di.look-app.theme-light .glass .gl-edge { stroke: rgb(var(--ink) / 0.35); }

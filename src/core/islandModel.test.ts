@@ -194,3 +194,27 @@ describe('the right event is "Now" (IS10, IS6)', () => {
     expect(nowNext([maybe, invite], at(15, 10))).toEqual({ now: null, next: null })
   })
 })
+
+describe('island motion and two live things (IA6, IL2)', () => {
+  it('keeps the animations setting, full by default', async () => {
+    const { cleanIslandPrefs } = await import('./islandModel')
+    expect(cleanIslandPrefs(null).motion).toBe('full')
+    expect(cleanIslandPrefs({ motion: 'calm' }).motion).toBe('calm')
+    expect(cleanIslandPrefs({ motion: 'off' }).motion).toBe('off')
+    expect(cleanIslandPrefs({ motion: 'wild' }).motion).toBe('full')
+  })
+  it('a timer and a meeting soon (or Ben unread) are two live things; water is not', async () => {
+    const { activities, liveActivity, pillBubbles, EMPTY_ISLAND } = await import('./islandModel')
+    const at = (h: number, m = 0) => new Date(2026, 10, 4, h, m).getTime()
+    const two = (s: any, now: number) => {
+      const { main, second } = pillBubbles(activities(s, now), null)
+      return [main, second].filter((x) => liveActivity(x, now)).map((x) => x!.kind)
+    }
+    const base = { ...EMPTY_ISLAND, locked: false, running: { subject: 'Math', startedAt: at(10), endsAt: at(10, 25) }, water: { ml: 500, target: 2700 } }
+    expect(two({ ...base, next: { title: 'Call', start: at(10, 12), end: at(10, 40) } }, at(10, 5))).toEqual(['timer', 'next'])
+    // The meeting an hour away is not live yet: just the pill.
+    expect(two({ ...base, next: { title: 'Gym', start: at(12), end: at(13) } }, at(10, 5))).toEqual(['timer'])
+    expect(two({ ...base, ben: { ...EMPTY_ISLAND.ben, unread: 1, last: { text: 'Hi', at: 'x', face: '🙂' } } }, at(10, 5))).toEqual(['timer', 'ben'])
+    expect(liveActivity(null, at(9))).toBe(false)
+  })
+})

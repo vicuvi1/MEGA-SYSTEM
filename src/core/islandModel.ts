@@ -309,6 +309,8 @@ export interface IslandPrefs {
   pillHeight: number
   peekWidth: number
   panelWidth: number
+  /** Animations: full (springs, flights, water bubbles), calm (gentle fades) or off. */
+  motion: 'full' | 'calm' | 'off'
 }
 
 /** peek: it drops down; dot: a dot only (it waits in the panel); never: not shown (IF5). */
@@ -385,7 +387,8 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   idleLook: 'dot',
   pillHeight: 38,
   peekWidth: 400,
-  panelWidth: 460
+  panelWidth: 460,
+  motion: 'full'
 }
 export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { compact: 0.88, normal: 1, large: 1.15 }
 export const HIDE_MS: Record<IslandPrefs['hide'], number> = { fast: 250, normal: 450, slow: 1200 }
@@ -440,7 +443,8 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
     idleLook: p?.idleLook === 'fade' ? 'fade' : 'dot',
     pillHeight: num(p?.pillHeight, SIZE_LIMITS.pillHeight[0], SIZE_LIMITS.pillHeight[1], d.pillHeight, true),
     peekWidth: num(p?.peekWidth, SIZE_LIMITS.peekWidth[0], SIZE_LIMITS.peekWidth[1], d.peekWidth, true),
-    panelWidth: num(p?.panelWidth, SIZE_LIMITS.panelWidth[0], SIZE_LIMITS.panelWidth[1], d.panelWidth, true)
+    panelWidth: num(p?.panelWidth, SIZE_LIMITS.panelWidth[0], SIZE_LIMITS.panelWidth[1], d.panelWidth, true),
+    motion: ['full', 'calm', 'off'].includes(p?.motion) ? p.motion : d.motion
   }
 }
 
@@ -568,6 +572,15 @@ export function meetingToOpen(s: IslandSnapshot, now: number, minutes: number): 
   if (!minutes || !s.next || !s.next.call || s.next.maybe) return null
   const left = s.next.start - now
   return left > 0 && left <= minutes * 60_000 ? `meet:${s.next.start}:${s.next.title}` : null
+}
+
+/**
+ * Is this pill activity live (IL2): a running timer, a meeting within 10
+ * minutes, Ben's unread message? Two live ones show as the pill plus a small
+ * round bubble beside it.
+ */
+export function liveActivity(a: Activity | null, now: number): boolean {
+  return !!a && (a.kind === 'timer' || a.kind === 'ben' || (a.kind === 'next' && a.at != null && a.at - now <= 10 * 60_000))
 }
 
 // ---- The island's states (desktop command center) --------------------------

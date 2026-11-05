@@ -9,11 +9,12 @@
 // springs that can reverse halfway. States and timers live in islandStep
 // (core/islandModel.ts), so nothing closes or opens behind your back.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, clock, islandStep, islandTiming, isLive, meetingToOpen, pill, pillBubbles, tuckState, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, clock, islandStep, islandTiming, isLive, liveActivity, meetingToOpen, pill, pillBubbles, tuckState, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
 import type { IslandPlacement, IslandTheme } from '../../shared/desktop'
-import { AlertScene, TypeIn } from './IslandScenes'
+import { AlertScene, CountUp, Glass, Marquee, Roll, TypeIn, type WaterSplash } from './IslandScenes'
+import { FeelContext, bump, feelFor, flyId, onFrame, ringColor, useFeel, type Feel } from './islandFeel'
 import { logIslandUi } from './islandLog'
 import { plainError } from '@core/islandErrors'
 import './island.css'
@@ -85,12 +86,109 @@ function Ring({ pct, over, size = 22, stroke = 2.6 }: { pct: number; over?: bool
   )
 }
 
-function ActIcon({ a, face, small = false }: { a: Activity; face: string; small?: boolean }) {
-  const size = small ? 20 : 22
+/**
+ * IL1: a ring that fills smoothly from `from` to `to` (ms), drawn by the one
+ * shared animation frame (no re-render, no 1-second steps). It warms from
+ * lime to amber in the last 5 minutes and goes red when time is up. A focus
+ * timer's ring (`timer`) also breathes and gives a soft pulse each minute.
+ * Off: it moves once a second.
+ */
+function SmoothRing({ from, to, size = 22, stroke = 2.6, timer = false }: { from: number; to: number; size?: number; stroke?: number; timer?: boolean }) {
+  const f = useFeel()
+  const svg = useRef<SVGSVGElement>(null)
+  const fg = useRef<SVGCircleElement>(null)
+  const r = size / 2 - stroke
+  const c = 2 * Math.PI * r
+  useEffect(() => {
+    let lastOff = -1
+    let lastColor = '-'
+    let lastMin = -1
+    const draw = (t: number) => {
+      const el = fg.current
+      if (!el) return
+      const pct = Math.min(1, Math.max(0, (t - from) / Math.max(1, to - from)))
+      const off = c * (1 - pct)
+      if (Math.abs(off - lastOff) >= 0.02) {
+        el.setAttribute('stroke-dashoffset', off.toFixed(2))
+        lastOff = off
+      }
+      const color = ringColor(to - t) ?? ''
+      if (color !== lastColor) {
+        el.style.stroke = color
+        svg.current?.classList.toggle('over', t > to)
+        svg.current?.classList.toggle('warm', t <= to && to - t < 5 * 60_000)
+        lastColor = color
+      }
+      // A soft pulse as each minute ticks over (Full only).
+      const min = Math.floor((to - t) / 60_000)
+      if (timer && f.extras && lastMin !== -1 && min !== lastMin && t < to) svg.current?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.14)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 520, easing: 'ease-out' })
+      lastMin = min
+    }
+    if (f.mode === 'off') {
+      draw(Date.now())
+      const i = window.setInterval(() => draw(Date.now()), 1000)
+      return () => clearInterval(i)
+    }
+    return onFrame(draw)
+  }, [from, to, c, timer, f])
+  return (
+    <svg ref={svg} className={`di-ring live ${timer ? 'breathe' : ''}`} width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+      <circle cx={size / 2} cy={size / 2} r={r} className="bg" strokeWidth={stroke} />
+      <circle ref={fg} cx={size / 2} cy={size / 2} r={r} className="fg" strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={c} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+    </svg>
+  )
+}
+
+/** IL1: the current block's (or timer's) progress, a thin line sweeping along the bottom edge. */
+function Sweep({ from, to }: { from: number; to: number }) {
+  const f = useFeel()
+  const el = useRef<HTMLElement>(null)
+  useEffect(() => {
+    let last = -1
+    let lastColor = '-'
+    const draw = (t: number) => {
+      const pct = Math.min(1, Math.max(0, (t - from) / Math.max(1, to - from)))
+      if (el.current && Math.abs(pct - last) >= 0.0005) {
+        el.current.style.transform = `scaleX(${pct.toFixed(4)})`
+        last = pct
+      }
+      const color = ringColor(to - t) ?? ''
+      if (el.current && color !== lastColor) {
+        el.current.style.background = color
+        lastColor = color
+      }
+    }
+    if (f.mode === 'off') {
+      draw(Date.now())
+      const i = window.setInterval(() => draw(Date.now()), 1000)
+      return () => clearInterval(i)
+    }
+    return onFrame(draw)
+  }, [from, to, f])
+  return <i ref={el} className="di-sweep" aria-hidden />
+}
+
+/**
+ * IA2: something that flies between the pill, the peek and the panel (its
+ * icon, title or time share an id there). `pos`: it only moves (text that
+ * would look squashed if it stretched). Calm and Off: no flight, just a fade.
+ */
+function Fly({ id, pos = false, className, children }: { id: string; pos?: boolean; className?: string; children: ReactNode }) {
+  const f = useFeel()
+  const lid = flyId(f, id)
+  return (
+    <motion.span layoutId={lid} layout={lid ? (pos ? 'position' : true) : undefined} transition={f.fly} className={`di-flyer ${className ?? ''}`}>
+      {children}
+    </motion.span>
+  )
+}
+
+function ActIcon({ a, face, small = false, size: px }: { a: Activity; face: string; small?: boolean; size?: number }) {
+  const size = px ?? (small ? 20 : 22)
   if (a.kind === 'timer' || a.kind === 'now') return <Ring pct={a.pct} over={a.over} size={size} />
-  if (a.kind === 'water') return <span className="di-act-ico">💧</span>
+  if (a.kind === 'water') return <Glass pct={a.pct} size={Math.round(size * 1.05)} label={false} />
   if (a.kind === 'bed') return <span className="di-act-ico di-moon-sm">🌙</span>
-  if (a.kind === 'next') return <span className="di-act-ico">⏭</span>
+  if (a.kind === 'next') return <span className={`di-act-ico ${a.at && a.at - Date.now() <= 10 * 60_000 ? 'tick' : ''}`}>⏭</span>
   if (a.kind === 'points') return <span className="di-act-ico">⭐</span>
   if (a.kind === 'mustdos') return <span className="di-act-ico">☑️</span>
   if (a.kind === 'tasks') return <span className="di-act-ico">✓</span>
@@ -111,14 +209,20 @@ function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard
   const now = useNow(1000)
   const left = (run.endsAt - now) / 1000
   const over = left < 0
-  const pct = (now - run.startedAt) / Math.max(1, run.endsAt - run.startedAt)
-  if (!big) return <span className={`di-pill-time ${over ? 'over' : ''}`}>{over ? '+' : ''}{clock(left)}</span>
+  const text = `${over ? '+' : ''}${clock(left)}`
+  if (!big) return <Roll className={`di-pill-time ${over ? 'over' : ''}`} text={text} />
   return (
     <>
-      <Ring pct={pct} over={over} size={58} stroke={4} />
+      <Fly id="ic-timer">
+        <SmoothRing from={run.startedAt} to={run.endsAt} size={58} stroke={4} timer />
+      </Fly>
       <div className="di-timer-mid">
-        <span className={`di-clock ${over ? 'over' : ''}`}>{over ? '+' : ''}{clock(left)}</span>
-        <small>{run.subject}</small>
+        <Fly id="tm-timer" className="di-clock-fly">
+          <Roll className={`di-clock ${over ? 'over' : ''}`} text={text} />
+        </Fly>
+        <Fly id="ti-timer" pos className="di-sub-fly">
+          <small>{run.subject}</small>
+        </Fly>
         {guard && (
           <small className={`di-guard ${guard.pct >= 85 ? 'good' : guard.pct < 60 ? 'low' : ''}`} title="How much of this session you've been at the PC (no mouse/keys for 2+ min counts as away)">
             🎯 {guard.pct}% at the PC{guard.idleMin ? ` · away ${guard.idleMin} min` : ''}
@@ -128,19 +232,87 @@ function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard
     </>
   )
 }
-/** "in 4:59" before a meeting, amber in the last 5 minutes (P7). */
+/** "in 4:59" before a meeting, amber in the last 5 minutes (P7); the digits roll (IL5). */
 function LiveCountdown({ at }: { at: number }) {
   const now = useNow(1000)
   const left = Math.max(0, Math.round((at - now) / 1000))
-  return <span className={`di-pill-time ${left <= 300 ? 'soon' : ''}`}>in {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}</span>
+  return <Roll className={`di-pill-time ${left <= 300 ? 'soon' : ''}`} text={`in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`} />
 }
 function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
-  const now = useNow(1000)
-  return <Ring pct={(now - run.startedAt) / Math.max(1, run.endsAt - run.startedAt)} over={now > run.endsAt} size={size} />
+  return <SmoothRing from={run.startedAt} to={run.endsAt} size={size} timer />
 }
 
-const SPRING_OPEN = { type: 'spring', stiffness: 340, damping: 28, mass: 0.9 } as const
-const SPRING_CLOSE = { type: 'spring', stiffness: 520, damping: 44, mass: 0.8 } as const
+/** A +N reps button: the count runs up and the button gives a small bounce. */
+function RepBtn({ r, n = 10, onTap }: { r: IslandSnapshot['reps'][number]; n?: number; onTap: () => void }) {
+  const f = useFeel()
+  const el = useRef<HTMLButtonElement>(null)
+  const was = useRef(r.done)
+  useEffect(() => {
+    if (r.done > was.current) bump(el.current, f, 1.07)
+    was.current = r.done
+  }, [r.done, f])
+  return (
+    <button ref={el} onClick={onTap} title={`${r.done}/${r.target}`}>
+      <span>{r.name}</span>
+      <small>
+        <CountUp value={r.done} />/{r.target}
+      </small>
+      <b>+{n}</b>
+    </button>
+  )
+}
+
+/** A water button: a ripple from where you clicked, and a little bounce. */
+function WaterBtn({ ml, onTap, children }: { ml: number; onTap: (ml: number) => void; children: ReactNode }) {
+  const f = useFeel()
+  const [rip, setRip] = useState<{ id: number; x: number; y: number }[]>([])
+  return (
+    <button
+      className="di-wbtn"
+      onClick={(e) => {
+        onTap(ml)
+        bump(e.currentTarget, f, 1.06)
+        if (!f.extras) return
+        const b = e.currentTarget.getBoundingClientRect()
+        const id = Date.now()
+        setRip((x) => [...x.slice(-2), { id, x: e.clientX - b.left, y: e.clientY - b.top }])
+        window.setTimeout(() => setRip((x) => x.filter((p) => p.id !== id)), 600)
+      }}
+    >
+      {children}
+      {rip.map((p) => (
+        <i key={p.id} className="di-ripple" style={{ left: p.x, top: p.y }} aria-hidden />
+      ))}
+    </button>
+  )
+}
+
+/** What flies into the pill (IL6): a coin for points, a drop for water. */
+interface Flight { id: number; kind: 'coin' | 'drop'; text: string }
+function FlyIn({ fl, f }: { fl: Flight; f: Feel }) {
+  if (!f.extras)
+    return (
+      <motion.span className={`di-flyin ${fl.kind}`} initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 1, 0] }} transition={{ duration: 1.4 }} aria-live="polite">
+        {fl.text}
+      </motion.span>
+    )
+  // A curve: sideways fast at first, up slowly then fast, landing in the pill.
+  return (
+    <motion.span
+      className={`di-flyin ${fl.kind}`}
+      initial={{ x: -78, y: 64, scale: 0.6, opacity: 0 }}
+      animate={{ x: 0, y: 0, scale: [0.6, 1.15, 0.55], opacity: [0, 1, 1, 0] }}
+      transition={{ x: { duration: 0.58, ease: [0.2, 0.7, 0.4, 1] }, y: { duration: 0.58, ease: [0.6, 0, 0.8, 0.6] }, scale: { duration: 0.6, times: [0, 0.45, 1] }, opacity: { duration: 0.62, times: [0, 0.12, 0.82, 1] } }}
+      aria-live="polite"
+    >
+      {/* The coin flips as it flies; the drop wobbles. */}
+      <motion.span className="di-flyin-ico" initial={{ rotateY: 0, rotate: 0 }} animate={fl.kind === 'coin' ? { rotateY: 720 } : { rotate: [0, -14, 10, 0] }} transition={{ duration: 0.58, ease: 'easeOut' }}>
+        {fl.kind === 'coin' ? '🪙' : '💧'}
+      </motion.span>
+      <b>{fl.text}</b>
+    </motion.span>
+  )
+}
 
 export function DesktopIsland() {
   const [s, setS] = useState<IslandSnapshot>(EMPTY_ISLAND)
@@ -155,11 +327,18 @@ export function DesktopIsland() {
   prefsRef.current = prefs
   const [text, setText] = useState('')
   const [quietMenu, setQuietMenu] = useState(false)
-  // A splash in the water scene on each "+250" (A1); a squish of the shape when something new drops in.
-  const [splash, setSplash] = useState(0)
-  const [squish, setSquish] = useState(0)
+  // A splash in the glasses on each "+250" (A1, WATER); the shimmer once the day's water is reached.
+  const [splash, setSplash] = useState<WaterSplash>({ n: 0, ml: 0 })
+  const [shimmer, setShimmer] = useState(0)
+  // IL3: a new alert first stretches the pill down a little, then bounces into the peek.
+  const [stretch, setStretch] = useState(false)
+  const [dropping2, setDropping2] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const reduce = useReducedMotion()
+  // IA3, IA6: one feel for every motion (Full / Calm / Off; the system's reduce-motion means Off).
+  const f = useMemo(() => feelFor(prefs.motion, !!reduce), [prefs.motion, reduce])
+  const fRef = useRef(f)
+  fRef.current = f
 
   // ---- states: one reducer, one timer ----
   const [ui, setUi] = useState<IslandUi>(ISLAND_UI)
@@ -275,10 +454,21 @@ export function DesktopIsland() {
       return
     }
     lastPeek.current = Date.now()
-    dispatch({ type: 'alert' })
-    setSquish((n) => n + 1)
     const pref = alertPref(a.kind, !!a.meeting)
     if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume)
+    // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce.
+    if (uiRef.current.view === 'compact' && fRef.current.moves) {
+      setStretch(true)
+      setDropping2(true)
+      window.setTimeout(() => {
+        setStretch(false)
+        // Still the same alert (a newer one restarts this).
+        if (seenAlert.current === a.id) dispatch({ type: 'alert' })
+      }, 130)
+      window.setTimeout(() => setDropping2(false), 900)
+      return
+    }
+    dispatch({ type: 'alert' })
   }, [s.alert, quiet, inCall, dispatch]) // eslint-disable-line react-hooks/exhaustive-deps
   // Back from quiet or a call: what waited, in one line (P3).
   const wasBusy = useRef(false)
@@ -295,15 +485,40 @@ export function DesktopIsland() {
   const p = useMemo(() => pill(s, now), [s, now])
   // IF4: what the pill shows, in your order.
   const acts = useMemo(() => activities(s, now, prefs.pillOrder), [s, now, prefs.pillOrder])
-  // Switch between activities (P6): the dots under the pill, or a sideways swipe on the trackpad.
+  // Switch between activities (P6): the dots under the pill, a sideways swipe
+  // on the trackpad or the mouse wheel (IL4); the new one slides in from that side.
   const [pick, setPick] = useState<string | null>(null)
   const main: Activity | null = pillBubbles(acts, pick).main
   const swipeAcc = useRef(0)
+  const wheelAt = useRef(0)
+  const [dir, setDir] = useState<1 | -1>(1)
   const cycle = (d: 1 | -1) => {
     if (acts.length < 2 || !main) return
     const i = acts.indexOf(main)
+    setDir(d)
     setPick(acts[(i + d + acts.length) % acts.length].key)
   }
+  const pickKey = (key: string) => {
+    if (!main || key === main.key) return
+    setDir(acts.findIndex((x) => x.key === key) > acts.indexOf(main) ? 1 : -1)
+    setPick(key)
+  }
+  const onWheel = (e: React.WheelEvent) => {
+    const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY)
+    // A trackpad swipe adds up; a mouse wheel notch switches once (then a short pause).
+    swipeAcc.current += sideways ? e.deltaX : e.deltaY
+    if (Math.abs(swipeAcc.current) < (sideways ? 60 : 50)) return
+    const d = swipeAcc.current > 0 ? 1 : -1
+    swipeAcc.current = 0
+    if (performance.now() - wheelAt.current < 380) return
+    wheelAt.current = performance.now()
+    cycle(d)
+  }
+  // IL2: two live things at once (a timer and a meeting soon, or Ben's unread
+  // message): the pill plus a small round bubble beside it. The order follows
+  // your pill order when you have set one.
+  const second = pillBubbles(acts, pick).second
+  const bubble: Activity | null = liveActivity(main, now) && liveActivity(second, now) ? second : null
   const run = s.running
 
   // IP3: nothing live for a while: it tucks away (a tiny dot, or faded); the mouse on it brings it back.
@@ -344,19 +559,25 @@ export function DesktopIsland() {
   }, [ui.view])
 
   // Tell the desktop where the shape is: clicks elsewhere pass through (IS2).
-  // The real box on screen (getBoundingClientRect, so the squish counts),
-  // every frame while it moves, on every size change, and once it settles.
+  // The real boxes on screen (getBoundingClientRect, so the hover lift and the
+  // drop's stretch count): the shape, the second bubble (IL2) and the toast,
+  // every frame while anything moves, on every size change, and once it settles (IA1).
   const [moving, setMoving] = useState(false)
   const movingRef = useRef(false)
   const lastHot = useRef('')
+  const rootEl = useRef<HTMLDivElement>(null)
   const sendHot = useCallback((settled = false) => {
-    const el = shape.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    if (!r.width || !r.height) return
-    const x = Math.floor(r.left)
-    const y = Math.floor(r.top)
-    const rects: HotRect[] = [{ x, y, w: Math.ceil(r.right) - x, h: Math.ceil(r.bottom) - y }]
+    const root = rootEl.current
+    if (!root) return
+    const rects: HotRect[] = []
+    for (const el of root.querySelectorAll<HTMLElement>('[data-hot]')) {
+      const r = el.getBoundingClientRect()
+      if (!r.width || !r.height) continue
+      const x = Math.floor(r.left)
+      const y = Math.floor(r.top)
+      rects.push({ x, y, w: Math.ceil(r.right) - x, h: Math.ceil(r.bottom) - y })
+    }
+    if (!rects.length) return
     const key = rects.map((b) => `${b.x},${b.y} ${b.w}×${b.h}`).join(' ')
     if (key !== lastHot.current) {
       lastHot.current = key
@@ -391,7 +612,7 @@ export function DesktopIsland() {
     setMoving(false)
     pump(50)
   }
-  // Any size change (content growing, fonts loading) and the squish (0.55 s of CSS scale).
+  // Any size change (content growing, fonts loading).
   useEffect(() => {
     const el = shape.current
     if (!el) return
@@ -399,9 +620,6 @@ export function DesktopIsland() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [pump])
-  useEffect(() => {
-    if (squish) pump(650)
-  }, [squish, pump])
   useEffect(() => {
     lastHot.current = ''
     pump(400)
@@ -528,7 +746,7 @@ export function DesktopIsland() {
     desk()?.islandAction?.({ ...a, id })
   }
   const tap = (a: IslandAction, lbl?: string) => {
-    if (a.kind === 'water') setSplash((n) => n + 1)
+    if (a.kind === 'water') setSplash((x) => ({ n: x.n + 1, ml: a.ml }))
     if (lbl === 'Reply') {
       dispatch({ type: 'click' })
       focusInput()
@@ -588,20 +806,40 @@ export function DesktopIsland() {
     window.setTimeout(() => (setMoon(false), close()), 2600)
   }
   const pts = s.points
-  // Points that pop from the pill; a reward unlocking gets confetti.
-  const [pop, setPop] = useState<{ n: number; key: number } | null>(null)
+  // IL6: new points fly into the pill as a spinning coin, water as a drop;
+  // the pill gives a small gulp when they land. A reward unlocking gets confetti.
+  const [flights, setFlights] = useState<Flight[]>([])
+  const fly = useCallback((kind: Flight['kind'], text: string) => {
+    if (fRef.current.mode === 'off') return
+    const id = Date.now() + Math.random()
+    setFlights((x) => [...x.slice(-2), { id, kind, text }])
+    window.setTimeout(() => setFlights((x) => x.filter((y) => y.id !== id)), 1500)
+    if (fRef.current.moves)
+      window.setTimeout(() => {
+        bump(shape.current, fRef.current, 1.035)
+        pump(450)
+      }, 560)
+  }, [pump])
   const prevPts = useRef<number | null>(null)
   useEffect(() => {
     const b = s.points?.balance
     if (b == null) return
     const before = prevPts.current
     prevPts.current = b
-    if (before != null && b > before) {
-      setPop({ n: b - before, key: Date.now() })
-      const t = window.setTimeout(() => setPop(null), 1800)
-      return () => clearTimeout(t)
-    }
-  }, [s.points?.balance])
+    if (before != null && b > before) fly('coin', `+${b - before}`)
+  }, [s.points?.balance, fly])
+  const prevWater = useRef<number | null>(null)
+  useEffect(() => {
+    const { ml, target } = s.water
+    // Only real pictures count (not the empty one before the first snapshot).
+    if (s.locked || !s.at) return
+    const before = prevWater.current
+    prevWater.current = ml
+    if (before == null || ml <= before) return
+    fly('drop', `+${ml - before} ml`)
+    // The day's water reached: the glasses shimmer, once.
+    if (target > 0 && before < target && ml >= target) setShimmer((n) => n + 1)
+  }, [s.water.ml, s.water.target, fly]) // eslint-disable-line react-hooks/exhaustive-deps
   const confetti = s.alert?.kind === 'reward'
   // Hold 🎤 to talk to Ben (a voice note, like on Telegram).
   const [rec, setRec] = useState<{ r: MediaRecorder; parts: Blob[]; at: number } | null>(null)
@@ -704,7 +942,7 @@ export function DesktopIsland() {
                   )}
                 </section>) : null,
     points: pts ? (<section className="di-points">
-                  <span className="di-pts">{pts.balance} pts</span>
+                  <span className="di-pts"><Roll text={String(pts.balance)} up /> pts</span>
                   {pts.goal ? (
                     <div className="di-pts-mid">
                       <div className="di-bar gold"><i style={{ width: `${Math.min(100, (pts.balance / pts.goal.price) * 100)}%` }} /></div>
@@ -728,7 +966,11 @@ export function DesktopIsland() {
                   <span className="di-label">Now</span>
                   {s.now ? (
                     <div className="di-block">
-                      <b>{s.now.title}</b>
+                      {run ? <b>{s.now.title}</b> : (
+                        <Fly id={`ti-now:${s.now.start}`} pos className="di-title-fly">
+                          <b>{s.now.title}</b>
+                        </Fly>
+                      )}
                       <small>
                         {hhmm(s.now.start)}–{hhmm(s.now.end)} · {minsText(s.now.end - now)} left
                       </small>
@@ -791,27 +1033,21 @@ export function DesktopIsland() {
                 </section>) : null,
     logs: (<section className="di-logs">
                 <div className="di-water">
-                  <span>💧</span>
+                  <Glass pct={water.target ? water.ml / water.target : 0} size={40} splash={splash} shimmer={shimmer} />
                   <div className="di-water-mid">
                     <small>
-                      {(water.ml / 1000).toFixed(1)} / {(water.target / 1000).toFixed(1)} L
+                      <Roll text={(water.ml / 1000).toFixed(2).replace(/0$/, '')} up /> / {(water.target / 1000).toFixed(1)} L
                     </small>
-                    <div className="di-bar water"><i style={{ width: `${water.target ? Math.min(100, (water.ml / water.target) * 100) : 0}%` }} /></div>
+                    <div className="di-bar water"><i style={{ transform: `scaleX(${water.target ? Math.min(1, water.ml / water.target) : 0})` }} /></div>
                   </div>
                   {prefs.chips.water.slice(0, 3).map((ml) => (
-                    <button key={ml} onClick={() => tap({ kind: 'water', ml })}>+{ml}</button>
+                    <WaterBtn key={ml} ml={ml} onTap={(v) => tap({ kind: 'water', ml: v })}>+{ml}</WaterBtn>
                   ))}
                 </div>
                 {!!s.reps.length && (
                   <div className="di-reps">
                     {s.reps.map((r) => (
-                      <button key={r.id} onClick={() => tap({ kind: 'reps', id: r.id, name: r.name, n: repN })} title={`${r.done}/${r.target}`}>
-                        <span>{r.name}</span>
-                        <small>
-                          {r.done}/{r.target}
-                        </small>
-                        <b>+{repN}</b>
-                      </button>
+                      <RepBtn key={r.id} r={r} n={repN} onTap={() => tap({ kind: 'reps', id: r.id, name: r.name, n: repN })} />
                     ))}
                   </div>
                 )}
@@ -841,7 +1077,6 @@ export function DesktopIsland() {
     const t = a.kind === 'water' ? '' : a.sub
     return <span className={`di-pill-time ${a.over ? 'over' : ''}`}>{place === 'left' || place === 'right' ? String(t ?? '').replace(/\s*left$/i, '') : t}</span>
   }
-  const icon = (a: Activity) => (a.kind === 'timer' && run ? <LiveRing run={run} /> : <ActIcon a={a} face={s.ben.face} />)
   // IF8: what each click does (left / middle / right), your choice.
   const clickAction = (what: ClickAction) => {
     logIslandUi('click', what)
@@ -872,6 +1107,15 @@ export function DesktopIsland() {
       else clickAction(prefs.clicks.right)
     }
   }
+  const nowBlock = s.now
+  const icon = (a: Activity, size = 22) =>
+    a.kind === 'timer' && run ? <LiveRing run={run} size={size} />
+    : a.kind === 'now' && nowBlock && a.key === `now:${nowBlock.start}` ? <SmoothRing from={nowBlock.start} to={nowBlock.end} size={size} />
+    : <ActIcon a={a} face={s.ben.face} size={size} />
+  // IL4: the activity you switch to slides in from the side you swiped to.
+  const slide = f.moves
+    ? { enter: (d: number) => ({ x: d * 26, opacity: 0 }), center: { x: 0, opacity: 1 }, exit: (d: number) => ({ x: d * -26, opacity: 0 }) }
+    : { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }
   const compact = (
     <div
       className={`di-pill kind-${s.locked ? 'locked' : main?.kind ?? 'idle'}`}
@@ -880,16 +1124,8 @@ export function DesktopIsland() {
       {...dragProps}
       {...clickProps}
       onKeyDown={(e) => (e.key === 'Enter' ? dispatch({ type: 'click' }) : e.key === 'ArrowRight' ? cycle(1) : e.key === 'ArrowLeft' ? cycle(-1) : undefined)}
-      onWheel={(e) => {
-        // Only a sideways swipe switches (scrolling the page below doesn't).
-        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
-        swipeAcc.current += e.deltaX
-        if (Math.abs(swipeAcc.current) > 60) {
-          cycle(swipeAcc.current > 0 ? 1 : -1)
-          swipeAcc.current = 0
-        }
-      }}
-      aria-label="Open the island (drag to move it, arrows switch)"
+      onWheel={onWheel}
+      aria-label="Open the island (drag to move it, arrows or the mouse wheel switch)"
     >
       {s.locked ? (
         <span className="di-pill-text">🔒 Open Life System</span>
@@ -899,16 +1135,21 @@ export function DesktopIsland() {
           <span className="di-pill-text di-reconnect">Reconnecting…</span>
         </>
       ) : !main ? (
-        <span className="di-face-sm">{s.ben.face}</span>
+        <Fly id="ic-idle">
+          <span className="di-face-sm">{s.ben.face}</span>
+        </Fly>
       ) : (
-        <>
-          {icon(main)}
-          <span className="di-pill-text">{main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text}</span>
-          {pillTime(main)}
-        </>
+        <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+          <motion.span key={main.key} className="di-pill-main" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" transition={f.pop}>
+            <Fly id={`ic-${main.key}`}>{icon(main)}</Fly>
+            <Fly id={`ti-${main.key}`} pos className="di-pill-title">
+              <Marquee className="di-pill-text" text={main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text} />
+            </Fly>
+            <Fly id={`tm-${main.key}`}>{pillTime(main)}</Fly>
+          </motion.span>
+        </AnimatePresence>
       )}
-      {pop && <span key={pop.key} className="di-pop" aria-live="polite">+{pop.n} ⭐</span>}
-      {p.dot && <i className="di-dot" />}
+      {p.dot && <i className={`di-dot ${main?.kind === 'next' && main.at && main.at - now <= 10 * 60_000 ? 'tick' : ''}`} />}
       {acts.length > 1 && !s.locked && (
         <span className="di-dots" aria-hidden>
           {acts.slice(0, 5).map((x) => (
@@ -917,7 +1158,7 @@ export function DesktopIsland() {
               className={x === main ? 'on' : ''}
               onClick={(e) => {
                 e.stopPropagation()
-                setPick(x.key)
+                pickKey(x.key)
               }}
             />
           ))}
@@ -926,12 +1167,48 @@ export function DesktopIsland() {
     </div>
   )
 
+  // IL2: the second live thing, a small round bubble beside the pill (click: it becomes the pill).
+  const side = place === 'right' || place === 'top-right' ? -1 : 1
+  const bubbleIcon = (b: Activity) =>
+    b.kind === 'timer' && run ? (
+      <>
+        <SmoothRing from={run.startedAt} to={run.endsAt} size={26} stroke={2.4} timer />
+        <b className="di-bubble-num">{Math.max(0, Math.ceil((run.endsAt - now) / 60_000))}</b>
+      </>
+    ) : b.kind === 'next' && b.at ? (
+      <b className="di-bubble-num soon tick">{Math.max(0, Math.ceil((b.at - now) / 60_000))}m</b>
+    ) : (
+      <>
+        <span className="di-face-sm">{s.ben.face}</span>
+        <i className="di-bubble-dot" />
+      </>
+    )
+  const hushedNow = q.until > Date.now() || (inCall && prefs.callMode === 'dot') || (q.fullscreen && q.fullscreenMode === 'dot')
+  const bubbleOn = !!bubble && ui.view === 'compact' && !hushedNow && !s.locked && !old
+  const bubbleEl = bubbleOn && bubble ? (
+    <motion.button
+      key="bubble"
+      data-hot
+      className={`di-bubble kind-${bubble.kind}`}
+      title={bubble.kind === 'timer' ? `Timer: ${bubble.sub}` : bubble.kind === 'next' ? `Next: ${bubble.text}` : `Ben: ${bubble.text}`}
+      aria-label={bubble.kind === 'timer' ? `Show the timer: ${bubble.sub}` : bubble.kind === 'next' ? `Show next: ${bubble.text}` : "Show Ben's message"}
+      initial={f.moves ? { opacity: 0, scale: 0.3, x: side * -24 } : { opacity: 0 }}
+      animate={{ opacity: 1, scale: 1, x: 0 }}
+      exit={f.moves ? { opacity: 0, scale: 0.3, x: side * -24 } : { opacity: 0 }}
+      transition={f.pop}
+      onAnimationStart={() => pump(700)}
+      onClick={() => pickKey(bubble.key)}
+    >
+      {bubbleIcon(bubble)}
+    </motion.button>
+  ) : null
+
   // ---- peek: the alert, or what's on with one action and Ben's last line ----
   const a = s.alert && gateOf(s.alert.kind) !== 'drop' ? s.alert : null
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main) ? (
     <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} onClick={() => clicked() && dispatch({ type: 'click' })} {...dragProps}>
-      <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onAlertDone={() => alertDone(a.id)} />
+      <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />
       <div className="di-peek-top">
         <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
         <div className="di-peek-mid">
@@ -948,12 +1225,34 @@ export function DesktopIsland() {
       )}
     </div>
   ) : (
-    <div className="di-peek" onClick={() => clicked() && dispatch({ type: 'click' })} {...dragProps}>
+    <div className="di-peek" onClick={() => clicked() && dispatch({ type: 'click' })} {...dragProps} onWheel={onWheel}>
       <div className="di-peek-top">
-        {main ? (run && main.kind === 'timer' ? <LiveRing run={run} size={34} /> : <span className="di-peek-face">{main.kind === 'ben' ? s.ben.face : <ActIcon a={main} face={s.ben.face} />}</span>) : <span className="di-peek-face">{s.ben.face}</span>}
+        {main ? (
+          <Fly id={`ic-${main.key}`} className="di-peek-ico">
+            {(main.kind === 'timer' && run) || main.kind === 'now' ? icon(main, 34) : <span className="di-peek-face">{main.kind === 'ben' ? s.ben.face : icon(main, 24)}</span>}
+          </Fly>
+        ) : (
+          <Fly id="ic-idle">
+            <span className="di-peek-face">{s.ben.face}</span>
+          </Fly>
+        )}
         <div className="di-peek-mid">
-          <b>{main ? (main.kind === 'timer' ? main.sub : main.text) : s.ben.move?.title ?? 'Nothing running'}</b>
-          <small>{main ? (main.kind === 'timer' && run ? <LiveTimer run={run} /> : main.sub) : s.ben.move?.sub ?? 'Click for the command center'}</small>
+          <b>
+            {main ? (
+              <Fly id={`ti-${main.key}`} pos className="di-title-fly">
+                <Marquee text={main.kind === 'timer' ? main.sub : main.text} />
+              </Fly>
+            ) : (
+              s.ben.move?.title ?? 'Nothing running'
+            )}
+          </b>
+          <small>
+            {main ? (
+              <Fly id={`tm-${main.key}`}>{main.kind === 'timer' && run ? <LiveTimer run={run} /> : main.kind === 'next' && main.at && main.at - now <= 10 * 60_000 ? <LiveCountdown at={main.at} /> : main.sub}</Fly>
+            ) : (
+              s.ben.move?.sub ?? 'Click for the command center'
+            )}
+          </small>
         </div>
         {run ? (
           <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'stop' }))}>Stop & log</button>
@@ -970,7 +1269,7 @@ export function DesktopIsland() {
           <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'start', subject: 'Focus', minutes: focusMin }))}>▶ Focus {focusMin}</button>
         )}
       </div>
-      {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><span className="di-peek-ben-text">{benLine}</span></p>}
+      {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
     </div>
   )
 
@@ -1023,10 +1322,10 @@ export function DesktopIsland() {
       </form>
       <div className="di-chips">
         {prefs.chips.water.map((ml) => (
-          <button key={`w${ml}`} onClick={() => tap({ kind: 'water', ml })}>💧 +{ml} ml</button>
+          <button key={`w${ml}`} onClick={(e) => (tap({ kind: 'water', ml }), bump(e.currentTarget, f))}>💧 +{ml} ml</button>
         ))}
         {firstRep && prefs.chips.reps.map((n) => (
-          <button key={`r${n}`} onClick={() => tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n })}>💪 +{n} {firstRep.name}</button>
+          <button key={`r${n}`} onClick={(e) => (tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n }), bump(e.currentTarget, f))}>💪 +{n} {firstRep.name}</button>
         ))}
         {!run && prefs.chips.focus.map((m) => (
           <button key={`f${m}`} onClick={() => tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: m })}>▶ Focus {m}</button>
@@ -1036,7 +1335,7 @@ export function DesktopIsland() {
 
       {a && (
         <section className={`di-alert kind-${a.kind}`}>
-          <AlertScene kind={a.kind} water={s.water} splash={splash} title={a.title} onAlertDone={() => alertDone(a.id)} />
+          <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />
           <div className="di-alert-top">
             <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
             <b>{a.title}</b>
@@ -1080,51 +1379,99 @@ export function DesktopIsland() {
   const tuckDot = <div className="di-tuck-dot" role="button" tabIndex={0} {...dragProps} {...clickProps} aria-label="The island is tucked away: hover to see it" />
   const views = { compact: hushed ? moonPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
-  const transition = reduce ? { duration: 0 } : ui.view === 'compact' ? SPRING_CLOSE : SPRING_OPEN
+  // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
+  const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
+
+  // IA5: the pill lifts a little (and its shadow deepens) while the mouse is on it.
+  const lift = useMotionValue(1)
+  const liftOn = ui.over && ui.view === 'compact' && f.moves && !stretch
+  useEffect(() => {
+    const c = animate(lift, liftOn ? 1.03 : 1, liftOn ? f.open : f.close)
+    pump(450)
+    return () => c.stop()
+  }, [liftOn]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Leaving the pill: the lift is gone at once, so what flies to the peek or panel lands exactly.
+  useLayoutEffect(() => {
+    if (ui.view === 'compact' || lift.get() === 1) return
+    lift.jump(1)
+    if (shape.current) shape.current.style.transform = 'none'
+  }, [ui.view, lift])
+  // The click area follows every new shape: the stretch, the bubble, the toast (IA1).
+  useEffect(() => {
+    pump(700)
+  }, [stretch, dropping2, bubbleOn, toast?.id, toast?.state, pump])
+  // IP1: the glow pauses while the island is hidden.
+  const [docHidden, setDocHidden] = useState(false)
+  useEffect(() => {
+    const on = () => setDocHidden(document.hidden)
+    document.addEventListener('visibilitychange', on)
+    return () => document.removeEventListener('visibilitychange', on)
+  }, [])
+  const benUnread = s.ben.unread > 0 && !hushed && !s.locked
+  const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
+  const sweep = ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old ? (run ? <Sweep from={run.startedAt} to={run.endsAt} /> : s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null) : null
   return (
-    <div
-      {...dropProps}
-      style={{
-        ['--di-alpha' as string]: String(prefs.opacity),
-        scale: scale === 1 ? undefined : String(scale),
-        // IF3: your sizes.
-        ['--di-pill-h' as string]: `${prefs.pillHeight}px`,
-        ['--di-peek-w' as string]: `${prefs.peekWidth}px`,
-        ['--di-panel-w' as string]: `${prefs.panelWidth}px`,
-        // IP4: the app's colours.
-        ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
-      }}
-      className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
-    >
-      <motion.div
-        ref={shape}
-        className={`di-shape ${squish ? `sq${squish % 2}` : ''}`}
-        initial={false}
-        animate={{ width: size.w, height: size.h, borderRadius: radius }}
-        transition={transition}
-        onAnimationStart={onStart}
-        onAnimationComplete={onDone}
-      >
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.div
-            key={ui.view}
-            data-view={ui.view}
-            className={`di-view di-v-${ui.view}`}
-            initial={reduce ? false : { opacity: 0, scale: 0.94, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', transition: reduce ? { duration: 0 } : { delay: 0.06, duration: 0.24, ease: [0.2, 0.8, 0.2, 1] } }}
-            exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.97, filter: 'blur(4px)', transition: { duration: 0.12 } }}
+    <FeelContext.Provider value={f}>
+      <MotionConfig reducedMotion={f.mode === 'off' ? 'always' : 'never'}>
+        <LayoutGroup>
+          <div
+            ref={rootEl}
+            {...dropProps}
+            style={{
+              ['--di-alpha' as string]: String(prefs.opacity),
+              scale: scale === 1 ? undefined : String(scale),
+              // IF3: your sizes.
+              ['--di-pill-h' as string]: `${prefs.pillHeight}px`,
+              ['--di-peek-w' as string]: `${prefs.peekWidth}px`,
+              ['--di-panel-w' as string]: `${prefs.panelWidth}px`,
+              // IP4: the app's colours.
+              ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
+            }}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${docHidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
           >
-            {views[ui.view]}
-          </motion.div>
-        </AnimatePresence>
-      </motion.div>
-      <AnimatePresence>
-        {toast && (
-          <motion.div key="toast" className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-            {toast.state === 'busy' ? `${toast.text}…` : toast.text}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            <motion.i className="di-glow" style={{ scale: lift, originX: origin, originY: 0 }} animate={{ borderRadius: radius }} transition={transition} aria-hidden />
+            <motion.div
+              ref={shape}
+              data-hot
+              className="di-shape"
+              initial={false}
+              style={{ scale: lift, originX: origin, originY: 0 }}
+              animate={{ width: size.w, height: size.h + (stretch ? 8 : 0), borderRadius: radius }}
+              transition={transition}
+              onAnimationStart={onStart}
+              onAnimationComplete={onDone}
+            >
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div
+                  key={ui.view}
+                  data-view={ui.view}
+                  className={`di-view di-v-${ui.view}`}
+                  // IA4: opacity and scale only (no blur): cheap and crisp.
+                  initial={f.mode === 'off' ? false : { opacity: 0 }}
+                  animate={{ opacity: 1, transition: f.fadeIn }}
+                  exit={{ opacity: 0, scale: f.moves ? 0.97 : 1, transition: f.fadeOut }}
+                >
+                  {views[ui.view]}
+                </motion.div>
+              </AnimatePresence>
+              {sweep}
+            </motion.div>
+            <AnimatePresence>{bubbleEl}</AnimatePresence>
+            <div className="di-flights" aria-hidden={!flights.length}>
+              {flights.map((fl) => (
+                <FlyIn key={fl.id} fl={fl} f={f} />
+              ))}
+            </div>
+            <AnimatePresence>
+              {toast && (
+                <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)}>
+                  {toast.state === 'busy' ? `${toast.text}…` : toast.text}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </LayoutGroup>
+      </MotionConfig>
+    </FeelContext.Provider>
   )
 }
