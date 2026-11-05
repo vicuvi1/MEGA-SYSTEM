@@ -2019,3 +2019,7 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 :root .icon-btn { border-radius: 10px; }
 :root .bd-btn.strong, :root .btn.primary { background: var(--accent); color: var(--accent-ink, #0b0d12); border-color: transparent; }
 :root .bd-btn:not(.strong):not(.ghost) { background: var(--surface-2); border-color: var(--border); }
+
+/* Tasks use the full width (V12): the area columns grow to fill the row
+   instead of three fixed 370 px columns with empty space beside them. */
+:root .ta-cols { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
