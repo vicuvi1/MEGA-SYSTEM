@@ -35,6 +35,7 @@ import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
 import { DevicesPanel } from '../DevicesPanel'
 import { SyncPanel } from '../SyncPanel'
+import { PluginsPanel } from '../../../plugins/PluginsPanel'
 import { timeAgo, useAction } from '../ui'
 import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundSystemOracle, soundWarning } from '../sound'
 
@@ -1332,6 +1333,14 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       </section>
         </>
       )
+    },
+    {
+      id: 'plugins',
+      label: 'Plugins',
+      icon: 'spark',
+      hint: 'Weather, GitHub, Gmail, bank import, phone numbers, notes',
+      keywords: 'plugins weather rain sunset github ctf gmail mail deadlines bank csv statement import phone shortcut steps weight sleep health obsidian notion notes vault',
+      body: <PluginsPanel />
     },
     ...(window.desktop
       ? [

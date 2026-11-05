@@ -60,12 +60,17 @@ import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, clea
 import { missTwiceLine } from '@core/neverMissTwice'
 import { coachStatus } from '../renderer/src/web/coachStatus'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
+import { PLUGINS } from '../plugins'
+import { runPluginJobs, type PluginStatus } from '../plugins/run'
+import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginsOn, readData, writeData } from '../plugins/store'
+import { cleanHealth, mergeDay, type HealthData } from '../plugins/health/health'
+import { HEALTH } from '../plugins/health'
 
 /** What Ben already said today, by kind (each kind once a day). */
 const BEN_SENT = 'ben_sent_today'
 
 export { createTodoistApi }
-export { GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, localIso } from './googleCalendar'
+export { GOOGLE_SETTING, GMAIL_READ_SCOPE, authUrl, createCalendarApi, exchangeCode, keepGooglePrefs, localIso } from './googleCalendar'
 
 export interface BotEnv {
   tursoUrl: string
@@ -690,6 +695,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     await healthTick(healthDb, mirror, now, send)
   } catch (e) {
     console.error('health:', e)
+  }
+
+  // Plugins (Settings → Plugins): weather, GitHub, mail… fetched on their own schedule.
+  try {
+    const ran = await pluginJobs(env, mirror, healthDb, now, (t) => send(t))
+    if (ran.length) note('sent', `Plugins: ${ran.join(', ')}`, undefined, 'plugins')
+  } catch (e) {
+    console.error('plugins:', e)
   }
 
   // Calendar watch (N10): a class added or cancelled today or tomorrow, checked every 10 minutes.
@@ -1331,3 +1344,80 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   return { ok: false, error: 'op must be state | water | reps | workout | poll | updated' }
 }
 export { runBenEval } from './benEval'
+
+// ---- Plugins (src/plugins) ---------------------------------------------------
+
+/** The plugins' jobs with the server's helpers (database, env, AI, Google). */
+async function pluginJobs(env: BotEnv, mirror: Mirror, healthDb: TursoHttp, now: Date, send?: (text: string) => Promise<unknown>, opts: { force?: boolean; only?: string } = {}): Promise<string[]> {
+  const on = await mirror.read((db) => pluginsOn(db as any))
+  if (!PLUGINS.some((p) => p.jobs && on[p.id])) return []
+  const stored = await mirror.read((db) => parsePluginJson<GoogleStored | null>(getSetting(db as any, GSET), null))
+  const google = env.google && stored?.enc ? { token: () => makeCal(env.google!, stored).token(), scopes: stored.scopes ?? [] } : null
+  return runPluginJobs(
+    {
+      plugins: PLUGINS,
+      on: (id) => on[id] === true,
+      claim: (key, gap) => sysClaim(healthDb, key, now.getTime(), gap),
+      ctx: {
+        now,
+        get: (k) => mirror.read((db) => getSetting(db as any, k)),
+        set: async (k, v) => {
+          await mirror.write((db) => setSetting(db as any, k, v))
+        },
+        env: (n) => process.env[n],
+        fetch: (...a) => fetch(...a),
+        ai: env.model ? (prompt) => env.model!(prompt, { json: true, kind: 'plugin' }) : undefined,
+        google
+      },
+      saveStatus: async (id, st) => {
+        await mirror.write((db) => {
+          const all = parsePluginJson<Record<string, PluginStatus>>(getSetting(db as any, PLUGINS_STATUS), {})
+          setSetting(db as any, PLUGINS_STATUS, JSON.stringify({ ...all, [id]: st }))
+        })
+      },
+      send
+    },
+    opts
+  )
+}
+
+/** "Refresh now" in Settings → Plugins: runs the plugins' fetch jobs at once (no messages). */
+export async function runPlugins(env: BotEnv, opts: { only?: string } = {}): Promise<{ ok: boolean; ran: string[] }> {
+  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const { mirror } = await botsFor(env)
+  const ran = await pluginJobs(env, mirror, new TursoHttp(env.tursoUrl, env.tursoToken), new Date(), undefined, { force: true, only: opts.only })
+  return { ok: true, ran }
+}
+
+/**
+ * MC14: weight, steps and sleep from your phone (an iOS Shortcut or Android
+ * automation; the key was checked in api/cron.mjs). Weight goes to Body;
+ * steps and sleep to the daily record Ben reads. No points are paid.
+ */
+export async function healthPush(env: BotEnv, body: unknown): Promise<{ ok: boolean; saved?: string[]; day?: string; error?: string }> {
+  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const { mirror, services } = await botsFor(env)
+  const now = new Date()
+  const r = cleanHealth(body, now.toLocaleDateString('sv-SE'))
+  if (!r.ok) return { ok: false, error: r.error }
+  const input = r.input
+  try {
+    const saved = await mirror.write((db) => {
+      const out: string[] = []
+      if (input.weight != null) {
+        services.services(db).body.logMetric({ weight: input.weight, day: input.day } as any, now)
+        out.push(`weight ${input.weight} kg`)
+      }
+      if (input.steps != null || input.sleepHours != null) {
+        writeData(db as any, HEALTH, mergeDay(readData<HealthData>(db as any, HEALTH), input, now.toISOString()))
+        if (input.steps != null) out.push(`${input.steps} steps`)
+        if (input.sleepHours != null) out.push(`${input.sleepHours} h sleep`)
+      }
+      return out
+    })
+    return { ok: true, saved, day: input.day }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+

@@ -21,6 +21,7 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
     return (
       <div className="money">
         <FinanceHelperView f={f} onState={onState} />
+        <BankImport />
       </div>
     )
   }
@@ -356,5 +357,38 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
         )}
       </section>
     </>
+  )
+}
+
+/** MC9: a bank statement (CSV) → new payments for Finance Helper; read here, never stored. */
+function BankImport() {
+  const act = useAction()
+  const [on, setOn] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  useEffect(() => {
+    life.plugins?.state().then((s) => setOn(!!s.on.bank)).catch(() => {})
+  }, [])
+  if (!on || !life.plugins) return null
+  const pick = async (file: File | undefined) => {
+    if (!file) return
+    if (file.size > 2_000_000) return setSaid('⚠️ That file is too big (2 MB at most).')
+    const text = await file.text()
+    const r = await act(() => life.plugins!.importBank(text))
+    if (r) setSaid(r)
+  }
+  return (
+    <section className="panel" style={{ marginTop: '20px' }}>
+      <header className="panel-head">
+        <h2>
+          <Icon name="coin" /> Import a bank statement
+        </h2>
+      </header>
+      <p className="hint block">Choose the CSV export from your bank. Payments you already have are skipped; the new ones go to Finance Helper. The file stays on this device and isn't kept. You can also send the file to Ben on Telegram.</p>
+      <label className="btn small primary" style={{ display: 'inline-flex', cursor: 'pointer' }}>
+        Choose CSV file
+        <input type="file" accept=".csv,text/csv" hidden onChange={(e) => void pick(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
+      </label>
+      {said && <p className="hint block" style={{ marginTop: 10 }}>{said}</p>}
+    </section>
   )
 }

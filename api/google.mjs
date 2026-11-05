@@ -2,14 +2,14 @@
 // the app. The sign-in's refresh token stays sealed in the database; only
 // this server opens it (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in Vercel).
 //   status                 → {configured, connected, email, calendars?, on, target}
-//   connect                → {url}            open it to sign in with Google
+//   connect {gmail?}       → {url}            open it to sign in with Google (gmail: also read-only Gmail)
 //   events {from, to}      → {events}         ISO times, the shown calendars
 //   create {title, start, end, description?, calendarId?} → {event}
 //   move {calendarId, id, start, end} · remove {calendarId, id}
 //   setCalendars {on, target} · disconnect
 import { randomBytes } from "node:crypto"
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, sign } from './_lib.mjs'
-import { GOOGLE_SETTING, authUrl, createCalendarApi } from './_bot/bot.mjs'
+import { GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, createCalendarApi } from './_bot/bot.mjs'
 
 export function googleEnv(cfg, env = process.env) {
   const clientId = (env.GOOGLE_CLIENT_ID || '').trim()
@@ -53,14 +53,14 @@ export default async function handler(req, res) {
   const op = body?.op
   if (op === 'connect') {
     if (!env) return send(res, 200, { error: 'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel first' })
-    return send(res, 200, { url: authUrl(env, redirectUri(req), makeState(cfg)) })
+    return send(res, 200, { url: authUrl(env, redirectUri(req), makeState(cfg), body.gmail ? [GMAIL_READ_SCOPE] : []) })
   }
   const st = await stored(cfg)
   if (op === 'status') {
     if (!env || !st?.enc) return send(res, 200, { configured: !!env, connected: false })
     try {
       const cals = await createCalendarApi(env, st).calendars()
-      return send(res, 200, { configured: true, connected: true, email: st.email ?? null, calendars: cals, on: st.on ?? [], target: st.target ?? null })
+      return send(res, 200, { configured: true, connected: true, email: st.email ?? null, calendars: cals, on: st.on ?? [], target: st.target ?? null, gmail: (st.scopes ?? []).includes(GMAIL_READ_SCOPE) })
     } catch (e) {
       return send(res, 200, { configured: true, connected: false, email: st.email ?? null, error: e.message })
     }

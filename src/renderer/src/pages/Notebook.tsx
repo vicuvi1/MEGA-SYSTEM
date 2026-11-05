@@ -8,6 +8,9 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useLive } from '../live'
 import { timeAgo, useToast } from '../ui'
+import { usePluginData } from '../../../plugins/usePluginData'
+import { syncVault } from '../../../plugins/notes/settings'
+import type { NotionData, VaultData } from '../../../plugins/notes/vault'
 
 type Filter = 'all' | 'me' | 'ben' | 'journal'
 
@@ -233,6 +236,7 @@ export function Notebook() {
           ))}
           {notes && !shown.length && <p className="hint">Nothing matches.</p>}
         </div>
+        <FromVault q={q} />
       </aside>
 
       <section className="nb-main">
@@ -307,5 +311,48 @@ export function Notebook() {
         )}
       </section>
     </div>
+  )
+}
+
+/** MC16: notes from your Obsidian vault (and Notion), read-only; Ben sees them too. */
+function FromVault({ q }: { q: string }) {
+  const vault = usePluginData<VaultData>('plugin_notes_data')
+  const notion = usePluginData<NotionData>('plugin_notes_notion')
+  // The Windows app reads the vault again each time the Notebook opens.
+  useEffect(() => {
+    void syncVault(false).catch(() => null)
+  }, [])
+  const words = q.trim().toLowerCase()
+  const match = (t: string) => !words || t.toLowerCase().includes(words)
+  const vNotes = (vault?.notes ?? []).filter((n) => match(`${n.title} ${n.headings.join(' ')} ${n.lines.join(' ')}`))
+  const nPages = (notion?.pages ?? []).filter((p) => match(p.title))
+  if (!vault && !notion) return null
+  return (
+    <details className="nb-vault">
+      <summary>
+        From your vault <small>({vNotes.length + nPages.length}, read-only)</small>
+      </summary>
+      <div className="pl-vault">
+        {vNotes.slice(0, 40).map((n) => (
+          <div key={`${n.folder}/${n.title}`} className="pl-vault-note">
+            <b>{n.title}</b>
+            {n.headings.length > 0 && <small>{n.headings.join(' · ')}</small>}
+            {n.lines.map((l, i) => (
+              <small key={i}>{l}</small>
+            ))}
+            <small>
+              {n.folder ? `${n.folder} · ` : ''}
+              {timeAgo(n.edited)}
+            </small>
+          </div>
+        ))}
+        {nPages.slice(0, 25).map((p) => (
+          <a key={p.url || p.title} className="pl-vault-note" href={p.url} target="_blank" rel="noreferrer">
+            <b>{p.title}</b>
+            <small>Notion · {p.edited ? timeAgo(p.edited) : ''}</small>
+          </a>
+        ))}
+      </div>
+    </details>
   )
 }

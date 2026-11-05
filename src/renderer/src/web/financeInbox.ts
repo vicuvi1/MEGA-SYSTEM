@@ -40,6 +40,22 @@ export function queueFinanceExpense(db: DbLike, entry: InboxEntry): void {
   setSetting(db, SETTING, JSON.stringify(list))
 }
 
+/** Adds many records at once (a bank statement); returns the ids that were new. */
+export function queueFinanceEntries(db: DbLike, entries: InboxEntry[], now = Date.now()): string[] {
+  const cutoff = now - KEEP_DAYS * 86400_000
+  const list = parse<InboxEntry[]>(getSetting(db, SETTING), []).filter((e) => e.at >= cutoff)
+  const have = new Set(list.map((e) => e.id))
+  const fresh = entries.filter((e) => !have.has(e.id))
+  if (!fresh.length) return []
+  setSetting(db, SETTING, JSON.stringify([...list, ...fresh]))
+  return fresh.map((e) => e.id)
+}
+
+/** The ids already waiting in the inbox. */
+export function inboxIds(db: DbLike): Set<string> {
+  return new Set(parse<InboxEntry[]>(getSetting(db, SETTING), []).map((e) => e.id))
+}
+
 // Life System's categories → Finance Helper's (by id, else by name).
 const CATEGORY_MAP: Record<string, string[]> = {
   food: ['food'],

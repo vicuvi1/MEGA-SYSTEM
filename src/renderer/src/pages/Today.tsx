@@ -19,6 +19,7 @@ import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
 import { DeepWork, MissTwiceCard, NextUpBar, WeekStrip } from '../TodayExtras'
+import { PluginCards } from '../../../plugins/cards'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -216,6 +217,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         </div>
         <aside className="cmd-side">
           {on.some((x) => x.id === 'timeline') && <TodayStrip />}
+          <PluginCards />
           {on.filter((x) => SIDE.includes(x.id)).map((x) => (
             <Fragment key={x.id}>{sections[x.id]()}</Fragment>
           ))}

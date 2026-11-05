@@ -19,6 +19,8 @@ export interface GoogleStored {
   on?: string[]
   /** Where new events go (default: primary). */
   target?: string | null
+  /** What the sign-in may do (Google's granted scopes); gmail.readonly after "Connect Gmail". */
+  scopes?: string[]
 }
 
 export const GOOGLE_SETTING = 'google_oauth'
@@ -42,12 +44,15 @@ export function openToken(secret: string, sealed: string): string {
   return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8')
 }
 
-export function authUrl(env: GoogleEnv, redirectUri: string, state: string): string {
+export const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+
+/** `extra`: more permissions asked on top (incremental: the calendar ones stay granted). */
+export function authUrl(env: GoogleEnv, redirectUri: string, state: string, extra: string[] = []): string {
   const p = new URLSearchParams({
     client_id: env.clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: GOOGLE_SCOPES.join(' '),
+    scope: [...GOOGLE_SCOPES, ...extra].join(' '),
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
@@ -72,7 +77,18 @@ export async function exchangeCode(env: GoogleEnv, redirectUri: string, code: st
   } catch {
     /* no email: fine */
   }
-  return { enc: sealToken(env.secret, j.refresh_token), email, on: [], target: null }
+  return { enc: sealToken(env.secret, j.refresh_token), email, on: [], target: null, scopes: String(j.scope ?? '').split(/\s+/).filter(Boolean) }
+}
+
+/** A new sign-in keeps the calendars you picked before (connecting Gmail must not reset them). */
+export function keepGooglePrefs(prevRaw: string | null, next: GoogleStored): GoogleStored {
+  try {
+    const prev = JSON.parse(prevRaw || 'null') as GoogleStored | null
+    if (!prev?.enc) return next
+    return { ...next, on: prev.on ?? [], target: prev.target ?? null }
+  } catch {
+    return next
+  }
 }
 
 export interface CalendarInfo {
@@ -146,6 +162,8 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
 
   return {
     calendars,
+    /** A fresh access token (Gmail reads use the same sign-in). */
+    token,
     /** Events of the shown calendars between two ISO times, sorted. */
     async events(fromIso: string, toIso: string): Promise<CalEvent[]> {
       const list = (await calendars()).filter((c) => !stored.on?.length || stored.on.includes(c.id))

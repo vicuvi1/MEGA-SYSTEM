@@ -46,6 +46,8 @@ All server secrets are **Vercel environment variables** (Vercel → mega-system 
 | `SPORT_SYNC_KEY` | lets Sporty read/write water and workouts (`/api/cron?job=sport`) |
 | `LIFE_TZ` | time zone (Europe/Chisinau) |
 | `APP_URL` | public app URL for links in messages |
+| `GITHUB_TOKEN` | optional: a fine-grained **read-only** GitHub token for the GitHub plugin (recent commits) |
+| `NOTION_TOKEN` | optional: a read-only Notion connection token for the notes plugin |
 
 Bot tokens come from @BotFather. If a token was ever pasted in a chat or screenshot, it must be revoked there and replaced in Vercel.
 
@@ -79,6 +81,11 @@ Bot tokens come from @BotFather. If a token was ever pasted in a chat or screens
 | `src/core/coachNext.ts` | "Do this now" |
 
 Ben's actions (the model returns JSON with `reply`, `mood`, `chips`, `buttons`, `show`, `actions`, `remember`, `steps`, `need`) include: log, water, reps, sleep, habit, mustdo, focus (only when I ask to start), task/edit/done/star/move in Todoist (T-numbers), calendar event/move/resize/delete/shift (E-numbers), remind, checkin, kept/broken (P-numbers), delmoney/editmoney (M-numbers), goal + book, aim/works/fails/pattern/person (memory), reward, week plan, exercise/target/noexercise.
+
+### Plugins (`src/plugins/`)
+
+Small add-ons compiled into the app, each off until switched on in Settings → Plugins (`plugins_on`). A plugin (`src/plugins/<id>/index.ts`, `definePlugin`) can add a line to `lifeContext()`, actions checked by `readAction()` before the built-ins, Telegram commands, a file reader, server jobs (morning / tick / evening, run from `runTick` via `src/plugins/run.ts`) and read-only `mcpTools`. Today cards and Settings pieces live in `card.tsx` / `settings.tsx`, registered in `src/plugins/cards.tsx` (browser only, never in the server bundle). Settings keys: `plugin_<id>` (your settings), `plugin_<id>_data` (what the job fetched), `plugins_status`.
+Plugins now: weather (Open-Meteo), github (commits + CTFtime), gmail (deadline digest, read-only, "Connect Gmail" adds `gmail.readonly`), bank (CSV import into the Finance Helper inbox), health (phone numbers by Shortcut: `POST /api/cron?job=health` with a per-phone key, hashed in `sys_health_keys`), notes (Obsidian vault in the desktop app, Notion optional).
 
 ### App UI
 

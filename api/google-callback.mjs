@@ -1,7 +1,7 @@
 // GET /api/google-callback?code&state: where Google sends you back after
 // signing in. Saves the sealed refresh token and returns to the app.
-import { config, setSetting } from './_lib.mjs'
-import { GOOGLE_SETTING, exchangeCode } from './_bot/bot.mjs'
+import { config, getSetting, setSetting } from './_lib.mjs'
+import { GOOGLE_SETTING, exchangeCode, keepGooglePrefs } from './_bot/bot.mjs'
 import { googleEnv, redirectUri, stateOk } from './google.mjs'
 
 const back = (res, q) => {
@@ -19,7 +19,8 @@ export default async function handler(req, res) {
   if (!stateOk(cfg, url.searchParams.get('state'))) return back(res, 'expired')
   try {
     const stored = await exchangeCode(env, redirectUri(req), String(url.searchParams.get('code') || ''))
-    await setSetting(cfg, GOOGLE_SETTING, JSON.stringify(stored))
+    // Connecting Gmail later keeps the calendars you picked.
+    await setSetting(cfg, GOOGLE_SETTING, JSON.stringify(keepGooglePrefs(await getSetting(cfg, GOOGLE_SETTING).catch(() => null), stored)))
     back(res, 'connected')
   } catch (e) {
     console.error('google callback:', e)

@@ -4,7 +4,8 @@
 // nudge when there's been no focus yet. Evening: the review, Sundays the week.
 // Night: the wind-down before bedtime, only while wake-ups are slipping.
 import { bearer, botDefaults, config, cronSecretOk, gate, send, serverBots, sessionOk } from './_lib.mjs'
-import { runDaily, runTick, sportShared } from './_bot/bot.mjs'
+import { healthPush, runDaily, runPlugins, runTick, sportShared } from './_bot/bot.mjs'
+import { dropHealthKey, healthKeyOk, listHealthKeys, newHealthKey } from './_health.mjs'
 import { readBody } from './_lib.mjs'
 import { askModel } from './ai.mjs'
 import { googleEnv } from './google.mjs'
@@ -18,6 +19,10 @@ export default async function handler(req, res) {
   if (new URL(req.url, 'http://x').searchParams.get('job') === 'tick') return tick(req, res)
   // job=sport: Sporty (the Python bot) reads and writes water and workouts here.
   if (new URL(req.url, 'http://x').searchParams.get('job') === 'sport') return sport(req, res)
+  // job=health: your phone sends weight, steps and sleep (a key made in Settings → Plugins).
+  if (new URL(req.url, 'http://x').searchParams.get('job') === 'health') return health(req, res)
+  // job=plugins: "Refresh now" in Settings → Plugins (signed in).
+  if (new URL(req.url, 'http://x').searchParams.get('job') === 'plugins') return plugins(req, res)
   const secret = process.env.CRON_SECRET || ''
   if (!secret || !cronSecretOk(req)) return send(res, 401, { error: 'Not allowed' })
   const job = new URL(req.url, 'http://x').searchParams.get('job')
@@ -95,6 +100,53 @@ async function sport(req, res) {
     send(res, r.ok ? 200 : 400, r)
   } catch (e) {
     console.error('sport:', e)
+    send(res, 500, { error: e.message || 'failed' })
+  }
+}
+
+const botEnv = (cfg) => ({ tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ })
+
+// POST /api/cron?job=health
+//   Authorization: Bearer <phone key>, {weight?, steps?, sleepHours?, day?} → saved
+//   Signed in (the app): {op:'list'} · {op:'new', label} → {key} once · {op:'drop', id}
+async function health(req, res) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
+  const cfg = config()
+  if (!cfg.ok) return send(res, 503, { error: 'Server not set up' })
+  let body = {}
+  try {
+    body = (await readBody(req)) || {}
+  } catch {
+    return send(res, 400, { error: 'Bad JSON' })
+  }
+  try {
+    if (body.op) {
+      if (!(await sessionOk(cfg, bearer(req)).catch(() => false))) return send(res, 401, { error: 'Sign in first' })
+      if (body.op === 'new') return send(res, 200, await newHealthKey(cfg, body.label))
+      if (body.op === 'drop') await dropHealthKey(cfg, body.id)
+      return send(res, 200, { keys: await listHealthKeys(cfg) })
+    }
+    if (!(await healthKeyOk(cfg, bearer(req)))) return send(res, 401, { error: 'Not allowed: make a key in Settings → Plugins → Phone health numbers' })
+    const r = await healthPush(botEnv(cfg), body)
+    send(res, r.ok ? 200 : 400, r)
+  } catch (e) {
+    console.error('health:', e)
+    send(res, 503, { error: e.message || 'Database not reachable' })
+  }
+}
+
+async function plugins(req, res) {
+  const cfg = config()
+  if (!cfg.ok) return send(res, 503, { error: 'Server not set up' })
+  if (!(await sessionOk(cfg, bearer(req)).catch(() => false))) return send(res, 401, { error: 'Sign in first' })
+  try {
+    if (!(await gate(cfg, 'plugins-now', 20_000))) return send(res, 429, { error: 'Just refreshed: try again in a moment' })
+    const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
+    const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+    const only = new URL(req.url, 'http://x').searchParams.get('only') || undefined
+    send(res, 200, await runPlugins({ ...botEnv(cfg), google: googleEnv(cfg), model }, { only }))
+  } catch (e) {
+    console.error('plugins:', e)
     send(res, 500, { error: e.message || 'failed' })
   }
 }

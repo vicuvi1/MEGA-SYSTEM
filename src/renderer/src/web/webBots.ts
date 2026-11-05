@@ -43,6 +43,7 @@ import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, ref
 import { purchaseCheck, readPurchase } from '@core/benMoney'
 import { moodFace } from '@core/benKnows'
 import { benNote, listNotes, seedNotes } from './notes'
+import { findPluginCommand, pluginActionInText, pluginForFile, runPluginAction, undoPluginAction } from '../../../plugins'
 import { loadStory, answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText, checkoutText, checkoutKeyboard } from '@core/rhythm'
@@ -97,6 +98,23 @@ async function downloadFile(token: string, fileId: string, kind: 'voice' | 'phot
     const ext = String(path).split('.').pop()?.toLowerCase()
     const mime = kind === 'photo' ? (ext === 'png' ? 'image/png' : 'image/jpeg') : ext === 'mp3' ? 'audio/mpeg' : ext === 'm4a' ? 'audio/mp4' : 'audio/ogg'
     return { kind, mime, data: btoa(bin) }
+  } catch {
+    return null
+  }
+}
+
+/** A small text file sent on Telegram (a bank CSV), read in memory. */
+async function downloadText(token: string, fileId: string): Promise<string | null> {
+  try {
+    const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`)
+    const path = info?.result?.file_path
+    if (!info?.ok || !path || (info.result.file_size ?? 0) > 2_000_000) return null
+    const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`)
+    if (!res.ok) return null
+    const buf = new Uint8Array(await res.arrayBuffer())
+    // Most banks export UTF-8; older ones Windows-1252/1250. Fall back when UTF-8 shows broken letters.
+    const utf = new TextDecoder('utf-8').decode(buf)
+    return utf.includes('�') ? new TextDecoder('windows-1252').decode(buf) : utf
   } catch {
     return null
   }
@@ -1684,6 +1702,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // that kind of thing; otherwise a one-tap "Yes, …" button (text in his calendar or
     // Todoist can't make Ben delete or pay anything).
     const toKeep: { id: string; a: BrainAction }[] = []
+    // Plugin actions with numbers (steps…) run only with numbers he wrote himself.
+    acts = acts.filter((a) => a.kind !== 'plugin' || confirmed || !!preset || pluginActionInText(text, a))
     acts = acts.filter((a) => {
       const risk = riskOf(a as any)
       if (confirmed || !risk || (askedFor(text, risk) && (risk !== 'log' || loggedInText(text, a as any)))) return true
@@ -1758,6 +1778,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const mark = done.length
         opNow = null
         try {
+          if (a.kind === 'plugin') {
+            const r = await mirror.write((db) => runPluginAction({ db: db as any, now: new Date() }, a))
+            if (r?.line) {
+              done.push(r.line)
+              if (r.undo !== undefined && !r.line.startsWith('⚠️')) opNow = { k: 'plugin', plugin: a.plugin, verb: a.verb, data: r.undo }
+            }
+            continue
+          }
           if (a.kind === 'event') {
             if (!calendar) {
               noCal()
@@ -2250,6 +2278,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               setSetting(db as any, REMINDERS, JSON.stringify(list.filter((r) => r.id !== op.id)))
               return '↩ Reminder cancelled'
             }
+            if (op.k === 'plugin') return undoPluginAction({ db: db as any, now: new Date() }, op.plugin, op.verb, op.data)
             if (op.k === 'mustdo') {
               if (op.day && op.day !== svc.wallet.today()) return `⚠️ That must-do was for ${op.day}: it's gone with that day`
               const p = svc.focus.plan(svc.wallet.today())
@@ -2381,6 +2410,34 @@ His note: ${note}`,
         return reply
       } catch (e) {
         const reply = `⚠️ ${esc((e as Error).message)}`
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
+        return reply
+      }
+    }
+    // Plugins (Settings → Plugins): their commands (/weather, /steps…) and files (a bank CSV).
+    const doc = update.message?.document
+    if (chat && (doc || text.startsWith('/'))) {
+      const hit = await mirror
+        .read((db) => (doc ? { file: pluginForFile(db as any, String(doc.file_name ?? ''), String(doc.mime_type ?? '')), cmd: null } : { file: null, cmd: findPluginCommand(db as any, text) }))
+        .catch(() => null)
+      if (hit?.file || hit?.cmd) {
+        if (!(await markSeen(key))) return null
+        if (!allowed(cfg, chat)) return null
+        let reply: string
+        try {
+          if (hit.cmd) {
+            const c = hit.cmd
+            reply = (await mirror.read((db) => c.cmd.run({ db: db as any, now: new Date() }, c.arg))) ?? '🤷 Nothing to show yet.'
+          } else {
+            const p = hit.file!
+            const body = (doc.file_size ?? 0) > 2_000_000 ? null : await downloadText(update.__token, doc.file_id)
+            // Read in memory only: the file is never saved anywhere.
+            reply = body == null ? '⚠️ I couldn\'t open that file (2 MB at most).' : esc(await mirror.write((db) => p.file!.run({ db: db as any, now: new Date() }, body, String(doc.file_name ?? ''))))
+            if (body != null) onExpense?.()
+          }
+        } catch (e) {
+          reply = `⚠️ ${esc((e as Error).message)}`
+        }
         await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
         return reply
       }

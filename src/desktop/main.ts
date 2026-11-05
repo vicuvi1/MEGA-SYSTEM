@@ -9,6 +9,7 @@ import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
 import { createBackups } from './backups'
+import { createVault } from './vault'
 import { createPc } from './pc'
 
 const origin = 'life-system://app'
@@ -102,6 +103,11 @@ if (firstCopy) void app.whenReady().then(async () => {
   handle('backups:read', (where: 'local' | 'drive', name: string) => backups.read(where, name))
   handle('backups:choose', () => backups.choose(win))
   handle('backups:open', (where: 'local' | 'drive') => backups.open(where))
+  // Your Obsidian vault (read-only): titles, headings and first lines.
+  const vault = createVault(dir)
+  handle('vault:choose', () => vault.choose(win))
+  handle('vault:scan', () => vault.scan())
+  handle('vault:forget', () => vault.forget())
   handle('desktop:updateStatus', () => updater.get())
   handle('desktop:checkUpdates', () => updater.check())
   handle('desktop:installUpdate', async () => { await saves; return updater.update() })

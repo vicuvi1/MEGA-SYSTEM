@@ -28,6 +28,7 @@ import { loadTriggers, urgeEvents } from './disciplinePatterns'
 import { DESK_ACTIONS, minutesUntil } from '@core/benStakes'
 import { readPurchase } from '@core/benMoney'
 import { UNTRUSTED_NOTE } from '@core/benSafety'
+import { pluginActionsHelp, pluginContext, readPluginAction, type PluginActionCall } from '../../../plugins'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -115,6 +116,8 @@ export type UndoOp =
   | { k: 'mustdo'; text: string; day?: string }
   /** startedAt: only that timer is cancelled, never a newer one. */
   | { k: 'focus'; startedAt?: string }
+  /** A plugin's action (src/plugins): its own undo gets `data`. */
+  | { k: 'plugin'; plugin: string; verb: string; data: unknown }
 
 export interface LogEntry {
   role: 'me' | 'coach'
@@ -304,6 +307,8 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     if (extra.events.some((e) => localDay(e.start) > tomorrow)) lines.push(weekAhead(extra.events, today))
   }
   lines.push(...nowContext(s, db, extra.events ?? null, extra.finance, now))
+  // Plugins (Settings → Plugins): weather, GitHub, mail, phone numbers, notes.
+  lines.push(...pluginContext(db, now))
   if (extra.todoToday) {
     const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? ' (late)' : ''}${t.priority >= 3 ? ` P${5 - t.priority}` : ''}${t.section ? ` [${t.section}]` : ''}`)
     lines.push(`Todoist today/late (${extra.todoToday.length}): ${list.join('; ') || 'nothing'}.`)
@@ -716,6 +721,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     '',
     ACT_CORE,
     DESK_ACTIONS,
+    pluginActionsHelp(),
     '',
     LOOKUPS,
     '',
@@ -805,6 +811,7 @@ export function parseBrain(text: string): BrainOut {
 const SAFE_SLASH = /^\/(wake|bed|checkin|oath|weight|waist|pushups|situps|squats|plank|run|stop)\b/i
 
 export type BrainAction =
+  | PluginActionCall
   | { kind: 'event'; title: string; day: string; time: string; minutes: number }
   | { kind: 'log'; text: string }
   | { kind: 'mustdo'; text: string }
@@ -851,6 +858,9 @@ const MREF = /^M\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
+  // Plugin verbs first ("steps: 8000"); the built-ins after.
+  const plugin = readPluginAction(line)
+  if (plugin) return plugin
   // W7: "stop" (he's done) and "extend: 5" (5 more minutes) on a running timer.
   if (/^\s*stop(focus)?\s*:?\s*$/i.test(line) || /^\s*stopfocus\s*:/i.test(line)) return { kind: 'stopfocus' }
   // SP14: "sets: bench 3x8x60" (sets × reps × kg), also "pullups 3x10".

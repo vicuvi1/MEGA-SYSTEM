@@ -52,6 +52,8 @@ import { profileView } from './web/coachProfile'
 import { addNotif, dismissNotif, listNotifs, readNotifs, snoozeNotif } from './web/notifications'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings } from '@core/eventAlerts'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
+import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginKey, pluginsOn, setOn as setPluginOn, configKey as pluginConfigKey } from '../../plugins/store'
+import { importBank, importText } from '../../plugins/bank'
 import { addBlockResult, addFocusQuality, setPcLine } from './web/dayLog'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 
@@ -1046,6 +1048,50 @@ export function createTursoWebBridge(): Bridge {
       },
       setPc: async (day: string, line: string) => {
         await (await mirrorP).write((db) => setPcLine(db as any, day, line))
+      }
+    },
+    // Settings → Plugins (src/plugins): on/off, their settings, what their jobs fetched.
+    plugins: {
+      state: async () =>
+        (await mirrorP).read((db) => {
+          const get = (k: string) => ((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(k) as any)?.value ?? null
+          const config: Record<string, Record<string, unknown>> = {}
+          for (const r of (db as any).prepare("SELECT key, value FROM settings WHERE key LIKE 'plugin\\_%' ESCAPE '\\' AND key NOT LIKE '%\\_data' ESCAPE '\\'").all() as any[]) config[String(r.key).slice(7)] = parsePluginJson(r.value, {})
+          return { on: pluginsOn(db as any), status: parsePluginJson(get(PLUGINS_STATUS), {}), config }
+        }),
+      setOn: async (id: string, on: boolean) => {
+        await (await mirrorP).write((db) => setPluginOn(db as any, id, on))
+      },
+      setConfig: async (id: string, cfg: Record<string, unknown>) => {
+        await (await mirrorP).write((db) => (db as any).prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(pluginConfigKey(id), JSON.stringify(cfg)))
+      },
+      data: async (key: string) => (pluginKey(key) ? (await mirrorP).read((db) => parsePluginJson((((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(key) as any)?.value ?? null), null)) : null),
+      saveData: async (key: string, value: unknown) => {
+        if (!pluginKey(key)) throw new Error('Not a plugin setting')
+        await (await mirrorP).write((db) => (db as any).prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value)))
+      },
+      refresh: async (only?: string) => {
+        const r = await fetch(`/api/cron?job=plugins${only ? `&only=${encodeURIComponent(only)}` : ''}`, { headers: { Authorization: `Bearer ${currentSession()}` } })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error || httpProblem('Plugins', r.status))
+        await (await mirrorP).refresh().catch(() => {})
+        return j as { ran: string[] }
+      },
+      // MC9: read in memory, never stored; Finance Helper gets the new payments.
+      importBank: async (text: string) => {
+        const r = await (await mirrorP).write((db) => importBank(db as any, text))
+        await applyFinance()
+        return importText(r)
+      },
+      healthKeys: async (op: { op: 'list' } | { op: 'new'; label: string } | { op: 'drop'; id: string }) => {
+        const r = await fetch('/api/cron?job=health', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(op) })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error || httpProblem('Health keys', r.status))
+        return j
+      },
+      connectGmail: async () => {
+        const j = await googleCall('connect', { gmail: true })
+        if (j.url) window.location.href = j.url
       }
     },
     notes: {

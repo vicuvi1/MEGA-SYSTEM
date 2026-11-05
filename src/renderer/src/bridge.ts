@@ -15,6 +15,8 @@ export interface GoogleStatus {
   calendars?: { id: string; name: string; color: string; primary: boolean; canWrite: boolean }[]
   on?: string[]
   target?: string | null
+  /** Read-only Gmail was allowed too (Connect Gmail). */
+  gmail?: boolean
   error?: string
 }
 import { createTursoWebBridge } from './tursoWebBridge'
@@ -94,6 +96,19 @@ export type Bridge = LifeApi & {
     logErrors?(list: import('./web/systemHealth').ErrorReport[]): Promise<void>
     /** Ben's log: messages sent, held back (and why) or failed. */
     benLog?(): Promise<(import('./web/systemHealth').BenLogEntry & { at: string })[]>
+  }
+  /** Settings → Plugins (src/plugins). */
+  plugins?: {
+    state(): Promise<{ on: Record<string, boolean>; status: Record<string, { at: string; ok: boolean; note?: string; need?: string[] }>; config: Record<string, Record<string, unknown>> }>
+    setOn(id: string, on: boolean): Promise<void>
+    setConfig(id: string, cfg: Record<string, unknown>): Promise<void>
+    /** A plugin_* setting (what a job fetched). */
+    data<T = any>(key: string): Promise<T | null>
+    saveData(key: string, value: unknown): Promise<void>
+    refresh(only?: string): Promise<{ ran: string[] }>
+    importBank(text: string): Promise<string>
+    healthKeys(op: { op: 'list' } | { op: 'new'; label: string } | { op: 'drop'; id: string }): Promise<{ keys?: { id: string; label: string; created: number; lastUsed: number | null }[]; key?: string; id?: string; label?: string }>
+    connectGmail(): Promise<void>
   }
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */

@@ -51,6 +51,10 @@ export interface DesktopApi {
   readBackup?(where: BackupWhere, name: string): Promise<string>
   chooseBackupFolder?(): Promise<BackupStatus>
   openBackupFolder?(where: BackupWhere): Promise<void>
+  // ---- your Obsidian vault, read-only (optional: older desktops don't have it) ----
+  vaultChoose?(): Promise<import('../plugins/notes/vault').VaultData | null>
+  vaultScan?(): Promise<import('../plugins/notes/vault').VaultData | null>
+  vaultForget?(): Promise<void>
   // ---- the desktop island (optional: older desktops don't have it) ----
   /** App window → island: what to show. */
   islandState?(s: IslandSnapshot): void
