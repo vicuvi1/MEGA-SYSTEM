@@ -447,6 +447,13 @@ export interface LifeApi {
     setDoing?(day: string, line: string, hours: Record<string, Record<string, number>>): Promise<void>
     /** Island eyes: what's in front now, one short line for Ben (only with "Tell Ben" on). */
     setEyes?(day: string, line: string, at: number): Promise<void>
+    /** Island 2: a focus check-in halfway through a timer ("Still on X?"). */
+    addCheck?(day: string, e: { at: string; subject: string; answer: 'yes' | 'drifted' | 'switch' }): Promise<void>
+  }
+  /** Island 2: your island nudges (settings, people, tallies, move breaks), synced setting island_nudges. */
+  nudges?: {
+    get(): Promise<import('@core/islandNudges').NudgeStore>
+    save(n: import('@core/islandNudges').NudgeStore): Promise<import('@core/islandNudges').NudgeStore>
   }
   /** AU2 / AU7: Ben's asks for the PC and the last hour's summary (synced settings pc_asks, pc_last_hour). */
   pcAuto?: {
@@ -484,6 +491,8 @@ export interface LifeApi {
     history(limit?: number): Promise<LedgerEntry[]>
     award(ruleId: string, note?: string): Promise<Summary>
     undo(id: number, note: string): Promise<Summary>
+    /** Pays a rule once for one thing that happened (ref); the ledger id, or 0 when nothing was paid. */
+    payOnce?(ruleId: string, ref: string, note?: string): Promise<number>
     quests(): Promise<QuestState>
     claimQuests(): Promise<Summary>
     allocateStats(stat: 'str' | 'agi' | 'vit' | 'int' | 'sen', points?: number): Promise<Summary>
@@ -558,6 +567,8 @@ export interface LifeApi {
     state(): Promise<BodyState>
     logWorkout(input: WorkoutInput): Promise<{ workout: Workout; state: BodyState; awarded: boolean }>
     deleteWorkout(id: number): Promise<BodyState>
+    /** Takes one set back out of a day's workout (an undo); the workout and its points go when nothing is left. */
+    takeBackSet?(id: number, name: string, amount: number): Promise<BodyState>
     logMetric(input: BodyMetricInput): Promise<BodyState>
     saveExercise(exercise: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }): Promise<BodyState>
     /** Mark a day (default today) as a rest day, or take it back. */

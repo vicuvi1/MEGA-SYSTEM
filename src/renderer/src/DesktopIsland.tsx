@@ -35,6 +35,8 @@ import { cursorNear } from '../../desktop/islandPlace'
 import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
 import { CalendarCap, Crescent, DropCap, LiquidBorder, Sky, TodayRing, pageTurn } from './islandShapes'
 import { IslandEyesBadge } from './IslandEyesBadge'
+import { IslandMoveBadge, IslandNudgeCard, IslandNudgePill, type NudgeRun } from './IslandNudgeCard'
+import { NUDGE_CLOSES, nudgeTapLabel } from '@core/islandNudges'
 import { BenThinking, EveningScene, LiveStack, MomentPill, PillEditor, RECAP_MS, SnapGhost, ThinkWave, leanFor, makeJelly, snapBounceIn } from './islandWidgets'
 
 const desk = () => window.desktop
@@ -993,6 +995,7 @@ export function DesktopIsland() {
     : a.kind === 'rename' ? `✎ ${a.subject}`
     : a.kind === 'undo' ? '↶ Undoing'
     : a.kind === 'drop' ? (a.file ? 'Adding to today’s note' : 'Saving the link')
+    : a.kind === 'nudge' ? nudgeTapLabel(a.op)
     : null
   const clearToastLater = (ms: number) => {
     if (toastT.current) clearTimeout(toastT.current)
@@ -1065,7 +1068,7 @@ export function DesktopIsland() {
       close()
     }
     // Answered the thing that peeked: it goes back to the pill.
-    if (uiRef.current.byAlert && ['dismiss', 'start', 'stop', 'push', 'blockResult', 'moveBreak', 'clipSave', 'water'].includes(a.kind)) close()
+    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'moveBreak', 'clipSave', 'water'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)))) close()
   }
   // IC4: what Enter will do, live while you type (the same rules as the command bar).
   const [sel, setSel] = useState(0)
@@ -1153,6 +1156,19 @@ export function DesktopIsland() {
     window.setTimeout(() => burstFrom(shape.current, m.colors, 60), 160)
   }, [s])
   useEffect(() => () => clearTimeout(momentT.current), [])
+  // Island 2: an eye break / tidy minute countdown or a breathing minute runs on the pill; done, it's noted.
+  const [nudgeRun, setNudgeRun] = useState<NudgeRun | null>(null)
+  const startNudgeRun = (r: NudgeRun) => {
+    setNudgeRun(r)
+    close()
+  }
+  const endNudgeRun = (done: boolean) => {
+    const r = nudgeRun
+    setNudgeRun(null)
+    if (!r) return
+    const kind = r.kind
+    send({ kind: 'nudge', op: done ? { op: 'tally', kind, ok: true, alertId: r.alertId } : { op: 'close', alertId: r.alertId } })
+  }
   // IC13: after "Going to bed", the pill becomes the moon until morning.
   const [asleep, setAsleep] = useState(false)
   useEffect(() => {
@@ -1602,6 +1618,7 @@ export function DesktopIsland() {
           </motion.span>
         </AnimatePresence>
       )}
+      {!s.locked && !old && <IslandMoveBadge move={s.move} now={now} />}
       {p.dot && <i className={`di-dot ${main?.kind === 'next' && main.at && main.at - now <= 10 * 60_000 ? 'tick' : ''}`} />}
       {acts.length > 1 && !s.locked && (
         <span className="di-dots" aria-hidden>
@@ -1658,7 +1675,7 @@ export function DesktopIsland() {
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main) ? (
     <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
-      {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
+      {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
       <div className="di-peek-top">
         <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
         <div className="di-peek-mid">
@@ -1666,7 +1683,9 @@ export function DesktopIsland() {
           <small>{a.kind === 'ben' ? <TypeIn key={a.id} text={a.text} /> : a.text}</small>
         </div>
       </div>
-      {a.actions.length > 0 && (
+      {a.nudge ? (
+        <IslandNudgeCard a={a} tap={tap} onRun={startNudgeRun} sound={!!prefs.sound} volume={prefs.volume} />
+      ) : a.actions.length > 0 && (
         <div className="di-actions">
           {a.actions.slice(0, 3).map((x) => (
             <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`peek:alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
@@ -1816,17 +1835,21 @@ export function DesktopIsland() {
 
       {a && (
         <section className={`di-alert kind-${a.kind}`}>
-          {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
+          {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
           <div className="di-alert-top">
             <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
             <b>{a.title}</b>
           </div>
           <p>{a.kind === 'ben' ? <TypeIn key={a.id} text={a.text} /> : a.text}</p>
-          <div className="di-actions">
-            {a.actions.map((x) => (
-              <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
-            ))}
-          </div>
+          {a.nudge ? (
+            <IslandNudgeCard a={a} tap={tap} onRun={startNudgeRun} sound={false} volume={prefs.volume} />
+          ) : (
+            <div className="di-actions">
+              {a.actions.map((x) => (
+                <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
+              ))}
+            </div>
+          )}
         </section>
       )}
       {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
@@ -1872,7 +1895,7 @@ export function DesktopIsland() {
     </div>
   )
   const showMoment = !!moment && !hushed && !s.locked && !old
-  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
+  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
   const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
@@ -2043,7 +2066,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: radius, scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />

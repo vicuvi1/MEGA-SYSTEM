@@ -413,6 +413,61 @@ try {
     }
     await ip.context().close()
   })
+  // Island 2: a move break you pick and count (−/+), logged with ↶ Undo; an eye break counts down on the pill.
+  await step('Desktop island nudges: pick the count, log it, undo it, the eye break countdown', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, reps: [], alert: null,
+        move: { done: 40, goal: 100, unit: 'reps', breaks: 2, streak: 3, best: 3, challenge: { name: 'Push-ups', done: 40, target: 100 }, plus: null }
+      }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandAction: (a) => { window.__island.actions.push(a); if (a.id) setTimeout(() => cbs.ack?.({ id: a.id, ok: true, tookMs: 5 }), 100) },
+        islandHot: () => {}, islandTakeClicks: () => {},
+        onIslandAck: on('ack'),
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill .nd-badge', { timeout: 15000 })
+    const op = (o) => ({ kind: 'nudge', op: o })
+    await ip.evaluate((op) => {
+      window.__island.send('prefs', { size: 'normal', gapMin: 0 })
+      window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: { id: 'move:1', kind: 'move', title: '60 min at the PC', text: '2-minute break: 20 squats?', face: '🏃', actions: [{ label: '✓ 20 Squats', action: op, primary: true }], nudge: { type: 'move', kind: 'move', options: [{ ex: 'squat', name: 'Squats', n: 20, left: 40 }, { ex: 'push', name: 'Push-ups', n: 10, left: 60 }], pick: 'squat', count: 20, hint: null, level: 'peek', postponed: 0, coins: 3, tidy: false, snooze: [{ c: '5', label: '5 min' }, { c: '15', label: '15 min' }], challenge: null } } })
+    }, op({ op: 'move', ex: 'squat', name: 'Squats', n: 20, alertId: 'move:1' }))
+    await ip.waitForSelector('.di-peek [data-tap="nd:move:1:plus"]', { timeout: 6000 })
+    await ip.waitForTimeout(400)
+    await ip.click('.di-peek [data-tap="nd:move:1:ex:push"]')
+    await ip.waitForTimeout(300)
+    await ip.click('.di-peek [data-tap="nd:move:1:plus"]')
+    await ip.waitForTimeout(300)
+    await ip.click('.di-peek [data-tap="nd:move:1:log"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'nudge' && a.op.op === 'move'), null, { timeout: 3000 })
+    const sent = await ip.evaluate(() => window.__island.actions.find((a) => a.kind === 'nudge' && a.op.op === 'move').op)
+    if (sent.ex !== 'push' || sent.n !== 12) throw new Error(`the break sent ${sent.n} ${sent.ex}`)
+    // A logged break can be taken back (↶ Undo for a few seconds).
+    await ip.waitForSelector('.di-toast .di-undo', { timeout: 3000 })
+    await ip.click('.di-toast .di-undo')
+    await ip.waitForFunction((id) => window.__island.actions.some((a) => a.kind === 'undo' && a.of === id), await ip.evaluate(() => window.__island.actions.find((a) => a.kind === 'nudge' && a.op.op === 'move').id), { timeout: 3000 })
+    // The eye break: a 20-second countdown on the pill; tap stops it without noting it.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: { id: 'eyes:1', kind: 'eyes', title: '20-20-20', text: 'Look 6 m away for 20 seconds.', actions: [], nudge: { type: 'timer', kind: 'eyes', seconds: 20, postponed: 0, snooze: [] } } }))
+    await ip.waitForSelector('[data-tap="nd:eyes:1:go"]', { timeout: 6000 })
+    await ip.waitForTimeout(400)
+    await ip.click('[data-tap="nd:eyes:1:go"]')
+    await ip.waitForSelector('.di.nudge-eyes .nd-count-pill', { timeout: 4000 })
+    await ip.waitForTimeout(400)
+    await ip.click('.nd-count-pill')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'nudge' && a.op.op === 'close' && a.op.alertId === 'eyes:1'), null, { timeout: 3000 })
+    await ip.context().close()
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

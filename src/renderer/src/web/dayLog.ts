@@ -19,6 +19,8 @@ export interface DayLogDay {
   hours?: Record<string, Record<string, number>>
   /** Island eyes: the last short line of what's in front (120 chars), only if you share it with Ben. */
   eyes?: { at: number; line: string }
+  /** Island 2: "Still on X?" halfway through a focus timer, and your answer. */
+  checks?: { at: string; subject: string; answer: 'yes' | 'drifted' | 'switch' }[]
 }
 type All = Record<string, DayLogDay>
 
@@ -93,6 +95,15 @@ export function setEyesLine(db: any, day: string, line: string, at: number): voi
   write(db, all)
 }
 
+/** Island 2: a focus check-in's answer (at most 12 a day). */
+export function addFocusCheck(db: any, day: string, e: { at: string; subject: string; answer: 'yes' | 'drifted' | 'switch' }): void {
+  const all = read(db)
+  const d = all[day] ?? empty()
+  d.checks = [...(d.checks ?? []).filter((x) => x.at !== e.at), { at: e.at, subject: String(e.subject).slice(0, 60), answer: e.answer }].slice(-12)
+  all[day] = d
+  write(db, all)
+}
+
 /** The last days of the log (oldest first), for the morning plan's facts (SI25). */
 export function recentDayLogs(db: any, today: string, n = 7): { day: string; d: DayLogDay }[] {
   return Object.entries(read(db))
@@ -119,6 +130,10 @@ export function dayLogLine(d: DayLogDay): string {
   if (d.blocks.length) {
     const n = (r: string) => d.blocks.filter((x) => x.result === r).length
     parts.push(`Blocks he checked off: ${n('done')} done, ${n('half')} half, ${n('no')} not done${d.blocks.filter((x) => x.result !== 'done').length ? ` (${d.blocks.filter((x) => x.result !== 'done').map((x) => `${x.title}: ${x.result}`).join('; ')})` : ''}`)
+  }
+  if (d.checks?.length) {
+    const n = (a: string) => d.checks!.filter((x) => x.answer === a).length
+    parts.push(`Focus check-ins halfway through a timer: ${n('yes')} still on it, ${n('drifted')} drifted, ${n('switch')} switched`)
   }
   if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`)
   if (d.web) parts.push(`From his browser history: ${d.web}`)

@@ -31,6 +31,11 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'general.full_house', module: 'general', title: 'Weekly full house', coins: 40, xp: 60, dailyCap: 1, cooldownMin: 0, enabled: true },
   // Your own habits (Today): +2 a tap, paid once per habit and day, at most 6 a day.
   { id: 'habit.own', module: 'tasks', title: 'Your own habit', coins: 2, xp: 5, dailyCap: 6, cooldownMin: 0, enabled: true },
+  // Island 2: a confirmed move break (+3, at most 5 a day), an eye break you did (+1, 3 a day),
+  // and Ben's daily challenge once complete. Paid only on a real log, undone with it.
+  { id: 'body.move_break', module: 'body', title: 'Move break', coins: 3, xp: 5, dailyCap: 5, cooldownMin: 10, enabled: true },
+  { id: 'body.eye_break', module: 'body', title: 'Eye break (20-20-20)', coins: 1, xp: 1, dailyCap: 3, cooldownMin: 15, enabled: true },
+  { id: 'body.challenge_done', module: 'body', title: "Ben's daily challenge", coins: 10, xp: 15, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'grand_slam.all_four', module: 'general', title: '4-Pillar Grand Slam (Sovereign Day)', coins: 50, xp: 100, dailyCap: 1, cooldownMin: 0, enabled: true }
 ]
 

@@ -79,6 +79,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'pcAsk'; askId: string; answer: 'allow' | 'deny'; alertId: string }
   /** SI27: close the day in one go (ends timers, unfinished blocks to tomorrow or dropped, drafts the note). */
   | { kind: 'closeAll'; blocks: 'move' | 'drop' }
+  /** Island 2: a tap on a nudge card (move break, eye break, mood, people…: src/core/islandNudges.ts). */
+  | { kind: 'nudge'; op: import('./islandNudges').NudgeOp }
 )
 
 export interface IslandAlert {
@@ -94,6 +96,8 @@ export interface IslandAlert {
   dot?: boolean
   /** IC14: the evening story's numbers (kind 'recap'). */
   recap?: IslandRecap
+  /** Island 2: the interactive nudge card's data (count picker, countdown, faces…). */
+  nudge?: import('./islandNudges').Nudge
 }
 
 /** IC14: the day in a few numbers, told as a short story in the evening. */
@@ -151,6 +155,8 @@ export interface IslandSnapshot {
   money?: { left: number; level: string } | null
   /** SI1: what you're doing on the PC now (Smart island on): a kind, never a window title. Tap to fix. */
   doing?: { ctx: ContextKind; label: string; icon: string; detail?: string; app: string; conf: number } | null
+  /** Island 2: today's movement ring, the daily challenge and the move streak. */
+  move?: import('./islandNudges').MovePill | null
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {

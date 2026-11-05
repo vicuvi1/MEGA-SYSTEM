@@ -103,6 +103,7 @@ export const SETTINGS = {
   notif_settings: json<Record<string, unknown> | null>('quiet hours, event warnings, travel times (N2, N3, N6)', null),
   milestones_seen: json<unknown[]>('milestones already celebrated', []),
   island_day_log: json<Record<string, unknown> | null>("the island's log of the day", null),
+  island_nudges: json<Record<string, unknown> | null>('Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)', null),
   island_recipes: json<unknown[]>('Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)', []),
   // ---- shared app data (embedded apps) ----
   sport_tracker_json: json<SportBlob | null>('Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}', null),

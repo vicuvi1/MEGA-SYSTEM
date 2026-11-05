@@ -58,7 +58,8 @@ import { NOTIF_SETTINGS_KEY, cleanNotifSettings } from '@core/eventAlerts'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginKey, pluginsOn, setOn as setPluginOn, configKey as pluginConfigKey } from '../../plugins/store'
 import { importBank, importText } from '../../plugins/bank'
-import { addBlockResult, addFocusQuality, setDoingLine, setEyesLine, setPcLine, setWebLine } from './web/dayLog'
+import { addBlockResult, addFocusCheck, addFocusQuality, setDoingLine, setEyesLine, setPcLine, setWebLine } from './web/dayLog'
+import { cleanNudgeStore, type NudgeStore } from '@core/islandNudges'
 import { cleanRecipes, type Recipe } from '@core/recipes'
 import { cleanPcState, setAskStatus, type PcAsk } from '@core/pcActions'
 import type { LastHour } from '@core/pcLastHour'
@@ -1203,6 +1204,9 @@ export function createTursoWebBridge(): Bridge {
       },
       setEyes: async (day: string, line: string, at: number) => {
         await (await mirrorP).write((db) => setEyesLine(db as any, day, line, at))
+      },
+      addCheck: async (day: string, e: { at: string; subject: string; answer: 'yes' | 'drifted' | 'switch' }) => {
+        await (await mirrorP).write((db) => addFocusCheck(db as any, day, e))
       }
     },
     pcAuto: {
@@ -1221,6 +1225,15 @@ export function createTursoWebBridge(): Bridge {
       },
       lastHour: async (h: LastHour | null) => {
         await (await mirrorP).write((db) => writeSetting(db as any, 'pc_last_hour', h))
+      }
+    },
+    // Island 2: your nudges (settings, people, today's tallies, move breaks to undo), synced.
+    nudges: {
+      get: async () => (await mirrorP).read((db) => cleanNudgeStore(readSetting(db as any, 'island_nudges'), dayKey(new Date()))),
+      save: async (n: NudgeStore) => {
+        const clean = cleanNudgeStore(n, dayKey(new Date()))
+        await (await mirrorP).write((db) => writeSetting(db as any, 'island_nudges', clean as unknown as Record<string, unknown>))
+        return clean
       }
     },
     recipes: {

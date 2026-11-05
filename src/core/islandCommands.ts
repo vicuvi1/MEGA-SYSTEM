@@ -420,10 +420,10 @@ export const UNDO_SHOW_MS = 5000
 export const UNDO_KEEP_MS = 60_000
 /** Taps that log something that can be taken back. */
 export function canUndo(a: IslandAction): boolean {
-  return a.kind === 'water' || a.kind === 'reps' || a.kind === 'mustdo' || a.kind === 'extend' || a.kind === 'start'
+  return a.kind === 'water' || a.kind === 'reps' || a.kind === 'mustdo' || a.kind === 'extend' || a.kind === 'start' || a.kind === 'moveBreak' || (a.kind === 'nudge' && a.op.op === 'move')
 }
 export function undoLabel(a: IslandAction): string {
-  return a.kind === 'water' ? `+${a.ml} ml` : a.kind === 'reps' ? `+${a.n} ${a.name}` : a.kind === 'mustdo' ? 'the must-do' : a.kind === 'extend' ? `+${a.minutes} min` : a.kind === 'start' ? 'the timer' : a.kind === 'moveBreak' ? `+${a.n} ${a.name}` : 'that'
+  return a.kind === 'water' ? `+${a.ml} ml` : a.kind === 'reps' ? `+${a.n} ${a.name}` : a.kind === 'mustdo' ? 'the must-do' : a.kind === 'extend' ? `+${a.minutes} min` : a.kind === 'start' ? 'the timer' : a.kind === 'moveBreak' ? `+${a.n} ${a.name}` : a.kind === 'nudge' && a.op.op === 'move' ? `+${a.op.n} ${a.op.name}` : 'that'
 }
 
 // ---- IC19: fade while you type in another app --------------------------------------

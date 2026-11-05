@@ -7,7 +7,8 @@ import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
-import { eyesAlert, morningAlert, moveAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
+import { morningAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
+import { nudgeAct, nudgeIdle, nudgeTick, nudgeWater, nudgeYes } from './islandNudgesFeed'
 import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
 import { dayHighlight, highlightAlert, rewardAlert } from '@core/islandFeel'
 import { liveScore } from '@core/liveScore'
@@ -437,6 +438,9 @@ export function IslandFeed() {
       const h = await life.finance.hub().catch(() => null)
       moneyCache.v = h && h.hero.perDay > 0 ? { left: h.hero.leftToday, level: h.hero.dayLevel } : null
     }
+    // Island 2: the nudge cards (move breaks, eyes, mood, people…), the movement ring and the challenge.
+    const callOn = callNow(blocks.current.list, now)
+    const nudges = await nudgeTick({ now, busy: !!running || !!callOn, call: !!callOn, idleSec, activeSince, running: focusRun, blockEnd: cur && !cur.call ? cur.end : null, meetingEnd: callOn?.end ?? (next?.call && next.start - now < 15 * 60_000 ? next.end : null), dismissed, eyeBreaks: get<boolean>(EYES, false), doing: doingForBreaks(now) }).catch(() => ({ early: null, body: null, move: null }))
     return {
       at: now,
       locked: false,
@@ -491,6 +495,7 @@ export function IslandFeed() {
           bedAlert(dismissed, now, !!running) ??
           breakOverAlert(now, dismissed, !!run) ??
           qualityAlert(dismissed, now) ??
+          nudges.early ??
           (() => {
             // A reward you can now afford: celebrate it (for 3 minutes, once).
             const r = rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
@@ -507,9 +512,8 @@ export function IslandFeed() {
           (running ? null : lateAlert(now, target, dismissed)) ??
           windDownAlert(wd, now, dismissed) ??
           (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
-          moveAlert(body) ??
-          waterAlert(body) ??
-          eyesAlert(body) ??
+          nudges.body ??
+          nudgeWater(waterAlert(body), now) ??
           (busy ? null : recapAlert({ now, eveningAt: evAt, dismissed, recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget: status.today.waterTarget || WATER_TARGET_ML, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined } })) ??
           highlightAlert(highlight, now, dismissed) ??
           (call ? null : pick)
@@ -521,6 +525,7 @@ export function IslandFeed() {
       })(),
       inMeeting: !!callNow(blocks.current.list, now),
       doing: doingNow(),
+      move: nudges.move,
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
@@ -610,8 +615,11 @@ export function IslandFeed() {
         // IS4: only when the PIN session is really gone (a hiccup is not a lock).
         if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss' && a.kind !== 'join' && !sessionValid(currentSession())) throw new Error('Life System is locked: open it and enter your PIN')
         // IC1, IC6–IC8, IC10, IC11: pause, the wheel's end, rename, undo, drops, breaks and flow timers.
-        const ctl = await controlAct(a, { blocks: blocks.current.list, findTask: (id) => todoCache.full[id] ?? null })
-        if (ctl != null) said = ctl || null
+        // Island 2: nudge cards and move breaks (islandNudgesFeed.ts); undefined: not theirs.
+        const nd = await nudgeAct(a, { moved: () => void (activeSince = Date.now()) })
+        const ctl = nd !== undefined ? null : await controlAct(a, { blocks: blocks.current.list, findTask: (id) => todoCache.full[id] ?? null })
+        if (nd !== undefined) said = nd
+        else if (ctl != null) said = ctl || null
         else switch (a.kind) {
           case 'water': {
             put(LAST_WATER, Date.now())
@@ -619,6 +627,7 @@ export function IslandFeed() {
             // device's copy set to its answer (never added twice), and every screen told.
             await addWater(a.ml)
             rememberUndo(a.id, { kind: 'water', ml: a.ml })
+            nudgeYes('water')
             break
           }
           case 'reps': {
@@ -727,25 +736,6 @@ export function IslandFeed() {
           case 'eyeBreaks':
             put(EYES, a.on)
             break
-          case 'moveBreak': {
-            // Into Sport Track's checklist when it has that exercise, and the workout log.
-            let id = a.name.toLowerCase()
-            updateSport((d) => {
-              const ex = findExercise(d, a.name)
-              if (ex) {
-                ex.doneToday = (Number(ex.doneToday) || 0) + a.n
-                id = String(ex.id)
-              }
-            })
-            await life.body.logWorkout({ title: `${a.name} (+${a.n}) · movement break`, items: [{ exerciseId: id, name: a.name, amount: a.n, unit: 'reps' as any }], note: 'From the island' })
-            window.dispatchEvent(new CustomEvent('life-body-changed'))
-            put(LAST_MOVE, Date.now())
-            activeSince = Date.now()
-            const d = get<Record<string, number>>(DISMISSED, {})
-            d[a.alertId] = Date.now() + 864e5
-            put(DISMISSED, d)
-            break
-          }
           case 'todoDone': {
             // IS19: the real task (its priority pays the points), never made-up fields.
             const task = todoCache.full[a.id]
@@ -1014,6 +1004,7 @@ export function IslandFeed() {
         const before = idleSec
         guardTick(sec)
         bodyTick(sec)
+        nudgeIdle(sec)
         // Crossing the drift line (or coming back) updates the island at once.
         if (before == null || (before < 480) !== (sec < 480)) void sendRef.current()
       })

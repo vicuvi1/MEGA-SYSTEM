@@ -208,6 +208,12 @@ export function createWebServices(mirror: Mirror) {
           afterUndo(s, id)
           return s.wallet.summary()
         }, W),
+      // Island 2: pays a rule once for one thing that happened (its ref); 0 when nothing was paid.
+      payOnce: (ruleId: string, ref: string, note?: string) =>
+        write((s) => {
+          if (isFlowRule(ruleId)) throw new LedgerError('This one is logged from its own section')
+          return s.wallet.payOnce(ruleId, { ref, note })
+        }, W),
       quests: () => read((s) => s.wallet.quests()),
       claimQuests: () =>
         write((s) => {
@@ -358,6 +364,7 @@ export function createWebServices(mirror: Mirror) {
       state: () => read((s) => s.body.state()),
       logWorkout: (input: WorkoutInput) => write((s) => s.body.logWorkout(input), W, B),
       deleteWorkout: (id: number) => write((s) => s.body.deleteWorkout(id), W, B),
+      takeBackSet: (id: number, name: string, amount: number) => write((s) => s.body.takeBackSet(id, name, amount), W, B),
       logMetric: (input: BodyMetricInput) => write((s) => s.body.logMetric(input), W, B),
       saveExercise: (ex: Omit<Exercise, 'id' | 'sort'> & { id?: string; sort?: number }) => write((s) => (s.body.saveExercise(ex), s.body.state()), B),
       setRest: (day: string | null, on: boolean) => write((s) => s.body.setRest(day, on), B)

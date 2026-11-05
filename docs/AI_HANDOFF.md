@@ -99,6 +99,10 @@ Small add-ons, each off until switched on in Settings → Plugins (`plugins_on`)
 
 Settings → PC & automation (all off by default, all free): pause music during focus and what's playing on the island, ActivityWatch / the last hour for Ben (`pc_last_hour`), Ben's PC actions with Allow/Deny on the island (`pc_asks`), phone push by ntfy, n8n webhooks out and `/api/hook` in, Ben's outside MCP tools. Server parts keep their settings in `sys_kv` (`auto:*`). Details: `docs/pc-automation.md`.
 
+### Island nudges (Island 2)
+
+The desktop island's body and day nudges: move breaks with an exercise picker and −/+ count (undo and "I did fewer" reverse Sport Track, the workout and the points), the 20-20-20 eye break and a tidy minute as real countdowns on the pill, posture, a breathing minute, mood faces (saved with Ben's mood check-ins), one good thing a day (Notebook → Good things), a focus check-in halfway through a timer, people to call, "Moved?" after time away, a snooze menu, gentle escalation, learning (a nudge you keep skipping moves to another hour or becomes a dot), a movement ring, Ben's daily challenge and a move streak. Logic: `src/core/islandNudges.ts`; the app window: `src/renderer/src/islandNudgesFeed.ts`; the cards: `IslandNudgeCard.tsx`; settings in Settings → Desktop island → Nudges (synced setting `island_nudges`). Points: `body.move_break` (+3, 5 a day), `body.eye_break` (+1, 3 a day), `body.challenge_done` (once a day), each paid only on a confirmed log and undone with it.
+
 ### Database
 
 - Tables: see `src/core/schema.ts` (**append-only**: never edit a shipped migration, add a new one and bump `SCHEMA_VERSION` in `api/_schema.mjs`; a test checks they match). Pages built for an older schema may read but `/api/db` refuses their writes ("A new version is out — please reload"). A migration that MOVES data must run once on the server, never in each browser.

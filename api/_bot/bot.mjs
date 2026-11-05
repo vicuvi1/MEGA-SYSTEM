@@ -1828,6 +1828,7 @@ var SETTINGS = {
 	notif_settings: json$4("quiet hours, event warnings, travel times (N2, N3, N6)", null),
 	milestones_seen: json$4("milestones already celebrated", []),
 	island_day_log: json$4("the island's log of the day", null),
+	island_nudges: json$4("Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)", null),
 	island_recipes: json$4("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
 	sport_tracker_json: json$4("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
 	sport_sync_seen: json$4("when Sporty last synced water and workouts", null),
@@ -5382,6 +5383,10 @@ function dayLogLine(d) {
 		const n = (r) => d.blocks.filter((x) => x.result === r).length;
 		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
 	}
+	if (d.checks?.length) {
+		const n = (a) => d.checks.filter((x) => x.answer === a).length;
+		parts.push(`Focus check-ins halfway through a timer: ${n("yes")} still on it, ${n("drifted")} drifted, ${n("switch")} switched`);
+	}
 	if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`);
 	if (d.web) parts.push(`From his browser history: ${d.web}`);
 	if (d.doing) parts.push(`His day on the PC by activity: ${d.doing}`);
@@ -8016,6 +8021,36 @@ var DEFAULT_RULES = [
 		coins: 2,
 		xp: 5,
 		dailyCap: 6,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "body.move_break",
+		module: "body",
+		title: "Move break",
+		coins: 3,
+		xp: 5,
+		dailyCap: 5,
+		cooldownMin: 10,
+		enabled: true
+	},
+	{
+		id: "body.eye_break",
+		module: "body",
+		title: "Eye break (20-20-20)",
+		coins: 1,
+		xp: 1,
+		dailyCap: 3,
+		cooldownMin: 15,
+		enabled: true
+	},
+	{
+		id: "body.challenge_done",
+		module: "body",
+		title: "Ben's daily challenge",
+		coins: 10,
+		xp: 15,
+		dailyCap: 1,
 		cooldownMin: 0,
 		enabled: true
 	},
@@ -17882,6 +17917,13 @@ function createWebServices(mirror) {
 				afterUndo(s, id);
 				return s.wallet.summary();
 			}, W),
+			payOnce: (ruleId, ref, note) => write((s) => {
+				if (isFlowRule(ruleId)) throw new LedgerError("This one is logged from its own section");
+				return s.wallet.payOnce(ruleId, {
+					ref,
+					note
+				});
+			}, W),
 			quests: () => read((s) => s.wallet.quests()),
 			claimQuests: () => write((s) => {
 				s.wallet.claimQuests();
@@ -18083,6 +18125,7 @@ syncFinance: (recordDays) => write((s) => {
 			state: () => read((s) => s.body.state()),
 			logWorkout: (input) => write((s) => s.body.logWorkout(input), W, B),
 			deleteWorkout: (id) => write((s) => s.body.deleteWorkout(id), W, B),
+			takeBackSet: (id, name, amount) => write((s) => s.body.takeBackSet(id, name, amount), W, B),
 			logMetric: (input) => write((s) => s.body.logMetric(input), W, B),
 			saveExercise: (ex) => write((s) => (s.body.saveExercise(ex), s.body.state()), B),
 			setRest: (day, on) => write((s) => s.body.setRest(day, on), B)

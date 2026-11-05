@@ -6,7 +6,7 @@ import type { IslandAlert, IslandRecap, IslandSnapshot } from './islandModel'
 /** IM4: something worth a short burst and a wide pill. */
 export interface Moment {
   id: string
-  kind: 'mustdos' | 'water' | 'focus' | 'streak'
+  kind: 'mustdos' | 'water' | 'focus' | 'streak' | 'move'
   icon: string
   text: string
   /** The burst's colours. */
@@ -41,6 +41,11 @@ export function momentsFrom(prev: IslandSnapshot | null, cur: IslandSnapshot, no
   const a = prev.streak
   const b = cur.streak
   if (a && b && a.best != null && b.best != null && b.best > a.best && b.days >= b.best && b.days > 1) out.push({ id: `streak:${b.kind}:${b.days}`, kind: 'streak', icon: '🔥', text: `Best streak: ${b.days} days`, colors: GOLD })
+  // Island 2 (IN51): a new best move streak (days with 3+ move breaks); IN49: Ben's challenge complete.
+  const m0 = prev.move
+  const m1 = cur.move
+  if (m0 && m1 && m1.best > m0.best && m1.streak >= m1.best && m1.streak > 1) out.push({ id: `movestreak:${m1.streak}`, kind: 'move', icon: '🔥', text: `Best move streak: ${m1.streak} days`, colors: GOLD })
+  if (m0?.challenge && m1?.challenge && m0.challenge.done < m0.challenge.target && m1.challenge.done >= m1.challenge.target) out.push({ id: `challenge:${day}`, kind: 'move', icon: '🏆', text: `Challenge done: ${m1.challenge.target} ${m1.challenge.name}`, colors: GOLD })
   return out
 }
 
