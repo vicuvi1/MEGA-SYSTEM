@@ -8115,11 +8115,17 @@ var Discipline = class {
 		this.db.transaction(() => {
 			const today = this.wallet.today(now);
 			planCheckIn(this.events(), today);
-			this.wallet.awardRule("discipline.clean_day", {
-				now,
-				ref: `discipline:checkin:${today}`
-			});
+			try {
+				this.wallet.awardRule("discipline.clean_day", {
+					now,
+					ref: `discipline:checkin:${today}`
+				});
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
 			this.record("checkin", today, now);
+			const events = this.events();
+			for (const m of this.milestones(events, today)) if (m.status === "claimable") this.claim(m.days, now);
 		}).immediate();
 	}
 	oath(now = /* @__PURE__ */ new Date()) {
@@ -16240,11 +16246,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					tasksLeft: s.tasks.state().tasks.filter((t) => !t.done).length
 				}) };
 			}
-			case "checkin": {
+			case "checkin":
 				s.discipline.checkIn();
-				const st = s.discipline.state();
-				return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), ruleCoins(s, "discipline.clean_day", 20)) };
-			}
+				return { reply: formatCleanCheckinResponse(s.discipline.state().day, ruleCoins(s, "discipline.clean_day", 20)) };
 			case "oath":
 				s.discipline.oath();
 				return { reply: "📜 <b>Morning Oath Affirmed!</b>\n\n<i>\"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery.\"</i>\n\n+" + ruleCoins(s, "discipline.oath", 3) + " points!" };

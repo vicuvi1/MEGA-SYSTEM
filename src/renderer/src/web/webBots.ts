@@ -548,9 +548,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
       case 'checkin': {
         s.discipline.checkIn()
-        // The same day number MAN shows (its start day is Day 1).
+        // The same "Day N" MAN and every screen show (dayNumber: P7).
         const st = s.discipline.state()
-        return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), ruleCoins(s, 'discipline.clean_day', 20)) }
+        return { reply: formatCleanCheckinResponse(st.day, ruleCoins(s, 'discipline.clean_day', 20)) }
       }
       case 'oath':
         s.discipline.oath()

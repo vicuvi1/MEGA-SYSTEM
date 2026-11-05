@@ -68,8 +68,16 @@ export class Discipline {
     this.db.transaction(() => {
       const today = this.wallet.today(now)
       planCheckIn(this.events(), today)
-      this.wallet.awardRule('discipline.clean_day', { now, ref: `discipline:checkin:${today}` })
+      // A rule you turned off (or a used limit) never blocks the check-in itself (P7).
+      try {
+        this.wallet.awardRule('discipline.clean_day', { now, ref: `discipline:checkin:${today}` })
+      } catch (e) {
+        if (!(e instanceof LedgerError)) throw e
+      }
       this.record('checkin', today, now)
+      // Milestones you reached are paid straight away, no "Claim" tap needed (P7).
+      const events = this.events()
+      for (const m of this.milestones(events, today)) if (m.status === 'claimable') this.claim(m.days, now)
     }).immediate()
   }
 

@@ -36,12 +36,21 @@ describe('discipline service', () => {
     expect(s.milestones.find((m) => m.days === 7)?.status).toBe('before-setup')
   })
 
-  it('checks in once a day for coins', () => {
+  it('checks in once a day for coins (and a reached milestone pays itself: P7)', () => {
     d.setStart('2026-10-15', oct25)
     d.checkIn(oct25)
-    expect(wallet.summary(oct25).balance).toBe(20)
+    expect(wallet.summary(oct25).balance).toBe(20 + 60)
+    expect(d.state(oct25).milestones.find((m) => m.days === 10)?.status).not.toBe('claimable')
     expect(d.state(oct25).checkedInToday).toBe(true)
     expect(() => d.checkIn(oct25)).toThrow('Already')
+  })
+
+  it('a check-in works even with its rule turned off (P7)', () => {
+    d.setStart('2026-10-24', oct25)
+    const r = wallet.rules().find((x) => x.id === 'discipline.clean_day')!
+    wallet.saveRule({ ...r, enabled: false })
+    d.checkIn(oct25)
+    expect(d.state(oct25).checkedInToday).toBe(true)
   })
 
   it('claims a milestone once', () => {
@@ -90,7 +99,7 @@ describe('discipline service', () => {
   })
 
   it('awards clean day coins (+20), XP (+40), and oath coins (+10) for check-in synchronization', () => {
-    d.setStart('2026-10-15', oct25)
+    d.setStart('2026-10-23', oct25) // day 2: no milestone reached
     // Synchronize check-in
     d.checkIn(oct25)
     expect(d.state(oct25).checkedInToday).toBe(true)
