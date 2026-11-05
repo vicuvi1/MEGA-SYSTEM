@@ -71,7 +71,7 @@ export function fuzzyScore(label: string, q: string): number {
   return Math.max(1, 50 - gaps)
 }
 
-export function Palette({ open, onClose, commands }: { open: boolean; onClose: () => void; commands: Command[] }) {
+export function Palette({ open, onClose, commands, onFreeText }: { open: boolean; onClose: () => void; commands: Command[]; onFreeText?: (text: string) => void }) {
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(0)
   const input = useRef<HTMLInputElement>(null)
@@ -133,7 +133,11 @@ export function Palette({ open, onClose, commands }: { open: boolean; onClose: (
                     setSel((s) => Math.max(0, s - 1))
                   } else if (e.key === 'Enter') {
                     e.preventDefault()
-                    run(results[sel])
+                    // Nothing matches: it's a capture ("45 lunch", "water 500", "call mom tomorrow").
+                    if (!results.length && q.trim() && onFreeText) {
+                      onClose()
+                      onFreeText(q.trim())
+                    } else run(results[sel])
                   } else if (e.key === 'Escape') {
                     e.preventDefault()
                     onClose()
@@ -143,7 +147,7 @@ export function Palette({ open, onClose, commands }: { open: boolean; onClose: (
               <kbd>Esc</kbd>
             </div>
             <div className="palette-list" ref={list} role="listbox">
-              {results.length === 0 && <div className="palette-empty">Nothing matches “{q}”.</div>}
+              {results.length === 0 && <div className="palette-empty">{onFreeText ? <>Enter adds “{q}” (money, water, reps, a task, or a note for Ben).</> : <>Nothing matches “{q}”.</>}</div>}
               {results.map((c, i) => (
                 <div key={c.id}>
                   {(i === 0 || results[i - 1].group !== c.group) && !q && <div className="palette-group">{c.group}</div>}

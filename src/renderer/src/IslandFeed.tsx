@@ -11,6 +11,8 @@ import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/isl
 import { bestStreak, dayHighlight, highlightAlert, rewardAlert, runOf } from '@core/islandFeel'
 import { liveScore } from '@core/liveScore'
 import { life } from './bridge'
+import { capture } from './capture'
+import { parseCapture } from '@core/capture'
 import { useLive } from './live'
 import { findExercise, readSport, updateSport } from './sportTrack'
 
@@ -510,19 +512,13 @@ export function IslandFeed() {
           case 'chat': {
             // The command bar: "focus 50 algebra" starts a timer; the rules do
             // money, water, reps, sleep (free, instant); only the rest goes to Ben.
-            const t = a.text.trim()
-            // "focus 50 algebra", "focus algebra 25", "f 90 lab report"
-            const fm = /^(?:focus|f)\s+(.{2,80})$/i.exec(t)
-            const num = fm ? /(?:^|\s)(\d{1,3})\s*(?:min|m)?(?=\s|$)/i.exec(fm[1]) : null
-            const subject = fm && num ? fm[1].replace(num[0], ' ').replace(/\s+/g, ' ').trim() : ''
-            if (fm && num && subject) {
-              const minutes = Math.max(5, Math.min(180, Number(num[1]) || 50))
-              await life.focus.start(subject, minutes, null)
-              window.dispatchEvent(new Event('life-focus-changed'))
-              said = `⏱ Focus: ${subject} · ${minutes} min`
+            // Everything but Ben's answer goes through the one capture pipeline (capture.ts).
+            const c = parseCapture(a.text)
+            if (c && c.kind !== 'free') {
+              said = (await capture(a.text)).said
               break
             }
-            const q = await life.coach?.quick?.(t).catch(() => null)
+            const q = await life.coach?.quick?.(a.text.trim()).catch(() => null)
             if (q && !('unknown' in q)) {
               if (!q.ok) throw new Error(q.reply.replace(/^⚠️\s*/, ''))
               said = q.reply.split('\n').slice(0, 3).join(' · ').slice(0, 140)

@@ -28,6 +28,7 @@ import { BenBubble } from './BenBubble'
 import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { reloadToday } from './todayEvents'
+import { capture } from './capture'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at once).
@@ -505,7 +506,20 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   return (
     <div className={`shell ${collapsed ? 'rail' : ''} ${focus ? 'focus' : ''}`}>
-      <Palette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+      <Palette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+        onFreeText={(t) =>
+          void capture(t)
+            .then((r) => {
+              toast(r.said, r.ok ? 'good' : 'info')
+              onWallet()
+              void reloadToday()
+            })
+            .catch((e) => toast((e as Error).message, 'bad'))
+        }
+      />
       {focus && (
         <div className="focus-reveal">
           <div className="focus-bar">

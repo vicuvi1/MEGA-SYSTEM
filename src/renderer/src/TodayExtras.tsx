@@ -11,6 +11,7 @@ import { blockTasks, setBlockTaskDone } from '@core/blockTasks'
 import { localDay, type CalEvent } from '@core/dayTime'
 import type { CoachStatus } from './web/coachStatus'
 import { life } from './bridge'
+import { capture } from './capture'
 import { useLive } from './live'
 import { useFocus } from './pages/Focus'
 import { reloadToday, useTodayEvents } from './todayEvents'
@@ -26,18 +27,11 @@ export function QuickCapture() {
     if (!t || busy) return
     setBusy(true)
     try {
-      const r = life.coach?.chat ? await life.coach.chat(t).catch(() => null) : null
-      if (r) {
-        const did = r.done?.filter(Boolean) ?? []
-        toast(did.length ? did.join(' · ').slice(0, 160) : r.reply.replace(/^\p{Extended_Pictographic}\s*/u, '').slice(0, 160), r.ok ? 'good' : 'info')
-      } else {
-        await life.todoist!.quickAdd(t)
-        toast(`Added to Todoist: ${t}`, 'good')
-      }
+      const r = await capture(t)
+      toast(r.said, r.ok ? 'good' : 'info')
       setText('')
       soundSuccess()
       void reloadToday()
-      window.dispatchEvent(new CustomEvent('life-external-changed'))
     } catch (e) {
       toast((e as Error).message, 'bad')
     } finally {
