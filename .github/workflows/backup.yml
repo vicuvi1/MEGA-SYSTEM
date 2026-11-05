@@ -1,0 +1,50 @@
+# Weekly off-site copy of your data (LT1). The 30 daily backups live in the
+# same Turso database as everything else; this keeps a copy outside it.
+#
+# Once a week it downloads the newest daily backup from Ben's server
+# (/api/cron?job=backup, needs CRON_SECRET), ENCRYPTS it with your passphrase
+# (BACKUP_PASSPHRASE) and keeps it as a workflow artifact for 90 days. The
+# repository is public and anyone signed in to GitHub can download artifacts,
+# so nothing unencrypted is ever uploaded: without the passphrase the run fails.
+#
+# To restore: docs/AI_HANDOFF.md, "Backups".
+name: Off-site backup
+on:
+  schedule:
+    - cron: '41 2 * * 1'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download and encrypt the newest backup
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ] || [ -z "${BACKUP_PASSPHRASE}" ]; then
+            echo "::error::Add the CRON_SECRET and BACKUP_PASSPHRASE repository secrets (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+          umask 077
+          mkdir -p out
+          curl -fsS -m 120 -D headers.txt -H "Authorization: Bearer ${CRON_SECRET}" "https://mega-system-ten.vercel.app/api/cron?job=backup" -o snap.json.gz
+          gzip -t snap.json.gz
+          day=$(grep -i '^x-snapshot-day:' headers.txt | tr -d '\r' | awk '{print $2}')
+          [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "::error::No backup day in the answer"; exit 1; }
+          out="out/life-backup-${day}.json.gz.enc"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in snap.json.gz -out "$out" -pass env:BACKUP_PASSPHRASE
+          # It must open again with the same passphrase before it is kept.
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in "$out" -pass env:BACKUP_PASSPHRASE | gzip -t
+          rm -f snap.json.gz headers.txt
+          echo "DAY=${day}" >> "$GITHUB_ENV"
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: life-backup-${{ env.DAY }}
+          path: out/*.enc
+          retention-days: 90
+          if-no-files-found: error

@@ -7,7 +7,9 @@ import { removeDevicePasskeys, revokedSids } from './_devices.mjs'
 import { dropPush } from './_push.mjs'
 
 const DEFAULT_PIN = '2007' // only while no PIN was ever set, like the app
-const SESSION_DAYS = 30
+// LT3: 14 days, renewed while you use the app (session.ts renewSession), so an
+// unused or stolen session runs out sooner. A failed check is never a sign-out.
+export const SESSION_DAYS = 14
 
 export function config(env = process.env) {
   const url = (env.TURSO_URL || env.TURSO_DATABASE_URL || '').trim().replace(/^libsql:\/\//, 'https://').replace(/\/+$/, '')
@@ -354,8 +356,13 @@ export const webhookSecret = (cfg, botId) => sign(cfg.secret, 'telegram:' + botI
 
 /** "Authorization: Bearer <CRON_SECRET>", compared in constant time. */
 export function cronSecretOk(req, env = process.env) {
-  const want = String(env.CRON_SECRET || '')
-  const got = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '')
+  return bearerIs(req, env.CRON_SECRET)
+}
+
+/** "Authorization: Bearer <secret>" for any shared secret (CRON_SECRET, SPORT_SYNC_KEY), in constant time. */
+export function bearerIs(req, secret) {
+  const want = String(secret || '').trim()
+  const got = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim()
   if (!want || !got) return false
   const a = createHash('sha256').update(want).digest()
   const b = createHash('sha256').update(got).digest()

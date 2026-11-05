@@ -30,11 +30,14 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
 const pg = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
 const errors = []
 pg.on('pageerror', (e) => errors.push(e.message))
+// LT3: anything the Content-Security-Policy blocks is a failure too (main page and the apps).
+pg.on('console', (m) => /Content.Security.Policy|Refused to (load|execute|connect|frame|apply)/i.test(m.text()) && errors.push(`CSP: ${m.text().slice(0, 200)}`))
 await pg.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
 
 try {
   await step('opens and signs in with the PIN', async () => {
-    await pg.goto(`http://127.0.0.1:${port}/`)
+    const res = await pg.goto(`http://127.0.0.1:${port}/`)
+    if (!/frame-ancestors 'none'/.test(res?.headers()['content-security-policy'] ?? '')) throw new Error('no Content-Security-Policy header')
     await pg.waitForSelector('input', { timeout: 20000 })
     await pg.fill('input', '1234')
     await pg.keyboard.press('Enter')
@@ -43,6 +46,21 @@ try {
   await step('Today shows Ben and the day', async () => {
     await pg.waitForSelector('.thb', { timeout: 15000 })
   })
+  // LT3: a 14-day session (renewed while in use), and the backups can't be wiped from a page (LT1).
+  await step('the session lasts 14 days and the cloud backups are read-only', async () => {
+    const r = await pg.evaluate(async () => {
+      const s = localStorage.getItem('life_web_session') ?? ''
+      const exp = JSON.parse(atob(s.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))).exp
+      const post = (body) => fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const del = await post({ requests: [{ type: 'execute', stmt: { sql: 'DELETE FROM cloud_snapshots', args: [] } }, { type: 'close' }] })
+      const read = await post({ requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*) FROM cloud_snapshots', args: [] } }, { type: 'close' }] })
+      return { days: (exp - Date.now()) / 864e5, del: del.status, read: read.status }
+    })
+    if (r.days > 14.1 || r.days < 13.9) throw new Error(`session lasts ${r.days.toFixed(1)} days`)
+    if (r.del !== 403) throw new Error(`deleting the backups answered ${r.del}`)
+    if (r.read !== 200) throw new Error(`reading the backups answered ${r.read}`)
+  })
+
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
   for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky']]) {
     await step(`${name} loads with its own content`, async () => {

@@ -164,7 +164,7 @@ let aiChosen = { chat: null, deep: null }
 const fakeAi = (q, r) => {
   const send = (j) => (r.setHeader('Content-Type', 'application/json'), r.end(JSON.stringify(j)))
   const b = q.body || {}
-  if (b.op === 'status') return send({ configured: true, model: aiChosen.chat || 'deepseek/deepseek-v4.1-flash', chosen: aiChosen, auto: { chat: 'deepseek/deepseek-v4.1-flash', deep: 'deepseek/deepseek-v4-pro' } })
+  if (b.op === 'status') return send({ configured: true, model: aiChosen.chat || 'deepseek/deepseek-v4.1-flash', chosen: aiChosen, auto: { chat: 'deepseek/deepseek-v4.1-flash', deep: 'deepseek/deepseek-v4-pro' }, newer: { chat: 'deepseek/deepseek-v4.2-flash', deep: null } })
   if (b.op === 'models')
     return send({ models: [
       { id: 'anthropic/claude-sonnet-5.5', name: 'Anthropic: Claude Sonnet 5.5', in: 3, out: 15, context: 1000000, tools: true, reasoning: true },
@@ -184,6 +184,12 @@ const fakeAi = (q, r) => {
   return send({ error: 'No AI in the e2e server' })
 }
 
+// The same response headers as production (vercel.json), so the smoke test
+// runs under the real Content-Security-Policy (LT3).
+const vercelHeaders = JSON.parse(readFileSync(join(repo, 'vercel.json'), 'utf8')).headers.map((h) => ({ re: new RegExp(`^${h.source}$`), headers: h.headers }))
+const withHeaders = (pathname, r) => {
+  for (const h of vercelHeaders) if (h.re.test(pathname)) for (const { key, value } of h.headers) r.setHeader(key, value)
+}
 const dist = join(repo, 'dist')
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }
 http
@@ -192,6 +198,7 @@ http
     q.on('data', (c) => (body += c))
     q.on('end', () => {
       const url = new URL(q.url, 'http://x')
+      if (url.pathname !== '/v2/pipeline') withHeaders(url.pathname, r)
       if (url.pathname.startsWith('/api/')) {
         const n = url.pathname.slice(5)
         q.body = body ? JSON.parse(body) : {}

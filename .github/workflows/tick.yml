@@ -1,10 +1,20 @@
-# Wakes the coach every 10 minutes so reminders, check-ins and follow-ups
-# reach Telegram even when no device has the app open. (GitHub may delay a
-# run by a few minutes; the open app also wakes it every 2 minutes.)
+# Wakes the coach every 10 minutes so reminders, check-ins, follow-ups and the
+# daily messages (by your local time) reach Telegram even when no device has
+# the app open. (GitHub may delay a run by a few minutes; the open app also
+# wakes it every 2 minutes.)
+#
+# Keeping it alive (LT2): GitHub switches off scheduled workflows in a public
+# repository after 60 days without a commit. Twice a month the "keepalive" job
+# switches this workflow and the backup workflow on again through the GitHub
+# API. Settings → System health shows "Ben's timer" and warns when it has not
+# run for 30+ minutes. For extra safety add a second pinger (docs/AI_HANDOFF.md,
+# "Timers"): cron-job.org or UptimeRobot calling the same URL with the header
+# "Authorization: Bearer <CRON_SECRET>".
 name: Coach tick
 on:
   schedule:
     - cron: '*/10 * * * *'
+    - cron: '17 3 1,15 * *'
   workflow_dispatch:
 permissions: {}
 jobs:
@@ -22,8 +32,23 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           for i in 1 2 3; do
-            curl -fsS -m 60 -H "Authorization: Bearer ${CRON_SECRET}" "https://mega-system-ten.vercel.app/api/cron?job=tick" && exit 0
+            curl -fsS -m 60 -H "Authorization: Bearer ${CRON_SECRET}" -H "X-Life-Timer: github" "https://mega-system-ten.vercel.app/api/cron?job=tick" && exit 0
             sleep 20
           done
           echo "::error::Ben's server did not answer 3 times in a row"
           exit 1
+  keepalive:
+    if: github.event.schedule == '17 3 1,15 * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Keep the timers switched on
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for wf in tick.yml backup.yml; do
+            gh api -X PUT "repos/${REPO}/actions/workflows/${wf}/enable" && echo "${wf}: on"
+          done

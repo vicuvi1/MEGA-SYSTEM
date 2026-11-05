@@ -8,6 +8,13 @@
 /** Server-only tables: never read or written from a page. */
 export const PROTECTED_TABLES = ['sys_auth', 'sys_login_guard', 'sys_passkeys', 'sys_passkey_chal', 'sys_devices', 'sys_gate', 'sys_push', 'sys_kv', 'sys_mcp_tokens']
 const BANNED = new Set(['attach', 'detach', 'pragma', 'vacuum', 'load_extension'])
+/**
+ * Tables a page may only read (LT1): the 30 daily cloud backups. A stolen
+ * session must not be able to wipe or rewrite them; the app saves its daily
+ * backup through the server ({snapshot} in api/db.mjs), which only adds.
+ */
+export const READ_ONLY_TABLES = ['cloud_snapshots']
+const WRITES = new Set(['insert', 'update', 'delete', 'replace', 'drop', 'alter', 'create', 'upsert', 'truncate', 'reindex'])
 
 /**
  * The words of a statement outside strings, quoted names and comments;
@@ -70,7 +77,18 @@ export function stmtProblem(stmt) {
   if (!words) return 'Unclosed quote or comment'
   const bad = words.find((w) => BANNED.has(w))
   if (bad) return `${bad.toUpperCase()} is not allowed`
+  // Anywhere, like the server tables: a read-only table may appear only in a plain SELECT.
+  const ro = READ_ONLY_TABLES.find((t) => lower.includes(t))
+  if (ro && (words[0] !== 'select' || words.some((w) => WRITES.has(w)))) return `The table ${ro} can only be read here (backups are saved by the server)`
   return null
+}
+
+/** The plain SQL of every statement in a pipeline body. */
+const stmtsOf = (body) => (body?.requests ?? []).flatMap((r) => (r?.type === 'execute' ? [r.stmt] : r?.type === 'batch' ? (r.batch?.steps ?? []).map((s) => s?.stmt) : [])).filter((s) => s && typeof s.sql === 'string')
+
+/** True when a pipeline body changes data (anything but reads and BEGIN/COMMIT/ROLLBACK). */
+export function pipelineWrites(body) {
+  return stmtsOf(body).some((s) => (codeWords(s.sql) ?? ['?']).some((w) => WRITES.has(w)))
 }
 
 /** Why a pipeline body is refused, or null when every statement may run. */

@@ -26,7 +26,7 @@ It ships three ways from one codebase:
 ```
 api/              Vercel functions (max 12 on the Hobby plan): login (PIN, passkeys,
                   devices), db (guarded Turso proxy), coach, telegram webhook, cron
-                  (tick, daily jobs, sport), ai, google (+ its sign-in callback), todoist, config,
+                  (tick, daily jobs, backup, sport), ai, google (+ its sign-in callback), todoist, config,
                   bot-setup (+ health on GET), mcp (AI apps: MCP tools, tokens, OAuth; logic
                   in src/server/mcp.ts). Old URLs live on as vercel.json rewrites.
 api/_bot/bot.mjs  The server bundle of src/server/telegramBot.ts (npm run build:bot;
@@ -54,8 +54,11 @@ e2e/              smoke.mjs (the real app on fake data) and server.mjs.
   user, not jargon.
 - The repo is **public**: no secrets, no real personal data in code, tests,
   docs or screenshots. Use made-up data.
+- Database changes: `src/core/schema.ts` is append-only; adding a migration
+  means bumping `SCHEMA_VERSION` in `api/_schema.mjs` (a test checks it).
 - Security rules that must hold: `/api/db` refuses the server-only `sys_*`
-  tables and ATTACH/PRAGMA (`api/_sqlguard.mjs`); the PIN lives only on the
+  tables and ATTACH/PRAGMA, and lets pages only read `cloud_snapshots`
+  (`api/_sqlguard.mjs`); the PIN lives only on the
   server (`sys_auth`) and is changed through `/api/login {changePin}`; the bots
   obey only your own chat ids; a database hiccup is a 503, never a sign-out.
 - Points must be honest: a habit pays only for something you actually did when

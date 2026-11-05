@@ -57,6 +57,19 @@ import { importBank, importText } from '../../plugins/bank'
 import { addBlockResult, addFocusQuality, setPcLine, setWebLine } from './web/dayLog'
 import { createExtras } from './web/lifeExtras'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
+import { MIGRATIONS } from '@core/schema'
+
+/**
+ * /api/db with this page's database version (LT22): when the server is
+ * newer, it refuses this page's writes and the "new version" bar asks for a reload.
+ */
+const schemaFetch: typeof fetch = async (input, init) => {
+  const headers = new Headers(init?.headers)
+  headers.set('X-Life-Schema', String(MIGRATIONS.length))
+  const res = await fetch(input, { ...init, headers })
+  if (res.status === 409) window.dispatchEvent(new CustomEvent('life-schema-old'))
+  return res
+}
 
 /**
  * A direct Turso connection, only for development and tests (set turso_url
@@ -199,10 +212,17 @@ export function createTursoWebBridge(): Bridge {
   // The server said the session is over: ask for the PIN again.
   const turso = direct
     ? new TursoHttp(direct.url, direct.token)
-    : new TursoHttp('/api/db', currentSession, () => {
-        clearSession()
-        lockNow()
-      })
+    : new TursoHttp(
+        '/api/db',
+        currentSession,
+        () => {
+          clearSession()
+          lockNow()
+        },
+        schemaFetch
+      )
+  // LT3: sessions last 14 days and are renewed while the app is in use (a tab left open too).
+  if (!direct) setInterval(() => void renewSession(), 6 * 3600_000)
 
   // Nothing is fetched before there's a session (the first PIN on a device).
   let haveSession: () => void = () => {}
@@ -483,8 +503,10 @@ export function createTursoWebBridge(): Bridge {
     return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
   }
 
-  const ensureSnapshotsTable = () =>
-    turso.writeAtomic([{ sql: 'CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)', args: [] }])
+  // Through /api/db the backups can only be read (LT1): the server makes the table.
+  const ensureSnapshotsTable = async () => {
+    if (direct) await turso.writeAtomic([{ sql: 'CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)', args: [] }])
+  }
 
   /** Everything, for the export and the daily snapshot. */
   const snapshot = async () => {
@@ -779,7 +801,7 @@ export function createTursoWebBridge(): Bridge {
         })
         const n = new Date()
         const today = calendarDay(n)
-        return { checks: healthChecks({ now: n, beats: h.beats, sportySeen: sporty, latestSnapshot: h.latestSnapshot, today, errors: h.errors }), errors: h.errors }
+        return { checks: healthChecks({ now: n, beats: h.beats, sportySeen: sporty, latestSnapshot: h.latestSnapshot, today, errors: h.errors, notes: h.notes }), errors: h.errors }
       },
       beat: (key: string, ok: boolean, msg?: string) => beat(turso, key, ok, msg),
       logError: (source: string, msg: string) => logError(turso, source, msg),
@@ -1325,14 +1347,20 @@ export function createTursoWebBridge(): Bridge {
             store?.setItem('life_snapshot_error', `Today's cloud backup is too big to save (${(data.length / 1e6).toFixed(1)} MB). Download a backup from Settings → Data instead.`)
             return false
           }
-          await turso.writeAtomic([
-            {
-              sql: `INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?)
-                    ON CONFLICT(day) DO UPDATE SET exported_at = excluded.exported_at, size_bytes = excluded.size_bytes, data = excluded.data`,
-              args: [day, new Date().toISOString(), new Blob([data]).size, data]
-            },
-            { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [addDays(day, -30)] }
-          ])
+          if (direct)
+            await turso.writeAtomic([
+              {
+                sql: `INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?)
+                      ON CONFLICT(day) DO UPDATE SET exported_at = excluded.exported_at, size_bytes = excluded.size_bytes, data = excluded.data`,
+                args: [day, new Date().toISOString(), new Blob([data]).size, data]
+              },
+              { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [addDays(day, -30)] }
+            ])
+          else {
+            // LT1: the backups are read-only through /api/db; the server adds today's (it never overwrites one).
+            const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ snapshot: { day, data } }) })
+            if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || `HTTP ${res.status}`)
+          }
           store?.removeItem('life_snapshot_error')
           return true
         } catch (e) {

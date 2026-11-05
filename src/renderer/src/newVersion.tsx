@@ -28,6 +28,13 @@ const wentBackFrom = (): string | null => {
 export function NewVersionBar() {
   const [ready, setReady] = useState(false)
   const [back, setBack] = useState(false)
+  // LT22: the server has a newer database: this page may not save until it reloads.
+  const [mustReload, setMustReload] = useState(false)
+  useEffect(() => {
+    const on = () => setMustReload(true)
+    window.addEventListener('life-schema-old', on)
+    return () => window.removeEventListener('life-schema-old', on)
+  }, [])
   useEffect(() => {
     if (!MINE || (typeof window !== 'undefined' && (window as any).life)) return
     let stop = false
@@ -62,7 +69,17 @@ export function NewVersionBar() {
         </button>
       </div>
     )
+  if (mustReload)
+    return (
+      <div className="nv-bar" role="alert">
+        <span>✨ A new version is out — please reload. Changes are not saved until you do.</span>
+        <button className="btn primary small" onClick={() => window.location.reload()}>
+          Reload now
+        </button>
+      </div>
+    )
   if (!ready) return null
+
   return (
     <div className="nv-bar" role="status">
       <span>✨ A new version of Life System is ready.</span>

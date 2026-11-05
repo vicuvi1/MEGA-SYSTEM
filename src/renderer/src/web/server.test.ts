@@ -69,7 +69,7 @@ describe('web server', () => {
   it('sessions expire and cannot be forged', () => {
     const s = makeSession(cfg, Date.now())
     expect(sessionSigned(cfg, s)).toBeTruthy()
-    expect(sessionSigned(cfg, s, Date.now() + 31 * 86400_000)).toBeNull()
+    expect(sessionSigned(cfg, s, Date.now() + 15 * 86400_000)).toBeNull()
     expect(sessionSigned(config({ TURSO_URL: 'x', TURSO_TOKEN: 'other' }), s)).toBeNull()
     const [data] = s.split('.')
     expect(sessionSigned(cfg, `${data}.forged`)).toBeNull()

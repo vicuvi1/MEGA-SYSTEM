@@ -19,6 +19,8 @@ interface Status {
   model: string | null
   chosen: { chat: string | null; deep: string | null }
   auto: { chat: string | null; deep: string | null }
+  /** Newer models than the pinned ones Ben uses (LT9): shown, never switched to by themselves. */
+  newer?: { chat: string | null; deep: string | null }
 }
 interface Totals {
   calls: number
@@ -302,6 +304,14 @@ export function BrainPanel() {
         <ModelPicker label="Talks with you (chat, Telegram, nudges)" value={chosen.chat} auto={status?.auto.chat ?? null} models={models} onPick={(id) => void save(id, chosen.deep)} />
         <ModelPicker label="Thinks hard (morning plan, reviews, weekly letter)" value={chosen.deep} auto={chosen.chat ?? status?.auto.deep ?? null} models={models} onPick={(id) => void save(chosen.chat, id)} />
       </div>
+      {(status?.newer?.chat || status?.newer?.deep) && (
+        <p className="hint block brain-newer">
+          A newer model is available{status.newer.chat ? `: ${status.newer.chat} for chat` : ''}
+          {status.newer.chat && status.newer.deep ? ',' : ''}
+          {status.newer.deep ? ` ${status.newer.chat ? '' : ': '}${status.newer.deep} for hard thinking` : ''}. Ben keeps his current one until you pick it above (try it with "Test Ben" first).
+        </p>
+      )}
+
 
       {usage && !(usage.month?.calls || usage.week?.calls || usage.today?.calls) ? (
         <p className="brain-empty">No AI calls yet. What Ben costs shows up here after his first reply.{usage.credits ? ` OpenRouter balance: ${usd(usage.credits.left)}.` : ''}</p>

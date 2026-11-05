@@ -3,7 +3,7 @@
 // handled exactly like the app does (same services, same Turso transaction
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
-import { gunzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { calendarChanges, type Seen } from '../core/calWatch'
 import { loadFeedback } from '../renderer/src/web/botBrain'
 import { quietNow, quietRules } from '../core/benTiming'
@@ -64,6 +64,8 @@ import { coachStatus } from '../renderer/src/web/coachStatus'
 import { handleMcp, type McpCtx, type McpLife } from './mcp'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
 import { PLUGINS } from '../plugins'
+import { MIGRATIONS } from '@core/schema'
+
 import { runPluginJobs, type PluginStatus } from '../plugins/run'
 import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginsOn, readData, writeData } from '../plugins/store'
 import { cleanHealth, mergeDay, type HealthData } from '../plugins/health/health'
@@ -154,8 +156,18 @@ async function botsFor(env: BotEnv) {
   }
   const require = createRequire(import.meta.url)
   const SQL = await initSqlJs({ locateFile: (f: string) => require.resolve(`sql.js/dist/${f}`) })
-  const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken), null)
+  // LT7: a cold start downloads the whole database into memory; count the rows
+  // it reads (Settings → System health shows the month's total).
+  const cold = { on: true, rows: 0 }
+  const countingFetch = (async (input: any, init?: any) => {
+    const res = await fetch(input, init)
+    if (cold.on && typeof (res as any)?.clone === 'function') cold.rows += await res.clone().json().then(rowsIn, () => 0)
+    return res
+  }) as typeof fetch
+  const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, undefined, countingFetch), null)
   await mirror.ready
+  cold.on = false
+  void recordColdStart(new TursoHttp(env.tursoUrl, env.tursoToken), cold.rows)
   const services = createWebServices(mirror)
   const defaults = { enabled: true, pollingEnabled: true, morningBriefing: true, eveningNudge: true, ...env.defaults } as BotBridgeConfig
   // New tasks from the bots go to their area too (words first, then Gemini).
@@ -190,6 +202,36 @@ async function botsFor(env: BotEnv) {
   warm = { key, SQL, bots, mirror, services, calendar }
   warmAt = Date.now()
   return warm
+}
+
+/** Rows in a Turso pipeline answer (reads and batch steps). */
+export function rowsIn(json: any): number {
+  let n = 0
+  for (const r of json?.results ?? []) {
+    const res = r?.response?.result
+    n += res?.rows?.length ?? 0
+    for (const st of res?.step_results ?? []) n += st?.rows?.length ?? 0
+  }
+  return n
+}
+
+/** The month's cold starts and the rows they read, in sys_health (note:coldreads:YYYY-MM). Never throws. */
+export async function recordColdStart(t: TursoHttp, rows: number, now = new Date()): Promise<void> {
+  const key = `note:coldreads:${now.toISOString().slice(0, 7)}`
+  await t
+    .writeAtomic([
+      { sql: 'CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)', args: [] },
+      {
+        sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', ?, 'starts', 1)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_object('rows', COALESCE(json_extract(sys_health.msg, '$.rows'), 0) + ?3, 'starts', COALESCE(json_extract(sys_health.msg, '$.starts'), 0) + 1)",
+        args: [key, now.toISOString(), rows]
+      },
+      // LT22: the database version the server runs (only ever goes up; api/_schema.mjs checks pages against it).
+      {
+        sql: "INSERT INTO sys_health (key, at, msg) VALUES ('note:schema', ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = CAST(MAX(CAST(sys_health.msg AS INTEGER), CAST(excluded.msg AS INTEGER)) AS TEXT)",
+        args: [now.toISOString(), String(MIGRATIONS.length)]
+      }
+    ] as any)
+    .catch(() => {})
 }
 
 let todoistCheckedAt = 0
@@ -467,11 +509,15 @@ async function sysGet(db: TursoHttp, key: string): Promise<string | null> {
 }
 const sysSet = (db: TursoHttp, key: string, value: string) => db.writeAtomic([SYS_KV, { sql: 'INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [key, value] }])
 
-export async function runTick(env: BotEnv & { botToken: string; chatId: string; sleepBotToken?: string }, now = new Date()): Promise<string[]> {
+export async function runTick(env: BotEnv & { botToken: string; chatId: string; sleepBotToken?: string; timer?: boolean }, now = new Date()): Promise<string[]> {
   const tz = lifeTz(env)
+
   const { services, mirror, calendar, bots, SQL } = await botsFor(env)
-  // At most once a minute, whoever calls.
   const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
+  // LT2: the outside timer (GitHub Actions or a second pinger) woke Ben, not an open app.
+  // Settings → System health warns when it stops, even while the app keeps Ben going.
+  if (env.timer) await beat(healthDb, 'timer', true, undefined, now)
+  // At most once a minute, whoever calls.
   if (!(await sysClaim(healthDb, TICK_AT, now.getTime(), 50_000))) return []
   await beat(healthDb, 'tick', true, undefined, now)
   const sent: string[] = []
@@ -717,6 +763,13 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     console.error('health:', e)
   }
 
+  // LT8: Telegram's "already handled" marks: the server prunes them too (14 days kept), once a day.
+  try {
+    if (await sysClaim(healthDb, 'ben_prune_at', now.getTime(), 24 * 3600_000)) await mirror.write((db) => db.prepare('DELETE FROM bot_seen_updates WHERE ts < ?').run(seenCutoff(now)))
+  } catch (e) {
+    console.error('prune:', e)
+  }
+
   // Plugins (Settings → Plugins): weather, GitHub, mail… fetched on their own schedule.
   try {
     const ran = await pluginJobs(env, mirror, healthDb, now, (t) => send(t))
@@ -889,7 +942,13 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   }
 }
 
+/** bot_seen_updates older than this are dropped (Telegram never resends an update that old). */
+export const seenCutoff = (now: Date, days = 14) => new Date(now.getTime() - days * 86400_000).toISOString().slice(0, 10)
+
+export { dailyDue, localMinute, dailyGate, DAILY_GAP_MS } from '@core/dailyClock'
+
 const OUTBOX = 'ben_outbox'
+
 type OutMsg = { text: string; markup: unknown; at: number }
 const readOutbox = (db: any): OutMsg[] => {
   try {
@@ -984,7 +1043,8 @@ async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: D
   ] as any)
   if (!(have instanceof Error) && !have.rows.length) {
     try {
-      const data = JSON.stringify(await mirror.read((db) => snapshotOf(db as any, "Ben's server", now)))
+      // Packed like the app's ("gz:" + base64 of the gzipped JSON): a tenth of the size (LT1).
+      const data = `gz:${gzipSync(Buffer.from(JSON.stringify(await mirror.read((db) => snapshotOf(db as any, "Ben's server", now))), 'utf8')).toString('base64')}`
       const cut = new Date(now.getTime() - 30 * 86400000)
       await t.writeAtomic([
         { sql: 'INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING', args: [day, now.toISOString(), Buffer.byteLength(data), data] },
@@ -1023,7 +1083,7 @@ async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: 
     })(),
     today: calendarDay(now)
   }))
-  const checks = healthChecks({ now, beats: h.beats, sportySeen: local.sporty, latestSnapshot: h.latestSnapshot, today: local.today, errors: h.errors })
+  const checks = healthChecks({ now, beats: h.beats, sportySeen: local.sporty, latestSnapshot: h.latestSnapshot, today: local.today, errors: h.errors, notes: h.notes })
   const d = alertDecisions(checks, h.notes.alerted ?? {}, now)
   if (d.warn.length || d.fixed.length) {
     await setNote(t, 'alerted', d.next)

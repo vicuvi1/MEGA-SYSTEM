@@ -1,6 +1,6 @@
 // POST /api/login {pin} → {session}
-// POST /api/login {renew: session} → {session}: a device that skips the PIN
-// (Settings → General) swaps its still-valid session for a fresh 30-day one.
+// POST /api/login {renew: session} → {session}: a signed-in device swaps its
+// still-valid session for a fresh 14-day one while it is used (sliding expiry, LT3).
 // POST /api/login {signOutAll: session} → {session}: every other device has
 // to enter the PIN again (this one gets a fresh session).
 // POST /api/login {passkey:'options'|'register'|'login', …}: fingerprint/face unlock (_passkey.mjs).

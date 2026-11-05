@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 // src/core/calWatch.ts
@@ -23422,6 +23422,10 @@ function cleanVoice(out, template) {
 	return t;
 }
 // src/core/health.ts
+/** 1234567 → "1.2M" */
+var big = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n));
+/** Turso's free plan reads 500M rows a month; warn well before (LT7). */
+var COLD_READS_WARN = 3e8;
 var ago = (now, iso) => {
 	const m = Math.round((now.getTime() - Date.parse(iso)) / 6e4);
 	return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
@@ -23488,6 +23492,17 @@ function healthChecks(i) {
 			...late ? { since: new Date(Date.parse(tick) + 6e5).toISOString() } : {}
 		});
 	}
+	const timer = beats.timer?.ok;
+	if (timer) {
+		const late = now.getTime() - Date.parse(timer) > 18e5;
+		out.push({
+			id: "timer",
+			label: "Ben's timer",
+			ok: !late,
+			detail: late ? `Last ran ${ago(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago(now, timer)}`,
+			...late ? { since: new Date(Date.parse(timer) + 18e5).toISOString() } : {}
+		});
+	}
 	out.push(okErr("telegram", "Telegram", beats.telegram, now, "No messages sent yet"));
 	out.push(okErr("ai", "Ben's AI", beats.ai, now, "Not used yet"));
 	out.push(okErr("calendar", "Google Calendar", beats.calendar, now, "Not used yet"));
@@ -23525,6 +23540,16 @@ function healthChecks(i) {
 	}
 	const drill = beats.restoreDrill;
 	if (drill?.ok || drill?.err) out.push(okErr("restoreDrill", "Restore drill", drill, now, ""));
+	const cold = i.notes?.[`coldreads:${now.toISOString().slice(0, 7)}`];
+	if (cold && Number.isFinite(Number(cold.rows))) {
+		const rows = Number(cold.rows);
+		out.push({
+			id: "coldReads",
+			label: "Database reads at server start",
+			ok: rows < COLD_READS_WARN,
+			detail: `This month: ${big(rows)} rows in ${Number(cold.starts) || 0} cold starts${rows >= 3e8 ? " (near Turso's monthly free reads)" : ""}`
+		});
+	}
 	const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 864e5);
 	out.push({
 		id: "errors",
@@ -25317,6 +25342,33 @@ function localCleanup(tasks, today) {
 	}
 	return out;
 }
+// src/core/dailyClock.ts
+/** Local start time (minutes after midnight) of each daily message. */
+var DAILY_AT = {
+	morning: 510,
+	reask: 600,
+	midday: 780,
+	evening: 1290
+};
+/** The jobs whose local time has come (and not yet passed its window), for this minute of the day. */
+function dailyDue(minuteOfDay) {
+	return Object.keys(DAILY_AT).filter((j) => minuteOfDay >= DAILY_AT[j] && minuteOfDay < Math.min(DAILY_AT[j] + 150, 1440));
+}
+/** Minutes after local midnight in a time zone (Europe/Chisinau when none is given). */
+function localMinute(now, timeZone = "Europe/Chisinau") {
+	const parts = new Intl.DateTimeFormat("en-GB", {
+		timeZone,
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23"
+	}).formatToParts(now);
+	const n = (t) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+	return n("hour") * 60 + n("minute");
+}
+/** The gate name both the tick and Vercel's cron claim (api/cron.mjs, BG16). */
+var dailyGate = (job) => `daily:${job}`;
+/** At most once per this long (the same as api/cron.mjs). */
+var DAILY_GAP_MS = 72e6;
 // src/core/benEval.ts
 var EVAL_CASES = [
 	{
@@ -25834,8 +25886,19 @@ async function botsFor(env) {
 	}
 	const require = createRequire(import.meta.url);
 	const SQL = await initSqlJs({ locateFile: (f) => require.resolve(`sql.js/dist/${f}`) });
-	const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken), null);
+	const cold = {
+		on: true,
+		rows: 0
+	};
+	const countingFetch = (async (input, init) => {
+		const res = await fetch(input, init);
+		if (cold.on && typeof res?.clone === "function") cold.rows += await res.clone().json().then(rowsIn, () => 0);
+		return res;
+	});
+	const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, void 0, countingFetch), null);
 	await mirror.ready;
+	cold.on = false;
+	recordColdStart(new TursoHttp(env.tursoUrl, env.tursoToken), cold.rows);
 	const services = createWebServices(mirror);
 	const defaults = {
 		enabled: true,
@@ -25883,6 +25946,38 @@ async function botsFor(env) {
 	};
 	warmAt = Date.now();
 	return warm;
+}
+/** Rows in a Turso pipeline answer (reads and batch steps). */
+function rowsIn(json) {
+	let n = 0;
+	for (const r of json?.results ?? []) {
+		const res = r?.response?.result;
+		n += res?.rows?.length ?? 0;
+		for (const st of res?.step_results ?? []) n += st?.rows?.length ?? 0;
+	}
+	return n;
+}
+/** The month's cold starts and the rows they read, in sys_health (note:coldreads:YYYY-MM). Never throws. */
+async function recordColdStart(t, rows, now = /* @__PURE__ */ new Date()) {
+	const key = `note:coldreads:${now.toISOString().slice(0, 7)}`;
+	await t.writeAtomic([
+		{
+			sql: "CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)",
+			args: []
+		},
+		{
+			sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', ?, 'starts', 1)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_object('rows', COALESCE(json_extract(sys_health.msg, '$.rows'), 0) + ?3, 'starts', COALESCE(json_extract(sys_health.msg, '$.starts'), 0) + 1)",
+			args: [
+				key,
+				now.toISOString(),
+				rows
+			]
+		},
+		{
+			sql: "INSERT INTO sys_health (key, at, msg) VALUES ('note:schema', ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = CAST(MAX(CAST(sys_health.msg AS INTEGER), CAST(excluded.msg AS INTEGER)) AS TEXT)",
+			args: [now.toISOString(), String(MIGRATIONS.length)]
+		}
+	]).catch(() => {});
 }
 var todoistCheckedAt = 0;
 var TODOIST_COINS = DEFAULT_RULES.find((r) => r.id === "tasks.todoist_done")?.coins ?? 8;
@@ -26225,6 +26320,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	const tz = lifeTz(env);
 	const { services, mirror, calendar, bots, SQL } = await botsFor(env);
 	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
+	if (env.timer) await beat(healthDb, "timer", true, void 0, now);
 	if (!await sysClaim(healthDb, TICK_AT, now.getTime(), 5e4)) return [];
 	await beat(healthDb, "tick", true, void 0, now);
 	const sent = [];
@@ -26467,6 +26563,11 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			console.error("health:", e);
 		}
 		try {
+			if (await sysClaim(healthDb, "ben_prune_at", now.getTime(), 864e5)) await mirror.write((db) => db.prepare("DELETE FROM bot_seen_updates WHERE ts < ?").run(seenCutoff(now)));
+		} catch (e) {
+			console.error("prune:", e);
+		}
+		try {
 			const ran = await pluginJobs(env, mirror, healthDb, now, (t) => send(t));
 			if (ran.length) note("sent", `Plugins: ${ran.join(", ")}`, void 0, "plugins");
 		} catch (e) {
@@ -26663,6 +26764,8 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		return sent;
 	}
 }
+/** bot_seen_updates older than this are dropped (Telegram never resends an update that old). */
+var seenCutoff = (now, days = 14) => (/* @__PURE__ */ new Date(now.getTime() - days * 864e5)).toISOString().slice(0, 10);
 var OUTBOX = "ben_outbox";
 var readOutbox = (db) => {
 	try {
@@ -26777,7 +26880,7 @@ async function backupTick(t, SQL, mirror, now) {
 		args: []
 	}]);
 	if (!(have instanceof Error) && !have.rows.length) try {
-		const data = JSON.stringify(await mirror.read((db) => snapshotOf(db, "Ben's server", now)));
+		const data = `gz:${gzipSync(Buffer.from(JSON.stringify(await mirror.read((db) => snapshotOf(db, "Ben's server", now))), "utf8")).toString("base64")}`;
 		const cut = /* @__PURE__ */ new Date(now.getTime() - 2592e6);
 		await t.writeAtomic([{
 			sql: "INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING",
@@ -26829,7 +26932,8 @@ async function healthTick(t, mirror, now, send) {
 		sportySeen: local.sporty,
 		latestSnapshot: h.latestSnapshot,
 		today: local.today,
-		errors: h.errors
+		errors: h.errors,
+		notes: h.notes
 	});
 	const d = alertDecisions(checks, h.notes.alerted ?? {}, now);
 	if (d.warn.length || d.fixed.length) {
@@ -27392,4 +27496,4 @@ async function mcpCall(env, body, ctx) {
 	};
 	return handleMcp(life, body, ctx);
 }
-export { GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, exchangeCode, handleMcp, handleTelegramUpdate, healthPush, keepGooglePrefs, localCleanup, localIso, mcpCall, outboxAdd, parseCleanup, payTodoistDone, runBenEval, runDaily, runPlugins, runTick, sportShared };
+export { DAILY_GAP_MS, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, exchangeCode, handleMcp, handleTelegramUpdate, healthPush, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, sportShared };

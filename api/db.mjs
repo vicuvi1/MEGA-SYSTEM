@@ -1,7 +1,11 @@
 // POST /api/db (Bearer session): a Turso pipeline request, sent on with the
 // server's Turso key. Server-only tables and statements are refused (_sqlguard.mjs).
-import { pipelineProblem } from './_sqlguard.mjs'
+// POST /api/db {snapshot: {day, data}}: the app's daily cloud backup (LT1). The
+// backups are read-only for pages, so this only ADDS today's (never replaces one).
+import { pipelineProblem, pipelineWrites } from './_sqlguard.mjs'
+import { SCHEMA_VERSION, schemaTooOld } from './_schema.mjs'
 import { bearer, config, readBody, send, requireSession, turso } from './_lib.mjs'
+import { saveSnapshot } from './_snapshots.mjs'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
@@ -10,9 +14,17 @@ export default async function handler(req, res) {
   if (!(await requireSession(res, cfg, bearer(req)))) return
   try {
     const body = await readBody(req)
+    if (body && body.snapshot) {
+      const r = await saveSnapshot(cfg, body.snapshot)
+      return send(res, r.status, r.body)
+    }
+
     // Only the app's own data: never the server's tables or ATTACH/PRAGMA (A1).
     const problem = pipelineProblem(body)
     if (problem) return send(res, 403, { error: problem })
+    // LT22: a page built before the newest database change may read, but not write.
+    if (schemaTooOld(req.headers?.['x-life-schema']) && pipelineWrites(body)) return send(res, 409, { error: 'A new version is out — please reload', reload: true, schema: SCHEMA_VERSION })
+
     const r = await turso(cfg, body)
     // BG5: only our own session check may answer 401. Turso refusing the
     // server's key (expired, rotated) is a server problem: 503, never a sign-out.

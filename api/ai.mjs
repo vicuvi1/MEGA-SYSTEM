@@ -52,7 +52,14 @@ export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
 }
 
 const OPENROUTER = 'https://openrouter.ai/api/v1'
-let resolvedModel = null
+
+/**
+ * LT9: the models Ben uses unless you pick others (Settings → Ben → Brain) or
+ * set OPENROUTER_MODEL / OPENROUTER_STRONG_MODEL. Pinned, so a new model never
+ * changes how he talks overnight: Settings → Ben says when a newer one is out.
+ * A pinned model OpenRouter no longer lists is replaced by the newest one.
+ */
+export const PINNED_MODELS = { chat: 'deepseek/deepseek-v4.1-flash', deep: 'deepseek/deepseek-v4.1-pro' }
 
 /** Version numbers in a model id ("deepseek-v4.1-flash" → [4, 1]) for "newest first". */
 const versionOf = (id) => (String(id).match(/\d+(?:\.\d+)?/g) ?? []).map(Number)
@@ -63,42 +70,63 @@ const newer = (a, b) => {
   return 0
 }
 
+/** The newest DeepSeek "flash" model in a list of ids (cheap and good), else DeepSeek chat. */
+export function newestFlash(all) {
+  const ids = all.filter((id) => /^deepseek\//i.test(id) && !/:free$/.test(id))
+  return ids.filter((id) => /flash/i.test(id)).sort(newer)[0] ?? ids.filter((id) => /chat|v\d/i.test(id)).sort(newer)[0] ?? 'deepseek/deepseek-chat'
+}
+/** The newest DeepSeek "pro"/reasoning model in a list (not flash, lite or distilled), or null. */
+export function newestStrong(all) {
+  const ids = all.filter((id) => /^deepseek\//i.test(id) && !/:free$|flash|lite|distill|prover|ocr|coder/i.test(id))
+  return ids.filter((id) => /pro|reason|-r\d/i.test(id)).sort(newer)[0] ?? ids.filter((id) => /v\d/i.test(id)).sort(newer)[0] ?? null
+}
+
+let idsCache = null
+/** OpenRouter's model ids (cached an hour; a failed read is tried again after 5 minutes), or null. */
+async function modelIds(fetchImpl = fetch) {
+  if (idsCache && Date.now() < idsCache.until) return idsCache.ids
+  try {
+    const r = await fetchImpl(`${OPENROUTER}/models`)
+    const ids = ((await r.json())?.data ?? []).map((m) => String(m.id))
+    idsCache = { ids, until: Date.now() + 3600_000 }
+  } catch {
+    idsCache = { ids: null, until: Date.now() + 5 * 60_000 }
+  }
+  return idsCache.ids
+}
+
 /**
- * The OpenRouter model to use: OPENROUTER_MODEL if set, else the newest
- * DeepSeek "flash" model OpenRouter lists (cheap and good), else DeepSeek chat.
+ * The OpenRouter model to use: OPENROUTER_MODEL if set, else the pinned one
+ * (PINNED_MODELS.chat), else (when OpenRouter no longer lists it) the newest
+ * DeepSeek flash model.
  */
 export async function openRouterModel(env = process.env, fetchImpl = fetch) {
   if ((env.OPENROUTER_MODEL || '').trim()) return env.OPENROUTER_MODEL.trim()
-  if (resolvedModel) return resolvedModel
-  try {
-    const r = await fetchImpl(`${OPENROUTER}/models`)
-    const ids = ((await r.json())?.data ?? []).map((m) => String(m.id)).filter((id) => /^deepseek\//i.test(id) && !/:free$/.test(id))
-    const flash = ids.filter((id) => /flash/i.test(id)).sort(newer)
-    resolvedModel = flash[0] ?? ids.filter((id) => /chat|v\d/i.test(id)).sort(newer)[0] ?? 'deepseek/deepseek-chat'
-  } catch {
-    resolvedModel = 'deepseek/deepseek-chat'
-  }
-  return resolvedModel
+  const ids = await modelIds(fetchImpl)
+  if (!ids || ids.includes(PINNED_MODELS.chat)) return PINNED_MODELS.chat
+  return newestFlash(ids)
 }
 
-let resolvedStrong
 /**
  * The strong model for hard thinking (plans, reviews, corrections, questions):
- * OPENROUTER_STRONG_MODEL if set, else the newest DeepSeek "pro"/reasoning
- * model OpenRouter lists (not flash, lite or distilled); null if none.
+ * OPENROUTER_STRONG_MODEL if set, else the pinned one, else the newest DeepSeek
+ * pro/reasoning model OpenRouter lists; null if none.
  */
 export async function strongModel(env = process.env, fetchImpl = fetch) {
   if ((env.OPENROUTER_STRONG_MODEL || '').trim()) return env.OPENROUTER_STRONG_MODEL.trim()
-  if (resolvedStrong !== undefined) return resolvedStrong
-  try {
-    const r = await fetchImpl(`${OPENROUTER}/models`)
-    const ids = ((await r.json())?.data ?? []).map((m) => String(m.id)).filter((id) => /^deepseek\//i.test(id) && !/:free$|flash|lite|distill|prover|ocr|coder/i.test(id))
-    const pro = ids.filter((id) => /pro|reason|-r\d/i.test(id)).sort(newer)
-    resolvedStrong = pro[0] ?? ids.filter((id) => /v\d/i.test(id)).sort(newer)[0] ?? null
-  } catch {
-    resolvedStrong = null
-  }
-  return resolvedStrong
+  const ids = await modelIds(fetchImpl)
+  if (!ids || ids.includes(PINNED_MODELS.deep)) return PINNED_MODELS.deep
+  return newestStrong(ids)
+}
+
+/** Newer DeepSeek models than the ones in use, for "a newer model is available" (null = none). */
+export async function newerModels(env = process.env, fetchImpl = fetch) {
+  const ids = await modelIds(fetchImpl)
+  if (!ids) return { chat: null, deep: null }
+  const [chat, deep] = [await openRouterModel(env, fetchImpl), await strongModel(env, fetchImpl)]
+  const flash = newestFlash(ids)
+  const strong = newestStrong(ids)
+  return { chat: flash !== chat && newer(flash, chat) < 0 ? flash : null, deep: strong && strong !== deep && (!deep || newer(strong, deep) < 0) ? strong : null }
 }
 
 // ---- Your choice of model (Settings → Ben → Brain), kept in the database ----
@@ -148,6 +176,35 @@ export async function recordUsage(u, env = process.env, fetchImpl = fetch) {
       { type: 'close' }
     ]
   }, fetchImpl).catch(() => null)
+}
+
+/**
+ * LT8: calls older than 90 days become one row per month, model and kind
+ * (`calls` holds how many). All in one transaction. Statements only, so a test
+ * can run them on sql.js.
+ */
+export function rollupStatements(now = new Date(), keepDays = 90) {
+  const cut = new Date(now.getTime() - keepDays * 86400_000).toISOString()
+  return [
+    {
+      sql: "INSERT INTO ai_usage (at, model, kind, prompt_tokens, completion_tokens, cost, calls) SELECT substr(at, 1, 7) || '-01T00:00:00.000Z', model, kind, SUM(prompt_tokens), SUM(completion_tokens), SUM(cost), COUNT(*) FROM ai_usage WHERE at < ? AND calls IS NULL GROUP BY substr(at, 1, 7), model, kind",
+      args: [cut]
+    },
+    { sql: 'DELETE FROM ai_usage WHERE at < ? AND calls IS NULL', args: [cut] }
+  ]
+}
+/** The `calls` column (older tables don't have it); an error means it is there already. */
+export const USAGE_CALLS_COLUMN = 'ALTER TABLE ai_usage ADD COLUMN calls INTEGER'
+
+export async function rollupUsage(env = process.env, fetchImpl = fetch, now = new Date()) {
+  const cfg = config(env)
+  if (!cfg.ok || testing(env)) return
+  await turso(cfg, { requests: [{ type: 'execute', stmt: { sql: USAGE_TABLE } }, { type: 'execute', stmt: { sql: USAGE_CALLS_COLUMN } }, { type: 'close' }] }, fetchImpl)
+  const st = rollupStatements(now)
+  const steps = [{ stmt: { sql: 'BEGIN' } }, ...st.map((s, i) => ({ condition: { type: 'ok', step: i }, stmt: { sql: s.sql, args: s.args.map(t) } }))]
+  steps.push({ condition: { type: 'ok', step: st.length }, stmt: { sql: 'COMMIT' } })
+  steps.push({ condition: { type: 'not', cond: { type: 'ok', step: st.length + 1 } }, stmt: { sql: 'ROLLBACK' } })
+  await turso(cfg, { requests: [{ type: 'batch', batch: { steps } }, { type: 'close' }] }, fetchImpl)
 }
 
 // ---- The monthly budget: steps down to cheaper models as it fills up ----
@@ -222,7 +279,16 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
     }
   }
   const model = await openRouterModel(env, fetchImpl)
-  return callOpenRouter(key, model, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000)
+  try {
+    return await callOpenRouter(key, model, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000)
+  } catch (e) {
+    // The pinned model was refused as unknown: the newest one keeps Ben talking (LT9).
+    const ids = /\b(400|404)\b|not a valid model|no endpoints|not found/i.test(String(e?.message)) ? await modelIds(fetchImpl) : null
+    const backup = ids ? newestFlash(ids) : null
+    if (!backup || backup === model) throw e
+    console.warn(`model ${model} failed, using ${backup}:`, e.message)
+    return callOpenRouter(key, backup, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000)
+  }
 }
 
 /**
@@ -374,7 +440,8 @@ export default async function handler(req, res) {
   if (body?.op === 'status') {
     const strong = orKey ? await strongModel() : null
     const pick = await chosenModels()
-    return send(res, 200, { configured: !!(key || orKey), model: orKey ? pick.chat || (await openRouterModel()) : key ? 'gemini' : null, strong: pick.deep || pick.chat || strong, chosen: pick, auto: { chat: orKey ? await openRouterModel() : null, deep: strong } })
+    const newerOut = orKey ? await newerModels().catch(() => ({ chat: null, deep: null })) : { chat: null, deep: null }
+    return send(res, 200, { configured: !!(key || orKey), model: orKey ? pick.chat || (await openRouterModel()) : key ? 'gemini' : null, strong: pick.deep || pick.chat || strong, chosen: pick, auto: { chat: orKey ? await openRouterModel() : null, deep: strong }, pinned: PINNED_MODELS, newer: newerOut })
   }
   if (body?.op === 'models') return send(res, 200, { models: await listModels() })
   if (body?.op === 'setModels') {
@@ -443,20 +510,24 @@ async function usageReport(orKey, fetchImpl = fetch) {
     day0.setHours(0, 0, 0, 0)
     const since = (d) => new Date(Date.now() - d * 86400_000).toISOString()
     const q = (sql, args = []) => ({ type: 'execute', stmt: { sql, args: args.map((a) => ({ type: 'text', value: a })) } })
-    const sum = 'SELECT COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ?'
+    // A monthly roll-up row (LT8) stands for `calls` calls.
+    const sum = 'SELECT COALESCE(SUM(COALESCE(calls, 1)),0), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ?'
     const { json } = await turso(cfg, {
       requests: [
         { type: 'execute', stmt: { sql: USAGE_TABLE } },
+        { type: 'execute', stmt: { sql: USAGE_CALLS_COLUMN } },
         q(sum, [day0.toISOString()]),
         q(sum, [since(7)]),
         q(sum, [since(30)]),
         q('SELECT model, COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0) + COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ? GROUP BY model ORDER BY 3 DESC, 2 DESC', [since(30)]),
-        q('SELECT at, model, kind, prompt_tokens, completion_tokens, cost FROM ai_usage ORDER BY id DESC LIMIT 60'),
+        q('SELECT at, model, kind, prompt_tokens, completion_tokens, cost FROM ai_usage WHERE calls IS NULL ORDER BY id DESC LIMIT 60'),
         q("SELECT COALESCE(kind, 'chat'), COUNT(*), COALESCE(SUM(cost),0) FROM ai_usage WHERE at >= ? GROUP BY 1 ORDER BY 3 DESC, 2 DESC", [since(30)]),
         { type: 'close' }
       ]
     }, fetchImpl).catch(() => ({ json: null }))
-    const rows = (i) => json?.results?.[i]?.response?.result?.rows ?? []
+    // Shifted by one: the ALTER TABLE above is request 1.
+    const rows = (i) => json?.results?.[i > 0 ? i + 1 : i]?.response?.result?.rows ?? []
+
     const v = (c) => (c == null || c.type === 'null' ? null : c.value)
     const tot = (i) => {
       const r = rows(i)[0]

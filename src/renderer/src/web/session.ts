@@ -1,6 +1,7 @@
 // The web app's login with the server (api/login.mjs): the PIN is checked
-// there and a 30-day session comes back. The Turso and Telegram keys stay on
-// the server; the page only ever holds this session.
+// there and a 14-day session comes back, renewed while you use the app
+// (LT3). The Turso and Telegram keys stay on the server; the page only ever
+// holds this session.
 const KEY = 'life_web_session'
 
 export class NetworkError extends Error {}
@@ -79,13 +80,16 @@ export const setRememberedFlag = (on: boolean) => {
   }
 }
 
-/** A remembered device swaps its session for a fresh 30-day one when it has under 20 days left. */
+/** Renewed once it has under this long left (sessions last 14 days): about once every 3 days of use. */
+export const RENEW_UNDER_MS = 11 * 86400_000
+
+/** A device in use swaps its session for a fresh 14-day one (sliding expiry). Offline or a hiccup: kept as it is. */
 export async function renewSession(now = Date.now()): Promise<void> {
   const token = currentSession()
   if (!sessionValid(token, now)) return
   try {
     const exp = JSON.parse(atob(token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))).exp
-    if (exp - now > 20 * 86400_000) return
+    if (exp - now > RENEW_UNDER_MS) return
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ renew: token }) })
     const body = await res.json().catch(() => ({}))
     if (res.ok && body.session) {

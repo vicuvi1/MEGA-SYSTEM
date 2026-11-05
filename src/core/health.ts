@@ -16,7 +16,14 @@ export interface HealthInput {
   /** Today, local (YYYY-MM-DD). */
   today: string
   errors: ErrorEntry[]
+  /** Small notes the server keeps in sys_health (coldreads:YYYY-MM, schema…). */
+  notes?: Record<string, any>
 }
+
+/** 1234567 → "1.2M" */
+const big = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n)))
+/** Turso's free plan reads 500M rows a month; warn well before (LT7). */
+export const COLD_READS_WARN = 300e6
 
 export interface Check {
   id: string
@@ -71,6 +78,12 @@ export function healthChecks(i: HealthInput): Check[] {
     const late = now.getTime() - Date.parse(tick) > 30 * 60000
     out.push({ id: 'tick', label: "Ben's server", ok: !late, detail: late ? `Last ran ${ago(now, tick)} (should be every 10 min)` : `Ran ${ago(now, tick)}`, ...(late ? { since: new Date(Date.parse(tick) + 10 * 60000).toISOString() } : {}) })
   }
+  // LT2: the outside timer on its own (an open app also wakes Ben, which hides a dead timer).
+  const timer = beats.timer?.ok
+  if (timer) {
+    const late = now.getTime() - Date.parse(timer) > 30 * 60000
+    out.push({ id: 'timer', label: "Ben's timer", ok: !late, detail: late ? `Last ran ${ago(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago(now, timer)}`, ...(late ? { since: new Date(Date.parse(timer) + 30 * 60000).toISOString() } : {}) })
+  }
   out.push(okErr('telegram', 'Telegram', beats.telegram, now, 'No messages sent yet')!)
   out.push(okErr('ai', "Ben's AI", beats.ai, now, 'Not used yet')!)
   out.push(okErr('calendar', 'Google Calendar', beats.calendar, now, 'Not used yet')!)
@@ -90,7 +103,14 @@ export function healthChecks(i: HealthInput): Check[] {
   }
   const drill = beats.restoreDrill
   if (drill?.ok || drill?.err) out.push(okErr('restoreDrill', 'Restore drill', drill, now, '')!)
+  // LT7: each cold server start downloads the whole database; this month's total.
+  const cold = i.notes?.[`coldreads:${now.toISOString().slice(0, 7)}`]
+  if (cold && Number.isFinite(Number(cold.rows))) {
+    const rows = Number(cold.rows)
+    out.push({ id: 'coldReads', label: 'Database reads at server start', ok: rows < COLD_READS_WARN, detail: `This month: ${big(rows)} rows in ${Number(cold.starts) || 0} cold starts${rows >= COLD_READS_WARN ? " (near Turso's monthly free reads)" : ''}` })
+  }
   const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 86400000)
+
   out.push({ id: 'errors', label: 'Errors (24 h)', ok: day.length < 20, detail: day.length ? `${day.length} in the last 24 h, last: ${day[day.length - 1].msg.slice(0, 100)}` : 'None', ...(day.length >= 20 ? { since: day[day.length - 20].at } : {}) })
   return out
 }
