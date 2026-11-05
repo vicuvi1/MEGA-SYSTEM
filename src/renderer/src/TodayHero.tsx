@@ -50,10 +50,14 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
     load()
     const t = setInterval(load, 60_000)
     const on = () => load()
-    window.addEventListener('life-focus-changed', on)
+    // Anything that changes today's numbers refreshes the card at once (N5), not only focus.
+    const EVENTS = ['life-focus-changed', 'life-focus-ended', 'life-water-changed', 'life-body-changed', 'life-sport-changed', 'life-wallet-changed', 'life-tasks-changed', 'life-sleep-changed', 'life-external-changed', 'life-day-closed']
+    for (const e of EVENTS) window.addEventListener(e, on)
+    window.addEventListener('focus', on)
     return () => {
       clearInterval(t)
-      window.removeEventListener('life-focus-changed', on)
+      for (const e of EVENTS) window.removeEventListener(e, on)
+      window.removeEventListener('focus', on)
     }
   }, [load])
   useLive(load)
