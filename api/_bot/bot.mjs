@@ -20738,15 +20738,16 @@ async function runDaily(env, job) {
 		await send(eveningText(st.plan, st.todayMin) + todoLine + weekLine, st.plan.items.length ? planKeyboard(st.plan, true) : void 0);
 		sent.push("evening");
 		if ((/* @__PURE__ */ new Date()).getDay() === 0) {
-			await send(weekText(st.week, st.goals));
-			await send(progressText(report));
-			if (shouldPlan(savedPlan, input.today)) {
-				const url = env.appUrl ? `${env.appUrl.replace(/\/$/, "")}/` : null;
-				await send("🗓 <b>Plan next week</b> (15 minutes)\n\nPick <b>one</b> area to focus on and your <b>3 big tasks</b>. Open Progress in the app; the coach then checks that focus every day.", url ? { inline_keyboard: [[{
-					text: "🗓 Plan my week",
-					url
-				}]] } : void 0);
-			}
+			const plan = shouldPlan(savedPlan, input.today);
+			const url = env.appUrl ? `${env.appUrl.replace(/\/$/, "")}/` : null;
+			await send([
+				weekText(st.week, st.goals),
+				progressText(report),
+				plan ? "🗓 <b>Plan next week</b> (15 minutes): pick <b>one</b> area to focus on and your <b>3 big tasks</b> in Progress; the coach then checks that focus every day." : ""
+			].filter(Boolean).join("\n\n"), plan && url ? { inline_keyboard: [[{
+				text: "🗓 Plan my week",
+				url
+			}]] } : void 0);
 			sent.push("weekly");
 		}
 	}
@@ -21142,7 +21143,7 @@ async function deskTick(mirror, services, now, send, esc) {
 		text: f,
 		callback_data: `md|${i + 1}`
 	}))] }).catch(() => null);
-	if (callDue(d.calls, now) && now.getDay() === 0 && h >= 18 && h < 22) await send("🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.").catch(() => null);
+	if (callDue(d.calls, now) && now.getDay() === 0 && h >= 20 && h < 22) await send("🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.").catch(() => null);
 }
 /**
 * The daily cloud snapshot, made by the server so no device has to be open
@@ -21223,7 +21224,7 @@ async function healthTick(t, mirror, now, send) {
 		await send(alertText(d.warn, d.fixed)).catch(() => null);
 	}
 	const week = `${local.today}`;
-	if (now.getDay() === 0 && now.getHours() === 18 && h.notes.weekly !== week) {
+	if (now.getDay() === 0 && now.getHours() === 21 && h.notes.weekly !== week) {
 		await setNote(t, "weekly", week);
 		await send(weeklyReport(checks, h.errors, now)).catch(() => null);
 	}
