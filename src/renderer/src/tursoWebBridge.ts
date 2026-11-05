@@ -59,6 +59,16 @@ import { NetworkError, clearSession, currentSession, remembered, renewSession, s
  * and turso_token in localStorage). The live site has no keys in its code:
  * it goes through the server (api/db.mjs) after the PIN login.
  */
+
+/** A server error in words, never "Coach 404" (U9). */
+export function httpProblem(who: string, status: number): string {
+  if (status === 401) return 'Your session ended: enter your PIN again.'
+  if (status === 404) return `${who} isn't reachable right now (a new version may still be deploying). Reload in a minute.`
+  if (status === 429) return `${who} is busy: too many requests. Try again in a minute.`
+  if (status >= 500) return `${who} had a problem on the server. Try again in a minute.`
+  return `${who} didn't answer (error ${status}). Try again.`
+}
+
 export function getTursoConfig(): { url: string; token: string } | null {
   try {
     const url = localStorage.getItem('turso_url')
@@ -272,7 +282,7 @@ export function createTursoWebBridge(): Bridge {
       body: JSON.stringify({ op, ...extra })
     })
     const j = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(j.error || `Todoist ${r.status}`)
+    if (!r.ok) throw new Error(j.error || httpProblem('Todoist', r.status))
     return j
   }
   // Google Calendar through the server (the sign-in stays sealed there).
@@ -281,7 +291,7 @@ export function createTursoWebBridge(): Bridge {
     // 25 s at most: a stuck request must never leave "Loading your day…" up forever.
     const r = await fetch('/api/google', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op, ...extra }), signal: AbortSignal.timeout(25_000) })
     const j = await r.json().catch(() => ({}))
-    if (!r.ok || j.error) throw new Error(j.error || `Google ${r.status}`)
+    if (!r.ok || j.error) throw new Error(j.error || httpProblem('Google Calendar', r.status))
     return j
   }
   let googleOn: Promise<boolean> | null = null
@@ -541,7 +551,7 @@ export function createTursoWebBridge(): Bridge {
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, ...(media ? { media } : {}) }) })
         if (!r.ok || !r.body) {
           const j = await r.json().catch(() => ({}))
-          throw new Error(j.error || `Coach ${r.status}`)
+          throw new Error(j.error || httpProblem('Ben', r.status))
         }
         const reader = r.body.getReader()
         const dec = new TextDecoder()
@@ -619,7 +629,7 @@ export function createTursoWebBridge(): Bridge {
       undo: async (at: string, index?: number) => {
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'undo', at, index }) })
         const j = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(j.error || `Coach ${r.status}`)
+        if (!r.ok) throw new Error(j.error || httpProblem('Ben', r.status))
         void syncNow().catch(() => null)
         return j as { ok: boolean; lines: string[] }
       },
@@ -654,7 +664,7 @@ export function createTursoWebBridge(): Bridge {
         }
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'rhythm', action, note, prefs }) })
         const j = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(j.error || `Coach ${r.status}`)
+        if (!r.ok) throw new Error(j.error || httpProblem('Ben', r.status))
         void syncNow().catch(() => null)
         return j
       },

@@ -820,7 +820,7 @@ function MoneyTab({ v }: { v: DeskView }) {
                   <i className="week" style={{ width: `${(c.week / max) * 100}%` }} />
                 </div>
                 <b>{lei(c.week)}</b>
-                <small>{c.usual ? `${c.pct > 0 ? '+' : ''}${c.pct}%` : 'new'}</small>
+                <small>{!c.usual ? 'new' : c.week === 0 ? 'none yet' : `${c.pct > 0 ? '+' : ''}${c.pct}%`}</small>
               </div>
             ))}
             <p className="bd-legend">
