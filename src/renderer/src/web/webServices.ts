@@ -224,6 +224,7 @@ export function createWebServices(mirror: Mirror) {
       checkIn: () => write((s) => (s.discipline.checkIn(), s.discipline.state()), W, D),
       oath: () => write((s) => (s.discipline.oath(), s.discipline.state()), W, D),
       reset: () => write((s) => (s.discipline.reset(), s.discipline.state()), W, D),
+      undoReset: () => write((s) => (s.discipline.undoReset(), s.discipline.state()), W, D),
       startUrge: () => write((s) => (s.discipline.startUrge(), s.discipline.state()), W, D),
       finishUrge: () => write((s) => (s.discipline.finishUrge(), s.discipline.state()), W, D),
       cancelUrge: () => write((s) => (s.discipline.cancelUrge(), s.discipline.state()), W, D),

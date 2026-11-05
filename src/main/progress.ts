@@ -6,6 +6,7 @@ import { growth, type Growth } from '@core/growth'
 import { TODOIST_RULE } from '@core/todoist'
 import type { DB } from './db'
 import type { Wallet } from './wallet'
+import { undoneResets } from './discipline'
 
 export class ProgressService {
   constructor(private db: DB, private wallet: Wallet) {}
@@ -26,7 +27,12 @@ export class ProgressService {
       focus: all('SELECT day, minutes FROM focus_sessions WHERE day >= ?', since),
       wakes: all<{ day: string; on_time: number }>('SELECT day, on_time FROM sleep_logs WHERE day >= ?', since).map((r) => ({ day: r.day, onTime: !!r.on_time })),
       workouts: all('SELECT day FROM workouts WHERE day >= ?', since),
-      discipline: all("SELECT kind, day FROM discipline_events WHERE kind IN ('start', 'reset') ORDER BY id"),
+      discipline: (() => {
+        const undone = undoneResets(this.db)
+        return all<{ id: number; kind: string; day: string }>("SELECT id, kind, day FROM discipline_events WHERE kind IN ('start', 'reset') ORDER BY id")
+          .filter((r) => !undone.has(r.id))
+          .map((r) => ({ kind: r.kind, day: r.day }))
+      })(),
       todoist: all(
         "SELECT day FROM ledger WHERE rule_id = ? AND kind = 'earn' AND day >= ? AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)",
         TODOIST_RULE,

@@ -8528,7 +8528,42 @@ function dayNumber(s) {
 	if (s.setup === false) return 0;
 	return s.current + (s.resets === 0 ? 1 : 0);
 }
+/**
+* When the clean-day check-in can be done (MN3, H2): from 19:00 (until the day
+* turns at 04:00) it is for today; in the morning (until 12:00) for yesterday,
+* if yesterday wasn't checked in or reset; otherwise it waits for 19:00.
+*/
+function checkInWindow(events, appToday, hour) {
+	if (hour >= 19 || hour < 4) return {
+		mode: "today",
+		day: appToday
+	};
+	const yesterday = addDays$3(appToday, -1);
+	const start = startOf(events);
+	return hour < 12 && !!start && yesterday >= start.day && !events.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === yesterday) ? {
+		mode: "yesterday",
+		day: yesterday
+	} : {
+		mode: "wait",
+		day: appToday
+	};
+}
+function resetUndoable(events, today, now) {
+	const r = [...events].reverse().find((e) => e.kind === "reset");
+	if (!r || r.day !== today) return null;
+	return now.getTime() - Date.parse(r.ts) <= 6e5 ? r : null;
+}
 // src/main/discipline.ts
+var UNDONE_KEY = "discipline_undone_resets";
+/** Resets that were taken back in their first 10 minutes (MN7). */
+function undoneResets(db) {
+	try {
+		const v = JSON.parse(getSetting(db, UNDONE_KEY) || "[]");
+		return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "number") : []);
+	} catch {
+		return /* @__PURE__ */ new Set();
+	}
+}
 var Discipline = class {
 	db;
 	wallet;
@@ -8537,7 +8572,9 @@ var Discipline = class {
 		this.wallet = wallet;
 	}
 	events() {
-		return this.db.prepare("SELECT id, kind, day, ts FROM discipline_events ORDER BY id").all();
+		const undone = undoneResets(this.db);
+		const all = this.db.prepare("SELECT id, kind, day, ts FROM discipline_events ORDER BY id").all();
+		return undone.size ? all.filter((e) => !undone.has(e.id)) : all;
 	}
 	record(kind, day, now) {
 		this.db.prepare("INSERT INTO discipline_events (kind, day, ts) VALUES (?, ?, ?)").run(kind, day, now.toISOString());
@@ -8578,8 +8615,41 @@ var Discipline = class {
 			urgeStartedAt: getSetting(this.db, "urge_started_at") || null,
 			urgesThisWeek: events.filter((e) => e.kind === "urge" && e.day >= weekAgo).length,
 			stealth: getSetting(this.db, "discipline_stealth") === "1",
-			quote: quoteFor(today)
+			quote: quoteFor(today),
+			checkIn: (() => {
+				const w = checkInWindow(events, today, now.getHours());
+				return {
+					mode: events.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === w.day) && w.mode !== "wait" ? "done" : w.mode,
+					day: w.day
+				};
+			})(),
+			history: events.filter((e) => e.day >= addDays$3(today, -84) && e.kind !== "start").map((e) => ({
+				day: e.day,
+				kind: e.kind,
+				hour: new Date(e.ts).getHours()
+			})),
+			undoResetUntil: (() => {
+				const r = resetUndoable(events, today, now);
+				return r ? new Date(Date.parse(r.ts) + 6e5).toISOString() : null;
+			})()
 		};
+	}
+	/**
+	* Take back a reset made in the last 10 minutes (MN7: a test, or a wrong
+	* tap). The reset is removed and its coin penalty is given back.
+	*/
+	undoReset(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			const r = resetUndoable(this.events(), today, now);
+			if (!r) throw new LedgerError("A reset can only be taken back in the first 10 minutes.");
+			setSetting(this.db, UNDONE_KEY, JSON.stringify([...undoneResets(this.db), r.id]));
+			const undone = new Set(this.wallet.entries().filter((e) => e.kind === "undo").map((e) => e.undoOf));
+			for (const e of this.wallet.entries()) {
+				if (undone.has(e.id) || e.kind === "undo" || e.ts < r.ts.slice(0, 19)) continue;
+				if (e.ruleId === "discipline.reset" || e.ref === "perk:rulers_authority") this.wallet.undo(e.id, "Reset taken back", now);
+			}
+		}).immediate();
 	}
 	setStart(day, now = /* @__PURE__ */ new Date()) {
 		const events = this.events();
@@ -8594,15 +8664,9 @@ var Discipline = class {
 	checkIn(now = /* @__PURE__ */ new Date()) {
 		this.db.transaction(() => {
 			const appToday = this.wallet.today(now);
-			const h = now.getHours();
-			let today = appToday;
-			if (h >= 4 && h < 19) {
-				const yesterday = addDays$3(appToday, -1);
-				const evs = this.events();
-				const start = startOf(evs);
-				if (!(h < 12 && !!start && yesterday >= start.day && !evs.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === yesterday))) throw new LedgerError("The clean-day check-in opens at 19:00, when the day is done.");
-				today = yesterday;
-			}
+			const win = checkInWindow(this.events(), appToday, now.getHours());
+			if (win.mode === "wait") throw new LedgerError("The clean-day check-in opens at 19:00, when the day is done.");
+			const today = win.day;
 			planCheckIn(this.events(), today);
 			try {
 				this.wallet.awardRule("discipline.clean_day", {
@@ -11182,7 +11246,13 @@ var ProgressService = class {
 				onTime: !!r.on_time
 			})),
 			workouts: all("SELECT day FROM workouts WHERE day >= ?", since),
-			discipline: all("SELECT kind, day FROM discipline_events WHERE kind IN ('start', 'reset') ORDER BY id"),
+			discipline: (() => {
+				const undone = undoneResets(this.db);
+				return all("SELECT id, kind, day FROM discipline_events WHERE kind IN ('start', 'reset') ORDER BY id").filter((r) => !undone.has(r.id)).map((r) => ({
+					kind: r.kind,
+					day: r.day
+				}));
+			})(),
 			todoist: all("SELECT day FROM ledger WHERE rule_id = ? AND kind = 'earn' AND day >= ? AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)", TODOIST_RULE, since),
 			mustdos: plans.flatMap((p) => {
 				try {
@@ -12882,6 +12952,7 @@ syncFinance: (recordDays) => write((s) => {
 			checkIn: () => write((s) => (s.discipline.checkIn(), s.discipline.state()), W, D),
 			oath: () => write((s) => (s.discipline.oath(), s.discipline.state()), W, D),
 			reset: () => write((s) => (s.discipline.reset(), s.discipline.state()), W, D),
+			undoReset: () => write((s) => (s.discipline.undoReset(), s.discipline.state()), W, D),
 			startUrge: () => write((s) => (s.discipline.startUrge(), s.discipline.state()), W, D),
 			finishUrge: () => write((s) => (s.discipline.finishUrge(), s.discipline.state()), W, D),
 			cancelUrge: () => write((s) => (s.discipline.cancelUrge(), s.discipline.state()), W, D),

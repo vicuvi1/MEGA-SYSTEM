@@ -82,3 +82,41 @@ describe('dayNumber: one "Day N" everywhere', () => {
     expect(dayNumber({ current: 5, resets: 0, setup: false })).toBe(0)
   })
 })
+
+import { checkInWindow, disciplineCharts, resetUndoable } from './discipline'
+
+describe('Night 6 discipline helpers', () => {
+  const ev = (id: number, kind: 'start' | 'reset' | 'checkin' | 'urge', day: string, ts = `${day}T20:00:00.000Z`) => ({ id, kind, day, ts })
+  it('MN3: check-in waits for 19:00, morning is for yesterday', () => {
+    const events = [ev(1, 'start', '2026-11-01')]
+    expect(checkInWindow(events, '2026-11-05', 20)).toEqual({ mode: 'today', day: '2026-11-05' })
+    expect(checkInWindow(events, '2026-11-05', 9)).toEqual({ mode: 'yesterday', day: '2026-11-04' })
+    expect(checkInWindow(events, '2026-11-05', 14).mode).toBe('wait')
+    expect(checkInWindow([...events, ev(2, 'checkin', '2026-11-04')], '2026-11-05', 9).mode).toBe('wait')
+  })
+  it('MN25: charts show only what happened', () => {
+    const c = disciplineCharts(
+      [
+        { day: '2026-11-03', kind: 'checkin', hour: 21 },
+        { day: '2026-11-04', kind: 'reset', hour: 23 },
+        { day: '2026-11-04', kind: 'urge', hour: 23 },
+        { day: '2026-11-05', kind: 'urge', hour: 7 }
+      ],
+      '2026-11-05',
+      '2026-11-02',
+      2
+    )
+    expect(c.days).toHaveLength(14)
+    expect(c.days.at(-1)).toMatchObject({ day: '2026-11-05', state: 'none', urges: 1 })
+    expect(c.days.find((d) => d.day === '2026-11-03')?.state).toBe('clean')
+    expect(c.days.find((d) => d.day === '2026-11-04')?.state).toBe('reset')
+    expect(c.days.find((d) => d.day === '2026-11-01')?.state).toBe('before')
+    expect(c.byTime.map((b) => b.count)).toEqual([0, 1, 0, 1])
+    expect(c.logged).toBe(1)
+  })
+  it('MN7: a reset can be taken back for 10 minutes', () => {
+    const events = [ev(1, 'start', '2026-11-01'), ev(2, 'reset', '2026-11-05', '2026-11-05T20:00:00.000Z')]
+    expect(resetUndoable(events, '2026-11-05', new Date('2026-11-05T20:09:00.000Z'))?.id).toBe(2)
+    expect(resetUndoable(events, '2026-11-05', new Date('2026-11-05T20:11:00.000Z'))).toBeNull()
+  })
+})

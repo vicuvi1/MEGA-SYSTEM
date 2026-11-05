@@ -156,24 +156,11 @@ function withSportTrack(state: BodyState): BodyState {
 }
 
 /** Discipline, shown with MAN's own streak when MAN keeps one on this device. */
+// MN2: Life System's record (Turso) is the only streak. MAN on this device
+// no longer fills in numbers; before setup, its streak is only offered as a
+// suggested start date on the setup screen (connections.man.suggestion).
 function withMan(state: DisciplineState): DisciplineState {
-  const man = readJson<any>('MAN_SPARTAN_DATA')
-  if (!man || typeof man.streakDays !== 'number') return state
-  // The streak in Turso is the same on every device; MAN on this device only
-  // fills in before a start date was set (a new phone's MAN starts at Day 1).
-  // Life System's record is the only truth once a start date exists: reading
-  // MAN's own "checked in today" here made MAN's check-in look done before it
-  // was recorded, so it was never counted (and the streaks drifted apart).
-  if (state.setup) return state
-  const current = Math.max(0, man.streakDays)
-  return {
-    ...state,
-    current,
-    day: current,
-    best: Math.max(state.best, Number(man.longestStreak) || 0, current),
-    checkedInToday: state.checkedInToday || man.lastCheckin === state.today,
-    oathToday: state.oathToday || man.lastOathDate === state.today
-  }
+  return state
 }
 
 const SNAPSHOT_TABLES = [

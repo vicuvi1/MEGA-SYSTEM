@@ -482,6 +482,9 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         } else if (action === 'MAN_SET_STREAK') {
           const streak = Math.max(0, Number(payload?.streakDays) || 0)
           const d = await life.discipline.state()
+          // MN4: the streak can't be set to any day. Only a first setup takes a
+          // start date; after that the count comes from your check-ins and resets.
+          if (d.setup) return
           const startDay = streak > 0 ? addDays(d.today, -streak + 1) : d.today
           await life.discipline.setStart(startDay)
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'set_streak', streak } }))

@@ -159,3 +159,61 @@ export function dayNumber(s: { current: number; resets: number; setup?: boolean 
   if (s.setup === false) return 0
   return s.current + (s.resets === 0 ? 1 : 0)
 }
+
+/**
+ * When the clean-day check-in can be done (MN3, H2): from 19:00 (until the day
+ * turns at 04:00) it is for today; in the morning (until 12:00) for yesterday,
+ * if yesterday wasn't checked in or reset; otherwise it waits for 19:00.
+ */
+export function checkInWindow(events: DisciplineEvent[], appToday: string, hour: number): { mode: 'today' | 'yesterday' | 'wait'; day: string } {
+  if (hour >= 19 || hour < 4) return { mode: 'today', day: appToday }
+  const yesterday = addDays(appToday, -1)
+  const start = startOf(events)
+  const open = hour < 12 && !!start && yesterday >= start.day && !events.some((e) => (e.kind === 'checkin' || e.kind === 'reset') && e.day === yesterday)
+  return open ? { mode: 'yesterday', day: yesterday } : { mode: 'wait', day: appToday }
+}
+
+export interface DisciplineMark {
+  day: string
+  kind: DisciplineKind
+  /** Local hour of the event, 0–23. */
+  hour: number
+}
+
+/**
+ * Honest charts (MN25) from what really happened: the last `weeks` weeks as
+ * days (clean = a check-in, reset, or nothing logged), and urges by time of
+ * day. Days before the start date are 'before'.
+ */
+export function disciplineCharts(marks: DisciplineMark[], today: string, start: string | null, weeks = 12) {
+  const byDay = new Map<string, Set<DisciplineKind>>()
+  for (const m of marks) {
+    const s = byDay.get(m.day) ?? new Set<DisciplineKind>()
+    s.add(m.kind)
+    byDay.set(m.day, s)
+  }
+  const n = weeks * 7
+  const days = Array.from({ length: n }, (_, i) => {
+    const day = addDays(today, i - n + 1)
+    const k = byDay.get(day)
+    const state: 'before' | 'reset' | 'clean' | 'none' = !start || day < start ? 'before' : k?.has('reset') ? 'reset' : k?.has('checkin') ? 'clean' : 'none'
+    return { day, state, urges: marks.filter((m) => m.day === day && m.kind === 'urge').length }
+  })
+  const slots = [
+    { label: 'Night (0–6)', from: 0, to: 6 },
+    { label: 'Morning (6–12)', from: 6, to: 12 },
+    { label: 'Afternoon (12–18)', from: 12, to: 18 },
+    { label: 'Evening (18–24)', from: 18, to: 24 }
+  ]
+  const urges = marks.filter((m) => m.kind === 'urge')
+  const byTime = slots.map((s) => ({ label: s.label, count: urges.filter((u) => u.hour >= s.from && u.hour < s.to).length }))
+  return { days, byTime, urges: urges.length, logged: days.filter((d) => d.state === 'clean').length }
+}
+
+/** A reset can be taken back for 10 minutes (MN7): a test or a wrong tap. */
+export const RESET_UNDO_MINUTES = 10
+export function resetUndoable(events: DisciplineEvent[], today: string, now: Date): DisciplineEvent | null {
+  const r = [...events].reverse().find((e) => e.kind === 'reset')
+  if (!r || r.day !== today) return null
+  return now.getTime() - Date.parse(r.ts) <= RESET_UNDO_MINUTES * 60_000 ? r : null
+}

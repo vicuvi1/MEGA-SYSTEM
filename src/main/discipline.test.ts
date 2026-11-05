@@ -125,4 +125,30 @@ describe('discipline service', () => {
     d.checkIn(t('2026-10-26T21:00:00Z'))
     expect(db.prepare("SELECT COUNT(*) AS n FROM discipline_events WHERE kind = 'checkin'").get()).toMatchObject({ n: 2 })
   })
+
+  it('MN7: a reset taken back in 10 minutes gives the coins back and keeps the streak', () => {
+    d.setStart('2026-10-15', oct25)
+    const before = wallet.summary(oct25).balance
+    const streak = d.state(oct25).current
+    d.reset(oct25)
+    expect(d.state(oct25).current).toBe(0)
+    expect(d.state(oct25).undoResetUntil).toBeTruthy()
+    d.undoReset(t('2026-10-25T20:05:00Z'))
+    const s = d.state(t('2026-10-25T20:05:00Z'))
+    expect(s.current).toBe(streak)
+    expect(s.resetToday).toBe(false)
+    expect(s.canEditStart).toBe(true)
+    expect(wallet.summary(oct25).balance).toBe(before)
+    d.reset(t('2026-10-25T21:00:00Z'))
+    expect(() => d.undoReset(t('2026-10-25T21:20:00Z'))).toThrow('first 10 minutes')
+  })
+
+  it('MN3/MN25: says when the check-in opens, and keeps 12 weeks of history', () => {
+    d.setStart('2026-10-15', oct25)
+    expect(d.state(t('2026-10-25T14:00:00Z')).checkIn?.mode).toBe('wait')
+    expect(d.state(oct25).checkIn?.mode).toBe('today')
+    d.checkIn(oct25)
+    expect(d.state(oct25).checkIn?.mode).toBe('done')
+    expect(d.state(oct25).history?.some((h) => h.kind === 'checkin' && h.day === '2026-10-25')).toBe(true)
+  })
 })

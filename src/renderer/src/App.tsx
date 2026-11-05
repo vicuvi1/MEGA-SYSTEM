@@ -60,7 +60,7 @@ const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickComma
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
   money: { kind: 'finance', system: 'Points & budget' },
   sleep: { kind: 'waky', system: 'Points & stats' },
-  discipline: { kind: 'man', system: 'Streak & points' },
+  // MN24: Discipline is one page (the built-in one); the MAN app isn't a second copy.
   body: { kind: 'sport', system: 'Metrics & Workouts' }
 }
 

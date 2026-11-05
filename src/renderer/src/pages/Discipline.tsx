@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { campaignMap, URGE_SECONDS } from '@core/discipline'
+import { campaignMap, disciplineCharts, URGE_SECONDS } from '@core/discipline'
+import { TRIGGERS } from '@core/urgePatterns'
+import { addReflection, lastReflections, REFLECTION_TITLE, reflectionPrompt } from '@core/reflections'
 import type { ConnectionsState, DisciplineState } from '@shared/api'
 
 type ManSuggestion = ConnectionsState['man']['suggestion']
@@ -27,6 +29,30 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
   const [confirmReset, setConfirmReset] = useState(false)
   const [comeback, setComeback] = useState(false)
   const [celebrate, setCelebrate] = useState<string | null>(null)
+  // MN23: a privacy blur. Tap the eye to hide the numbers; they also hide
+  // when you leave the window or after a minute without touching it.
+  const [blurred, setBlurred] = useState(false)
+  useEffect(() => {
+    let idle = 0
+    const hide = () => setBlurred(true)
+    const poke = () => {
+      window.clearTimeout(idle)
+      idle = window.setTimeout(hide, 60_000)
+    }
+    const onVis = () => document.hidden && hide()
+    poke()
+    window.addEventListener('blur', hide)
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('pointerdown', poke)
+    window.addEventListener('keydown', poke)
+    return () => {
+      window.clearTimeout(idle)
+      window.removeEventListener('blur', hide)
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('pointerdown', poke)
+      window.removeEventListener('keydown', poke)
+    }
+  }, [])
 
   async function run(fn: () => Promise<DisciplineState>, ok?: string) {
     const s = await act(fn, ok)
@@ -52,12 +78,21 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
   const map = campaignMap({ current: state.current, best: state.best, totalClean: state.totalClean, relapses: state.resets, since: state.since })
 
   return (
-    <div className="discipline">
+    <div className={`discipline ${blurred ? 'privacy-blur' : ''}`}>
+      <button
+        className="btn small ghost privacy-eye"
+        aria-pressed={blurred}
+        title={blurred ? 'Show the numbers' : 'Hide the numbers (privacy blur)'}
+        onClick={() => setBlurred((b) => !b)}
+      >
+        {blurred ? '🙈 Hidden: tap to show' : '👁 Hide'}
+      </button>
+      {blurred && <button className="privacy-cover" aria-label="Show the numbers" onClick={() => setBlurred(false)} />}
       <section className="disc-hero">
         <div className="streak">
-          <motion.div className="flame" animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 2.4 }}>
+          <div className="flame">
             <Icon name="shield" size={34} />
-          </motion.div>
+          </div>
           <div>
             <div className="streak-num">
               {state.current}
@@ -82,29 +117,26 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         </div>
         <blockquote className="quote">“{state.quote}”</blockquote>
         <div className="disc-actions">
-          <button className="btn primary" disabled={state.checkedInToday || state.resetToday} onClick={() => run(() => life.discipline.checkIn(), 'Checked in. Another day won.')}>
-            <Icon name="check" size={15} />
-            {state.checkedInToday ? 'Checked in today' : state.resetToday ? 'Check in tomorrow' : 'Check in clean today'}
-          </button>
+          <CheckInButton state={state} onCheckIn={() => run(() => life.discipline.checkIn(), 'Checked in. Another day won.')} />
           <HoldButton done={state.oathToday} onDone={() => run(() => life.discipline.oath(), 'Oath sworn')} />
           <button className="btn urge-btn" onClick={() => onUrgeOpen(true)}>
-            <Icon name="bolt" size={15} /> Urge crusher
+            <Icon name="bolt" size={15} /> I feel an urge
           </button>
         </div>
-        <span className="hint panic-hint">Panic shortcut from anywhere: Ctrl + Alt + U</span>
+        <span className="hint panic-hint">From anywhere: Ctrl + Alt + U</span>
       </section>
 
       <section className="stats four">
         <Stat label="Best streak" value={`${state.best} d`} />
         <Stat label="Total clean days" value={`${state.totalClean}`} />
-        <Stat label="Urges crushed this week" value={`${state.urgesThisWeek}`} />
+        <Stat label="Urges beaten this week" value={state.urgesThisWeek ? `${state.urgesThisWeek}` : 'None yet'} />
         <Stat label="Resets" value={`${state.resets}`} />
       </section>
 
       <section className="panel">
         <header className="panel-head">
           <h2>Milestones</h2>
-          <span className="hint">Bonus coins and XP when you reach them. Days that passed before you set this up show as reached without coins.</span>
+          <span className="hint">The coins are paid when your check-in reaches the day. Days before you set this up show as reached, with no coins.</span>
         </header>
         <div className="milestones">
           {state.milestones.map((m) => (
@@ -148,6 +180,10 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         </div>
       </section>
 
+      <DisciplineCharts state={state} />
+
+      <ReflectionCard today={state.today} />
+
       <section className="panel slim">
         <div className="row spread">
           <label className="check">
@@ -163,7 +199,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         <div className="sheet" role="dialog" aria-label="Reset streak">
           <div className="sheet-card">
             <h3>Reset the streak?</h3>
-            <p className="hint">Being honest is the strong move. Your best ({state.best} days) and your {state.totalClean} total clean days stay. The count starts again from today, and it costs a few coins. No XP is lost.</p>
+            <p className="hint">Being honest is the strong move. Your best ({state.best} days) and your {state.totalClean} total clean days stay. The count starts again from today, and it costs a few coins. You can take it back in the next 10 minutes if it was a test or a wrong tap.</p>
             <div className="sheet-actions">
               <button className="btn ghost" onClick={() => setConfirmReset(false)}>
                 Cancel
@@ -204,6 +240,22 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
             </ul>
             <p className="hint small">Ben will check in tonight, tomorrow and on day 3 with your if-then plan, and the steps are in Todoist.</p>
             <p className="hint">One slip doesn't erase the work. Your best of {state.best} days is still yours to beat.</p>
+            {state.undoResetUntil && Date.parse(state.undoResetUntil) > Date.now() && (
+              <p className="hint small">
+                Was it a test or a wrong tap?{' '}
+                <button
+                  className="btn small ghost"
+                  onClick={async () => {
+                    if (!life.discipline.undoReset) return
+                    const s = await run(() => life.discipline.undoReset!(), 'Reset taken back. Your streak and coins are back.')
+                    if (s) setComeback(false)
+                  }}
+                >
+                  Take the reset back
+                </button>{' '}
+                (for 10 minutes, no cost)
+              </p>
+            )}
             <div className="sheet-actions">
               <button className="btn primary" onClick={() => setComeback(false)}>
                 Let's go
@@ -226,7 +278,8 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
               const s = await run(() => life.discipline.finishUrge(), 'Urge crushed. You won that one.')
               if (s) {
                 onUrgeOpen(false)
-                window.dispatchEvent(new Event('life-urge-won'))
+                // The trigger was asked in the crusher (MN9): don't ask twice.
+                window.dispatchEvent(new CustomEvent('life-urge-won', { detail: { noted: true } }))
               }
             }}
           />
@@ -341,22 +394,35 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
   const [trigger, setTrigger] = useState<string | null>(null)
   const [before, setBefore] = useState<number | null>(null)
   const [after, setAfter] = useState<number | null>(null)
-  const [did, setDid] = useState(false)
+  const [did, setDid] = useState<string | null>(null)
+  const [reps, setReps] = useState<number>(20)
+  const [failed, setFailed] = useState<string | null>(null)
+  const [usual, setUsual] = useState<string | null>(null)
   useEffect(() => {
-    life.discipline.patterns?.().then((p) => setTrigger(p.triggers[0] ?? null)).catch(() => {})
+    life.discipline.patterns?.().then((p) => setUsual(p.triggers[0] ?? null)).catch(() => {})
   }, [])
-  const action = pickUrgeAction(trigger)
+  const action = pickUrgeAction(trigger ?? usual)
+  // MN16: you log the push-ups you really did (after doing them), and a
+  // failure says so instead of looking done.
   const doAction = async () => {
+    setFailed(null)
     try {
-      if (action.kind === 'pushups' && action.reps) await life.body.logWorkout({ title: 'Push-ups (urge crusher)', items: [{ exerciseId: 'pushups', name: 'Push-ups', unit: 'reps', amount: action.reps }], note: 'Urge crusher' })
-      if (action.kind === 'focus' && action.minutes) await life.focus.start('Urge → focus', action.minutes, null)
-      setDid(true)
-      window.dispatchEvent(new CustomEvent('life-body-changed'))
-    } catch {
-      setDid(true)
+      if (action.kind === 'pushups') {
+        const n = Math.max(1, Math.min(500, Math.round(reps) || 0))
+        await life.body.logWorkout({ title: 'Push-ups (urge crusher)', items: [{ exerciseId: 'pushups', name: 'Push-ups', unit: 'reps', amount: n }], note: 'Urge crusher' })
+        window.dispatchEvent(new CustomEvent('life-body-changed'))
+        setDid(`✓ ${n} push-ups in Sport Track`)
+      }
+      if (action.kind === 'focus' && action.minutes) {
+        await life.focus.start('Urge → focus', action.minutes, null)
+        setDid(`✓ ${action.minutes}-minute focus started`)
+      }
+    } catch (e) {
+      setFailed(`Couldn't log it: ${(e as Error).message}`)
     }
   }
   const finish = () => {
+    // Only a trigger you picked is saved (not a guess from your usual one).
     void life.discipline.note?.('urge', trigger ?? 'Other', { ...(before != null ? { before } : {}), ...(after != null ? { after } : {}), action: action.kind }).catch(() => {})
     onFinish()
   }
@@ -384,15 +450,37 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
         <div className="urge-time">{mmss(left)}</div>
         {before == null ? (
           <Scale value={before} onPick={setBefore} label="How strong is it? (1–10)" />
+        ) : trigger == null ? (
+          <div className="urge-triggers" role="radiogroup" aria-label="What set it off?">
+            <small>What set it off?</small>
+            {TRIGGERS.map((t) => (
+              <button key={t} role="radio" aria-checked={false} className={t === usual ? 'usual' : ''} onClick={() => setTrigger(t)}>
+                {t}
+              </button>
+            ))}
+          </div>
         ) : (
           <div className="urge-action">
             <b>{action.title}</b>
             <p className="hint">{action.how}</p>
-            {(action.kind === 'pushups' || action.kind === 'focus') && (
-              <button className="btn small" disabled={did} onClick={() => void doAction()}>
-                {did ? '✓ Done' : action.kind === 'pushups' ? `Log ${action.reps} push-ups` : `Start ${action.minutes} min`}
+            {did ? (
+              <p className="hint">{did}</p>
+            ) : action.kind === 'pushups' ? (
+              <div className="row center">
+                <label className="hint">
+                  I did{' '}
+                  <input type="number" min={1} max={500} value={reps} onChange={(e) => setReps(Number(e.target.value))} style={{ width: 64 }} aria-label="Push-ups you did" />
+                </label>
+                <button className="btn small" onClick={() => void doAction()}>
+                  Log them
+                </button>
+              </div>
+            ) : action.kind === 'focus' ? (
+              <button className="btn small" onClick={() => void doAction()}>
+                Start {action.minutes} min
               </button>
-            )}
+            ) : null}
+            {failed && <p className="hint danger-text">{failed}</p>}
           </div>
         )}
         <p className="hint">The urge peaks and passes. Stay here until the timer ends.</p>
@@ -407,5 +495,133 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
         </div>
       </div>
     </motion.div>
+  )
+}
+
+/** MN3: the check-in says when it opens, instead of failing. */
+function CheckInButton({ state, onCheckIn }: { state: DisciplineState; onCheckIn: () => void }) {
+  const w = state.checkIn
+  const done = state.checkedInToday || w?.mode === 'done'
+  const label = state.resetToday
+    ? 'Check in tomorrow evening'
+    : done
+      ? 'Checked in'
+      : w?.mode === 'wait'
+        ? 'Check-in opens at 19:00'
+        : w?.mode === 'yesterday'
+          ? 'Check in yesterday as clean'
+          : 'Check in: today was clean'
+  return (
+    <button className="btn primary" disabled={done || state.resetToday || w?.mode === 'wait'} onClick={onCheckIn} title="You check in a day once you've lived it: from 19:00, or the next morning until 12:00">
+      <Icon name="check" size={15} />
+      {label}
+    </button>
+  )
+}
+
+/** MN25: only what really happened: 12 weeks of days, and urges by time of day. */
+function DisciplineCharts({ state }: { state: DisciplineState }) {
+  const history = state.history ?? []
+  const c = disciplineCharts(history, state.today, state.since, 12)
+  const max = Math.max(1, ...c.byTime.map((b) => b.count))
+  const weeks = Array.from({ length: 12 }, (_, i) => c.days.slice(i * 7, i * 7 + 7))
+  return (
+    <section className="panel disc-charts">
+      <header className="panel-head">
+        <h2>Last 12 weeks</h2>
+        <span className="hint">{c.logged ? `${c.logged} checked-in clean days` : 'Your check-ins show up here'}</span>
+      </header>
+      {!history.some((h) => h.kind === 'checkin' || h.kind === 'reset' || h.kind === 'urge') ? (
+        <p className="empty-note">Nothing here yet. Check in tonight after 19:00 and your first green square appears.</p>
+      ) : (
+        <>
+          <div className="disc-weeks" aria-label="Check-ins in the last 12 weeks">
+            {weeks.map((w, i) => (
+              <div key={i} className="disc-week">
+                {w.map((d) => (
+                  <span key={d.day} className={`dw ${d.state}`} title={`${d.day}: ${d.state === 'clean' ? 'checked in clean' : d.state === 'reset' ? 'reset' : d.state === 'before' ? 'before you started' : 'not checked in'}${d.urges ? `, ${d.urges} urge${d.urges > 1 ? 's' : ''} beaten` : ''}`} />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="disc-legend">
+            <span><i className="dw clean" /> Checked in</span>
+            <span><i className="dw none" /> Not checked in</span>
+            <span><i className="dw reset" /> Reset</span>
+          </div>
+          <h3 className="disc-sub">When urges come</h3>
+          {c.urges === 0 ? (
+            <p className="empty-note">No urges logged yet. When one comes, tap “I feel an urge” and this shows your risky times.</p>
+          ) : (
+            <div className="disc-bars">
+              {c.byTime.map((b) => (
+                <div key={b.label} className="disc-bar">
+                  <span>{b.label}</span>
+                  <i style={{ width: `${(b.count / max) * 100}%` }} />
+                  <b>{b.count}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+/** MN14: one question a day; the answer goes into the Notebook ("Reflections"). */
+function ReflectionCard({ today }: { today: string }) {
+  const act = useAction()
+  const prompt = reflectionPrompt(today)
+  const [text, setText] = useState('')
+  const [recent, setRecent] = useState<{ day: string; text: string }[] | null>(null)
+  const load = async () => {
+    const notes = await life.notes?.list().catch(() => null)
+    const note = notes?.find((n) => n.title.toLowerCase() === REFLECTION_TITLE.toLowerCase())
+    setRecent(lastReflections(note?.body, 3))
+    return { notes, note }
+  }
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  if (!life.notes) return null
+  const save = async () => {
+    const t = text.trim()
+    if (!t) return
+    const ok = await act(async () => {
+      const { note } = await load()
+      await life.notes!.save(note ? { id: note.id, title: note.title, body: addReflection(note.body, today, prompt, t) } : { title: REFLECTION_TITLE, body: addReflection('', today, prompt, t) })
+      return true
+    }, 'Saved in Notebook → Reflections')
+    if (ok) {
+      setText('')
+      void load()
+    }
+  }
+  return (
+    <section className="panel reflection">
+      <header className="panel-head">
+        <h2>Reflection</h2>
+        <span className="hint">Saved in your Notebook. No points: it's for you.</span>
+      </header>
+      <label className="reflect-q" htmlFor="reflect-text">{prompt}</label>
+      <textarea id="reflect-text" rows={3} value={text} placeholder="A sentence or two is enough." onChange={(e) => setText(e.target.value)} />
+      <div className="row end">
+        <button className="btn small primary" disabled={!text.trim()} onClick={() => void save()}>
+          Save
+        </button>
+      </div>
+      {recent && recent.length === 0 && <p className="empty-note">No reflections yet. Your first one shows up here.</p>}
+      {recent && recent.length > 0 && (
+        <ul className="reflect-list">
+          {recent.map((r) => (
+            <li key={r.day + r.text.slice(0, 10)}>
+              <small>{r.day}</small> {r.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

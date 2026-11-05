@@ -203,6 +203,12 @@ export interface DisciplineState {
   urgesThisWeek: number
   stealth: boolean
   quote: string
+  /** MN3: when the clean-day check-in can be done ('wait' = it opens at 19:00). */
+  checkIn?: { mode: 'today' | 'yesterday' | 'wait' | 'done'; day: string }
+  /** MN25: the last 12 weeks of check-ins, resets and urges, for honest charts. */
+  history?: { day: string; kind: 'start' | 'reset' | 'checkin' | 'oath' | 'urge'; hour: number }[]
+  /** MN7: a reset can be taken back until this time (10 minutes). */
+  undoResetUntil?: string | null
 }
 
 export type ConnectionKind = 'waky' | 'finance' | 'man'
@@ -459,6 +465,8 @@ export interface LifeApi {
     checkIn(): Promise<DisciplineState>
     oath(): Promise<DisciplineState>
     reset(): Promise<DisciplineState>
+    /** Take back a reset made in the last 10 minutes (a test or a wrong tap). */
+    undoReset?(): Promise<DisciplineState>
     claim(days: number): Promise<{ coins: number; state: DisciplineState }>
     startUrge(): Promise<DisciplineState>
     finishUrge(): Promise<DisciplineState>

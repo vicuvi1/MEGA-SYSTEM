@@ -16,7 +16,8 @@ export function DisciplineMoments({ onOpenChat }: { onOpenChat: () => void }) {
   const [steps, setSteps] = useState<string[]>([])
 
   useEffect(() => {
-    const open = (kind: Moment['kind']) => async () => {
+    const open = (kind: Moment['kind']) => async (e?: Event) => {
+      if ((e as CustomEvent | undefined)?.detail?.noted) return // already asked (MN9)
       const d = await life.discipline.state().catch(() => null)
       setM({ kind, best: d?.best ?? 0, day: d?.day ?? d?.current ?? 0 })
       setStep('ask')

@@ -44,7 +44,7 @@ try {
     await pg.waitForSelector('.thb', { timeout: 15000 })
   })
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
-  for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky'], ['discipline', 'MAN']]) {
+  for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky']]) {
     await step(`${name} loads with its own content`, async () => {
       await open(page)
       await pg.waitForTimeout(3500)
@@ -56,6 +56,12 @@ try {
       if (text.length < 40) throw new Error(`frame looks empty (${text.length} chars)`)
     })
   }
+  // MN24: Discipline is one built-in page (no embedded MAN copy).
+  await step('Discipline is one page with its own content', async () => {
+    await open('discipline')
+    await pg.waitForSelector('.discipline, .setup, .stealth-cover', { timeout: 10000 })
+    if (await pg.evaluate(() => !![...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent && /man/.test(e.getAttribute('src') ?? '')))) throw new Error('MAN is still embedded')
+  })
   await step('Settings: every section opens with content', async () => {
     await open('settings')
     await pg.waitForSelector('.st-item', { timeout: 10000 })

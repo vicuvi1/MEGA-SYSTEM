@@ -1767,7 +1767,7 @@
                 <span>⚙️</span> Streak & Reset
             </button>
             <button class="nav-tab" data-tab="tab-empire">
-                <span>🏛️</span> Empire & Codex
+                <span>📜</span> More
             </button>
         </div>
 
@@ -1808,7 +1808,7 @@
             <div class="combat-deck">
                 <!-- CLAIM VICTORY -->
                 <button id="btn-claim-victory" class="btn btn-victory" style="padding: 16px 20px; font-size: 14px; margin-bottom: 0;">
-                    ✅ CLAIM TODAY'S VICTORY (+40 XP, +20 COINS)
+                    ✅ CHECK IN TODAY (CLEAN)
                 </button>
 
                 <!-- MORNING OATH -->
@@ -1850,23 +1850,6 @@
                         <div id="reward-teaser-status" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">2 days remaining to earn your treat</div>
                     </div>
                     <button class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px; border-color: var(--spartan-gold); color: var(--spartan-gold); font-weight: 700; white-space: nowrap; margin-bottom: 0;">Open Gifts</button>
-                </div>
-            </div>
-
-            <!-- EMPIRE & KINGDOM ROADMAP TEASER CARD -->
-            <div class="card" id="empire-teaser-card" style="background: linear-gradient(135deg, rgba(34, 25, 12, 0.95), rgba(17, 24, 39, 0.95)); border: 1px solid rgba(234, 179, 8, 0.55); box-shadow: 0 4px 18px rgba(234, 179, 8, 0.12); margin-bottom: 12px; cursor: pointer; padding: 12px 14px; border-radius: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-size: 11px; font-weight: 800; color: var(--spartan-gold); letter-spacing: 0.8px;">👑 SPARTAN EMPIRE & KINGDOM</span>
-                    <span id="empire-main-status-badge" style="background: rgba(234, 179, 8, 0.18); color: var(--spartan-gold); border: 1px solid rgba(234, 179, 8, 0.4); font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">TIER 1 (19 Y/O) • $2.5K/MO</span>
-                </div>
-                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-                    <div style="flex: 1; min-width: 0;">
-                        <div id="empire-teaser-headline" style="font-size: 13px; font-weight: 900; color: #fff;">Set your income goal (tap Edit)</div>
-                        <div id="empire-teaser-sub" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">The King's Standard: Build the kingdom first, the queen follows.</div>
-                    </div>
-                    <button id="btn-open-empire-teaser" class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px; border-color: var(--spartan-gold); color: var(--spartan-gold); font-weight: 800; white-space: nowrap; margin-bottom: 0;">
-                        View Empire 👑
-                    </button>
                 </div>
             </div>
 
@@ -1927,7 +1910,7 @@
                 <textarea id="diary-entry-text" class="diary-textarea" rows="4" placeholder="Log your experience today... What urges or triggers appeared? What victory did you achieve? What is your oath for tomorrow? Write honestly, Spartan."></textarea>
 
                 <button id="btn-save-diary" class="btn btn-seal-entry">
-                    💾 SEAL TODAY'S REFLECTION (+25 XP, +10 COINS)
+                    💾 SAVE TODAY'S REFLECTION
                 </button>
             </div>
 
@@ -1980,37 +1963,6 @@
                 </div>
             </div>
 
-            <!-- DIRECT STREAK CONTROLLER -->
-            <div class="card control-card">
-                <div class="control-card-header">
-                    <div>
-                        <div class="control-title">⚡ DIRECT STREAK CONTROL</div>
-                        <div class="control-sub">Full authority over your streak counter. Set it to any day count immediately.</div>
-                    </div>
-                    <span class="control-badge">SOVEREIGNTY</span>
-                </div>
-
-                <div class="control-section-label">QUICK PRESET JUMP:</div>
-                <div class="preset-btn-group">
-                    <button class="btn-preset" data-days="0">Day 0 (Reset)</button>
-                    <button class="btn-preset" data-days="1">Day 1</button>
-                    <button class="btn-preset" data-days="3">Day 3</button>
-                    <button class="btn-preset" data-days="5">Day 5</button>
-                    <button class="btn-preset" data-days="7">Day 7</button>
-                    <button class="btn-preset" data-days="14">Day 14</button>
-                    <button class="btn-preset" data-days="30">Day 30</button>
-                    <button class="btn-preset" data-days="90">Day 90</button>
-                </div>
-
-                <div class="control-section-label" style="margin-top: 14px;">OR ENTER EXACT DAY COUNT:</div>
-                <div class="custom-streak-row">
-                    <input type="number" id="input-custom-days" class="custom-streak-input" min="0" max="9999" value="1" placeholder="Enter day #" />
-                    <button id="btn-apply-custom-days" class="btn btn-gold-outline" style="width: auto; margin-bottom: 0; padding: 12px 24px;">
-                        Set Streak
-                    </button>
-                </div>
-            </div>
-
             <!-- RELAPSE & RESET PROTOCOL -->
             <div class="card reset-card">
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
@@ -2033,9 +1985,6 @@
         <!-- ============================================== -->
         <div id="tab-empire" class="tab-pane">
             <div class="grid-2">
-                <button id="btn-open-empire" class="btn btn-secondary" style="border-color: rgba(234, 179, 8, 0.65); color: var(--spartan-gold); font-weight: 800;">
-                    👑 Empire Roadmap ($10K)
-                </button>
                 <button id="btn-open-timeline" class="btn btn-secondary" style="border-color: rgba(56, 189, 248, 0.55); color: #38bdf8; font-weight: 800;">
                     🧬 Brain & Body Timeline
                 </button>
@@ -2072,7 +2021,7 @@
         </div>
 
         <div class="version-footer">
-            MAN: SPARTAN DESKTOP v2.1 • vicuvi1/Poppy-bot • Molon Labe
+            MAN • your streak lives in Life System
         </div>
 
     </div>
@@ -2286,147 +2235,6 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
         </div>
     </div>
 
-    <!-- MODAL: SPARTAN EMPIRE & KINGDOM ROADMAP -->
-    <div id="modal-empire" class="modal-overlay">
-        <div class="modal-card">
-            <div class="modal-header">
-                <div class="modal-title">👑 SPARTAN EMPIRE & KINGDOM ROADMAP</div>
-                <button class="modal-close" onclick="closeModal('modal-empire')">✕</button>
-            </div>
-            <div class="modal-body">
-                <!-- THE KING'S CORE DIRECTIVE BANNER -->
-                <div style="background: linear-gradient(135deg, rgba(34, 25, 12, 0.95), rgba(17, 24, 39, 0.95)); border: 1px solid rgba(234, 179, 8, 0.5); border-radius: 12px; padding: 14px; margin-bottom: 14px; border-left: 4px solid var(--spartan-gold);">
-                    <div style="font-size: 11px; font-weight: 800; color: var(--spartan-gold); letter-spacing: 0.8px; margin-bottom: 4px;">
-                        🏛️ THE KING'S PRIME DIRECTIVE
-                    </div>
-                    <div style="font-size: 12.5px; color: #fff; font-style: italic; line-height: 1.5;">
-                        "Build the fortress first. A King never invites a Queen into a ruin. Cybersecurity sovereignty, financial armor, and an unshakeable mind come before everything."
-                    </div>
-                </div>
-
-                <!-- LIVE FINANCIAL & WAR CHEST TRACKER -->
-                <div style="background: #171A26; border: 1px solid #282C3D; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-size: 12px; font-weight: 800; color: #fff;">⚡ FINANCIAL WAR ENGINE</span>
-                        <button id="btn-edit-empire-stats" style="background: rgba(234,179,8,0.12); border: 1px solid rgba(234,179,8,0.3); color: var(--spartan-gold); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 6px; cursor: pointer;">
-                            ✏️ Update Income & Fund
-                        </button>
-                    </div>
-
-                    <!-- Monthly Income Bar -->
-                    <div style="margin-bottom: 12px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 4px;">
-                            <span style="color: var(--text-secondary);">Monthly Tech Income:</span>
-                            <span id="empire-income-display" style="font-weight: 800; color: var(--spartan-gold);">$0 / $5,000 USD (0%)</span>
-                        </div>
-                        <div class="progress-bar-container" style="height: 8px;">
-                            <div id="empire-income-bar" class="progress-bar-fill" style="width: 0%; background: linear-gradient(90deg, #EAB308, #22c55e);"></div>
-                        </div>
-                        <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 3px;">Next Target: $5,000/mo (High-ticket remote EU/US contracts)</div>
-                    </div>
-
-                    <!-- Citadel House Fund Bar -->
-                    <div>
-                        <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 4px;">
-                            <span style="color: var(--text-secondary);">Citadel Real Estate Fund:</span>
-                            <span id="empire-house-display" style="font-weight: 800; color: #38bdf8;">$0 / $50,000 USD (0%)</span>
-                        </div>
-                        <div class="progress-bar-container" style="height: 8px;">
-                            <div id="empire-house-bar" class="progress-bar-fill" style="width: 0%; background: linear-gradient(90deg, #38bdf8, #818cf8);"></div>
-                        </div>
-                        <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 3px;">Target: Own your modern apartment/citadel in Chișinău or abroad</div>
-                    </div>
-                </div>
-
-                <!-- THE 3 CONQUEST TIERS -->
-                <div style="font-size: 12px; font-weight: 800; color: var(--text-muted); letter-spacing: 0.8px; margin-bottom: 8px;">
-                    ⚔️ THE 3 EMPIRE CONQUEST TIERS
-                </div>
-
-                <!-- TIER 1 -->
-                <div class="empire-tier-card conquered" id="empire-tier-1">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 12.5px; font-weight: 900; color: #fff;">TIER 1: The Warrior Prodigy (Age 19)</span>
-                        <span class="empire-stat-badge" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e;">CONQUERED & ACTIVE ✅</span>
-                    </div>
-                    <div style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5;">
-                        • <b>Income:</b> your first steady monthly income from your craft.<br>
-                        • <b>Craft:</b> Cybersecurity University Degree + Technical Exploit/Audit Mastery.<br>
-                        • <b>Territory:</b> Independent rented apartment (paid 100% with your own sweat).<br>
-                        • <b>Dating Protocol:</b> <i>Casual exploration & frame training.</i> Women are 20%, mission is 80%. Never skip gym or study for a girl.
-                    </div>
-                </div>
-
-                <!-- TIER 2 -->
-                <div class="empire-tier-card active" id="empire-tier-2">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 12.5px; font-weight: 900; color: var(--spartan-gold);">TIER 2: The Sovereign Contractor ($5K/MO)</span>
-                        <span class="empire-stat-badge" style="background: rgba(234, 179, 8, 0.2); color: var(--spartan-gold); border: 1px solid var(--spartan-gold);">ACTIVE BATTLEGROUND 🎯</span>
-                    </div>
-                    <div style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5;">
-                        • <b>Income Target:</b> $3,500 – $5,000 USD / mo (Senior remote EU/US contracts, Pen-testing, Cloud Sec).<br>
-                        • <b>War Chest:</b> $15,000 – $25,000 liquid capital / investments.<br>
-                        • <b>👑 THE KING'S DATING STANDARD UNLOCKED:</b><br>
-                        You have effortless financial independence. You can invite high-caliber, feminine women out to top dining without blinking. You don't chase approval; you screen for loyalty and peace.
-                    </div>
-                </div>
-
-                <!-- TIER 3 -->
-                <div class="empire-tier-card" id="empire-tier-3">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 12.5px; font-weight: 900; color: #fff;">TIER 3: The Tech Warlord ($10K/MO & Citadel House)</span>
-                        <span class="empire-stat-badge" style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid #475569;">FUTURE CITADEL 🏛️</span>
-                    </div>
-                    <div style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5;">
-                        • <b>Income Target:</b> $10,000+ USD / mo (Elite Cybersecurity Consultant / Security Architect).<br>
-                        • <b>Territory:</b> Own your own Modern Penthouse / House in Chișinău or abroad.<br>
-                        • <b>👑 QUEEN PROTOCOL ACTIVATED:</b><br>
-                        You have fully forged your fortress. Zero debt, high social standing, and true sovereignty. You are ready to choose a feminine Queen to build a legacy with.
-                    </div>
-                </div>
-
-                <!-- THE KING'S STANDARD: DATING READINESS GAUGE -->
-                <div style="margin-top: 18px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 12px; font-weight: 800; color: #fff;">👑 THE KING'S STANDARD: DATING READINESS</span>
-                        <span id="empire-checklist-score" style="font-size: 11px; font-weight: 800; color: var(--spartan-gold);">3 / 5 PILLARS (60%)</span>
-                    </div>
-
-                    <div id="empire-checklist-items">
-                        <!-- Items rendered via JS -->
-                    </div>
-
-                    <div id="empire-readiness-verdict" style="background: rgba(234, 179, 8, 0.08); border-left: 3px solid var(--spartan-gold); padding: 10px 12px; border-radius: 8px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.45; margin-top: 8px;">
-                        <!-- Verdict text -->
-                    </div>
-                </div>
-
-                <!-- CYBERSECURITY & WEALTH WAR RULES -->
-                <div style="margin-top: 16px;">
-                    <div style="font-size: 12px; font-weight: 800; color: var(--text-muted); letter-spacing: 0.8px; margin-bottom: 8px;">
-                        ⚡ CYBERSECURITY & WEALTH SPARTAN RULES
-                    </div>
-
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="background: #171A26; border: 1px solid #282C3D; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: var(--text-secondary);">
-                            💻 <b>Cyber Sovereignty:</b> Code, audit, and penetrate systems until your knowledge is indispensable. Cyber expertise is modern warfare.
-                        </div>
-                        <div style="background: #171A26; border: 1px solid #282C3D; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: var(--text-secondary);">
-                            ⛰️ <b>The Mountain Law:</b> A high-value woman wants a man who has a mountain to climb. If she becomes your mountain, she will lose all respect for you.
-                        </div>
-                        <div style="background: #171A26; border: 1px solid #282C3D; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: var(--text-secondary);">
-                            📈 <b>The 19-Year-Old Leverage:</b> Your compounding rate right now is the highest in your entire life. Every skill mastered and dollar invested at 19 is worth 10x at 25.
-                        </div>
-                        <div style="background: #171A26; border: 1px solid #282C3D; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: var(--text-secondary);">
-                            🛡️ <b>Iron Frame:</b> Never simp. Never fund a girl's lifestyle before she has proven loyalty, peace, and feminine respect in your kingdom.
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
-
     <!-- MODAL: SPARTAN RELAPSE & COMEBACK PROTOCOL -->
     <div id="modal-reset-streak" class="modal-overlay">
         <div class="modal-card" style="border-color: #EF4444; box-shadow: 0 10px 40px rgba(239, 68, 68, 0.35);">
@@ -2446,7 +2254,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                     <button type="button" class="trigger-pill" data-trigger="Aimless Boredom / Idleness" onclick="selectResetTrigger(this)">⏳ Aimless Boredom</button>
                     <button type="button" class="trigger-pill" data-trigger="High Stress / Exhaustion" onclick="selectResetTrigger(this)">⚡ High Stress / Fatigue</button>
                     <button type="button" class="trigger-pill" data-trigger="Social Media Algorithm" onclick="selectResetTrigger(this)">🌐 Social Media Trigger</button>
-                    <button type="button" class="trigger-pill" data-trigger="Intentional Clean Restart" onclick="selectResetTrigger(this)">🔄 Clean Restart / Testing</button>
+                    
                 </div>
 
                 <div class="diary-section-label" style="margin-top: 14px;">LESSON FORGED (WHAT RULE WILL PREVENT THIS?):</div>
@@ -4289,232 +4097,9 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             }
         }
 
-        function updateEmpireTeaser() {
-            initEmpireData();
-            const badge = document.getElementById("empire-main-status-badge");
-            const headline = document.getElementById("empire-teaser-headline");
-            const sub = document.getElementById("empire-teaser-sub");
-
-            let tierName = "TIER 1 (19 Y/O)";
-            if (appData.empire.income >= 10000) {
-                tierName = "TIER 3 (WARLORD)";
-            } else if (appData.empire.income >= 5000) {
-                tierName = "TIER 2 (SOVEREIGN)";
-            }
-
-            if (badge) {
-                badge.innerText = `${tierName} • $${appData.empire.income.toLocaleString()}/MO`;
-            }
-            if (headline) {
-                headline.innerText = appData.empire.income > 0
-                    ? `${appData.empire.field || "Income"} • $${appData.empire.income.toLocaleString()}/mo ➔ $${appData.empire.incomeTarget.toLocaleString()} Target`
-                    : "Set your income goal (tap Edit)";
-            }
-            if (sub) {
-                const incomePct = Math.min(100, Math.round((appData.empire.income / appData.empire.incomeTarget) * 100));
-                sub.innerText = `King's Standard: ${incomePct}% to Tier 2 ($5k/mo) • House Fund: $${appData.empire.houseFund.toLocaleString()}`;
-            }
-        }
-
-        function renderEmpire() {
-            initEmpireData();
-            const income = appData.empire.income;
-            const incomeTarget = appData.empire.incomeTarget || 5000;
-            const houseFund = appData.empire.houseFund || 0;
-            const houseTarget = appData.empire.houseTarget || 50000;
-
-            const incomePct = Math.min(100, Math.round((income / incomeTarget) * 100));
-            const housePct = Math.min(100, Math.round((houseFund / houseTarget) * 100));
-
-            const incomeDisplay = document.getElementById("empire-income-display");
-            const incomeBar = document.getElementById("empire-income-bar");
-            if (incomeDisplay) incomeDisplay.innerText = `$${income.toLocaleString()} / $${incomeTarget.toLocaleString()} USD (${incomePct}%)`;
-            if (incomeBar) incomeBar.style.width = `${incomePct}%`;
-
-            const houseDisplay = document.getElementById("empire-house-display");
-            const houseBar = document.getElementById("empire-house-bar");
-            if (houseDisplay) houseDisplay.innerText = `$${houseFund.toLocaleString()} / $${houseTarget.toLocaleString()} USD (${housePct}%)`;
-            if (houseBar) houseBar.style.width = `${housePct}%`;
-
-            // Tiers highlight
-            const t1 = document.getElementById("empire-tier-1");
-            const t2 = document.getElementById("empire-tier-2");
-            const t3 = document.getElementById("empire-tier-3");
-
-            if (t1 && t2 && t3) {
-                t1.className = "empire-tier-card conquered";
-                if (income >= 10000) {
-                    t2.className = "empire-tier-card conquered";
-                    t3.className = "empire-tier-card active";
-                } else if (income >= 5000) {
-                    t2.className = "empire-tier-card active";
-                    t3.className = "empire-tier-card";
-                } else {
-                    t2.className = "empire-tier-card active";
-                    t3.className = "empire-tier-card";
-                }
-            }
-
-            renderEmpireChecklist();
-            updateEmpireTeaser();
-        }
-
-        function renderEmpireChecklist() {
-            initEmpireData();
-            const container = document.getElementById("empire-checklist-items");
-            if (!container) return;
-
-            const isDisciplinePassed = appData.streakDays >= 30;
-            const isIncomePassed = appData.empire.income >= 5000;
-            const isPhysique = !!appData.empire.checklist.physique;
-            const isTerritory = !!appData.empire.checklist.territory;
-            const isMission = !!appData.empire.checklist.mission;
-
-            const pillars = [
-                {
-                    id: "discipline",
-                    title: "🛡️ Iron Discipline (30+ Days Clean)",
-                    desc: isDisciplinePassed ? "Conquered! Zero pixel rot, sovereign dopamine control." : `In Progress: Day ${appData.streakDays}/30 conquered. (Auto-forges at Day 30)`,
-                    passed: isDisciplinePassed,
-                    auto: true
-                },
-                {
-                    id: "income",
-                    title: "💵 Financial Armor ($5,000 / mo)",
-                    desc: isIncomePassed ? "Conquered! $5,000+ monthly tech income unlocked." : `In Progress: Current $${appData.empire.income.toLocaleString()}/mo ($${Math.max(0, 5000 - appData.empire.income).toLocaleString()} to Tier 2).`,
-                    passed: isIncomePassed,
-                    auto: true
-                },
-                {
-                    id: "physique",
-                    title: "⚔️ Spartan Physique & High Testosterone",
-                    desc: "Daily training, athletic body, and explosive male physical vitality.",
-                    passed: isPhysique,
-                    auto: false
-                },
-                {
-                    id: "territory",
-                    title: "🏰 Sovereign Territory (Independent Living)",
-                    desc: "Independent living, rent paid with your own sweat, clean organized base.",
-                    passed: isTerritory,
-                    auto: false
-                },
-                {
-                    id: "mission",
-                    title: "🎯 Mission-First Mindset (Craft Priority)",
-                    desc: "Cybersecurity and income are sacred. Never skip study, coding, or gym for female attention.",
-                    passed: isMission,
-                    auto: false
-                }
-            ];
-
-            let passedCount = pillars.filter(p => p.passed).length;
-            const scoreEl = document.getElementById("empire-checklist-score");
-            if (scoreEl) {
-                const pct = Math.round((passedCount / pillars.length) * 100);
-                scoreEl.innerText = `${passedCount} / ${pillars.length} PILLARS (${pct}%)`;
-                scoreEl.style.color = passedCount === 5 ? "var(--accent-green)" : "var(--spartan-gold)";
-            }
-
-            container.innerHTML = "";
-            pillars.forEach(p => {
-                const item = document.createElement("div");
-                item.className = `empire-checklist-item ${p.passed ? "checked" : ""}`;
-                item.style.cursor = p.auto ? "default" : "pointer";
-                item.innerHTML = `
-                    <div style="font-size: 18px; min-width: 24px; text-align: center;">
-                        ${p.passed ? "✅" : "⏳"}
-                    </div>
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="font-weight: 800; color: ${p.passed ? '#fff' : 'var(--text-secondary)'}; font-size: 12px;">
-                            ${p.title}
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-                            ${p.desc}
-                        </div>
-                    </div>
-                    ${!p.auto ? `<div style="font-size: 10px; color: var(--spartan-gold); font-weight: 700; white-space: nowrap;">[Toggle]</div>` : ""}
-                `;
-                if (!p.auto) {
-                    item.addEventListener("click", () => {
-                        appData.empire.checklist[p.id] = !appData.empire.checklist[p.id];
-                        saveData();
-                        renderEmpireChecklist();
-                    });
-                }
-                container.appendChild(item);
-            });
-
-            const verdictEl = document.getElementById("empire-readiness-verdict");
-            if (verdictEl) {
-                if (passedCount === 5) {
-                    verdictEl.innerHTML = `👑 <b>FULL KING'S STANDARD CONQUERED!</b> You hold an empire, financial armor, and an unshakeable mind. You do not chase; you choose. Invite high-caliber women into your kingdom on your terms.`;
-                    verdictEl.style.borderColor = "var(--accent-green)";
-                    verdictEl.style.background = "rgba(34, 197, 94, 0.1)";
-                } else if (passedCount >= 3) {
-                    verdictEl.innerHTML = `⚔️ <b>RISING BEAST AT 19 ($2.5K ENGINE):</b> You already dominate 99% of men your age in Eastern Europe. Keep pushing to Tier 2 ($5k/mo) and hold your streak. <i>Build the empire first, and the queen will naturally follow.</i>`;
-                    verdictEl.style.borderColor = "var(--spartan-gold)";
-                    verdictEl.style.background = "rgba(234, 179, 8, 0.08)";
-                } else {
-                    verdictEl.innerHTML = `🛡️ <b>FORTIFY THE BASE:</b> Lock in your cybersecurity skills, independent income, and 30-day streak before inviting any romantic commitments.`;
-                    verdictEl.style.borderColor = "var(--text-muted)";
-                    verdictEl.style.background = "rgba(100, 116, 139, 0.08)";
-                }
-            }
-        }
-
-        function handleEditEmpireStats() {
-            initEmpireData();
-            const fieldInput = prompt("What do you earn from? (e.g. Cybersecurity, Freelance design)", appData.empire.field || "");
-            if (fieldInput !== null) appData.empire.field = fieldInput.trim().slice(0, 40);
-            const incomeInput = prompt("Your monthly income now, in USD:", appData.empire.income);
-            if (incomeInput !== null && !isNaN(parseInt(incomeInput))) {
-                appData.empire.income = Math.max(0, parseInt(incomeInput));
-                appData.empire.incomeSet = true;
-            }
-            const targetInput = prompt("Your monthly income goal, in USD:", appData.empire.incomeTarget);
-            if (targetInput !== null && !isNaN(parseInt(targetInput)) && parseInt(targetInput) > 0) {
-                appData.empire.incomeTarget = parseInt(targetInput);
-            }
-
-            const houseInput = prompt("Enter current Citadel House / Real Estate savings fund in USD (e.g. 5000, 15000, 50000):", appData.empire.houseFund);
-            if (houseInput !== null && !isNaN(parseInt(houseInput))) {
-                appData.empire.houseFund = Math.max(0, parseInt(houseInput));
-            }
-
-            saveData();
-            renderEmpire();
-            showToast("👑 Spartan Empire Stats Updated!");
-        }
-
-        const btnEditEmpire = document.getElementById("btn-edit-empire-stats");
-        if (btnEditEmpire) btnEditEmpire.addEventListener("click", handleEditEmpireStats);
-
-        const btnOpenEmpire = document.getElementById("btn-open-empire");
-        if (btnOpenEmpire) {
-            btnOpenEmpire.addEventListener("click", () => {
-                renderEmpire();
-                openModal("modal-empire");
-            });
-        }
-
-        const btnOpenEmpireTeaser = document.getElementById("btn-open-empire-teaser");
-        if (btnOpenEmpireTeaser) {
-            btnOpenEmpireTeaser.addEventListener("click", () => {
-                renderEmpire();
-                openModal("modal-empire");
-            });
-        }
-
-        const empireTeaserCard = document.getElementById("empire-teaser-card");
-        if (empireTeaserCard) {
-            empireTeaserCard.addEventListener("click", (e) => {
-                if (e.target !== btnOpenEmpireTeaser) {
-                    renderEmpire();
-                    openModal("modal-empire");
-                }
-            });
-        }
+        // MN1: the old income / dating roadmap held personal details; it's gone.
+        function updateEmpireTeaser() {}
+        function renderEmpire() {}
 
         // -------------------------------------------------------------
 
@@ -4850,52 +4435,16 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                 textEl.value = '';
                 renderDiaryFeed();
                 updateControlsTab();
-                showToast("⚔️ Warrior reflection sealed in the Citadel! (+25 XP, +10 Coins)");
+                showToast("Reflection saved.");
 
-                try {
-                    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_DIARY', payload: entry }, '*');
-                } catch (e) {}
+                lifeBridge('MAN_DIARY', entry);
             });
         }
 
         // -------------------------------------------------------------
         // 11. FULL STREAK CONTROL & RESET PROTOCOL
         // -------------------------------------------------------------
-        function setStreakDays(val) {
-            const num = Math.max(0, parseInt(val) || 0);
-            appData.streakDays = num;
-            appData.longestStreak = Math.max(appData.longestStreak || 0, num);
-            if (num === 0) {
-                appData.lastCheckin = "";
-            }
-            saveData();
-            refreshUI();
-            updateControlsTab();
-            sound.playVictory();
-            showToast(`⚡ Spartan streak updated to Day ${num}!`);
-
-            try {
-                lifeBridge("MAN_SET_STREAK", ({ streakDays: num }));
-                window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_SET_STREAK', payload: { streakDays: num } }, '*');
-            } catch (e) {}
-        }
-
-        // Quick Preset Buttons
-        document.querySelectorAll('.btn-preset').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const d = parseInt(btn.getAttribute('data-days'));
-                setStreakDays(d);
-            });
-        });
-
-        // Custom Input
-        const btnApplyCustomDays = document.getElementById('btn-apply-custom-days');
-        const inputCustomDays = document.getElementById('input-custom-days');
-        if (btnApplyCustomDays && inputCustomDays) {
-            btnApplyCustomDays.addEventListener('click', () => {
-                setStreakDays(inputCustomDays.value);
-            });
-        }
+        // MN4: the streak can't be set to any day; it comes from check-ins and resets.
 
         // Reset Modal Handlers & Fail-Safe Global Protocol
         let selectedResetTrigger = 'Late Night Screen / Bed Phone';
@@ -4945,7 +4494,6 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
 
                 try {
                     lifeBridge("MAN_RESET", ({ today: getTodayString() }));
-                    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_RESET', payload: { today: getTodayString() } }, '*');
                 } catch (e) {}
             } catch (err) {
                 console.error("confirmResetProtocol error:", err);
