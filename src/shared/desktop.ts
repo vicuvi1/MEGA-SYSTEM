@@ -1,6 +1,8 @@
 import type { UpdateStatus } from './api'
 import type { IslandAck, IslandAction, IslandPrefs, IslandSnapshot } from '../core/islandModel'
 import type { BackupStatus, BackupWhere } from '../desktop/backups'
+import type { IslandDeskPrefs } from '../desktop/islandWin'
+export type { IslandDeskPrefs } from '../desktop/islandWin'
 
 /** Where the island lives: top of the screen, docked on a side, or floating. */
 export type IslandPlacement = 'top' | 'left' | 'right' | 'free'
@@ -37,7 +39,7 @@ export interface DesktopApi {
   onLock?(cb: (l: { locked: boolean; at: number }) => void): void
   /** A taskbar shortcut (P17): "focus25". */
   onJump?(cb: (a: string) => void): void
-  /** Island window: Ctrl+Alt+N (add a task) / Ctrl+Alt+B (talk to Ben). */
+  /** Island window: the add-a-task shortcut (Alt+Shift+N) / talk-to-Ben (Alt+Shift+B). */
   onIslandCapture?(cb: () => void): void
   onIslandVoice?(cb: () => void): void
   /** A button on a Windows notification (N9). */
@@ -73,10 +75,16 @@ export interface DesktopApi {
   /** Island window: give it the keyboard (typing to Ben). */
   islandFocus?(): void
   /** App window: your island settings (Settings → Desktop island). */
-  getIslandPrefs?(): Promise<IslandPrefs | null>
-  setIslandPrefs?(p: Partial<IslandPrefs>): Promise<{ prefs: IslandPrefs; shortcutOk: boolean } | null>
+  getIslandPrefs?(): Promise<(IslandPrefs & Partial<IslandDeskPrefs>) | null>
+  setIslandPrefs?(p: Partial<IslandPrefs & IslandDeskPrefs>): Promise<{ prefs: IslandPrefs & Partial<IslandDeskPrefs>; shortcutOk: boolean } | null>
+  /** App window: shortcuts another app already uses (Settings shows "taken by another app"). */
+  islandShortcutStatus?(): Promise<{ failed: { what: string; accelerator: string }[] } | null>
+  /** App window: a shortcut could not be registered (another app has it). `what`: island, quiet, capture or voice. */
+  onIslandShortcutFailed?(cb: (f: { accelerator: string; what: string }) => void): void
+  /** The island log kept by the desktop (its own lines and the island page's). */
+  islandGetLog?(): Promise<{ at: string; from: 'main' | 'island'; line: string }[]>
   /** Island window: settings changed. */
-  onIslandPrefs?(cb: (p: IslandPrefs) => void): void
+  onIslandPrefs?(cb: (p: IslandPrefs & Partial<IslandDeskPrefs> & { scale?: number }) => void): void
   /** App window: open a page when the island asks. */
   onNavigate?(cb: (page: string) => void): void
   /** You came back after a long time away from the PC (asleep?): when you were last active, and when you came back. */
@@ -96,9 +104,17 @@ export interface DesktopApi {
   /** Island window: quiet for N minutes / until tomorrow, or back on (null). */
   islandQuiet?(choice: number | 'tomorrow' | null): void
   /** Island window: quiet until (ms, 0 = not quiet), and what Windows says (a call, a full-screen app). */
-  onIslandQuiet?(cb: (q: { until: number; call: boolean; fullscreen: boolean }) => void): void
-  /** Island window: where the visible pill/card is (window pixels); clicks pass through elsewhere. */
-  islandHot?(rect: { x: number; y: number; width: number; height: number }): void
+  onIslandQuiet?(cb: (q: { until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: IslandDeskPrefs['fullscreen'] }) => void): void
+  /** Island window: where the visible shape is, in CSS pixels of the page (one or more areas); clicks pass through elsewhere. The old single rect still works. */
+  islandHot?(rect: { rects: { x: number; y: number; w: number; h: number }[] } | { x: number; y: number; width: number; height: number }): void
+  /** Island window: a calendar meeting is going on now (hides the island when "in a call: hide"). */
+  islandCall?(inCall: boolean): void
+  /** Island window: a line for the island log. */
+  islandLog?(line: string): void
+  /** Island window: a line from the desktop side for the island log (hover, click-through, zoom, why it hid). */
+  onIslandDiag?(cb: (d: { at: string; from: 'main'; line: string }) => void): void
+  /** Island window: the desktop ended a drag that got stuck (no movement for 10 s). */
+  onIslandDragCancel?(cb: () => void): void
   /** Island window: start / stop dragging it (the desktop moves the window with the pointer). */
   islandDrag?(on: boolean): void
   /** Island window: where it lives now (changes when you drop it on an edge). */

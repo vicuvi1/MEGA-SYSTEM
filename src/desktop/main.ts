@@ -71,7 +71,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   const win = new BrowserWindow({ width: 1440, height: 950, minWidth: 850, minHeight: 600, show: !hidden,
     title: 'Life System', backgroundColor: '#07090e', autoHideMenuBar: true,
     titleBarStyle: 'hidden', titleBarOverlay: { color: '#07090e', symbolColor: '#c9ced6', height: 36 },
-    webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false }
+    // IS17: not slowed down while it sits in the tray, so the island keeps fresh data.
+    webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false }
   })
   // Only this bundled window can use the fixed, narrow IPC methods.
   const handle = (name: string, fn: (...args: any[]) => unknown) => ipcMain.handle(name, (event, ...args) => {
@@ -208,7 +209,7 @@ if (firstCopy) void app.whenReady().then(async () => {
     dir,
     onChange: () => refreshTray(),
     pc: () => ({ activeApp: !!pcRef.current?.prefs().activeApp, titles: !!pcRef.current?.prefs().titles }),
-    onApp: (proc, title) => pcRef.current?.sample(proc, title, 4)
+    onApp: (proc, title, seconds) => pcRef.current?.sample(proc, title, seconds)
   })
   const pc = await createPc({
     dir,
@@ -347,12 +348,16 @@ if (firstCopy) void app.whenReady().then(async () => {
     // Copied text, for the island's "save this?". The check happens HERE, in
     // the main process: only short dated text ("exam friday 10:00") ever
     // reaches a page; passwords, codes, keys, links and long text never do.
+    // IS25: the clipboard is read only while that switch is on; what was
+    // already there when you turned it on is never offered.
     let lastClip = ''
+    let clipWatching = false
     const readClip = async (): Promise<string> => { try { return String(await clipboard.readText()) } catch { return '' } }
-    lastClip = await readClip()
     setInterval(async () => {
+      if (!pcPrefsNow.clipboard) { clipWatching = false; return }
       const t = await readClip()
-      if (!pcPrefsNow.clipboard || !t || t === lastClip) return
+      if (!clipWatching) { clipWatching = true; lastClip = t; return }
+      if (!t || t === lastClip) return
       lastClip = t
       const safe = clipWorthSaving(t)
       if (safe) win.webContents.send('desktop:clip', safe)

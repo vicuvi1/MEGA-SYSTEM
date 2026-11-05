@@ -144,7 +144,7 @@ export function PcPrivacyPanel() {
 
       <h4 className="pc-h">Shortcuts</h4>
       <p className="hint small">
-        <b>Ctrl+Alt+N</b> add a task from anywhere · <b>Ctrl+Alt+B</b> talk to Ben (press again to send) · right-click the taskbar icon: Start 25-min focus, Talk to Ben, Capture a task.
+        <b>Alt+Shift+N</b> add a task from anywhere · <b>Alt+Shift+B</b> talk to Ben (press again to send) · right-click the taskbar icon: Start 25-min focus, Talk to Ben, Capture a task.
       </p>
     </div>
   )

@@ -6,19 +6,31 @@
 // It never takes the keyboard on its own, only when you type in it.
 // It never touches your data: the app window sends it snapshots and gets its
 // taps back. Clicks pass through everything except the visible shape.
+//
+// Size: the page scales itself with CSS (`scale` in island:prefs). The island
+// page has the same origin as the app, and Chromium shares page zoom per
+// origin, so zooming the island would zoom the app too: its zoom stays locked.
 import { app, BrowserWindow, globalShortcut, ipcMain, powerMonitor, screen } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IslandPlacement } from '../shared/desktop'
 import { cleanIslandPrefs, ISLAND_ZOOM, quietUntil, type IslandPrefs } from '../core/islandModel'
+import {
+  cleanDeskPrefs, dragStale, hotRects, islandSize, migrateShortcuts, overRects, parseWatcherLine, placeIsland, QUNS_PRESENTATION, rateLimit,
+  rectsToDip, sampleSeconds, SHORTCUTS_VERSION, type HotRect, type IslandDeskPrefs
+} from './islandWin'
 
 /** The window: room for the biggest state (the command center); the rest is see-through. */
 const WIN = { width: 500, height: 660 }
 /** Where the pill sits inside the window on the side placements (from the window's top). */
 const SIDE_PILL_Y = 40
+/** Above normal windows (on Windows every level above "normal" is plain topmost). */
+const LEVEL = 'pop-up-menu' as const
 
-export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null) => void }) {
+type Slot = 'island' | 'quiet' | 'capture' | 'voice'
+
+export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null, seconds: number) => void }) {
   const prefFile = join(o.dir, 'island.json')
   let enabled = true
   let place: IslandPlacement = 'top'
@@ -26,12 +38,16 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let pos = { cx: 0.5, top: 0, cy: 0.5 }
   // Your settings (Settings → Desktop island): size, look, sections, sound, hide speed, shortcut.
   let prefs: IslandPrefs = cleanIslandPrefs(null)
+  // The settings only this PC has: full-screen behaviour, the add-a-task and talk-to-Ben shortcuts.
+  let desk: IslandDeskPrefs = cleanDeskPrefs(null)
   // The screen you put it on (kept after a restart; the main screen if it's gone).
   let savedDisplay = -1
   // Quiet until this time (Q1): no reminders, only a small moon; 0 = not quiet.
   let quietEnd = 0
-  // What Windows says (Q2, Q3): a call (mic or camera in use) or a full-screen app / Focus Assist.
-  let busy = { call: false, fullscreen: false }
+  // What Windows says (Q2, Q3): mic or camera in use, a full-screen app on the island's screen;
+  // and from the island page: a calendar meeting going on now.
+  let busy = { mic: false, fullscreen: false, meeting: false }
+  let version = 0
   try {
     if (existsSync(prefFile)) {
       const p = JSON.parse(readFileSync(prefFile, 'utf8'))
@@ -45,131 +61,175 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       // Older versions saved a dragged spot without a placement: that was "free".
       if (!p.place && p.top > 0) place = 'free'
       prefs = cleanIslandPrefs(p.prefs)
+      desk = cleanDeskPrefs(p.desk)
+      if (Number.isFinite(p.v)) version = p.v
     }
   } catch { /* defaults */ }
-  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs })) } catch { /* fine */ } }
-  /** Size setting: the page is zoomed, so the window and its click areas scale too. */
-  const zoom = () => ISLAND_ZOOM[prefs.size]
-  const scaled = () => ({ width: Math.round(WIN.width * zoom()), height: Math.round(WIN.height * zoom()) })
+  // IS15: the old Ctrl+Alt shortcuts (AltGr on Windows: they ate "@" and "ł") move to the new ones, once.
+  const migrated = migrateShortcuts(prefs, version)
+  const needsSave = version < SHORTCUTS_VERSION
+  prefs = cleanIslandPrefs(migrated)
+  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ v: SHORTCUTS_VERSION, enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs, desk })) } catch { /* fine */ } }
+  if (needsSave) savePrefs()
+  const allPrefs = () => ({ ...prefs, ...desk })
 
   let win: BrowserWindow | null = null
   let last: unknown = null
-  let hot = { x: 0, y: 0, width: 0, height: 0 }
-  let inside = false
-  let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number } | null = null
+  /** The clickable areas, in CSS pixels of the island page. */
+  let hot: HotRect[] = []
+  /** Over the shape (null: not known, check again on the next poll). */
+  let inside: boolean | null = null
+  let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number; startedAt: number; lastMove: number; lx: number; ly: number } | null = null
+  /** The page is listening (IS22): shortcuts pressed before that wait here. */
+  let ready = false
+  let pending: string[] = []
+
+  // ---- The island log (IS23): what the desktop side did, for Settings → Diagnostics ----
+  const log: { at: string; from: 'main' | 'island'; line: string }[] = []
+  const limit = rateLimit(2000)
+  const diag = (key: string, line: string, force = false) => {
+    if (!force && !limit(key)) return
+    const e = { at: new Date().toISOString(), from: 'main' as const, line }
+    log.push(e)
+    if (log.length > 200) log.splice(0, log.length - 200)
+    if (win && !win.isDestroyed() && ready) win.webContents.send('island:diag', e)
+  }
 
   const display = () => (savedDisplay >= 0 ? screen.getAllDisplays().find((d) => d.id === savedDisplay) : null) ?? screen.getPrimaryDisplay()
+  /** The page's real zoom (1 unless something zoomed the app's origin). */
+  const pageZoom = () => {
+    try { return win && !win.isDestroyed() ? win.webContents.getZoomFactor() || 1 : 1 } catch { return 1 }
+  }
+  /** The size setting, done by the page itself with CSS. */
+  const cssScale = () => ISLAND_ZOOM[prefs.size] ?? 1
+  const sizeNow = () => islandSize(WIN, cssScale() * pageZoom(), display().workArea)
 
   const placeWin = () => {
     if (!win || win.isDestroyed()) return
     const wa = display().workArea
-    const { width, height } = scaled()
-    const clampX = (x: number) => Math.round(Math.min(wa.x + wa.width - width, Math.max(wa.x, x)))
-    const clampY = (y: number) => Math.round(Math.min(wa.y + wa.height - height, Math.max(wa.y, y)))
-    let x: number
-    let y: number
-    if (place === 'left' || place === 'right') {
-      x = place === 'left' ? wa.x : wa.x + wa.width - width
-      y = clampY(wa.y + pos.cy * wa.height - SIDE_PILL_Y * zoom())
-    } else {
-      x = clampX(wa.x + pos.cx * wa.width - width / 2)
-      y = place === 'free' ? clampY(wa.y + pos.top) : wa.y
-    }
-    win.setBounds({ x, y, width, height })
+    const { width, height } = sizeNow()
+    const { x, y } = placeIsland({ wa, width, height, place, pos, sidePillY: SIDE_PILL_Y * cssScale() * pageZoom() })
+    const b = win.getBounds()
+    if (b.x !== x || b.y !== y || b.width !== width || b.height !== height) win.setBounds({ x, y, width, height })
   }
 
+  const sendPrefs = () => win?.webContents.send('island:prefs', { ...allPrefs(), scale: cssScale() })
   const sendPlacement = () => win?.webContents.send('island:placement', place)
+  const onTop = () => {
+    if (!win || win.isDestroyed()) return
+    try { win.setAlwaysOnTop(true, LEVEL) } catch { /* fine */ }
+  }
   const showWin = () => {
     if (!win || win.isDestroyed()) return
     if (!win.isVisible()) win.showInactive()
-    win.setAlwaysOnTop(true, 'pop-up-menu')
+    onTop()
+  }
+  /** Sends now, or once the page says it's listening. */
+  const sendWhenReady = (channel: string) => {
+    if (win && !win.isDestroyed() && ready) win.webContents.send(channel)
+    else if (!pending.includes(channel)) pending.push(channel)
+  }
+  const greet = () => {
+    sendPrefs()
+    sendQuiet()
+    sendPlacement()
+    if (last) win?.webContents.send('island:state', last)
+  }
+  const markReady = () => {
+    if (!win || win.isDestroyed()) return
+    const first = !ready
+    ready = true
+    greet()
+    if (first) for (const e of log.slice(-20)) win.webContents.send('island:diag', e)
+    const q = pending
+    pending = []
+    for (const ch of q) win.webContents.send(ch)
   }
 
   const open = () => {
     if (win && !win.isDestroyed()) return
+    ready = false
+    inside = null
+    const wa = display().workArea
     win = new BrowserWindow({
-      ...scaled(), frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
+      ...islandSize(WIN, cssScale(), wa), frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
       // Not focusable: clicking it never takes the keyboard from your app (only typing in it does).
       fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true, backgroundColor: '#00000000', focusable: false,
       type: process.platform === 'win32' ? 'toolbar' : undefined, title: 'Life System island',
       webPreferences: { preload: o.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false }
     })
-    // Above normal windows, below full-screen video and games.
-    win.setAlwaysOnTop(true, 'pop-up-menu')
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
-    win.setIgnoreMouseEvents(true, { forward: true })
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    win.webContents.on('will-navigate', (e) => e.preventDefault())
-    win.webContents.on('did-finish-load', () => {
-      win?.webContents.setZoomFactor(zoom())
-      win?.webContents.send('island:prefs', prefs)
-      sendQuiet()
-      sendPlacement()
-      if (last) win?.webContents.send('island:state', last)
+    const w = win
+    onTop()
+    // Only macOS knows "all workspaces / over full screen"; on Windows the watcher below decides.
+    if (process.platform === 'darwin') { try { w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false }) } catch { /* fine */ } }
+    // No menu: its Ctrl+= / Ctrl+- would zoom the island (and with it the app).
+    try { w.setMenu(null) } catch { /* fine */ }
+    w.setIgnoreMouseEvents(true, { forward: true })
+    w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    w.webContents.on('will-navigate', (e) => e.preventDefault())
+    // IS2: the zoom stays as it is (pinch, Ctrl+wheel and Ctrl+plus/minus do nothing here).
+    w.webContents.on('zoom-changed', () => diag('zoom', 'Zoom gesture ignored on the island'))
+    w.webContents.on('before-input-event', (e, input) => {
+      if ((input.control || input.meta) && ['+', '-', '=', '0', 'Add', 'Subtract', 'NumpadAdd', 'NumpadSubtract'].includes(input.key)) e.preventDefault()
     })
-    win.on('closed', () => { win = null })
+    w.webContents.on('did-start-loading', () => { ready = false })
+    w.webContents.on('did-finish-load', () => {
+      void w.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {})
+      greet()
+      diag('zoom-load', `Island loaded: page zoom ${pageZoom().toFixed(2)}, size ${prefs.size} (scale ${cssScale()})`, true)
+      placeWin()
+      // An older page never says "ready": don't keep shortcuts waiting forever.
+      setTimeout(() => { if (!ready && win === w && !w.isDestroyed()) markReady() }, 3000)
+    })
+    w.on('closed', () => {
+      if (win === w) { win = null; ready = false }
+    })
     // You clicked into another app: the panel may close (the island decides).
-    win.on('blur', () => win?.webContents.send('island:blur'))
-    win.on('always-on-top-changed', (_e, on) => { if (!on) win?.setAlwaysOnTop(true, 'pop-up-menu') })
+    w.on('blur', () => { if (!w.isDestroyed()) w.webContents.send('island:blur') })
+    w.on('always-on-top-changed', (_e, on) => { if (!on) onTop() })
     placeWin()
-    void win.loadURL(o.origin + '/?island=1').then(() => showWin())
+    // IS13: shown only when it should be (not over a full-screen app or in a call you hide it in).
+    void w.loadURL(o.origin + '/?island=1').then(() => applyVisibility(), () => applyVisibility())
   }
   const close = () => { if (win && !win.isDestroyed()) win.destroy() }
 
-  const fromIsland = (e: Electron.IpcMainEvent) => !!win && e.sender === win.webContents
-  const fromApp = (e: Electron.IpcMainEvent) => e.sender === o.appWindow.webContents
+  const fromIsland = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => !!win && !win.isDestroyed() && e.sender === win.webContents
+  const fromApp = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => e.sender === o.appWindow.webContents
   ipcMain.on('island:state', (e, s) => {
     if (!fromApp(e)) return
     last = s
     if (win && !win.isDestroyed()) win.webContents.send('island:state', s)
   })
   // The island page is ready (it loads a moment after the window): tell it where it lives and what to show.
-  ipcMain.on('island:ready', (e) => {
-    if (!fromIsland(e)) return
-    win?.webContents.send('island:prefs', prefs)
-    sendQuiet()
-    sendPlacement()
-    if (last) win?.webContents.send('island:state', last)
-  })
+  ipcMain.on('island:ready', (e) => { if (fromIsland(e)) markReady() })
   ipcMain.on('island:action', (e, a) => { if (fromIsland(e)) o.appWindow.webContents.send('island:action', a) })
   ipcMain.on('island:ack', (e, ack) => { if (fromApp(e)) win?.webContents.send('island:ack', ack) })
   // Typing: the island takes the keyboard (it never takes it on its own), and gives it back.
+  // IS5: the mouse is left to the hover check (it looks again right away), so the
+  // rest of the window keeps letting clicks through to the apps below.
   ipcMain.on('island:focus', (e) => {
     if (!fromIsland(e) || !win) return
     win.setFocusable(true)
-    win.setIgnoreMouseEvents(false)
     win.focus()
     win.webContents.focus()
+    inside = null
   })
   ipcMain.on('island:keyboard', (e, on) => {
     if (!fromIsland(e) || !win || on) return
     if (win.isFocused()) win.blur()
     win.setFocusable(false)
+    inside = null
   })
   ipcMain.on('island:showApp', (e, page) => { if (fromIsland(e)) o.showApp(typeof page === 'string' ? page : undefined) })
 
   // Drag it anywhere. Drop it on the left/right edge → docked there; at the top →
   // top; anywhere else → floating right there. The spot is remembered.
-  ipcMain.on('island:dragStart', (e) => {
-    if (!fromIsland(e) || !win || drag) return
-    const c = screen.getCursorScreenPoint()
-    const b = win.getBounds()
-    win.setIgnoreMouseEvents(false)
-    drag = {
-      offX: c.x - b.x,
-      offY: c.y - b.y,
-      timer: setInterval(() => {
-        if (!win || win.isDestroyed()) return
-        const p = screen.getCursorScreenPoint()
-        // Only the position: the size is set once on drop (no jumps between screens).
-        win.setPosition(p.x - drag!.offX, p.y - drag!.offY)
-      }, 16)
-    }
-  })
-  ipcMain.on('island:dragEnd', (e) => {
-    if (!fromIsland(e) || !win || !drag) return
+  const endDrag = (why: 'drop' | 'stuck') => {
+    if (!drag) return
     clearInterval(drag.timer)
     drag = null
+    inside = null
+    if (!win || win.isDestroyed()) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
     const d = screen.getDisplayNearestPoint(c)
@@ -180,57 +240,114 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     else if (sb.x + sb.width - c.x < 70) place = 'right'
     else if (c.y - sb.y < 50) place = 'top'
     else place = 'free'
-    pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * zoom() - wa.y) / wa.height))
+    pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * cssScale() * pageZoom() - wa.y) / wa.height))
     pos.cx = Math.min(1, Math.max(0, (b.x + b.width / 2 - wa.x) / wa.width))
     pos.top = Math.max(0, b.y - wa.y)
     savePrefs()
     sendPlacement()
     placeWin()
+    // IS21: clicks pass through again where there's no island.
+    win.setIgnoreMouseEvents(true, { forward: true })
+    if (why === 'stuck') {
+      win.webContents.send('island:dragCancel')
+      diag('drag', 'Drag ended by itself (no movement for 10 s)', true)
+    }
     o.onChange?.()
+  }
+  ipcMain.on('island:dragStart', (e) => {
+    if (!fromIsland(e) || !win || drag) return
+    const c = screen.getCursorScreenPoint()
+    const b = win.getBounds()
+    win.setIgnoreMouseEvents(false)
+    const now = Date.now()
+    drag = {
+      offX: c.x - b.x,
+      offY: c.y - b.y,
+      startedAt: now,
+      lastMove: now,
+      lx: c.x,
+      ly: c.y,
+      timer: setInterval(() => {
+        if (!drag) return
+        if (!win || win.isDestroyed()) return endDrag('stuck')
+        const p = screen.getCursorScreenPoint()
+        const t = Date.now()
+        if (p.x !== drag.lx || p.y !== drag.ly) {
+          drag.lx = p.x
+          drag.ly = p.y
+          drag.lastMove = t
+          // Only the position: the size is set once on drop (no jumps between screens).
+          win.setPosition(p.x - drag.offX, p.y - drag.offY)
+        } else if (dragStale({ now: t, lastMove: drag.lastMove, startedAt: drag.startedAt })) endDrag('stuck')
+      }, 16)
+    }
   })
+  ipcMain.on('island:dragEnd', (e) => { if (fromIsland(e)) endDrag('drop') })
+  // IS2: the clickable areas, in CSS pixels of the page (one or more; the old single rect works too).
   ipcMain.on('island:hot', (e, r) => {
-    if (fromIsland(e) && r && [r.x, r.y, r.width, r.height].every(Number.isFinite)) hot = r
+    if (!fromIsland(e)) return
+    const list = hotRects(r)
+    if (!list) return
+    hot = list
+    diag('hot', `Click area: ${list.map((h) => `${Math.round(h.x)},${Math.round(h.y)} ${Math.round(h.w)}×${Math.round(h.h)}`).join(' + ') || 'none'} (zoom ${pageZoom().toFixed(2)})`)
   })
-  // The real pointer, ~16 times a second: over the shape → it takes clicks
+  // The real pointer, ~20 times a second: over the shape → it takes clicks
   // (and hears "hover"); elsewhere clicks pass through to the apps below.
   // (Polling avoids the browser's false mouse-leave events on Windows.)
   setInterval(() => {
     if (!win || win.isDestroyed() || drag || !win.isVisible()) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
-    const x = c.x - b.x
-    const y = c.y - b.y
-    const z = zoom()
-    const now = hot.width > 0 && x >= hot.x * z - 4 && x <= (hot.x + hot.width) * z + 4 && y >= hot.y * z - 4 && y <= (hot.y + hot.height) * z + 4
+    const now = overRects(c.x - b.x, c.y - b.y, rectsToDip(hot, pageZoom()))
     if (now === inside) return
     inside = now
     win.setIgnoreMouseEvents(!now, { forward: true })
     win.webContents.send('island:hover', now)
+    diag(now ? 'hover-in' : 'hover-out', now ? 'Mouse over the island: it takes clicks' : 'Mouse left the island: clicks pass through')
   }, 50)
 
-  // Screens plugged in or out, scaling changed: back on its screen (or the main one).
-  const replace = () => {
+  // IS20: still on top after sleep, the screen turning off, a new screen or Explorer restarting.
+  const reassert = (why: string) => {
+    if (!win || win.isDestroyed() || drag) return
     if (savedDisplay >= 0 && !screen.getAllDisplays().some((d) => d.id === savedDisplay)) savedDisplay = -1
-    if (win && !win.isDestroyed()) win.setBounds({ ...win.getBounds(), ...scaled() })
     placeWin()
+    if (win.isVisible()) {
+      onTop()
+      try { win.moveTop() } catch { /* fine */ }
+    }
+    if (why !== 'minute') {
+      inside = null
+      diag('ontop', `Back on top (${why})`)
+    }
   }
-  screen.on('display-metrics-changed', replace)
-  screen.on('display-removed', replace)
-  screen.on('display-added', replace)
+  screen.on('display-metrics-changed', () => reassert('screen changed'))
+  screen.on('display-removed', () => reassert('screen removed'))
+  screen.on('display-added', () => reassert('screen added'))
+  powerMonitor.on('resume', () => setTimeout(() => reassert('woke up'), 1500))
+  powerMonitor.on('unlock-screen', () => setTimeout(() => reassert('unlocked'), 1000))
+  setInterval(() => reassert('minute'), 60_000)
 
   // ---- Quiet, calls and full screen (Q1–Q3, Q5) ----------------------------
-  const sendQuiet = () => win?.webContents.send('island:quiet', { until: quietEnd, call: busy.call, fullscreen: busy.fullscreen })
-  /** Hidden over full-screen apps / Focus Assist, and in a call when you chose "hide". */
+  const inCall = () => busy.mic || busy.meeting
+  const fullscreenShown = () => busy.fullscreen && desk.fullscreen !== 'show'
+  const sendQuiet = () => win?.webContents.send('island:quiet', { until: quietEnd, call: inCall(), fullscreen: fullscreenShown(), mic: busy.mic, meeting: busy.meeting, fullscreenMode: desk.fullscreen })
+  let shownWhy = ''
+  /** Hidden over a full-screen app on its screen (if you chose "hide"), and in a call when you chose "hide". */
   const applyVisibility = () => {
     if (!win || win.isDestroyed() || !enabled) return
-    const hide = busy.fullscreen || (busy.call && prefs.callMode === 'hide')
-    if (hide) { if (win.isVisible()) win.hide() } else showWin()
+    const why = busy.fullscreen && desk.fullscreen === 'hide' ? 'a full-screen app' : inCall() && prefs.callMode === 'hide' ? (busy.meeting ? 'a calendar meeting' : 'a call (mic or camera on)') : ''
+    if (why) { if (win.isVisible()) win.hide() } else showWin()
+    if (why !== shownWhy) {
+      shownWhy = why
+      diag('vis', why ? `Hidden: ${why}` : 'Shown', true)
+    }
   }
   /** Quiet for `choice` minutes / until tomorrow 06:00, or off (null). */
   const setQuiet = (choice: number | 'tomorrow' | null) => {
     quietEnd = choice == null ? 0 : quietUntil(choice, Date.now())
     savePrefs()
     sendQuiet()
+    diag('quiet', quietEnd ? `Quiet until ${new Date(quietEnd).toTimeString().slice(0, 5)}` : 'Quiet off', true)
     o.onChange?.()
   }
   // Quiet time over: back by itself (checked every 15 s and when the PC wakes up).
@@ -241,35 +358,93 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (!fromIsland(e)) return
     setQuiet(choice === 'tomorrow' ? 'tomorrow' : Number.isFinite(choice) && choice > 0 ? Number(choice) : null)
   })
+  // IS12: a calendar meeting is on now (the island page knows the plan).
+  ipcMain.on('island:call', (e, c) => {
+    if (!fromIsland(e) && !fromApp(e)) return
+    const on = !!(c && typeof c === 'object' ? (c as { inCall?: unknown }).inCall : c)
+    if (on === busy.meeting) return
+    busy = { ...busy, meeting: on }
+    diag('meeting', on ? 'A calendar meeting started' : 'The calendar meeting ended', true)
+    sendQuiet()
+    applyVisibility()
+  })
+  // IS23: lines from the island page go in the same log.
+  ipcMain.on('island:log', (e, line) => {
+    if (!fromIsland(e) || typeof line !== 'string') return
+    log.push({ at: new Date().toISOString(), from: 'island', line: line.slice(0, 300) })
+    if (log.length > 200) log.splice(0, log.length - 200)
+  })
+  ipcMain.handle('island:getLog', (e) => (fromApp(e) || fromIsland(e) ? log.slice() : []))
 
   // Windows: a call (any app using the microphone or camera, from Windows'
-  // own privacy log) and full-screen apps / presentation / Focus Assist
-  // (SHQueryUserNotificationState). One small PowerShell loop, every 4 s.
+  // own privacy log) and a full-screen app (the window in front covers its
+  // whole screen; only the island's screen counts) or presentation mode.
+  // One small PowerShell process stays running: every 4 s, every 10 s once
+  // nothing changes.
   let watcher: ChildProcess | null = null
   let restarting = false
+  let lastSample = 0
+  /** Is that point (physical pixels, from Windows) on the island's screen? */
+  const onIslandScreen = (p: { x: number; y: number }) => {
+    try {
+      const dip = process.platform === 'win32' ? screen.screenToDipPoint(p) : p
+      return screen.getDisplayNearestPoint({ x: Math.round(dip.x), y: Math.round(dip.y) }).id === display().id
+    } catch {
+      return true
+    }
+  }
   const startWatcher = () => {
     if (process.platform !== 'win32' || watcher) return
     // P2: the app in front, only when you turned it on (Settings → Ben on this PC); the title only with "titles".
     const pc = o.pc?.() ?? { activeApp: false, titles: false }
-    const fg = pc.activeApp
-      ? [
-          'Add-Type -TypeDefinition \'using System;using System.Text;using System.Runtime.InteropServices;public static class FG{[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);[DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern int GetWindowText(IntPtr h,StringBuilder s,int n);}\''
-        ]
-      : []
+    const cs = [
+      'using System;using System.Text;using System.Text.RegularExpressions;using System.Runtime.InteropServices;using Microsoft.Win32;',
+      'public static class QN{',
+      '[DllImport("shell32.dll")]public static extern int SHQueryUserNotificationState(out int s);',
+      '[StructLayout(LayoutKind.Sequential)]public struct R{public int L;public int T;public int Rt;public int B;}',
+      '[StructLayout(LayoutKind.Sequential)]public struct MI{public int cbSize;public R rcMonitor;public R rcWork;public uint dwFlags;}',
+      '[DllImport("user32.dll")]public static extern bool SetProcessDPIAware();',
+      '[DllImport("user32.dll")]static extern bool SetProcessDpiAwarenessContext(IntPtr v);',
+      // Real pixels on every screen (per-monitor), so the screen can be matched; older Windows: system DPI.
+      'public static void Dpi(){try{if(SetProcessDpiAwarenessContext(new IntPtr(-4)))return;}catch{}SetProcessDPIAware();}',
+      '[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();',
+      '[DllImport("user32.dll")]public static extern bool GetWindowRect(IntPtr h,out R r);',
+      '[DllImport("user32.dll")]public static extern bool IsZoomed(IntPtr h);',
+      '[DllImport("user32.dll")]public static extern int GetWindowLong(IntPtr h,int i);',
+      '[DllImport("user32.dll")]public static extern IntPtr MonitorFromWindow(IntPtr h,uint f);',
+      '[DllImport("user32.dll")]public static extern bool GetMonitorInfo(IntPtr m,ref MI i);',
+      '[DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern int GetClassName(IntPtr h,StringBuilder s,int n);',
+      '[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);',
+      '[DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern int GetWindowText(IntPtr h,StringBuilder s,int n);',
+      // The window in front covers its whole monitor (not the desktop, not a normal maximized window): that monitor's middle.
+      'public static string Fs(){IntPtr h=GetForegroundWindow();if(h==IntPtr.Zero)return "";var c=new StringBuilder(64);GetClassName(h,c,64);string k=c.ToString();',
+      'if(k=="Progman"||k=="WorkerW"||k=="Shell_TrayWnd"||k=="Shell_SecondaryTrayWnd")return "";',
+      'bool cap=(GetWindowLong(h,-16)&0x00C00000)==0x00C00000;if(cap&&IsZoomed(h))return "";R r;if(!GetWindowRect(h,out r))return "";',
+      'MI i=new MI();i.cbSize=Marshal.SizeOf(typeof(MI));if(!GetMonitorInfo(MonitorFromWindow(h,2),ref i))return "";R m=i.rcMonitor;',
+      'if(r.L<=m.L&&r.T<=m.T&&r.Rt>=m.Rt&&r.B>=m.B)return ((m.L+m.Rt)/2)+","+((m.T+m.B)/2);return "";}',
+      // Mic / camera: only the apps\' own keys and NonPackaged\'s, not the whole tree.
+      'static bool Live(RegistryKey p,string n){if(Regex.IsMatch(n,"Life System|electron",RegexOptions.IgnoreCase))return false;using(var k=p.OpenSubKey(n)){if(k==null)return false;object s=k.GetValue("LastUsedTimeStart");object e=k.GetValue("LastUsedTimeStop");return s!=null&&e!=null&&Convert.ToInt64(s)>0&&Convert.ToInt64(e)==0;}}',
+      'public static int Media(){foreach(string w in new string[]{"microphone","webcam"}){using(var b=Registry.CurrentUser.OpenSubKey(@"Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\"+w)){if(b==null)continue;',
+      'foreach(string n in b.GetSubKeyNames()){if(n=="NonPackaged"){using(var np=b.OpenSubKey(n)){if(np==null)continue;foreach(string a in np.GetSubKeyNames()){if(Live(np,a))return 1;}}}else if(Live(b,n))return 1;}}}return 0;}',
+      '}'
+    ].join('')
     const fgLine = pc.activeApp
-      ? ` $h=[FG]::GetForegroundWindow(); $fp=0; [void][FG]::GetWindowThreadProcessId($h,[ref]$fp); $pn=(Get-Process -Id $fp).ProcessName; $tt=''; ${pc.titles ? '$sb=New-Object System.Text.StringBuilder 300; [void][FG]::GetWindowText($h,$sb,300); $tt=$sb.ToString() -replace "[\\r\\n|]"," "' : ''}`
+      ? ` $h=[QN]::GetForegroundWindow(); $fp=0; [void][QN]::GetWindowThreadProcessId($h,[ref]$fp); $pn=''; try { $pn=[System.Diagnostics.Process]::GetProcessById([int]$fp).ProcessName } catch {}; $tt=''; ${pc.titles ? '$sb=New-Object System.Text.StringBuilder 300; [void][QN]::GetWindowText($h,$sb,300); $tt=$sb.ToString() -replace "[\\r\\n|]"," "' : ''}`
       : ''
     const ps = [
       "$ErrorActionPreference='SilentlyContinue'",
-      'Add-Type -TypeDefinition \'using System;using System.Runtime.InteropServices;public static class QN{[DllImport("shell32.dll")]public static extern int SHQueryUserNotificationState(out int s);}\'',
-      ...fg,
-      "$base='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore'",
+      `Add-Type -TypeDefinition '${cs}'`,
+      '[QN]::Dpi()',
+      "$prev=''; $same=0",
       'while($true){',
       ' $s=0; [void][QN]::SHQueryUserNotificationState([ref]$s)',
-      " $m=0; foreach($k in 'microphone','webcam'){ Get-ChildItem -Path \"$base\\$k\" -Recurse | Where-Object { $_.PSChildName -notmatch 'Life System|electron' } | ForEach-Object { $p=Get-ItemProperty -Path $_.PSPath; if($p.LastUsedTimeStart -gt 0 -and $p.LastUsedTimeStop -eq 0){ $m=1 } } }",
+      ' $m=[QN]::Media(); $f=[QN]::Fs()',
       ...(fgLine ? [fgLine] : []),
-      pc.activeApp ? ' Write-Output "qs=$s media=$m app=$pn|$tt"' : ' Write-Output "qs=$s media=$m"',
-      ' Start-Sleep -Seconds 4',
+      ' $o="qs=$s media=$m"; if($f){ $o+=" fs=$f" }',
+      ...(pc.activeApp ? [' $o+=" app=$pn|$tt"'] : []),
+      ' Write-Output $o',
+      ' if($o -eq $prev){ $same++ } else { $same=0 }; $prev=$o',
+      ' if($same -ge 3){ Start-Sleep -Seconds 10 } else { Start-Sleep -Seconds 4 }',
       '}'
     ].join('\n')
     try {
@@ -278,20 +453,25 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       watcher = null
       return
     }
+    lastSample = 0
     let buf = ''
     watcher.stdout?.on('data', (d: Buffer) => {
       buf += d.toString()
       const lines = buf.split(/\r?\n/)
       buf = lines.pop() ?? ''
-      const last = lines.reverse().find((l) => l.startsWith('qs='))
-      if (!last) return
-      const qs = Number(/qs=(\d+)/.exec(last)?.[1] ?? 0)
-      // P2: the app in front ("app=chrome|Lofi - YouTube").
-      const am = / app=([^|]*)\|?(.*)$/.exec(last)
-      if (am && am[1]) o.onApp?.(am[1].trim(), am[2]?.trim() || null)
-      // 2 busy (full screen), 3 full-screen game/video, 4 presentation, 6 Focus Assist / quiet time, 7 full-screen app.
-      const next = { fullscreen: [2, 3, 4, 6, 7].includes(qs), call: / media=1/.test(last) }
-      if (next.fullscreen === busy.fullscreen && next.call === busy.call) return
+      const raw = lines.reverse().find((l) => l.startsWith('qs='))
+      const w = raw ? parseWatcherLine(raw) : null
+      if (!w) return
+      const now = Date.now()
+      // P2: the app in front ("app=chrome|Lofi - YouTube"), with the real time since the last look.
+      if (w.app) o.onApp?.(w.app.proc, w.app.title, sampleSeconds(now, lastSample))
+      lastSample = now
+      // Full screen counts only on the island's own screen; presentation mode everywhere.
+      const fsHere = !!w.fs && onIslandScreen(w.fs)
+      const next = { ...busy, fullscreen: fsHere || w.qs === QUNS_PRESENTATION, mic: w.media }
+      if (next.fullscreen === busy.fullscreen && next.mic === busy.mic) return
+      if (next.fullscreen !== busy.fullscreen) diag('fs', next.fullscreen ? (fsHere ? 'A full-screen app is on the island\'s screen' : 'Presentation mode is on') : 'No full-screen app on the island\'s screen', true)
+      if (next.mic !== busy.mic) diag('mic', next.mic ? 'Microphone or camera in use' : 'Microphone and camera free', true)
       busy = next
       sendQuiet()
       applyVisibility()
@@ -319,38 +499,15 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   startWatcher()
   app.on('will-quit', () => { try { watcher?.kill() } catch { /* fine */ } })
 
-  // Ctrl+Alt+Space: open / close it from anywhere.
+  // ---- Shortcuts (IS15, IS22) ------------------------------------------------
+  // Open / close it from anywhere.
   const toggle = () => {
     if (!enabled) return
     if (!win || win.isDestroyed()) open()
     showWin()
-    win?.webContents.send('island:toggle')
+    sendWhenReady('island:toggle')
   }
-  let bound = ''
-  /** Registers your shortcut; false when another app already uses it. */
-  const bindShortcut = (): boolean => {
-    if (bound) { try { globalShortcut.unregister(bound) } catch { /* fine */ } }
-    bound = ''
-    if (!prefs.shortcut) return true
-    try {
-      if (globalShortcut.register(prefs.shortcut, toggle)) { bound = prefs.shortcut; return true }
-    } catch { /* invalid */ }
-    return false
-  }
-  bindShortcut()
-  // Ctrl+Alt+Q: quiet for an hour, or back on (Q6).
-  let boundQuiet = ''
-  const bindQuiet = (): boolean => {
-    if (boundQuiet) { try { globalShortcut.unregister(boundQuiet) } catch { /* fine */ } }
-    boundQuiet = ''
-    if (!prefs.quietShortcut) return true
-    try {
-      if (globalShortcut.register(prefs.quietShortcut, () => setQuiet(quietEnd > Date.now() ? null : 60))) { boundQuiet = prefs.quietShortcut; return true }
-    } catch { /* invalid */ }
-    return false
-  }
-  bindQuiet()
-  // P4: Ctrl+Alt+N adds a task from anywhere. P9: Ctrl+Alt+B starts (and sends) a voice note to Ben.
+  // P4: add a task from anywhere. P9: start (and send) a voice note to Ben.
   const openFor = (what: 'capture' | 'voice') => {
     if (!enabled) {
       enabled = true
@@ -358,32 +515,56 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     }
     if (!win || win.isDestroyed()) open()
     showWin()
-    win?.webContents.send(`island:${what}`)
+    sendWhenReady(`island:${what}`)
   }
-  for (const [keys, what] of [['Control+Alt+N', 'capture'], ['Control+Alt+B', 'voice']] as const) {
-    try {
-      globalShortcut.register(keys, () => openFor(what))
-    } catch {
-      /* another app has it */
-    }
+  const bound: Record<Slot, string> = { island: '', quiet: '', capture: '', voice: '' }
+  const failed = new Map<Slot, string>()
+  const actions: Record<Slot, () => void> = {
+    island: toggle,
+    quiet: () => setQuiet(quietEnd > Date.now() ? null : 60),
+    capture: () => openFor('capture'),
+    voice: () => openFor('voice')
   }
+  const wanted = (slot: Slot) => (slot === 'island' ? prefs.shortcut : slot === 'quiet' ? prefs.quietShortcut : slot === 'capture' ? desk.captureShortcut : desk.voiceShortcut)
+  /** Registers a shortcut; false (and a note to Settings) when another app already uses it. */
+  const bind = (slot: Slot): boolean => {
+    if (bound[slot]) { try { globalShortcut.unregister(bound[slot]) } catch { /* fine */ } }
+    bound[slot] = ''
+    failed.delete(slot)
+    const acc = wanted(slot)
+    if (!acc) return true
+    let ok = false
+    try { ok = globalShortcut.register(acc, actions[slot]) } catch { ok = false }
+    if (ok) { bound[slot] = acc; return true }
+    failed.set(slot, acc)
+    diag(`key-${slot}`, `Shortcut ${acc} is taken by another app`, true)
+    try { if (!o.appWindow.isDestroyed()) o.appWindow.webContents.send('island:shortcutFailed', { accelerator: acc, what: slot }) } catch { /* fine */ }
+    return false
+  }
+  for (const s of Object.keys(bound) as Slot[]) bind(s)
+  ipcMain.handle('island:shortcutStatus', (e) => (fromApp(e) ? { failed: [...failed].map(([what, accelerator]) => ({ what, accelerator })) } : null))
+
   // Settings → Desktop island (from the app window).
-  ipcMain.handle('island:getPrefs', (e) => (e.sender === o.appWindow.webContents ? prefs : null))
-  ipcMain.handle('island:setPrefs', (e, p: Partial<IslandPrefs>) => {
-    if (e.sender !== o.appWindow.webContents) return null
-    const before = prefs
+  ipcMain.handle('island:getPrefs', (e) => (fromApp(e) ? allPrefs() : null))
+  ipcMain.handle('island:setPrefs', (e, p: Partial<IslandPrefs & IslandDeskPrefs>) => {
+    if (!fromApp(e)) return null
+    const before = allPrefs()
     prefs = cleanIslandPrefs({ ...prefs, ...p })
-    const shortcutOk = (prefs.shortcut === before.shortcut ? true : bindShortcut()) && (prefs.quietShortcut === before.quietShortcut ? true : bindQuiet())
+    desk = cleanDeskPrefs({ ...desk, ...p })
+    let shortcutOk = true
+    if (prefs.shortcut !== before.shortcut) shortcutOk = bind('island') && shortcutOk
+    if (prefs.quietShortcut !== before.quietShortcut) shortcutOk = bind('quiet') && shortcutOk
+    if (desk.captureShortcut !== before.captureShortcut) shortcutOk = bind('capture') && shortcutOk
+    if (desk.voiceShortcut !== before.voiceShortcut) shortcutOk = bind('voice') && shortcutOk
     savePrefs()
+    sendQuiet()
     applyVisibility()
     if (win && !win.isDestroyed()) {
-      win.webContents.setZoomFactor(zoom())
-      win.webContents.send('island:prefs', prefs)
-      win.setBounds({ ...win.getBounds(), ...scaled() })
+      sendPrefs()
       placeWin()
     }
     o.onChange?.()
-    return { prefs, shortcutOk }
+    return { prefs: allPrefs(), shortcutOk }
   })
   app.on('will-quit', () => globalShortcut.unregisterAll())
 
@@ -397,7 +578,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     quietUntil: () => (quietEnd > Date.now() ? quietEnd : 0),
     setQuiet,
     placement: () => place,
-    get shortcut() { return prefs.shortcut || 'no shortcut' },
+    get shortcut() { return bound.island || prefs.shortcut || 'no shortcut' },
     setPlacement(p: IslandPlacement) {
       place = p
       if (p === 'top') pos.cx = 0.5
