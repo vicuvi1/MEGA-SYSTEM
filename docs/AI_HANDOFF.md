@@ -51,7 +51,7 @@ Bot tokens come from @BotFather. If a token was ever pasted in a chat or screens
 
 ## 4. Architecture (Life System repo)
 
-- **Stack:** TypeScript, React 19, Vite. The web app is plain browser code. It used to be an Electron desktop app; that code still exists (`src/main`, `src/preload`, `electron.vite.config.mts`) but **the web app is the product now**.
+- **Stack:** TypeScript, React 19, Vite. The web app is plain browser code and **the product**. The Windows desktop app is an Electron shell around the same build (`src/desktop`, with the floating island in `src/desktop/island.ts`). The old Electron-only code (its own main process, Telegram hub, AI service, backups) was removed; `src/main` now holds only the services the web app runs.
 - **Data:** the browser keeps a **sql.js copy (mirror) of the Turso database** (`src/renderer/src/web/mirror.ts`). It refreshes live (checks `settings.data_version` every few seconds) and writes go through to Turso. The same "desktop services" (`src/main/*.ts`: wallet, focus, sleep, body, shop, weekPlan, progress…) run on that copy via `src/renderer/src/web/webServices.ts`.
 - **Server = Vercel functions in `api/*.mjs`**. Hobby plan: **max 12 serverless functions**, so extra jobs live inside `api/cron.mjs` (`?job=tick`, `?job=sport`, daily jobs).
   - `api/telegram.mjs`: Telegram webhook (Ben and the other bots).

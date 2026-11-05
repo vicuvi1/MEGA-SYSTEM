@@ -4,8 +4,6 @@ import { levelInfo, xpToNext } from './levels'
 import { balance, byModule, clampPenalty, LedgerError, planSpend, planUndo, totalXp, type LedgerEntry } from './ledger'
 import { planAward, type Rule } from './rules'
 import { bestDayStreak, cleanStats, dayStreak } from './streaks'
-import { decryptBackup, encryptBackup } from './backupCrypto'
-import { backupName, namesToPrune } from './retention'
 
 let nextId = 1
 function entry(p: Partial<LedgerEntry>): LedgerEntry {
@@ -114,32 +112,5 @@ describe('streaks', () => {
   })
   it('handles no start date', () => {
     expect(cleanStats(null, [], '2026-10-25').current).toBe(0)
-  })
-})
-
-describe('backup crypto', () => {
-  it('round-trips and rejects a wrong passphrase', () => {
-    const data = Buffer.from('ledger rows here')
-    const enc = encryptBackup(data, 'correct horse')
-    expect(enc.includes(data)).toBe(false)
-    expect(decryptBackup(enc, 'correct horse').toString()).toBe('ledger rows here')
-    expect(() => decryptBackup(enc, 'wrong')).toThrow('Wrong passphrase')
-    expect(() => decryptBackup(Buffer.from('nope'), 'x')).toThrow('Not a Life System backup')
-  })
-})
-
-describe('retention', () => {
-  it('keeps recent snapshots and one per day for 30 days', () => {
-    const now = new Date(2026, 9, 25, 12)
-    const names: string[] = []
-    for (let d = 0; d < 40; d++) {
-      for (const h of [9, 18]) names.push(backupName(new Date(2026, 9, 25 - d, h)))
-    }
-    const gone = new Set(namesToPrune(names, now))
-    const kept = names.filter((n) => !gone.has(n))
-    expect(kept).toContain(backupName(new Date(2026, 9, 25, 18)))
-    expect(kept.length).toBeGreaterThanOrEqual(30)
-    expect(kept.length).toBeLessThanOrEqual(36)
-    expect(gone.has(backupName(new Date(2026, 9, 25 - 39, 9)))).toBe(true)
   })
 })

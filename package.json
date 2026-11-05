@@ -6,7 +6,6 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "npm run build:electron && electron .",
-    "dev:legacy": "electron-vite dev",
     "build": "vite build --config vite.web.mts",
     "build:electron": "npm run build:web && electron-vite build --config electron.desktop.config.mts && node scripts/copy-desktop-ui.mjs",
     "preview": "electron-vite preview",
