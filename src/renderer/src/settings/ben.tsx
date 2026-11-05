@@ -4,12 +4,14 @@ import { features } from '../bridge'
 import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
 import { BenNotes } from '../BenNotes'
+import { CoachLooksPanel } from '../CoachLooksPanel'
 import type { SettingsState } from './useSettingsState'
 
 export function BenSection({ s }: { s: SettingsState }) {
   const { onGo, aiCfg, setAiCfg, showGemini, setShowGemini, showOr, setShowOr, testingProvider, aiTestResult, saveAiConfig, testAiConnection } = s
   return (
         <>
+          <CoachLooksPanel />
           {!features.aiSettings && <BrainPanel />}
           <BenNotes />
           {onGo && (

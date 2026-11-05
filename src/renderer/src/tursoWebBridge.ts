@@ -23,6 +23,7 @@ import { MAN, WAKY, createAppSync } from './web/appSync'
 import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../main/settings'
+import { cleanLooks, type CoachLooks } from '@core/coachLooks'
 import { financeSpending } from '@core/progress'
 
 /** What every screen listens to; sent when live data arrived. */
@@ -730,6 +731,14 @@ export function createTursoWebBridge(): Bridge {
       // How Ben writes: length and tone.
       style: async () => (await svcP).read((s) => loadStyle(s.db)),
       setStyle: async (st: Partial<CoachStyle>) => (await svcP).write((s) => saveStyle(s.db, st)),
+      // How the chat looks: Ben's face and your photo (one small synced setting).
+      looks: async () => (await svcP).read((s) => cleanLooks(readSetting(s.db, 'coach_looks'))),
+      setLooks: async (patch: Partial<CoachLooks>) =>
+        (await svcP).write((s) => {
+          const next = cleanLooks({ ...cleanLooks(readSetting(s.db, 'coach_looks')), ...patch })
+          writeSetting(s.db, 'coach_looks', next as unknown as Record<string, unknown>)
+          return next
+        }),
       // Ben's desk (read here, instant; changes sync like everything else).
       desk: async () => (await svcP).read((s) => deskView(s as any, financeStateFrom((s as any).db, localStorage))),
       deskDo: async (op: DeskOp) => {

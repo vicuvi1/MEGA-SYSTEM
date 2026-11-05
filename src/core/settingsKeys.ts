@@ -139,6 +139,7 @@ export const SETTINGS = {
   coach_blocks: json<unknown[]>("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
   coach_memory_changes: json<unknown[]>("recent changes to Ben's memory, with what was there before (undo)", []),
   coach_style: json<Record<string, unknown> | null>("Ben's tone and style", null),
+  coach_looks: json<Record<string, unknown> | null>("how the chat looks: Ben's face and your photo (small data URL)", null),
   coach_adapt: json<Record<string, unknown> | null>('how Ben adapts the plan to how it went', null),
   goal_booking: json<Record<string, unknown> | null>('goal blocks booked into the calendar', null),
   ben_desk: json<object | null>("Ben's desk: excuses, moods, study, stakes, calls, letters", null),

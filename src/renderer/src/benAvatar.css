@@ -1,0 +1,58 @@
+/* Faces in the chat (BenAvatar.tsx). Motion budget: only transform and
+   opacity move; the glow and ring are drawn once and only fade, scale or turn. */
+
+.ba { position: relative; display: inline-block; flex: none; width: var(--ba, 32px); height: var(--ba, 32px); border-radius: 50%; isolation: isolate; }
+.ba-face { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06) inset; }
+:root[data-theme='light'] .ba-face { box-shadow: 0 2px 8px -2px rgb(20 25 34 / 0.35); }
+
+/* Presence: a soft glow that breathes when he is idle... */
+.ba-glow { position: absolute; inset: -22%; z-index: 0; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 55%, transparent), transparent); opacity: 0.3; animation: ba-breathe 4.8s ease-in-out infinite; }
+@keyframes ba-breathe { 50% { opacity: 0.7; transform: scale(1.08); } }
+/* ...and a ring with a gradient that sweeps round while he thinks or types. */
+.ba-ring { position: absolute; inset: calc(var(--ba, 32px) * -0.07 - 1px); z-index: 0; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 0deg, var(--accent), color-mix(in srgb, var(--accent) 10%, transparent) 28%, color-mix(in srgb, var(--accent) 55%, #3fd8ff) 52%, color-mix(in srgb, var(--accent) 10%, transparent) 76%, var(--accent));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  opacity: 0.45; transition: opacity 0.3s; }
+.ba.thinking .ba-ring, .ba.typing .ba-ring { opacity: 1; animation: ba-spin 1.3s linear infinite; }
+.ba.thinking .ba-glow, .ba.typing .ba-glow { animation-duration: 1.6s; }
+@keyframes ba-spin { to { transform: rotate(1turn); } }
+
+/* The green "online" dot. */
+.ba-dot { position: absolute; z-index: 2; right: 0; bottom: 0; width: max(8px, 24%); height: max(8px, 24%); border-radius: 50%; background: #34d399; box-shadow: 0 0 0 2.5px var(--surface); }
+
+/* The big face blinks now and then; thinking, he looks around; typing, he talks. */
+.ba .ba-eyes, .ba .ba-mouth { transform-box: fill-box; transform-origin: center; }
+.ba.live .ba-eyes { animation: ba-blink 5.5s ease-in-out infinite; }
+@keyframes ba-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.12); } }
+.ba.live.thinking .ba-eyes { animation: ba-look 2.2s ease-in-out infinite; }
+@keyframes ba-look { 0%, 100% { transform: translate(0, 0); } 30% { transform: translate(-2px, -1.5px); } 65% { transform: translate(2px, -1.5px); } }
+.ba.live.typing .ba-mouth { animation: ba-talk 0.32s ease-in-out infinite alternate; }
+@keyframes ba-talk { from { transform: scaleY(1); } to { transform: scaleY(0.45); } }
+.ba.live .ba-led { animation: ba-led 2.4s ease-in-out infinite; }
+@keyframes ba-led { 50% { opacity: 0.45; } }
+
+/* Your face: your photo, or your initials on a gradient. */
+.me-av { flex: none; display: inline-grid; place-items: center; width: var(--ba, 32px); height: var(--ba, 32px); padding: 0; border: 0; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, #8b5cf6, #ec4899 55%, #f59e0b); color: #fff; font: 700 calc(var(--ba, 32px) * 0.36) / 1 var(--display, inherit); letter-spacing: 0.02em; box-shadow: 0 0 0 2px var(--surface), 0 4px 12px -4px rgb(0 0 0 / 0.5); }
+.me-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+button.me-av { cursor: pointer; transition: transform 0.2s var(--ease-out, ease); }
+button.me-av:hover { transform: scale(1.06); }
+
+/* Calm mode lets loops play once, but a thinking ring is "something live now". */
+html.calm .ba.thinking .ba-ring, html.calm .ba.typing .ba-ring { animation-iteration-count: infinite !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ba-glow, .ba-ring, .ba .ba-eyes, .ba .ba-mouth, .ba .ba-led { animation: none !important; }
+}
+
+/* Settings → Ben: faces in the chat */
+.lk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+.lk-opt { display: grid; justify-items: center; align-content: start; gap: 4px; padding: 16px 10px 12px; border-radius: 16px; border: 1px solid var(--border); background: rgb(var(--ink) / 0.02); color: var(--text); font: inherit; cursor: pointer; text-align: center; transition: border-color 0.15s, background-color 0.15s, transform 0.2s var(--ease-out, ease); }
+.lk-opt:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+.lk-opt.on { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); }
+.lk-opt .ba { margin-bottom: 6px; }
+.lk-opt b { font-size: 14px; }
+.lk-opt small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.lk-me { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.lk-me > div { display: grid; gap: 4px; min-width: 0; }
+.lk-me small { color: var(--muted); font-size: 12.5px; }
+.lk-me .row { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }

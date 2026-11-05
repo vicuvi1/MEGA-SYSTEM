@@ -28,6 +28,7 @@ import type { CoachStatus } from './web/coachStatus'
 import type { ProfileView } from './web/coachProfile'
 import type { DeskOp, DeskView } from './web/benDesk'
 import type { SportyView } from '@core/sportyUpdate'
+import type { CoachLooks } from '@core/coachLooks'
 
 export type Bridge = LifeApi & {
   onLocked(cb: () => void): void
@@ -57,6 +58,9 @@ export type Bridge = LifeApi & {
     style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
     setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang: 'en' | 'ro' | 'ru' | 'auto' }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
     status?(): Promise<CoachStatus>
+    /** How the chat looks: Ben's face and your photo (synced). */
+    looks?(): Promise<CoachLooks>
+    setLooks?(patch: Partial<CoachLooks>): Promise<CoachLooks>
     /** Sporty on your server: connected, version, updates waiting; update() presses its Update button. */
     sporty?(): Promise<SportyView>
     /** Adds water to the shared log (the one Ben and Sporty use). */

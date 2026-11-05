@@ -2,7 +2,7 @@
 // Ben's automatic messages (plan, water, focus block, calendar, mood), the
 // folded "earlier updates" line, the one "Now" card, small receipts and the
 // one face for Ben.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { life } from './bridge'
 import { useAction } from './ui'
 import { CoachPlan } from './CoachPlan'
@@ -13,14 +13,16 @@ import { MOOD_FACES } from '@core/benKnows'
 import './coachFeed.css'
 import { tidyText, type FeedItem, type NudgeInfo, type NudgeKind } from '@core/chatFeed'
 import { barFill } from './motionKit'
+import { BenAvatar, type Presence } from './BenAvatar'
+import { createPortal } from 'react-dom'
 
 const hm = (iso: string | number) => new Date(iso).toTimeString().slice(0, 5)
 
-/** CL4: one face for Ben, always the same. */
-export function BenMark({ ghost = false, big = false }: { ghost?: boolean; big?: boolean }) {
+/** CL4: one face for Ben, always the same (his drawn avatar; the look is yours to pick). */
+export function BenMark({ ghost = false, big = false, state }: { ghost?: boolean; big?: boolean; state?: Presence }) {
   return (
     <span className={`cf-mark ${ghost ? 'ghost' : ''} ${big ? 'big' : ''}`} aria-hidden>
-      B
+      {!ghost && <BenAvatar size={big ? 44 : 34} state={state} ring={!!state && state !== 'idle'} />}
     </span>
   )
 }
@@ -100,9 +102,9 @@ export function FoldLine({ item, log, open, onToggle }: { item: Extract<FeedItem
 }
 
 /** A card's shell: icon, title, a small note ("reminded twice"), the content. */
-function Card({ icon, title, note, settled, children }: { icon: string; title: string; note?: string; settled?: boolean; children?: React.ReactNode }) {
+function Card({ icon, title, note, settled, tone = 'plain', children }: { icon: string; title: string; note?: string; settled?: boolean; tone?: string; children?: React.ReactNode }) {
   return (
-    <div className={`cf-card ${settled ? 'settled' : ''}`}>
+    <div className={`cf-card t-${tone} ${settled ? 'settled' : ''}`}>
       <div className="cf-card-head">
         <span className="ic">{icon}</span>
         <b>{title}</b>
@@ -148,12 +150,12 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
     const st = status?.plan.status
     if (st === 'approved' || !latest || !today)
       return (
-        <Card icon="🗓" title={st === 'approved' && today ? 'Plan approved' : "Today's plan"} settled>
+        <Card tone="plan" icon="🗓" title={st === 'approved' && today ? 'Plan approved' : "Today's plan"} settled>
           <p className="cf-quiet">{st === 'approved' && today ? 'Blocks are in your calendar and the must-dos are on Today.' : <Rich text={t.text.split('\n')[0]} maxBold={1} />}</p>
         </Card>
       )
     return (
-      <Card icon="🗓" title="Today's plan" note={remindedNote(repeats)}>
+      <Card tone="plan" icon="🗓" title="Today's plan" note={remindedNote(repeats)}>
         {st === 'proposed' ? <CoachPlan onChange={onChange} oneApprove hideReview /> : <p className="cf-text"><Rich text={t.text} maxBold={2} /></p>}
       </Card>
     )
@@ -162,7 +164,7 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
   if (kind === 'water') {
     const ml = status?.today.waterMl ?? 0
     const target = status?.today.waterTarget ?? 0
-    if (!latest || !today || !target) return <Card icon="💧" title="Water" settled><p className="cf-quiet"><Rich text={t.text} maxBold={1} /></p></Card>
+    if (!latest || !today || !target) return <Card tone="water" icon="💧" title="Water" settled><p className="cf-quiet"><Rich text={t.text} maxBold={1} /></p></Card>
     const add = async (n: number) => {
       const r = await act(() => life.coach!.deskDo!({ op: 'water', ml: n }))
       if (r) {
@@ -171,14 +173,19 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
       }
     }
     return (
-      <Card icon="💧" title="Water" note={remindedNote(repeats)}>
+      <Card tone="water" icon="💧" title="Water" note={remindedNote(repeats)}>
         <div className="cf-water">
-          <div className="cf-bar pbar">
-            <i style={barFill(ml / target)} />
+          <Ring value={ml / target} size={46} tone="water">
+            {Math.round((ml / target) * 100)}%
+          </Ring>
+          <div className="cf-water-tx">
+            <span>
+              <b>{(ml / 1000).toFixed(1)}</b> of {(target / 1000).toFixed(1)} L today
+            </span>
+            <div className="cf-bar pbar">
+              <i style={barFill(ml / target)} />
+            </div>
           </div>
-          <span>
-            <b>{(ml / 1000).toFixed(1)}</b> of {(target / 1000).toFixed(1)} L
-          </span>
         </div>
         {life.coach?.deskDo && ml < target && (
           <div className="cf-btns">
@@ -195,7 +202,7 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
     const left = minutesTo(info.time, now)
     if (settled || !today)
       return (
-        <Card icon="🎯" title={info.title ?? 'Focus block'} settled>
+        <Card tone="block" icon="🎯" title={info.title ?? 'Focus block'} settled>
           <p className="cf-quiet">{info.time ? `Was at ${info.time}` : 'Time has passed'}{(status?.today.focusMin ?? 0) > 0 ? ` · ${status!.today.focusMin} min of focus today` : ''}</p>
         </Card>
       )
@@ -207,11 +214,19 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
       }
     }
     return (
-      <Card icon="🎯" title={info.title ?? 'Focus block'} note={left != null ? (left > 0 ? `in ${left} min` : 'now') : undefined}>
-        <p className="cf-quiet">
-          {info.time ? `${info.time} · ` : ''}
-          {info.minutes ? `${info.minutes} min` : ''}
-        </p>
+      <Card tone="block" icon="🎯" title={info.title ?? 'Focus block'} note={left != null ? (left > 0 ? `in ${left} min` : 'now') : undefined}>
+        <div className="cf-when">
+          <Ring value={left != null && left > 0 ? 1 - Math.min(60, left) / 60 : 1} size={46} tone="block">
+            {left != null && left > 0 ? `${left}m` : 'Now'}
+          </Ring>
+          <p className="cf-quiet">
+            {info.time ? <b>{info.time}</b> : null}
+            {info.time && info.minutes ? ' · ' : ''}
+            {info.minutes ? `${info.minutes} min of focus` : ''}
+            <br />
+            <span>{left != null && left > 0 ? 'Get ready: water, phone away.' : 'Starts now. One tap and go.'}</span>
+          </p>
+        </div>
         {done ? (
           <small className="cf-done">✓ {done}</small>
         ) : (
@@ -231,12 +246,12 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
     const left = minutesTo(info.time, now)
     if (settled || !today)
       return (
-        <Card icon="📅" title={info.title ?? 'Calendar'} settled>
+        <Card tone="cal" icon="📅" title={info.title ?? 'Calendar'} settled>
           <p className="cf-quiet">{info.time ? `${info.time}${info.end ? `–${info.end}` : ''}` : hm(m.at)}</p>
         </Card>
       )
     return (
-      <Card icon="📅" title={info.title ?? t.text.split('\n')[0]} note={left != null && left > 0 ? `in ${left} min` : left != null ? 'now' : undefined}>
+      <Card tone="cal" icon="📅" title={info.title ?? t.text.split('\n')[0]} note={left != null && left > 0 ? `in ${left} min` : left != null ? 'now' : undefined}>
         <p className="cf-quiet">{info.time ? `${info.time}${info.end ? `–${info.end}` : ''}` : <Rich text={t.text} maxBold={1} />}</p>
         <div className="cf-btns">
           <button onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'calendar' }))}>Open calendar</button>
@@ -248,9 +263,9 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
   if (kind === 'mood') {
     const after = (deck?.moods ?? []).find((x) => Date.parse(x.at) >= Date.parse(m.at))
     const picked = done ?? (after ? MOOD_FACES[after.mood - 1] : null)
-    if (!today || !latest) return <Card icon="🙂" title="How you felt" settled><p className="cf-quiet">{picked ? `You said ${picked}` : 'No answer'}</p></Card>
+    if (!today || !latest) return <Card tone="mood" icon="🙂" title="How you felt" settled><p className="cf-quiet">{picked ? `You said ${picked}` : 'No answer'}</p></Card>
     return (
-      <Card icon="🙂" title={/how was today/i.test(m.text) ? 'How was today, really?' : 'How do you feel right now?'}>
+      <Card tone="mood" icon="🙂" title={/how was today/i.test(m.text) ? 'How was today, really?' : 'How do you feel right now?'}>
         {picked ? (
           <small className="cf-done">Noted {picked} · Ben links it to sleep, training and spending.</small>
         ) : (
@@ -294,11 +309,13 @@ export function NowCard({ status, busy, onDo, onNotYet }: { status: CoachStatus;
   const mv = status.move
   const label: Record<string, string> = { focus: 'Start', running: 'Stop & log', approve: 'Approve', plan: 'Plan it', answer: 'Done', ask: 'Ask Ben' }
   return (
-    <div className={`cf-now move-${mv.kind}`} role="region" aria-label="Now">
-      <span className="k">Now</span>
+    <div className={`cf-now move-${mv.kind}`} role="region" aria-label="Now" title={mv.sub}>
+      <span className="k" aria-hidden>
+        <ChipIcon text={`${mv.kind} ${mv.title}`} />
+      </span>
       <div className="tx">
+        <small>Now</small>
         <b>{mv.title}</b>
-        <small>{mv.sub}</small>
       </div>
       <div className="cf-btns">
         {mv.kind === 'answer' && (
@@ -310,6 +327,210 @@ export function NowCard({ status, busy, onDo, onNotYet }: { status: CoachStatus;
           {label[mv.kind]}
         </button>
       </div>
+    </div>
+  )
+}
+
+/** A progress ring (static SVG: it is redrawn only when the number changes). */
+export function Ring({ value, size = 44, tone = 'accent', children }: { value: number; size?: number; tone?: string; children?: ReactNode }) {
+  const v = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
+  const r = 15.5
+  const c = 2 * Math.PI * r
+  return (
+    <span className={`cf-ring t-${tone}`} style={{ '--rs': `${size}px` } as CSSProperties}>
+      <svg viewBox="0 0 36 36" aria-hidden>
+        <circle cx="18" cy="18" r={r} className="bg" />
+        <circle cx="18" cy="18" r={r} className="fg" strokeDasharray={c} strokeDashoffset={c * (1 - v)} />
+      </svg>
+      {children != null && <b>{children}</b>}
+    </span>
+  )
+}
+
+const ICON_PATH = {
+  plan: 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z',
+  water: 'M12 3.5c3.5 4.2 6 7.6 6 10.6a6 6 0 0 1-12 0c0-3 2.5-6.4 6-10.6Z',
+  focus: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM12 9v4l2.5 1.5M9.5 2.5h5',
+  review: 'M4 20h16M7 16V10M12 16V5M17 16v-4',
+  push: 'M13 2 4 14h7l-1 8 9-12h-7Z',
+  done: 'M5 12.5 10 17 19 7',
+  moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z',
+  spark: 'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6'
+}
+export type ChipKind = keyof typeof ICON_PATH
+
+/** The small icon for a suggestion chip, from what it says. */
+export function chipKind(text: string): ChipKind {
+  const t = text.toLowerCase()
+  if (/water|drink/.test(t)) return 'water'
+  if (/start|focus|block|running|stop/.test(t)) return 'focus'
+  if (/review|how did|how was|score|month|pattern/.test(t)) return 'review'
+  if (/plan|approve|week|tomorrow|calendar/.test(t)) return 'plan'
+  if (/push|procrastinat|lazy|stuck|rescue/.test(t)) return 'push'
+  if (/done|answer|did it|finished/.test(t)) return 'done'
+  if (/sleep|bed|night/.test(t)) return 'moon'
+  return 'spark'
+}
+
+export function GlyphIcon({ kind, size = 15 }: { kind: ChipKind; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={ICON_PATH[kind]} />
+    </svg>
+  )
+}
+export function ChipIcon({ text, size = 15 }: { text: string; size?: number }) {
+  return <GlyphIcon kind={chipKind(text)} size={size} />
+}
+
+/** A suggestion chip above the message box. */
+export function SuggestChip({ text, disabled, onClick }: { text: string; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={`cf-chip k-${chipKind(text)}`} disabled={disabled} onClick={onClick}>
+      <ChipIcon text={text} />
+      <span>{text}</span>
+    </button>
+  )
+}
+
+/** Ben's words while they stream in: the new part fades in. */
+export function StreamText({ text }: { text: string }) {
+  const shown = useRef(0)
+  const cut = Math.min(shown.current, text.length)
+  useEffect(() => {
+    shown.current = text.length
+  }, [text])
+  return (
+    <span className="cf-streamtx">
+      {text.slice(0, cut)}
+      <span key={cut} className="cf-fresh">
+        {text.slice(cut)}
+      </span>
+      <i className="cx-caret" />
+    </span>
+  )
+}
+
+/** Three dots that bounce while Ben thinks, with what he is doing now. */
+export function TypingBubble({ step }: { step?: string }) {
+  return (
+    <div className="cf-bubble ben tail cf-typing" aria-live="polite" aria-label="Ben is typing">
+      <span className="cf-dots" aria-hidden>
+        <i />
+        <i />
+        <i />
+      </span>
+      {step && <span className="cf-step">{step}…</span>}
+    </div>
+  )
+}
+
+/** The soft moving light behind the chat (GPU only; still when hidden, calm or reduced motion). */
+export function CoachAmbient() {
+  return (
+    <div className="cf-amb" aria-hidden>
+      <i className="a" />
+      <i className="b" />
+      <i className="c" />
+    </div>
+  )
+}
+
+type Rated = 'up' | 'down' | null
+/**
+ * A message bubble with its actions: a small toolbar on hover (desktop) and a
+ * menu on a long press (phone). Copy, reply, 👍 / 👎 on Ben's replies, undo.
+ */
+export function Bubble({ m, mine = false, tail = false, onReply, onUndo, className = '', children }: { m: Entry; mine?: boolean; tail?: boolean; onReply?: () => void; onUndo?: () => void; className?: string; children: ReactNode }) {
+  const [copied, setCopied] = useState(false)
+  const [rated, setRated] = useState<Rated>(null)
+  const [sheet, setSheet] = useState(false)
+  const press = useRef<{ t: number; x: number; y: number } | null>(null)
+  const canUndo = !!onUndo && (m.undo ?? []).some((op, k) => op && !m.undone?.[k])
+  const canRate = !mine && !m.pending && !!life.coach?.feedback
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(m.text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1400)
+    } catch {
+      /* no clipboard here */
+    }
+  }
+  const rate = async (k: 'up' | 'down') => {
+    setRated(k)
+    await life.coach?.feedback?.(m.at, k).catch(() => setRated(null))
+  }
+  const stop = () => {
+    if (press.current) clearTimeout(press.current.t)
+    press.current = null
+  }
+  const acts: { k: string; label: string; icon: string; run: () => void; on?: boolean }[] = [
+    { k: 'copy', label: copied ? 'Copied' : 'Copy', icon: copied ? '✓' : '⧉', run: () => void copy() },
+    ...(onReply ? [{ k: 'reply', label: 'Reply', icon: '↩', run: onReply }] : []),
+    ...(canRate
+      ? [
+          { k: 'up', label: 'Good reply', icon: '👍', run: () => void rate('up'), on: rated === 'up' },
+          { k: 'down', label: 'Not helpful', icon: '👎', run: () => void rate('down'), on: rated === 'down' }
+        ]
+      : []),
+    ...(canUndo ? [{ k: 'undo', label: 'Undo what Ben logged', icon: '↶', run: () => onUndo!() }] : [])
+  ]
+  return (
+    <div
+      className={`cf-bubble ${mine ? 'me' : 'ben'} ${tail ? 'tail' : ''} ${className}`}
+      onPointerDown={(e) => {
+        if (e.pointerType !== 'touch') return
+        const t = window.setTimeout(() => {
+          press.current = null
+          navigator.vibrate?.(8)
+          setSheet(true)
+        }, 480)
+        press.current = { t, x: e.clientX, y: e.clientY }
+      }}
+      onPointerMove={(e) => press.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 10 && stop()}
+      onPointerUp={stop}
+      onPointerCancel={stop}
+      onContextMenu={(e) => {
+        if (window.matchMedia?.('(hover: none)').matches) e.preventDefault()
+      }}
+    >
+      {children}
+      {!m.pending && (
+        <span className="cf-tools" role="toolbar" aria-label="Message actions">
+          {acts.map((a) => (
+            <button key={a.k} type="button" className={a.on ? 'on' : ''} onClick={a.run} title={a.label} aria-label={a.label}>
+              {a.icon}
+            </button>
+          ))}
+        </span>
+      )}
+      {rated && <span className="cf-rated">{rated === 'up' ? '👍' : '👎'}</span>}
+      {sheet &&
+        createPortal(
+        <div className="cf-sheet-wrap" onClick={() => setSheet(false)}>
+          <div className="cf-sheet" role="menu" onClick={(e) => e.stopPropagation()}>
+            <p>{m.text.replace(/\s+/g, ' ').slice(0, 140) || 'Photo'}</p>
+            {acts.map((a) => (
+              <button
+                key={a.k}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  a.run()
+                  setSheet(false)
+                }}
+              >
+                <span>{a.icon}</span> {a.label}
+              </button>
+            ))}
+            <button type="button" className="x" onClick={() => setSheet(false)}>
+              Close
+            </button>
+          </div>
+        </div>,
+          document.body
+        )}
     </div>
   )
 }

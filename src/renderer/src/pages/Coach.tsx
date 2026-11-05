@@ -20,6 +20,10 @@ import { readDo } from '@core/coachButtons'
 import { BenDesk, type DeskTab } from '../BenDesk'
 import { Feedback, ReplyExtras, Rich, type Entry } from '../BenThread'
 import { BenMark, FoldLine, Meta, NowCard, NudgeCard, Receipts } from '../CoachFeed'
+import { Bubble, CoachAmbient, GlyphIcon, Ring, StreamText, SuggestChip, TypingBubble } from '../CoachFeed'
+import { BenAvatar, MeAvatar, avatarFromFile, useCoachLooks, type Presence } from '../BenAvatar'
+import { CoachSide } from '../CoachSide'
+import { benStatus } from '@core/coachLooks'
 import { buildFeed, momentChips, readSlash, SLASH, type Filter } from '@core/chatFeed'
 import '../ben.css'
 
@@ -139,6 +143,31 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [openFolds, setOpenFolds] = useState<Record<string, boolean>>({})
   const [quote, setQuote] = useState<Entry | null>(null)
   const [menu, setMenu] = useState(false)
+  // Ben's view of today (wide screens): open unless you folded it away.
+  const [side, setSideRaw] = useState(() => {
+    try {
+      return localStorage.getItem('ls.coachSide') !== '0'
+    } catch {
+      return true
+    }
+  })
+  const setSide = (v: boolean) => {
+    setSideRaw(v)
+    try {
+      localStorage.setItem('ls.coachSide', v ? '1' : '0')
+    } catch {
+      /* fine */
+    }
+  }
+  // Your photo: tap your face in the chat to change it.
+  const [, saveLooks] = useCoachLooks(true)
+  const meFile = useRef<HTMLInputElement>(null)
+  const pickMe = async (f: File | undefined) => {
+    if (!f) return
+    await act(async () => {
+      if (!(await saveLooks({ me: await avatarFromFile(f) }))) throw new Error('Could not save your photo')
+    }, 'Your photo is in the chat')
+  }
   // CN8: when you last had the chat open (fixed for this visit), saved when you leave.
   const [seenAt] = useState<string | null>(() => {
     try {
@@ -399,36 +428,64 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const addWater = async () => {
     if (life.coach?.deskDo && (await act(() => life.coach!.deskDo!({ op: 'water', ml: 250 }), '💧 +250 ml'))) loadStatus()
   }
-  const statusLine = busy ? 'typing…' : status ? (status.move.kind === 'running' ? status.move.title : `Next: ${status.move.title}`) : 'your coach'
+  // Ben is alive: what he is doing shows on his face and under his name.
+  const pendingMsg = busy ? (log ?? []).find((x) => x.pending) : undefined
+  const presence: Presence = busy ? (pendingMsg?.streamed && pendingMsg.text ? 'typing' : 'thinking') : 'idle'
+  const st = benStatus({ busy, streaming: presence === 'typing', step: pendingMsg?.steps?.[pendingMsg.steps.length - 1], running: status?.move.kind === 'running' ? status.move.title : null, hour: new Date().getHours() })
+  const focusLabel = (n: number) => (n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n} min`)
 
   return (
-    <div className={`cx cf ${info ? 'info-open' : ''} ${typing ? 'typing' : ''}`}>
+    <div className={`cx cf cf2 ${info ? 'info-open' : ''} ${typing ? 'typing' : ''} ${side && status ? 'side-on' : ''} ${busy ? 'busy' : ''}`}>
       <section className="cx-chat">
-        {/* CL6: a calm header; CL7: today's numbers as small chips. */}
+        <CoachAmbient />
+        {/* CL6: a rich header (Ben's face, what he is doing); CL7: today's numbers as small pills. */}
         <header className="cf-head">
           <button className="cf-who" onClick={() => setInfo((v) => !v)} title="Ben's desk: plan, goals, about you">
-            <BenMark big />
+            <BenAvatar size={52} state={presence} ring online live />
             <span>
-              <b>Ben</b>
-              <small className={busy ? 'typing' : ''}>{statusLine}</small>
+              <b>
+                Ben <i className="cf-tag">AI coach</i>
+              </b>
+              <small className={`cf-status ${st.live ? 'typing' : ''}`} aria-live="polite">
+                {st.live ? st.text : `Online · ${st.text}`}
+              </small>
             </span>
           </button>
           {status && (
             <div className="cf-chips" role="list" aria-label="Today">
-              <button role="listitem" onClick={() => (setTab('plan'), setInfo(true))} title="Must-dos: open the plan">
-                Must-dos <b>{status.today.mustTotal ? `${status.today.mustDone}/${status.today.mustTotal}` : 'none'}</b>
+              <button role="listitem" className="p-must" onClick={() => (setTab('plan'), setInfo(true))} title="Must-dos: open the plan">
+                <GlyphIcon kind="done" size={14} />
+                {status.today.mustTotal ? (
+                  <>
+                    <b>
+                      {status.today.mustDone}/{status.today.mustTotal}
+                    </b>{' '}
+                    must-dos
+                  </>
+                ) : (
+                  'No must-dos yet'
+                )}
               </button>
               {!!status.today.waterTarget && (
-                <button role="listitem" onClick={() => void addWater()} title="Tap to add 250 ml">
-                  Water <b>{(status.today.waterMl / 1000).toFixed(1)}/{(status.today.waterTarget / 1000).toFixed(1)} L</b>
+                <button role="listitem" className="p-water" onClick={() => void addWater()} title="Tap to add 250 ml">
+                  <Ring value={status.today.waterMl / status.today.waterTarget} size={16} tone="water" />
+                  <b>
+                    {(status.today.waterMl / 1000).toFixed(1)}/{(status.today.waterTarget / 1000).toFixed(1)} L
+                  </b>
                 </button>
               )}
-              <button role="listitem" onClick={() => (status.move.kind === 'focus' || status.move.kind === 'running' ? void doMove() : (setTab('today'), setInfo(true)))} title={status.move.kind === 'focus' ? 'Start focus' : 'Focus today'}>
-                Focus <b>{status.today.focusMin >= 60 ? `${Math.floor(status.today.focusMin / 60)}h ${status.today.focusMin % 60}m` : `${status.today.focusMin} min`}</b>
+              <button role="listitem" className="p-focus" onClick={() => (status.move.kind === 'focus' || status.move.kind === 'running' ? void doMove() : (setTab('today'), setInfo(true)))} title={status.move.kind === 'focus' ? 'Start focus' : 'Focus today'}>
+                <GlyphIcon kind="focus" size={14} />
+                <b>{focusLabel(status.today.focusMin)}</b> focus
               </button>
             </div>
           )}
           <div className="cf-head-tools">
+            {status && !side && (
+              <button className="icon-btn cf-side-open" onClick={() => setSide(true)} aria-label="Show Ben's view of today" title="Ben's view of today">
+                <GlyphIcon kind="review" />
+              </button>
+            )}
             <button className={`icon-btn ${query != null ? 'on' : ''}`} onClick={() => setQuery((q) => (q == null ? '' : null))} aria-label="Search the chat" title="Search and filter">
               <Icon name="search" />
             </button>
@@ -585,7 +642,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             )}
             {log?.length === 0 && (
               <div className="co-hero cf-hero">
-                <BenMark big />
+                <BenAvatar size={88} ring online live />
                 <h3>Talk to me like a friend.</h3>
                 <p>I see your day, calendar, Todoist, sleep, training and money, and I can act: log things, plan blocks, book goals, hold you to promises.</p>
                 <div className="co-cards">
@@ -600,7 +657,10 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             )}
             {!!log?.length && !feed.some((x) => x.t === 'msg') && <p className="cf-empty">Nothing here with this filter.</p>}
             {log &&
-              feed.map((it) => {
+              feed.map((it, idx) => {
+                // The last message of a group carries the face, the tail and the time.
+                const nx = feed[idx + 1]
+                const lastOfGroup = !(nx && nx.t === 'msg' && nx.grouped)
                 if (it.t === 'divider')
                   return (
                     <div key={it.key} className="cf-divider">
@@ -622,13 +682,17 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                     ↩ Reply
                   </button>
                 )
+                const reply = () => (setQuote(m), setTimeout(() => (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus(), 30))
                 if (m.role === 'me')
                   return (
-                    <div key={it.key} id={`cx-m${i}`} className={`cf-row me ${it.grouped ? 'grouped' : ''} ${flash}`}>
-                      <div className="cf-me">
-                        {m.quote && <blockquote>{m.quote}</blockquote>}
-                        {m.photo && <img className="cx-photo" src={m.photo} alt="Your photo" />}
-                        <Rich text={m.text} highlight={query ?? ''} />
+                    <div key={it.key} id={`cx-m${i}`} className={`cf-row me ${it.grouped ? 'grouped' : ''} ${lastOfGroup ? 'last' : ''} ${flash}`}>
+                      <div className="cf-me-line">
+                        <Bubble m={m} mine tail={lastOfGroup} onReply={reply} className="cf-me">
+                          {m.quote && <blockquote>{m.quote}</blockquote>}
+                          {m.photo && <img className="cx-photo" src={m.photo} alt="Your photo" />}
+                          <Rich text={m.text} highlight={query ?? ''} />
+                        </Bubble>
+                        {lastOfGroup ? <MeAvatar size={30} onPick={() => meFile.current?.click()} /> : <span className="cf-me-gap" />}
                       </div>
                       {m.failed ? (
                         <span className="cx-failed" title={m.failed}>
@@ -646,14 +710,14 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                           </button>
                         </span>
                       ) : (
-                        !it.grouped && <Meta m={m} />
+                        lastOfGroup && <Meta m={m} />
                       )}
                     </div>
                   )
                 if (it.kind !== 'talk')
                   return (
-                    <div key={it.key} id={`cx-m${i}`} className={`cf-row ben nudge ${it.grouped ? 'grouped' : ''} ${flash}`}>
-                      <BenMark ghost={it.grouped} />
+                    <div key={it.key} id={`cx-m${i}`} className={`cf-row ben nudge ${it.grouped ? 'grouped' : ''} ${lastOfGroup ? 'last' : ''} ${flash}`}>
+                      <BenMark ghost={!lastOfGroup} />
                       <div className="cf-ben">
                         <NudgeCard m={m} kind={it.kind} info={it.info} repeats={it.repeats} settled={it.settled} latest={latestOf[it.kind] === i} status={status} deck={deck} onChange={() => (loadStatus(), onWallet())} />
                         <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
@@ -665,34 +729,34 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                     </div>
                   )
                 return (
-                  <div key={it.key} id={`cx-m${i}`} className={`cf-row ben ${it.grouped ? 'grouped' : ''} ${flash}`}>
-                    <BenMark ghost={it.grouped} />
+                  <div key={it.key} id={`cx-m${i}`} className={`cf-row ben ${it.grouped ? 'grouped' : ''} ${lastOfGroup || m.pending ? 'last' : ''} ${flash}`}>
+                    {m.pending ? <BenMark state={presence} /> : <BenMark ghost={!lastOfGroup} />}
                     <div className={`cf-ben ${m.pending ? 'pending' : ''}`}>
                       {m.pending ? (
-                        // CM6: typing, with one short line about what Ben is doing.
+                        // CM6: typing, with one short line about what Ben is doing; then his words stream in.
                         <div className="cf-thinking">
-                          <span className="co-typing">
-                            <i />
-                            <i />
-                            <i />
-                          </span>
-                          {!!m.steps?.length && <span className="cf-step">{m.steps[m.steps.length - 1]}…</span>}
                           {m.streamed && m.text ? (
-                            <div className="cf-text">
-                              <Rich text={m.text} maxBold={2} />
-                            </div>
-                          ) : null}
+                            <Bubble m={m} tail>
+                              <div className="cf-text">
+                                <StreamText text={m.text} />
+                              </div>
+                            </Bubble>
+                          ) : (
+                            <TypingBubble step={m.steps?.length ? m.steps[m.steps.length - 1] : undefined} />
+                          )}
                         </div>
                       ) : (
                         <>
                           {m.photo && <img className="cx-photo" src={m.photo} alt="" />}
-                          <div className="cf-text">
-                            <Rich text={m.text} reveal={!!m.fresh} highlight={query ?? ''} maxBold={2} />
-                          </div>
+                          <Bubble m={m} tail={lastOfGroup} onReply={reply} onUndo={() => void undoLine(m)}>
+                            <div className="cf-text">
+                              <Rich text={m.text} reveal={!!m.fresh} highlight={query ?? ''} maxBold={2} />
+                            </div>
+                          </Bubble>
                           <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
                           {(!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
                           <div className="cf-foot">
-                            {!it.grouped && <Meta m={m} />}
+                            {lastOfGroup && <Meta m={m} />}
                             {!!m.steps?.length && (
                               <details className="cf-steps">
                                 <summary>
@@ -724,14 +788,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         )}
 
         <div className="cf-dock">
-          {status && query == null && filter === 'all' && !!log?.length && <NowCard status={status} busy={busy} onDo={() => void doMove()} onNotYet={() => void send(`Not yet: ${(status.move as any).promise}`)} />}
-          {!!log?.length && !busy && (
-            <div className="cf-sugg">
-              {chips.map((q) => (
-                <button key={q} disabled={busy} onClick={() => void send(q)}>
-                  {q}
-                </button>
-              ))}
+          {/* CN2 + CM2: the one next thing and the suggestions, as one row of pills. */}
+          {!!log?.length && (
+            <div className="cf-sugg cf-rail" role="toolbar" aria-label="Suggestions">
+              {status && query == null && filter === 'all' && <NowCard status={status} busy={busy} onDo={() => void doMove()} onNotYet={() => void send(`Not yet: ${(status.move as any).promise}`)} />}
+              {!busy && chips.map((q) => <SuggestChip key={q} text={q} disabled={busy} onClick={() => void send(q)} />)}
             </div>
           )}
           {slashHits.length > 0 && (
@@ -802,12 +863,16 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               {/* JV7: push-to-talk (sends when you stop) and 🔊 read-aloud. */}
               <CoachMic base={text} disabled={busy} onListening={setListening} onText={(t, final) => (final ? void send(t) : setText(t))} />
               <ReadAloudToggle />
-              <button className="cf-send" disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter) · new line: Shift+Enter">
-                {busy ? '…' : '↑'}
+              <button className={`cf-send ${busy ? 'busy' : text.trim() || photo ? 'ready' : ''}`} disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter) · new line: Shift+Enter">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" />
+                </svg>
               </button>
             </div>
           </form>
         </div>
+        {status && side && <CoachSide status={status} onClose={() => setSide(false)} onOpen={(t) => (setTab(t), setInfo(true))} onWater={() => void addWater()} onFocus={() => void (status.move.kind === 'focus' || status.move.kind === 'running' ? doMove() : send('Start a 25 minute focus block on my most important task.'))} />}
+        <input ref={meFile} type="file" accept="image/*" hidden onChange={(e) => void pickMe(e.target.files?.[0]).then(() => (e.target.value = ''))} />
       </section>
 
       <div className="cx-scrim" onClick={() => setInfo(false)} aria-hidden />

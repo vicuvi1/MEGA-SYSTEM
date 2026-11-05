@@ -1862,6 +1862,7 @@ var SETTINGS = {
 	coach_blocks: json$4("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
 	coach_memory_changes: json$4("recent changes to Ben's memory, with what was there before (undo)", []),
 	coach_style: json$4("Ben's tone and style", null),
+	coach_looks: json$4("how the chat looks: Ben's face and your photo (small data URL)", null),
 	coach_adapt: json$4("how Ben adapts the plan to how it went", null),
 	goal_booking: json$4("goal blocks booked into the calendar", null),
 	ben_desk: json$4("Ben's desk: excuses, moods, study, stakes, calls, letters", null),

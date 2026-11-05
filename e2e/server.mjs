@@ -53,7 +53,11 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
     ben(90, '💧 Water 0.3 of 2.7 L and the day is going. Drink 4 glasses now.'),
     ben(60, '😐 Lunch check-in: how do you feel right now?'),
     ben(30, '🎯 3h 10m since your last thing. Pick anything on your list and give it 10 minutes.'),
-    ben(5, `📚 🎯 Deep block (afternoon) starts at ${hmIn(9)} · 100 min · +30 points if you focus.\nStart the timer?`)
+    ben(5, `📚 🎯 Deep block (afternoon) starts at ${hmIn(9)} · 100 min · +30 points if you focus.\nStart the timer?`),
+    { role: 'me', bot: 'mega', via: 'app', text: 'Just finished 20 min of reading', at: ago(3) },
+    { role: 'me', bot: 'mega', via: 'app', text: 'What should I do before the block?', at: ago(3) },
+    { role: 'coach', bot: 'mega', via: 'app', text: 'Good work. Reading is 20/30 min, so 10 min left for tonight.', at: ago(2), done: ['📚 Reading +20 min · 20/30 today'], undo: [{ op: 'demo' }] },
+    { role: 'coach', bot: 'mega', via: 'app', text: 'Before the block: one glass of water, phone in the other room, and open the study notes. You start in 9 min.', at: ago(2), chips: ['Start the block now', 'Log 250 ml water'] }
   ]
   db.run("INSERT INTO settings (key, value) VALUES ('coach_log', ?)", [JSON.stringify(log)])
 }

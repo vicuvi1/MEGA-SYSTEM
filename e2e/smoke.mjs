@@ -86,6 +86,8 @@ try {
     await pg.waitForSelector('.cf-col .cf-row', { timeout: 15000 })
     if (!(await pg.$('.cf-fold'))) throw new Error('no folded updates line')
     if (!(await pg.$('.cf-card'))) throw new Error('no card')
+    if (!(await pg.$('.cf-head .ba-face'))) throw new Error("no face for Ben in the header")
+    if (!(await pg.$('.cf-rail .cf-now'))) throw new Error('no Now pill above the message box')
     await pg.fill('.cf-input textarea', '/wa')
     if (!(await pg.$('.cf-slash'))) throw new Error('no / shortcuts')
     await pg.fill('.cf-input textarea', '')
