@@ -17385,7 +17385,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const correcting = isCorrection(text);
 		const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text);
 		if (big) step("Thinking it through");
-		const deadline = Date.now() + 45e3;
+		const deadline = Date.now() + 38e3;
 		const ask = (found, extraNote = "") => withTimeout(ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
 			refs: [
 				made.lines,
@@ -19332,6 +19332,7 @@ function cleanVoice(out, template) {
 	let t = String(out ?? "").trim().replace(/^["'“”]+|["'“”]+$/g, "").trim();
 	if (!t || t.length > 420 || /^\{/.test(t)) return null;
 	t = t.replace(/<(?!\/?(b|i)>)[^>]*>/g, "");
+	t = t.replace(/&(?!(amp|lt|gt|quot|#\d+);)/g, "&amp;").replace(/<(?!\/?(b|i)>)/g, "&lt;");
 	const emoji = template.replace(/<[^>]+>/g, "").trimStart().match(/^\p{Extended_Pictographic}️?/u)?.[0];
 	if (emoji && !t.startsWith(emoji)) t = `${emoji} ${t.replace(/^\p{Extended_Pictographic}️?\s*/u, "")}`;
 	const nums = (s) => (s.replace(/<[^>]+>/g, "").match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(",", "."));

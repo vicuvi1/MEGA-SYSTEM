@@ -50,6 +50,8 @@ export function cleanVoice(out: string, template: string): string | null {
   if (!t || t.length > 420 || /^\{/.test(t)) return null
   // Only <b>/<i> survive (Telegram HTML); anything else is dropped.
   t = t.replace(/<(?!\/?(b|i)>)[^>]*>/g, '')
+  // A lone "<" or "&" ("x < 5", "<3", "R&D") breaks Telegram's HTML: escape it (T6).
+  t = t.replace(/&(?!(amp|lt|gt|quot|#\d+);)/g, '&amp;').replace(/<(?!\/?(b|i)>)/g, '&lt;')
   const emoji = template.replace(/<[^>]+>/g, '').trimStart().match(/^\p{Extended_Pictographic}️?/u)?.[0]
   if (emoji && !t.startsWith(emoji)) t = `${emoji} ${t.replace(/^\p{Extended_Pictographic}️?\s*/u, '')}`
   // Every number in the original must still be there (no made-up figures).

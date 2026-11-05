@@ -30,3 +30,10 @@ describe("Ben's own words for his nudges", () => {
     expect(cleanVoice('💪 <a href="x">Train</a> <b>20 minutes</b> now.', '💪 No training yet. 20 minutes counts.')).toBe('💪 Train <b>20 minutes</b> now.')
   })
 })
+
+describe('safe HTML from the model (T6)', () => {
+  it('escapes a stray < and &, keeps <b>', () => {
+    const t = cleanVoice('💧 <b>2</b> glasses < goal & R&D', '💧 <b>2</b> glasses')
+    expect(t).toBe('💧 <b>2</b> glasses &lt; goal &amp; R&amp;D')
+  })
+})

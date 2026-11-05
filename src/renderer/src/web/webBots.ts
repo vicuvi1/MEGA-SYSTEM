@@ -1413,8 +1413,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const correcting = isCorrection(text)
     const big = isBigAsk(text) || correcting || text.split(/\s+/).length > 8 || /\?/.test(text)
     if (big) step('Thinking it through')
-    // One reply must fit Vercel's 60 s: every call gets what's left of a 45 s budget.
-    const deadline = Date.now() + 45_000
+    // One reply must fit Vercel's 60 s, actions and sending included: the model
+    // gets what's left of a 38 s budget, so the reply is never cut off (T6).
+    const deadline = Date.now() + 38_000
     const ask = (found?: string, extraNote = '') =>
       withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined }), Math.max(4_000, deadline - Date.now()))
     let out: BrainOut
