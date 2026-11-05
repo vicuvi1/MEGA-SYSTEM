@@ -567,7 +567,7 @@ export function DayFlow(props: Props) {
     onDragStart: (e: React.DragEvent) => {
       setDragId(t.id)
       e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/x-task', JSON.stringify({ id: t.id, title: t.content, minutes: t.duration ?? 50 }))
+      e.dataTransfer.setData('text/x-task', JSON.stringify({ id: t.id, title: t.content, minutes: bookMinutes(t) }))
     },
     onDragEnd: () => {
       setDragId(null)
@@ -618,7 +618,7 @@ export function DayFlow(props: Props) {
       leaving={leaving.includes(t.id)}
       dropping={dropOn === t.id && dragId !== t.id}
       onDone={() => void (isStar ? doneStarred(t) : doneTodo(t))}
-      onFocus={() => void startFocus(todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content }, t.duration ?? 50)}
+      onFocus={() => void startFocus(todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content }, bookMinutes(t))}
       onBook={t.dueTime ? undefined : () => void bookTask(t)}
       onStar={() => void (isStar ? unstar(t) : star(t))}
       onPatch={(patch, local, msg) => void patchTask(t, patch, local, msg)}

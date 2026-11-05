@@ -14,6 +14,7 @@ import { layoutDay } from '@core/calLayout'
 import { addBlockTask, blockTasks } from '@core/blockTasks'
 import { blockState, blockSubject, freeGaps, isFocusBlock, localDay, localHM, planKept, type BlockState, type CalEvent } from '@core/dayTime'
 import type { TodoTask } from '@core/todoist'
+import { bookMinutes } from '@core/booking'
 import { life } from './bridge'
 import { useLive } from './live'
 import { useFocus } from './pages/Focus'
@@ -120,7 +121,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     for (const t of tasks) {
       if (t.due !== today || !t.dueTime || grouped.has(t.id) || todayEvents.some((e) => e.title.trim().toLowerCase() === t.content.trim().toLowerCase())) continue
       const s = toMin(t.dueTime)
-      out.push({ key: `t:${t.id}`, title: t.content, start: s, end: s + Math.max(15, Math.min(240, t.duration ?? 30)), color: '#94a3b8', task: t })
+      out.push({ key: `t:${t.id}`, title: t.content, start: s, end: s + bookMinutes(t), color: '#94a3b8', task: t })
     }
     return out.filter((b) => b.end > START_H * 60)
   }, [todayEvents, tasks, today, grouped])

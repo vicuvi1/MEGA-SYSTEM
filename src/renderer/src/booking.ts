@@ -3,9 +3,7 @@
 // new date, the calendar block is taken back out: no orphan blocks).
 import type { TodoTask } from '@core/todoist'
 import { life } from './bridge'
-
-/** The length a task books for: its own Todoist duration, else 50 minutes. */
-export const bookMinutes = (t: Pick<TodoTask, 'duration'>) => (t.duration && t.duration >= 10 ? Math.min(t.duration, 240) : 50)
+export { bookMinutes } from '@core/booking'
 
 export async function bookTask(t: TodoTask, day: string, start: string, end: string, description = 'Todoist task · planned in Life System'): Promise<void> {
   if (!life.google) throw new Error('Connect Google Calendar in Settings to book tasks')

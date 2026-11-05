@@ -30,6 +30,6 @@ describe('booking a dropped task', () => {
   it('reads a length from the task', () => {
     expect(taskMinutes('Read chapter 4 45m')).toBe(45)
     expect(taskMinutes('Lab report 2h')).toBe(120)
-    expect(taskMinutes('Call mom')).toBe(30)
+    expect(taskMinutes('Call mom')).toBe(50) // the one default (core/booking.ts)
   })
 })

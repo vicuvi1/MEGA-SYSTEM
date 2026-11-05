@@ -2,6 +2,7 @@
 // - clipboard catch: copied text with a date or a deadline in it → offer to
 //   save it as a task or a note (never URLs, code, passwords or long text)
 // - book a dropped task in the next free slot today.
+import { DEFAULT_TASK_MIN } from './booking'
 import type { IslandAlert, IslandBlock } from './islandModel'
 
 const MONTHS = 'jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|ian|ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie|янв|фев|мар|апр|май|июн|июл|авг|сен|окт|ноя|дек'
@@ -58,7 +59,7 @@ export function nextFreeSlot(blocks: IslandBlock[], now: number, minutes = 30): 
 /** "Read chapter 4 45m" → 45 minutes; default 30. */
 export function taskMinutes(text: string): number {
   const m = /(\d{1,3})\s*(?:m|min|mins|minutes)\b/i.exec(text) ?? /(\d)\s*(?:h|hr|hours?)\b/i.exec(text)
-  if (!m) return 30
+  if (!m) return DEFAULT_TASK_MIN
   const n = Number(m[1])
   return Math.max(15, Math.min(180, /h/i.test(m[0]) ? n * 60 : n))
 }

@@ -15,6 +15,7 @@ import { addBlockTask, blockTasks, removeBlockTask, setBlockTaskDone } from '@co
 import { blocksToApply, repeatRule, templateFromDay, type DayTemplate, type Repeat } from '@core/calTemplates'
 import { defaultAreaColor, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life, type GoogleStatus } from '../bridge'
+import { bookMinutes, bookTask } from '../booking'
 import { Icon } from '../Icon'
 import type { PageId } from '../modules'
 import { useAction, useToast } from '../ui'
@@ -221,7 +222,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     for (const t of todo?.tasks ?? []) {
       if (!t.due || !t.dueTime || blocked.has(`${t.due}|${t.content}`) || grouped.has(t.id)) continue
       const s = toMin(t.dueTime)
-      out.push({ key: `t:${t.id}`, title: t.content, day: t.due, start: s, end: s + Math.max(15, Math.min(240, t.duration ?? 30)), color: areaColor(t), kind: 'task', task: t })
+      out.push({ key: `t:${t.id}`, title: t.content, day: t.due, start: s, end: s + bookMinutes(t), color: areaColor(t), kind: 'task', task: t })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,12 +232,13 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const toSchedule = sortTasks((todo?.tasks ?? []).filter((t) => !t.dueTime && (!t.due || t.due <= addDays(today, 7))), today).slice(0, 30)
 
   // ---- Changes ----------------------------------------------------------
-  const block = async (task: TodoTask, day: string, start: number, minutes = 50) => {
+  // The one way to book a task (booking.ts): its own length, calendar block + Todoist time together.
+  const block = async (task: TodoTask, day: string, start: number, minutes = bookMinutes(task)) => {
     const ok = await act(async () => {
-      if (connected) await life.google!.create({ title: task.content, start: isoAt(day, start), end: isoAt(day, start + minutes), description: 'Todoist task · planned in Life System' })
-      await life.todoist?.update?.(task.id, { due: `${day} ${hmOf(start)}` })
+      if (connected) await bookTask(task, day, hmOf(start), hmOf(Math.min(24 * 60 - 1, start + minutes)))
+      else await life.todoist?.update?.(task.id, { due: `${day} ${hmOf(start)}`, duration: minutes } as any)
       return true
-    }, `Planned: ${task.content} at ${hmOf(start)}`)
+    }, `Planned: ${task.content} at ${hmOf(start)} · ${minutes} min`)
     if (ok) void load()
   }
   /**
