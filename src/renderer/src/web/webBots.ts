@@ -1103,7 +1103,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             const reason = REASONS[Number(n)]
             return { text: `${esc(String(cq.message?.text ?? '').replace(/What got in the way\?[\s\S]*$/, ''))}Noted: <b>${esc(reason)}</b>. The coach will help you fix that first next time.`, keyboard: undefined, toast }
           }
-          const evening = String(cq.message?.text ?? '').includes('Evening review')
+          const evening = /Evening review|Day review/.test(String(cq.message?.text ?? ''))
           const focusMin = svc.focus.state().todayMin
           return { text: evening ? eveningText(plan, focusMin) : planText(plan), keyboard: planKeyboard(plan, evening), toast }
         })()
@@ -2112,10 +2112,10 @@ His note: ${note}`,
         return reply
       }
     }
-    const prompted = !!text && !text.startsWith('/') && (asked.includes(PLAN_ASK) || /Evening review|One thing to change next week/.test(asked))
+    const prompted = !!text && !text.startsWith('/') && (asked.includes(PLAN_ASK) || /Evening review|Day review|One thing to change next week/.test(asked))
     if (text && !text.startsWith('/') && asked.includes(PLAN_ASK)) text = `/plan ${text}`
-    // A reply to the evening review or the weekly report is your note for the day.
-    else if (text && !text.startsWith('/') && /Evening review|One thing to change next week/.test(asked)) text = `/review ${asked.includes('next week') ? 'Next week: ' : ''}${text}`
+    // A reply to the evening review ("Day review: 72/100" too: T10) or the weekly report is your note for the day.
+    else if (text && !text.startsWith('/') && /Evening review|Day review|One thing to change next week/.test(asked)) text = `/review ${asked.includes('next week') ? 'Next week: ' : ''}${text}`
     // Free text (not a quick log), a voice note or a photo: the coach's brain.
     const media = update.message?.voice ?? update.message?.audio ?? (update.message?.photo ? update.message.photo[update.message.photo.length - 1] : null)
     if (ai && chat && (media || (text && !prompted && !isSimpleLog(text)))) {

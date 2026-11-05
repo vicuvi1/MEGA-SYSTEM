@@ -17082,7 +17082,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							toast
 						};
 					}
-					const evening = String(cq.message?.text ?? "").includes("Evening review");
+					const evening = /Evening review|Day review/.test(String(cq.message?.text ?? ""));
 					const focusMin = svc.focus.state().todayMin;
 					return {
 						text: evening ? eveningText(plan, focusMin) : planText(plan),
@@ -18252,9 +18252,9 @@ His note: ${note}`, { json: true }));
 				return reply;
 			}
 		}
-		const prompted = !!text && !text.startsWith("/") && (asked.includes("What are your 1–3 must-dos today?") || /Evening review|One thing to change next week/.test(asked));
+		const prompted = !!text && !text.startsWith("/") && (asked.includes("What are your 1–3 must-dos today?") || /Evening review|Day review|One thing to change next week/.test(asked));
 		if (text && !text.startsWith("/") && asked.includes("What are your 1–3 must-dos today?")) text = `/plan ${text}`;
-		else if (text && !text.startsWith("/") && /Evening review|One thing to change next week/.test(asked)) text = `/review ${asked.includes("next week") ? "Next week: " : ""}${text}`;
+		else if (text && !text.startsWith("/") && /Evening review|Day review|One thing to change next week/.test(asked)) text = `/review ${asked.includes("next week") ? "Next week: " : ""}${text}`;
 		const media = update.message?.voice ?? update.message?.audio ?? (update.message?.photo ? update.message.photo[update.message.photo.length - 1] : null);
 		if (ai && chat && (media || text && !prompted && !isSimpleLog(text))) {
 			if (!await markSeen(key)) return null;
