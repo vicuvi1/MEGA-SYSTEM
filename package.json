@@ -66,6 +66,10 @@
       {
         "from": "apps",
         "to": "apps"
+      },
+      {
+        "from": "extension",
+        "to": "extension"
       }
     ],
     "npmRebuild": false,

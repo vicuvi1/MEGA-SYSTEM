@@ -25,6 +25,7 @@ import { DesktopBackupPanel } from '../DesktopBackups'
 import { HealthPanel } from '../HealthPanel'
 import { IslandLogPanel } from '../IslandLogPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
+import { PcPrivacyPanel } from '../PcPrivacyPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
 import { ConnectionsOverview } from '../ConnectionsOverview'
 import { NotifSettings } from '../NotifSettings'
@@ -1345,6 +1346,14 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       <IslandSettingsPanel />
         </>
       )
+    },
+    {
+      id: 'pc',
+      label: 'Ben on this PC',
+      icon: 'shield',
+      hint: 'What the desktop app may see, and what it saw today',
+      keywords: 'privacy pc computer app activity focus distraction clipboard idle sensors block sites do not disturb shortcuts',
+      body: <PcPrivacyPanel />
     },
         ]
       : []),

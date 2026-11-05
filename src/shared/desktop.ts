@@ -15,7 +15,25 @@ export interface DesktopApi {
   /** Go back one version (installs the previous release and restarts). */
   rollback?(): Promise<{ ok: boolean; version?: string; error?: string }>
   /** A Windows notification (silent: the page plays its own chime). */
-  notify?(n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[] }): Promise<boolean>
+  notify?(n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[]; urgent?: boolean }): Promise<boolean>
+  // ---- Ben on this PC (P1–P20; optional: older desktops don't have it) ----
+  pcGetPrefs?(): Promise<{ prefs: import('../core/pcActivity').PcPrefs; port: number; token: string; now: { label: string; kind: string } | null; windows: boolean } | null>
+  pcSetPrefs?(p: Partial<import('../core/pcActivity').PcPrefs>): Promise<import('../core/pcActivity').PcPrefs | null>
+  pcToday?(): Promise<{ line: string; apps: Record<string, { sec: number; kind: string }> } | null>
+  pcClear?(): Promise<boolean>
+  pcFocus?(f: { running: boolean; subject: string; endsAt: number }): void
+  pcLock?(): Promise<boolean>
+  pcDnd?(): Promise<boolean>
+  pcExtensionFolder?(): Promise<string | null>
+  /** The app in front (only with the sensor on): its friendly name and kind, every few seconds. */
+  onPcApp?(cb: (a: { label: string; kind: 'work' | 'distract' | 'neutral'; seconds: number }) => void): void
+  /** The PC locked / unlocked. */
+  onLock?(cb: (l: { locked: boolean; at: number }) => void): void
+  /** A taskbar shortcut (P17): "focus25". */
+  onJump?(cb: (a: string) => void): void
+  /** Island window: Ctrl+Alt+N (add a task) / Ctrl+Alt+B (talk to Ben). */
+  onIslandCapture?(cb: () => void): void
+  onIslandVoice?(cb: () => void): void
   /** A button on a Windows notification (N9). */
   onNotifAction?(cb: (a: { id: string; action: string }) => void): void
   /** You clicked one: the app is in front, run its action. */

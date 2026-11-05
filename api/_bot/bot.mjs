@@ -7076,6 +7076,7 @@ function dayLogLine(d) {
 		const n = (r) => d.blocks.filter((x) => x.result === r).length;
 		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
 	}
+	if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`);
 	return parts.join(". ");
 }
 // src/core/notebook.ts

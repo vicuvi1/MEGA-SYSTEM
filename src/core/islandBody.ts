@@ -50,7 +50,8 @@ export function waterAlert(a: BodyInput): IslandAlert | null {
 
 export function moveAlert(a: BodyInput): IslandAlert | null {
   if (a.busy || !a.activeSince || a.idleSec == null || a.idleSec > 120) return null
-  if (a.now - a.activeSince < 75 * 60_000 || a.now - a.lastMoveAt < 75 * 60_000) return null
+  // P11: after 50 minutes of input with no 5-minute pause (away time resets it, so never right after a break).
+  if (a.now - a.activeSince < 50 * 60_000 || a.now - a.lastMoveAt < 50 * 60_000) return null
   const id = `move:${Math.floor(a.activeSince / 60_000)}`
   if ((a.dismissed[id] ?? 0) > a.now) return null
   const sat = Math.round((a.now - a.activeSince) / 60_000)
@@ -63,6 +64,8 @@ export function moveAlert(a: BodyInput): IslandAlert | null {
     actions: [
       { label: '✓ 20 squats', action: { kind: 'moveBreak', name: 'Squats', n: 20, alertId: id }, primary: true },
       { label: '✓ 10 push-ups', action: { kind: 'moveBreak', name: 'Push-ups', n: 10, alertId: id } },
+      // P14: a real break: the PC locks, Ben greets you when you're back.
+      { label: '🔒 Lock PC 5 min', action: { kind: 'lockPc', alertId: id } },
       { label: 'In 15 min', action: { kind: 'dismiss', id, snoozeMin: 15 } }
     ]
   }

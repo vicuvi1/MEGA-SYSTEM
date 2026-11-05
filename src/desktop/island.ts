@@ -18,7 +18,7 @@ const WIN = { width: 500, height: 660 }
 /** Where the pill sits inside the window on the side placements (from the window's top). */
 const SIDE_PILL_Y = 40
 
-export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void }) {
+export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null) => void }) {
   const prefFile = join(o.dir, 'island.json')
   let enabled = true
   let place: IslandPlacement = 'top'
@@ -246,16 +246,29 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   // own privacy log) and full-screen apps / presentation / Focus Assist
   // (SHQueryUserNotificationState). One small PowerShell loop, every 4 s.
   let watcher: ChildProcess | null = null
+  let restarting = false
   const startWatcher = () => {
     if (process.platform !== 'win32' || watcher) return
+    // P2: the app in front, only when you turned it on (Settings → Ben on this PC); the title only with "titles".
+    const pc = o.pc?.() ?? { activeApp: false, titles: false }
+    const fg = pc.activeApp
+      ? [
+          'Add-Type -TypeDefinition \'using System;using System.Text;using System.Runtime.InteropServices;public static class FG{[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);[DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern int GetWindowText(IntPtr h,StringBuilder s,int n);}\''
+        ]
+      : []
+    const fgLine = pc.activeApp
+      ? ` $h=[FG]::GetForegroundWindow(); $fp=0; [void][FG]::GetWindowThreadProcessId($h,[ref]$fp); $pn=(Get-Process -Id $fp).ProcessName; $tt=''; ${pc.titles ? '$sb=New-Object System.Text.StringBuilder 300; [void][FG]::GetWindowText($h,$sb,300); $tt=$sb.ToString() -replace "[\\r\\n|]"," "' : ''}`
+      : ''
     const ps = [
       "$ErrorActionPreference='SilentlyContinue'",
       'Add-Type -TypeDefinition \'using System;using System.Runtime.InteropServices;public static class QN{[DllImport("shell32.dll")]public static extern int SHQueryUserNotificationState(out int s);}\'',
+      ...fg,
       "$base='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore'",
       'while($true){',
       ' $s=0; [void][QN]::SHQueryUserNotificationState([ref]$s)',
       " $m=0; foreach($k in 'microphone','webcam'){ Get-ChildItem -Path \"$base\\$k\" -Recurse | Where-Object { $_.PSChildName -notmatch 'Life System|electron' } | ForEach-Object { $p=Get-ItemProperty -Path $_.PSPath; if($p.LastUsedTimeStart -gt 0 -and $p.LastUsedTimeStop -eq 0){ $m=1 } } }",
-      ' Write-Output "qs=$s media=$m"',
+      ...(fgLine ? [fgLine] : []),
+      pc.activeApp ? ' Write-Output "qs=$s media=$m app=$pn|$tt"' : ' Write-Output "qs=$s media=$m"',
       ' Start-Sleep -Seconds 4',
       '}'
     ].join('\n')
@@ -273,6 +286,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       const last = lines.reverse().find((l) => l.startsWith('qs='))
       if (!last) return
       const qs = Number(/qs=(\d+)/.exec(last)?.[1] ?? 0)
+      // P2: the app in front ("app=chrome|Lofi - YouTube").
+      const am = / app=([^|]*)\|?(.*)$/.exec(last)
+      if (am && am[1]) o.onApp?.(am[1].trim(), am[2]?.trim() || null)
       // 2 busy (full screen), 3 full-screen game/video, 4 presentation, 6 Focus Assist / quiet time, 7 full-screen app.
       const next = { fullscreen: [2, 3, 4, 6, 7].includes(qs), call: / media=1/.test(last) }
       if (next.fullscreen === busy.fullscreen && next.call === busy.call) return
@@ -282,9 +298,23 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     })
     watcher.on('exit', () => {
       watcher = null
+      if (restarting) {
+        restarting = false
+        return startWatcher()
+      }
       // It stopped (e.g. PowerShell blocked): try again in a minute.
       setTimeout(startWatcher, 60_000)
     })
+  }
+  /** The PC sensors changed (Settings → Ben on this PC): start the watcher again with them. */
+  const restartWatcher = () => {
+    if (!watcher) return startWatcher()
+    restarting = true
+    try {
+      watcher.kill()
+    } catch {
+      restarting = false
+    }
   }
   startWatcher()
   app.on('will-quit', () => { try { watcher?.kill() } catch { /* fine */ } })
@@ -320,6 +350,23 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     return false
   }
   bindQuiet()
+  // P4: Ctrl+Alt+N adds a task from anywhere. P9: Ctrl+Alt+B starts (and sends) a voice note to Ben.
+  const openFor = (what: 'capture' | 'voice') => {
+    if (!enabled) {
+      enabled = true
+      savePrefs()
+    }
+    if (!win || win.isDestroyed()) open()
+    showWin()
+    win?.webContents.send(`island:${what}`)
+  }
+  for (const [keys, what] of [['Control+Alt+N', 'capture'], ['Control+Alt+B', 'voice']] as const) {
+    try {
+      globalShortcut.register(keys, () => openFor(what))
+    } catch {
+      /* another app has it */
+    }
+  }
   // Settings → Desktop island (from the app window).
   ipcMain.handle('island:getPrefs', (e) => (e.sender === o.appWindow.webContents ? prefs : null))
   ipcMain.handle('island:setPrefs', (e, p: Partial<IslandPrefs>) => {
@@ -342,6 +389,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
 
   if (enabled) open()
   return {
+    capture: () => openFor('capture'),
+    voice: () => openFor('voice'),
+    restartWatcher,
     enabled: () => enabled,
     /** Quiet until (ms), or 0. */
     quietUntil: () => (quietEnd > Date.now() ? quietEnd : 0),

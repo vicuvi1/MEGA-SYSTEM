@@ -2268,3 +2268,14 @@ button.cal-chip:hover { filter: brightness(1.15); }
 .ce-check input { padding: 0 !important; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .sheet-card label.ce-check { display: inline-flex; white-space: nowrap; font-size: 13px; color: var(--text); }
 .cal-hours span.under-now { opacity: 0; }
+
+/* Settings → Ben on this PC (P1) */
+.pc-panel { display: grid; gap: 6px; }
+.pc-h { margin: 14px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.pc-live { margin: 4px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 13px; }
+.pc-list { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.pc-list input { padding: 7px 10px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.14); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 12.5px; }
+.pc-setup { margin-top: 4px; font-size: 13px; }
+.pc-setup summary { cursor: pointer; font-weight: 600; }
+.pc-setup ol { display: grid; gap: 8px; padding-left: 20px; }
+.pc-token { user-select: all; padding: 2px 6px; border-radius: 6px; background: rgb(var(--ink) / 0.08); }

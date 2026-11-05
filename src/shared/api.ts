@@ -391,6 +391,8 @@ export interface LifeApi {
   dayLog?: {
     addFocus(day: string, e: { at: string; subject: string; minutes: number; pct: number }): Promise<void>
     addBlock(day: string, e: { at: string; title: string; result: 'done' | 'half' | 'no' }): Promise<void>
+    /** P8: the day's PC totals for Ben (only if you share them). */
+    setPc?(day: string, line: string): Promise<void>
   }
   /** The notebook (Obsidian-like): your notes and Ben's. */
   notes?: {

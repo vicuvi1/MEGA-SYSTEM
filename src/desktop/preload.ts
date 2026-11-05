@@ -9,7 +9,7 @@ const api: DesktopApi = {
   checkUpdates: () => ipcRenderer.invoke('desktop:checkUpdates'),
   installUpdate: () => ipcRenderer.invoke('desktop:installUpdate'),
   rollback: () => ipcRenderer.invoke('desktop:rollback'),
-  notify: (n: { id: string; title: string; body?: string | null }) => ipcRenderer.invoke('desktop:notify', n),
+  notify: (n: { id: string; title: string; body?: string | null; urgent?: boolean }) => ipcRenderer.invoke('desktop:notify', n),
   onNotifClick: (cb: (id: string) => void) => void ipcRenderer.on('desktop:notif-click', (_e, id) => cb(String(id))),
   onNotifAction: (cb) => void ipcRenderer.on('desktop:notif-action', (_e, a) => cb({ id: String(a?.id ?? ''), action: String(a?.action ?? 'open') })),
   onUpdateStatus: (cb: (s: any) => void) => void ipcRenderer.on('desktop:update', (_e, s) => cb(s)),
@@ -45,6 +45,20 @@ const api: DesktopApi = {
   onIslandPlacement: (cb) => void ipcRenderer.on('island:placement', (_e, p) => cb(p)),
   onIslandToggle: (cb) => void ipcRenderer.on('island:toggle', () => cb()),
   islandReady: () => ipcRenderer.send('island:ready'),
-  showApp: (page) => ipcRenderer.send('island:showApp', page)
+  showApp: (page) => ipcRenderer.send('island:showApp', page),
+  // Ben on this PC (P1–P20)
+  pcGetPrefs: () => ipcRenderer.invoke('pc:getPrefs'),
+  pcSetPrefs: (p) => ipcRenderer.invoke('pc:setPrefs', p),
+  pcToday: () => ipcRenderer.invoke('pc:today'),
+  pcClear: () => ipcRenderer.invoke('pc:clear'),
+  pcFocus: (f) => ipcRenderer.send('pc:focus', f),
+  pcLock: () => ipcRenderer.invoke('pc:lock'),
+  pcDnd: () => ipcRenderer.invoke('pc:dnd'),
+  pcExtensionFolder: () => ipcRenderer.invoke('pc:extensionFolder'),
+  onPcApp: (cb) => void ipcRenderer.on('desktop:app', (_e, a) => cb(a)),
+  onLock: (cb) => void ipcRenderer.on('desktop:lock', (_e, l) => cb(l)),
+  onJump: (cb) => void ipcRenderer.on('desktop:jump', (_e, a) => cb(String(a))),
+  onIslandCapture: (cb) => void ipcRenderer.on('island:capture', () => cb()),
+  onIslandVoice: (cb) => void ipcRenderer.on('island:voice', () => cb())
 }
 contextBridge.exposeInMainWorld('desktop', api)

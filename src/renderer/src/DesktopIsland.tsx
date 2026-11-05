@@ -149,6 +149,8 @@ export function DesktopIsland() {
   // ---- states: one reducer, one timer ----
   const [ui, setUi] = useState<IslandUi>(ISLAND_UI)
   const uiRef = useRef(ui)
+  // P4: the input adds a Todoist task (Ctrl+Alt+N) instead of talking to Ben.
+  const [capture, setCapture] = useState(false)
   const timer = useRef<number | null>(null)
   const focusInput = useCallback(() => {
     desk()?.islandFocus?.()
@@ -178,6 +180,18 @@ export function DesktopIsland() {
     desk()?.onIslandPlacement?.(setPlace)
     desk()?.onIslandPrefs?.(setPrefs)
     desk()?.onIslandToggle?.(() => dispatch({ type: 'toggle' }))
+    // P4: Ctrl+Alt+N from any app: a box to add a task.
+    desk()?.onIslandCapture?.(() => {
+      setCapture(true)
+      dispatch({ type: 'click' })
+      dispatch({ type: 'typing', on: true })
+      focusInput()
+    })
+    // P9: Ctrl+Alt+B: start a voice note to Ben; press again to send it.
+    desk()?.onIslandVoice?.(() => {
+      dispatch({ type: 'click' })
+      window.dispatchEvent(new CustomEvent('island-voice-toggle'))
+    })
     desk()?.onIslandBlur?.(() => dispatch({ type: 'blur' }))
     desk()?.islandReady?.()
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && dispatch({ type: 'close' })
@@ -400,7 +414,16 @@ export function DesktopIsland() {
   }
   const chat = () => {
     const t = text.trim()
-    if (!t || s.ben.busy) return
+    if (!t) return
+    // P4: in capture mode it's a Todoist task, not a message to Ben.
+    if (capture) {
+      setText('')
+      setCapture(false)
+      dispatch({ type: 'typing', on: false })
+      send({ kind: 'clipSave', to: 'task', text: t, alertId: 'capture' })
+      return
+    }
+    if (s.ben.busy) return
     setText('')
     dispatch({ type: 'typing', on: false })
     send({ kind: 'chat', text: t })
@@ -462,6 +485,14 @@ export function DesktopIsland() {
     setRec(null)
     dispatch({ type: 'typing', on: !!text.trim() })
   }
+  // P9: the shortcut toggles recording (press to start, press again to send).
+  const recRef = useRef({ rec, startRec, stopRec })
+  recRef.current = { rec, startRec, stopRec }
+  useEffect(() => {
+    const on = () => (recRef.current.rec ? recRef.current.stopRec() : void recRef.current.startRec())
+    window.addEventListener('island-voice-toggle', on)
+    return () => window.removeEventListener('island-voice-toggle', on)
+  }, [])
   // Drop a task (text) on the island: booked in the next free slot today.
   const [dropping, setDropping] = useState(false)
   const dropProps = {
@@ -772,7 +803,8 @@ export function DesktopIsland() {
           ref={input}
           value={text}
           onChange={(e) => (setText(e.target.value), uiRef.current.typing || dispatch({ type: 'typing', on: true }))}
-          placeholder="spent 40 taxi · water 500 · 30 pushups · ask Ben"
+          placeholder={capture ? 'Add a task: call bank friday 10:00 · Esc to cancel' : 'spent 40 taxi · water 500 · 30 pushups · ask Ben'}
+          onKeyDown={(e) => e.key === 'Escape' && setCapture(false)}
           onPointerDown={() => desk()?.islandFocus?.()}
           onFocus={() => dispatch({ type: 'typing', on: true })}
           onBlur={() => dispatch({ type: 'typing', on: !!text.trim() })}

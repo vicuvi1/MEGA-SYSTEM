@@ -1,6 +1,7 @@
 // Desktop only: the app window (it keeps running hidden in the tray) feeds the
 // desktop island its snapshot and does what the island's buttons ask. The
 // island window itself never opens your data, so there is one owner of it.
+import { focusQualityPc, lateNight } from '@core/pcActivity'
 import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
@@ -54,7 +55,89 @@ const localDayOf = (t: number) => {
   const d = new Date(t)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-interface Guard { startedAt: number; endsAt: number; subject: string; idle: number; last: number }
+interface Guard { startedAt: number; endsAt: number; subject: string; idle: number; last: number; distract?: number }
+
+// ---- Ben on this PC (P3, P6, P7, P12, P13, P16) ----
+/** The app in front (only with the sensor on), and how long you've been in a distracting one. */
+let pcNow: { label: string; kind: 'work' | 'distract' | 'neutral'; since: number } | null = null
+const PC_SNOOZE = 'ls.pcDistractSnooze'
+/** The PC was locked during focus: when (P6). */
+let lockedAt: number | null = null
+const BACK = 'ls.pcBack'
+const LATE = 'ls.lateNightAsked'
+const BLOCK_NOTIFIED = 'ls.blockNotified'
+/** P16: messages to Ben typed while offline, sent when the internet is back. */
+const OUTBOX = 'ls.islandOutbox'
+function pcSample(a: { label: string; kind: 'work' | 'distract' | 'neutral'; seconds: number }) {
+  const now = Date.now()
+  pcNow = pcNow && pcNow.label === a.label ? pcNow : { label: a.label, kind: a.kind, since: now }
+  // P7: time in a distracting app counts against the running focus.
+  if (a.kind === 'distract') {
+    const g = get<Guard | null>(GUARD, null)
+    if (g) {
+      g.distract = (g.distract ?? 0) + a.seconds
+      put(GUARD, g)
+    }
+  }
+}
+/** P3: in a distracting app for a minute during a focus timer. */
+function distractAlert(running: { subject: string; startedAt: number } | null, now: number, dismissed: Record<string, number>): IslandAlert | null {
+  if (!running || !pcNow || pcNow.kind !== 'distract' || now - pcNow.since < 60_000) return null
+  if (get<number>(PC_SNOOZE, 0) > now) return null
+  const id = `distract:${running.startedAt}:${pcNow.label}`
+  if ((dismissed[id] ?? 0) > now) return null
+  const into = Math.max(1, Math.round((now - running.startedAt) / 60000))
+  return {
+    id,
+    kind: 'distract',
+    title: `That's ${pcNow.label}`,
+    text: `${into} min into ${running.subject}. Back to it?`,
+    face: '👀',
+    actions: [
+      { label: '↩ Back', action: { kind: 'dismiss', id, snoozeMin: 10 }, primary: true },
+      { label: "It's for this", action: { kind: 'pcWork', app: pcNow.label, alertId: id } },
+      { label: '⏹ Stop & log', action: { kind: 'stop' } }
+    ]
+  }
+}
+/** P6: back after locking the PC during focus: add the time away, or stop. */
+function backAlert(running: { subject: string } | null, now: number, dismissed: Record<string, number>): IslandAlert | null {
+  const b = get<{ at: number; away: number } | null>(BACK, null)
+  if (!b || !running || now - b.at > 10 * 60_000 || b.away < 2) return null
+  const id = `back:${b.at}`
+  if ((dismissed[id] ?? 0) > now) return null
+  return {
+    id,
+    kind: 'back',
+    title: 'Welcome back',
+    text: `You were away ${b.away} min during ${running.subject}. Keep going?`,
+    face: '👋',
+    actions: [
+      { label: `▶ Add ${Math.min(60, b.away)} min`, action: { kind: 'extend', minutes: Math.min(60, b.away) }, primary: true },
+      { label: '▶ Keep going', action: { kind: 'dismiss', id } },
+      { label: '⏹ Stop & log', action: { kind: 'stop' } }
+    ]
+  }
+}
+/** P13: still at the PC half an hour after bedtime. */
+function lateAlert(now: number, bedTarget: string, dismissed: Record<string, number>): IslandAlert | null {
+  if (!lateNight(new Date(now), bedTarget, idleSec)) return null
+  const day = localDayOf(now - 6 * 3600_000)
+  const id = `late:${day}`
+  if ((dismissed[id] ?? 0) > now || get<string>(LATE, '') === `${day}:done`) return null
+  return {
+    id,
+    kind: 'late',
+    title: 'Still up?',
+    text: `It's ${new Date(now).toTimeString().slice(0, 5)} and your bedtime was ${bedTarget}. Close the day: tomorrow starts tonight.`,
+    face: '🌙',
+    actions: [
+      { label: '🌙 Going to bed', action: { kind: 'bed' }, primary: true },
+      { label: 'Close the day', action: { kind: 'closeDay' } },
+      { label: '20 min more', action: { kind: 'dismiss', id, snoozeMin: 20 } }
+    ]
+  }
+}
 
 /** While a focus timer runs: time away from the PC counts against its quality. */
 function guardTick(sec: number) {
@@ -202,6 +285,28 @@ export function IslandFeed() {
         }
       }
     }
+    // P12: a block starts and no timer runs: a Windows notification with [Start] [5 min] [Skip], once.
+    if (!running && window.desktop?.notify) {
+      const b = blocks.current.list.find((x) => x.start <= now && now - x.start < 3 * 60_000 && x.end - now >= 15 * 60_000)
+      const notified = get<Record<string, number>>(BLOCK_NOTIFIED, {})
+      if (b && !notified[blockKey(b)]) {
+        put(BLOCK_NOTIFIED, { ...Object.fromEntries(Object.entries(notified).slice(-40)), [blockKey(b)]: now })
+        const mins = Math.round((b.end - now) / 60000)
+        void window.desktop.notify({ id: `block:${blockKey(b)}|${encodeURIComponent(b.title)}|${mins}`, title: `▶ ${b.title}`, body: `Starts now · ${mins} min`, actions: [{ id: 'start', label: '▶ Start' }, { id: 'later5', label: 'In 5 min' }, { id: 'skip', label: 'Skip' }] }).catch(() => {})
+      }
+    }
+    // P8: if you share them, the day's PC totals go to the day log (Ben reads it in the evening), every 30 min.
+    if (now - get<number>('ls.pcShareAt', 0) > 30 * 60_000 && window.desktop?.pcGetPrefs) {
+      put('ls.pcShareAt', now)
+      void (async () => {
+        const p = await window.desktop!.pcGetPrefs!().catch(() => null)
+        if (!p?.prefs.shareTotals) return
+        const t = await window.desktop!.pcToday?.().catch(() => null)
+        if (t?.line) await life.dayLog?.setPc?.(localDayOf(now), t.line).catch(() => {})
+      })()
+    }
+    // Focus state for the PC (P19 site blocker, P20 holding notifications).
+    window.desktop?.pcFocus?.({ running: !!running, subject: running?.subject ?? '', endsAt: running?.endsAt ?? 0 })
     const seen = get<number>(SEEN, 0) || now
     const faceOf = (m?: string) => (m && MOOD_FACE[m as Mood]) || status.face
     const coach = log.filter((e) => e.role === 'coach')
@@ -268,6 +373,8 @@ export function IslandFeed() {
         const firstBlock = blocks.current.list.filter((b) => b.end > now).sort((x, y) => x.start - y.start)[0] ?? null
         const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || 2700 }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
         return (
+          backAlert(running, now, dismissed) ??
+          distractAlert(running, now, dismissed) ??
           bedAlert(dismissed, now, !!running) ??
           qualityAlert(dismissed, now) ??
           (() => {
@@ -281,6 +388,7 @@ export function IslandFeed() {
             return c && !call ? clipAlert(c.text, c.at, dismissed, now) : null
           })() ??
           smart ??
+          (running ? null : lateAlert(now, target, dismissed)) ??
           windDownAlert(wd, now, dismissed) ??
           (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
           moveAlert(body) ??
@@ -307,7 +415,7 @@ export function IslandFeed() {
       focusGuard: (() => {
         const gg = get<Guard | null>(GUARD, null)
         if (!running || !gg || gg.startedAt !== running.startedAt) return null
-        return { pct: focusQuality((now - gg.startedAt) / 1000, gg.idle), idleMin: Math.round(gg.idle / 60) }
+        return { pct: focusQualityPc((now - gg.startedAt) / 1000, gg.idle, gg.distract ?? 0), idleMin: Math.round((gg.idle + (gg.distract ?? 0)) / 60) }
       })(),
       sleep: (() => {
         const d = new Date(now)
@@ -417,6 +525,25 @@ export function IslandFeed() {
           case 'autoFocus':
             put(AUTO, a.on)
             break
+          case 'pcWork': {
+            // P3: "It's for this": this app is work from now on (your list in Settings → Ben on this PC).
+            const cur = await window.desktop?.pcGetPrefs?.()
+            if (cur) await window.desktop!.pcSetPrefs!({ work: [...cur.prefs.work, a.app.toLowerCase()] })
+            put(PC_SNOOZE, Date.now() + 30 * 60_000)
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[a.alertId] = Date.now() + 864e5
+            put(DISMISSED, d)
+            said = `✓ ${a.app} counts as work now`
+            break
+          }
+          case 'lockPc': {
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[a.alertId] = Date.now() + 864e5
+            put(DISMISSED, d)
+            put(LAST_MOVE, Date.now())
+            if (!(await window.desktop?.pcLock?.())) throw new Error('Locking works on Windows only')
+            break
+          }
           case 'eyeBreaks':
             put(EYES, a.on)
             break
@@ -530,6 +657,12 @@ export function IslandFeed() {
               break
             }
             if (!life.coach) throw new Error('Ben is not available here')
+            // P16: no internet: it waits and goes to Ben when you're back online.
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+              put(OUTBOX, [...get<string[]>(OUTBOX, []), a.text].slice(-10))
+              said = "📴 Offline: Ben will answer when you're back online"
+              break
+            }
             if (busy.current.on) throw new Error('Ben is still answering your last message')
             busy.current = { on: true, steps: [] }
             void send()
@@ -576,6 +709,42 @@ export function IslandFeed() {
         if (!text) return
         put(CLIP, { text, at: Date.now() })
         void sendRef.current()
+      })
+      // Ben on this PC: the app in front (P2/P3/P7), lock/unlock (P6), taskbar shortcuts (P17), block buttons (P12).
+      desk.onPcApp?.((a) => {
+        const before = pcNow?.kind
+        pcSample(a)
+        if (before !== pcNow?.kind) void sendRef.current()
+      })
+      desk.onLock?.((l) => {
+        if (l.locked) lockedAt = l.at
+        else if (lockedAt) {
+          put(BACK, { at: l.at, away: Math.round((l.at - lockedAt) / 60000) })
+          lockedAt = null
+          void sendRef.current()
+        }
+      })
+      desk.onJump?.((j) => {
+        if (j === 'focus25') void actRef.current({ kind: 'start', subject: 'Focus', minutes: 25 })
+      })
+      desk.onNotifAction?.((n) => {
+        if (!n.id.startsWith('block:')) return
+        const [, title = 'Focus', mins = '25'] = n.id.slice(6).split('|')
+        const subject = decodeURIComponent(title)
+        if (n.action === 'start' || n.action === 'open') void actRef.current({ kind: 'start', subject, minutes: Math.max(5, Math.min(180, Number(mins) || 25)) })
+        else if (n.action === 'later5')
+          setTimeout(() => {
+            void window.desktop?.notify?.({ id: n.id, title: `▶ ${subject}`, body: 'Ready now?', actions: [{ id: 'start', label: '▶ Start' }, { id: 'skip', label: 'Skip' }] })
+          }, 5 * 60_000)
+      })
+      // P16: back online: what you typed offline goes to Ben, one by one.
+      window.addEventListener('online', () => {
+        const list = get<string[]>(OUTBOX, [])
+        if (!list.length) return
+        put(OUTBOX, [])
+        void (async () => {
+          for (const t of list) await actRef.current({ kind: 'chat', text: t })
+        })()
       })
       // Every 15 s from the desktop: how long since your last mouse/keys.
       desk.onIdle?.((sec) => {

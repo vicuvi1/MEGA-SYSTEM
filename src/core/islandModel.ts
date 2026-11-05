@@ -30,11 +30,15 @@ export type IslandAction = { id?: string } & (
   | { kind: 'push'; block: IslandBlock; minutes: number }
   | { kind: 'blockResult'; block: IslandBlock; result: 'done' | 'half' | 'no'; alertId: string }
   | { kind: 'autoFocus'; on: boolean }
+  /** P3: "It's for this": this app counts as work from now on. */
+  | { kind: 'pcWork'; app: string; alertId: string }
+  /** P14: lock the PC for a real break. */
+  | { kind: 'lockPc'; alertId: string }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back'
   title: string
   text: string
   face?: string

@@ -9,6 +9,7 @@ import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
 import { createBackups } from './backups'
+import { createPc } from './pc'
 
 const origin = 'life-system://app'
 const server = 'https://mega-system-ten.vercel.app'
@@ -36,6 +37,8 @@ if (firstCopy) void app.whenReady().then(async () => {
     done(own(url) && (media || permission === 'notifications' || permission === 'clipboard-sanitized-write'))
   })
   session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) => (permission === 'media' || permission === 'notifications' || permission === 'clipboard-sanitized-write') && origin.startsWith('life-system://app'))
+  // Ben on this PC (P1–P20): set up once the window exists.
+  const pcRef: { current: Awaited<ReturnType<typeof createPc>> | null } = { current: null }
   const dir = app.getPath('userData')
   await mkdir(dir, { recursive: true })
   const file = join(dir, 'life-local.sqlite')
@@ -142,7 +145,11 @@ if (firstCopy) void app.whenReady().then(async () => {
       return false
     }
   }
+  // P17: taskbar shortcuts arrive as a second start with --action=…
+  let pcAction: (a: string) => void = () => {}
   app.on('second-instance', (_e, argv) => {
+    const a = argv.find((x) => x.startsWith('--action='))?.slice(9)
+    if (a) return pcAction(a)
     if (!fromLink(argv)) showApp()
   })
 
@@ -150,8 +157,10 @@ if (firstCopy) void app.whenReady().then(async () => {
   // plays its own chime; a click opens Life System and runs the action.
   const shown = new Map<string, Notification>()
   const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  handle('desktop:notify', (n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[] }) => {
+  handle('desktop:notify', (n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[]; urgent?: boolean }) => {
     if (!Notification.isSupported() || typeof n?.id !== 'string') return false
+    // P20: during focus, Life System's own notifications wait (unless urgent, or a focus block's own).
+    if (pcRef.current?.prefs().holdNotifs && pcRef.current.focus().running && !n.urgent && !n.id.startsWith('block:')) return false
     const title = String(n.title).slice(0, 120)
     const body = String(n.body ?? '').slice(0, 240)
     const link = (a: string) => xml(`lifesystem://notif?id=${encodeURIComponent(n.id)}&a=${encodeURIComponent(a)}`)
@@ -185,7 +194,37 @@ if (firstCopy) void app.whenReady().then(async () => {
   })
 
   let refreshTray = () => {}
-  const island = createIsland({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, showApp, dir, onChange: () => refreshTray() })
+  const island = createIsland({
+    origin,
+    preload: join(__dirname, '../preload/index.cjs'),
+    appWindow: win,
+    showApp,
+    dir,
+    onChange: () => refreshTray(),
+    pc: () => ({ activeApp: !!pcRef.current?.prefs().activeApp, titles: !!pcRef.current?.prefs().titles }),
+    onApp: (proc, title) => pcRef.current?.sample(proc, title, 4)
+  })
+  const pc = await createPc({
+    dir,
+    win,
+    onPrefs: (p) => {
+      island.restartWatcher()
+      pcPrefsNow = p
+    },
+    onAction: (a) => {
+      if (a === 'talk') island.voice()
+      else if (a === 'capture') island.capture()
+      else if (a === 'focus25') win.webContents.send('desktop:jump', a)
+    }
+  })
+  pcRef.current = pc
+  let pcPrefsNow = pc.prefs()
+  pcAction = (a) => {
+    if (a === 'talk') island.voice()
+    else if (a === 'capture') island.capture()
+    else win.webContents.send('desktop:jump', a)
+  }
+  island.restartWatcher()
 
   // Tray: open, island on/off, start with Windows, quit.
   const icon = nativeImage.createFromPath(join(ui, 'icon.png')).resize({ width: 16, height: 16 })
@@ -298,7 +337,7 @@ if (firstCopy) void app.whenReady().then(async () => {
     }
     setInterval(tick, 60_000)
     // Seconds since the last mouse/keys, for the island (drift, focus quality).
-    setInterval(() => win.webContents.send('desktop:idle', powerMonitor.getSystemIdleTime()), 15_000)
+    setInterval(() => pcPrefsNow.idle && win.webContents.send('desktop:idle', powerMonitor.getSystemIdleTime()), 15_000)
     // Copied text, for the island's "save this?". The check happens HERE, in
     // the main process: only short dated text ("exam friday 10:00") ever
     // reaches a page; passwords, codes, keys, links and long text never do.
@@ -307,7 +346,7 @@ if (firstCopy) void app.whenReady().then(async () => {
     lastClip = await readClip()
     setInterval(async () => {
       const t = await readClip()
-      if (!t || t === lastClip) return
+      if (!pcPrefsNow.clipboard || !t || t === lastClip) return
       lastClip = t
       const safe = clipWorthSaving(t)
       if (safe) win.webContents.send('desktop:clip', safe)
@@ -319,7 +358,11 @@ if (firstCopy) void app.whenReady().then(async () => {
     powerMonitor.on('lock-screen', leaving)
     powerMonitor.on('suspend', leaving)
     powerMonitor.on('shutdown', leaving)
-    powerMonitor.on('unlock-screen', () => setTimeout(tick, 1500))
+    powerMonitor.on('lock-screen', () => win.webContents.send('desktop:lock', { locked: true, at: Date.now() }))
+    powerMonitor.on('unlock-screen', () => {
+      setTimeout(tick, 1500)
+      win.webContents.send('desktop:lock', { locked: false, at: Date.now() })
+    })
     powerMonitor.on('resume', () => setTimeout(tick, 3000))
   }
   // Look for a new version shortly after start, every 30 minutes and when the

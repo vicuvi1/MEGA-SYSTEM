@@ -8,6 +8,8 @@ export const DAY_LOG = 'island_day_log'
 export interface DayLogDay {
   focus: { at: string; subject: string; minutes: number; pct: number }[]
   blocks: { at: string; title: string; result: 'done' | 'half' | 'no' }[]
+  /** P8: the day's PC totals ("VS Code 3h10, YouTube 35m · work 3h, distracting 40m"), only if you share them. */
+  pc?: string
 }
 type All = Record<string, DayLogDay>
 
@@ -41,6 +43,14 @@ export function addBlockResult(db: any, day: string, e: DayLogDay['blocks'][numb
   write(db, all)
 }
 
+export function setPcLine(db: any, day: string, line: string): void {
+  const all = read(db)
+  const d = all[day] ?? empty()
+  d.pc = line.slice(0, 300)
+  all[day] = d
+  write(db, all)
+}
+
 export function dayLog(db: any, day: string): DayLogDay {
   return read(db)[day] ?? empty()
 }
@@ -57,5 +67,6 @@ export function dayLogLine(d: DayLogDay): string {
     const n = (r: string) => d.blocks.filter((x) => x.result === r).length
     parts.push(`Blocks he checked off: ${n('done')} done, ${n('half')} half, ${n('no')} not done${d.blocks.filter((x) => x.result !== 'done').length ? ` (${d.blocks.filter((x) => x.result !== 'done').map((x) => `${x.title}: ${x.result}`).join('; ')})` : ''}`)
   }
+  if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`)
   return parts.join('. ')
 }

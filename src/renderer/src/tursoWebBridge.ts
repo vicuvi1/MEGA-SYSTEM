@@ -52,7 +52,7 @@ import { profileView } from './web/coachProfile'
 import { addNotif, dismissNotif, listNotifs, readNotifs, snoozeNotif } from './web/notifications'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings } from '@core/eventAlerts'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
-import { addBlockResult, addFocusQuality } from './web/dayLog'
+import { addBlockResult, addFocusQuality, setPcLine } from './web/dayLog'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 
 /**
@@ -1056,6 +1056,9 @@ export function createTursoWebBridge(): Bridge {
       },
       addBlock: async (day: string, e: { at: string; title: string; result: 'done' | 'half' | 'no' }) => {
         await (await mirrorP).write((db) => addBlockResult(db as any, day, e))
+      },
+      setPc: async (day: string, line: string) => {
+        await (await mirrorP).write((db) => setPcLine(db as any, day, line))
       }
     },
     notes: {
