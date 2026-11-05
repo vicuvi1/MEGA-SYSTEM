@@ -17,6 +17,9 @@ import type { CleanChange } from '@core/todoistClean'
 import { useSwipeRows } from '../swipe'
 import { useLive } from '../live'
 
+/** A touch screen: no keyboard-shortcut hints in placeholders (U6). */
+const TOUCH = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches
+
 type View = 'areas' | 'today' | 'upcoming' | 'all'
 
 const P_COLOR: Record<number, string> = { 4: '#FF5D6C', 3: '#FF9F43', 2: '#5BA8FF', 1: 'var(--muted)' }
@@ -342,7 +345,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
           }}
         >
           <Icon name="plus" size={16} />
-          <input ref={addRef} value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a task… e.g. “fix lab 3 friday 18:00 p1”  (n)" maxLength={300} />
+          <input ref={addRef} value={text} onChange={(e) => setText(e.target.value)} placeholder={TOUCH ? "Add a task… “fix lab 3 friday 18:00 p1”" : "Add a task… e.g. “fix lab 3 friday 18:00 p1”  (n)"} maxLength={300} />
           <select value={addArea} onChange={(e) => setAddArea(e.target.value)} aria-label="Area">
             <option value="auto">Area: automatic</option>
             {data.areas.map((a) => (
@@ -376,7 +379,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
                 ⚑ P{5 - p}
               </button>
             ))}
-            <input ref={searchRef} className="ta-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…  /" />
+            <input ref={searchRef} className="ta-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={TOUCH ? "Search…" : "Search…  /"} />
             <button className="btn small ta-clean" onClick={() => setCleaning(true)} disabled={!data.tasks.length} title="The coach suggests fixes: typos, short titles, areas, priorities, dates, duplicates. You approve each one.">
               <Icon name="spark" size={13} /> Clean up
             </button>

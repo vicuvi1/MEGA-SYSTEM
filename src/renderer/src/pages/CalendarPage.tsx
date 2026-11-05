@@ -659,7 +659,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                         {d === today && nowMin >= START_H * 60 && <i className="cal-now" style={{ top: ((nowMin - START_H * 60) / 60) * hourPx }} />}
                         {lay.placed.map(({ it, left, width, backdrop }) => {
                           const top = yOf(it.start)
-                          const h = Math.max(18, ((Math.min(it.end, END_H * 60) - Math.max(it.start, START_H * 60)) / 60) * hourPx - 2)
+                          const h = Math.max(22, ((Math.min(it.end, END_H * 60) - Math.max(it.start, START_H * 60)) / 60) * hourPx - 2)
                           const tiny = h < 34
                           // Events inside a long "window" sit a little in, so the window's name stays visible.
                           const inset = !backdrop && bands.some((b) => b.start < it.end && it.start < b.end) ? 12 : 0

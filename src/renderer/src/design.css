@@ -2045,3 +2045,42 @@ body:has(.bb-bubble) main { padding-bottom: 96px; }
 @media (max-width: 760px) { body:has(.bb-bubble) main { padding-bottom: 72px; } }
 /* Smaller and quieter while you scroll a page. */
 .bb-bubble:not(.open) { opacity: 0.92; }
+
+/* ===== One button system (U5): primary (solid accent), secondary (filled),
+   quiet (ghost: text with a visible hover), and a clear disabled state. ===== */
+:root .btn:disabled, :root .btn[aria-disabled='true'] { cursor: not-allowed; transform: none !important; filter: none !important; box-shadow: none !important; }
+:root .btn:not(.primary):disabled { opacity: 0.45; }
+/* A disabled main button looks switched off, never a faint version of "go". */
+:root .btn.primary:disabled { background: var(--surface-3, rgb(var(--ink) / 0.1)); color: var(--muted); opacity: 1; }
+:root .btn.ghost { color: var(--muted); }
+:root .btn.ghost:hover:not(:disabled) { color: var(--text); }
+:root .btn.danger { color: var(--red); }
+:root .btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+/* ===== Light mode that reads well (U7) ===== */
+:root[data-theme='light'] { --gold: #8a6400; --lime-text: #3f5700; }
+:root[data-theme='light'] .isl { box-shadow: 0 4px 14px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.06); }
+:root[data-theme='light'] .bb-bubble { box-shadow: 0 6px 18px rgb(0 0 0 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.06); }
+:root[data-theme='light'] .btn.primary:not(:disabled) { color: #151a00; }
+
+/* ===== Calendar: short events stay readable (U4) ===== */
+.cal-item { container-type: inline-size; }
+.cal-item.tiny b { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-item.tiny b small { margin-left: 4px; opacity: 0.75; }
+/* Too narrow for words (several at once): just the colour; the title shows on hover/tap. */
+@container (max-width: 46px) { .cal-item b, .cal-item small, .cal-item .cal-tasks { display: none; } }
+/* The first hour label is never cut by the top edge. */
+.cal-hours span:first-child { transform: none !important; top: 2px !important; }
+
+/* ===== Tasks on a phone (U6): the list first, actions on tap ===== */
+@media (max-width: 760px) {
+  .ta-add:not(:focus-within) select, .ta-add:not(:focus-within) .btn { display: none; }
+  .ta-add { flex-wrap: wrap; }
+  .ta-filters { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; gap: 6px; }
+  .ta-filters::-webkit-scrollbar { display: none; }
+  .ta-filters > * { flex: none; }
+  .ta-filters .ta-search { flex: 0 0 150px; min-width: 0; }
+  .ta-task:not(.hot):not(:focus-within) .ta-actions { display: none; }
+  .ta-tabs { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+  .ta-tabs > * { flex: none; }
+}

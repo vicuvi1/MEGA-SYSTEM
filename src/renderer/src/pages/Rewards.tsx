@@ -129,11 +129,11 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
                     <button className="btn small ghost" onClick={() => { setEditing(r.id); setForm({ title: r.title, price: String(r.price), realCost: r.realCost ? String(r.realCost) : '', note: r.note ?? '' }) }}>
                       Edit
                     </button>
-                    <button className="btn small ghost" onClick={() => void archive(r)}>
+                    <button className="btn small ghost danger" onClick={() => void archive(r)}>
                       Remove
                     </button>
                     <button className={`btn small ${sure === r.id || !blocked ? 'primary' : ''}`} disabled={!!blocked} onClick={() => void redeem(r)} onBlur={() => setSure(null)}>
-                      {sure === r.id ? `Confirm −${r.price}` : 'Get it'}
+                      {sure === r.id ? `Confirm −${r.price}` : blocked ? (left ? `${left.toLocaleString()} more pts` : 'Not yet') : 'Get it'}
                     </button>
                   </span>
                 </div>
