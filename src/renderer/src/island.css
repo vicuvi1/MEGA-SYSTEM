@@ -58,7 +58,7 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di-face-sm { font-size: 17px; line-height: 1; }
 .di-act-ico { font-size: 15px; line-height: 1; }
 .di-moon-sm { display: inline-block; }
-.di-dot { position: absolute; top: 5px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: di-pulse 1.8s infinite; }
+.di-dot { flex: none; width: 7px; height: 7px; margin-left: -2px; border-radius: 50%; background: var(--red); animation: di-pulse 1.8s infinite; }
 @keyframes di-pulse { 50% { box-shadow: 0 0 0 5px rgb(255 90 95 / 0.22); } }
 
 /* peek */

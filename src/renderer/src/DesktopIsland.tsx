@@ -101,7 +101,7 @@ function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
   return <Ring pct={(now - run.startedAt) / Math.max(1, run.endsAt - run.startedAt)} over={now > run.endsAt} size={size} />
 }
 
-const SPRING_OPEN = { type: 'spring', stiffness: 400, damping: 30, mass: 0.8 } as const
+const SPRING_OPEN = { type: 'spring', stiffness: 340, damping: 28, mass: 0.9 } as const
 const SPRING_CLOSE = { type: 'spring', stiffness: 520, damping: 44, mass: 0.8 } as const
 const PAD = 6 // the shape's distance from the window edge
 
