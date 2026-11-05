@@ -146,7 +146,7 @@ export function normalizeState(raw) {
       .map((g) => (g.id === 'g-main' && !g.updatedAt && g.account === 'all' && g.name === 'Safe goal' ? { ...g, account: 'savings' } : g))
     : [{ id: 'g-main', name: settings.goal.name || 'Safe goal', emoji: '🏦', target: settings.goal.target || 0, account: settings.goal.account || 'all', saved: 0, history: [], deadline: null, doneAt: null, theme: 'gold', updatedAt: 0 }];
   const goalAllocations = (Array.isArray(raw.goalAllocations) ? raw.goalAllocations : []).filter((a) => a && typeof a.id === 'string' && typeof a.goalId === 'string' && Number.isSafeInteger(a.amount) && a.amount > 0 && isValidISO(a.date || '')).map((a) => ({ ...a, currency: a.currency || baseCur, updatedAt: a.updatedAt || 0 }));
-  return { version: SCHEMA_VERSION, settings, tx, people, recurring, invoices, netWorth, goals, goalAllocations, deleted, rates: raw.rates || null, meta: { ...base.meta, ...(raw.meta || {}) } };
+  return { version: SCHEMA_VERSION, settings, tx, people, recurring, invoices, netWorth, goals, goalAllocations, deleted, rates: raw.rates || (raw.lastRates?.usd?.MDL ? { usd: { ...raw.lastRates.usd }, crypto: {}, history: {}, fetchedAt: Date.parse(`${raw.lastRates.date}T12:00:00`) || null, synced: true } : null), meta: { ...base.meta, ...(raw.meta || {}) } };
 }
 
 function validTx(t) {
@@ -208,6 +208,97 @@ export function moveAccountBy(state, id, dir, now = Date.now()) {
 }
 
 export const activeAccounts = (state) => orderedAccounts(state).filter((a) => !a.archived);
+
+// Where a new record goes when you haven't picked an account: the lei
+// account you last used for that category, else your main lei wallet.
+// Never a business or a foreign-currency account by default.
+export function defaultAccount(state, type = 'expense', category = null) {
+  const baseCur = state.settings.currency || 'MDL';
+  const ok = (a) => a && !a.archived && a.kind !== 'business' && a.kind !== 'crypto' && (a.currency || baseCur) === baseCur;
+  if (category) {
+    const last = sortTx(state.tx).find((t) => t.type === type && t.category === category && ok(account(state, t.account)));
+    if (last) return last.account;
+  }
+  const list = activeAccounts(state).filter(ok);
+  const wallet = list.find((a) => a.id === 'wallet') || list.find((a) => a.kind === 'cash' && !a.savings) || list.find((a) => !a.savings && (a.kind === 'card' || a.kind === 'virtual'));
+  return (wallet || list.find((a) => !a.savings) || list[0] || activeAccounts(state)[0] || state.settings.accounts[0])?.id;
+}
+
+// The rates to price foreign money with. Today's live rates when this
+// device has them; otherwise the newest known ones (synced from your other
+// devices, the saved history, or the rate on your last record in that
+// currency), so a USD or EUR account never silently drops out of totals.
+export function knownRates(state) {
+  const r = state.rates || null;
+  const baseCur = state.settings.currency || 'MDL';
+  const need = new Set([baseCur, ...state.settings.accounts.map((a) => a.currency)].filter((c) => c && c !== 'USD'));
+  const usd = { ...(r?.usd || {}) };
+  const missing = () => [...need].filter((c) => !(usd[c] > 0));
+  if (!missing().length) return r;
+  const hist = r?.history || {};
+  for (const d of Object.keys(hist).sort().reverse()) {
+    for (const c of missing()) if (hist[d][c] > 0) usd[c] = hist[d][c];
+    if (!missing().length) break;
+  }
+  if (missing().length) {
+    // A record's rate is "base currency per 1 unit".
+    const perBase = {};
+    for (const t of sortTx(state.tx)) if (t.currency && t.currency !== baseCur && t.rate > 0 && !perBase[t.currency]) perBase[t.currency] = t.rate;
+    const basePerUsd = usd[baseCur] > 0 ? usd[baseCur] : perBase.USD;
+    if (basePerUsd > 0) {
+      usd[baseCur] = basePerUsd;
+      for (const c of missing()) if (perBase[c] > 0) usd[c] = basePerUsd / perBase[c];
+    }
+  }
+  return { ...(r || {}), usd, crypto: r?.crypto || {} };
+}
+
+// How old the rates in use are: "rates from 3 Nov" when older than a day
+// and a half (or when there are no live ones on this device at all).
+export function ratesAge(state, now = Date.now()) {
+  const at = state.rates?.fetchedAt || 0;
+  const d = at ? new Date(at) : null;
+  const date = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
+  return { at, date, stale: !at || now - at > 36 * 3600e3 };
+}
+
+// Free tags in a note: "dinner #trip #friends" -> ['trip', 'friends'].
+export function tagsOf(note) {
+  const out = [];
+  for (const m of String(note || '').matchAll(/(^|\s)#([\p{L}\p{N}_-]{1,30})/gu)) {
+    const t = m[2].toLowerCase();
+    if (!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
+// Every tag you used, most used first.
+export function allTags(state) {
+  const n = new Map();
+  for (const t of state.tx) for (const g of tagsOf(t.note)) n.set(g, (n.get(g) || 0) + 1);
+  return [...n].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([tag, count]) => ({ tag, count }));
+}
+
+// Splits one receipt into parts ({ amount, category, person, note }). The
+// parts must add up to the original; each becomes its own record with the
+// same date and account. The first part keeps the original's id.
+export function splitRecord(tx, parts, now = Date.now()) {
+  const total = parts.reduce((a, p) => a + (Number.isInteger(p.amount) ? p.amount : 0), 0);
+  if (tx.type === 'transfer' || parts.length < 2 || total !== tx.amount || parts.some((p) => !(p.amount > 0))) return null;
+  const fullBase = Number.isInteger(tx.base) ? tx.base : tx.amount;
+  let baseLeft = fullBase;
+  return parts.map((p, i) => {
+    const base = i === parts.length - 1 ? baseLeft : Math.round((p.amount * fullBase) / tx.amount);
+    baseLeft -= base;
+    const out = { ...tx, id: i === 0 ? tx.id : uid() + i, createdAt: i === 0 ? tx.createdAt : (tx.createdAt || now) + i, updatedAt: now, amount: p.amount, base, category: p.category || tx.category, splitOf: tx.id };
+    delete out.orig;
+    delete out.debt;
+    if (p.person) out.person = p.person;
+    else if (p.person === null) delete out.person;
+    if (p.note) out.note = p.note;
+    return out;
+  });
+}
 export const jar = (state, id) => state.settings.jars.find((j) => j.id === id);
 export const savingsJar = (state) => state.settings.jars.find((j) => j.savings) || state.settings.jars[0];
 
@@ -311,13 +402,14 @@ export function accountBalances(state, upTo = null) {
 export function accountValues(state, upTo = null) {
   const baseCur = state.settings.currency;
   const bal = accountBalances(state, upTo);
+  const rates = knownRates(state);
   return state.settings.accounts.map((a) => {
     const own = bal[a.id] || 0;
-    let inBase = convert(own, a.currency, baseCur, state.rates);
+    let inBase = convert(own, a.currency, baseCur, rates);
     let coins = 0;
     let coinsKnown = true;
     for (const h of a.holdings || []) {
-      const v = coinValue(Number(h.qty), h.asset, baseCur, state.rates);
+      const v = coinValue(Number(h.qty), h.asset, baseCur, rates);
       if (v == null) coinsKnown = false; else coins += v;
     }
     if (inBase != null) inBase += coins;
@@ -1323,4 +1415,15 @@ export function reportSeries(state, from, to) {
     if (b) b[t.type === 'income' ? 'income' : 'expense'] += B(t);
   }
   return { unit: days <= 62 ? 'day' : 'month', rows: [...buckets.values()] };
+}
+
+// "$12", "12$", "€ 5", "5 eur", "20 usd", "50 lei": the amount text and the
+// currency it names (null when none: then it is the account's, usually lei).
+export function currencyInText(text) {
+  const raw = String(text ?? '');
+  const map = [[/\$|\busd\b|\bdollars?\b/i, 'USD'], [/€|\beur\b|\beuros?\b/i, 'EUR'], [/\blei\b|\bmdl\b|\bleu\b/i, 'MDL'], [/£|\bgbp\b/i, 'GBP'], [/\bron\b/i, 'RON']];
+  for (const [re, currency] of map) {
+    if (re.test(raw)) return { text: raw.replace(new RegExp(re.source, 'gi'), '').replace(/\s+/g, ' ').trim(), currency };
+  }
+  return { text: raw, currency: null };
 }

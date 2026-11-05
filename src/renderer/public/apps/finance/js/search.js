@@ -6,6 +6,9 @@
 //   march  mar 2025  2026       a month and/or year
 //   today  yesterday            a day
 //   spent  earned  moves        a type
+//   #trip                       a tag in the note
+//   cat:food  acc:cash          a category or account (name or id, start of it)
+//   from:2026-01-01 to:2026-01-31   a date range (or 2026-01-01..2026-01-31)
 // Pure; app.js shows the results and the summary.
 
 import { addDays } from './dates.js';
@@ -37,12 +40,19 @@ const num = (s) => {
 };
 
 export function parseQuery(q) {
-  const out = { words: [], min: null, max: null, exact: null, months: [], year: null, day: null, type: null };
+  const out = { words: [], min: null, max: null, exact: null, months: [], year: null, day: null, type: null, tags: [], cats: [], accs: [], from: null, to: null };
   // Join "1 000" into "1000", "> 1000" into ">1000", "100 - 500" into "100-500".
   const text = fold(q).replace(/(\d)[\s\u00a0](?=\d{3}(?!\d))/g, '$1').replace(/([<>]=?)\s+(?=\d)/g, '$1').replace(/(\d)\s*-\s*(\d)/g, '$1-$2').trim();
   for (const tok of text.split(/\s+/).filter(Boolean)) {
     let m;
-    if ((m = tok.match(/^(>=?|<=?)(\d+(?:[.,]\d+)?)$/))) {
+    if ((m = tok.match(/^#([\p{L}\p{N}_-]+)$/u))) out.tags.push(m[1]);
+    else if ((m = tok.match(/^(?:cat|category):(.+)$/))) out.cats.push(m[1]);
+    else if ((m = tok.match(/^(?:acc|account):(.+)$/))) out.accs.push(m[1]);
+    else if ((m = tok.match(/^from:(\d{4}-\d{2}-\d{2})$/))) out.from = m[1];
+    else if ((m = tok.match(/^to:(\d{4}-\d{2}-\d{2})$/))) out.to = m[1];
+    else if ((m = tok.match(/^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/))) { out.from = m[1]; out.to = m[2]; }
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(tok)) { out.from = tok; out.to = tok; }
+    else if ((m = tok.match(/^(>=?|<=?)(\d+(?:[.,]\d+)?)$/))) {
       const v = num(m[2]);
       if (m[1] === '>') out.min = v + 1;
       else if (m[1] === '>=') out.min = v;
@@ -65,6 +75,27 @@ export function parseQuery(q) {
   return out;
 }
 
+// Tags in a note (same rule as model.js tagsOf), folded.
+const noteTags = (note) => [...String(note || '').matchAll(/(^|\s)#([\p{L}\p{N}_-]{1,30})/gu)].map((m) => fold(m[2]));
+
+// Saved filters (Log → search → ☆ Save): a name and the query text, on this
+// device's settings (they sync with your data).
+export function savedFilters(state) {
+  return Array.isArray(state.settings.savedFilters) ? state.settings.savedFilters.filter((f) => f && typeof f.q === 'string' && f.q.trim()) : [];
+}
+export function saveFilter(state, q, name = q) {
+  const list = savedFilters(state).filter((f) => f.q !== q.trim());
+  list.push({ q: q.trim(), name: String(name || q).trim().slice(0, 30) });
+  state.settings.savedFilters = list.slice(-12);
+  state.settings.updatedAt = Date.now();
+  return state.settings.savedFilters;
+}
+export function removeFilter(state, q) {
+  state.settings.savedFilters = savedFilters(state).filter((f) => f.q !== q);
+  state.settings.updatedAt = Date.now();
+  return state.settings.savedFilters;
+}
+
 // Everything a word can match on a record.
 function haystack(state, t) {
   const name = (arr, id) => arr.find((x) => x.id === id);
@@ -83,6 +114,20 @@ export function searchTx(state, query, today) {
   const day = q.day == null ? null : addDays(today, q.day);
   return state.tx.filter((t) => {
     if (q.type && t.type !== q.type) return false;
+    if (q.from && t.date < q.from) return false;
+    if (q.to && t.date > q.to) return false;
+    if (q.tags?.length) {
+      const have = noteTags(t.note);
+      if (!q.tags.every((g) => have.includes(g))) return false;
+    }
+    if (q.cats?.length) {
+      const c = t.category && state.settings.categories.find((x) => x.id === t.category);
+      if (!c || !q.cats.some((w) => fold(c.id).startsWith(w) || fold(c.name).startsWith(w))) return false;
+    }
+    if (q.accs?.length) {
+      const accs = [t.account, t.from, t.to].filter(Boolean).map((id) => state.settings.accounts.find((a) => a.id === id)).filter(Boolean);
+      if (!q.accs.some((w) => accs.some((a) => fold(a.id).startsWith(w) || fold(a.name).startsWith(w) || fold(a.name).split(/\s+/).some((p) => p.startsWith(w))))) return false;
+    }
     if (day && t.date !== day) return false;
     if (q.year && !t.date.startsWith(q.year)) return false;
     if (q.months.length && !q.months.includes(Number(t.date.slice(5, 7)))) return false;
@@ -112,4 +157,4 @@ export function searchSummary(list, base = (t) => t.base ?? t.amount) {
   };
 }
 
-export const SEARCH_HINT = 'coffee · maib · >1000 · 50-200 · march 2026 · earned · today';
+export const SEARCH_HINT = 'coffee · >100 · #trip · cat:food · acc:cash · from:2026-01-01 · march · earned';

@@ -9,6 +9,7 @@ import { evalAmount, formatMoney, centsToPlain } from '../money.js';
 import { convert } from '../fx.js';
 import { forecast } from '../forecast.js';
 import { lineChart } from '../charts.js';
+import { findSubscriptions, recurringFrom } from '../subs.js';
 
 const initial = (name) => esc((String(name).match(/\p{L}|\p{N}/u) || ['•'])[0].toUpperCase());
 const catOf = (id) => M.category(ctx.state, id) || { name: 'Other', emoji: '•' };
@@ -612,6 +613,28 @@ export function homeCard() {
     ${due.length > 4 ? `<p class="muted small" style="margin-bottom:0">${due.length - 4} more due on the Plan screen.</p>` : ''}</section>`;
 }
 
+// ---------- Subscription finder ----------
+
+// Payments that come back every month at about the same amount, which you
+// never set up as recurring: what they cost a year, and two actions.
+function subsFinderCard(state, today) {
+  const found = findSubscriptions(state, today);
+  if (!found.length) return '';
+  const active = found.filter((s) => !s.cancelled);
+  const yearly = active.reduce((a, s) => a + s.yearly, 0);
+  const row = (s) => `<div class="tx rec-row sub-found${s.cancelled ? ' is-cancelled' : ''}">
+    <span class="av" style="--c:${ctx.catColor(s.category)}" aria-hidden="true">${initial(s.name)}</span>
+    <span class="t"><b>${esc(s.name)}</b><span>${formatMoney(s.amount, s.currency)} about monthly · ${s.count} times since ${esc(shortDay(s.first))}${s.cancelled ? ` · cancelled ${esc(shortDay(s.cancelledOn))}` : ` · next around ${esc(shortDay(s.next))}`}</span></span>
+    <span class="sub-year"><b class="money">${formatMoney(s.yearly, base(), { compact: true })}</b><small class="muted">a year</small></span>
+    <span class="sub-acts">${s.cancelled
+    ? `<button type="button" class="btn small" data-act="sub-uncancel" data-key="${esc(s.key)}">Undo</button>`
+    : `<button type="button" class="btn small" data-act="sub-cancel" data-key="${esc(s.key)}">Mark as cancelled</button><button type="button" class="btn small primary" data-act="sub-make-rec" data-key="${esc(s.key)}">Make recurring</button><button type="button" class="icon-btn" data-act="sub-hide" data-key="${esc(s.key)}" title="Not a subscription" aria-label="Not a subscription">✕</button>`}</span>
+  </div>`;
+  return `<section class="card sub-finder"><h2>Looks like subscriptions</h2>
+    <p class="muted small">Same payee, a similar amount, about once a month. ${active.length ? `Together about <b>${formatMoney(yearly, base(), { compact: true })}</b> a year.` : ''}</p>
+    <div class="list">${found.map(row).join('')}</div></section>`;
+}
+
 // ---------- Main View ----------
 
 export function view() {
@@ -639,7 +662,7 @@ export function view() {
       tabContent = budgetCard();
       break;
     default:
-      tabContent = subscriptionsTab(state, today, rules, scheduled);
+      tabContent = subsFinderCard(state, today) + subscriptionsTab(state, today, rules, scheduled);
       break;
   }
 
@@ -835,6 +858,28 @@ export function editRule(existing = null, preset = {}) {
 const findRule = (id) => (ctx.state.recurring || []).find((r) => r.id === id);
 
 export function onClick(act, el) {
+  if (act === 'sub-make-rec' || act === 'sub-cancel' || act === 'sub-uncancel' || act === 'sub-hide') {
+    const st = ctx.state;
+    const sub = findSubscriptions(st, todayISO()).find((s) => s.key === el.dataset.key);
+    if (!sub) return true;
+    const now = Date.now();
+    if (act === 'sub-make-rec') {
+      (st.recurring || (st.recurring = [])).push(recurringFrom(sub, now, M.uid()));
+      ctx.toast(`${sub.name}: now a monthly payment in Plan`);
+    } else if (act === 'sub-cancel') {
+      st.settings.subsCancelled = { ...(st.settings.subsCancelled || {}), [sub.key]: todayISO() };
+      ctx.toast(`Marked as cancelled. That saves about ${formatMoney(sub.yearly, base(), { compact: true })} a year.`);
+    } else if (act === 'sub-uncancel') {
+      const c = { ...(st.settings.subsCancelled || {}) };
+      delete c[sub.key];
+      st.settings.subsCancelled = c;
+    } else {
+      st.settings.subsHidden = { ...(st.settings.subsHidden || {}), [sub.key]: true };
+    }
+    st.settings.updatedAt = now;
+    ctx.commit();
+    return true;
+  }
   if (act === 'plan-tab') {
     ctx.ui.planTab = el.dataset.tab;
     ctx.render();

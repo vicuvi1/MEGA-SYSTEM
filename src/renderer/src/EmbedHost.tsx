@@ -24,8 +24,14 @@ import { Icon } from './Icon'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
-/** Finance Helper inside Life System on a phone: no buddy, no calculator button (U3). */
-const FINANCE_IN_LIFE = `@media (max-width: 760px) { .buddy, .buddy-card, .calc-fab { display: none !important; } }`
+/**
+ * Finance Helper inside Life System: its own layout rules live in its
+ * stylesheet (html[data-in-life]); here only Life's colours and font, used
+ * by its "Match Life System" look (html[data-look="life"], the default here).
+ */
+export function financeLifeCss(t: { bg: string; surface: string; surface2: string; border: string; text: string; muted: string; font: string; light: boolean }): string {
+  return `:root[data-look="life"] { --bg: ${t.bg}; --surface: ${t.surface}; --surface-2: ${t.surface2}; --surface-3: ${t.surface2}; --line: ${t.border}; --line-strong: ${t.border}; --text: ${t.text}; --muted: ${t.muted}; --side-bg: ${t.surface}; --font: ${t.font}; color-scheme: ${t.light ? 'light' : 'dark'}; }`
+}
 
 export const EMBED_LABEL: Record<EmbedKind, string> = { finance: 'Finance Helper', waky: 'Waky', man: 'MAN', sport: 'Sport Track' }
 
@@ -280,15 +286,12 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       const root = document.documentElement
       const cs = getComputedStyle(root)
       const light = root.dataset.theme === 'light' || (root.dataset.theme !== 'dark' && window.matchMedia?.('(prefers-color-scheme: light)').matches)
-      const css = appKey === 'finance' ? FINANCE_IN_LIFE : `${on ? embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light)) : ''}${embedPhoneCss(appKey)}`
-      // Finance Helper follows Life System's light / dark (U2), unless you
-      // picked a theme or a design inside Finance Helper itself.
-      if (appKey === 'finance' && on) {
+      const css = appKey === 'finance' ? (on ? financeLifeCss(readTokens((n) => cs.getPropertyValue(n), !!light)) : '') : `${on ? embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light)) : ''}${embedPhoneCss(appKey)}`
+      // MO2: Finance Helper's "Match Life System" look (its default here)
+      // follows Life's light / dark, live. Its own themes stay optional picks.
+      if (appKey === 'finance') {
         const mode = light ? 'light' : 'dark'
-        void runIn(
-          el,
-          `(() => { const r = document.documentElement; if (r.dataset.design || (r.dataset.theme && r.dataset.lifeTheme !== '1')) return; r.dataset.theme = '${mode}'; r.dataset.lifeTheme = '1'; })()`
-        ).catch(() => null)
+        void runIn(el, `(() => { const r = document.documentElement; r.dataset.inLife = '1'; r.dataset.lifeMode = '${mode}'; window.dispatchEvent(new Event('life-theme')); })()`).catch(() => null)
       }
       try {
         if (typeof el.insertCSS === 'function') {

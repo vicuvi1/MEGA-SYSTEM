@@ -14,6 +14,12 @@ const embedded = (() => { try { return window.parent !== window || /Electron/.te
 
 let ctx = null;
 
+// The app's one audio context, made on first use (ambient.js shares it).
+// Inside Life System there is none: Life's sound kit plays everything.
+export function sharedAudioContext() {
+  return embedded ? null : getAudioContext();
+}
+
 function getAudioContext() {
   if (typeof window === 'undefined') return null;
   const AudioCtx = window.AudioContext || window.webkitAudioContext;

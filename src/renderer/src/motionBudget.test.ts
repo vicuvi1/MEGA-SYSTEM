@@ -18,7 +18,18 @@ function files(dir: string, ext: RegExp, out: string[] = []): string[] {
   return out
 }
 
-const cssFiles = files(SRC, /\.css$/)
+// The embedded apps' own stylesheets (public/apps/*/css) run inside Life
+// too, so the same budget holds for them.
+const APPS = join(__dirname, '..', 'public', 'apps')
+const appCss = readdirSync(APPS).flatMap((app) => {
+  const dir = join(APPS, app, 'css')
+  try {
+    return statSync(dir).isDirectory() ? files(dir, /\.css$/) : []
+  } catch {
+    return []
+  }
+})
+const cssFiles = [...files(SRC, /\.css$/), ...appCss]
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '')
 
 /** Every `@keyframes name { ... }` block with its body. */
@@ -59,6 +70,11 @@ const EXCEPTIONS: Record<string, string[]> = {
   'chart-draw': ['stroke-dashoffset'],
   // The island timer ring: a 20 px SVG arc, only while a timer runs.
   'isl-ring-in': ['stroke-dashoffset'],
+  // Finance Helper (public/apps/finance): SVG lines that draw in once.
+  draw: ['stroke-dashoffset'], // a chart line, on first view
+  'g-draw': ['stroke-dashoffset'], // a goal ring
+  'spark-draw': ['stroke-dashoffset'], // the small balance line
+  'toast-check': ['stroke-dashoffset'], // the 14 px tick in a toast
 }
 
 describe('motion budget', () => {
@@ -136,6 +152,19 @@ describe('motion budget', () => {
       if (allowed.has(name)) continue
       const src = readFileSync(f, 'utf8')
       if (/new\s+(window\.)?(webkit)?AudioContext\b|window\.(webkit)?AudioContext\b/.test(src)) bad.push(relative(ROOT, f))
+    }
+    expect(bad).toEqual([])
+  })
+
+  it('the embedded apps stop endless animations in calm mode', () => {
+    // An app that loops an animation forever must also have a calm rule
+    // (html[data-calm]) that plays each loop once, as Finance Helper does
+    // inside Life System.
+    const bad: string[] = []
+    for (const f of appCss) {
+      const css = stripComments(readFileSync(f, 'utf8'))
+      if (!/\binfinite\b/.test(css)) continue
+      if (!/html\[data-calm\][^{]*\{[^}]*animation-iteration-count:\s*1/.test(css)) bad.push(relative(SRC, f))
     }
     expect(bad).toEqual([])
   })

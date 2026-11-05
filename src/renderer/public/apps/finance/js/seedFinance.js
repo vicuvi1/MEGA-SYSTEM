@@ -20,12 +20,16 @@ export function demoFinanceState(now = Date.now()) {
   rec('income', 9000, 10, 'work', 'example salary', 'card');
   rec('income', 600, 25, 'side', 'example side job', 'wallet');
   rec('income', 300, 18, 'gift-in', 'example gift', 'wallet', { person: 'p-friend' });
+  for (const back of [66, 36, 6]) rec('expense', 99, back, 'subscriptions', 'music app', 'card');
+  rec('expense', 64, 1, 'food', 'lunch with a friend #weekend', 'card');
+  rec('expense', 120, 1, 'fun', 'bowling #weekend', 'wallet');
+  rec('expense', 35, 0, 'food', 'coffee', 'wallet');
   const spend = [
     [55, 'food', 'groceries'], [38, 'food', 'coffee'], [12, 'transport', 'bus'], [240, 'home', 'internet'],
     [150, 'fun', 'cinema'], [90, 'food', 'lunch'], [12, 'transport', 'bus'], [420, 'clothes', 'shoes'],
-    [65, 'hygiene', 'soap'], [99, 'subscriptions', 'music app'], [180, 'learning', 'online course'], [30, 'food', 'snacks'],
+    [65, 'hygiene', 'soap'], [48, 'food', 'fruit'], [180, 'learning', 'online course'], [30, 'food', 'snacks'],
     [75, 'transport', 'taxi'], [110, 'health', 'vitamins'], [12, 'transport', 'bus'], [210, 'food', 'groceries'],
-    [99, 'subscriptions', 'music app'], [60, 'fun', 'board game night'], [45, 'food', 'bakery'], [350, 'sport', 'gym month'],
+    [22, 'food', 'juice'], [60, 'fun', 'board game night'], [45, 'food', 'bakery'], [350, 'sport', 'gym month'],
     [12, 'transport', 'bus'], [140, 'gifts', 'present for a friend'], [80, 'food', 'pizza'], [25, 'other', 'stationery'],
     [190, 'food', 'groceries'], [38, 'food', 'coffee'], [12, 'transport', 'bus'], [55, 'fun', 'museum'],
     [70, 'hygiene', 'toothpaste'], [160, 'food', 'groceries'], [12, 'transport', 'bus'], [45, 'food', 'tea and cake'],
@@ -55,6 +59,8 @@ export function demoFinanceState(now = Date.now()) {
     goalAllocations: [],
     netWorth: [],
     deleted: {},
+    // Made-up rates from a few days ago (the demo has no live download).
+    rates: { usd: { USD: 1, MDL: 17.6, EUR: 0.92 }, crypto: {}, history: {}, fetchedAt: now - 3 * 864e5 },
     meta: { demo: true },
   };
 }

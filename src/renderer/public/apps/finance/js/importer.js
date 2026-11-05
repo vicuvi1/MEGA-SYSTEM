@@ -79,7 +79,7 @@ export function importRows(rows, state, { account } = {}) {
     const currency = t.currency || accCur(t.account || t.from);
     const rate = currency === baseCur ? 1 : pairRate(currency, baseCur, state.rates);
     const stamp = base++;
-    out.push({ id: uid(), createdAt: stamp, updatedAt: stamp, ...t, currency, rate, base: rate ? Math.round(t.amount * rate) : t.amount });
+    out.push({ id: uid(), createdAt: stamp, updatedAt: stamp, ...t, currency, rate, base: rate ? Math.round(t.amount * rate) : t.amount, source: 'import' });
   };
 
   const cell = (row, i) => (i >= 0 && i < row.length ? row[i] : '');

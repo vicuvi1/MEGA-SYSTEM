@@ -143,6 +143,7 @@ export function view() {
       <div class="label">All my money</div>
       <div class="big">${ctx.bigMoney(total)}</div>
       <div class="accounts">${[...byCur.entries()].map(([c, v]) => `<span class="acc static"><span class="n">${esc(c)}</span><b class="money">${formatMoney(v, '')}</b></span>`).join('')}</div>
+      ${ctx.ratesLine?.(total) || ''}
       ${missing.length ? `<p class="muted small" style="margin:10px 0 0">Not counted yet (no rate): ${missing.map((v) => esc(v.account.name)).join(', ')}.</p>` : ''}
     </div>
     <div class="hero-month">

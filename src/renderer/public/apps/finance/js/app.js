@@ -5,7 +5,7 @@ import { load, save, backupText, restoreJSON, requestPersistence, isSealed, open
 import * as M from './model.js';
 import { formatMoney, evalAmount, centsToPlain } from './money.js';
 import { todayISO, monthKey, monthLabel, addMonths, daysInMonth, dayLabel, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, addDays } from './dates.js';
-import { convert, pairRate } from './fx.js';
+import { convert, pairRate, formatRate } from './fx.js';
 import { parseCSV, toCSV } from './csv.js';
 import { importRows, importWorkbook, importCheck, exportRows, toTSV, monthSheet, overviewSheet, detectColumns } from './importer.js';
 import { readWorkbook } from './xlsx-read.js';
@@ -47,7 +47,7 @@ import { invoiceStatus } from './invoices.js';
 import { tableHTML, calendarHTML, dayLabelHTML, accountOptionsHTML, accountDisplayName } from './logviews.js';
 import { sheetHTML, monthTabs } from './sheetview.js';
 import { createHistory } from './history.js';
-import { searchTx, searchSummary, SEARCH_HINT } from './search.js';
+import { searchTx, searchSummary, SEARCH_HINT, savedFilters, saveFilter, removeFilter } from './search.js';
 import { safeToSpend, shortDay, limitStatus, suggestLimit, everydaySpent } from './safespend.js';
 import { verdict, nextSteps } from './nextsteps.js';
 import { openRecap } from './screens/recap.js';
@@ -86,6 +86,21 @@ let toastTimer = null;
 const DEMO = globalThis.FH_DEMO === true;
 // Only undo a theme we set ourselves; the host page may set its own.
 let ownTheme = false;
+// Inside Life System (its Money page): Life's light/dark, a slim tab strip
+// instead of the sidebar, no robot, and the data syncs to your Life database.
+const inLifeNow = () => document.documentElement.dataset.inLife === '1';
+// The look: inside Life "Match Life System" unless you picked another one
+// there (themeInLife, this device only); on its own, your usual pick.
+const themeChoice = () => (inLifeNow() ? state.settings.themeInLife || 'life' : state.settings.theme);
+function lifeMode() {
+  const r = document.documentElement;
+  if (r.dataset.lifeMode === 'light' || r.dataset.lifeMode === 'dark') return r.dataset.lifeMode;
+  try {
+    const t = window.parent.document.documentElement.dataset.theme;
+    if (t === 'light' || t === 'dark') return t;
+  } catch {}
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
 
 const app = document.getElementById('app');
 const sheetRoot = document.getElementById('sheet-root');
@@ -162,14 +177,18 @@ const THEME_STYLES = [
   ['system', 'Follow system', 'Matches your device appearance', '#303b4b', '#c6d3e2'],
 ];
 function themePicker(st) {
-  return '<fieldset class="style-picker"><legend>Choose your atmosphere</legend><div class="style-grid">' + THEME_STYLES.map(([id, name, detail, bg, accent]) =>
-    `<label class="style-choice"><input type="radio" name="app-theme" data-set="theme" value="${id}" ${st.theme === id ? 'checked' : ''}><span class="style-preview style-${id}" style="--preview-bg:${bg};--preview-accent:${accent}"><span class="preview-sidebar"></span><span class="preview-heading"></span><span class="preview-panel"></span><span class="preview-panel second"></span><span class="preview-motif"></span><span class="style-check" aria-hidden="true">✓</span></span><span class="style-name">${name}</span><span class="style-detail">${detail}</span></label>`
+  const styles = inLifeNow() ? [['life', 'Match Life System', 'Life’s light or dark, and it follows when you switch', '#11151d', '#c8f135'], ...THEME_STYLES] : THEME_STYLES;
+  const picked = themeChoice();
+  return '<fieldset class="style-picker"><legend>Choose your atmosphere</legend><div class="style-grid">' + styles.map(([id, name, detail, bg, accent]) =>
+    `<label class="style-choice"><input type="radio" name="app-theme" data-set="theme" value="${id}" ${picked === id ? 'checked' : ''}><span class="style-preview style-${id}" style="--preview-bg:${bg};--preview-accent:${accent}"><span class="preview-sidebar"></span><span class="preview-heading"></span><span class="preview-panel"></span><span class="preview-panel second"></span><span class="preview-motif"></span><span class="style-check" aria-hidden="true">✓</span></span><span class="style-name">${name}</span><span class="style-detail">${detail}</span></label>`
   ).join('') + '</div></fieldset>';
 }
 let ambientKey = '';
 function applyAtmosphere() {
-  const active = state.settings.themeMotion !== false && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const key = active ? state.settings.theme || 'system' : '';
+  // Calm inside Life (its Match theme has no floating flecks), and never
+  // with reduced motion.
+  const active = state.settings.themeMotion !== false && !window.matchMedia('(prefers-reduced-motion: reduce)').matches && themeChoice() !== 'life';
+  const key = active ? themeChoice() || 'system' : '';
   if (key === ambientKey) return;
   ambientKey = key;
   document.getElementById('theme-atmosphere')?.remove();
@@ -228,10 +247,14 @@ function applyWallpaper() {
 function applyTheme() {
   applyAtmosphere();
   applyWallpaper();
-  const choice = state.settings.theme;
+  const choice = themeChoice();
   const design = ['ocean', 'forest', 'paper', 'samurai'].includes(choice) ? choice : '';
   document.documentElement.dataset.design = design;
-  const t = design ? (design === 'paper' ? 'light' : 'dark') : choice;
+  if (choice === 'life') document.documentElement.dataset.look = 'life';
+  else delete document.documentElement.dataset.look;
+  // Calm: inside Life, or with "Living atmosphere" off, nothing loops forever.
+  document.documentElement.toggleAttribute('data-calm', inLifeNow() || state.settings.themeMotion === false);
+  const t = choice === 'life' ? lifeMode() : design ? (design === 'paper' ? 'light' : 'dark') : choice;
   if (t === 'dark' || t === 'light') {
     document.documentElement.dataset.theme = t;
     ownTheme = true;
@@ -240,6 +263,9 @@ function applyTheme() {
     ownTheme = false;
   }
 }
+
+// Life switched light/dark (EmbedHost sets data-life-mode and tells us).
+window.addEventListener('life-theme', () => { if (!state._sealed && !document.getElementById('life-tabs')?.dataset.ready) render(); else if (themeChoice() === 'life') applyTheme(); });
 
 AmbientMusic.subscribe(() => {
   renderSidebar();
@@ -313,7 +339,40 @@ function sparkline(values, w = 216, h = 28) {
   </svg>`;
 }
 
+// Lei, euro and dollars: a total in the other two, today's rates, and how
+// old they are when they could not be updated ("rates from 3 Nov").
+function ratesLine(totalCents = null) {
+  const base0 = state.settings.currency;
+  const r = M.knownRates(state);
+  const others = ['EUR', 'USD'].filter((c) => c !== base0);
+  const pair = (c) => pairRate(c, base0, r);
+  const parts = others.filter((c) => pair(c)).map((c) => `1 ${c === 'USD' ? '$' : '€'} = ${formatRate(pair(c))} ${base0 === 'MDL' ? 'lei' : base0}`);
+  if (!parts.length) return '';
+  const alt = totalCents == null ? '' : others.map((c) => convert(totalCents, base0, c, r)).map((v, i) => (v == null ? '' : formatMoney(Math.round(v / 100) * 100, others[i], { compact: true }))).filter(Boolean).join(' · ');
+  const age = M.ratesAge(state);
+  const when = age.date ? `rates from ${Number(age.date.slice(8, 10))} ${MONTHS[Number(age.date.slice(5, 7)) - 1].slice(0, 3)}` : 'rates from your last records';
+  return `<p class="rates-note">${alt ? `≈ ${alt} · ` : ''}${parts.join(' · ')}${age.stale ? ` · <b>${when}</b>` : ''}</p>`;
+}
+
+// Inside Life: one slim strip of sections at the top (Life has the sidebar).
+const LIFE_TABS = [['home', 'Home'], ['log', 'Log'], ['accounts', 'Accounts'], ['goals', 'Goals'], ['plan', 'Plan'], ['reports', 'Reports']];
+function renderLifeTabs() {
+  const nav = document.getElementById('life-tabs');
+  if (!nav || !inLifeNow()) return;
+  if (!nav.dataset.ready) {
+    nav.dataset.ready = '1';
+    nav.hidden = false;
+    nav.innerHTML = `<div class="lt-scroll">${LIFE_TABS.map(([tab, label]) => `<a href="#${tab}" data-tab="${tab}">${label}</a>`).join('')}<button type="button" class="lt-more" data-act="more" aria-label="More sections">More</button></div>
+      <button type="button" class="lt-add" data-act="add" aria-label="Add a record"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>`;
+  }
+  const cur = NAV_PARENT[ui.tab] || ui.tab;
+  const inStrip = LIFE_TABS.some(([t]) => t === cur);
+  for (const a of nav.querySelectorAll('a')) a.toggleAttribute('aria-current', a.dataset.tab === cur);
+  nav.querySelector('.lt-more')?.setAttribute('aria-pressed', String(!inStrip));
+}
+
 function renderSidebar() {
+  renderLifeTabs();
   const top = document.getElementById('side-top');
   const bottom = document.getElementById('side-bottom');
   if (!top || state._sealed) return;
@@ -442,7 +501,9 @@ function txRow(t, { showDate = false } = {}) {
     title = t.note || c.name;
     sub = [c.name, who ? `${t.type === 'income' ? 'from' : 'to'} ${who}` : null, accOf(t.account).name].filter(Boolean).join(' · ');
     const ty = M.typedAs(t);
-    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : ''}</span>`;
+    // In another currency: what it was in lei too (at that day's rate).
+    const inLei = cur !== state.settings.currency && Number.isInteger(t.base) ? `<small class="typed-as">≈ ${formatMoney(t.base, state.settings.currency)}</small>` : '';
+    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
   }
   if (showDate) sub = `${dayLabel(t.date)} · ${sub}`;
   return `<button class="tx" data-act="edit" data-id="${esc(t.id)}">
@@ -820,7 +881,8 @@ function wallet(sf) {
   if (!vals.length) return '';
   const cards = vals.map((v, i) => `<div class="shw-card" style="--i:${i}">${cardHTML(v, { money, base: state.settings.currency })}</div>`).reverse().join('');
   return `<div class="sh-wallet" style="--n:${vals.length}"><div class="shw-stack">${cards}</div>
-    <button type="button" class="card-link shw-cap" data-act="spend-setup">${money(Math.round(Math.max(0, sf.liquid) / 100) * 100)} spending money →</button></div>`;
+    <button type="button" class="card-link shw-cap" data-act="spend-setup">${money(Math.round(Math.max(0, sf.liquid) / 100) * 100)} spending money →</button>
+    ${state.settings.accounts.some((a) => !a.archived && a.currency !== state.settings.currency) ? ratesLine() : ''}</div>`;
 }
 
 function safeCard(today) {
@@ -1197,11 +1259,28 @@ function draftRow() {
   const inMonth = monthKey(todayISO()) === ui.month ? todayISO() : `${ui.month}-01`;
   if (!ui.draft || !ui.draft.date.startsWith(ui.month)) {
     // The new row starts on the account you used last (your wallet, usually).
-    const last = M.sortTx(state.tx).find((t) => t.type !== 'transfer' && M.account(state, t.account) && !M.account(state, t.account).archived);
-    const acc = ui.draft?.account || last?.account || state.settings.accounts[0]?.id;
+    const acc = ui.draft?.account || M.defaultAccount(state, 'expense');
     ui.draft = { type: 'expense', date: inMonth, category: '', note: '', account: acc, from: acc, to: state.settings.savingsAccount };
   }
   return ui.draft;
+}
+
+// Filters without typing: category, account, tag and dates become a search.
+function filterPanel() {
+  const opts = (list, label) => `<option value="">${label}</option>` + list.map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
+  const cats = state.settings.categories.map((c) => [c.id, c.name]);
+  const accs = M.activeAccounts(state).map((a) => [a.id, a.name]);
+  const tags = M.allTags(state).map((g) => [g.tag, `#${g.tag}`]);
+  return `<details class="filter-panel"${ui.filterOpen ? ' open' : ''}><summary data-act="filter-toggle">Filters</summary>
+    <div class="fp-row">
+      <select id="fp-cat" aria-label="Category">${opts(cats, 'Any category')}</select>
+      <select id="fp-acc" aria-label="Account">${opts(accs, 'Any account')}</select>
+      ${tags.length ? `<select id="fp-tag" aria-label="Tag">${opts(tags, 'Any tag')}</select>` : ''}
+      <label class="fp-date"><span>From</span><input id="fp-from" type="date"></label>
+      <label class="fp-date"><span>To</span><input id="fp-to" type="date"></label>
+      <input id="fp-min" type="text" inputmode="decimal" placeholder="More than" aria-label="More than (amount)">
+      <button type="button" class="btn primary" data-act="filter-apply">Show</button>
+    </div></details>`;
 }
 
 function viewLog() {
@@ -1244,7 +1323,7 @@ function viewLog() {
   ${q || view === 'sheet' ? '' : `<section class="card">${stats(s)}${rateBar(s)}</section>`}
   <div class="log-tools">
     <div class="seg seg-views" role="group" aria-label="View">${viewBtn('sheet', 'Sheet')}${viewBtn('table', 'Table')}${viewBtn('calendar', 'Calendar')}${viewBtn('list', 'List')}</div>
-    ${view === 'calendar' ? '' : `<input type="search" id="search" placeholder="Search all months: coffee, maib, >1000, march…" value="${esc(ui.search)}" aria-label="Search all records">`}
+    ${view === 'calendar' ? '' : `<input type="search" id="search" placeholder="Search: coffee, >100, #trip, cat:food, from:2026-01-01…" value="${esc(ui.search)}" aria-label="Search all records">`}
     <div class="log-actions">
       ${undoButtons()}
       <button type="button" class="btn" data-act="copy-table" title="Copy this month as a table to paste into Excel or Google Sheets">Copy table</button>
@@ -1265,11 +1344,13 @@ function viewLog() {
         <button type="button" class="lq-chip" data-act="log-quick-search" data-q="today">📅 Today</button>
         <button type="button" class="lq-chip" data-act="log-quick-search" data-q=">1000">&gt; 1 000</button>
         <button type="button" class="lq-chip" data-act="log-quick-search" data-q="50-200">50–200</button>
-        <button type="button" class="lq-chip" data-act="log-quick-search" data-q="coffee">☕ coffee</button>
-        ${state.people?.length ? `<button type="button" class="lq-chip" data-act="log-quick-search" data-q="${esc(state.people[0].name)}">👤 ${esc(state.people[0].name)}</button>` : ''}
+        ${M.allTags(state).slice(0, 4).map((g) => `<button type="button" class="lq-chip" data-act="log-quick-search" data-q="#${esc(g.tag)}">#${esc(g.tag)}</button>`).join('')}
+        ${savedFilters(state).map((f) => `<span class="lq-saved"><button type="button" class="lq-chip saved" data-act="log-quick-search" data-q="${esc(f.q)}" title="${esc(f.q)}">☆ ${esc(f.name)}</button><button type="button" class="lq-x" data-act="filter-forget" data-q="${esc(f.q)}" aria-label="Forget the saved filter ${esc(f.name)}">✕</button></span>`).join('')}
+        ${q && !savedFilters(state).some((f) => f.q === ui.search.trim()) ? '<button type="button" class="lq-chip" data-act="filter-save">☆ Save this search</button>' : ''}
         ${q ? `<button type="button" class="lq-chip lq-clear" data-act="log-clear-search">✕ Clear search</button>` : ''}
       </div>
     </div>
+    ${filterPanel()}
   `}
   ${q && view !== 'calendar' ? searchCard(list) : ''}
   ${content}
@@ -1451,8 +1532,9 @@ function viewSettings() {
         ${sections.map((x) => `<button type="button" class="set-tab" data-act="set-tab" data-sec="${x.id}" aria-current="${x.id === cur.id ? 'page' : 'false'}"><span class="set-ic" aria-hidden="true">${x.icon}</span><span class="set-t"><b>${x.label}</b><span>${x.sub}</span></span><span class="set-tab-chevron" aria-hidden="true">›</span></button>`).join('')}
       </div>
       <div class="set-nav-foot">
-        <span class="set-privacy-badge">🔒 100% Private &amp; Offline</span>
-        <span>Zero tracking · Your device, your data</span>
+        ${inLifeNow() ? `<span class="set-privacy-badge">🔒 Yours only</span>
+        <span>Syncs to your own Life System database · no tracking</span>` : `<span class="set-privacy-badge">🔒 100% Private &amp; Offline</span>
+        <span>Zero tracking · Your device, your data</span>`}
       </div>
     </nav>
     <div class="set-body">
@@ -1578,7 +1660,7 @@ function render({ enter = false } = {}) {
     app.querySelector(`[data-id="${CSS.escape(ui.flashId)}"]`)?.classList.add('flash');
     ui.flashId = null;
   }
-  for (const a of document.querySelectorAll('.tabbar a, .more-list a')) {
+  for (const a of document.querySelectorAll('.tabbar a, .more-list a, .life-tabs a')) {
     if (a.dataset.tab === (NAV_PARENT[ui.tab] || ui.tab)) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
@@ -1637,11 +1719,11 @@ function suggestedRate(cur) {
 function openTxSheet(existing = null, preset = {}) {
   const accounts = M.activeAccounts(state).length ? M.activeAccounts(state) : state.settings.accounts;
   const baseCur = state.settings.currency;
-  const last = M.sortTx(state.tx).find((t) => t.type !== 'transfer');
   const draft = existing ? { ...existing, personName: M.person(state, existing.person)?.name || '' } : {
     type: 'expense',
     date: todayISO(),
-    account: (last && M.account(state, last.account) && !M.account(state, last.account).archived) ? last.account : accounts[0]?.id,
+    // Lei by default: the lei account last used for the category, else the main wallet.
+    account: M.defaultAccount(state, preset.type || 'expense', preset.category || null),
     from: accounts[0]?.id,
     to: state.settings.savingsAccount || accounts[1]?.id,
     category: null,
@@ -1655,6 +1737,8 @@ function openTxSheet(existing = null, preset = {}) {
   let toTouched = !!existing?.toAmount;
   let rateText = existing?.rate && existing.currency !== baseCur ? String(existing.rate) : '';
   let catTouched = !!existing;
+  // You picked the account yourself: a category no longer moves it.
+  let accTouched = !!existing || !!preset.account;
   let addingCat = false;
   // One-tap fills for things you log often (and your favorites).
   const picks = existing || preset.fromRule ? [] : M.quickPicks(state, todayISO(), 8);
@@ -1709,6 +1793,7 @@ function openTxSheet(existing = null, preset = {}) {
       <label class="field"><span>${isT ? 'Note (optional)' : 'What for?'}</span>
         <input id="tx-note" type="text" list="note-list" autocomplete="off" value="${esc(draft.note)}" placeholder="${draft.type === 'income' ? 'e.g. salary, project for a client' : isT ? 'e.g. to the safe' : 'e.g. groceries, taxi, rent'}"></label>
       <datalist id="note-list">${M.noteSuggestions(state, draft.type).map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+      ${(() => { const tags = M.allTags(state).slice(0, 8); return `<div class="tag-picks" role="group" aria-label="Tags">${tags.map((g) => `<button type="button" class="tag-pick" data-tag="${esc(g.tag)}" aria-pressed="${M.tagsOf(draft.note).includes(g.tag)}">#${esc(g.tag)}</button>`).join('')}<span class="muted small">${tags.length ? 'Tap a tag, or' : 'Tags:'} type #trip in the note</span></div>`; })()}
       ${isT ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(draft.type).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${dot(catColor(c.id))}<span>${esc(c.name)}</span></button>`).join('')}
         ${addingCat ? `<span class="cat-new"><input id="new-cat" type="text" placeholder="New category" aria-label="New category name"><button type="button" class="btn primary" data-act="cat-create">Add</button></span>` : '<button type="button" class="cat cat-add" data-act="cat-new">+ New</button>'}</div>`}
       ${isT ? '' : `<div class="row2">
@@ -1724,6 +1809,7 @@ function openTxSheet(existing = null, preset = {}) {
       <div class="btns">
         ${existing ? '<button type="button" class="btn danger" data-act="tx-delete">Delete</button>' : ''}
         ${existing && draft.type === 'income' && !existing.loan ? '<button type="button" class="btn" data-act="tx-split">Split</button>' : ''}
+        ${existing && existing.type === 'expense' && draft.type === 'expense' ? '<button type="button" class="btn" data-act="tx-split-receipt" title="Divide this receipt across categories or people">Split receipt</button>' : ''}
         ${existing?.type === 'income' && draft.type === 'income' && !existing.loan ? '<button type="button" class="btn" data-act="tx-allocate">Allocate to goals</button>' : ''}
         ${existing && !isT ? `<button type="button" class="btn" data-act="tx-fav" aria-pressed="${M.isFavorite(state, existing)}">${M.isFavorite(state, existing) ? '★ Favorite' : '☆ Make favorite'}</button>` : ''}
         <button type="submit" class="btn primary">${existing ? 'Save' : 'Add'}</button>
@@ -1775,10 +1861,40 @@ function openTxSheet(existing = null, preset = {}) {
     hint.textContent = parts.join('  ') || (draft.type === 'transfer' ? 'Move money between your accounts' : 'Tip: type 120+45 and it adds up');
   };
 
+  // A category picked (or guessed): the account follows it, unless you chose one.
+  const followCategory = (sheet) => {
+    if (accTouched || draft.type === 'transfer') return;
+    const next = M.defaultAccount(state, draft.type, draft.category);
+    if (!next || next === draft.account) return;
+    const before = curOf();
+    draft.account = next;
+    if (curOf() !== before) { readInputs(sheet); draft.account = next; rateText = ''; paint(sheet, false); updateHint(sheet); return; }
+    const el = sheet.querySelector('#tx-account');
+    if (el) el.value = next;
+  };
+
+  // "$12", "12 €", "12 eur": that amount in that currency (lei otherwise).
+  const readSymbol = (sheet) => {
+    if (draft.type === 'transfer') return false;
+    const el = sheet.querySelector('#tx-amount');
+    const hit = M.currencyInText(el.value);
+    if (!hit.currency) return false;
+    readInputs(sheet);
+    amountText = hit.text;
+    entryCur = hit.currency === curOf() ? null : hit.currency;
+    entryRateText = entryCur ? defaultEntryRate(entryCur) : '';
+    paint(sheet, false);
+    const a = sheet.querySelector('#tx-amount');
+    a.focus();
+    a.setSelectionRange?.(a.value.length, a.value.length);
+    updateHint(sheet);
+    return true;
+  };
+
   const paint = (sheet, focus = true) => {
     sheet.innerHTML = `<div class="grab"></div>${html()}`;
     const amount = sheet.querySelector('#tx-amount');
-    amount.addEventListener('input', () => updateHint(sheet));
+    amount.addEventListener('input', () => { if (!readSymbol(sheet)) updateHint(sheet); });
     sheet.querySelector('#tx-rate')?.addEventListener('input', () => updateHint(sheet));
     sheet.querySelector('#tx-erate')?.addEventListener('input', () => updateHint(sheet));
     sheet.querySelector('#tx-cur')?.addEventListener('change', (e) => {
@@ -1792,6 +1908,7 @@ function openTxSheet(existing = null, preset = {}) {
     sheet.querySelector('#tx-to-amount')?.addEventListener('input', () => { toTouched = true; });
     for (const f of ['account', 'from', 'to']) {
       sheet.querySelector(`#tx-${f}`)?.addEventListener('change', () => {
+        if (f === 'account') accTouched = true;
         const before = curOf();
         const beforeTo = draft.type === 'transfer' ? toCur() : null;
         readInputs(sheet);
@@ -1804,6 +1921,7 @@ function openTxSheet(existing = null, preset = {}) {
       const s = M.suggestCategory(state, e.target.value, draft.type);
       draft.category = s;
       for (const b of sheet.querySelectorAll('.cat[data-cat]')) b.setAttribute('aria-pressed', String(b.dataset.cat === s));
+      if (s) followCategory(sheet);
     });
     sheet.querySelector('#new-cat')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); sheet.querySelector('[data-act="cat-create"]').click(); }
@@ -1909,6 +2027,7 @@ function openTxSheet(existing = null, preset = {}) {
           draft.category = catTouched ? null : M.suggestCategory(state, draft.note, draft.type);
           catTouched = false;
           addingCat = false;
+          if (!accTouched && draft.type !== 'transfer') draft.account = M.defaultAccount(state, draft.type, draft.category);
           paint(sheet);
         }
         return;
@@ -1937,6 +2056,7 @@ function openTxSheet(existing = null, preset = {}) {
         draft.category = cat.dataset.cat;
         catTouched = true;
         for (const b of sheet.querySelectorAll('.cat[data-cat]')) b.setAttribute('aria-pressed', String(b === cat));
+        followCategory(sheet);
         return;
       }
       const pick = e.target.closest('[data-pick]');
@@ -1966,7 +2086,79 @@ function openTxSheet(existing = null, preset = {}) {
       }
       if (e.target.closest('[data-act="tx-delete"]')) deleteTx(existing.id);
       if (e.target.closest('[data-act="tx-split"]')) { closeSheet(); setTimeout(() => openSplitSheet(existing), 200); }
+      if (e.target.closest('[data-act="tx-split-receipt"]')) { closeSheet(); setTimeout(() => openReceiptSplit(existing), 200); }
+      const tagBtn = e.target.closest('.tag-pick[data-tag]');
+      if (tagBtn) {
+        readInputs(sheet);
+        const tag = tagBtn.dataset.tag;
+        const has = M.tagsOf(draft.note).includes(tag);
+        draft.note = has ? draft.note.replace(new RegExp(`(^|\\s)#${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'i'), '').replace(/\s+/g, ' ').trim() : `${draft.note.trim()} #${tag}`.trim();
+        const noteEl = sheet.querySelector('#tx-note');
+        if (noteEl) noteEl.value = draft.note;
+        tagBtn.setAttribute('aria-pressed', String(!has));
+        return;
+      }
       if (e.target.closest('[data-act="tx-allocate"]')) { closeSheet(); setTimeout(() => Goals.openAllocationSheet(existing.id), 200); }
+    });
+    paint(sheet);
+  });
+}
+
+// One receipt across categories or people: the parts become separate
+// records with the same date and account (model.js splitRecord).
+function openReceiptSplit(tx) {
+  if (!tx || tx.type !== 'expense') return;
+  const cur = tx.currency;
+  let parts = [
+    { amount: '', category: tx.category, person: M.person(state, tx.person)?.name || '' },
+    { amount: '', category: tx.category, person: '' },
+  ];
+  const cats = categoryOrder('expense');
+  const read = (sheet) => {
+    parts = [...sheet.querySelectorAll('.rs-row')].map((row) => ({
+      amount: row.querySelector('.rs-amt').value,
+      category: row.querySelector('.rs-cat').value,
+      person: row.querySelector('.rs-person').value,
+    }));
+  };
+  const cents = (p) => evalAmount(String(p.amount)) || 0;
+  const paint = (sheet) => {
+    const used = parts.reduce((a, p) => a + cents(p), 0);
+    const left = tx.amount - used;
+    sheet.innerHTML = `<div class="grab"></div><h3>Split receipt <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
+      <p class="muted small">${esc(tx.note || catOf(tx.category).name)} · ${formatMoney(tx.amount, cur)} on ${esc(tx.date)}. Each part becomes its own record.</p>
+      <div class="rs-list">${parts.map((p, i) => `<div class="rs-row">
+        <input class="rs-amt" type="text" inputmode="decimal" placeholder="${i === parts.length - 1 && left > 0 ? centsToPlain(left) : '0'}" value="${esc(p.amount)}" aria-label="Part ${i + 1} amount">
+        <select class="rs-cat" aria-label="Part ${i + 1} category">${cats.map((c) => `<option value="${esc(c.id)}" ${c.id === p.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
+        <input class="rs-person" type="text" list="people-list" placeholder="Person (optional)" value="${esc(p.person)}" aria-label="Part ${i + 1} person">
+      </div>`).join('')}</div>
+      <datalist id="people-list">${state.people.map((x) => `<option value="${esc(x.name)}">`).join('')}</datalist>
+      <p class="small ${left === 0 ? 'income' : 'muted'}" id="rs-left">${left === 0 ? 'Adds up.' : left > 0 ? `${formatMoney(left, cur)} left to share (the last empty part takes it)` : `${formatMoney(-left, cur)} too much`}</p>
+      <div class="btns"><button type="button" class="btn" data-act="rs-add">+ Part</button><button type="button" class="btn primary" data-act="rs-save">Split</button></div>`;
+  };
+  openSheet('', (sheet) => {
+    sheet.addEventListener('input', () => {
+      read(sheet);
+      const used = parts.reduce((a, p) => a + cents(p), 0);
+      const left = tx.amount - used;
+      const el = sheet.querySelector('#rs-left');
+      if (el) { el.textContent = left === 0 ? 'Adds up.' : left > 0 ? `${formatMoney(left, cur)} left to share (the last empty part takes it)` : `${formatMoney(-left, cur)} too much`; el.className = `small ${left === 0 ? 'income' : 'muted'}`; }
+    });
+    sheet.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act="rs-add"]')) { read(sheet); parts.push({ amount: '', category: tx.category, person: '' }); paint(sheet); return; }
+      if (!e.target.closest('[data-act="rs-save"]')) return;
+      read(sheet);
+      const used = parts.reduce((a, p) => a + cents(p), 0);
+      const empty = parts.filter((p) => !cents(p));
+      if (empty.length === 1 && tx.amount - used > 0) empty[0].amount = centsToPlain(tx.amount - used);
+      const now = Date.now();
+      const list = parts.filter((p) => cents(p) > 0).map((p) => ({ amount: cents(p), category: p.category, person: p.person.trim() ? M.ensurePerson(state, p.person, now) : null }));
+      const out = M.splitRecord(tx, list, now);
+      if (!out) { toast(`The parts must add up to ${formatMoney(tx.amount, cur)} (at least two).`); return; }
+      state.tx = state.tx.filter((t) => t.id !== tx.id).concat(out);
+      commit();
+      closeSheet();
+      toast(`Split into ${out.length} records`);
     });
     paint(sheet);
   });
@@ -2587,6 +2779,11 @@ function onSettingsChange(el) {
     else if (key === 'goal.target') st.goal.target = Math.max(0, evalAmount(v) || 0);
     else if (key === 'goal.account') st.goal.account = v;
     else if (key === 'savingsAccount') st.savingsAccount = v;
+    else if (key === 'theme' && inLifeNow()) {
+      st.themeInLife = v;
+      applyTheme();
+      render();
+    }
     else if (key === 'theme') {
       st.theme = v;
       if (v === 'samurai') {
@@ -2603,7 +2800,7 @@ function onSettingsChange(el) {
       applyTheme();
       render();
     }
-    else if (key === 'themeMotion') { st.themeMotion = el.checked; applyAtmosphere(); }
+    else if (key === 'themeMotion') { st.themeMotion = el.checked; applyTheme(); }
     else if (key === 'sound') { st.sound = el.checked; if (st.sound) sound.test(state); }
     else if (key === 'currency') st.currency = v.trim().toUpperCase() || 'MDL';
     else if (key === 'wallpaper') {
@@ -2763,6 +2960,25 @@ document.addEventListener('click', (e) => {
   else if (act === 'filter') { ui.filter = el.dataset.filter; render(); }
   else if (act === 'log-quick-search') { ui.search = el.dataset.q; render(); document.getElementById('search')?.focus(); }
   else if (act === 'log-clear-search') { ui.search = ''; render(); }
+  else if (act === 'filter-save') {
+    const q = ui.search.trim();
+    if (q) { saveFilter(state, q, q.length > 24 ? `${q.slice(0, 22)}…` : q); commit({ quiet: true }); toast('Saved. Tap the chip to run it again.'); }
+  }
+  else if (act === 'filter-forget') { removeFilter(state, el.dataset.q); commit({ quiet: true }); }
+  else if (act === 'filter-toggle') { ui.filterOpen = !el.closest('details')?.open; }
+  else if (act === 'filter-apply') {
+    const v = (id) => document.getElementById(id)?.value?.trim() || '';
+    const parts = [];
+    if (v('fp-cat')) parts.push(`cat:${v('fp-cat')}`);
+    if (v('fp-acc')) parts.push(`acc:${v('fp-acc')}`);
+    if (v('fp-tag')) parts.push(`#${v('fp-tag')}`);
+    if (v('fp-from')) parts.push(`from:${v('fp-from')}`);
+    if (v('fp-to')) parts.push(`to:${v('fp-to')}`);
+    if (v('fp-min')) parts.push(`>${v('fp-min').replace(/\s/g, '')}`);
+    ui.search = parts.join(' ');
+    ui.filterOpen = false;
+    render();
+  }
   else if (act === 'log-view') { state.settings.logView = el.dataset.view; commit(); }
   else if (act === 'sort') {
     const col = el.dataset.col;
@@ -3089,6 +3305,7 @@ Object.assign(ctx, {
   updateRates,
   suggestedRate: (cur) => suggestedRate(cur),
   restoreFromText: (text) => onJSONFile(text),
+  ratesLine: (c) => ratesLine(c),
   buddy: (msg) => Buddy.say(msg),
   openSplit: (tx) => openSplitSheet(tx),
   backupNow: () => Backups.autoBackup({ force: true }),

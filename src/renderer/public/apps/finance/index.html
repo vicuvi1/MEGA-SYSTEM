@@ -18,7 +18,19 @@
   <script>
     // Apply the saved theme before first paint so there is no flash.
     try {
-      const t = JSON.parse(localStorage.getItem('finance-helper.state') || '{}')?.settings?.theme || JSON.parse(localStorage.getItem('finance-helper.head') || '{}')?.theme;
+      // Inside Life System (same-site frame): its look, unless picked otherwise.
+      let inLife = false;
+      try { inLife = window.parent !== window && window.parent.location.origin === location.origin; } catch {}
+      const st = JSON.parse(localStorage.getItem('finance-helper.state') || '{}')?.settings || {};
+      const r = document.documentElement;
+      if (inLife) { r.dataset.inLife = '1'; r.setAttribute('data-calm', ''); }
+      let t = inLife ? st.themeInLife || 'life' : st.theme || JSON.parse(localStorage.getItem('finance-helper.head') || '{}')?.theme;
+      if (t === 'life') {
+        let m = '';
+        try { m = window.parent.document.documentElement.dataset.theme || ''; } catch {}
+        r.dataset.look = 'life';
+        t = m === 'light' || m === 'dark' ? m : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      }
       const design = ['ocean', 'forest', 'paper', 'samurai'].includes(t) ? t : '';
       if (design) {
         document.documentElement.dataset.design = design;
@@ -28,6 +40,7 @@
   </script>
 </head>
 <body>
+  <nav class="life-tabs" id="life-tabs" aria-label="Money sections" hidden></nav>
   <main id="app" class="app" aria-live="polite"></main>
 
   <nav class="tabbar" aria-label="Sections">

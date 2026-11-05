@@ -133,12 +133,12 @@ function cells(state, t, { who = true } = {}) {
   const debtTag = t.debt ? `<span class="cur-tag debt-cur-tag" title="Original loan: ${formatMoney(t.debt.amount, t.debt.currency)}">⚡ ${t.debt.amount ? plain(t.debt.amount) : ''} ${esc(t.debt.currency)}</span>` : '';
   const signPrefix = t.type === 'income' ? '+' : t.type === 'expense' ? '−' : '';
   const isBaseCur = !t.currency || t.currency === state.settings.currency;
-  return `<td><span class="dcell">${shown}<input type="date" class="dpick" data-col="date" value="${esc(t.date)}" aria-label="Date"></span></td>
-    <td>${typeSel}</td><td>${cat}</td>
-    <td><span class="note-cell">${loanBadge}<input type="text" data-col="note" value="${esc(t.note)}" placeholder="${isLoan ? 'Loan note' : 'What for?'}" aria-label="Note"></span></td>
-    ${who ? `<td>${isT ? '' : `<input type="text" data-col="person" list="people-list" value="${esc(state.people.find((p) => p.id === t.person)?.name || t.personName || '')}" placeholder="—" aria-label="Who" autocomplete="off">`}</td>` : ''}
-    <td>${acc}</td>
-    <td><span class="amt-cell ${t.type}"><span class="amt-sign" aria-hidden="true">${signPrefix}</span><input type="text" inputmode="decimal" class="amt" data-col="amount" value="${t.amount ? plain(t.amount) : ''}" placeholder="0" aria-label="Amount" autocomplete="off">${debtTag || (!isBaseCur ? `<span class="cur-tag">${esc(t.currency)}</span>` : `<span class="cur-tag cur-faint">${esc(state.settings.currency || 'MDL')}</span>`)}</span></td>`;
+  return `<td class="c-date"><span class="dcell">${shown}<input type="date" class="dpick" data-col="date" value="${esc(t.date)}" aria-label="Date"></span></td>
+    <td class="c-type">${typeSel}</td><td class="c-cat">${cat}</td>
+    <td class="c-note"><span class="note-cell">${loanBadge}<input type="text" data-col="note" value="${esc(t.note)}" placeholder="${isLoan ? 'Loan note' : 'What for?'}" aria-label="Note"></span></td>
+    ${who ? `<td class="c-who">${isT ? '' : `<input type="text" data-col="person" list="people-list" value="${esc(state.people.find((p) => p.id === t.person)?.name || t.personName || '')}" placeholder="—" aria-label="Who" autocomplete="off">`}</td>` : ''}
+    <td class="c-acc">${acc}</td>
+    <td class="c-amt"><span class="amt-cell ${t.type}"><span class="amt-sign" aria-hidden="true">${signPrefix}</span><input type="text" inputmode="decimal" class="amt" data-col="amount" value="${t.amount ? plain(t.amount) : ''}" placeholder="0" aria-label="Amount" autocomplete="off">${debtTag || (!isBaseCur ? `<span class="cur-tag">${esc(t.currency)}</span>` : `<span class="cur-tag cur-faint">${esc(state.settings.currency || 'MDL')}</span>`)}</span></td>`;
 }
 
 // "Saturday 10 October · Today" with the day's totals.
@@ -191,7 +191,7 @@ export function tableHTML(state, list, { sort, draft, fmt: fmtExact, selected = 
     const head = byDate && newDay ? dayRow(t.date, perDay[t.date], today, fmt, years, span) : '';
     const on = selected.has(t.id);
     return `${head}<tr data-id="${esc(t.id)}" class="t-${t.type}${isLoan ? ' is-loan' : ''}${newDay ? ' newday' : ''}${t.date === today ? ' is-today' : ''}${on ? ' selected' : ''}"><td class="selc"><input type="checkbox" class="sel" data-act="sel" data-id="${esc(t.id)}" ${on ? 'checked' : ''} aria-label="Select this record"></td>${cells(state, t, { who })}
-      <td><button type="button" class="row-del" data-act="row-del" data-id="${esc(t.id)}" aria-label="Delete this record" title="Delete">×</button></td></tr>`;
+      <td class="c-del"><button type="button" class="row-del" data-act="row-del" data-id="${esc(t.id)}" aria-label="Delete this record" title="Delete">×</button></td></tr>`;
   }).join('');
   const income = list.filter((t) => t.type === 'income' && !t.loan).reduce((a, t) => a + B(t), 0);
   const expense = list.filter((t) => t.type === 'expense' && !t.loan).reduce((a, t) => a + B(t), 0);
@@ -213,7 +213,7 @@ export function tableHTML(state, list, { sort, draft, fmt: fmtExact, selected = 
     <thead><tr><th class="selc"><input type="checkbox" class="sel" data-act="sel-all" ${list.length && list.every((t) => selected.has(t.id)) ? 'checked' : ''} aria-label="Select all shown"></th>${cols.map((c) => `<th class="${c.num ? 'num' : ''}"><button type="button" data-act="sort" data-col="${c.id}" aria-label="Sort by ${c.label}">${c.label}${arrow(c.id)}</button></th>`).join('')}<th></th></tr></thead>
     <tbody>${body}
       ${draft ? `<tr class="draft t-${draft.loan ? (draft.type === 'income' ? 'loan-borrowed' : 'loan-lent') : draft.type}" data-draft><td class="selc"></td>${cells(state, { ...draft, amount: 0 }, { who })}
-        <td><button type="button" class="row-add" data-act="row-add" aria-label="Add this record" title="Add (Enter)">＋</button></td></tr>` : ''}
+        <td class="c-del"><button type="button" class="row-add" data-act="row-add" aria-label="Add this record" title="Add (Enter)">＋</button></td></tr>` : ''}
     </tbody>
     <tfoot><tr><td colspan="${span}" class="tbl-footer-td">
       <div class="tbl-footer-bar">

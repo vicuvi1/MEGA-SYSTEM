@@ -54,6 +54,12 @@ export function openBankImport(rows, { fileName = '' } = {}) {
     account: accounts.some((a) => a.id === preset?.account) ? preset.account : accounts.find((a) => a.kind === 'card')?.id || accounts[0]?.id,
   };
   let res = null;
+  // The review: rows you untick stay out; categories you change are kept.
+  // Keyed by date|amount|note|n so a repaint (new ids) keeps your choices.
+  const unticked = new Set();
+  const catPick = new Map();
+  const rowKey = (t, i) => `${t.date}|${t.type}|${t.amount}|${t.note}|${i}`;
+  const chosen = () => (res?.tx || []).map((t, i) => ({ ...t, category: catPick.get(rowKey(t, i)) || t.category, _k: rowKey(t, i) })).filter((t) => !unticked.has(t._k));
 
   const header = () => (rows[cfg.headerRow] || []).map((h, i) => ({ i, name: String(h ?? '').trim() || `Column ${i + 1}` }));
   const colSelect = (f) => `<label class="field"><span>${esc(f.label)}</span><select data-map="${f.id}">
@@ -70,8 +76,14 @@ export function openBankImport(rows, { fileName = '' } = {}) {
       ${res.duplicates ? `<div class="split-row"><span class="muted">Already in the app, skipped</span><b>${res.duplicates}</b></div>` : ''}
       ${res.skipped ? `<div class="split-row"><span class="muted">Rows without a date or amount (totals, notes)</span><b>${res.skipped}</b></div>` : ''}
       <p class="muted small">${res.months.map((m) => monthLabel(m)).join(', ')}. Check the totals against the statement.</p>
-      <div class="bank-prev">${res.tx.slice(0, 8).map((t) => `<div class="bp-row"><span class="muted">${esc(dayLabel(t.date))}</span><span class="bp-note">${esc(t.note || '—')}</span><span class="bp-cat">${esc(M.category(state, t.category)?.name || '')}</span><b class="${t.type === 'income' ? 'income' : ''}">${cur(t)}</b></div>`).join('')}
-      ${res.tx.length > 8 ? `<p class="muted small" style="margin:6px 0 0">…and ${res.tx.length - 8} more</p>` : ''}</div>`;
+      <p class="small" style="margin:8px 0 4px"><b>Check each row.</b> Untick what you don't want; change a guessed category. <button type="button" class="linkish" data-bk="all">Tick all</button> · <button type="button" class="linkish" data-bk="none">Untick all</button></p>
+      <div class="bank-prev bank-review">${res.tx.map((t, i) => {
+    const k = rowKey(t, i);
+    const cat = catPick.get(k) || t.category;
+    const cats = state.settings.categories.filter((c) => c.type === t.type);
+    return `<label class="bp-row bp-pick"><input type="checkbox" data-bk-row="${esc(k)}" ${unticked.has(k) ? '' : 'checked'} aria-label="Import ${esc(t.note || 'this row')}"><span class="muted">${esc(dayLabel(t.date))}</span><span class="bp-note">${esc(t.note || '—')}</span><select class="bp-cat" data-bk-cat="${esc(k)}" aria-label="Category">${cats.map((c) => `<option value="${esc(c.id)}" ${c.id === cat ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select><b class="${t.type === 'income' ? 'income' : ''}">${cur(t)}</b></label>`;
+  }).join('')}</div>
+      <p class="muted small">Imported records don't earn points: they weren't logged on the day.</p>`;
   };
 
   const html = () => `<div class="grab"></div><h3>Import bank statement <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
@@ -85,7 +97,7 @@ export function openBankImport(rows, { fileName = '' } = {}) {
       ${cfg.map.amount != null ? `<label class="field check"><input type="checkbox" id="bk-flip" ${cfg.flip ? 'checked' : ''}><span>Money out shows as positive numbers</span></label>` : ''}
     </details>
     <div id="bk-preview">${preview()}</div>
-    <div class="btns" style="margin-top:12px"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="bk-go" ${res?.tx.length ? '' : 'disabled'}>Import ${res?.tx.length || ''}</button></div>`;
+    <div class="btns" style="margin-top:12px"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="bk-go" ${chosen().length ? '' : 'disabled'}>Import ${chosen().length || ''}</button></div>`;
 
   ctx.openSheet('', (sheet) => {
     const paint = () => {
@@ -94,8 +106,15 @@ export function openBankImport(rows, { fileName = '' } = {}) {
       if (open) sheet.querySelector('.bank-map').open = true;
     };
     paint();
+    const goLabel = () => {
+      const go = sheet.querySelector('#bk-go');
+      const n = chosen().length;
+      if (go) { go.textContent = `Import ${n || ''}`; go.disabled = !n; }
+    };
     sheet.addEventListener('change', (e) => {
       const el = e.target;
+      if (el.dataset.bkRow) { if (el.checked) unticked.delete(el.dataset.bkRow); else unticked.add(el.dataset.bkRow); goLabel(); return; }
+      if (el.dataset.bkCat) { catPick.set(el.dataset.bkCat, el.value); return; }
       if (el.dataset.map) {
         const v = el.value === '' ? null : Number(el.value);
         if (v == null) delete cfg.map[el.dataset.map];
@@ -112,16 +131,25 @@ export function openBankImport(rows, { fileName = '' } = {}) {
       paint();
     });
     sheet.addEventListener('click', (e) => {
-      if (!e.target.closest('#bk-go') || !res?.tx.length) return;
+      const bk = e.target.closest('[data-bk]');
+      if (bk) {
+        unticked.clear();
+        if (bk.dataset.bk === 'none') (res?.tx || []).forEach((t, i) => unticked.add(rowKey(t, i)));
+        for (const box of sheet.querySelectorAll('[data-bk-row]')) box.checked = !unticked.has(box.dataset.bkRow);
+        goLabel();
+        return;
+      }
+      const picked = chosen().map(({ _k, ...t }) => t);
+      if (!e.target.closest('#bk-go') || !picked.length) return;
       const st = ctx.state;
       st.settings.bankPresets = { ...(st.settings.bankPresets || {}), [signature(rows, cfg.headerRow)]: { map: cfg.map, flip: cfg.flip, account: cfg.account } };
       st.settings.updatedAt = Date.now();
-      st.tx.push(...res.tx);
+      st.tx.push(...picked);
       ctx.commit();
       ctx.closeSheet();
       if (res.months.length) ctx.ui.month = res.months.at(-1);
       location.hash = '#log';
-      ctx.toast(`Imported ${res.tx.length} records from the statement. Categories are guessed; fix any in the Log.`);
+      ctx.toast(`Imported ${picked.length} record${picked.length === 1 ? '' : 's'} from the statement.`);
     });
   });
 }

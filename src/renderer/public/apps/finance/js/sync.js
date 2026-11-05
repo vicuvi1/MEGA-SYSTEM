@@ -6,7 +6,7 @@
 
 import { normalizeState, SCHEMA_VERSION } from './model.js';
 
-const LOCAL_SETTINGS = ['theme', 'themeMotion', 'logView'];
+const LOCAL_SETTINGS = ['theme', 'themeInLife', 'themeMotion', 'logView'];
 const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'accounts', 'categories', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
 
 // What goes to Drive.
@@ -18,8 +18,29 @@ export function toCloud(state, deviceId, now = Date.now()) {
     schema: SCHEMA_VERSION,
     savedAt: now,
     deviceId,
-    data: { settings, tx: state.tx, people: state.people, recurring: state.recurring || [], invoices: state.invoices || [], netWorth: state.netWorth || [], goals: state.goals || [], goalAllocations: state.goalAllocations || [], deleted: state.deleted },
+    data: { settings, tx: state.tx, people: state.people, recurring: state.recurring || [], invoices: state.invoices || [], netWorth: state.netWorth || [], goals: state.goals || [], goalAllocations: state.goalAllocations || [], deleted: state.deleted, ...(sharedRates(state.rates) ? { lastRates: sharedRates(state.rates) } : {}) },
   };
+}
+
+// The latest known exchange rates travel too (once a day at most), so a
+// device whose live rate download fails still prices USD and EUR: the fiat
+// rates (units per 1 USD) and the day they are from.
+const FIAT_CODES = ['MDL', 'USD', 'EUR', 'RON', 'GBP', 'UAH', 'CHF', 'PLN', 'TRY', 'CAD'];
+export function sharedRates(rates) {
+  if (!rates?.usd || !rates.fetchedAt) return null;
+  const usd = {};
+  for (const c of FIAT_CODES) if (rates.usd[c] > 0) usd[c] = Math.round(rates.usd[c] * 1e4) / 1e4;
+  if (!usd.MDL) return null;
+  const d = new Date(rates.fetchedAt);
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { date, usd };
+}
+
+// Rates from another device, when they are newer than this device's.
+function withRates(localRates, remote) {
+  const mine = sharedRates(localRates);
+  if (!remote?.usd?.MDL || !/^\d{4}-\d{2}-\d{2}$/.test(remote.date || '') || (mine && mine.date >= remote.date)) return localRates;
+  return { ...(localRates || {}), usd: { ...(localRates?.usd || {}), ...remote.usd }, crypto: localRates?.crypto || {}, history: localRates?.history || {}, fetchedAt: Date.parse(`${remote.date}T12:00:00`), synced: true };
 }
 
 function mergeList(a = [], b = [], deleted) {
@@ -78,6 +99,7 @@ export function mergeStates(local, remote) {
     goals: mergeList(local.goals, r.goals, deleted),
     goalAllocations: mergeList(local.goalAllocations, r.goalAllocations, deleted),
     deleted,
+    rates: withRates(local.rates, remote.data.lastRates),
   };
   const localData = toCloud(local, '').data;
   const mergedData = toCloud(merged, '').data;

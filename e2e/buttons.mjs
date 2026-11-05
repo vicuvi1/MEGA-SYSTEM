@@ -251,7 +251,8 @@ async function places() {
   for (const [name, open, tabSel] of APPS) {
     if (only.length && !only.some((o) => o === name || o.startsWith(name + ' ›'))) continue
     const frame = await open()
-    const tabs = await frame.locator(tabSel).evaluateAll((els) => els.map((e) => e.getAttribute('data-view') || e.getAttribute('data-tab')))
+    // Each tab once (Finance Helper inside Life has a strip of tabs plus its hidden sidebar).
+    const tabs = [...new Set(await frame.locator(tabSel).evaluateAll((els) => els.map((e) => e.getAttribute('data-view') || e.getAttribute('data-tab'))))]
     for (const tab of tabs.length ? tabs : [null]) {
       const place = tab ? `${name} › ${tab}` : name
       if (!want(place)) continue
@@ -262,7 +263,12 @@ async function places() {
         open: async () => {
           const f = await open()
           if (tab) {
-            await f.locator(`${tabSel}[data-view="${tab}"], ${tabSel}[data-tab="${tab}"]`).first().click({ timeout: 3000 })
+            const links = f.locator(`${tabSel}[data-view="${tab}"], ${tabSel}[data-tab="${tab}"]`)
+            let shown = null
+            for (let i = 0; i < (await links.count()); i++) if (await links.nth(i).isVisible()) { shown = links.nth(i); break }
+            // A section only behind "More" (its sidebar link is hidden): go by its address.
+            if (shown) await shown.click({ timeout: 3000 })
+            else await f.evaluate((t) => { location.hash = '#' + t }, tab)
             await settled(f, null)
           }
           return f
