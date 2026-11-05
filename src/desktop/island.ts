@@ -806,7 +806,13 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     }
   }
   startWatcher()
-  app.on('will-quit', () => { try { watcher?.kill() } catch { /* fine */ } })
+  const stopWatcher = (): void => {
+    restarting = false
+    try { watcher?.kill() } catch { /* fine */ }
+  }
+  app.on('will-quit', stopWatcher)
+  // main.ts exitNow (the release check): app.exit skips will-quit.
+  ;(app as unknown as NodeJS.EventEmitter).on('life-exit-now', stopWatcher)
 
   // ---- Shortcuts (IS15, IS22) ------------------------------------------------
   // Open / close it from anywhere.

@@ -36,11 +36,25 @@ const smokeLog = (step: string): void => {
     /* no log */
   }
 }
+/**
+ * Quit right away (the release check, the 90 s safety net). app.exit skips
+ * will-quit, so the island's PowerShell watcher kept running and on Windows the
+ * app never closed: stop the helpers first, then make sure the process ends.
+ */
+function exitNow(code: number): void {
+  try {
+    app.emit('life-exit-now')
+  } catch {
+    /* helpers are best effort */
+  }
+  app.exit(code)
+  setTimeout(() => process.exit(code), 2000).unref()
+}
 if (smoke) {
   smokeLog('start')
   setTimeout(() => {
     smokeLog('90 s passed: giving up')
-    app.exit(3)
+    exitNow(3)
   }, 90_000)
 }
 // Only one copy runs; a second start just brings the first one forward.
@@ -397,7 +411,8 @@ if (firstCopy) void app.whenReady().then(async () => {
         smokeLog(`page text ${seen}, updates ${updates}`)
         const ok = win.isVisible() && Number(seen) > 0 && updates === 'github'
         await writeFile(join(dir, 'smoke.txt'), `visible=${win.isVisible()} text=${seen} updates=${updates}\n`).catch(() => {})
-        app.exit(ok ? 0 : 1)
+        smokeLog(ok ? 'all good: closing' : 'not good: closing')
+        exitNow(ok ? 0 : 1)
       }, 5000)
       return
     }
