@@ -1898,3 +1898,12 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .st-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgb(var(--ink) / 0.03); }
 .st-list small { display: block; color: var(--muted); }
 .st-spark { flex: none; }
+.st-vol { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 6px 0 2px; }
+.st-vol-cell { display: grid; place-items: center; padding: 8px 2px; border-radius: 8px; background: rgb(var(--ink) / 0.04); text-align: center; }
+.st-vol-cell b { font-size: 16px; }
+.st-vol-cell small { font-size: 10.5px; color: var(--muted); }
+.st-vol-cell.z-low { background: color-mix(in srgb, var(--orange) 18%, transparent); }
+.st-vol-cell.z-good { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+.st-vol-cell.z-high { background: color-mix(in srgb, var(--red) 20%, transparent); }
+.st-vol-note { margin: 0 0 10px; }
+@media (max-width: 480px) { .st-vol { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

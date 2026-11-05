@@ -72,3 +72,40 @@ export function strengthSummary(workouts: Workout[]): LiftSummary[] {
   }
   return out.sort((a, b) => b.lastDay.localeCompare(a.lastDay))
 }
+
+// ---- Volume per muscle group (H3) ---------------------------------------
+export const MUSCLES = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core'] as const
+export type Muscle = (typeof MUSCLES)[number]
+
+/** Which muscles an exercise trains (by its name). */
+export function musclesOf(name: string): Muscle[] {
+  const n = name.toLowerCase()
+  const out = new Set<Muscle>()
+  if (/bench|push.?up|chest|dip|fly|press up/.test(n)) out.add('Chest')
+  if (/pull.?up|chin|row|lat|deadlift|back/.test(n)) out.add('Back')
+  if (/overhead|ohp|shoulder|lateral|military|pike|handstand|(^|\s)press$/.test(n)) out.add('Shoulders')
+  if (/curl|tricep|bicep|dip|extension|close.?grip/.test(n)) out.add('Arms')
+  if (/squat|lunge|leg|deadlift|calf|hip thrust|step.?up|jump/.test(n)) out.add('Legs')
+  if (/sit.?up|crunch|plank|core|ab|leg raise|hollow/.test(n)) out.add('Core')
+  if (/push.?up|bench|dip/.test(n)) out.add('Arms')
+  return [...out]
+}
+
+/** Hard sets per muscle over the 7 days up to `today` (rep-only logs: every 15 reps count as a set). */
+export function weeklyMuscleSets(workouts: Workout[], today: string): Record<Muscle, number> {
+  const from = new Date(`${today}T12:00:00Z`)
+  from.setUTCDate(from.getUTCDate() - 6)
+  const start = from.toISOString().slice(0, 10)
+  const out = Object.fromEntries(MUSCLES.map((m) => [m, 0])) as Record<Muscle, number>
+  for (const w of workouts) {
+    if (w.day < start || w.day > today) continue
+    for (const it of w.items) {
+      const sets = it.sets?.length ? it.sets.length : Math.floor((Number(it.amount) || 0) / 15)
+      for (const m of musclesOf(it.name)) out[m] += sets
+    }
+  }
+  return out
+}
+
+/** Where a muscle's weekly sets stand against 10–20. */
+export const volumeZone = (sets: number): 'none' | 'low' | 'good' | 'high' => (sets === 0 ? 'none' : sets < 10 ? 'low' : sets <= 20 ? 'good' : 'high')

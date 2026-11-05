@@ -2,7 +2,8 @@
 // estimated max climb (one line per lift). Records show up by themselves.
 import { useState } from 'react'
 import type { BodyState } from '@shared/api'
-import { parseSets, type LiftSummary } from '@core/strength'
+import { MUSCLES, parseSets, volumeZone, weeklyMuscleSets, type LiftSummary } from '@core/strength'
+import { dayKey } from '@core/dates'
 import { life } from './bridge'
 import { useAction } from './ui'
 
@@ -29,6 +30,8 @@ export function StrengthCard({ state, onChange }: { state: BodyState; onChange: 
   const [text, setText] = useState('')
   const parsed = parseSets(text)
   const lifts = state.strength ?? []
+  // Hard sets per muscle this week, against the 10–20 that build muscle (H3).
+  const vol = weeklyMuscleSets(state.recentWorkouts, dayKey(new Date()))
   const log = async () => {
     if (!parsed) return
     const reps = parsed.sets.reduce((t, s) => t + s.reps, 0)
@@ -64,6 +67,15 @@ export function StrengthCard({ state, onChange }: { state: BodyState; onChange: 
           Log
         </button>
       </form>
+      <div className="st-vol" role="list" aria-label="Hard sets per muscle this week (aim 10 to 20)">
+        {MUSCLES.map((m) => (
+          <div key={m} role="listitem" className={`st-vol-cell z-${volumeZone(vol[m])}`} title={`${m}: ${vol[m]} hard sets in 7 days (aim 10–20)`}>
+            <b>{vol[m]}</b>
+            <small>{m}</small>
+          </div>
+        ))}
+      </div>
+      <p className="hint small st-vol-note">Hard sets per muscle, last 7 days · 10–20 builds muscle</p>
       {text.trim() && !parsed && <p className="hint small">Write it like: exercise sets x reps x kg (bench 3x8x60).</p>}
       {lifts.length === 0 ? (
         <p className="hint">Log a lift with a weight and your best sets and estimated max show here.</p>

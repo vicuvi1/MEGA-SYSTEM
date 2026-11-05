@@ -22,3 +22,16 @@ describe('strength', () => {
     expect(strengthSummary([w('2026-11-01', 'Bench', 8, 60), w('2026-11-04', 'Bench', 5, 55)])[0].newPr).toBe(false)
   })
 })
+
+import { musclesOf, volumeZone, weeklyMuscleSets } from './strength'
+describe('volume per muscle group', () => {
+  it('maps exercises to muscles and counts the week’s hard sets', () => {
+    expect(musclesOf('Bench')).toEqual(['Chest', 'Arms'])
+    expect(musclesOf('Squats')).toEqual(['Legs'])
+    const ws = [w('2026-11-04', 'Bench', 8, 60), w('2026-10-20', 'Bench', 8, 60), { id: 2, day: '2026-11-05', ts: '', title: 'x', items: [{ exerciseId: 'p', name: 'Push-ups', unit: 'reps', amount: 100 }], note: null } as any]
+    const v = weeklyMuscleSets(ws, '2026-11-05')
+    expect(v.Chest).toBe(3 + 6) // 3 sets of bench + 100 push-ups ≈ 6 sets; the old session doesn't count
+    expect(v.Legs).toBe(0)
+    expect([volumeZone(0), volumeZone(9), volumeZone(15), volumeZone(25)]).toEqual(['none', 'low', 'good', 'high'])
+  })
+})
