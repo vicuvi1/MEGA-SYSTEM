@@ -35,5 +35,6 @@ export default async function handler(req, res) {
     }
   }
   if (!(await requireSession(res, cfg, bearer(req)))) return
-  send(res, 200, { bots: publicBots(botDefaults()), vapidPublicKey: vapidPublic() || null })
+  // tz: the time zone your plan and Ben run on, so the calendar can warn when a device differs.
+  send(res, 200, { bots: publicBots(botDefaults()), vapidPublicKey: vapidPublic() || null, tz: process.env.LIFE_TZ || 'Europe/Chisinau' })
 }

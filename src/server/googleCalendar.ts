@@ -140,7 +140,8 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
     attendees: Array.isArray(e.attendees) ? e.attendees.length : 0,
     declined: Array.isArray(e.attendees) && e.attendees.some((a: any) => a?.self && a?.responseStatus === 'declined'),
     free: e.transparency === 'transparent',
-    htmlLink: e.htmlLink ?? null
+    htmlLink: e.htmlLink ?? null,
+    reminder: e.reminders?.useDefault === false ? (e.reminders.overrides?.[0]?.minutes ?? 0) : null
   })
 
   return {
@@ -158,7 +159,7 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
       return all.flat().sort((a, b) => a.start.localeCompare(b.start))
     },
     /** A new event (in your chosen calendar), marked as made by Life System. */
-    async create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; colorId?: string; recurrence?: string[]; timeZone?: string }): Promise<CalEvent> {
+    async create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; colorId?: string; recurrence?: string[]; timeZone?: string; reminder?: number | null }): Promise<CalEvent> {
       const calId = e.calendarId || (await target())
       const allDay = /^\d{4}-\d{2}-\d{2}$/.test(e.start)
       const body = {
@@ -167,6 +168,8 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
         start: allDay ? { date: e.start } : { dateTime: e.start, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}) },
         end: allDay ? { date: e.end } : { dateTime: e.end, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}) },
         ...(e.colorId ? { colorId: e.colorId } : {}),
+        // A reminder you chose (D6): a pop-up N minutes before.
+        ...(e.reminder != null ? { reminders: { useDefault: false, overrides: e.reminder > 0 ? [{ method: 'popup', minutes: Math.min(40320, Math.round(e.reminder)) }] : [] } } : {}),
         // Repeating blocks: one RRULE, e.g. RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR
         ...(e.recurrence?.length ? { recurrence: e.recurrence.filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2) } : {}),
         extendedProperties: { private: { lifeSystem: '1' } }
@@ -176,19 +179,23 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
       return toEvent(j, cal)
     },
     async move(calendarId: string, id: string, start: string, end: string): Promise<void> {
-      await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ start: { dateTime: start }, end: { dateTime: end } }) })
+      // An all-day event moves by its dates (F6).
+      const day = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? { date: v, dateTime: null } : { dateTime: v, date: null })
+      await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ start: day(start), end: day(end) }) })
     },
     /**
      * Changes an event: title, times, notes, color, repeat, calendar. With
      * scope 'all' on a repeating event, the whole series changes (its times
      * keep each day, only the time of day moves).
      */
-    async update(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null; timeZone?: string }): Promise<void> {
+    async update(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null; timeZone?: string; reminder?: number | null }): Promise<void> {
       let target = id
       const body: any = {}
       if (patch.title != null) body.summary = patch.title
       if (patch.description != null) body.description = patch.description
       if (patch.colorId !== undefined) body.colorId = patch.colorId || null
+      // Reminder (D6): a number of minutes, 0 = none, null = the calendar's default.
+      if (patch.reminder !== undefined) body.reminders = patch.reminder == null ? { useDefault: true } : { useDefault: false, overrides: patch.reminder > 0 ? [{ method: 'popup', minutes: Math.min(40320, Math.round(patch.reminder)) }] : [] }
       if (patch.scope === 'all' && patch.recurringEventId) {
         target = patch.recurringEventId
         if (patch.start || patch.end) {
@@ -200,8 +207,10 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
         }
       } else {
         const tz = patch.recurrence?.length ? { timeZone: patch.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}
-        if (patch.start) body.start = { dateTime: patch.start, ...tz }
-        if (patch.end) body.end = { dateTime: patch.end, ...tz }
+        // A date only (YYYY-MM-DD) makes it all-day (D5); a date-time makes it timed again.
+        const at = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? { date: v, dateTime: null } : { dateTime: v, date: null, ...tz })
+        if (patch.start) body.start = at(patch.start)
+        if (patch.end) body.end = at(patch.end)
       }
       if (patch.recurrence !== undefined && !patch.recurringEventId) body.recurrence = (patch.recurrence ?? []).filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2)
       if (Object.keys(body).length) await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(target)}`, { method: 'PATCH', body: JSON.stringify(body) })

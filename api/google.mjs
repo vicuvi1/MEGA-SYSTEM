@@ -81,7 +81,7 @@ export default async function handler(req, res) {
       case 'events':
         return send(res, 200, { connected: true, events: await api.events(String(body.from), String(body.to)) })
       case 'create':
-        return send(res, 200, { event: await api.create({ title: String(body.title || 'Focus').slice(0, 200), start: String(body.start), end: String(body.end), description: body.description ? String(body.description).slice(0, 2000) : undefined, calendarId: body.calendarId ? String(body.calendarId) : undefined, recurrence: Array.isArray(body.recurrence) ? body.recurrence.map(String) : undefined, timeZone: process.env.LIFE_TZ || undefined }) })
+        return send(res, 200, { event: await api.create({ title: String(body.title || 'Focus').slice(0, 200), start: String(body.start), end: String(body.end), description: body.description ? String(body.description).slice(0, 2000) : undefined, calendarId: body.calendarId ? String(body.calendarId) : undefined, recurrence: Array.isArray(body.recurrence) ? body.recurrence.map(String) : undefined, timeZone: process.env.LIFE_TZ || undefined, reminder: Number.isFinite(body.reminder) ? Number(body.reminder) : undefined }) })
       case 'update':
         await api.update(String(body.calendarId), String(body.id), {
           title: body.title != null ? String(body.title).slice(0, 200) : undefined,
@@ -93,7 +93,8 @@ export default async function handler(req, res) {
           moveTo: body.moveTo ? String(body.moveTo) : undefined,
           scope: body.scope === 'all' ? 'all' : 'one',
           recurringEventId: body.recurringEventId ? String(body.recurringEventId) : null,
-          timeZone: process.env.LIFE_TZ || undefined
+          timeZone: process.env.LIFE_TZ || undefined,
+          reminder: body.reminder === undefined ? undefined : Number.isFinite(body.reminder) ? Number(body.reminder) : null
         })
         return send(res, 200, { ok: true })
       case 'move':

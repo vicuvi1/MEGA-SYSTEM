@@ -12,7 +12,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { localDay, localHM, type CalEvent } from '@core/dayTime'
 import { layoutDay } from '@core/calLayout'
 import { addBlockTask, blockTasks, removeBlockTask, setBlockTaskDone } from '@core/blockTasks'
-import { blocksToApply, repeatRule, templateFromDay, type DayTemplate, type Repeat } from '@core/calTemplates'
+import { blocksToApply, customRule, repeatRule, templateFromDay, type CustomRepeat, type DayTemplate, type Repeat } from '@core/calTemplates'
+import { parseWhen, type When } from '@core/whenParse'
+import { currentSession } from '../web/session'
 import { defaultAreaColor, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life, type GoogleStatus } from '../bridge'
 import { bookMinutes, bookTask } from '../booking'
@@ -28,8 +30,8 @@ const PX_MIN = 32
 const PX_MAX = 160
 const PX_DEFAULT = 72
 /** Your calendar's look (F1–F3): day hours (or fit to your events), work hours, days shown, week start. */
-interface CalPrefs { startH: number; endH: number; fit: boolean; workFrom: number; workTo: number; days: number; weekStart: 0 | 1 | 6; weekNumbers: boolean }
-const CAL_PREFS: CalPrefs = { startH: 6, endH: 24, fit: true, workFrom: 8, workTo: 20, days: 3, weekStart: 1, weekNumbers: true }
+interface CalPrefs { startH: number; endH: number; fit: boolean; workFrom: number; workTo: number; days: number; weekStart: 0 | 1 | 6; weekNumbers: boolean; tz2: string }
+const CAL_PREFS: CalPrefs = { startH: 6, endH: 24, fit: true, workFrom: 8, workTo: 20, days: 3, weekStart: 1, weekNumbers: true, tz2: '' }
 /** ISO week number (Monday weeks), for the title and the month view. */
 export const isoWeek = (day: string) => {
   const d = new Date(`${day}T12:00:00Z`)
@@ -55,6 +57,45 @@ const agoShort = (ms: number) => (ms < 10_000 ? 'just now' : ms < 60_000 ? `${Ma
 const toMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
 const hmOf = (min: number) => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`
 const isoAt = (day: string, min: number) => (min >= 24 * 60 ? new Date(`${addDays(day, 1)}T00:00:00`).toISOString() : new Date(`${day}T${hmOf(min)}:00`).toISOString())
+/** Any minute count from a day's midnight, also past midnight (1500 = 01:00 the next day). */
+const isoFrom = (day: string, min: number) => isoAt(addDays(day, Math.floor(min / 1440)), min % 1440)
+const dayDiff = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00`).getTime() - new Date(`${a}T12:00:00`).getTime()) / 86400000)
+const lenLabel = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60}` : `${m / 60} h`)
+const LENGTHS = [15, 30, 45, 60, 90, 120]
+/** Reminder choices (D6), in minutes before. "default" = the calendar's own. */
+const REMINDERS: [string, string][] = [
+  ['default', 'Calendar default'],
+  ['0', 'No reminder'],
+  ['5', '5 min before'],
+  ['10', '10 min before'],
+  ['30', '30 min before'],
+  ['60', '1 hour before'],
+  ['1440', '1 day before']
+]
+const WD2 = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+type RepeatChoice = Repeat | 'custom'
+const CUSTOM0: CustomRepeat = { freq: 'weekly', interval: 1, days: [], until: null, count: 12 }
+/** Minutes a time zone is ahead of this device's clock right now (D7). */
+const tzAhead = (tz: string, at = new Date()) => {
+  try {
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(at)
+    const g = (t: string) => Number(p.find((x) => x.type === t)?.value)
+    const there = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'))
+    const here = Date.UTC(at.getFullYear(), at.getMonth(), at.getDate(), at.getHours(), at.getMinutes())
+    return Math.round((there - here) / 60000)
+  } catch {
+    return 0
+  }
+}
+const deviceTz = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+  } catch {
+    return ''
+  }
+}
+const TZ_CHOICES = ['UTC', 'Europe/London', 'Europe/Berlin', 'Europe/Bucharest', 'Europe/Chisinau', 'Europe/Moscow', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney']
+const tzShort = (tz: string) => tz.split('/').pop()!.replace(/_/g, ' ')
 const store = {
   get<T>(k: string, d: T): T {
     try {
@@ -85,6 +126,23 @@ interface Item {
   task?: TodoTask
   dim?: boolean
 }
+
+/** A new event from the form (D3): a time (may pass midnight) or whole days. */
+interface NewEvent {
+  title: string
+  day: string
+  start: number
+  end: number
+  allDay?: boolean
+  /** Last day, for all-day events over several days. */
+  endDay?: string
+  recurrence?: string[]
+  calendarId?: string
+  reminder?: number
+  description?: string
+}
+/** An all-day event as an editable item (F5, F6). */
+const allDayItem = (e: CalEvent, color: string): Item => ({ key: `e:${e.calendarId}:${e.id}`, title: e.title, day: localDay(e.start), start: 0, end: 24 * 60, color, kind: 'event', event: e })
 
 type Drag =
   | { kind: 'move'; item: Item; offset: number; len: number; x0: number; y0: number; moved: boolean }
@@ -126,6 +184,8 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const [hidden, setHidden] = useState<string[]>(() => store.get('ls.calHidden', []))
   const [dimmed, setDimmed] = useState<string[]>(() => store.get('ls.calDim', []))
   const [anchor, setAnchor] = useState(today)
+  // The agenda keeps loading as you scroll (F5): two weeks at a time, up to four months.
+  const [agendaLen, setAgendaLen] = useState(14)
   const [events, setEvents] = useState<CalEvent[]>([])
   const [status, setStatus] = useState<GoogleStatus | null>(null)
   const statusRef = useRef(status)
@@ -166,10 +226,10 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     if (view === 'ndays') return Array.from({ length: Math.max(1, Math.min(7, prefs.days)) }, (_, i) => addDays(anchor, i))
     if (view === 'workweek') return Array.from({ length: 5 }, (_, i) => addDays(monday(anchor), i))
     if (view === 'week') return Array.from({ length: 7 }, (_, i) => addDays(weekStartOf(anchor, prefs.weekStart), i))
-    if (view === 'agenda') return Array.from({ length: 14 }, (_, i) => addDays(anchor, i))
+    if (view === 'agenda') return Array.from({ length: agendaLen }, (_, i) => addDays(anchor, i))
     const first = weekStartOf(`${anchor.slice(0, 7)}-01`, prefs.weekStart)
     return Array.from({ length: 42 }, (_, i) => addDays(first, i))
-  }, [view, anchor, prefs.days, prefs.weekStart])
+  }, [view, anchor, prefs.days, prefs.weekStart, agendaLen])
   // The day's hours (F1): yours, stretched to fit an earlier or later event when "fit" is on.
   const { startH, endH } = useMemo(() => {
     let a = Math.max(0, Math.min(23, prefs.startH))
@@ -352,12 +412,58 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const groupRef = useRef(groupTask)
   groupRef.current = groupTask
 
-  const createEvent = async (title: string, day: string, start: number, end: number, repeat: Repeat) => {
-    const ok = await act(() => life.google!.create({ title, start: isoAt(day, start), end: isoAt(day, end), recurrence: repeatRule(repeat, day) }).then(() => true), repeat === 'none' ? 'Added to your calendar' : `Added, repeating ${repeat}`)
+  const createEvent = async (n: NewEvent) => {
+    const start = n.allDay ? n.day : isoFrom(n.day, n.start)
+    const end = n.allDay ? addDays(n.endDay && n.endDay > n.day ? n.endDay : n.day, 1) : isoFrom(n.day, n.end)
+    const ok = await act(
+      () => life.google!.create({ title: n.title, start, end, recurrence: n.recurrence, calendarId: n.calendarId, description: n.description, ...(n.reminder != null ? { reminder: n.reminder } : {}) }).then(() => true),
+      n.recurrence?.length ? 'Added, repeating' : 'Added to your calendar'
+    )
     if (ok) {
       soundSuccess()
       setDraft(null)
+      setAllDayDraft(null)
       void load()
+    }
+    return ok
+  }
+  const colorOf = (e: CalEvent) => e.color ?? calColor(e.calendarId) ?? '#7CC4FF'
+  const canMoveAllDay = (e: CalEvent) => connected && writable(e.calendarId)
+  /** A timed event that runs over several days can't be dragged as one piece. */
+  const canMoveItem = (it: Item) => {
+    if (it.kind === 'task') return true
+    const e = it.event!
+    if (!connected || !writable(e.calendarId)) return false
+    return new Date(e.end).getTime() - new Date(e.start).getTime() <= (it.end - it.start) * 60000 + 60000
+  }
+  /** Move an all-day event to another day, keeping how many days it lasts (F4, F6). */
+  const moveAllDay = (e: CalEvent, d: string, undoable = true) => {
+    const from = localDay(e.start)
+    if (from === d) return
+    const s = d
+    const en = addDays(d, Math.max(1, dayDiff(from, localDay(e.end))))
+    const key = `${e.calendarId}:${e.id}`
+    pending.current.set(key, { start: s, end: en })
+    setEvents((list) => list.map((x) => (x.id === e.id && x.calendarId === e.calendarId ? { ...x, start: s, end: en } : x)))
+    const wd = new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    toast(undoable ? `${e.title}: ${wd}` : `Moved back: ${e.title}`, 'good', undoable ? { label: 'Undo', run: () => moveAllDay({ ...e, start: s, end: en }, from, false) } : undefined)
+    life.google!
+      .move(e.calendarId, e.id, s, en)
+      .catch((err: Error) => {
+        setEvents((list) => list.map((x) => (x.id === e.id && x.calendarId === e.calendarId ? { ...x, start: e.start, end: e.end } : x)))
+        toast(`Google didn't take that move (${err.message}). It's back where it was.`, 'bad')
+      })
+      .finally(() => pending.current.delete(key))
+  }
+  /** Something dragged in the month view or the all-day row ("a|cal|id" or "i|key") dropped on a day. */
+  const dropOnDay = (v: string, d: string) => {
+    if (v.startsWith('a|')) {
+      const [, cal, id] = v.split('|')
+      const e = events.find((x) => x.calendarId === cal && x.id === id)
+      if (e) moveAllDay(e, d)
+    } else if (v.startsWith('i|')) {
+      const it = itemsRef.current.find((x) => x.key === v.slice(2))
+      if (it && it.day !== d) commitMove(it, d, it.start, it.end)
     }
   }
 
@@ -523,6 +629,17 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     setDraft({ day: today, start: at, end: Math.min(24 * 60, at + 50) })
   }
   const [armed, setArmed] = useState<TodoTask | null>(null)
+  const [allDayDraft, setAllDayDraft] = useState<string | null>(null)
+  const [overDay, setOverDay] = useState<string | null>(null)
+  // The time zone your plan and Ben run on (the server's), to warn when this device differs (D7).
+  const [serverTz, setServerTz] = useState('')
+  const [tzOk, setTzOk] = useState<string>(() => store.get('ls.calTzOk', ''))
+  useEffect(() => {
+    fetch('/api/config', { headers: { Authorization: `Bearer ${currentSession()}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j?.tz && setServerTz(String(j.tz)))
+      .catch(() => {})
+  }, [])
 
   // ---- Zoom by Ctrl+scroll / pinch (C2), swipe days (M2), keys (D2) --------
   const pxRef = useRef(hourPx)
@@ -664,7 +781,9 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     if (menu && !(e.target as HTMLElement).closest('.cal-pop-wrap')) setMenu(null)
     if (moreOpen && !(e.target as HTMLElement).closest('.cal-more-pop, .cal-more')) setMoreOpen(null)
   }
-  const cols = `52px repeat(${gridDays.length}, minmax(0, 1fr))`
+  const tz2 = prefs.tz2 && prefs.tz2 !== deviceTz() ? prefs.tz2 : ''
+  const tz2Ahead = tz2 ? tzAhead(tz2, new Date(`${anchor}T12:00:00`)) : 0
+  const cols = `${tz2 ? 88 : 52}px repeat(${gridDays.length}, minmax(0, 1fr))`
 
   return (
     <div className="cal cal2" onPointerDownCapture={closeMenus}>
@@ -814,6 +933,17 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         )}
 
         <section className="card cal-main">
+          {serverTz && deviceTz() && serverTz !== deviceTz() && tzOk !== `${deviceTz()}|${serverTz}` && (
+            <p className="cal-tzwarn" role="status">
+              🌍 This device is on <b>{tzShort(deviceTz())}</b> time, but your plan and Ben run on <b>{tzShort(serverTz)}</b> ({tzAhead(serverTz) === 0 ? 'same clock now' : `${tzAhead(serverTz) > 0 ? '+' : '−'}${lenLabel(Math.abs(tzAhead(serverTz)))}`}). Times here are this device's.{' '}
+              <button className="btn small ghost" onClick={() => (setPrefs({ tz2: serverTz }), setTzOk(`${deviceTz()}|${serverTz}`), store.set('ls.calTzOk', `${deviceTz()}|${serverTz}`))}>
+                Show both
+              </button>
+              <button className="btn small ghost" onClick={() => (setTzOk(`${deviceTz()}|${serverTz}`), store.set('ls.calTzOk', `${deviceTz()}|${serverTz}`))}>
+                OK
+              </button>
+            </p>
+          )}
           {view === 'month' && (
             <MonthGrid
               days={days}
@@ -821,33 +951,79 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
               today={today}
               events={visible}
               items={items}
+              colorOf={colorOf}
+              canMoveAllDay={canMoveAllDay}
+              canMoveItem={canMoveItem}
+              onDrop={dropOnDay}
+              onPick={setEditing}
               onDay={(d) => {
                 setAnchor(d)
                 setView('day')
               }}
+              onAdd={(d) => {
+                if (!connected) return
+                setAnchor(d)
+                setView('day')
+                setDraft({ day: d, start: 9 * 60, end: 9 * 60 + 50 })
+              }}
             />
           )}
-          {view === 'agenda' && <Agenda days={days} today={today} items={items} allDay={visible.filter((e) => e.allDay)} onPick={setEditing} />}
+          {view === 'agenda' && <Agenda days={days} today={today} items={items} allDay={visible.filter((e) => e.allDay)} colorOf={colorOf} onPick={setEditing} more={agendaLen < 120} onMore={() => setAgendaLen((n) => Math.min(120, n + 14))} />}
           {gridDays.length > 0 && (
             <>
-              {visible.some((e) => e.allDay && gridDays.some((d) => localDay(e.start) <= d && localDay(e.end) > d)) && (
+              {(connected || visible.some((e) => e.allDay && gridDays.some((d) => localDay(e.start) <= d && localDay(e.end) > d))) && (
                 <div className="cal-allday" style={{ gridTemplateColumns: cols }}>
                   <span className="cal-hour-label">all day</span>
                   {gridDays.map((d) => (
-                    <div key={d} className="cal-allday-cell">
+                    <div
+                      key={d}
+                      className={`cal-allday-cell ${overDay === d ? 'drop' : ''} ${connected ? 'can-add' : ''}`}
+                      title={connected ? 'Click an empty spot to add an all-day event' : undefined}
+                      onClick={(ev) => ev.target === ev.currentTarget && connected && setAllDayDraft(d)}
+                      onDragOver={(ev) => {
+                        if (!ev.dataTransfer.types.includes('text/cal')) return
+                        ev.preventDefault()
+                        if (overDay !== d) setOverDay(d)
+                      }}
+                      onDragLeave={() => overDay === d && setOverDay(null)}
+                      onDrop={(ev) => {
+                        setOverDay(null)
+                        const v = ev.dataTransfer.getData('text/cal')
+                        if (v.startsWith('a|')) {
+                          ev.preventDefault()
+                          dropOnDay(v, d)
+                        }
+                      }}
+                    >
                       {visible
                         .filter((e) => e.allDay && localDay(e.start) <= d && localDay(e.end) > d)
                         .map((e) => (
-                          <span key={e.id} className="cal-chip" style={{ ['--c' as string]: e.color ?? '#7CC4FF' }}>
+                          <button
+                            key={e.id}
+                            type="button"
+                            className="cal-chip"
+                            draggable={canMoveAllDay(e)}
+                            onDragStart={(ev) => ev.dataTransfer.setData('text/cal', `a|${e.calendarId}|${e.id}`)}
+                            onClick={() => setEditing(allDayItem(e, colorOf(e)))}
+                            style={{ ['--c' as string]: colorOf(e) }}
+                            title={`${e.title} · all day`}
+                          >
                             {e.title}
-                          </span>
+                          </button>
                         ))}
+                      {allDayDraft === d && <AllDayNew onCancel={() => setAllDayDraft(null)} onSave={(title) => createEvent({ title, day: d, start: 0, end: 24 * 60, allDay: true })} />}
                     </div>
                   ))}
                 </div>
               )}
               <div className="cal-head" style={{ gridTemplateColumns: cols }}>
-                <span />
+                {tz2 ? (
+                  <span className="cal-tz-head" title={`${tz2} · this device`}>
+                    <em>{tzShort(tz2).slice(0, 6)}</em> here
+                  </span>
+                ) : (
+                  <span />
+                )}
                 {gridDays.map((d) => (
                   <button
                     key={d}
@@ -866,7 +1042,8 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                 <div className="cal-grid" style={{ gridTemplateColumns: cols, height: (endH - startH) * hourPx, ['--hourPx' as string]: `${hourPx}px` }}>
                   <div className="cal-hours">
                     {Array.from({ length: endH - startH }, (_, i) => (
-                      <span key={i} className={startH + i === now.getHours() && gridDays.includes(today) ? 'cur' : ''} style={{ top: i * hourPx }}>
+                      <span key={i} className={`${startH + i === now.getHours() && gridDays.includes(today) ? 'cur' : ''} ${gridDays.includes(today) && Math.abs(nowMin - (startH + i) * 60) < 12 ? 'under-now' : ''}`} style={{ top: i * hourPx }}>
+                        {tz2 && <em className="cal-tz2">{hmOf(((((startH + i) * 60 + tz2Ahead) % 1440) + 1440) % 1440)}</em>}
                         {pad(startH + i)}:00
                       </span>
                     ))}
@@ -995,7 +1172,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                             </small>
                           </div>
                         )}
-                        {draft?.day === d && <DraftForm top={((draft.start - startH * 60) / 60) * hourPx} start={draft.start} end={draft.end} day={d} onCancel={() => setDraft(null)} onSave={(t, s, e, r) => createEvent(t, d, s, e, r)} />}
+                        {draft?.day === d && <DraftForm top={((draft.start - startH * 60) / 60) * hourPx} start={draft.start} end={draft.end} day={d} calendars={(status?.calendars ?? []).filter((c) => c.canWrite !== false)} onCancel={() => setDraft(null)} onSave={(n) => void createEvent(n)} />}
                       </div>
                     )
                   })}
@@ -1007,7 +1184,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         </section>
       </div>
 
-      {connected && (
+      {connected && !editing && !draft && (
         <button className="cal-fab" onClick={newAtNextSlot} aria-label="New event at the next free half hour" title="New event (N)">
           +
         </button>
@@ -1029,45 +1206,185 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   )
 }
 
-function MonthGrid({ days, month, today, events, items, onDay }: { days: string[]; month: string; today: string; events: CalEvent[]; items: Item[]; onDay: (d: string) => void }) {
+function MonthGrid({
+  days,
+  month,
+  today,
+  events,
+  items,
+  colorOf,
+  canMoveAllDay,
+  canMoveItem,
+  onDrop,
+  onPick,
+  onDay,
+  onAdd
+}: {
+  days: string[]
+  month: string
+  today: string
+  events: CalEvent[]
+  items: Item[]
+  colorOf: (e: CalEvent) => string
+  canMoveAllDay: (e: CalEvent) => boolean
+  canMoveItem: (it: Item) => boolean
+  onDrop: (v: string, d: string) => void
+  onPick: (it: Item) => void
+  onDay: (d: string) => void
+  onAdd: (d: string) => void
+}) {
+  const [list, setList] = useState<string | null>(null)
+  const [over, setOver] = useState<string | null>(null)
+  const names = days.slice(0, 7).map((d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' }))
+  const dayItems = (d: string) => [
+    ...events
+      .filter((e) => e.allDay && localDay(e.start) <= d && localDay(e.end) > d)
+      .map((e) => ({ key: `a:${e.calendarId}:${e.id}`, title: e.title, color: colorOf(e), time: '', open: () => onPick(allDayItem(e, colorOf(e))), drag: canMoveAllDay(e) ? `a|${e.calendarId}|${e.id}` : '' })),
+    ...items
+      .filter((x) => x.day === d)
+      .sort((a, b) => a.start - b.start)
+      .map((x) => ({ key: x.key, title: x.title, color: x.color, time: hmOf(x.start), open: () => onPick(x), drag: canMoveItem(x) ? `i|${x.key}` : '' }))
+  ]
+  const listItems = list ? dayItems(list) : []
   return (
-    <div className="cal-month">
-      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => (
-        <span key={w} className="cal-month-wd">
-          {w}
-        </span>
-      ))}
-      {days.map((d) => {
-        const allDay = events.filter((e) => e.allDay && localDay(e.start) <= d && localDay(e.end) > d)
-        const list = items.filter((x) => x.day === d).sort((a, b) => a.start - b.start)
-        const shown = [...allDay.map((e) => ({ key: e.id, title: e.title, color: e.color ?? '#7CC4FF', time: '' })), ...list.map((x) => ({ key: x.key, title: x.title, color: x.color, time: hmOf(x.start) }))]
-        return (
-          <button key={d} className={`cal-month-cell ${d.slice(0, 7) !== month ? 'out' : ''} ${d === today ? 'today' : ''}`} onClick={() => onDay(d)}>
-            <span className="cal-month-n">{Number(d.slice(8))}</span>
-            {shown.slice(0, 3).map((x) => (
-              <span key={x.key} className="cal-month-ev" style={{ ['--c' as string]: x.color }}>
-                {x.time && <small>{x.time}</small>} {x.title}
-              </span>
-            ))}
-            {shown.length > 3 && <span className="cal-month-more">+{shown.length - 3} more</span>}
-          </button>
-        )
-      })}
-    </div>
+    <>
+      <div className="cal-month">
+        {names.map((w, i) => (
+          <span key={i} className="cal-month-wd">
+            {w}
+          </span>
+        ))}
+        {days.map((d) => {
+          const shown = dayItems(d)
+          return (
+            <div
+              key={d}
+              role="button"
+              tabIndex={0}
+              aria-label={new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+              className={`cal-month-cell ${d.slice(0, 7) !== month ? 'out' : ''} ${d === today ? 'today' : ''} ${over === d ? 'drop' : ''}`}
+              title="Click to see the day · double-click to add"
+              onClick={() => setList(d)}
+              onDoubleClick={() => (setList(null), onAdd(d))}
+              onKeyDown={(e) => e.key === 'Enter' && setList(d)}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes('text/cal')) return
+                e.preventDefault()
+                if (over !== d) setOver(d)
+              }}
+              onDragLeave={() => over === d && setOver(null)}
+              onDrop={(e) => {
+                setOver(null)
+                const v = e.dataTransfer.getData('text/cal')
+                if (!v) return
+                e.preventDefault()
+                onDrop(v, d)
+              }}
+            >
+              <button
+                type="button"
+                className="cal-month-n"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDay(d)
+                }}
+                title="Open this day"
+              >
+                {Number(d.slice(8))}
+              </button>
+              {shown.slice(0, 3).map((x) => (
+                <span
+                  key={x.key}
+                  className="cal-month-ev"
+                  draggable={!!x.drag}
+                  onDragStart={(e) => {
+                    e.stopPropagation()
+                    e.dataTransfer.setData('text/cal', x.drag)
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    x.open()
+                  }}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  style={{ ['--c' as string]: x.color }}
+                  title={`${x.time || 'all day'} · ${x.title}`}
+                >
+                  <i className="cal-month-dot" />
+                  {x.time && <small>{x.time}</small>} <span className="cal-month-t">{x.title}</span>
+                  <span className="cal-month-w">{x.title.replace(/^[^\p{L}\p{N}]+/u, '').split(/\s+/)[0]}</span>
+                </span>
+              ))}
+              {shown.length > 3 && (
+                <button
+                  type="button"
+                  className="cal-month-more"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setList(d)
+                  }}
+                >
+                  +{shown.length - 3} more
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {list && (
+        <div className="sheet" role="dialog" aria-label="The day" onClick={(e) => e.target === e.currentTarget && setList(null)}>
+          <div className="sheet-card cal-month-sheet">
+            <h3>{new Date(`${list}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
+            <div className="cal-month-list">
+              {listItems.map((x) => (
+                <button key={x.key} type="button" style={{ ['--c' as string]: x.color }} onClick={() => (setList(null), x.open())}>
+                  <i />
+                  <small>{x.time || 'all day'}</small>
+                  <span>{x.title}</span>
+                </button>
+              ))}
+              {!listItems.length && <p className="hint small">Nothing planned.</p>}
+            </div>
+            <div className="sheet-actions">
+              <button type="button" className="btn small ghost" onClick={() => setList(null)}>
+                Close
+              </button>
+              <span style={{ flex: 1 }} />
+              <button type="button" className="btn small" onClick={() => (setList(null), onDay(list))}>
+                Open day
+              </button>
+              <button type="button" className="btn small primary" onClick={() => (setList(null), onAdd(list))}>
+                + Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
-function Agenda({ days, today, items, allDay, onPick }: { days: string[]; today: string; items: Item[]; allDay: CalEvent[]; onPick: (it: Item) => void }) {
+function Agenda({ days, today, items, allDay, colorOf, onPick, more, onMore }: { days: string[]; today: string; items: Item[]; allDay: CalEvent[]; colorOf: (e: CalEvent) => string; onPick: (it: Item) => void; more: boolean; onMore: () => void }) {
   const groups = days.map((d) => ({ d, all: allDay.filter((e) => localDay(e.start) <= d && localDay(e.end) > d), list: items.filter((x) => x.day === d).sort((a, b) => a.start - b.start) })).filter((g) => g.all.length || g.list.length)
-  if (!groups.length) return <p className="hint">Nothing in the next two weeks.</p>
+  const end = useRef<HTMLDivElement>(null)
+  const moreRef = useRef(onMore)
+  moreRef.current = onMore
+  // Near the bottom: the next two weeks load by themselves.
+  useEffect(() => {
+    const el = end.current
+    if (!el || !more || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver((es) => es.some((x) => x.isIntersecting) && moreRef.current(), { rootMargin: '200px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [more, days.length])
   return (
     <div className="cal-agenda">
+      {!groups.length && <p className="hint">Nothing in the next {days.length} days.</p>}
       {groups.map((g) => (
         <div key={g.d} className="cal-agenda-day">
           <h3 className={g.d === today ? 'today' : ''}>{new Date(`${g.d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
           <ul>
             {g.all.map((e) => (
-              <li key={e.id} style={{ ['--c' as string]: e.color ?? '#7CC4FF' }}>
+              <li key={e.id} style={{ ['--c' as string]: colorOf(e) }} onClick={() => onPick(allDayItem(e, colorOf(e)))}>
                 <span className="cal-agenda-time">all day</span>
                 <i />
                 <span>{e.title}</span>
@@ -1088,43 +1405,210 @@ function Agenda({ days, today, items, allDay, onPick }: { days: string[]; today:
           </ul>
         </div>
       ))}
+      <div ref={end} className="cal-agenda-end">
+        {more ? (
+          <button type="button" className="btn small ghost" onClick={onMore}>
+            Show the next two weeks
+          </button>
+        ) : (
+          <small className="hint">That's the next four months.</small>
+        )}
+      </div>
     </div>
   )
 }
 
-function DraftForm({ top, start, end, day, onSave, onCancel }: { top: number; start: number; end: number; day: string; onSave: (title: string, start: number, end: number, repeat: Repeat) => void; onCancel: () => void }) {
+/** A box to type the time in (D4): "fri 18:00", "tomorrow 9-10:30", "in 2h", "every mon 8:00". */
+function WhenBox({ onWhen }: { onWhen: (w: When) => void }) {
+  const [txt, setTxt] = useState('')
+  const w = txt.trim() ? parseWhen(txt) : null
+  const apply = () => {
+    if (!w) return
+    onWhen(w)
+    setTxt('')
+  }
+  const said = w
+    ? `${w.every ? `every ${w.every.map((d) => WD2[d]).join(', ')}, from ` : ''}${new Date(`${w.day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} ${hmOf(w.start)}${w.end != null ? `–${hmOf(w.end)}` : ''}`
+    : ''
+  return (
+    <div className="ce-whenbox">
+      <input
+        value={txt}
+        onChange={(e) => setTxt(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return
+          e.preventDefault()
+          e.stopPropagation()
+          apply()
+        }}
+        placeholder="Or type it: fri 18:00, tomorrow 9-10:30, in 2h"
+        aria-label="Type the time"
+      />
+      {txt.trim() && (
+        <small className={w ? 'ok' : 'bad'}>
+          {w ? `→ ${said}` : "Can't read that time yet"}
+          {w && (
+            <button type="button" className="btn small" onClick={apply}>
+              Use
+            </button>
+          )}
+        </small>
+      )}
+    </div>
+  )
+}
+
+/** Repeat every N days/weeks, on chosen weekdays, until a date or N times (D5). */
+function CustomRepeatFields({ value, day, onChange }: { value: CustomRepeat; day: string; onChange: (v: CustomRepeat) => void }) {
+  return (
+    <div className="ce-custom">
+      <div className="ce-row">
+        <span className="ce-label">Every</span>
+        <input type="number" min={1} max={30} value={value.interval} onChange={(e) => onChange({ ...value, interval: Math.max(1, Math.min(30, Number(e.target.value) || 1)) })} aria-label="Every how many" style={{ width: 64 }} />
+        <select value={value.freq} onChange={(e) => onChange({ ...value, freq: e.target.value as CustomRepeat['freq'] })} aria-label="Days or weeks">
+          <option value="daily">{value.interval > 1 ? 'days' : 'day'}</option>
+          <option value="weekly">{value.interval > 1 ? 'weeks' : 'week'}</option>
+        </select>
+      </div>
+      {value.freq === 'weekly' && (
+        <div className="ce-row ce-wd" role="group" aria-label="On these days">
+          <span className="ce-label">On</span>
+          {[1, 2, 3, 4, 5, 6, 0].map((d) => {
+            const on = value.days.length ? value.days.includes(d) : new Date(`${day}T12:00:00`).getDay() === d
+            return (
+              <button
+                key={d}
+                type="button"
+                className={on ? 'on' : ''}
+                aria-pressed={on}
+                onClick={() => {
+                  const cur = value.days.length ? value.days : [new Date(`${day}T12:00:00`).getDay()]
+                  const next = on ? cur.filter((x) => x !== d) : [...cur, d]
+                  onChange({ ...value, days: next.length ? next : cur })
+                }}
+              >
+                {WD2[d]}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      <div className="ce-row">
+        <span className="ce-label">Ends</span>
+        <select value={value.until ? 'until' : 'count'} onChange={(e) => onChange(e.target.value === 'until' ? { ...value, until: addDays(day, 56) } : { ...value, until: null })} aria-label="How it ends">
+          <option value="count">After</option>
+          <option value="until">On a date</option>
+        </select>
+        {value.until ? (
+          <input type="date" value={value.until} min={day} onChange={(e) => e.target.value && onChange({ ...value, until: e.target.value })} aria-label="Last day" />
+        ) : (
+          <>
+            <input type="number" min={1} max={52} value={value.count ?? 12} onChange={(e) => onChange({ ...value, count: Math.max(1, Math.min(52, Number(e.target.value) || 1)) })} aria-label="How many times" style={{ width: 64 }} />
+            <span>times</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DraftForm({ top, start, end, day, calendars, onSave, onCancel }: { top: number; start: number; end: number; day: string; calendars: { id: string; name: string }[]; onSave: (n: NewEvent) => void; onCancel: () => void }) {
   const [title, setTitle] = useState('')
-  const [len, setLen] = useState(end - start)
-  const [repeat, setRepeat] = useState<Repeat>('none')
-  const wd = new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' })
-  const stop = Math.min(24 * 60, start + len)
+  const [d, setD] = useState(day)
+  const [from, setFrom] = useState(start)
+  const [len, setLen] = useState(Math.max(15, end - start))
+  const [repeat, setRepeat] = useState<RepeatChoice>('none')
+  const [custom, setCustom] = useState<CustomRepeat>(CUSTOM0)
+  const [more, setMore] = useState(false)
+  const [cal, setCal] = useState('')
+  const [reminder, setReminder] = useState('default')
+  const [notes, setNotes] = useState('')
+  const wd = new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' })
+  const stop = from + len
+  const save = () => {
+    if (!title.trim()) return
+    onSave({
+      title: title.trim(),
+      day: d,
+      start: from,
+      end: stop,
+      recurrence: repeat === 'none' ? undefined : repeat === 'custom' ? customRule(custom, d) : repeatRule(repeat, d),
+      calendarId: cal || undefined,
+      reminder: reminder === 'default' ? undefined : Number(reminder),
+      description: notes.trim() || undefined
+    })
+  }
   return (
     <form
-      className="cal-draft"
+      className={`cal-draft ${more ? 'more' : ''}`}
       style={{ top }}
       onPointerDown={(e) => e.stopPropagation()}
       onSubmit={(e) => {
         e.preventDefault()
-        if (title.trim()) onSave(title.trim(), start, stop, repeat)
+        save()
       }}
     >
-      <small>
-        {hmOf(start)}–{hmOf(stop)}
-      </small>
-      <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What? e.g. Study math" onKeyDown={(e) => e.key === 'Escape' && onCancel()} />
+      <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What? e.g. Study math" onKeyDown={(e) => e.key === 'Escape' && onCancel()} aria-label="Title" />
+      <div className="row cal-draft-time">
+        {d !== day && <small>{new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</small>}
+        <input type="time" value={hmOf(from)} step={300} onChange={(e) => e.target.value && setFrom(toMin(e.target.value))} aria-label="Start" />
+        <small>
+          → {hmOf(stop)}
+          {stop >= 24 * 60 ? ' (next day)' : ''}
+        </small>
+      </div>
       <div className="row">
-        {[25, 50, 90].map((m) => (
+        {LENGTHS.map((m) => (
           <button type="button" key={m} className={`btn small ${len === m ? '' : 'ghost'}`} onClick={() => setLen(m)}>
-            {m}m
+            {m < 60 ? `${m}m` : lenLabel(m).replace(' ', '')}
           </button>
         ))}
       </div>
-      <select value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)} aria-label="Repeat">
+      <WhenBox
+        onWhen={(w) => {
+          setD(w.day)
+          setFrom(w.start)
+          if (w.end != null && w.end > w.start) setLen(w.end - w.start)
+          if (w.every) {
+            setRepeat('custom')
+            setCustom({ ...CUSTOM0, days: w.every })
+          }
+        }}
+      />
+      <select value={repeat} onChange={(e) => setRepeat(e.target.value as RepeatChoice)} aria-label="Repeat">
         <option value="none">Doesn't repeat</option>
         <option value="daily">Every day (4 weeks)</option>
         <option value="weekdays">Weekdays (8 weeks)</option>
         <option value="weekly">Every {wd} (12 weeks)</option>
+        <option value="custom">Custom…</option>
       </select>
+      {repeat === 'custom' && <CustomRepeatFields value={custom} day={d} onChange={setCustom} />}
+      {more ? (
+        <>
+          {calendars.length > 1 && (
+            <select value={cal} onChange={(e) => setCal(e.target.value)} aria-label="Calendar">
+              <option value="">Main calendar</option>
+              {calendars.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <select value={reminder} onChange={(e) => setReminder(e.target.value)} aria-label="Reminder">
+            {REMINDERS.map(([v, l]) => (
+              <option key={v} value={v}>
+                🔔 {l}
+              </option>
+            ))}
+          </select>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" rows={2} aria-label="Notes" />
+        </>
+      ) : (
+        <button type="button" className="btn small ghost cal-draft-more" onClick={() => setMore(true)}>
+          More options (calendar, reminder, notes)
+        </button>
+      )}
       <div className="row">
         <button className="btn small primary" disabled={!title.trim()}>
           Add
@@ -1133,6 +1617,22 @@ function DraftForm({ top, start, end, day, onSave, onCancel }: { top: number; st
           Cancel
         </button>
       </div>
+    </form>
+  )
+}
+
+/** Type a name for a new all-day event (F6). */
+function AllDayNew({ onSave, onCancel }: { onSave: (title: string) => Promise<unknown>; onCancel: () => void }) {
+  const [t, setT] = useState('')
+  return (
+    <form
+      className="cal-allday-new"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (t.trim()) void onSave(t.trim())
+      }}
+    >
+      <input autoFocus value={t} onChange={(e) => setT(e.target.value)} onBlur={() => !t.trim() && onCancel()} onKeyDown={(e) => e.key === 'Escape' && onCancel()} placeholder="All day: e.g. Exam week" aria-label="All-day event name" />
     </form>
   )
 }
@@ -1157,13 +1657,66 @@ function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { 
   const act = useAction()
   const e = item.event
   const [title, setTitle] = useState(item.title)
-  const [day, setDay] = useState(item.day)
+  // Times (D5): the real end from Google, so events past midnight or over days keep it.
+  const origAllDay = !!e?.allDay
+  const origEndDay = e ? (origAllDay ? addDays(localDay(e.end), -1) : localDay(e.end)) : item.day
+  const [allDay, setAllDay] = useState(origAllDay)
+  const [day, setDayRaw] = useState(item.day)
+  const [endDay, setEndDay] = useState(origEndDay < item.day ? item.day : origEndDay)
   const [start, setStart] = useState(hmOf(item.start))
-  const [end, setEnd] = useState(hmOf(Math.min(item.end, 23 * 60 + 59)))
+  const [end, setEnd] = useState(e && !origAllDay ? localHM(e.end) : hmOf(item.end))
+  const setDay = (d: string) => {
+    if (!d) return
+    setEndDay(addDays(d, Math.max(0, dayDiff(day, endDay))))
+    setDayRaw(d)
+  }
+  const reminder0 = e?.reminder == null ? 'default' : String(e.reminder)
+  const [reminder, setReminder] = useState(reminder0)
   const [notes, setNotes] = useState(e?.description ?? '')
   const [colorId, setColorId] = useState(e?.colorId ?? '')
   const [cal, setCal] = useState(e?.calendarId ?? '')
-  const [repeat, setRepeat] = useState<Repeat>('none')
+  const [repeat, setRepeat] = useState<RepeatChoice>('none')
+  const [custom, setCustom] = useState<CustomRepeat>(CUSTOM0)
+  /** Start and end as Google wants them; an end at or before the start on the same day = the next day. */
+  const sp = (() => {
+    if (allDay) {
+      const last = endDay < day ? day : endDay
+      return { s: day, en: addDays(last, 1), mins: (dayDiff(day, last) + 1) * 1440, nextDay: false }
+    }
+    const sm = toMin(start)
+    const em = toMin(end)
+    const ed = endDay > day ? endDay : em <= sm ? addDays(day, 1) : day
+    return { s: isoAt(day, sm), en: isoAt(ed, em), mins: dayDiff(day, ed) * 1440 + em - sm, nextDay: ed !== day }
+  })()
+  const setLen = (m: number) => {
+    const em = toMin(start) + m
+    setEnd(hmOf(em))
+    setEndDay(em >= 1440 ? addDays(day, 1) : day)
+  }
+  const applyWhen = (w: When) => {
+    const len = !allDay && sp.mins > 0 && sp.mins < 1440 ? sp.mins : 60
+    const em = w.end != null && w.end > w.start ? w.end : w.start + len
+    setAllDay(false)
+    setDayRaw(w.day)
+    setStart(hmOf(w.start))
+    setEnd(hmOf(em))
+    setEndDay(em >= 1440 ? addDays(w.day, 1) : w.day)
+    if (w.every && !e?.recurringEventId) {
+      setRepeat('custom')
+      setCustom({ ...CUSTOM0, days: w.every })
+    }
+  }
+  const toggleAllDay = (on: boolean) => {
+    setAllDay(on)
+    if (on) setEndDay(endDay < day ? day : endDay)
+    else {
+      if (start === end) {
+        setStart('09:00')
+        setEnd('10:00')
+      }
+      setEndDay(day)
+    }
+  }
   const series = !!e?.recurringEventId
   const [scope, setScope] = useState<'one' | 'all'>('one')
   const [sure, setSure] = useState<null | 'one' | 'all'>(null)
@@ -1176,16 +1729,18 @@ function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { 
     const s = toMin(start)
     const en = toMin(end)
     if (e) {
-      if (en <= s) return void act(async () => true, 'The end must be after the start')
-      const timesChanged = day !== item.day || s !== item.start || en !== Math.min(item.end, 23 * 60 + 59)
+      if (sp.mins <= 0) return void act(async () => true, 'The end must be after the start')
+      const same = (a: string, b: string) => (/^\d{4}-\d{2}-\d{2}$/.test(a) || /^\d{4}-\d{2}-\d{2}$/.test(b) ? a === b : new Date(a).getTime() === new Date(b).getTime())
+      const timesChanged = allDay !== origAllDay || !same(sp.s, e.start) || !same(sp.en, e.end)
       const ok = await act(async () => {
         await life.google!.update!(e.calendarId, e.id, {
           title: title.trim() || e.title,
-          ...(timesChanged ? { start: isoAt(day, s), end: isoAt(day, en) } : {}),
+          ...(timesChanged ? { start: sp.s, end: sp.en } : {}),
           description: notes,
           colorId: colorId || null,
+          ...(reminder !== reminder0 ? { reminder: reminder === 'default' ? null : Number(reminder) } : {}),
           ...(cal && cal !== e.calendarId ? { moveTo: cal } : {}),
-          ...(series ? { scope, recurringEventId: e.recurringEventId } : repeat !== 'none' ? { recurrence: repeatRule(repeat, day) } : {})
+          ...(series ? { scope, recurringEventId: e.recurringEventId } : repeat !== 'none' ? { recurrence: repeat === 'custom' ? customRule(custom, day) : repeatRule(repeat, day) } : {})
         })
         return true
       }, series && scope === 'all' ? 'Saved for every repeat' : 'Saved')
@@ -1203,7 +1758,7 @@ function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { 
   }
   const focus = async () => {
     const nowM = new Date().getHours() * 60 + new Date().getMinutes()
-    const left = Math.max(10, Math.min(180, toMin(end) - Math.max(toMin(start), nowM)))
+    const left = Math.max(10, Math.min(180, (sp.nextDay ? toMin(end) + 1440 : toMin(end)) - Math.max(toMin(start), nowM)))
     if (await act(() => life.focus.start(item.title.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 40), left, item.task ? { kind: 'todoist', ref: item.task.id, title: item.task.content } : null), `Focus started · ${left} min`)) onClose()
   }
   const canEdit = item.kind === 'task' || connected
@@ -1222,11 +1777,35 @@ function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { 
         <div className="ce-row">
           <Icon name="clock" size={15} />
           <input type="date" value={day} onChange={(ev) => setDay(ev.target.value)} disabled={!canEdit} aria-label="Day" />
-          <input type="time" value={start} step={300} onChange={(ev) => setStart(ev.target.value)} disabled={!canEdit} aria-label="Start" />
+          {!allDay && <input type="time" value={start} step={300} onChange={(ev) => ev.target.value && setStart(ev.target.value)} disabled={!canEdit} aria-label="Start" />}
           <span>–</span>
-          <input type="time" value={end} step={300} onChange={(ev) => setEnd(ev.target.value)} disabled={!canEdit} aria-label="End" />
-          <small className="ce-len">{toMin(end) > toMin(start) ? `${toMin(end) - toMin(start)} min` : ''}</small>
+          {!allDay && <input type="time" value={end} step={300} onChange={(ev) => ev.target.value && setEnd(ev.target.value)} disabled={!canEdit} aria-label="End" />}
+          {e && (allDay || endDay !== day || sp.nextDay) && <input type="date" value={sp.nextDay && endDay === day ? addDays(day, 1) : endDay} min={day} onChange={(ev) => ev.target.value && setEndDay(ev.target.value)} disabled={!canEdit} aria-label="End day" />}
+          <small className={`ce-len ${sp.mins <= 0 ? 'bad' : ''}`}>
+            {sp.mins <= 0 ? 'ends before it starts' : allDay ? (sp.mins === 1440 ? '1 day' : `${sp.mins / 1440} days`) : `${lenLabel(sp.mins)}${sp.nextDay ? ' · ends next day' : ''}`}
+          </small>
         </div>
+        {canEdit && (
+          <div className="ce-row ce-lens">
+            {e && (
+              <label className="ce-check">
+                <input type="checkbox" checked={allDay} onChange={(ev) => toggleAllDay(ev.target.checked)} /> All day
+              </label>
+            )}
+            {!allDay &&
+              LENGTHS.map((m) => (
+                <button key={m} type="button" className={`btn small ${sp.mins === m ? '' : 'ghost'}`} onClick={() => setLen(m)}>
+                  {lenLabel(m)}
+                </button>
+              ))}
+            {e && !allDay && endDay === day && !sp.nextDay && (
+              <button type="button" className="btn small ghost" onClick={() => setEndDay(addDays(day, 1))} title="Make it end on a later day">
+                Several days…
+              </button>
+            )}
+          </div>
+        )}
+        {canEdit && <WhenBox onWhen={applyWhen} />}
         {e && (
           <>
             {series ? (
@@ -1246,14 +1825,28 @@ function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { 
               <div className="ce-row">
                 <Icon name="refresh" size={15} />
                 <span className="ce-label">Repeat</span>
-                <select value={repeat} onChange={(ev) => setRepeat(ev.target.value as Repeat)} disabled={!canEdit} aria-label="Repeat">
+                <select value={repeat} onChange={(ev) => setRepeat(ev.target.value as RepeatChoice)} disabled={!canEdit} aria-label="Repeat">
                   <option value="none">Doesn't repeat</option>
                   <option value="daily">Every day</option>
                   <option value="weekdays">Every weekday</option>
                   <option value="weekly">Every week</option>
+                  <option value="custom">Custom…</option>
                 </select>
               </div>
             )}
+            {!series && repeat === 'custom' && <CustomRepeatFields value={custom} day={day} onChange={setCustom} />}
+            <div className="ce-row">
+              <Icon name="bell" size={15} />
+              <span className="ce-label">Reminder</span>
+              <select value={reminder} onChange={(ev) => setReminder(ev.target.value)} disabled={!canEdit} aria-label="Reminder">
+                {REMINDERS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+                {!REMINDERS.some(([v]) => v === reminder) && <option value={reminder}>{lenLabel(Number(reminder))} before</option>}
+              </select>
+            </div>
             <div className="ce-row ce-colors" role="radiogroup" aria-label="Color">
               <span className="ce-label">Color</span>
               {EVENT_COLORS.map(([id, name, hex]) => (
@@ -1461,6 +2054,17 @@ function ViewPop({ prefs, onChange, onView }: { prefs: CalPrefs; onChange: (p: P
         <input type="checkbox" checked={prefs.weekNumbers} onChange={(e) => onChange({ weekNumbers: e.target.checked })} />
         <span>Week numbers</span>
       </label>
+      <div className="cal-pop-row">
+        <span>2nd time zone</span>
+        <select value={prefs.tz2} onChange={(e) => onChange({ tz2: e.target.value })} aria-label="Second time zone">
+          <option value="">None</option>
+          {[...new Set([...(prefs.tz2 ? [prefs.tz2] : []), ...TZ_CHOICES])].filter((z) => z !== deviceTz()).map((z) => (
+            <option key={z} value={z}>
+              {tzShort(z)}
+            </option>
+          ))}
+        </select>
+      </div>
       <p className="hint small">Keys: T today · ← → back/forward · D W M A views · + − zoom · N new · G go to date</p>
     </div>
   )

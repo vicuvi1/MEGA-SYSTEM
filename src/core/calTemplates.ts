@@ -85,3 +85,20 @@ export function repeatRule(r: Repeat, day: string): string[] {
 export function upsertTemplate(list: DayTemplate[], t: DayTemplate): DayTemplate[] {
   return [...list.filter((x) => x.name.toLowerCase() !== t.name.toLowerCase()), t].slice(-12)
 }
+
+/** A repeat you shape (D5): every N days or weeks, on chosen weekdays, until a date (or N times). */
+export interface CustomRepeat { freq: 'daily' | 'weekly'; interval: number; days: number[]; until: string | null; count: number | null }
+export function customRule(r: CustomRepeat, day: string): string[] {
+  const parts = [`FREQ=${r.freq === 'weekly' ? 'WEEKLY' : 'DAILY'}`]
+  const n = Math.max(1, Math.min(30, Math.round(r.interval || 1)))
+  if (n > 1) parts.push(`INTERVAL=${n}`)
+  if (r.freq === 'weekly') {
+    const [y, m, d] = day.split('-').map(Number)
+    const days = (r.days.length ? r.days : [new Date(Date.UTC(y, m - 1, d)).getUTCDay()]).filter((x) => x >= 0 && x <= 6)
+    parts.push(`BYDAY=${[...new Set(days)].sort().map((x) => BYDAY[x]).join(',')}`)
+  }
+  // Always an end: a date (inclusive, end of that day) or a number of times (52 at most).
+  if (r.until && /^\d{4}-\d{2}-\d{2}$/.test(r.until)) parts.push(`UNTIL=${r.until.replace(/-/g, '')}T235959Z`)
+  else parts.push(`COUNT=${Math.max(1, Math.min(52, Math.round(r.count || 12)))}`)
+  return [`RRULE:${parts.join(';')}`]
+}

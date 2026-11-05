@@ -28,6 +28,8 @@ export interface CalEvent {
   free?: boolean
   /** The event in Google Calendar (web link). */
   htmlLink?: string | null
+  /** Minutes before it Google reminds you (null: the calendar's default). */
+  reminder?: number | null
   /** Set on one day of a repeating event: the series' id. */
   recurringEventId?: string | null
 }

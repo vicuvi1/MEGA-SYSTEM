@@ -18850,7 +18850,8 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 		attendees: Array.isArray(e.attendees) ? e.attendees.length : 0,
 		declined: Array.isArray(e.attendees) && e.attendees.some((a) => a?.self && a?.responseStatus === "declined"),
 		free: e.transparency === "transparent",
-		htmlLink: e.htmlLink ?? null
+		htmlLink: e.htmlLink ?? null,
+		reminder: e.reminders?.useDefault === false ? e.reminders.overrides?.[0]?.minutes ?? 0 : null
 	});
 	return {
 		calendars,
@@ -18875,6 +18876,13 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 					...e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || "Europe/Chisinau" } : {}
 				},
 				...e.colorId ? { colorId: e.colorId } : {},
+				...e.reminder != null ? { reminders: {
+					useDefault: false,
+					overrides: e.reminder > 0 ? [{
+						method: "popup",
+						minutes: Math.min(40320, Math.round(e.reminder))
+					}] : []
+				} } : {},
 				...e.recurrence?.length ? { recurrence: e.recurrence.filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2) } : {},
 				extendedProperties: { private: { lifeSystem: "1" } }
 			};
@@ -18892,11 +18900,18 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 			return toEvent(j, cal);
 		},
 		async move(calendarId, id, start, end) {
+			const day = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) ? {
+				date: v,
+				dateTime: null
+			} : {
+				dateTime: v,
+				date: null
+			};
 			await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, {
 				method: "PATCH",
 				body: JSON.stringify({
-					start: { dateTime: start },
-					end: { dateTime: end }
+					start: day(start),
+					end: day(end)
 				})
 			});
 		},
@@ -18911,6 +18926,13 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 			if (patch.title != null) body.summary = patch.title;
 			if (patch.description != null) body.description = patch.description;
 			if (patch.colorId !== void 0) body.colorId = patch.colorId || null;
+			if (patch.reminder !== void 0) body.reminders = patch.reminder == null ? { useDefault: true } : {
+				useDefault: false,
+				overrides: patch.reminder > 0 ? [{
+					method: "popup",
+					minutes: Math.min(40320, Math.round(patch.reminder))
+				}] : []
+			};
 			if (patch.scope === "all" && patch.recurringEventId) {
 				target = patch.recurringEventId;
 				if (patch.start || patch.end) {
@@ -18928,14 +18950,16 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 				}
 			} else {
 				const tz = patch.recurrence?.length ? { timeZone: patch.timeZone || process.env.TZ || "Europe/Chisinau" } : {};
-				if (patch.start) body.start = {
-					dateTime: patch.start,
+				const at = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) ? {
+					date: v,
+					dateTime: null
+				} : {
+					dateTime: v,
+					date: null,
 					...tz
 				};
-				if (patch.end) body.end = {
-					dateTime: patch.end,
-					...tz
-				};
+				if (patch.start) body.start = at(patch.start);
+				if (patch.end) body.end = at(patch.end);
 			}
 			if (patch.recurrence !== void 0 && !patch.recurringEventId) body.recurrence = (patch.recurrence ?? []).filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2);
 			if (Object.keys(body).length) await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(target)}`, {

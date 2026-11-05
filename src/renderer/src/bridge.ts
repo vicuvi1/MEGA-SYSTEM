@@ -71,8 +71,8 @@ export type Bridge = LifeApi & {
     status(): Promise<GoogleStatus>
     connect(): Promise<void>
     events(fromIso: string, toIso: string): Promise<CalEvent[]>
-    create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; recurrence?: string[] }): Promise<CalEvent>
-    update?(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null }): Promise<void>
+    create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; recurrence?: string[]; reminder?: number | null }): Promise<CalEvent>
+    update?(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null; reminder?: number | null }): Promise<void>
     move(calendarId: string, id: string, start: string, end: string): Promise<void>
     remove(calendarId: string, id: string): Promise<void>
     setCalendars(on: string[], target: string | null): Promise<void>
