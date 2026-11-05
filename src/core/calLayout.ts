@@ -22,6 +22,9 @@ export interface More<T> {
   items: T[]
 }
 
+/** % of the width a backdrop band keeps for its name (written up its left edge). */
+export const BAND_STRIP = 9
+
 export function layoutDay<T extends { start: number; end: number }>(items: T[], maxCols = 3): { placed: Placed<T>[]; more: More<T>[] } {
   const overlaps = (a: T, b: T) => a.start < b.end && b.start < a.end
   const len = (a: T) => a.end - a.start
@@ -65,7 +68,10 @@ export function layoutDay<T extends { start: number; end: number }>(items: T[], 
       let span = 1
       while (c + span < shown && !group.some((g) => colOf.get(g) === c + span && overlaps(g, it))) span++
       if (c + span === shown && shown < slots && !hidden.some((g) => overlaps(g, it))) span++
-      placed.push({ it, left: c * w, width: span * w, backdrop: false })
+      // Inside a long "window" (a backdrop band), events keep a strip on the left
+      // free so the band's name stays readable instead of being covered (U8).
+      const inBand = [...backdrop].some((b) => overlaps(b, it))
+      placed.push(inBand ? { it, left: BAND_STRIP + c * w * (1 - BAND_STRIP / 100), width: span * w * (1 - BAND_STRIP / 100), backdrop: false } : { it, left: c * w, width: span * w, backdrop: false })
     }
     if (hidden.length) {
       // One chip per run of hidden events that overlap each other.
@@ -75,7 +81,11 @@ export function layoutDay<T extends { start: number; end: number }>(items: T[], 
         if (last && last.some((x) => overlaps(x, h))) last.push(h)
         else runs.push([h])
       }
-      for (const r of runs) more.push({ start: Math.min(...r.map((x) => x.start)), end: Math.max(...r.map((x) => x.end)), left: shown * w, width: w, items: r })
+      for (const r of runs) {
+        const inBand = [...backdrop].some((b) => r.some((x) => overlaps(b, x)))
+        const k = inBand ? 1 - BAND_STRIP / 100 : 1
+        more.push({ start: Math.min(...r.map((x) => x.start)), end: Math.max(...r.map((x) => x.end)), left: (inBand ? BAND_STRIP : 0) + shown * w * k, width: w * k, items: r })
+      }
     }
   }
   return { placed, more }

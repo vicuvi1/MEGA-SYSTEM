@@ -1996,3 +1996,11 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
   .cal-todo li span { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
   .cal-head .ta-tabs button, .ta-tabs[aria-label="View"] button { white-space: nowrap; padding-inline: 8px; }
 }
+
+/* A long "window" with events on it (U8): its name runs up the left strip the
+   events leave free, instead of hiding under them. */
+.ds-block.band { padding: 6px 0 6px 4px; }
+.ds-block.band > b { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100%; font-size: 10.5px; letter-spacing: 0.02em; }
+.ds-block.band > small { display: none; }
+.cal-item.band > b { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100%; }
+.cal-item.band > small { display: none; }

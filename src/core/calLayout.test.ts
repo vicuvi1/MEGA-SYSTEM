@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { layoutDay } from './calLayout'
+import { BAND_STRIP, layoutDay } from './calLayout'
 
 const e = (id: string, s: number, en: number) => ({ id, start: s * 60, end: en * 60 })
 const by = (r: ReturnType<typeof layoutDay<{ id: string; start: number; end: number }>>) => Object.fromEntries(r.placed.map((p) => [p.it.id, p]))
@@ -9,8 +9,9 @@ describe('calendar day layout', () => {
     const r = layoutDay([e('window', 18, 22), e('a', 18.5, 19), e('b', 19, 20), e('c', 20, 21)])
     const p = by(r)
     expect(p.window).toMatchObject({ backdrop: true, left: 0, width: 100 })
-    expect(p.a).toMatchObject({ backdrop: false, left: 0, width: 100 })
-    expect(p.b.width).toBe(100)
+    // They leave a strip on the left for the band's name (U8).
+    expect(p.a).toMatchObject({ backdrop: false, left: BAND_STRIP, width: 100 - BAND_STRIP })
+    expect(p.b.width).toBe(100 - BAND_STRIP)
   })
 
   it('overlaps share the width and widen where they can', () => {
