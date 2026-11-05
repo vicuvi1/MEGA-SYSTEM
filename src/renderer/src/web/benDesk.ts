@@ -4,6 +4,8 @@
 // call, the month's story, the spending coach and the sleep link. The same
 // code runs in the app (instant, read from the local mirror) and on the
 // server (Ben's prompt, the tick that enforces stakes).
+import { EXPERIMENTS, measureExperiment, pickExperiment, type ExpMetric, type ExpResult, type ExpState, type Experiment, type Series } from '@core/experiment'
+import { nightMinutes } from '@core/readiness'
 import { getSetting, setSetting } from '../../../main/settings'
 import { addDays } from '@core/dates'
 import { financeSpending } from '@core/progress'
@@ -59,6 +61,8 @@ const json = (db: any, key: string) => {
 
 // ---------------------------------------------------------------- the view
 
+const EXP_KEY = 'ben_experiment'
+
 export interface DeskView {
   today: string
   energy: EnergyMap
@@ -82,6 +86,8 @@ export interface DeskView {
   goals: { id: number; title: string; deadline: string; hoursLeft: number; daysLeft: number; behind: boolean }[]
   exams: { title: string; deadline: string }[]
   restDays: string[]
+  /** The weekly experiment: the running one (measured) or the one Ben suggests (N8). */
+  experiment: { current: ExpResult | null; suggest: Experiment }
 }
 
 function sessionsOf(db: any, from: string) {
@@ -175,6 +181,32 @@ export function deskView(s: Services, finance: any, now = new Date()): DeskView 
     stakes: stakeStats(d.stakes, now),
     promises: { kept: ps.kept, missed: ps.broken + ps.ignored }
   })
+  // The weekly experiment (N8): daily numbers per area, measured against the 14 days before.
+  const series: Record<ExpMetric, Series> = { focus: {}, sleep: {}, workouts: {}, spend: {} }
+  for (const x of sessions) series.focus[x.day] = (series.focus[x.day] ?? 0) + x.minutes
+  for (const l of logs) {
+    const m = nightMinutes(l)
+    if (m != null) series.sleep[l.day] = m
+  }
+  for (const w of input.workouts as any[]) series.workouts[w.day] = (series.workouts[w.day] ?? 0) + 1
+  for (const x of spending ?? []) series.spend[x.day] = (series.spend[x.day] ?? 0) + x.bani / 100
+  const mean = (m: ExpMetric, from: number, to: number, counted = m !== 'sleep') => {
+    const vals: number[] = []
+    for (let k = from; k <= to; k++) {
+      const v = series[m][addDays(today, -k)]
+      if (v != null || counted) vals.push(v ?? 0)
+    }
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+  }
+  const gap = (m: ExpMetric) => {
+    const last = mean(m, 0, 6)
+    const usual = mean(m, 7, 34)
+    if (!usual) return 0
+    return m === 'spend' ? Math.max(0, (last - usual) / usual) : Math.max(0, (usual - last) / usual)
+  }
+  const expState = (json(db, EXP_KEY) as ExpState | null)
+  const current = expState ? measureExperiment(expState, series[EXPERIMENTS.find((e) => e.id === expState.id)?.metric ?? 'focus'], today) : null
+  const experiment = { current, suggest: pickExperiment({ focus: gap('focus'), sleep: gap('sleep'), workouts: gap('workouts'), spend: gap('spend') }, current ? [current.exp.id] : []) }
   const lastNight = logs.find((l) => l.day === today) ?? null
   const tx = Array.isArray(finance?.tx) ? finance.tx : null
   return {
@@ -202,7 +234,8 @@ export function deskView(s: Services, finance: any, now = new Date()): DeskView 
     money: moneyNumbers(finance, today),
     goals: f.goals.map((g) => ({ id: g.id, title: g.title, deadline: g.deadline, hoursLeft: Math.max(0, Math.round((g.hours - g.doneMin / 60) * 10) / 10), daysLeft: g.daysLeft, behind: g.aheadH <= -1 })),
     exams,
-    restDays
+    restDays,
+    experiment
   }
 }
 
@@ -304,11 +337,23 @@ export type DeskOp =
   | { op: 'dropStack'; id: string }
   | { op: 'call'; answers: CoachCall['answers'] }
   | { op: 'letter'; month: string; text: string }
+  | { op: 'experiment'; id: string }
+  | { op: 'stopExperiment' }
 
 /** One change on the desk (from the Coach page or Ben's actions). Returns a short line for the screen. */
 export function deskChange(s: Services, o: DeskOp, now = new Date()): string {
   const db = s.db
   const today = s.wallet.today(now)
+  if (o.op === 'experiment') {
+    const e = EXPERIMENTS.find((x) => x.id === o.id)
+    if (!e) throw new Error('No such experiment')
+    setSetting(db, EXP_KEY, JSON.stringify({ id: e.id, start: today }))
+    return `Experiment on for 7 days: ${e.title}`
+  }
+  if (o.op === 'stopExperiment') {
+    setSetting(db, EXP_KEY, '')
+    return 'Experiment ended'
+  }
   if (o.op === 'mood') {
     logMood(db, o.mood, now)
     return 'Mood noted'

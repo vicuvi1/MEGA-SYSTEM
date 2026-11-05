@@ -355,6 +355,7 @@ function PlanTab({ v, change, slots, onSay, reload }: { v: DeskView; change: Cha
   return (
     <>
       <CallCard v={v} change={change} />
+      <ExperimentCard v={v} change={change} />
       <WeekCard v={v} />
       <DeadlinesCard v={v} reload={reload} />
       <StudyCard v={v} change={change} />
@@ -368,6 +369,33 @@ function PlanTab({ v, change, slots, onSay, reload }: { v: DeskView; change: Cha
         {slots.goals}
       </details>
     </>
+  )
+}
+
+/** One change for 7 days, measured against your last 2 weeks (N8). */
+function ExperimentCard({ v, change }: { v: DeskView; change: Change }) {
+  const x = v.experiment
+  if (!x) return null
+  const cur = x.current
+  if (cur)
+    return (
+      <Card title="This week's experiment" icon="🧪" tone={cur.done ? 'accent' : 'calm'} sub={cur.exp.title} action={cur.done ? <button className="bd-btn" onClick={() => void change({ op: 'stopExperiment' })}>Done</button> : undefined}>
+        <p className="bd-line">{cur.exp.how}</p>
+        <p className="bd-line">
+          <b>{cur.verdict}</b>
+        </p>
+        {cur.before != null && cur.during != null && (
+          <small className="hint">
+            before {Math.round(cur.before)} → now {Math.round(cur.during)} {cur.exp.unit} a day
+          </small>
+        )}
+      </Card>
+    )
+  return (
+    <Card title="Try one change for a week" icon="🧪" sub={x.suggest.title} action={<button className="bd-btn strong" onClick={() => void change({ op: 'experiment', id: x.suggest.id })}>Start</button>}>
+      <p className="bd-line">{x.suggest.how}</p>
+      <small className="hint">Picked for where your last week dipped. Ben measures it against your 2 weeks before.</small>
+    </Card>
   )
 }
 
