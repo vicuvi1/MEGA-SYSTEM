@@ -337,5 +337,18 @@ export const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS notes_title ON notes(lower(title));
+  `,
+  /* 020 Rewards: a cover emoji, category, repeat rules, your order, up to 3 goals, bundles, savings jars */ `
+  ALTER TABLE rewards ADD COLUMN emoji TEXT;
+  ALTER TABLE rewards ADD COLUMN category TEXT;
+  ALTER TABLE rewards ADD COLUMN cooldown_days INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN month_limit INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN one_time INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN goal_rank INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN bundle TEXT;
+  ALTER TABLE rewards ADD COLUMN jar_goal_id INTEGER;
+  ALTER TABLE rewards ADD COLUMN price_locked INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE redemptions ADD COLUMN jar_used INTEGER NOT NULL DEFAULT 0;
   `
 ]

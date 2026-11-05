@@ -328,7 +328,17 @@ export function createWebServices(mirror: Mirror) {
         }),
       openChest: (level: number) => write((s) => ({ coins: s.shop.openChest(level), state: s.shop.state() }), W),
       setBudget: (amount: number) => write((s) => (s.shop.setBudget(amount), s.shop.state())),
-      setCurrency: (cur: string) => write((s) => (s.shop.setCurrency(cur), s.shop.state()))
+      setCurrency: (cur: string) => write((s) => (s.shop.setCurrency(cur), s.shop.state())),
+      // Night 11: the Rewards page.
+      insights: () => read((s) => s.shop.insights()),
+      restore: (id: number) => write((s) => (s.shop.restore(id), s.shop.state())),
+      setGoals: (ids: number[]) => write((s) => (s.shop.setGoals(ids), s.shop.state())),
+      reorder: (ids: number[]) => write((s) => (s.shop.reorder(ids), s.shop.state())),
+      undoBuy: (ledgerId: number) => write((s) => (s.shop.undoBuy(ledgerId), s.shop.state()), W),
+      jarAdd: (rewardId: number, amount: number) => write((s) => (s.shop.jarAdd(rewardId, amount, s.economy), s.shop.state()), W),
+      jarTake: (rewardId: number, amount: number) => write((s) => (s.shop.jarTake(rewardId, amount), s.shop.state()), W),
+      claimChallenge: () => write((s) => ({ coins: s.shop.claimChallenge(), state: s.shop.state() }), W),
+      markReady: (keys: string[]) => write((s) => s.shop.markReady(keys))
     },
     tasks: {
       state: () => read((s) => s.tasks.state()),

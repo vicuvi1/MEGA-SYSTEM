@@ -92,6 +92,14 @@ try {
     await pg.waitForSelector('.discipline, .setup, .stealth-cover', { timeout: 10000 })
     if (await pg.evaluate(() => !![...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent && /man/.test(e.getAttribute('src') ?? '')))) throw new Error('MAN is still embedded')
   })
+  // Night 11: Rewards shows the wallet, Ben's line, the tabs and the reward cards.
+  await step('Rewards: wallet, tabs and reward cards', async () => {
+    await open('shop')
+    await pg.waitForSelector('.rx-hero .rx-balance', { timeout: 10000 })
+    await pg.waitForSelector('.rx-ben', { timeout: 5000 })
+    await pg.click('.rx-tabs button:nth-child(3)')
+    await pg.waitForSelector('.rx-card .rx-title', { timeout: 5000 })
+  })
   // Night 7: Ben's chat folds his automatic messages and shows cards and the Now card.
   await step("Coach: Ben's chat with folded updates and cards", async () => {
     await open('coach')

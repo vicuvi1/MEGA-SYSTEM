@@ -193,6 +193,7 @@ export const SETTINGS = {
   fun_moves: json<Record<string, unknown>>('leftover money moved to a Finance Helper savings goal, by month', {}),
   fun_budget: json<{ lei: number; source: 'manual' | 'finance' } | null>('monthly fun budget in lei, typed or from Finance Helper', null),
   reward_unlocks: json<Record<string, unknown> | null>('rewards that unlock with a goal or streak', null),
+  reward_ready_seen: json<string[]>('rewards whose "Ready!" moment was already shown (id:buys)', []),
   currency: text('old name of the money currency'),
   coin_exchange_rate: num('lei per point'),
   bank_base_rate: num('points bank interest rate'),

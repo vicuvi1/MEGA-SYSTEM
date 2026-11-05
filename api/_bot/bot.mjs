@@ -1912,6 +1912,7 @@ var SETTINGS = {
 	fun_moves: json$4("leftover money moved to a Finance Helper savings goal, by month", {}),
 	fun_budget: json$4("monthly fun budget in lei, typed or from Finance Helper", null),
 	reward_unlocks: json$4("rewards that unlock with a goal or streak", null),
+	reward_ready_seen: json$4("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
 	currency: text("old name of the money currency"),
 	coin_exchange_rate: num$1("lei per point"),
 	bank_base_rate: num$1("points bank interest rate"),
@@ -2132,7 +2133,7 @@ function sparkline(values) {
 * Consecutive days ending today. If today isn't done yet the streak is still
 * alive as long as yesterday was.
 */
-function dayStreak(doneDays, today, restDays = []) {
+function dayStreak$1(doneDays, today, restDays = []) {
 	const set = new Set(doneDays);
 	const rest = new Set([...restDays].filter((d) => !set.has(d)));
 	let cursor = set.has(today) || rest.has(today) ? today : addDays$5(today, -1);
@@ -2219,7 +2220,7 @@ function habitRows(b, today, restDays = []) {
 			id: h.id,
 			name: h.name,
 			done: isLogged(b, h.id, today),
-			streak: dayStreak(days, today, restDays),
+			streak: dayStreak$1(days, today, restDays),
 			best: bestDayStreak(days, restDays),
 			week: days.filter((d) => d >= from && d <= today).length
 		};
@@ -7840,6 +7841,19 @@ var MIGRATIONS = [
     updated_at TEXT NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS notes_title ON notes(lower(title));
+  `,
+	`
+  ALTER TABLE rewards ADD COLUMN emoji TEXT;
+  ALTER TABLE rewards ADD COLUMN category TEXT;
+  ALTER TABLE rewards ADD COLUMN cooldown_days INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN month_limit INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN one_time INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN goal_rank INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE rewards ADD COLUMN bundle TEXT;
+  ALTER TABLE rewards ADD COLUMN jar_goal_id INTEGER;
+  ALTER TABLE rewards ADD COLUMN price_locked INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE redemptions ADD COLUMN jar_used INTEGER NOT NULL DEFAULT 0;
   `
 ];
 // src/core/rules.ts
@@ -8183,7 +8197,7 @@ function weekMonday(day) {
 function computeWorkoutStats(workouts, today, restDays = []) {
 	const workoutDays = Array.from(new Set(workouts.filter((w) => w.day <= today).map((w) => w.day))).sort();
 	const rest = restDays.filter((d) => d <= today);
-	const streak = dayStreak(workoutDays, today, rest);
+	const streak = dayStreak$1(workoutDays, today, rest);
 	const bestStreak = bestDayStreak(workoutDays, rest);
 	const restToday = rest.includes(today);
 	const totalWorkouts = workouts.length;
@@ -14068,11 +14082,64 @@ var TIERS = {
 function isTier(t) {
 	return t in TIERS;
 }
+/** The six kinds of reward (RF1). */
+var REWARD_CATEGORIES = [
+	{
+		id: "fun",
+		label: "Fun",
+		emoji: "🎮"
+	},
+	{
+		id: "food",
+		label: "Food",
+		emoji: "🍕"
+	},
+	{
+		id: "gear",
+		label: "Gear",
+		emoji: "🎧"
+	},
+	{
+		id: "experience",
+		label: "Experience",
+		emoji: "🎟️"
+	},
+	{
+		id: "selfcare",
+		label: "Self-care",
+		emoji: "🧴"
+	},
+	{
+		id: "big",
+		label: "Big goal",
+		emoji: "🏔️"
+	}
+];
+var isRewardCategory = (c) => REWARD_CATEGORIES.some((x) => x.id === c);
+/** Why a repeatable reward can't be bought again yet (RF2), or null. `buys`: days of your buys that still count. */
+function repeatBlocker(r, buys, today) {
+	const cd = Math.max(0, Math.floor(r.cooldownDays ?? 0));
+	if (cd > 0 && buys.length) {
+		const wait = cd - daysBetween$2([...buys].sort().at(-1), today);
+		if (wait > 0) return wait === 1 ? "You can get it again tomorrow" : `You can get it again in ${wait} days`;
+	}
+	const lim = Math.max(0, Math.floor(r.monthLimit ?? 0));
+	if (lim > 0) {
+		const used = buys.filter((d) => d.slice(0, 7) === today.slice(0, 7)).length;
+		if (used >= lim) return `Used ${used} of ${lim} this month`;
+	}
+	return null;
+}
 /** Why a reward can't be bought right now, or null if it can. */
 function redeemBlocker(c) {
 	const { reward, balance, level, monthSpent, budget } = c;
 	if (reward.archived) return "This reward is archived";
-	if (balance < reward.price) return `You need ${reward.price - balance} more points`;
+	if (c.today) {
+		const again = repeatBlocker(reward, c.buys ?? [], c.today);
+		if (again) return again;
+	}
+	const have = balance + Math.max(0, reward.jar ?? 0);
+	if (have < reward.price) return `You need ${reward.price - have} more points`;
 	if (budget > 0 && monthSpent + reward.realCost > budget) return `Over this month's reward budget (${budget - monthSpent} left)`;
 	return null;
 }
@@ -14085,6 +14152,8 @@ function validateReward(r) {
 	if (!Number.isInteger(r.price) || r.price <= 0) throw new LedgerError("Price must be a whole number of coins above 0");
 	if (!Number.isInteger(r.realCost) || r.realCost < 0) throw new LedgerError("Real cost must be a whole number, 0 or more");
 	if (!isTier(r.tier)) throw new LedgerError("Unknown tier");
+	if (r.category != null && !isRewardCategory(r.category)) throw new LedgerError("Unknown category");
+	for (const n of [r.cooldownDays ?? 0, r.monthLimit ?? 0]) if (!Number.isInteger(n) || n < 0 || n > 365) throw new LedgerError("Cooldown and monthly limit are whole numbers from 0 to 365");
 }
 function chestRef(level) {
 	return `chest:L${level}`;
@@ -14665,7 +14734,385 @@ function levelInfo(totalXp, hunterStatsInput) {
 		allRanks: RANKS
 	};
 }
+focusCoins(50);
+/** The ref of a small extra paid on top of one ledger row; undoing the row undoes it too. */
+var extraRef = (ledgerId, kind) => `extra:${ledgerId}:${kind}`;
+var isExtra = (e, kind) => (e.ref ?? "").startsWith("extra:") && (!kind || (e.ref ?? "").endsWith(`:${kind}`));
+/** RG7: about 1 in 8 finished must-dos brings a lucky +5, at most twice a day. */
+var LUCKY = {
+	chance: 1 / 8,
+	coins: 5,
+	dailyCap: 2
+};
+/** The lucky gift for one finished must-do: its coins, or 0. `rand` is 0..1. */
+function luckyRoll(rand, luckyToday) {
+	if (luckyToday >= LUCKY.dailyCap) return 0;
+	return rand < LUCKY.chance ? LUCKY.coins : 0;
+}
+/** RG6: +10% on focus points from a 7-day focus streak, at most +3 a session. */
+var STREAK_BONUS = {
+	days: 7,
+	pct: .1,
+	max: 3
+};
+/** Days in a row with focus, ending today (or yesterday, while today has none yet). */
+function dayStreak(days, today) {
+	const set = new Set(days);
+	let d = set.has(today) ? today : addDays$5(today, -1);
+	let n = 0;
+	while (set.has(d)) {
+		n++;
+		d = addDays$5(d, -1);
+	}
+	return n;
+}
+/** The streak extra for a real focus session that paid `coins`. */
+function streakBonus(coins, streak) {
+	if (!(coins > 0) || streak < STREAK_BONUS.days) return 0;
+	return Math.max(1, Math.min(STREAK_BONUS.max, Math.round(coins * STREAK_BONUS.pct)));
+}
+/** The flame in the header grows at 3, 7 and 14 days (0 = no flame). */
+function flameLevel(streak) {
+	return streak >= 14 ? 3 : streak >= 7 ? 2 : streak >= 3 ? 1 : 0;
+}
+/** Which colour a point belongs to, by the module that paid it. */
+function sourceOf(e) {
+	if (e.ref?.startsWith("extra:") || e.ref?.startsWith("quest:") || e.ref?.startsWith("chest:") || e.ref?.startsWith("challenge:")) return "bonus";
+	if (e.module === "focus" || e.module === "schedule") return "focus";
+	if (e.module === "plan") return "mustdo";
+	if (e.module === "tasks" || e.ref?.startsWith("task:")) return "tasks";
+	if ([
+		"sleep",
+		"discipline",
+		"body",
+		"money",
+		"face",
+		"habits",
+		"grand_slam"
+	].includes(e.module)) return "habits";
+	return "bonus";
+}
+/** Moving points into or out of a savings jar is not earning or spending. */
+var isJarMove = (e) => !!e.ref?.startsWith("goal:");
+/** Monday of the week `day` is in. */
+function mondayOf$1(day) {
+	const wd = (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+	return addDays$5(day, wd === 0 ? -6 : 1 - wd);
+}
+/** 30 days of points earned (by source) and spent, best day, this week against last. */
+function earnings(entries, today, span = 30) {
+	const start = addDays$5(today, -(span - 1));
+	const mon = mondayOf$1(today);
+	const lastMon = addDays$5(mon, -7);
+	const map = /* @__PURE__ */ new Map();
+	for (let i = 0; i < span; i++) {
+		const day = addDays$5(start, i);
+		map.set(day, {
+			day,
+			earned: {
+				focus: 0,
+				mustdo: 0,
+				tasks: 0,
+				habits: 0,
+				bonus: 0
+			},
+			total: 0,
+			spent: 0
+		});
+	}
+	const thisWeek = {
+		earned: 0,
+		spent: 0
+	};
+	const lastWeek = {
+		earned: 0,
+		spent: 0
+	};
+	for (const e of effective(entries)) {
+		if (isJarMove(e) || e.kind === "adjust") continue;
+		const earn = e.kind === "earn" && e.coins > 0 ? e.coins : 0;
+		const spend = e.coins < 0 ? -e.coins : 0;
+		const wk = e.day >= mon && e.day <= today ? thisWeek : e.day >= lastMon && e.day <= addDays$5(today, -7) ? lastWeek : null;
+		if (wk) {
+			wk.earned += earn;
+			wk.spent += spend;
+		}
+		const d = map.get(e.day);
+		if (!d) continue;
+		if (earn) {
+			d.earned[sourceOf(e)] += earn;
+			d.total += earn;
+		}
+		d.spent += spend;
+	}
+	const days = [...map.values()];
+	const top = days.reduce((b, d) => d.total > (b?.total ?? 0) ? d : b, null);
+	return {
+		days,
+		best: top ? {
+			day: top.day,
+			total: top.total
+		} : null,
+		thisWeek,
+		lastWeek,
+		today: map.get(today)?.total ?? 0,
+		earned: days.reduce((s, d) => s + d.total, 0),
+		spent: days.reduce((s, d) => s + d.spent, 0)
+	};
+}
+var HABIT_RULES = /* @__PURE__ */ new Set([
+	"sleep.up_on_time",
+	"sleep.bed_on_time",
+	"discipline.clean_day",
+	"discipline.oath",
+	"discipline.urge_resisted",
+	"body.workout_done",
+	"face.routine_done",
+	"money.logged",
+	"money.under_budget",
+	"money.no_spend",
+	"money.cooked_home",
+	"habit.done"
+]);
+/** Only real logged actions count: each challenge counts rows of the rule that pays that action. */
+var CHALLENGES = {
+	focus: {
+		title: "Finish 5 focus sessions this week",
+		goal: 5,
+		count: (e) => e.ruleId === "focus.session" && e.coins > 0
+	},
+	mustdo: {
+		title: "Tick off 10 must-dos this week",
+		goal: 10,
+		count: (e) => e.ruleId === "plan.item_done"
+	},
+	tasks: {
+		title: "Complete 12 Todoist tasks this week",
+		goal: 12,
+		count: (e) => e.module === "tasks" && e.coins > 0 && !isExtra(e)
+	},
+	habits: {
+		title: "Log 15 habits this week",
+		goal: 15,
+		count: (e) => !!e.ruleId && HABIT_RULES.has(e.ruleId) && e.coins > 0
+	}
+};
+var challengeRef = (week) => `challenge:${week}`;
+/** Your weakest area last week (the lowest share of its goal); focus wins a tie. */
+function pickChallenge(lastWeek) {
+	const live = effective(lastWeek);
+	let best = "focus";
+	let low = Infinity;
+	for (const a of Object.keys(CHALLENGES)) {
+		const share = live.filter(CHALLENGES[a].count).length / CHALLENGES[a].goal;
+		if (share < low) {
+			low = share;
+			best = a;
+		}
+	}
+	return best;
+}
+function challengeState(area, week, entries, today) {
+	const live = effective(entries);
+	const end = addDays$5(week, 6);
+	const c = CHALLENGES[area];
+	const progress = Math.min(c.goal, live.filter((e) => e.day >= week && e.day <= end && c.count(e)).length);
+	return {
+		week,
+		area,
+		title: c.title,
+		goal: c.goal,
+		progress,
+		done: progress >= c.goal,
+		paid: live.some((e) => e.ref === challengeRef(week)),
+		bonus: 40,
+		daysLeft: Math.max(0, daysBetween$2(today, end) + 1)
+	};
+}
+var BADGES = [
+	{
+		id: "first_buy",
+		emoji: "🎁",
+		title: "First reward",
+		hint: "Buy your first reward",
+		goal: (s) => [s.bought, 1]
+	},
+	{
+		id: "buy10",
+		emoji: "🛍️",
+		title: "Ten treats",
+		hint: "Buy 10 rewards",
+		goal: (s) => [s.bought, 10]
+	},
+	{
+		id: "k1",
+		emoji: "💰",
+		title: "1,000 points",
+		hint: "Earn 1,000 points in all",
+		goal: (s) => [s.earnedAllTime, 1e3]
+	},
+	{
+		id: "k10",
+		emoji: "💎",
+		title: "10,000 points",
+		hint: "Earn 10,000 points in all",
+		goal: (s) => [s.earnedAllTime, 1e4]
+	},
+	{
+		id: "streak7",
+		emoji: "🔥",
+		title: "Week on fire",
+		hint: "Focus 7 days in a row",
+		goal: (s) => [s.bestFocusStreak, 7]
+	},
+	{
+		id: "streak30",
+		emoji: "🌋",
+		title: "30-day streak",
+		hint: "Focus 30 days in a row",
+		goal: (s) => [s.bestFocusStreak, 30]
+	},
+	{
+		id: "quests",
+		emoji: "🎯",
+		title: "Quest master",
+		hint: "Finish all daily quests on 5 days",
+		goal: (s) => [s.questDays, 5]
+	},
+	{
+		id: "chest",
+		emoji: "🧰",
+		title: "Treasure",
+		hint: "Open a level chest",
+		goal: (s) => [s.chests, 1]
+	},
+	{
+		id: "lucky",
+		emoji: "🍀",
+		title: "Lucky",
+		hint: "Get a lucky gift for a must-do",
+		goal: (s) => [s.lucky, 1]
+	},
+	{
+		id: "challenge",
+		emoji: "🏆",
+		title: "Challenger",
+		hint: "Win a weekly challenge",
+		goal: (s) => [s.challenges, 1]
+	}
+];
+function badges(s) {
+	return BADGES.map((b) => {
+		const [have, need] = b.goal(s);
+		return {
+			id: b.id,
+			emoji: b.emoji,
+			title: b.title,
+			hint: b.hint,
+			earned: have >= need,
+			progress: Math.max(0, Math.min(1, have / need))
+		};
+	});
+}
+/** The longest run of consecutive days in a set. */
+function bestStreak$1(days) {
+	const sorted = [...new Set(days)].sort();
+	let best = 0;
+	let run = 0;
+	for (let i = 0; i < sorted.length; i++) {
+		run = i && daysBetween$2(sorted[i - 1], sorted[i]) === 1 ? run + 1 : 1;
+		best = Math.max(best, run);
+	}
+	return best;
+}
+/** Badge numbers from the ledger (live rows) and your buys. */
+function badgeStats(entries, bought, focusDays) {
+	const live = effective(entries);
+	return {
+		bought,
+		earnedAllTime: live.filter((e) => e.kind === "earn" && e.coins > 0).reduce((s, e) => s + e.coins, 0),
+		bestFocusStreak: bestStreak$1(focusDays),
+		questDays: live.filter((e) => e.ref?.startsWith("quest:")).length,
+		chests: live.filter((e) => e.ref?.startsWith("chest:")).length,
+		lucky: live.filter((e) => isExtra(e, "lucky")).length,
+		challenges: live.filter((e) => e.ref?.startsWith("challenge:")).length
+	};
+}
+// src/main/points.ts
+/** rule id → [old default, new value]. */
+var HABIT_POINTS = {
+	"sleep.up_on_time": [10, 3],
+	"sleep.bed_on_time": [5, 2],
+	"discipline.clean_day": [20, 3],
+	"discipline.urge_resisted": [10, 2],
+	"discipline.oath": [3, 1],
+	"discipline.reset": [-20, -5],
+	"body.workout_done": [10, 3],
+	"face.routine_done": [5, 2],
+	"money.under_budget": [5, 2],
+	"money.logged": [3, 1],
+	"grand_slam.all_four": [50, 5]
+};
+var FLAG = "points_v2";
+/** Runs once per database; true when it changed something. */
+function applyPointsV2(db) {
+	if (getSetting(db, FLAG)) return false;
+	const upd = db.prepare("UPDATE rules SET coins = ? WHERE id = ? AND coins = ?");
+	let n = 0;
+	for (const [id, [from, to]] of Object.entries(HABIT_POINTS)) n += Number(upd.run(to, id, from).changes ?? 0);
+	setSetting(db, FLAG, (/* @__PURE__ */ new Date()).toISOString());
+	return n > 0;
+}
+var HABIT_V3 = [
+	"sleep.up_on_time",
+	"sleep.bed_on_time",
+	"discipline.clean_day",
+	"discipline.oath",
+	"body.workout_done",
+	"face.routine_done",
+	"money.logged",
+	"money.under_budget",
+	"discipline.urge_resisted"
+];
+var FLAG3 = "points_v3";
+/** old defaults (v1 or v2) that move to the v3 values. */
+function applyPointsV3(db) {
+	if (getSetting(db, FLAG3)) return false;
+	let n = 0;
+	const upd = db.prepare("UPDATE rules SET coins = ? WHERE id = ? AND coins = ?");
+	for (const id of HABIT_V3) {
+		const olds = [HABIT_POINTS[id]?.[0], HABIT_POINTS[id]?.[1]].filter((v) => typeof v === "number" && v !== 2);
+		for (const old of olds) n += Number(upd.run(2, id, old).changes ?? 0);
+	}
+	n += Number(upd.run(5, "tasks.todoist_done", 8).changes ?? 0);
+	setSetting(db, FLAG3, (/* @__PURE__ */ new Date()).toISOString());
+	return n > 0;
+}
+/** Pays a one-time bonus (ref keeps it once); false when it was already paid. */
+function payOnce(wallet, ref, coins, note, now = /* @__PURE__ */ new Date()) {
+	if (wallet.entries().some((e) => e.ref === ref && e.kind !== "undo")) return false;
+	wallet.append({
+		ts: now.toISOString(),
+		day: wallet.today(now),
+		module: "goals",
+		kind: "earn",
+		coins,
+		xp: 0,
+		ref,
+		note
+	});
+	return true;
+}
 // src/main/shop.ts
+function parseBundle(raw) {
+	if (!raw) return null;
+	try {
+		const a = JSON.parse(raw);
+		return Array.isArray(a) ? a.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 12) : null;
+	} catch {
+		return null;
+	}
+}
 var toReward = (r) => ({
 	id: r.id,
 	title: r.title,
@@ -14677,8 +15124,20 @@ var toReward = (r) => ({
 	note: r.note,
 	imageUrl: r.image_url ?? null,
 	productUrl: r.product_url ?? null,
-	currency: r.currency ?? "MDL"
+	currency: r.currency ?? "MDL",
+	emoji: r.emoji ?? null,
+	category: isRewardCategory(r.category) ? r.category : null,
+	cooldownDays: r.cooldown_days ?? 0,
+	monthLimit: r.month_limit ?? 0,
+	oneTime: !!r.one_time,
+	sort: r.sort ?? 0,
+	goalRank: r.goal_rank || (r.pinned ? 1 : 0),
+	bundle: parseBundle(r.bundle),
+	jar: Math.max(0, r.jar ?? 0),
+	jarGoalId: r.jar_goal_id ?? null,
+	priceLocked: r.price_locked == null ? true : !!r.price_locked
 });
+var SELECT_REWARDS = `SELECT rewards.*, COALESCE(g.allocated_coins, 0) AS jar FROM rewards LEFT JOIN wishlist_goals g ON g.id = rewards.jar_goal_id`;
 var Shop = class {
 	db;
 	wallet;
@@ -14696,10 +15155,10 @@ var Shop = class {
 		this.economy = eco;
 	}
 	rewards() {
-		return this.db.prepare("SELECT * FROM rewards WHERE archived = 0 ORDER BY pinned DESC, price").all().map(toReward);
+		return this.db.prepare(`${SELECT_REWARDS} WHERE rewards.archived = 0 ORDER BY rewards.sort, rewards.pinned DESC, rewards.price`).all().map(toReward);
 	}
 	reward(id) {
-		const row = this.db.prepare("SELECT * FROM rewards WHERE id = ?").get(id);
+		const row = this.db.prepare(`${SELECT_REWARDS} WHERE rewards.id = ?`).get(id);
 		if (!row) throw new LedgerError("Reward not found");
 		return toReward(row);
 	}
@@ -14808,6 +15267,12 @@ var Shop = class {
 		const live = new Set(liveRows.map((e) => e.id));
 		return new Set(all.filter((e) => e.kind !== "undo" && !live.has(e.id)).map((e) => e.id));
 	}
+	/** Days of each reward's buys that still count (for cooldowns and monthly limits). */
+	buys(undone) {
+		const out = {};
+		for (const r of this.db.prepare("SELECT ledger_id, reward_id, day FROM redemptions").all()) if (!undone.has(r.ledger_id)) (out[r.reward_id] ??= []).push(r.day);
+		return out;
+	}
 	state(now = /* @__PURE__ */ new Date()) {
 		const all = this.wallet.entries();
 		const liveRows = this.wallet.effective();
@@ -14815,7 +15280,8 @@ var Shop = class {
 		const undone = this.undoneIds(all, liveRows);
 		const level = levelInfo(totalXp(all)).level;
 		const openedRefs = liveRows.map((e) => e.ref ?? "").filter((r) => r.startsWith("chest:"));
-		const recent = this.db.prepare("SELECT ledger_id, title, real_cost, day FROM redemptions ORDER BY id DESC LIMIT 8").all();
+		const recent = this.db.prepare("SELECT r.ledger_id, r.reward_id, r.title, r.real_cost, r.day, r.jar_used, w.emoji, w.category, w.image_url FROM redemptions r LEFT JOIN rewards w ON w.id = r.reward_id ORDER BY r.id DESC LIMIT 40").all();
+		const coinsOf = new Map(all.map((e) => [e.id, e.coins]));
 		return {
 			rewards: this.rewards(),
 			balance: balance(all),
@@ -14829,24 +15295,50 @@ var Shop = class {
 				title: r.title,
 				realCost: r.real_cost,
 				day: r.day,
-				undone: undone.has(r.ledger_id)
+				undone: undone.has(r.ledger_id),
+				ledgerId: r.ledger_id,
+				rewardId: r.reward_id,
+				coins: -(coinsOf.get(r.ledger_id) ?? 0) + (r.jar_used ?? 0),
+				emoji: r.emoji,
+				category: isRewardCategory(r.category) ? r.category : null,
+				imageUrl: r.image_url
 			})),
+			buys: this.buys(undone),
+			today: day,
 			economy: this.economy?.getEconomySummary(now)
 		};
 	}
+	/**
+	* Adds or edits a reward. On an edit, fields the caller leaves out keep
+	* their saved value (FX4: editing never wipes the photo, link, currency or
+	* tier). Only one reward is pinned (the goal shown on Today).
+	*/
 	save(input) {
+		const cur = input.id ? this.reward(input.id) : null;
+		const keep = (k, fallback) => input[k] !== void 0 ? input[k] : cur ? cur[k] : fallback;
+		const str = (v) => typeof v === "string" ? v.trim() || null : null;
 		const r = {
-			...input,
-			title: input.title.trim(),
-			note: input.note?.trim() || null,
-			imageUrl: input.imageUrl?.trim() || null,
-			productUrl: input.productUrl?.trim() || null,
-			currency: input.currency?.trim() || "MDL",
-			archived: false
+			title: (input.title ?? cur?.title ?? "").trim(),
+			price: keep("price", 0),
+			tier: keep("tier", "bronze"),
+			realCost: keep("realCost", 0),
+			pinned: keep("pinned", false),
+			archived: false,
+			note: str(keep("note", null)),
+			imageUrl: str(keep("imageUrl", null)),
+			productUrl: str(keep("productUrl", null)),
+			currency: str(keep("currency", "MDL"))?.toUpperCase() || "MDL",
+			emoji: str(keep("emoji", null))?.slice(0, 16) ?? null,
+			category: keep("category", null) || null,
+			cooldownDays: keep("cooldownDays", 0) ?? 0,
+			monthLimit: keep("monthLimit", 0) ?? 0,
+			oneTime: !!keep("oneTime", false),
+			bundle: keep("bundle", null),
+			priceLocked: keep("priceLocked", true) !== false
 		};
 		validateReward(r);
 		this.db.transaction(() => {
-			if (r.pinned) this.db.prepare("UPDATE rewards SET pinned = 0").run();
+			if (r.pinned) this.db.prepare("UPDATE rewards SET pinned = 0, goal_rank = CASE WHEN goal_rank = 1 THEN 0 ELSE goal_rank END").run();
 			const params = {
 				title: r.title,
 				price: r.price,
@@ -14856,20 +15348,55 @@ var Shop = class {
 				note: r.note,
 				imageUrl: r.imageUrl,
 				productUrl: r.productUrl,
-				currency: r.currency
+				currency: r.currency,
+				emoji: r.emoji,
+				category: r.category,
+				cooldown: r.cooldownDays ?? 0,
+				monthLimit: r.monthLimit ?? 0,
+				oneTime: r.oneTime ? 1 : 0,
+				bundle: r.bundle?.length ? JSON.stringify(r.bundle) : null,
+				priceLocked: r.priceLocked ? 1 : 0
 			};
+			const cols = "title = @title, price = @price, tier = @tier, real_cost = @realCost, pinned = @pinned, note = @note, image_url = @imageUrl, product_url = @productUrl, currency = @currency, emoji = @emoji, category = @category, cooldown_days = @cooldown, month_limit = @monthLimit, one_time = @oneTime, bundle = @bundle, price_locked = @priceLocked";
 			if (input.id) {
-				this.reward(input.id);
-				this.db.prepare("UPDATE rewards SET title = @title, price = @price, tier = @tier, real_cost = @realCost, pinned = @pinned, note = @note, image_url = @imageUrl, product_url = @productUrl, currency = @currency WHERE id = @id").run({
+				this.db.prepare(`UPDATE rewards SET ${cols}${r.pinned ? ", goal_rank = 1" : ""} WHERE id = @id`).run({
 					...params,
 					id: input.id
 				});
-			} else this.db.prepare("INSERT INTO rewards (title, price, tier, real_cost, pinned, note, image_url, product_url, currency) VALUES (@title, @price, @tier, @realCost, @pinned, @note, @imageUrl, @productUrl, @currency)").run(params);
+				if (cur?.jarGoalId) this.db.prepare("UPDATE wishlist_goals SET title = ?, target_coins = ? WHERE id = ?").run(r.title, r.price, cur.jarGoalId);
+			} else {
+				const sort = this.db.prepare("SELECT COALESCE(MAX(sort), 0) + 1 AS n FROM rewards").get().n;
+				this.db.prepare("INSERT INTO rewards (title, price, tier, real_cost, pinned, note, image_url, product_url, currency, emoji, category, cooldown_days, month_limit, one_time, bundle, price_locked, sort, goal_rank) VALUES (@title, @price, @tier, @realCost, @pinned, @note, @imageUrl, @productUrl, @currency, @emoji, @category, @cooldown, @monthLimit, @oneTime, @bundle, @priceLocked, @sort, @goalRank)").run({
+					...params,
+					sort,
+					goalRank: r.pinned ? 1 : 0
+				});
+			}
 		})();
 	}
 	archive(id) {
 		this.reward(id);
-		this.db.prepare("UPDATE rewards SET archived = 1, pinned = 0 WHERE id = ?").run(id);
+		this.db.prepare("UPDATE rewards SET archived = 1, pinned = 0, goal_rank = 0 WHERE id = ?").run(id);
+	}
+	/** Puts a removed reward back (the 5-second undo after Remove). */
+	restore(id) {
+		this.reward(id);
+		this.db.prepare("UPDATE rewards SET archived = 0 WHERE id = ?").run(id);
+	}
+	/** Your "saving for" goals, in order (RF3): up to 3; the first shows on Today. */
+	setGoals(ids) {
+		const list = [...new Set(ids)].slice(0, 3);
+		this.db.transaction(() => {
+			for (const id of list) this.reward(id);
+			this.db.prepare("UPDATE rewards SET goal_rank = 0, pinned = 0").run();
+			list.forEach((id, i) => this.db.prepare("UPDATE rewards SET goal_rank = ?, pinned = ? WHERE id = ?").run(i + 1, i === 0 ? 1 : 0, id));
+		})();
+	}
+	/** Your own order of the rewards (drag to reorder). */
+	reorder(ids) {
+		this.db.transaction(() => {
+			ids.forEach((id, i) => this.db.prepare("UPDATE rewards SET sort = ? WHERE id = ?").run(i + 1, id));
+		})();
 	}
 	/**
 	* RL3: why the fun budget stops this buy (null = fine). `paid` is what it
@@ -14896,31 +15423,96 @@ var Shop = class {
 			const reward = this.reward(id);
 			const all = this.wallet.entries();
 			const day = dayKey(now, this.timeZone);
+			const undone = this.undoneIds();
 			planRedeem({
 				reward,
 				balance: balance(all),
 				level: levelInfo(totalXp(all)).level,
-				monthSpent: this.monthSpent(day, this.undoneIds()),
-				budget: this.budget()
+				monthSpent: this.monthSpent(day, undone),
+				budget: this.budget(),
+				buys: this.buys(undone)[id] ?? [],
+				today: day
 			});
 			const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward.realCost;
 			if (!opts.force) {
 				const why = this.funBlocker(id, paid, opts.finance, now);
 				if (why) throw new LedgerError(`FUN_EMPTY: ${why}`);
 			}
+			const fromJar = Math.min(reward.jar ?? 0, reward.price);
 			const ledgerId = this.wallet.append({
 				ts: now.toISOString(),
 				day,
 				module: "shop",
 				kind: "spend",
-				coins: -reward.price,
+				coins: -(reward.price - fromJar),
 				xp: 0,
 				ref: `reward:${id}`,
 				note: reward.title
 			});
-			this.db.prepare("INSERT INTO redemptions (ledger_id, reward_id, title, real_cost, day) VALUES (?, ?, ?, ?, ?)").run(ledgerId, id, reward.title, paid, day);
+			this.db.prepare("INSERT INTO redemptions (ledger_id, reward_id, title, real_cost, day, jar_used) VALUES (?, ?, ?, ?, ?, ?)").run(ledgerId, id, reward.title, paid, day, fromJar);
+			if (fromJar && reward.jarGoalId) this.db.prepare("UPDATE wishlist_goals SET allocated_coins = allocated_coins - ?, completed = 0, completed_at = NULL WHERE id = ?").run(fromJar, reward.jarGoalId);
+			if (reward.oneTime) this.db.prepare("UPDATE rewards SET archived = 1, pinned = 0, goal_rank = 0 WHERE id = ?").run(id);
 			return ledgerId;
 		}).immediate();
+	}
+	/**
+	* "Undo buy" in History (RF5): the points come back through the ledger's
+	* undo (an honest new row), the jar gets its points back, and a one-time
+	* reward comes back to the page.
+	*/
+	undoBuy(ledgerId, now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const row = this.db.prepare("SELECT reward_id, jar_used FROM redemptions WHERE ledger_id = ?").get(ledgerId);
+			if (!row) throw new LedgerError("That buy was not found");
+			this.wallet.undo(ledgerId, "Undo buy", now);
+			const r = this.db.prepare("SELECT one_time, jar_goal_id FROM rewards WHERE id = ?").get(row.reward_id);
+			if (r?.one_time) this.db.prepare("UPDATE rewards SET archived = 0 WHERE id = ?").run(row.reward_id);
+			if (row.jar_used && r?.jar_goal_id) this.db.prepare("UPDATE wishlist_goals SET allocated_coins = allocated_coins + ? WHERE id = ?").run(row.jar_used, r.jar_goal_id);
+		})();
+	}
+	/**
+	* Sets points aside in a reward's savings jar (RF4). The jar is a wishlist
+	* goal, filled by the economy's depositCoinsToGoal (a ledger row with a
+	* `goal:` ref, so it is neither earning nor spending, and can't be undone
+	* by accident: take points back out with jarTake).
+	*/
+	jarAdd(rewardId, amount, eco, now = /* @__PURE__ */ new Date()) {
+		const r = this.reward(rewardId);
+		const n = Math.floor(amount);
+		if (!(n > 0)) throw new LedgerError("Put at least 1 point in the jar");
+		if ((r.jar ?? 0) + n > r.price) throw new LedgerError(`The jar only needs ${r.price - (r.jar ?? 0)} more`);
+		let goalId = r.jarGoalId;
+		if (!goalId || !this.db.prepare("SELECT 1 FROM wishlist_goals WHERE id = ?").get(goalId)) {
+			goalId = eco.saveGoal({
+				title: r.title,
+				targetCoins: r.price,
+				targetRealCost: 0,
+				category: "gear",
+				note: "Savings jar for a reward"
+			}).id;
+			this.db.prepare("UPDATE rewards SET jar_goal_id = ? WHERE id = ?").run(goalId, rewardId);
+		}
+		this.db.prepare("UPDATE wishlist_goals SET completed = 0, completed_at = NULL, target_coins = ? WHERE id = ?").run(r.price, goalId);
+		eco.depositCoinsToGoal(goalId, n, now);
+	}
+	/** Takes points back out of a jar into your balance (not earning: an `adjust` row). */
+	jarTake(rewardId, amount, now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const r = this.reward(rewardId);
+			const n = Math.min(Math.floor(amount), r.jar ?? 0);
+			if (!(n > 0) || !r.jarGoalId) throw new LedgerError("The jar is empty");
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: dayKey(now, this.timeZone),
+				module: "shop",
+				kind: "adjust",
+				coins: n,
+				xp: 0,
+				ref: `goal:${r.jarGoalId}:back`,
+				note: `Out of the jar: ${r.title}`
+			});
+			this.db.prepare("UPDATE wishlist_goals SET allocated_coins = allocated_coins - ?, completed = 0, completed_at = NULL WHERE id = ?").run(n, r.jarGoalId);
+		})();
 	}
 	openChest(level, now = /* @__PURE__ */ new Date()) {
 		return this.db.transaction(() => {
@@ -14938,6 +15530,45 @@ var Shop = class {
 			});
 			return coins;
 		}).immediate();
+	}
+	/** Days with a paid focus session (the flame and the streak bonus). */
+	focusDays(live) {
+		return [...new Set(live.filter((e) => e.ruleId === "focus.session" && e.coins > 0).map((e) => e.day))];
+	}
+	insights(now = /* @__PURE__ */ new Date()) {
+		const all = this.wallet.entries();
+		const live = effective(all);
+		const today = dayKey(now, this.timeZone);
+		const week = mondayOf$1(today);
+		const lastWeek = all.filter((e) => e.day >= addDays$5(week, -7) && e.day < week);
+		const days = this.focusDays(live);
+		const streak = dayStreak(days, today);
+		const liveIds = new Set(live.map((e) => e.id));
+		const bought = this.db.prepare("SELECT ledger_id FROM redemptions").all().filter((r) => liveIds.has(r.ledger_id)).length;
+		return {
+			today,
+			earnings: earnings(all, today),
+			focusStreak: streak,
+			flame: flameLevel(streak),
+			challenge: challengeState(pickChallenge(lastWeek), week, all, today),
+			badges: badges(badgeStats(all, bought, days)),
+			readySeen: readSetting(this.db, "reward_ready_seen")
+		};
+	}
+	/** Pays the weekly challenge bonus once (RG5), only when real logged actions reached the goal. */
+	claimChallenge(now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const c = this.insights(now).challenge;
+			if (!c.done) throw new LedgerError(`Not done yet: ${c.progress} of ${c.goal}`);
+			if (!payOnce(this.wallet, challengeRef(c.week), c.bonus, `Weekly challenge: ${c.title}`, now)) throw new LedgerError("Already paid this week");
+			return c.bonus;
+		})();
+	}
+	/** Remembers the "Ready!" moments already shown (RW6). */
+	markReady(keys) {
+		const cur = readSetting(this.db, "reward_ready_seen");
+		const next = [.../* @__PURE__ */ new Set([...cur, ...keys.map(String)])].slice(-200);
+		writeSetting(this.db, "reward_ready_seen", next);
 	}
 	/** The old reward budget: now the monthly fun budget, typed by hand (RL3). 0 = none. */
 	setBudget(amount) {
@@ -14981,7 +15612,7 @@ function computeSleepStats(logs, today, weekdayTarget = "07:00", weekendTarget =
 	const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 864e5).toISOString().slice(0, 10);
 	const tonight = logs.find((l) => l.day === tomorrow && !!l.bedTime) ?? null;
 	const onTimeDays = valid.filter((l) => l.onTime).map((l) => l.day);
-	const streak = dayStreak(onTimeDays, today);
+	const streak = dayStreak$1(onTimeDays, today);
 	const bestStreak = bestDayStreak(onTimeDays);
 	const last14Days = valid.slice(0, 14);
 	const onTimeRate = last14Days.length > 0 ? last14Days.filter((l) => l.onTime).length / last14Days.length : null;
@@ -15281,12 +15912,15 @@ function cleanStages(v) {
 }
 // src/main/focus.ts
 var RUNNING = "focus_running";
+var luck = () => globalThis.process?.env?.VITEST ? 1 : Math.random();
 var FocusService = class {
 	db;
 	wallet;
-	constructor(db, wallet) {
+	rand;
+	constructor(db, wallet, rand = luck) {
 		this.db = db;
 		this.wallet = wallet;
+		this.rand = rand;
 	}
 	sessions(sinceDay) {
 		return this.db.prepare("SELECT id, day, subject, minutes, coins FROM focus_sessions WHERE day >= ? ORDER BY id DESC").all(sinceDay).map((r) => ({
@@ -15493,17 +16127,33 @@ var FocusService = class {
 			};
 		}
 		const id = Number(this.db.prepare("INSERT INTO focus_sessions (day, subject, minutes, started_at, ended_at, coins) VALUES (?, ?, ?, ?, ?, ?)").run(d, subject, minutes, start, end, coins).lastInsertRowid);
-		if (coins > 0 || minutes > 0) this.wallet.append({
-			ts: end,
-			day: today,
-			module: "focus",
-			kind: "earn",
-			coins,
-			xp: minutes,
-			ruleId: "focus.session",
-			ref: `focus:${id}`,
-			note: `Focus ${minutes} min · ${subject}`
-		});
+		if (coins > 0 || minutes > 0) {
+			const ledgerId = this.wallet.append({
+				ts: end,
+				day: today,
+				module: "focus",
+				kind: "earn",
+				coins,
+				xp: minutes,
+				ruleId: "focus.session",
+				ref: `focus:${id}`,
+				note: `Focus ${minutes} min · ${subject}`
+			});
+			if (coins > 0) {
+				const extra = streakBonus(coins, dayStreak(this.wallet.effective().filter((e) => e.ruleId === "focus.session" && e.coins > 0).map((e) => e.day), today));
+				if (extra) this.wallet.append({
+					ts: end,
+					day: today,
+					module: "focus",
+					kind: "earn",
+					coins: extra,
+					xp: 0,
+					ruleId: null,
+					ref: extraRef(ledgerId, "streak"),
+					note: `Focus streak bonus (+${Math.round(STREAK_BONUS.pct * 100)}%)`
+				});
+			}
+		}
 		return {
 			session: {
 				id,
@@ -15557,7 +16207,7 @@ var FocusService = class {
 				const entries = this.wallet.entries();
 				const paidToday = entries.filter((e) => e.ruleId === "plan.item_done" && e.day === d).length;
 				if (!entries.some((e) => e.ref === ref) && paidToday < 3) {
-					this.wallet.append({
+					const ledgerId = this.wallet.append({
 						ts: now.toISOString(),
 						day: d,
 						module: "plan",
@@ -15569,6 +16219,32 @@ var FocusService = class {
 						note: `Must-do: ${item.text.slice(0, 80)}`
 					});
 					coins = 10;
+					const lucky = luckyRoll(this.rand(), entries.filter((e) => e.day === d && isExtra(e, "lucky")).length);
+					if (lucky) {
+						this.wallet.append({
+							ts: now.toISOString(),
+							day: d,
+							module: "plan",
+							kind: "earn",
+							coins: lucky,
+							xp: 0,
+							ruleId: null,
+							ref: extraRef(ledgerId, "lucky"),
+							note: `Lucky +${lucky} for a finished must-do`
+						});
+						coins += lucky;
+					}
+				}
+			}
+			if (!item.done) {
+				const ref = `plan:${d}:${item.text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 60)}`;
+				const live = this.wallet.effective();
+				const paid = live.find((e) => e.ref === ref);
+				const gift = paid && live.find((e) => e.ref === extraRef(paid.id, "lucky"));
+				if (gift) try {
+					this.wallet.undo(gift.id, "Must-do unticked", now);
+				} catch (e) {
+					if (!(e instanceof LedgerError)) throw e;
 				}
 			}
 			return {
@@ -16084,71 +16760,6 @@ function cleanPlan(p, today, now = /* @__PURE__ */ new Date()) {
 		big3,
 		savedAt: now.toISOString()
 	};
-}
-// src/main/points.ts
-/** rule id → [old default, new value]. */
-var HABIT_POINTS = {
-	"sleep.up_on_time": [10, 3],
-	"sleep.bed_on_time": [5, 2],
-	"discipline.clean_day": [20, 3],
-	"discipline.urge_resisted": [10, 2],
-	"discipline.oath": [3, 1],
-	"discipline.reset": [-20, -5],
-	"body.workout_done": [10, 3],
-	"face.routine_done": [5, 2],
-	"money.under_budget": [5, 2],
-	"money.logged": [3, 1],
-	"grand_slam.all_four": [50, 5]
-};
-var FLAG = "points_v2";
-/** Runs once per database; true when it changed something. */
-function applyPointsV2(db) {
-	if (getSetting(db, FLAG)) return false;
-	const upd = db.prepare("UPDATE rules SET coins = ? WHERE id = ? AND coins = ?");
-	let n = 0;
-	for (const [id, [from, to]] of Object.entries(HABIT_POINTS)) n += Number(upd.run(to, id, from).changes ?? 0);
-	setSetting(db, FLAG, (/* @__PURE__ */ new Date()).toISOString());
-	return n > 0;
-}
-var HABIT_V3 = [
-	"sleep.up_on_time",
-	"sleep.bed_on_time",
-	"discipline.clean_day",
-	"discipline.oath",
-	"body.workout_done",
-	"face.routine_done",
-	"money.logged",
-	"money.under_budget",
-	"discipline.urge_resisted"
-];
-var FLAG3 = "points_v3";
-/** old defaults (v1 or v2) that move to the v3 values. */
-function applyPointsV3(db) {
-	if (getSetting(db, FLAG3)) return false;
-	let n = 0;
-	const upd = db.prepare("UPDATE rules SET coins = ? WHERE id = ? AND coins = ?");
-	for (const id of HABIT_V3) {
-		const olds = [HABIT_POINTS[id]?.[0], HABIT_POINTS[id]?.[1]].filter((v) => typeof v === "number" && v !== 2);
-		for (const old of olds) n += Number(upd.run(2, id, old).changes ?? 0);
-	}
-	n += Number(upd.run(5, "tasks.todoist_done", 8).changes ?? 0);
-	setSetting(db, FLAG3, (/* @__PURE__ */ new Date()).toISOString());
-	return n > 0;
-}
-/** Pays a one-time bonus (ref keeps it once); false when it was already paid. */
-function payOnce(wallet, ref, coins, note, now = /* @__PURE__ */ new Date()) {
-	if (wallet.entries().some((e) => e.ref === ref && e.kind !== "undo")) return false;
-	wallet.append({
-		ts: now.toISOString(),
-		day: wallet.today(now),
-		module: "goals",
-		kind: "earn",
-		coins,
-		xp: 0,
-		ref,
-		note
-	});
-	return true;
 }
 // src/main/weekPlan.ts
 var KEY$1 = "week_plan";
@@ -17525,7 +18136,13 @@ var Wallet = class {
 	undo(id, note, now = /* @__PURE__ */ new Date()) {
 		return this.db.transaction(() => {
 			const row = planUndo(this.entries(), id, note, now.toISOString(), dayKey(now, this.timeZone));
-			return this.append(row);
+			const undoId = this.append(row);
+			for (const extra of effective(this.entries()).filter((e) => e.ref?.startsWith(`extra:${id}:`))) try {
+				this.append(planUndo(this.entries(), extra.id, note, now.toISOString(), dayKey(now, this.timeZone)));
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+			return undoId;
 		}).immediate();
 	}
 };
@@ -18086,7 +18703,19 @@ syncFinance: (recordDays) => write((s) => {
 				state: s.shop.state()
 			}), W),
 			setBudget: (amount) => write((s) => (s.shop.setBudget(amount), s.shop.state())),
-			setCurrency: (cur) => write((s) => (s.shop.setCurrency(cur), s.shop.state()))
+			setCurrency: (cur) => write((s) => (s.shop.setCurrency(cur), s.shop.state())),
+			insights: () => read((s) => s.shop.insights()),
+			restore: (id) => write((s) => (s.shop.restore(id), s.shop.state())),
+			setGoals: (ids) => write((s) => (s.shop.setGoals(ids), s.shop.state())),
+			reorder: (ids) => write((s) => (s.shop.reorder(ids), s.shop.state())),
+			undoBuy: (ledgerId) => write((s) => (s.shop.undoBuy(ledgerId), s.shop.state()), W),
+			jarAdd: (rewardId, amount) => write((s) => (s.shop.jarAdd(rewardId, amount, s.economy), s.shop.state()), W),
+			jarTake: (rewardId, amount) => write((s) => (s.shop.jarTake(rewardId, amount), s.shop.state()), W),
+			claimChallenge: () => write((s) => ({
+				coins: s.shop.claimChallenge(),
+				state: s.shop.state()
+			}), W),
+			markReady: (keys) => write((s) => s.shop.markReady(keys))
 		},
 		tasks: {
 			state: () => read((s) => s.tasks.state()),

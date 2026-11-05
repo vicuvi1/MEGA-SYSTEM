@@ -131,7 +131,23 @@ export interface ShopState {
   currency: string
   /** Levels whose chest is waiting to be opened. */
   chests: number[]
-  recent: { title: string; realCost: number; day: string; undone: boolean }[]
+  recent: {
+    title: string
+    realCost: number
+    day: string
+    undone: boolean
+    /** Night 11: the ledger row of the buy (for "Undo buy"), the reward, points paid (wallet + jar), its look. */
+    ledgerId?: number
+    rewardId?: number
+    coins?: number
+    emoji?: string | null
+    category?: string | null
+    imageUrl?: string | null
+  }[]
+  /** Days of each reward's buys that still count (cooldowns and monthly limits). */
+  buys?: Record<number, string[]>
+  /** Today's day key, as the shop sees it. */
+  today?: string
   economy?: EconomySummary
   /** Your usual points a day (last 30 days), for "about 3 days" next to a price. */
   earnPerDay?: number
@@ -525,6 +541,16 @@ export interface LifeApi {
     moveLeftover(): Promise<LeftoverState>
     setBudget(amount: number): Promise<ShopState>
     setCurrency(cur: string): Promise<ShopState>
+    /** Night 11 (Rewards page). Optional: older bridges may not have them. */
+    insights?(): Promise<import('../main/shop').RewardsInsights>
+    restore?(id: number): Promise<ShopState>
+    setGoals?(ids: number[]): Promise<ShopState>
+    reorder?(ids: number[]): Promise<ShopState>
+    undoBuy?(ledgerId: number): Promise<ShopState>
+    jarAdd?(rewardId: number, amount: number): Promise<ShopState>
+    jarTake?(rewardId: number, amount: number): Promise<ShopState>
+    claimChallenge?(): Promise<{ coins: number; state: ShopState }>
+    markReady?(keys: string[]): Promise<void>
   }
   tasks: {
     state(): Promise<TasksState>

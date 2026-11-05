@@ -284,7 +284,17 @@ export class Wallet {
   undo(id: number, note: string, now = new Date()): number {
     return this.db.transaction(() => {
       const row = planUndo(this.entries(), id, note, now.toISOString(), dayKey(now, this.timeZone))
-      return this.append(row)
+      const undoId = this.append(row)
+      // A small extra paid on top of this row (a lucky gift, a streak bonus)
+      // goes with it: it was only ever earned by the thing being undone.
+      for (const extra of effective(this.entries()).filter((e) => e.ref?.startsWith(`extra:${id}:`))) {
+        try {
+          this.append(planUndo(this.entries(), extra.id, note, now.toISOString(), dayKey(now, this.timeZone)))
+        } catch (e) {
+          if (!(e instanceof LedgerError)) throw e
+        }
+      }
+      return undoId
     }).immediate()
   }
 }

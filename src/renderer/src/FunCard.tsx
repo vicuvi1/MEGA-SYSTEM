@@ -1,19 +1,18 @@
 // "Treat yourself" on Today: what your coins buy right now. Guilt-free fun
 // time (1 coin a minute) and your Shop rewards: the ones you can get now, and
-// how far the next one is in focus sessions.
+// when you will have the next one at your pace.
 import { buyToast, redeemReward } from './redeem'
 import { useCallback, useEffect, useState } from 'react'
 import type { ShopState } from '@shared/api'
 import type { Reward } from '@core/shop'
 import { redeemBlocker } from '@core/shop'
+import { readyLine } from '@core/rewardsKit'
 import { life } from './bridge'
 import { Icon } from './Icon'
 import { play, soundSuccess } from './soundKit'
 import { useAction } from './ui'
 import { barFill } from './motionKit'
 
-/** A full 50-minute focus session pays this much (+3 per 10 min). */
-const COINS_PER_SESSION = 15
 const FUN = [15, 30, 60]
 
 function useShop(): [ShopState | null, () => void] {
@@ -43,6 +42,8 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
   const next = live
     .filter((r) => r.price > bal)
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.price - b.price)[0]
+  // When you'll have it at your pace ("ready by Thursday"), not a guess in focus sessions.
+  const eta = next && shop.today ? readyLine(shop.today, next.price - bal, shop.earnPerDay ?? 0) : null
 
   const fun = async (min: number) => {
     const r = await act(() => life.focus.fun(min, what), `Enjoy ${min} min of ${what.toLowerCase()} 🎮`)
@@ -115,7 +116,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
               <i style={barFill(bal / next.price)} />
             </div>
             <span className="hint">
-              {next.price - bal} points to go · about {Math.ceil((next.price - bal) / COINS_PER_SESSION)} focus sessions
+              {next.price - bal} points to go{eta ? ` · ${eta[0].toLowerCase()}${eta.slice(1)}` : ''}
             </span>
           </div>
         </div>

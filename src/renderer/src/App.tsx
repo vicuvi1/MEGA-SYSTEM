@@ -6,6 +6,7 @@ import { features, isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { Coins, ToastProvider, useToast } from './ui'
+import { CoinFlight } from './rewards/CoinFlight'
 import { ConfirmHost } from './confirmSheet'
 import { LockScreen } from './pages/LockScreen'
 import { Today } from './pages/Today'
@@ -755,6 +756,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <span className="tb-coins">
                 <Coins n={summary.balance} />
               </span>
+              <CoinFlight balance={summary.balance} recent={summary.recent} />
               <span className="wallet-pops" aria-live="polite">
                 <AnimatePresence>
                   {pops.map((p) => (

@@ -22,6 +22,7 @@ import { cleanStages, type FocusStage } from '@core/focusFlow'
 import type { DB } from './db'
 import { getSetting, setSetting, readSetting, writeSetting } from './settings'
 import type { Wallet } from './wallet'
+import { dayStreak, extraRef, isExtra, luckyRoll, streakBonus, STREAK_BONUS } from '@core/rewardsKit'
 
 /** What a session is for, so its end can tick it off (a must-do or a Todoist task). */
 export interface FocusTask {
@@ -61,9 +62,11 @@ export interface FocusState {
 }
 
 const RUNNING = 'focus_running'
+const luck = () => ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VITEST ? 1 : Math.random())
 
 export class FocusService {
-  constructor(private db: DB, private wallet: Wallet) {}
+  // `rand` rolls the lucky gift (RG7); under the test runner there is no luck unless a test passes its own.
+  constructor(private db: DB, private wallet: Wallet, private rand: () => number = luck) {}
 
   private sessions(sinceDay: string): FocusSession[] {
     return (this.db.prepare('SELECT id, day, subject, minutes, coins FROM focus_sessions WHERE day >= ? ORDER BY id DESC').all(sinceDay) as FocusSession[]).map((r) => ({
@@ -247,7 +250,14 @@ export class FocusService {
       this.db.prepare('INSERT INTO focus_sessions (day, subject, minutes, started_at, ended_at, coins) VALUES (?, ?, ?, ?, ?, ?)').run(d, subject, minutes, start, end, coins).lastInsertRowid
     )
     if (coins > 0 || minutes > 0) {
-      this.wallet.append({ ts: end, day: today, module: 'focus', kind: 'earn', coins, xp: minutes, ruleId: 'focus.session', ref: `focus:${id}`, note: `Focus ${minutes} min · ${subject}` })
+      const ledgerId = this.wallet.append({ ts: end, day: today, module: 'focus', kind: 'earn', coins, xp: minutes, ruleId: 'focus.session', ref: `focus:${id}`, note: `Focus ${minutes} min · ${subject}` })
+      // RG6: a 7-day focus streak adds a small, capped extra to a real, paid session (undone with it).
+      if (coins > 0) {
+        const live = this.wallet.effective()
+        const days = live.filter((e) => e.ruleId === 'focus.session' && e.coins > 0).map((e) => e.day)
+        const extra = streakBonus(coins, dayStreak(days, today))
+        if (extra) this.wallet.append({ ts: end, day: today, module: 'focus', kind: 'earn', coins: extra, xp: 0, ruleId: null, ref: extraRef(ledgerId, 'streak'), note: `Focus streak bonus (+${Math.round(STREAK_BONUS.pct * 100)}%)` })
+      }
     }
     return { session: { id, day: d, subject, minutes, coins }, coins, state: this.state(now) }
   }
@@ -289,8 +299,28 @@ export class FocusService {
         const entries = this.wallet.entries()
         const paidToday = entries.filter((e) => e.ruleId === 'plan.item_done' && e.day === d).length
         if (!entries.some((e) => e.ref === ref) && paidToday < 3) {
-          this.wallet.append({ ts: now.toISOString(), day: d, module: 'plan', kind: 'earn', coins: PLAN_ITEM_COINS, xp: 15, ruleId: 'plan.item_done', ref, note: `Must-do: ${item.text.slice(0, 80)}` })
+          const ledgerId = this.wallet.append({ ts: now.toISOString(), day: d, module: 'plan', kind: 'earn', coins: PLAN_ITEM_COINS, xp: 15, ruleId: 'plan.item_done', ref, note: `Must-do: ${item.text.slice(0, 80)}` })
           coins = PLAN_ITEM_COINS
+          // RG7: now and then a finished must-do brings a lucky gift (capped a day, undone with the must-do).
+          const lucky = luckyRoll(this.rand(), entries.filter((e) => e.day === d && isExtra(e, 'lucky')).length)
+          if (lucky) {
+            this.wallet.append({ ts: now.toISOString(), day: d, module: 'plan', kind: 'earn', coins: lucky, xp: 0, ruleId: null, ref: extraRef(ledgerId, 'lucky'), note: `Lucky +${lucky} for a finished must-do` })
+            coins += lucky
+          }
+        }
+      }
+      // Unticked: a lucky gift that came with it goes back (it was only for finishing it).
+      if (!item.done) {
+        const ref = `plan:${d}:${item.text.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 60)}`
+        const live = this.wallet.effective()
+        const paid = live.find((e) => e.ref === ref)
+        const gift = paid && live.find((e) => e.ref === extraRef(paid.id, 'lucky'))
+        if (gift) {
+          try {
+            this.wallet.undo(gift.id, 'Must-do unticked', now)
+          } catch (e) {
+            if (!(e instanceof LedgerError)) throw e
+          }
         }
       }
       return { plan: this.plan(d), coins }

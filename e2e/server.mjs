@@ -114,6 +114,33 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
   db.run("INSERT INTO settings (key, value) VALUES ('app_sync_finance', ?)", [JSON.stringify({ savedAt: Date.now(), data })])
 }
 
+// E2E_REWARDS_DEMO=1: a month of made-up points and a few made-up rewards, for
+// looking at the Rewards page (screenshots). Off for the smoke test.
+if (process.env.E2E_REWARDS_DEMO) {
+  const ins = db.prepare('INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, ref, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  let k = 0
+  const put = (n, mod, kind, coins, rule, note) => ins.run([`${day(n)}T10:00:00.000Z`, day(n), mod, kind, coins, 0, rule, `demo:${k++}`, note])
+  for (let n = 29; n >= 0; n--) {
+    const f = n < 9 ? 1 + (n % 3) : n % 4 === 0 ? 0 : 1 + (n % 2)
+    for (let i = 0; i < f; i++) put(n, 'focus', 'earn', 15, 'focus.session', 'Focus 50 min · Study')
+    for (let i = 0; i < (n * 7) % 4; i++) put(n, 'plan', 'earn', 10, 'plan.item_done', 'Must-do: made-up task')
+    for (let i = 0; i < (n * 5) % 3; i++) put(n, 'tasks', 'earn', 5, 'tasks.todoist_done', 'Task done')
+    for (let i = 0; i < 2 + (n % 3); i++) put(n, 'sleep', 'earn', 2, 'sleep.up_on_time', 'Up on time')
+    if (n % 6 === 2) put(n, 'focus', 'spend', -30, 'focus.fun', 'Fun 30 min')
+    if (n === 11) put(n, 'plan', 'earn', 5, null, 'Lucky +5 for a finished must-do')
+  }
+  put(0, 'quests', 'adjust', -1100, null, 'made-up: start lower')
+  const add = db.prepare('INSERT INTO rewards (title, price, tier, real_cost, pinned, note, emoji, category, cooldown_days, one_time, goal_rank, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  add.run(['Pizza night', 120, 'bronze', 150, 0, 'The good place, large', '🍕', 'food', 3, 0, 0, 1])
+  add.run(['Cinema with friends', 250, 'bronze', 120, 0, null, '🎟️', 'experience', 0, 0, 0, 2])
+  add.run(['New headphones', 900, 'bronze', 1200, 1, 'Over-ear, noise cancelling', '🎧', 'gear', 0, 1, 1, 3])
+  add.run(['New game release', 600, 'bronze', 700, 0, null, '🎮', 'fun', 0, 1, 0, 4])
+  add.run(['Spa afternoon', 400, 'bronze', 450, 0, null, '💆', 'selfcare', 30, 0, 0, 5])
+  add.run(['Mountain weekend', 5000, 'bronze', 3000, 0, 'With the whole group', '🏔️', 'big', 0, 1, 2, 6])
+  db.run('UPDATE rewards SET pinned = 0 WHERE title NOT IN (\'New headphones\')')
+  db.run("UPDATE rewards SET archived = 1 WHERE emoji IS NULL")
+}
+
 Object.assign(process.env, { TURSO_URL: `http://127.0.0.1:${port}`, TURSO_TOKEN: 'fake-turso-key', SESSION_SECRET: 'e2e-secret' })
 const api = {}
 for (const n of ['login', 'db', 'config', 'mcp']) api[n] = (await import(pathToFileURL(join(repo, 'api', `${n}.mjs`)).href)).default
