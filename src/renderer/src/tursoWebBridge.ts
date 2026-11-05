@@ -882,6 +882,8 @@ export function createTursoWebBridge(): Bridge {
     // Turso is the sync on the web: "Sync" fetches what other devices changed now.
     sync: {
       config: async () => ({ syncUrl: 'Turso (automatic)', syncSecret: '', autoSyncOnStartup: true, syncIntervalMinutes: 1, lastSyncedAt: (await mirrorP).syncedAt, lastSyncedCount: 0 }),
+      health: async () => ({ ...(await mirrorP).health(), backupError: store?.getItem('life_snapshot_error') ?? null }),
+      clearFailed: async () => (await mirrorP).clearFailed(),
       saveConfig: async () => bridge.sync.config(),
       test: async () => {
         const t = Date.now()

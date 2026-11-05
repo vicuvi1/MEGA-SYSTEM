@@ -627,7 +627,23 @@ export interface LifeApi {
     saveConfig(cfg: Partial<SyncConfig>): Promise<SyncConfig>
     test(url?: string, secret?: string): Promise<{ success: boolean; latencyMs: number; message: string; count?: number }>
     pull(): Promise<SyncResult>
+    /** How syncing is doing on this device (Y9). */
+    health?(): Promise<SyncHealth>
+    /** Forget the "couldn't sync" list. */
+    clearFailed?(): Promise<void>
   }
+}
+
+export interface SyncHealth {
+  syncedAt: string | null
+  /** Changes made offline, waiting to be sent. */
+  waiting: number
+  /** The desktop app's changes not yet sent. */
+  desktopPending: number
+  error: string | null
+  /** Changes the database refused (another device changed the same thing). */
+  failed: { at: string; error: string }[]
+  backupError: string | null
 }
 
 /** IPC replies are wrapped so error messages reach the UI cleanly. */

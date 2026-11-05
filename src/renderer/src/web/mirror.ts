@@ -441,6 +441,17 @@ export class Mirror {
     return this.current.prepare('SELECT id, data FROM desktop_outbox ORDER BY id').all() as { id: number; data: string }[]
   }
 
+  /** The sync panel's numbers (Y9). */
+  health(): { syncedAt: string | null; waiting: number; desktopPending: number; error: string | null; failed: { at: string; error: string }[] } {
+    return {
+      syncedAt: this.syncedAt,
+      waiting: this.pendingOffline,
+      desktopPending: this.desktop && this.db ? this.pending().length : 0,
+      error: this.lastError,
+      failed: this.failedSync.map((f) => ({ at: f.at, error: f.error }))
+    }
+  }
+
   private desktopStatus(): void {
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-desktop-sync', { detail: {
       pending: this.db ? this.pending().length : 0, error: this.lastError, syncedAt: this.syncedAt

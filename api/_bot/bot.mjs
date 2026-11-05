@@ -5488,6 +5488,19 @@ var Mirror = class Mirror {
 		this.current.raw.run("CREATE TABLE IF NOT EXISTS desktop_outbox (id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
 		return this.current.prepare("SELECT id, data FROM desktop_outbox ORDER BY id").all();
 	}
+	/** The sync panel's numbers (Y9). */
+	health() {
+		return {
+			syncedAt: this.syncedAt,
+			waiting: this.pendingOffline,
+			desktopPending: this.desktop && this.db ? this.pending().length : 0,
+			error: this.lastError,
+			failed: this.failedSync.map((f) => ({
+				at: f.at,
+				error: f.error
+			}))
+		};
+	}
 	desktopStatus() {
 		if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-desktop-sync", { detail: {
 			pending: this.db ? this.pending().length : 0,

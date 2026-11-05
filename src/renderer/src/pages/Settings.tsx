@@ -33,6 +33,7 @@ import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
 import { DevicesPanel } from '../DevicesPanel'
+import { SyncPanel } from '../SyncPanel'
 import { timeAgo, useAction } from '../ui'
 import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundSystemOracle, soundWarning } from '../sound'
 
@@ -1355,6 +1356,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       keywords: 'backup restore export import google drive folder snapshot data',
       body: (
         <>
+      <SyncPanel />
       <DesktopBackupPanel />
       <section className="panel">
         <header className="panel-head">
