@@ -3,6 +3,7 @@
 // right section, and the developer things folded under Advanced.
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
+import './settingsLook.css'
 
 export interface SettingsGroup {
   id: string
@@ -52,12 +53,9 @@ export function SettingsShell({ groups, initial }: { groups: SettingsGroup[]; in
   const main = matches.filter((g) => !g.advanced)
   const adv = matches.filter((g) => g.advanced)
   const item = (g: SettingsGroup) => (
-    <button key={g.id} className={`st-item ${g.id === current?.id ? 'on' : ''}`} onClick={() => setTab(g.id)} aria-current={g.id === current?.id ? 'page' : undefined}>
+    <button key={g.id} className={`st-item ${g.id === current?.id ? 'on' : ''}`} onClick={() => setTab(g.id)} aria-current={g.id === current?.id ? 'page' : undefined} title={g.hint}>
       <Icon name={g.icon as any} size={16} />
-      <span>
-        <b>{g.label}</b>
-        <small>{g.hint}</small>
-      </span>
+      <b>{g.label}</b>
     </button>
   )
   return (

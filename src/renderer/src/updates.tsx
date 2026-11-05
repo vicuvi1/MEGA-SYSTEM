@@ -14,18 +14,6 @@ export function useUpdates(): [UpdateStatus | null, (s: UpdateStatus) => void] {
   return [s, setS]
 }
 
-const LABEL: Record<UpdateStatus['state'], string> = {
-  dev: 'Dev copy',
-  idle: 'Not checked yet',
-  checking: 'Checking…',
-  'up-to-date': 'Up to date',
-  available: 'New version found',
-  downloading: 'Downloading…',
-  ready: 'Downloaded, restart to finish',
-  installing: 'Installing and restarting…',
-  error: 'Could not update'
-}
-
 export function UpdateChip({ status, onClick }: { status: UpdateStatus | null; onClick: () => void }) {
   if (!status || !['available', 'downloading', 'ready'].includes(status.state)) return null
   return (
@@ -36,54 +24,76 @@ export function UpdateChip({ status, onClick }: { status: UpdateStatus | null; o
   )
 }
 
+/** The headline for each state: what it means for you, in one line. */
+const HEADLINE: Record<UpdateStatus['state'], (s: UpdateStatus) => [string, string]> = {
+  dev: () => ['This is a developer copy', 'Updates only run in the installed app.'],
+  idle: () => ['Not checked yet', 'Life System checks on start and every 4 hours.'],
+  checking: () => ['Checking for a new version…', 'This takes a few seconds.'],
+  'up-to-date': (s) => ["You're up to date", `Version ${s.current} is the newest.`],
+  available: (s) => [`Version ${s.latest} is out`, 'It downloads in the background.'],
+  downloading: (s) => [`Downloading ${s.latest}…`, `${s.progress}% done. You can keep working.`],
+  ready: (s) => [`Version ${s.latest} is ready`, 'Restart to install it. It takes a few seconds and your data stays.'],
+  installing: () => ['Installing and restarting…', 'Life System opens again by itself.'],
+  error: () => ["Couldn't update", 'Check your connection and try again.']
+}
+
 export function UpdatePanel({ status, onStatus }: { status: UpdateStatus | null; onStatus: (s: UpdateStatus) => void }) {
   const act = useAction()
   if (!status) return null
   const busy = ['checking', 'downloading', 'installing'].includes(status.state)
+  const [title, sub] = HEADLINE[status.state](status)
+  const tone = status.state === 'ready' || status.state === 'available' ? 'new' : status.state === 'error' ? 'bad' : status.state === 'up-to-date' ? 'ok' : ''
   return (
-    <section className="panel">
-      <header className="panel-head">
-        <h2>
-          <Icon name="spark" /> Updates
-        </h2>
-        <span className={`chip ${status.state === 'up-to-date' ? 'ok' : status.state === 'error' ? 'warn' : ''}`}>{LABEL[status.state]}</span>
-      </header>
-      <dl className="facts">
-        <dt>This version</dt>
-        <dd>{status.current}</dd>
-        {status.latest && (
-          <>
-            <dt>Newest on GitHub</dt>
-            <dd>{status.latest}</dd>
-          </>
-        )}
-        {status.checkedAt && (
-          <>
-            <dt>Last checked</dt>
-            <dd>{timeAgo(status.checkedAt)}</dd>
-          </>
-        )}
-        {status.error && (
-          <>
-            <dt>Note</dt>
-            <dd className="warn-text">{status.error}</dd>
-          </>
-        )}
-      </dl>
+    <section className="panel up">
+      <div className={`up-hero ${tone}`}>
+        <span className={`up-icon ${busy ? 'spin' : ''}`} aria-hidden>
+          <Icon name={status.state === 'up-to-date' ? 'check' : 'refresh'} size={20} />
+        </span>
+        <div className="up-text">
+          <b>{title}</b>
+          <span>{sub}</span>
+        </div>
+        <div className="up-actions">
+          {status.state === 'ready' ? (
+            <button className="btn primary" onClick={async () => { const s = await act(() => life.updates.run()); if (s) onStatus(s) }}>
+              Restart and update
+            </button>
+          ) : (
+            <button className="btn" disabled={busy || status.state === 'dev'} onClick={async () => { const s = await act(() => life.updates.check()); if (s) onStatus(s) }}>
+              Check now
+            </button>
+          )}
+        </div>
+      </div>
       {status.state === 'downloading' && (
         <div className="bar update-bar">
           <i style={{ width: `${status.progress}%` }} />
         </div>
       )}
-      <p className="hint block">Life System checks for a new version on start and every 4 hours and downloads it in the background. When it's ready, Restart to update (in the top bar) installs it in a few seconds; it also installs by itself when you quit. Your data stays.</p>
-      <div className="row">
-        <button className="btn primary" disabled={busy || status.state === 'dev'} onClick={async () => { const s = await act(() => life.updates.run()); if (s) onStatus(s) }}>
-          {status.state === 'ready' ? 'Restart and update' : 'Update now'}
-        </button>
-        <button className="btn ghost" disabled={busy || status.state === 'dev'} onClick={async () => { const s = await act(() => life.updates.check()); if (s) onStatus(s) }}>
-          Check for updates
-        </button>
-      </div>
+      <dl className="up-facts">
+        <div>
+          <dt>This version</dt>
+          <dd>{status.current}</dd>
+        </div>
+        <div>
+          <dt>Newest</dt>
+          <dd>{status.latest ?? '—'}</dd>
+        </div>
+        <div>
+          <dt>Last checked</dt>
+          <dd>{status.checkedAt ? timeAgo(status.checkedAt) : 'not yet'}</dd>
+        </div>
+      </dl>
+      {status.error && <p className="hint block warn-text">{status.error}</p>}
+      <p className="hint up-note">
+        New versions download by themselves. If you don't restart, the update installs the next time you quit.
+        {status.state === 'ready' && ' '}
+        {status.state === 'ready' && (
+          <button className="link-btn" disabled={busy} onClick={async () => { const s = await act(() => life.updates.check()); if (s) onStatus(s) }}>
+            Check again
+          </button>
+        )}
+      </p>
     </section>
   )
 }

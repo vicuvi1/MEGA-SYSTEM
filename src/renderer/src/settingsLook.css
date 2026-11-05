@@ -1,0 +1,68 @@
+/* Settings, calmer: a plain menu on the left, one column of cards on the right,
+   bigger text, and the same tokens in dark and light. */
+.settings:has(.st) { max-width: none; }
+.st { grid-template-columns: 220px minmax(0, 780px); justify-content: center; gap: 40px; max-width: 1080px; padding-top: 8px; }
+.st-nav { background: none; box-shadow: none; padding: 0; gap: 2px; top: 16px; }
+.st-search { margin-bottom: 12px; padding: 9px 12px; border-radius: 10px; background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); }
+.st-search input { font-size: 14px; }
+.st-item { gap: 12px; padding: 8px 12px; border-radius: 10px; min-height: 38px; }
+.st-item b { font-size: 14px; font-weight: 550; color: var(--muted); }
+.st-item:hover b { color: var(--text); }
+.st-item.on { background: rgb(var(--ink) / 0.07); color: var(--text); }
+.st-item.on b { color: var(--text); font-weight: 650; }
+.st-item svg { flex: none; opacity: 0.8; }
+.st-item.on svg { color: var(--accent-text); opacity: 1; }
+.st-sep { margin: 18px 12px 6px; }
+
+.st-head { margin: 0 0 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.st-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.st-head p { font-size: 14px; margin-top: 6px; }
+.st-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+
+/* Cards inside Settings */
+.st-body .panel { padding: 20px 22px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: none; }
+.st-body .panel-head { margin-bottom: 12px; }
+.st-body .panel-head h2 { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+.st-body .panel-head h2 svg { color: var(--muted); }
+.st-body .hint { font-size: 13.5px; line-height: 1.55; }
+.st-body .hint.small { font-size: 12.5px; }
+.st-body .hint.block { max-width: 64ch; }
+.st-body .row { gap: 8px; }
+
+/* Updates: one clear status and one main action */
+.up-hero { display: flex; align-items: center; gap: 14px; }
+.up-icon { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgb(var(--ink) / 0.06); color: var(--muted); }
+.up-hero.ok .up-icon { background: color-mix(in srgb, var(--green, #10b981) 16%, transparent); color: var(--green, #10b981); }
+.up-hero.new .up-icon { background: var(--accent-soft); color: var(--accent-text); }
+.up-hero.bad .up-icon { background: color-mix(in srgb, var(--red, #ff4757) 14%, transparent); color: var(--red, #ff4757); }
+.up-icon.spin svg { animation: dbar-spin 1s linear infinite; }
+.up-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.up-text b { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.up-text span { color: var(--muted); font-size: 13.5px; }
+.up-actions { flex: none; }
+.up .update-bar { margin-top: 14px; }
+.up-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 18px 0 12px; border-radius: 12px; overflow: hidden; background: var(--border); border: 1px solid var(--border); }
+.up-facts div { background: var(--surface); padding: 10px 14px; display: grid; gap: 2px; }
+.up-facts dt { color: var(--muted); font-size: 12px; }
+.up-facts dd { margin: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.up-note { margin: 0; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-text); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.link-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Ben's brain */
+.st-body .brain-pickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.brain-empty { margin: 14px 0 4px; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--border-strong); color: var(--muted); font-size: 13.5px; }
+.st-body .bt-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.st-body .bt-row .mp { flex: 1; min-width: 240px; }
+
+@media (max-width: 900px) {
+  .st { grid-template-columns: 1fr; gap: 16px; }
+  .st-nav { padding: 0; }
+  .st-head h1 { font-size: 22px; }
+  .st-body .panel { padding: 16px; }
+  .up-hero { flex-wrap: wrap; }
+  .up-actions { width: 100%; }
+  .up-actions .btn { width: 100%; justify-content: center; }
+  .up-facts { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .up-icon.spin svg { animation: none; } }

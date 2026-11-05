@@ -121,8 +121,8 @@ export function ModelPicker({ value, auto, models, onPick, label }: { value: str
       <small className="mp-label">{label}</small>
       <button className={`mp-btn ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="mp-cur">
-          <b>{cur?.name ?? (value ? shortId(value) : `Automatic · ${shortId(auto)}`)}</b>
-          <small>{cur ? `${per1M(cur.in)} in · ${per1M(cur.out)} out per 1M tokens${cur.context ? ` · ${ctx(cur.context)} context` : ''}` : value ? value : 'The app picks it for you'}</small>
+          <b>{cur?.name ?? (value ? shortId(value) : auto ? `Automatic · ${shortId(auto)}` : 'Automatic')}</b>
+          <small>{cur ? `${per1M(cur.in)} in · ${per1M(cur.out)} out per 1M tokens${cur.context ? ` · ${ctx(cur.context)} context` : ''}` : value ? value : 'The app picks one for you'}</small>
         </span>
         <span className="mp-caret">▾</span>
       </button>
@@ -140,7 +140,7 @@ export function ModelPicker({ value, auto, models, onPick, label }: { value: str
             <button className={`mp-row ${value == null ? 'on' : ''}`} onClick={() => (onPick(null), setOpen(false))}>
               <span>
                 <b>Automatic</b>
-                <small>{shortId(auto)} · cheap and fast</small>
+                <small>{auto ? `${shortId(auto)} · ` : ''}cheap and fast</small>
               </span>
             </button>
             {shown.map((m) => (
@@ -215,7 +215,6 @@ function TestBen({ models, current }: { models: ModelInfo[]; current: string | n
   }
   return (
     <div className="bt">
-      <small className="brain-sub">🧪 Test Ben</small>
       <p className="hint block">20 messages you'd really send (log money, book a block, move one, finish a task, remember a person…). Run on made-up data, never yours. Compare models before you pick one.</p>
       <div className="bt-row">
         <ModelPicker label="Model to test" value={pick} auto={current} models={models} onPick={setPick} />
@@ -287,20 +286,26 @@ export function BrainPanel() {
   const monthPace = usage?.week ? (usage.week.cost / 7) * 30 : null
   const maxModel = Math.max(0.000001, ...(usage?.byModel ?? []).map((m) => m.cost))
   return (
+    <>
     <section className="panel brain">
       <header className="panel-head">
         <h2>
           <Icon name="spark" /> Ben's brain
         </h2>
-        {status && <span className="chip ok">{shortId(chosen.chat ?? status.auto.chat)}</span>}
+        <button className="icon-btn" onClick={load} aria-label="Refresh" title="Refresh">
+          <Icon name="refresh" size={15} />
+        </button>
       </header>
       {err && <p className="hint block">{err}</p>}
-      <p className="hint block">Pick any model on OpenRouter. A stronger model understands you better and plans better; it also costs more. Every call's real cost is below.</p>
+      <p className="hint block">Any model on OpenRouter. A stronger one understands and plans better, and costs more. You see the real cost of every call here.</p>
       <div className="brain-pickers">
         <ModelPicker label="Talks with you (chat, Telegram, nudges)" value={chosen.chat} auto={status?.auto.chat ?? null} models={models} onPick={(id) => void save(id, chosen.deep)} />
         <ModelPicker label="Thinks hard (morning plan, reviews, weekly letter)" value={chosen.deep} auto={chosen.chat ?? status?.auto.deep ?? null} models={models} onPick={(id) => void save(chosen.chat, id)} />
       </div>
 
+      {usage && !(usage.month?.calls || usage.week?.calls || usage.today?.calls) ? (
+        <p className="brain-empty">No AI calls yet. What Ben costs shows up here after his first reply.{usage.credits ? ` OpenRouter balance: ${usd(usage.credits.left)}.` : ''}</p>
+      ) : (
       <div className="brain-usage">
         {(
           [
@@ -323,6 +328,7 @@ export function BrainPanel() {
           <em>{monthPace != null ? `≈ ${usd(monthPace)} a month at this pace` : 'no calls yet'}</em>
         </div>
       </div>
+      )}
 
       {usage?.budget && (
         <BudgetRow
@@ -370,7 +376,7 @@ export function BrainPanel() {
 
       {usage && usage.recent.length > 0 && (
         <details className="brain-recent">
-          <summary>Last {usage.recent.length} calls</summary>
+          <summary>{usage.recent.length === 1 ? 'The last call' : `The last ${usage.recent.length} calls`}</summary>
           <table>
             <tbody>
               {usage.recent.map((r, i) => (
@@ -386,12 +392,15 @@ export function BrainPanel() {
           </table>
         </details>
       )}
-      <TestBen models={models} current={chosen.chat ?? status?.auto.chat ?? null} />
-      <div className="row">
-        <button className="btn small ghost" onClick={load}>
-          ⟳ Refresh
-        </button>
-      </div>
     </section>
+    <section className="panel">
+      <header className="panel-head">
+        <h2>
+          <Icon name="check" /> Test Ben
+        </h2>
+      </header>
+      <TestBen models={models} current={chosen.chat ?? status?.auto.chat ?? null} />
+    </section>
+    </>
   )
 }
