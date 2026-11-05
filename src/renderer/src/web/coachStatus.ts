@@ -11,6 +11,7 @@ import { loadStyle } from './botBrain'
 import { addDays } from '@core/dates'
 import type { Services } from './webServices'
 import { neverMissTwice, type MissTwiceItem } from '@core/neverMissTwice'
+import { WATER_TARGET_ML } from '@core/defaults'
 
 
 /**
@@ -20,7 +21,7 @@ import { neverMissTwice, type MissTwiceItem } from '@core/neverMissTwice'
  */
 export function waterToday(db: any, s: any, now = new Date()): { ml: number; target: number } {
   const sport = json(db, 'sport_tracker_json')?.data
-  const w = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: 2700 }
+  const w = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: WATER_TARGET_ML }
   try {
     const b = s.body.state(now)
     const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday)
@@ -28,7 +29,7 @@ export function waterToday(db: any, s: any, now = new Date()): { ml: number; tar
   } catch {
     /* no body data yet */
   }
-  return { ml: w.ml, target: w.target || 2700 }
+  return { ml: w.ml, target: w.target || WATER_TARGET_ML }
 }
 
 export interface CoachStatus {

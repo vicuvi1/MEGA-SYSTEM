@@ -2,6 +2,7 @@
 // one shared log (settings.sport_tracker_json): progress bars, buttons, the
 // day's record, and real progression (2 full days → harder, 2 weeks off → lighter). Pure.
 import { sportForDay } from './sportShared'
+import { WATER_GLASS_ML, WATER_TARGET_ML } from './defaults'
 
 export const DEFAULT_EXERCISES = [
   { id: 'ex_pushups', name: 'Push-ups', target: 100, unit: 'reps', active: true, doneToday: 0 },
@@ -12,7 +13,7 @@ export const DEFAULT_EXERCISES = [
 
 /** A fresh Sport Track state when there is none yet (so Ben works from day one). */
 export function defaultSport(today: string): any {
-  return { lastDate: today, exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })), water: { currentMl: 0, targetMl: 2700, glassSizeMl: 250 }, history: [], sportySettings: { autoProgression: true } }
+  return { lastDate: today, exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })), water: { currentMl: 0, targetMl: WATER_TARGET_ML, glassSizeMl: WATER_GLASS_ML }, history: [], sportySettings: { autoProgression: true } }
 }
 
 export function bar(done: number, target: number, len = 8): string {
@@ -29,7 +30,7 @@ type Kb = { inline_keyboard: { text: string; callback_data: string }[][] }
 export function waterCard(st: any, today: string, goal?: number): { text: string; keyboard: Kb } {
   const s = sportForDay(st, today)
   const ml = Math.round(Number(s.water.currentMl) || 0)
-  const target = goal || Number(s.water.targetMl) || 2700
+  const target = goal || Number(s.water.targetMl) || WATER_TARGET_ML
   const glass = Number(s.water.glassSizeMl) || 250
   const left = Math.max(0, target - ml)
   const text = [

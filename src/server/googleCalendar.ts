@@ -3,6 +3,7 @@
 // app, the bots and the coach read and write your calendars through here.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import type { CalEvent } from '@core/dayTime'
+import { DEFAULT_TZ } from '@core/defaults'
 
 export interface GoogleEnv {
   clientId: string
@@ -183,8 +184,8 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
       const body = {
         summary: e.title,
         description: e.description ?? 'Added by Life System',
-        start: allDay ? { date: e.start } : { dateTime: e.start, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}) },
-        end: allDay ? { date: e.end } : { dateTime: e.end, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}) },
+        start: allDay ? { date: e.start } : { dateTime: e.start, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || DEFAULT_TZ } : {}) },
+        end: allDay ? { date: e.end } : { dateTime: e.end, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || DEFAULT_TZ } : {}) },
         ...(e.colorId ? { colorId: e.colorId } : {}),
         // A reminder you chose (D6): a pop-up N minutes before.
         ...(e.reminder != null ? { reminders: { useDefault: false, overrides: e.reminder > 0 ? [{ method: 'popup', minutes: Math.min(40320, Math.round(e.reminder)) }] : [] } } : {}),
@@ -219,12 +220,12 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
         if (patch.start || patch.end) {
           const master = await call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(target)}`)
           const keepDay = (masterIso: string, newIso: string) => `${String(masterIso).slice(0, 10)}${String(newIso).slice(10)}`
-          const tz = master.start?.timeZone || patch.timeZone || process.env.TZ || 'Europe/Chisinau'
+          const tz = master.start?.timeZone || patch.timeZone || process.env.TZ || DEFAULT_TZ
           if (patch.start && master.start?.dateTime) body.start = { dateTime: keepDay(master.start.dateTime, localIsoOf(patch.start)), timeZone: tz }
           if (patch.end && master.end?.dateTime) body.end = { dateTime: keepDay(master.end.dateTime, localIsoOf(patch.end)), timeZone: tz }
         }
       } else {
-        const tz = patch.recurrence?.length ? { timeZone: patch.timeZone || process.env.TZ || 'Europe/Chisinau' } : {}
+        const tz = patch.recurrence?.length ? { timeZone: patch.timeZone || process.env.TZ || DEFAULT_TZ } : {}
         // A date only (YYYY-MM-DD) makes it all-day (D5); a date-time makes it timed again.
         const at = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? { date: v, dateTime: null } : { dateTime: v, date: null, ...tz })
         if (patch.start) body.start = at(patch.start)

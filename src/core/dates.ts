@@ -1,6 +1,7 @@
 // A "day" starts at 04:00 local time, so a study block finished at 01:30
-// still counts for the evening it belongs to.
-export const DAY_START_HOUR = 4
+// still counts for the evening it belongs to (the value lives in defaults.ts).
+import { DAY_START_HOUR } from './defaults'
+export { DAY_START_HOUR }
 
 const fmtCache = new Map<string, Intl.DateTimeFormat>()
 

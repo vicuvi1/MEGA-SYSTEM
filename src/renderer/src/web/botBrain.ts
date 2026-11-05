@@ -30,6 +30,7 @@ import { DESK_ACTIONS, minutesUntil } from '@core/benStakes'
 import { readPurchase } from '@core/benMoney'
 import { UNTRUSTED_NOTE } from '@core/benSafety'
 import { pluginActionsHelp, pluginContext, readPluginAction, type PluginActionCall } from '../../../plugins'
+import { WATER_MAX_ML } from '@core/defaults'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -958,7 +959,7 @@ export function readAction(line: string): BrainAction | null {
   }
   if (kind === 'water') {
     const ml = Math.round(Number(/^[+-]?\d{1,4}/.exec(arg.replace(/\s+/g, ''))?.[0]))
-    return ml && Math.abs(ml) <= 3000 ? { kind: 'water', ml } : null
+    return ml && Math.abs(ml) <= WATER_MAX_ML ? { kind: 'water', ml } : null
   }
   if (kind === 'reps') {
     const amount = Math.round(Number(parts[1]))

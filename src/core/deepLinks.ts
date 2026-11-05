@@ -2,6 +2,7 @@
 // shortcuts ("+250 ml water", "Start 25 min focus", "Log spending", "Talk to
 // Ben") and text or links shared from any phone app.
 import { parseWhen } from './whenParse'
+import { WATER_GLASS_ML, WATER_MAX_ML } from './defaults'
 
 export type DeepLink =
   | { kind: 'water'; ml: number }
@@ -25,8 +26,8 @@ export function readDeepLink(search: string): DeepLink | null {
   }
   const d = q.get('do')
   if (d === 'water') {
-    const ml = Math.round(Number(q.get('ml')) || 250)
-    return ml >= 50 && ml <= 2000 ? { kind: 'water', ml } : { kind: 'water', ml: 250 }
+    const ml = Math.round(Number(q.get('ml')) || WATER_GLASS_ML)
+    return ml >= 50 && ml <= WATER_MAX_ML ? { kind: 'water', ml } : { kind: 'water', ml: WATER_GLASS_ML }
   }
   if (d === 'focus') {
     const minutes = Math.round(Number(q.get('min')) || 25)

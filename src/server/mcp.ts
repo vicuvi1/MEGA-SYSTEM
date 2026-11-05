@@ -21,6 +21,7 @@ import type { TodoTask } from '@core/todoist'
 import type { CalEvent } from '@core/dayTime'
 import { mindText } from '@core/coachMind'
 import { addDays } from '@core/dates'
+import { WATER_MAX_ML } from '@core/defaults'
 
 export type McpScope = 'read' | 'write'
 
@@ -383,7 +384,7 @@ export const TOOLS: Tool[] = [
     name: 'log_water',
     title: 'Log water',
     description: 'Adds water drunk today (negative to correct a mistake).',
-    inputSchema: obj({ ml: { type: 'integer', minimum: -1000, maximum: 3000, description: 'Millilitres, e.g. 250.' } }, ['ml']),
+    inputSchema: obj({ ml: { type: 'integer', minimum: -1000, maximum: WATER_MAX_ML, description: 'Millilitres, e.g. 250.' } }, ['ml']),
     write: true,
     handle: (life, a, ctx) => (a.ml === 0 ? Promise.resolve({ ok: false, done: [], note: 'ml must not be 0' }) : doLines(life, ctx, `water ${a.ml} ml`, [`water: ${a.ml}`]))
   },

@@ -24,6 +24,7 @@ import { loadMind, loadProfile, sportState } from './botBrain'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport } from '@core/sportCards'
 import type { Services } from './webServices'
+import { WATER_MAX_ML } from '@core/defaults'
 
 export const DESK = 'ben_desk'
 
@@ -395,7 +396,7 @@ export function deskChange(s: Services, o: DeskOp, now = new Date()): string {
   }
   if (o.op === 'water') {
     const ml = Math.round(o.ml)
-    if (!(ml > 0 && ml <= 2000)) throw new Error('Water: between 1 and 2000 ml')
+    if (!(ml > 0 && ml <= WATER_MAX_ML)) throw new Error(`Water: between 1 and ${WATER_MAX_ML} ml`)
     const day = sportToday(now)
     const next = addWater(sportState(db) ?? defaultSport(day), ml, day)
     setSetting(db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))

@@ -8,6 +8,9 @@ describe('home-screen shortcuts and sharing (FT14, FT15)', () => {
   it('reads what a link asks for', () => {
     expect(readDeepLink('?do=water&ml=250')).toEqual({ kind: 'water', ml: 250 })
     expect(readDeepLink('?do=water&ml=99999')).toEqual({ kind: 'water', ml: 250 })
+    // One water limit everywhere (LT13): up to 3 litres in one log.
+    expect(readDeepLink('?do=water&ml=2500')).toEqual({ kind: 'water', ml: 2500 })
+    expect(readDeepLink('?do=water&ml=3001')).toEqual({ kind: 'water', ml: 250 })
     expect(readDeepLink('?do=focus&min=25')).toEqual({ kind: 'focus', minutes: 25, subject: 'Focus' })
     expect(readDeepLink('?page=today&do=spend')).toEqual({ kind: 'spend' })
     expect(readDeepLink('?page=coach&do=ben')).toEqual({ kind: 'ben' })

@@ -67,6 +67,7 @@ import { runPluginJobs, type PluginStatus } from '../plugins/run'
 import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginsOn, readData, writeData } from '../plugins/store'
 import { cleanHealth, mergeDay, type HealthData } from '../plugins/health/health'
 import { HEALTH } from '../plugins/health'
+import { BEN_DAILY_MESSAGES, DEFAULT_TZ } from '@core/defaults'
 
 /** What Ben already said today, by kind (each kind once a day). */
 const BEN_SENT = 'ben_sent_today'
@@ -216,7 +217,7 @@ export async function payTodoistDone(env: BotEnv, opts: { since?: Date; minGapMs
  * point; the day helpers (dayKey, calendarDay) are also given it explicitly.
  */
 function lifeTz(env: BotEnv): string {
-  const tz = env.timeZone || 'Europe/Chisinau'
+  const tz = env.timeZone || DEFAULT_TZ
   process.env.TZ = tz
   return tz
 }
@@ -550,7 +551,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
           return 0
         }
       })
-      if (count >= 15) {
+      if (count >= BEN_DAILY_MESSAGES) {
         await mirror.write((db) => {
           const n = notifFromMessage(text, reply_markup, new Date())
           if (n) addNotif(db as any, n)

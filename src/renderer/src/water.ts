@@ -4,12 +4,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { life } from './bridge'
 import { readSport, updateSport } from './sportTrack'
+import { WATER_TARGET_ML } from '@core/defaults'
 
 export interface Water { ml: number; target: number }
 
 const local = (): Water => {
   const s = readSport() as any
-  return { ml: Number(s?.water?.currentMl) || 0, target: Number(s?.water?.targetMl) || 2700 }
+  return { ml: Number(s?.water?.currentMl) || 0, target: Number(s?.water?.targetMl) || WATER_TARGET_ML }
 }
 
 /** Today's water from the shared log (Sport Track's copy until it loads). */
@@ -30,11 +31,11 @@ export async function addWater(ml: number): Promise<Water> {
   })
   window.dispatchEvent(new CustomEvent('life-body-changed'))
   window.dispatchEvent(new CustomEvent('life-water-changed'))
-  return r ?? { ml: Number((data as any)?.water?.currentMl) || 0, target: Number((data as any)?.water?.targetMl) || 2700 }
+  return r ?? { ml: Number((data as any)?.water?.currentMl) || 0, target: Number((data as any)?.water?.targetMl) || WATER_TARGET_ML }
 }
 
 export function useWater(): Water & { add: (ml: number) => Promise<Water>; set: (ml: number) => Promise<Water> } {
-  const [w, setW] = useState<Water>(() => (typeof localStorage === 'undefined' ? { ml: 0, target: 2700 } : local()))
+  const [w, setW] = useState<Water>(() => (typeof localStorage === 'undefined' ? { ml: 0, target: WATER_TARGET_ML } : local()))
   const load = useCallback(() => void readWater().then(setW).catch(() => {}), [])
   useEffect(() => {
     load()

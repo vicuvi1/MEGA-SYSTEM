@@ -18,6 +18,7 @@ import { useLive } from './live'
 import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
 import { calendarDay } from '@core/dates'
+import { WATER_TARGET_ML } from '@core/defaults'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
@@ -392,7 +393,7 @@ export function IslandFeed() {
       now: cur,
       next,
       mustdos: status.mustdos,
-      water: { ml: localWater, target: status.today.waterTarget || Number(sport?.water?.targetMl) || 2700 },
+      water: { ml: localWater, target: status.today.waterTarget || Number(sport?.water?.targetMl) || WATER_TARGET_ML },
       reps,
       alert: (() => {
         const pick = pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
@@ -408,7 +409,7 @@ export function IslandFeed() {
         const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
         const first = get<{ day: string; at: number } | null>(FIRST, null)
         const firstBlock = blocks.current.list.filter((b) => b.end > now).sort((x, y) => x.start - y.start)[0] ?? null
-        const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || 2700 }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
+        const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || WATER_TARGET_ML }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
         return (
           backAlert(running, now, dismissed) ??
           driftAlert(running, now, dismissed) ??

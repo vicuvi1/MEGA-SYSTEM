@@ -13,6 +13,7 @@ import { ReadinessCard } from '../ReadinessCard'
 import { SkillPaths } from '../SkillPaths'
 import { useAction } from '../ui'
 import '../body.css'
+import { WATER_TARGET_ML } from '@core/defaults'
 
 export function Body({
   state,
@@ -37,7 +38,7 @@ export function Body({
   // The one shared water log (water.ts): Ben, Sporty, Telegram and Today see the same number.
   const water = useWater()
   const waterMl = water.ml
-  const waterTarget = water.target || 2700
+  const waterTarget = water.target || WATER_TARGET_ML
   const saveWater = (newMl: number) => void water.set(Math.max(0, newMl))
 
   // Calculate today's completed reps per exercise

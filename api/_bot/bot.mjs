@@ -734,6 +734,15 @@ function neutral(text) {
 }
 /** The line for Ben's prompt while stealth is on. */
 var STEALTH_NOTE = "Stealth mode is on: never name the discipline challenge, urges, relapses, porn or MAN. Say \"the challenge\", \"a tough moment\", \"your streak\". Messages may be seen by others.";
+/** Daily water goal (ml) when Sport Track has none saved. */
+var WATER_TARGET_ML = 2700;
+/**
+* The most one water log may add or take back (ml). One value everywhere
+* (chat, Ben's actions, the desk card, deep links, AI apps): 3 litres covers a
+* big bottle or fixing a typo, and stops "water 25000" from counting.
+*/
+var WATER_MAX_ML = 3e3;
+// src/core/dates.ts
 var fmtCache = /* @__PURE__ */ new Map();
 function formatter(timeZone) {
 	let f = fmtCache.get(timeZone);
@@ -2239,7 +2248,7 @@ function sportForDay(st, today) {
 	if (!Array.isArray(s.exercises)) s.exercises = [];
 	if (!s.water || typeof s.water !== "object") s.water = {
 		currentMl: 0,
-		targetMl: 2700,
+		targetMl: WATER_TARGET_ML,
 		glassSizeMl: 250
 	};
 	if (s.lastDate !== today) {
@@ -2322,7 +2331,7 @@ function parseWater(text, glass = 250) {
 	if (t.length > 40 || /\b(lei|mdl|ron|leu|\$|€|usd|eur)\b/.test(t)) return null;
 	const word = /(water|apa|apă|вод[аыу]|drank|drink)/.test(t);
 	const glasses = /(\d{1,2})\s*(glass(es)?|pahar(e)?|стакан\w*|cups?)/.exec(t);
-	if (glasses && (word || /^\+?\s*\d/.test(t))) return Math.min(3e3, Number(glasses[1]) * glass);
+	if (glasses && (word || /^\+?\s*\d/.test(t))) return Math.min(WATER_MAX_ML, Number(glasses[1]) * glass);
 	const unit = /([+-]?\d+(?:[.,]\d+)?)\s*(ml|l|л|мл)\b/.exec(t);
 	if (unit) {
 		const n = Number(unit[1].replace(",", "."));
@@ -9428,7 +9437,7 @@ function defaultSport(today) {
 		exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })),
 		water: {
 			currentMl: 0,
-			targetMl: 2700,
+			targetMl: WATER_TARGET_ML,
 			glassSizeMl: 250
 		},
 		history: [],
@@ -10062,7 +10071,7 @@ function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
 	}
 	if (o.op === "water") {
 		const ml = Math.round(o.ml);
-		if (!(ml > 0 && ml <= 2e3)) throw new Error("Water: between 1 and 2000 ml");
+		if (!(ml > 0 && ml <= 3e3)) throw new Error(`Water: between 1 and ${WATER_MAX_ML} ml`);
 		const day = sportToday(now);
 		const next = addWater(sportState(db) ?? defaultSport(day), ml, day);
 		setSetting(db, "sport_tracker_json", JSON.stringify({
@@ -17560,7 +17569,7 @@ function waterToday(db, s, now = /* @__PURE__ */ new Date()) {
 	const sport = json$1(db, "sport_tracker_json")?.data;
 	const w = sport ? sharedView(sport, sportToday(now)).water : {
 		ml: 0,
-		target: 2700
+		target: WATER_TARGET_ML
 	};
 	try {
 		const b = s.body.state(now);
@@ -24255,7 +24264,7 @@ var TOOLS = [
 		inputSchema: obj({ ml: {
 			type: "integer",
 			minimum: -1e3,
-			maximum: 3e3,
+			maximum: WATER_MAX_ML,
 			description: "Millilitres, e.g. 250."
 		} }, ["ml"]),
 		write: true,
