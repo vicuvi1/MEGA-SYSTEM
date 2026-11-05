@@ -960,6 +960,9 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       await send(weeklyText(w), WEEKLY_KEYBOARD)
       const letter = await bots.rhythm.letter().catch(() => null)
       if (letter) await send(`💌 <b>A letter from Ben</b>\n\n${escapeHtml(letter)}`)
+    } else if (job === 'evening' && (await mirror.read((db) => (services.services(db).focus.state().plan.reasons?.length ?? 0) > 0).catch(() => false))) {
+      // You already closed the day in the app (on any device): no evening review (Z3).
+      await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{ status: 'skipped', kind: 'evening review', reason: 'You closed the day in the app already' }]).catch(() => null)
     } else if (job === 'evening') {
       await payTodoistDone(env, { since: localMidnight(0) }).catch(() => null)
       const r = await bots.rhythm.evening()

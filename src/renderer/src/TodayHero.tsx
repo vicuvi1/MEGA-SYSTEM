@@ -46,6 +46,13 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   const [busy, setBusy] = useState(false)
   const load = useCallback(() => {
     life.coach?.status?.().then(setSt).catch(() => {})
+    // Closed on another device too: today's review is in the synced day plan (Z3).
+    life.focus
+      .state()
+      .then((f) => {
+        if ((f.plan.reasons?.length ?? 0) > 0) setClosed(true)
+      })
+      .catch(() => {})
   }, [])
   useEffect(() => {
     load()

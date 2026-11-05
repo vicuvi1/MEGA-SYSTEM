@@ -271,7 +271,8 @@ export function DayFlow(props: Props) {
         planProposed: coachNow.proposed,
         blockNow: blockNow ? { id: blockNow.id, title: blockNow.title, start: blockNow.start, end: blockNow.end } : null,
         nextBlock: nextBlock ? { id: nextBlock.id, title: nextBlock.title, start: nextBlock.start, end: nextBlock.end } : null,
-        dayClosed: mode === 'evening' || storeGet('ls.dayClosed') === dayKey(new Date()),
+        // Closed on any device: the day's review is in the synced day plan (Z3).
+        dayClosed: mode === 'evening' || storeGet('ls.dayClosed') === dayKey(new Date()) || (st.plan.reasons?.length ?? 0) > 0,
         actions: shown,
         skipped
       })
