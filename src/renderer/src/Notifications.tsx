@@ -188,13 +188,21 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
                             <Icon name={KIND_ICON[n.kind] ?? 'spark'} size={15} />
                           </span>
                           <div className="ni-body">
-                            <b>{n.title}</b>
+                            <b>
+                              {n.title}
+                              {(n.count ?? 1) > 1 && <span className="nc-count">×{n.count}</span>}
+                            </b>
                             {n.body && <small>{n.body}</small>}
                             <span className="nc-meta">
                               {g.label === 'Today' ? hm(n.at) : `${new Date(n.at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} · ${hm(n.at)}`}
                               {n.action && (
                                 <button className="nc-act" onClick={() => void run(n)}>
                                   {n.action.label}
+                                </button>
+                              )}
+                              {life.notifications?.snooze && (
+                                <button className="nc-act nc-snooze" onClick={() => void life.notifications!.snooze!(n.id, Date.now() + 3600_000).then(() => window.dispatchEvent(new CustomEvent('life-notif-changed')))} title="Bring it back in an hour">
+                                  Snooze 1h
                                 </button>
                               )}
                             </span>

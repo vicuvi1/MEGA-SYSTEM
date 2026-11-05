@@ -21,8 +21,9 @@ export function addNotif(db: Db, n: Omit<Notif, 'readAt'>): void {
   db.prepare('DELETE FROM notifications WHERE at < ? OR id IN (SELECT id FROM notifications ORDER BY at DESC LIMIT -1 OFFSET 200)').run(cut)
 }
 
-export function listNotifs(db: Db): Notif[] {
-  return (db.prepare('SELECT id, at, kind, title, body, action, read_at FROM notifications WHERE dismissed_at IS NULL ORDER BY at DESC LIMIT 100').all() as any[]).map((r) => {
+/** The list, newest first; snoozed ones (dated later) appear when their time comes (N4). */
+export function listNotifs(db: Db, now = new Date()): Notif[] {
+  return (db.prepare('SELECT id, at, kind, title, body, action, read_at FROM notifications WHERE dismissed_at IS NULL AND at <= ? ORDER BY at DESC LIMIT 100').all(now.toISOString()) as any[]).map((r) => {
     let action = null
     try {
       action = r.action ? JSON.parse(r.action) : null
@@ -37,6 +38,15 @@ export function listNotifs(db: Db): Notif[] {
 export function readNotifs(db: Db, ids: string[] | null, now = new Date()): void {
   if (ids === null) db.prepare('UPDATE notifications SET read_at = ? WHERE read_at IS NULL').run(now.toISOString())
   else for (const id of ids) db.prepare('UPDATE notifications SET read_at = ? WHERE id = ? AND read_at IS NULL').run(now.toISOString(), id)
+}
+
+/** Snooze (N4): this one goes, a copy comes back at `until` (it pops up then, on every device). */
+export function snoozeNotif(db: Db, id: string, until: number, now = new Date()): void {
+  const r = db.prepare('SELECT id, kind, title, body, action FROM notifications WHERE id = ?').all(id)[0] as any
+  if (!r) return
+  dismissNotif(db, id, now)
+  const base = String(r.id).replace(/~s\d+$/, '')
+  db.prepare('INSERT OR IGNORE INTO notifications (id, at, kind, title, body, action) VALUES (?, ?, ?, ?, ?, ?)').run(`${base}~s${until}`, new Date(until).toISOString(), r.kind, r.title, r.body, r.action)
 }
 
 export function dismissNotif(db: Db, id: string, now = new Date()): void {

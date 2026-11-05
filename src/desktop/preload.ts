@@ -11,6 +11,7 @@ const api: DesktopApi = {
   rollback: () => ipcRenderer.invoke('desktop:rollback'),
   notify: (n: { id: string; title: string; body?: string | null }) => ipcRenderer.invoke('desktop:notify', n),
   onNotifClick: (cb: (id: string) => void) => void ipcRenderer.on('desktop:notif-click', (_e, id) => cb(String(id))),
+  onNotifAction: (cb) => void ipcRenderer.on('desktop:notif-action', (_e, a) => cb({ id: String(a?.id ?? ''), action: String(a?.action ?? 'open') })),
   onUpdateStatus: (cb: (s: any) => void) => void ipcRenderer.on('desktop:update', (_e, s) => cb(s)),
   loginGithub: () => ipcRenderer.invoke('desktop:loginGithub'),
   titleBar: (color, symbol) => ipcRenderer.send('desktop:titlebar', color, symbol),

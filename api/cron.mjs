@@ -8,6 +8,7 @@ import { runDaily, runTick, sportShared } from './_bot/bot.mjs'
 import { readBody } from './_lib.mjs'
 import { askModel } from './ai.mjs'
 import { googleEnv } from './google.mjs'
+import { pushNew } from './_push.mjs'
 
 export default async function handler(req, res) {
   // job=tick: the coach writes first (reminders, check-ins, block starts,
@@ -63,6 +64,8 @@ async function tick(req, res) {
     const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
     const sleepBot = serverBots().find((b) => b.name === 'WAKY_BOT_TOKEN') ?? serverBots().find((b) => b.name === 'MAN_BOT_TOKEN')
     const sent = await runTick({ tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, model, sleepBotToken: sleepBot?.token })
+    // Phones with push on (N11): woken for anything new and unread.
+    await pushNew(cfg).catch((e) => console.error('push:', e))
     send(res, 200, { ok: true, sent: sent.length })
   } catch (e) {
     console.error('tick:', e)

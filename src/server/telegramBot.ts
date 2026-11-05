@@ -41,7 +41,7 @@ import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
 import { PLAN_ASK, eveningText, morningText, planKeyboard, weekText } from '@core/focusBot'
 import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered as answeredReminders, dueReminders, followUpText, promiseStats, MOOD_FACE, nudged, shouldNudge, type NudgeFacts, type NudgeState, type Reminder } from '@core/coachKit'
 import { blockSubject, isFocusBlock } from '@core/dayTime'
-import { notifFromMessage } from '@core/notify'
+import { notifFromMessage, type Notif } from '@core/notify'
 import { addNotif } from '../renderer/src/web/notifications'
 import { autoApproveDue, planWaitingText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
 import { loadStyle } from '../renderer/src/web/botBrain'
@@ -56,6 +56,7 @@ import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState } from '@core/rhythm'
 import { missTwiceLine } from '@core/neverMissTwice'
 import { coachStatus } from '../renderer/src/web/coachStatus'
+import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
 
 /** What Ben already said today, by kind (each kind once a day). */
 const BEN_SENT = 'ben_sent_today'
@@ -463,7 +464,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   }
   // true when it really went out. `always`: check-ins and nudges escalate on purpose
   // ("Last check on…" twice is the point), so the once-a-day rule never drops them.
-  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean } = {}): Promise<any> => {
+  // Quiet hours, event warnings, travel times: the same settings as the app (N2, N3, N6).
+  const notifSet = await mirror.read((db) => cleanNotifSettings(JSON.parse(getSetting(db as any, NOTIF_SETTINGS_KEY) || 'null'))).catch(() => cleanNotifSettings(null))
+  /** `notif`: the bell entry to use (fixed id, so the app's own copy isn't doubled). `urgent`: through quiet hours. */
+  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean } = {}): Promise<any> => {
+    // Quiet hours (N6): only your own reminders (🔔 ⏰) and urgent things go to Telegram; the rest waits in the bell.
+    if (!opts.urgent && quietNowSet(notifSet, now) && !/^\s*(🔔|⏰)/u.test(text)) {
+      await mirror.write((db) => {
+        const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
+        if (n) addNotif(db as any, n)
+      }).catch(() => null)
+      note('skipped', text, `Quiet hours (${notifSet.quiet.from}–${notifSet.quiet.to}): in the bell instead`)
+      return false
+    }
     // Each kind of message at most once a day (not the same water nudge 4 times).
     // Each kind of message at most once a day (not the same water nudge 4 times).
     // Checked now, but marked as sent only once Telegram says ok (a failed send
@@ -525,7 +538,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
         const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith('🔔') ? 'annoyed' : 'chill'])[0]
         appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood }])
         // …and in the bell, with the one thing to do about it.
-        const n = notifFromMessage(text, reply_markup, new Date())
+        const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
         if (n) addNotif(db as any, n)
       })
       .catch(() => null)
@@ -678,6 +691,21 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
           inline_keyboard: [[{ text: `▶ Start: ${subject}`, callback_data: `fo|${subject}` }], pauseRow]
         })
         nudge = { ...nudge, announced: [...(nudge.announced ?? []), starting.id] }
+      } catch {
+        /* next tick */
+      }
+    }
+  }
+  // Classes and meetings (N2) and "leave now" (N3), not only focus blocks:
+  // the same warnings (same ids) as the app makes, once each.
+  if (calendar && notifSet.lead + Math.max(0, ...notifSet.travel.map((t) => t.minutes)) > 0) {
+    const ahead = await calendar.events(now.toISOString(), new Date(now.getTime() + (Math.max(notifSet.lead, ...notifSet.travel.map((t) => t.minutes + 5)) + 15) * 60_000).toISOString()).catch(() => [])
+    for (const w of eventAlerts(ahead, now, notifSet).filter((x) => !(nudge.announced ?? []).includes(x.id))) {
+      const ev = ahead.find((e) => w.id.includes(`:${e.id}:`))
+      const markup = ev?.meet ? { inline_keyboard: [[{ text: '🎥 Join', url: ev.meet }]] } : undefined
+      try {
+        await send(`${w.kind === 'leave' ? '🚶' : '📅'} <b>${esc(w.title)}</b>${w.body ? `\n${esc(w.body)}` : ''}`, markup, { always: true, notif: w, urgent: w.kind === 'leave' })
+        nudge = { ...nudge, announced: [...(nudge.announced ?? []), w.id] }
       } catch {
         /* next tick */
       }

@@ -2108,3 +2108,19 @@ body:has(.bb-bubble) main { padding-bottom: 96px; }
 .is-snd { border: 0; background: transparent; cursor: pointer; font-size: 15px; opacity: 0.5; padding: 2px 4px; }
 .is-snd.on { opacity: 1; }
 .is-snd:disabled { cursor: not-allowed; opacity: 0.25; }
+
+/* Notifications: snooze (N4), folded repeats (N5), the exact thing lit up (N7) */
+.nt-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.nt-acts .nt-act { margin-top: 0; }
+.nt-snooze, .nc-snooze { background: transparent !important; border: 1px solid var(--border, rgb(var(--ink) / 0.14)) !important; color: var(--muted) !important; }
+.nc-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--surface-3, rgb(var(--ink) / 0.1)); color: var(--muted); }
+.anchor-flash { animation: anchor-flash 2.4s ease; border-radius: 10px; }
+@keyframes anchor-flash { 0%, 60% { box-shadow: 0 0 0 3px var(--lime, #d4ff3f); } 100% { box-shadow: 0 0 0 3px transparent; } }
+
+/* Travel times (N3) */
+.nq-travel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 2px 0 12px; }
+.nq-place { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-radius: 999px; background: var(--surface-2, rgb(var(--ink) / 0.06)); font-size: 13px; }
+.nq-place button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.nq-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.nq-add input { border: 1px solid var(--border, rgb(var(--ink) / 0.14)); border-radius: 8px; padding: 6px 9px; background: transparent; color: inherit; font: inherit; }
+.nq-add input[type='number'] { width: 70px; }

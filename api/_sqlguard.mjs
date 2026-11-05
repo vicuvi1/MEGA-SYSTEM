@@ -6,7 +6,7 @@
 // requests pass; stored or multi-statement SQL is refused.
 
 /** Server-only tables: never read or written from a page. */
-export const PROTECTED_TABLES = ['sys_auth', 'sys_login_guard', 'sys_passkeys', 'sys_passkey_chal', 'sys_devices', 'sys_gate']
+export const PROTECTED_TABLES = ['sys_auth', 'sys_login_guard', 'sys_passkeys', 'sys_passkey_chal', 'sys_devices', 'sys_gate', 'sys_push', 'sys_kv']
 const BANNED = new Set(['attach', 'detach', 'pragma', 'vacuum', 'load_extension'])
 
 /**

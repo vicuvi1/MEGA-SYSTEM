@@ -41,11 +41,8 @@ export function useCoachUnread(onCoachPage: boolean, sound = true): number {
     setN(onCoachPage ? 0 : fresh.length)
     const newest = fresh[fresh.length - 1]
     if (newest && newest.at !== last.current && !onCoachPage) {
-      if (last.current !== null) {
-        const face = (newest.mood && MOOD_FACE[newest.mood as Mood]) || '💬'
-        toast(`${face} Ben: ${newest.text.replace(/\s+/g, ' ').slice(0, 110)}`, 'info')
-        if (sound) soundSystemOracle()
-      }
+      // The badge only (N1): the bell's notification is the one alert for it
+      // (it was a second card and a second sound, ignoring quiet hours).
       last.current = newest.at
     } else if (last.current === null) last.current = newest?.at ?? ''
   }, [onCoachPage, toast, sound])

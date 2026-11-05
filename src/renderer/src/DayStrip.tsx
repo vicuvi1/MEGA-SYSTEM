@@ -333,6 +333,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
               <div
                 key={b.key}
                 data-key={b.key}
+                id={b.event ? `event-${b.event.id}` : undefined}
                 className={`ds-block ${backdrop ? 'band' : ''} ${b.task ? 'task' : ''} ${done ? 'done' : ''} ${st === 'skipped' ? 'skipped' : ''} ${st === 'now' ? 'now' : ''} ${g ? 'dragging' : ''} ${yOf(e) - yOf(s) < 38 ? 'short' : ''} ${dropAt?.key === b.key ? 'drop' : ''}`}
                 style={{ top: yOf(s) + 1, height: Math.max(16, yOf(e) - yOf(s) - 2), left: lane(left), width: `calc((100% - ${LANE_LEFT + LANE_RIGHT}px) * ${w / 100} - 3px)`, ['--c' as string]: b.color }}
                 onPointerDown={(ev) => startDrag(ev, b, 'move')}

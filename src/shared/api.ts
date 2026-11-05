@@ -403,6 +403,13 @@ export interface LifeApi {
     list(): Promise<import('@core/notify').Notif[]>
     read(ids: string[] | null): Promise<void>
     dismiss(id: string): Promise<void>
+    /** Adds one made by the app (once per id, every device sees it). */
+    add?(n: Omit<import('@core/notify').Notif, 'readAt'>): Promise<void>
+    /** Comes back at `until` (ms). */
+    snooze?(id: string, until: number): Promise<void>
+    /** Quiet hours, event warnings, travel times: synced, the server uses them too. */
+    settings?(): Promise<import('@core/eventAlerts').NotifSettings>
+    saveSettings?(p: Partial<import('@core/eventAlerts').NotifSettings>): Promise<import('@core/eventAlerts').NotifSettings>
   }
   wallet: {
     summary(): Promise<Summary>

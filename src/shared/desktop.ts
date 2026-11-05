@@ -15,7 +15,9 @@ export interface DesktopApi {
   /** Go back one version (installs the previous release and restarts). */
   rollback?(): Promise<{ ok: boolean; version?: string; error?: string }>
   /** A Windows notification (silent: the page plays its own chime). */
-  notify?(n: { id: string; title: string; body?: string | null }): Promise<boolean>
+  notify?(n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[] }): Promise<boolean>
+  /** A button on a Windows notification (N9). */
+  onNotifAction?(cb: (a: { id: string; action: string }) => void): void
   /** You clicked one: the app is in front, run its action. */
   onNotifClick?(cb: (id: string) => void): void
   /** The update status, pushed whenever it changes. */

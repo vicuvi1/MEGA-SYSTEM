@@ -49,7 +49,8 @@ import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyReques
 
 const sportyViewOf = (db: any) => sportyView(parseJson<SportyStatus>(getSetting(db, SPORTY_STATUS)), parseJson<{ at: string }>(getSetting(db, 'sport_sync_seen')), parseJson<SportyRequest>(getSetting(db, SPORTY_REQUEST)), new Date())
 import { profileView } from './web/coachProfile'
-import { dismissNotif, listNotifs, readNotifs } from './web/notifications'
+import { addNotif, dismissNotif, listNotifs, readNotifs, snoozeNotif } from './web/notifications'
+import { NOTIF_SETTINGS_KEY, cleanNotifSettings } from '@core/eventAlerts'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { addBlockResult, addFocusQuality } from './web/dayLog'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
@@ -1074,7 +1075,23 @@ export function createTursoWebBridge(): Bridge {
       },
       dismiss: async (id: string) => {
         await (await mirrorP).write((db) => dismissNotif(db as any, id))
-      }
+      },
+      add: async (n: any) => {
+        // Already there (another device or the server added it): nothing to write.
+        const have = await (await mirrorP).read((db) => !!(db as any).prepare('SELECT 1 FROM notifications WHERE id = ?').get(n.id))
+        if (!have) await (await mirrorP).write((db) => addNotif(db as any, n))
+      },
+      snooze: async (id: string, until: number) => {
+        await (await mirrorP).write((db) => snoozeNotif(db as any, id, until))
+      },
+      settings: async () => (await mirrorP).read((db) => cleanNotifSettings(JSON.parse(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(NOTIF_SETTINGS_KEY) as any)?.value || 'null'))),
+      saveSettings: async (p: any) =>
+        (await mirrorP).write((db) => {
+          const cur = cleanNotifSettings(JSON.parse(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(NOTIF_SETTINGS_KEY) as any)?.value || 'null'))
+          const next = cleanNotifSettings({ ...cur, ...p })
+          ;(db as any).prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(NOTIF_SETTINGS_KEY, JSON.stringify(next))
+          return next
+        })
     },
     wallet: S('wallet') as Bridge['wallet'],
     rules: S('rules') as Bridge['rules'],

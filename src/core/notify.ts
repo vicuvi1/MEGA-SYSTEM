@@ -3,11 +3,14 @@
 // server adds one for every message it sends on its own; the app shows them
 // in the bell (synced, so read on one device is read everywhere).
 
-export type NotifKind = 'ben' | 'plan' | 'block' | 'review' | 'health' | 'reminder' | 'water' | 'training' | 'week'
+export type NotifKind = 'ben' | 'plan' | 'block' | 'review' | 'health' | 'reminder' | 'water' | 'training' | 'week' | 'event' | 'leave' | 'bedtime'
 
 export type NotifAction =
-  | { kind: 'page'; page: string; label: string }
+  /** `anchor`: the element to scroll to and highlight on that page (N7). */
+  | { kind: 'page'; page: string; label: string; anchor?: string }
   | { kind: 'focus'; subject: string; minutes: number; label: string }
+  /** A web link (a meeting's Join). */
+  | { kind: 'link'; url: string; label: string }
 
 export interface Notif {
   id: string
@@ -17,6 +20,8 @@ export interface Notif {
   body: string | null
   action: NotifAction | null
   readAt: string | null
+  /** Repeats of the same kind folded into this one (the bell, N5). */
+  count?: number
 }
 
 const plainOf = (html: string) =>
@@ -61,6 +66,9 @@ export function notifFromMessage(html: string, markup: unknown, at: Date): Omit<
     block: ['today', 'Open Today'],
     review: ['coach', 'Open with Ben'],
     health: ['settings', 'See what to fix'],
+    event: ['today', 'Open Today'],
+    leave: ['today', 'Open Today'],
+    bedtime: ['today', 'Close my day'],
     water: ['body', 'Log water'],
     training: ['body', 'Open Sport'],
     week: ['progress', 'See the week'],
@@ -73,15 +81,28 @@ export function notifFromMessage(html: string, markup: unknown, at: Date): Omit<
     kind,
     title,
     body,
-    action: action ?? { kind: 'page', page: page[kind][0], label: page[kind][1] }
+    action: action ?? { kind: 'page', page: page[kind][0], label: page[kind][1], ...(kind === 'health' ? { anchor: 'tab:health' } : {}) }
   }
 }
 
-/** Today / Earlier, newest first. */
+/** Repeats of the same kind within 2 hours become one row, "×N" (N5). Newest first. */
+export function foldRepeats(list: Notif[]): Notif[] {
+  const out: Notif[] = []
+  for (const n of [...list].sort((a, b) => b.at.localeCompare(a.at))) {
+    // Events and "leave now" are each their own thing; the rest fold by kind.
+    const foldable = n.kind !== 'event' && n.kind !== 'leave'
+    const prev = foldable ? out.find((x) => x.kind === n.kind && Date.parse(x.at) - Date.parse(n.at) < 2 * 3600_000 && Date.parse(x.at) >= Date.parse(n.at)) : undefined
+    if (prev) prev.count = (prev.count ?? 1) + 1
+    else out.push({ ...n })
+  }
+  return out
+}
+
+/** Today / Earlier, newest first, repeats folded. */
 export function groupNotifs(list: Notif[], now: Date): { label: string; items: Notif[] }[] {
   const day = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
   const today = day(now)
-  const sorted = [...list].sort((a, b) => b.at.localeCompare(a.at))
+  const sorted = foldRepeats(list)
   const t = sorted.filter((n) => day(new Date(n.at)) === today)
   const e = sorted.filter((n) => day(new Date(n.at)) !== today)
   return [

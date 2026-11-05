@@ -125,14 +125,43 @@ if (firstCopy) void app.whenReady().then(async () => {
     win.focus()
     if (page) win.webContents.send('app:navigate', page)
   }
-  app.on('second-instance', () => showApp())
+  // A button on a Windows notification (N9) opens a lifesystem:// link, which
+  // Windows hands to this copy as a second start.
+  if (process.platform === 'win32') app.setAsDefaultProtocolClient('lifesystem')
+  const fromLink = (argv: string[]) => {
+    const link = argv.find((a) => a.startsWith('lifesystem://'))
+    if (!link) return false
+    try {
+      const u = new URL(link)
+      const id = u.searchParams.get('id') ?? ''
+      const act = u.searchParams.get('a') ?? 'open'
+      if (act !== 'snooze') showApp()
+      win.webContents.send('desktop:notif-action', { id, action: act })
+      return true
+    } catch {
+      return false
+    }
+  }
+  app.on('second-instance', (_e, argv) => {
+    if (!fromLink(argv)) showApp()
+  })
 
   // Windows notifications: the page decides when (quiet hours, focus) and
   // plays its own chime; a click opens Life System and runs the action.
   const shown = new Map<string, Notification>()
-  handle('desktop:notify', (n: { id: string; title: string; body?: string | null }) => {
+  const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  handle('desktop:notify', (n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[] }) => {
     if (!Notification.isSupported() || typeof n?.id !== 'string') return false
-    const note = new Notification({ title: String(n.title).slice(0, 120), body: String(n.body ?? '').slice(0, 240), icon: join(ui, 'icon.png'), silent: true })
+    const title = String(n.title).slice(0, 120)
+    const body = String(n.body ?? '').slice(0, 240)
+    const link = (a: string) => xml(`lifesystem://notif?id=${encodeURIComponent(n.id)}&a=${encodeURIComponent(a)}`)
+    const acts = (Array.isArray(n.actions) ? n.actions : []).slice(0, 3)
+    // Buttons (N9): Start focus, Join, Snooze… right on the Windows notification.
+    const toastXml =
+      process.platform === 'win32' && acts.length
+        ? `<toast activationType="protocol" launch="${link('open')}"><visual><binding template="ToastGeneric"><text>${xml(title)}</text>${body ? `<text>${xml(body)}</text>` : ''}</binding></visual><audio silent="true"/><actions>${acts.map((a) => `<action content="${xml(String(a.label).slice(0, 30))}" activationType="protocol" arguments="${link(String(a.id))}"/>`).join('')}</actions></toast>`
+        : undefined
+    const note = new Notification({ title, body, icon: join(ui, 'icon.png'), silent: true, ...(toastXml ? { toastXml } : {}) })
     note.on('click', () => {
       showApp()
       win.webContents.send('desktop:notif-click', n.id)

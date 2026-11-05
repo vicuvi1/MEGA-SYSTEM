@@ -181,3 +181,26 @@ self.addEventListener('fetch', (e) => {
     )
   }
 })
+
+// Push (N11): the server wakes this helper with an empty push; it asks for the
+// newest unread notifications with its own push address and shows them, even
+// with no tab open.
+self.addEventListener('push', (e) => {
+  e.waitUntil(
+    (async () => {
+      const sub = await self.registration.pushManager.getSubscription()
+      let items = []
+      try {
+        const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pushPeek: sub && sub.endpoint }) })
+        items = (await r.json()).items || []
+      } catch {
+        items = []
+      }
+      // Already looking at the app: it shows its own card.
+      const open = await self.clients.matchAll({ type: 'window' })
+      if (open.some((c) => c.visibilityState === 'visible' && c.focused)) return
+      if (!items.length) items = [{ id: 'push', title: 'Life System', body: 'Something new from Ben' }]
+      for (const n of items) await self.registration.showNotification(n.title, { body: n.body, icon: '/icon.png', badge: '/icon.png', tag: n.id, data: { id: n.id } })
+    })()
+  )
+})
