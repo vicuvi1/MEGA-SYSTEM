@@ -61,3 +61,15 @@ describe('SleepService backend', () => {
     expect(wallet.summary(now).balance).toBe(5) // +5 for sleep.bed_on_time
   })
 })
+
+describe('the first wake-up of the day stays (X8)', () => {
+  it('a later "I am up" (nap) does not move it; a typed time does', () => {
+    const morning = new Date(2026, 9, 26, 6, 55)
+    sleep.logWake(undefined, undefined, morning)
+    const nap = sleep.logWake(undefined, undefined, new Date(2026, 9, 26, 15, 10))
+    expect(nap.log.wakeTime).toBe('06:55')
+    expect(nap.awarded).toBe(false)
+    const fixed = sleep.logWake('07:20', undefined, new Date(2026, 9, 26, 15, 11))
+    expect(fixed.log.wakeTime).toBe('07:20')
+  })
+})

@@ -91,6 +91,10 @@ export class SleepService {
 
     const existing = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(today) as SleepLogRow | undefined
 
+    // "I'm up" again later (after a nap, or at 3 am before the day turns) keeps
+    // the first wake-up of the day; only a time you type changes it (X8).
+    if (existing && existing.wake_time && !time) return { log: toLog(existing), state: this.state(now), awarded: false }
+
     if (existing) {
       this.db
         .prepare('UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?')

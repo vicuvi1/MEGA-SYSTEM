@@ -9711,6 +9711,11 @@ var SleepService = class {
 		const target = targetForDay(today, this.weekdayTarget(), this.weekendTarget());
 		const onTime = isWakeOnTime(wakeTime, target);
 		const existing = this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today);
+		if (existing && existing.wake_time && !time) return {
+			log: toLog(existing),
+			state: this.state(now),
+			awarded: false
+		};
 		if (existing) this.db.prepare("UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?").run(wakeTime, target, onTime ? 1 : 0, quality ?? existing.quality, today);
 		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)").run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString());
 		let awarded = false;
@@ -17519,7 +17524,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								said.push(`up ${r.log.wakeTime}${r.log.onTime ? " (on time)" : ""}`);
 							}
 							if (a.bed) {
-								if (!db.prepare("SELECT 1 FROM sleep_logs WHERE day = ?").get(a.day)) svc.sleep.setWake(a.day, a.wake ?? "07:00");
+								if (!db.prepare("SELECT 1 FROM sleep_logs WHERE day = ?").get(a.day)) db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, '', '', 0, NULL, NULL, NULL, NULL, ?)").run(a.day, (/* @__PURE__ */ new Date()).toISOString());
 								const target = svc.sleep.bedtimeTarget();
 								const toMin = (t) => {
 									const [h, m] = t.split(":").map(Number);
@@ -18029,7 +18034,7 @@ His note: ${note}`, { json: true }));
 			}).catch(() => null);
 			if (ai && out.ok && prompted && /Evening review/.test(asked)) await lessonOfDay(update.__token, chat, botId, cfg, said).catch(() => null);
 			await flushFocus();
-			if (server && out.ok && /^\/wake(@\w+)?$/i.test(text)) await morningAfterWake(update.__token, chat).catch(() => null);
+			if (server && out.ok && (/^\/wake(@\w+)?$/i.test(text) || parseTelegramText(text).type === "wake")) await morningAfterWake(update.__token, chat).catch(() => null);
 			if (out.ok && prompted && asked.includes("What are your 1–3 must-dos today?")) await offerBlocks(update.__token, chat).catch(() => null);
 			return out.reply;
 		} catch (e) {

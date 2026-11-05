@@ -1776,7 +1776,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               if (a.bed) {
                 // The bedtime belongs to that morning's row (the night before it).
                 const row = db.prepare('SELECT 1 FROM sleep_logs WHERE day = ?').get(a.day)
-                if (!row) svc.sleep.setWake(a.day, a.wake ?? '07:00')
+                // No wake-up that morning yet: an empty wake time, never a made-up 07:00 (X8).
+                if (!row) db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, '', '', 0, NULL, NULL, NULL, NULL, ?)").run(a.day, new Date().toISOString())
                 const target = svc.sleep.bedtimeTarget()
                 const toMin = (t: string) => {
                   const [h, m] = t.split(':').map(Number)
@@ -2167,7 +2168,8 @@ His note: ${note}`,
         if (ai && out.ok && prompted && /Evening review/.test(asked)) await lessonOfDay(update.__token, chat, botId, cfg, said).catch(() => null)
         await flushFocus()
         // Up (Telegram /wake): the plan question comes now. Plan sent: blocks for it in your free time.
-        if (server && out.ok && /^\/wake(@\w+)?$/i.test(text)) await morningAfterWake(update.__token, chat).catch(() => null)
+        // Any wake-up message ("I'm up", "woke up at 7"), not only /wake, gets the morning card (X8).
+        if (server && out.ok && (/^\/wake(@\w+)?$/i.test(text) || parseTelegramText(text).type === 'wake')) await morningAfterWake(update.__token, chat).catch(() => null)
         if (out.ok && prompted && asked.includes(PLAN_ASK)) await offerBlocks(update.__token, chat).catch(() => null)
         return out.reply
       } catch (e) {
