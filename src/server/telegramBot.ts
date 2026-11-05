@@ -3,6 +3,7 @@
 // handled exactly like the app does (same services, same Turso transaction
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
+import { calendarChanges, type Seen } from '../core/calWatch'
 import { loadFeedback } from '../renderer/src/web/botBrain'
 import { quietNow, quietRules } from '../core/benTiming'
 import { neutral } from '../core/stealth'
@@ -570,6 +571,39 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     await healthTick(healthDb, mirror, now, send)
   } catch (e) {
     console.error('health:', e)
+  }
+
+  // Calendar watch (N10): a class added or cancelled today or tomorrow, checked every 10 minutes.
+  if (calendar) {
+    try {
+      const last = await mirror.read((db) => Number(getSetting(db as any, 'ben_cal_watch_at') || 0))
+      if (now.getTime() - last >= 10 * 60000) {
+        const end = new Date(now)
+        end.setDate(end.getDate() + 2)
+        end.setHours(0, 0, 0, 0)
+        const evs = await calendar.events(now.toISOString(), end.toISOString())
+        const seenNow: Seen = Object.fromEntries(evs.filter((e) => !e.allDay && !isFocusBlock(e)).map((e) => [e.id, { title: e.title, start: e.start, end: e.end }]))
+        const { prev, must } = await mirror.read((db) => {
+          let p: Seen | null = null
+          try {
+            p = JSON.parse(getSetting(db as any, 'ben_cal_seen') || 'null')
+          } catch {
+            p = null
+          }
+          return { prev: p, must: services.services(db).focus.state(now).plan.items.find((x: any) => !x.done)?.text ?? null }
+        })
+        await mirror.write((db) => {
+          setSetting(db as any, 'ben_cal_seen', JSON.stringify(seenNow))
+          setSetting(db as any, 'ben_cal_watch_at', String(now.getTime()))
+        })
+        for (const ch of calendarChanges(prev, seenNow, now, must)) {
+          const subject = (must ?? 'Focus').split(/\s+/).slice(0, 3).join(' ').slice(0, 28)
+          await send(ch.text, ch.kind === 'cancelled' && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{ text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`, callback_data: `fo|${subject}` }]] } : undefined).catch(() => null)
+        }
+      }
+    } catch (e) {
+      console.error('calendar watch:', e)
+    }
   }
 
   // 2) A study block in your calendar starts now, and 3) follow-ups when slipping.

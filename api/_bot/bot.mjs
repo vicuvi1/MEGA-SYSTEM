@@ -1,6 +1,33 @@
 import { createRequire } from "node:module";
 import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+// src/core/calWatch.ts
+var hm$2 = (iso) => new Date(iso).toTimeString().slice(0, 5);
+var day = (iso, now) => {
+	const d = new Date(iso);
+	const t = new Date(now);
+	return d.toDateString() === t.toDateString() ? "today" : "tomorrow";
+};
+function calendarChanges(prev, now, at, firstMustDo) {
+	if (!prev) return [];
+	const out = [];
+	const live = (e) => Date.parse(e.end) > at.getTime();
+	for (const [id, e] of Object.entries(now)) if (!prev[id] && live(e)) out.push({
+		kind: "added",
+		ev: e,
+		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$2(e.start)}. I'll plan around it.`
+	});
+	for (const [id, e] of Object.entries(prev)) if (!now[id] && live(e) && Date.parse(e.start) > at.getTime()) {
+		const freeMin = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4);
+		out.push({
+			kind: "cancelled",
+			ev: e,
+			freeMin,
+			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$2(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
+		});
+	}
+	return out.slice(0, 3);
+}
 // src/core/botCommands.ts
 function parseAmountAndUnit(str, defaultUnit = "reps") {
 	if (!str) return {
@@ -20095,6 +20122,45 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			await healthTick(healthDb, mirror, now, send);
 		} catch (e) {
 			console.error("health:", e);
+		}
+		if (calendar) try {
+			const last = await mirror.read((db) => Number(getSetting(db, "ben_cal_watch_at") || 0));
+			if (now.getTime() - last >= 6e5) {
+				const end = new Date(now);
+				end.setDate(end.getDate() + 2);
+				end.setHours(0, 0, 0, 0);
+				const evs = await calendar.events(now.toISOString(), end.toISOString());
+				const seenNow = Object.fromEntries(evs.filter((e) => !e.allDay && !isFocusBlock(e)).map((e) => [e.id, {
+					title: e.title,
+					start: e.start,
+					end: e.end
+				}]));
+				const { prev, must } = await mirror.read((db) => {
+					let p = null;
+					try {
+						p = JSON.parse(getSetting(db, "ben_cal_seen") || "null");
+					} catch {
+						p = null;
+					}
+					return {
+						prev: p,
+						must: services.services(db).focus.state(now).plan.items.find((x) => !x.done)?.text ?? null
+					};
+				});
+				await mirror.write((db) => {
+					setSetting(db, "ben_cal_seen", JSON.stringify(seenNow));
+					setSetting(db, "ben_cal_watch_at", String(now.getTime()));
+				});
+				for (const ch of calendarChanges(prev, seenNow, now, must)) {
+					const subject = (must ?? "Focus").split(/\s+/).slice(0, 3).join(" ").slice(0, 28);
+					await send(ch.text, ch.kind === "cancelled" && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{
+						text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`,
+						callback_data: `fo|${subject}`
+					}]] } : void 0).catch(() => null);
+				}
+			}
+		} catch (e) {
+			console.error("calendar watch:", e);
 		}
 		const st = await mirror.read((db) => {
 			let nudge = {};
