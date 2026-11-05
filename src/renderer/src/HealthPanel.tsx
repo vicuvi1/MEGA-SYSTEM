@@ -78,6 +78,39 @@ export function HealthPanel() {
           ))}
         </ul>
       )}
+      <ReminderTimer tick={h.checks.find((c) => c.id === 'tick') ?? null} />
     </section>
+  )
+}
+
+/**
+ * Reminders on the minute (F4): Ben's server checks reminders when it's
+ * woken (every ~10 min by a timer, every 2 min while the app is open). A free
+ * outside timer that opens this link every minute makes them exact.
+ */
+function ReminderTimer({ tick }: { tick: Check | null }) {
+  const [copied, setCopied] = useState(false)
+  if (typeof window === 'undefined' || window.desktop) return null
+  const url = `${window.location.origin}/api/cron?job=tick`
+  return (
+    <details className="bd-more" style={{ marginTop: 12 }}>
+      <summary>⏰ Reminders on the minute {tick ? `· last check ${tick.detail.replace(/^(Ran|Last ran) /, '')}` : ''}</summary>
+      <p className="hint small">
+        Ben checks your reminders and check-ins when his server wakes up: about every 10 minutes, and every 2 minutes while the app is open. For exact times,
+        add a free timer at cron-job.org (or any uptime pinger) that opens this link every minute. No password needed: it only sends what is due, once.
+      </p>
+      <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <code style={{ overflowWrap: 'anywhere' }}>{url}</code>
+        <button
+          type="button"
+          className="btn small"
+          onClick={() => {
+            void navigator.clipboard?.writeText(url).then(() => setCopied(true)).catch(() => {})
+          }}
+        >
+          {copied ? 'Copied' : 'Copy link'}
+        </button>
+      </div>
+    </details>
   )
 }
