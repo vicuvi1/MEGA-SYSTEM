@@ -16,7 +16,7 @@ const readSore = (): number | null => {
   }
 }
 
-export function ReadinessCard() {
+export function ReadinessCard({ workoutDone = false }: { workoutDone?: boolean }) {
   const [slept, setSlept] = useState<{ min: number | null; quality: number | null }>({ min: null, quality: null })
   const [sore, setSore] = useState<number | null>(readSore)
   useEffect(() => {
@@ -34,12 +34,37 @@ export function ReadinessCard() {
     }
   }
   const r = readiness({ sleptMin: slept.min, soreness: sore, quality: slept.quality })
+  // Surprise on a hard day (M4): trained anyway on a light/rest day → a grit bonus, once a day.
+  const [grit, setGrit] = useState<string | null>(null)
+  useEffect(() => {
+    if (!workoutDone || r.kind === 'full') return
+    const key = `ls.grit.${today()}`
+    try {
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+    } catch {
+      return
+    }
+    life.wallet
+      .award('body.grit_day')
+      .then(() => {
+        const lines = ['You showed up when it was hard. That is the whole game.', 'Tired and you still trained: that counts double.', 'Hard day, done anyway. Respect.']
+        setGrit(lines[Math.floor(Math.random() * lines.length)])
+        window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+      })
+      .catch(() => {})
+  }, [workoutDone, r.kind])
   return (
     <section className={`card rd-card rd-${r.kind}`} aria-label="Readiness for training today">
       <div className="rd-top">
         <span className="rd-badge">{r.kind === 'full' ? '💪 Full' : r.kind === 'light' ? '🙂 Light' : '🛌 Rest'}</span>
         <p>{r.why}</p>
       </div>
+      {grit && (
+        <p className="rd-grit" role="status">
+          🎁 <b>Grit bonus +15</b> · {grit}
+        </p>
+      )}
       <div className="rd-sore" role="radiogroup" aria-label="How sore are you? 1 fresh, 5 very sore">
         <small>Sore?</small>
         {[1, 2, 3, 4, 5].map((v) => (

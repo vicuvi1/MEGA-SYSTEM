@@ -312,7 +312,7 @@ export function Body({
       </section>
 
       {/* READINESS: sleep + soreness → full / light / rest (H4) */}
-      <ReadinessCard />
+      <ReadinessCard workoutDone={!!state.workoutDoneToday} />
 
       {/* STRENGTH: sets × reps × kg, records, estimated max (H2) */}
       <StrengthCard state={state} onChange={(s2) => (onState(s2), onWallet())} />

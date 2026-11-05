@@ -3900,6 +3900,16 @@ var DEFAULT_RULES = [
 		enabled: true
 	},
 	{
+		id: "body.grit_day",
+		module: "body",
+		title: "Grit bonus: trained on a hard day",
+		coins: 15,
+		xp: 20,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
 		id: "face.routine_done",
 		module: "tasks",
 		title: "Skincare routine",

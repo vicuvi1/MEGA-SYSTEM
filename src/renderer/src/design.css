@@ -1952,3 +1952,4 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .urge-action { text-align: center; margin: 10px 0; }
 .urge-action p { margin: 4px 0 8px; }
 .rw-days { color: var(--muted); font-weight: 400; }
+.rd-grit { flex-basis: 100%; margin: 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 18%, transparent); }

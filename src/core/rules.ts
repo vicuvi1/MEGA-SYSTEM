@@ -21,6 +21,7 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'discipline.oath', module: 'discipline', title: 'Morning oath', coins: 3, xp: 5, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'discipline.reset', module: 'discipline', title: 'Streak reset', coins: -20, xp: 0, dailyCap: 3, cooldownMin: 0, enabled: true },
   { id: 'body.workout_done', module: 'body', title: 'Workout done', coins: 10, xp: 25, dailyCap: 2, cooldownMin: 60, enabled: true },
+  { id: 'body.grit_day', module: 'body', title: 'Grit bonus: trained on a hard day', coins: 15, xp: 20, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'face.routine_done', module: 'tasks', title: 'Skincare routine', coins: 5, xp: 10, dailyCap: 2, cooldownMin: 240, enabled: true },
   { id: 'tasks.todoist_done', module: 'tasks', title: 'Todoist task done', coins: 8, xp: 15, dailyCap: 12, cooldownMin: 0, enabled: true },
   { id: 'money.under_budget', module: 'money', title: 'Stayed under budget', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
