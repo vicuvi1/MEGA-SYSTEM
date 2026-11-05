@@ -22,6 +22,9 @@ import { Icon } from './Icon'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
+/** Finance Helper inside Life System on a phone: no buddy, no calculator button (U3). */
+const FINANCE_IN_LIFE = `@media (max-width: 760px) { .buddy, .buddy-card, .calc-fab { display: none !important; } }`
+
 export const EMBED_LABEL: Record<EmbedKind, string> = { finance: 'Finance Helper', waky: 'Waky', man: 'MAN', sport: 'Sport Track' }
 
 /**
@@ -193,18 +196,20 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
   // Waky and MAN, light or dark like the app, and a phone layout for MAN.
   // Settings → "Match the apps to Life System's look" turns it off.
   useEffect(() => {
-    if (appKey !== 'sport' && appKey !== 'waky' && appKey !== 'man') return
+    if (appKey !== 'sport' && appKey !== 'waky' && appKey !== 'man' && appKey !== 'finance') return
     const el = ref.current as any
     if (!el) return
     let on = true
     let lastKey: string | null = null
     life.app.prefs().then((p) => (on = p.matchAppThemes !== false)).catch(() => {})
     const apply = () => {
-      if (!on) return
+      // Finance Helper keeps its own look; on a phone inside Life System its
+      // robot buddy and calculator button go (they covered the numbers: U3).
+      if (appKey !== 'finance' && !on) return
       const root = document.documentElement
       const cs = getComputedStyle(root)
       const light = root.dataset.theme === 'light' || (root.dataset.theme !== 'dark' && window.matchMedia?.('(prefers-color-scheme: light)').matches)
-      const css = embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light))
+      const css = appKey === 'finance' ? FINANCE_IN_LIFE : embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light))
       try {
         if (typeof el.insertCSS === 'function') {
           // Desktop webview: replace the previous sheet.
