@@ -22,10 +22,22 @@ import { useAction, useToast } from '../ui'
 import { useLive } from '../live'
 import { soundSuccess } from '../sound'
 
-type View = 'day' | '3day' | 'week' | 'month' | 'agenda'
-const START_H = 6
-const END_H = 24
-const ZOOMS = [32, 44, 56, 72, 96]
+type View = 'day' | '3day' | 'ndays' | 'workweek' | 'week' | 'month' | 'agenda'
+/** Hour height: 72 px by default (C1), any size from 32 to 160 (C2). */
+const PX_MIN = 32
+const PX_MAX = 160
+const PX_DEFAULT = 72
+/** Your calendar's look (F1–F3): day hours (or fit to your events), work hours, days shown, week start. */
+interface CalPrefs { startH: number; endH: number; fit: boolean; workFrom: number; workTo: number; days: number; weekStart: 0 | 1 | 6; weekNumbers: boolean }
+const CAL_PREFS: CalPrefs = { startH: 6, endH: 24, fit: true, workFrom: 8, workTo: 20, days: 3, weekStart: 1, weekNumbers: true }
+/** ISO week number (Monday weeks), for the title and the month view. */
+export const isoWeek = (day: string) => {
+  const d = new Date(`${day}T12:00:00Z`)
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7))
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1))
+  return Math.ceil(((t.getTime() - y0.getTime()) / 86400000 + 1) / 7)
+}
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const addDays = (day: string, n: number) => {
@@ -33,10 +45,12 @@ const addDays = (day: string, n: number) => {
   d.setDate(d.getDate() + n)
   return ymd(d)
 }
-const monday = (day: string) => {
+/** The first day of `day`'s week (F3: Monday, Sunday or Saturday). */
+const weekStartOf = (day: string, ws: number = 1) => {
   const d = new Date(`${day}T12:00:00`)
-  return addDays(day, -((d.getDay() + 6) % 7))
+  return addDays(day, -((d.getDay() - ws + 7) % 7))
 }
+const monday = (day: string) => weekStartOf(day, 1)
 const agoShort = (ms: number) => (ms < 10_000 ? 'just now' : ms < 60_000 ? `${Math.round(ms / 1000)} s ago` : `${Math.round(ms / 60_000)} min ago`)
 const toMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
 const hmOf = (min: number) => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`
@@ -88,16 +102,27 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     setViewRaw(v)
     store.set(phone ? 'ls.calViewPhone' : 'ls.calView', v)
   }
-  // Roomier by default (56 px an hour); your zoom is remembered.
-  const [zoom, setZoomRaw] = useState<number>(() => store.get('ls.calZoom2', 2))
-  const setZoom = (z: number) => {
-    const n = Math.max(0, Math.min(ZOOMS.length - 1, z))
-    setZoomRaw(n)
-    store.set('ls.calZoom2', n)
+  // Bigger by default (72 px an hour, C1); any size by +/−, Ctrl+scroll or a pinch (C2). Remembered.
+  const [hourPx, setHourPxRaw] = useState<number>(() => Math.max(PX_MIN, Math.min(PX_MAX, Number(store.get('ls.calHourPx', PX_DEFAULT)) || PX_DEFAULT)))
+  const setHourPx = (v: number) => {
+    const n = Math.round(Math.max(PX_MIN, Math.min(PX_MAX, v)))
+    setHourPxRaw(n)
+    store.set('ls.calHourPx', n)
+  }
+  const [prefs, setPrefsRaw] = useState<CalPrefs>(() => ({ ...CAL_PREFS, ...store.get<Partial<CalPrefs>>('ls.calPrefs', {}) }))
+  const setPrefs = (p: Partial<CalPrefs>) => {
+    const next = { ...prefs, ...p }
+    setPrefsRaw(next)
+    store.set('ls.calPrefs', next)
+  }
+  // The "To schedule" list folds to a thin strip (C3).
+  const [sideOpen, setSideOpenRaw] = useState<boolean>(() => store.get('ls.calSideOpen', !phone))
+  const setSideOpen = (v: boolean) => {
+    setSideOpenRaw(v)
+    store.set('ls.calSideOpen', v)
   }
   const [dropOn, setDropOn] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState<{ day: string; top: number; left: number; items: Item[] } | null>(null)
-  const hourPx = ZOOMS[zoom] ?? 44
   const [hidden, setHidden] = useState<string[]>(() => store.get('ls.calHidden', []))
   const [dimmed, setDimmed] = useState<string[]>(() => store.get('ls.calDim', []))
   const [anchor, setAnchor] = useState(today)
@@ -118,7 +143,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   editingRef.current = editing
   const [ghost, setGhost] = useState<{ day: string; start: number; end: number; title: string; color: string; key?: string } | null>(null)
   const [templates, setTemplates] = useState<DayTemplate[]>([])
-  const [menu, setMenu] = useState<'cals' | 'templates' | null>(null)
+  const [menu, setMenu] = useState<'cals' | 'templates' | 'view' | 'date' | null>(null)
   const [now, setNow] = useState(new Date())
   // Ticks every 5 s, only for the "Synced 10 s ago" chip.
   const [clock, setClock] = useState(Date.now())
@@ -138,11 +163,28 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const days = useMemo(() => {
     if (view === 'day') return [anchor]
     if (view === '3day') return [anchor, addDays(anchor, 1), addDays(anchor, 2)]
-    if (view === 'week') return Array.from({ length: 7 }, (_, i) => addDays(monday(anchor), i))
+    if (view === 'ndays') return Array.from({ length: Math.max(1, Math.min(7, prefs.days)) }, (_, i) => addDays(anchor, i))
+    if (view === 'workweek') return Array.from({ length: 5 }, (_, i) => addDays(monday(anchor), i))
+    if (view === 'week') return Array.from({ length: 7 }, (_, i) => addDays(weekStartOf(anchor, prefs.weekStart), i))
     if (view === 'agenda') return Array.from({ length: 14 }, (_, i) => addDays(anchor, i))
-    const first = monday(`${anchor.slice(0, 7)}-01`)
+    const first = weekStartOf(`${anchor.slice(0, 7)}-01`, prefs.weekStart)
     return Array.from({ length: 42 }, (_, i) => addDays(first, i))
-  }, [view, anchor])
+  }, [view, anchor, prefs.days, prefs.weekStart])
+  // The day's hours (F1): yours, stretched to fit an earlier or later event when "fit" is on.
+  const { startH, endH } = useMemo(() => {
+    let a = Math.max(0, Math.min(23, prefs.startH))
+    let b = Math.max(a + 1, Math.min(24, prefs.endH))
+    if (prefs.fit) {
+      for (const e of events) {
+        if (e.allDay || !days.includes(localDay(e.start))) continue
+        const s0 = new Date(e.start)
+        const e0 = new Date(e.end)
+        a = Math.min(a, s0.getHours())
+        b = Math.max(b, localDay(e.end) > localDay(e.start) ? 24 : e0.getHours() + (e0.getMinutes() ? 1 : 0))
+      }
+    }
+    return { startH: a, endH: b }
+  }, [events, days, prefs.startH, prefs.endH, prefs.fit])
 
   const load = useCallback(async (quick = false) => {
     setSync((x) => ({ ...x, busy: true }))
@@ -197,7 +239,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   useEffect(() => {
     const el = gridRef.current
     if (!el) return
-    el.scrollTop = Math.max(0, (new Date().getHours() - 1 - START_H) * hourPx)
+    el.scrollTop = Math.max(0, (new Date().getHours() - 1 - startH) * hourPx)
   }, [view, hourPx])
 
   const calColor = (id: string) => status?.calendars?.find((c) => c.id === id)?.color
@@ -322,15 +364,44 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   // ---- Pointer drag (move, resize, create) --------------------------------
   const minuteAt = (clientY: number, col: HTMLElement) => {
     const y = clientY - col.getBoundingClientRect().top
-    return Math.min(END_H * 60, Math.max(START_H * 60, START_H * 60 + Math.round((y / hourPx) * 4) * 15))
+    return Math.min(endH * 60, Math.max(startH * 60, startH * 60 + Math.round((y / hourPx) * 4) * 15))
   }
   const colAt = (x: number, y: number) => (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>('[data-day]') ?? null
   const commitRef = useRef(commitMove)
   commitRef.current = commitMove
+  // Touch (M1): a finger drag scrolls; hold ~0.35 s to pick up, move, resize or create.
+  const pendingTouch = useRef<{ timer: ReturnType<typeof setTimeout>; d: Drag; x: number; y: number } | null>(null)
+  const beginDrag = (d: Drag, e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') {
+      drag.current = d
+      return
+    }
+    if (pendingTouch.current) clearTimeout(pendingTouch.current.timer)
+    pendingTouch.current = {
+      d,
+      x: e.clientX,
+      y: e.clientY,
+      timer: setTimeout(() => {
+        drag.current = d
+        pendingTouch.current = null
+        try {
+          navigator.vibrate?.(12)
+        } catch {
+          /* no vibration */
+        }
+      }, 350)
+    }
+  }
   useEffect(() => {
     let frame = 0
     let last: PointerEvent | null = null
     const move = (ev: PointerEvent) => {
+      const pt = pendingTouch.current
+      // The finger moved before the hold: it's a scroll (or a swipe), not a drag.
+      if (pt && Math.abs(ev.clientX - pt.x) + Math.abs(ev.clientY - pt.y) > 8) {
+        clearTimeout(pt.timer)
+        pendingTouch.current = null
+      }
       last = ev
       if (frame) return
       frame = requestAnimationFrame(() => {
@@ -352,7 +423,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       const day = col.dataset.day!
       const m = minuteAt(e.clientY, col)
       if (d.kind === 'move') {
-        const start = Math.max(START_H * 60, Math.min(END_H * 60 - d.len, m - d.offset))
+        const start = Math.max(startH * 60, Math.min(endH * 60 - d.len, m - d.offset))
         put({ day, start, end: start + d.len, title: d.item.title, color: d.item.color, key: d.item.key })
       } else if (d.kind === 'resize') {
         put({ day: d.item.day, start: d.item.start, end: Math.max(d.item.start + 15, m), title: d.item.title, color: d.item.color, key: d.item.key })
@@ -361,6 +432,15 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       }
     }
     const up = (pe: PointerEvent) => {
+      // A quick tap on touch (no hold): open it / start a new event there.
+      const pt = pendingTouch.current
+      if (pt) {
+        clearTimeout(pt.timer)
+        pendingTouch.current = null
+        if (pt.d.kind === 'create') setDraft({ day: pt.d.day, start: pt.d.from, end: Math.min(24 * 60, pt.d.from + 50) })
+        else setEditing(pt.d.item)
+        return
+      }
       const upAt = { x: pe.clientX, y: pe.clientY }
       if (frame) cancelAnimationFrame(frame)
       frame = 0
@@ -384,14 +464,31 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       if (d.kind === 'create') setDraft({ day: g.day, start: g.start, end: g.end })
       else if (g.day !== d.item.day || g.start !== d.item.start || g.end !== d.item.end) void commitRef.current(d.item, g.day, g.start, d.kind === 'resize' ? g.end : g.start + (d.item.end - d.item.start))
     }
+    // The browser took the gesture (a scroll) or the touch was cancelled: drop the drag cleanly.
+    const cancel = () => {
+      if (pendingTouch.current) clearTimeout(pendingTouch.current.timer)
+      pendingTouch.current = null
+      drag.current = null
+      last = null
+      ghostRef.current = null
+      setGhost(null)
+    }
+    // While dragging with a finger, the page must not scroll under it.
+    const noScroll = (ev: TouchEvent) => {
+      if (drag.current) ev.preventDefault()
+    }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('touchmove', noScroll, { passive: false })
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('touchmove', noScroll)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hourPx])
+  }, [hourPx, startH, endH])
 
   const startItemDrag = (e: React.PointerEvent, it: Item, resize = false) => {
     if (e.button !== 0) return
@@ -400,13 +497,102 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     if (!col) return
     const canMove = it.kind === 'task' || (connected && !!life.google && writable(it.event!.calendarId))
     if (!canMove) return setEditing(it)
-    drag.current = resize ? { kind: 'resize', item: it, x0: e.clientX, y0: e.clientY, moved: false } : { kind: 'move', item: it, offset: minuteAt(e.clientY, col) - it.start, len: it.end - it.start, x0: e.clientX, y0: e.clientY, moved: false }
+    beginDrag(resize ? { kind: 'resize', item: it, x0: e.clientX, y0: e.clientY, moved: false } : { kind: 'move', item: it, offset: minuteAt(e.clientY, col) - it.start, len: it.end - it.start, x0: e.clientX, y0: e.clientY, moved: false }, e)
   }
   const startCreate = (e: React.PointerEvent, day: string) => {
-    if (e.button !== 0 || !connected || (e.target as HTMLElement).closest('.cal-item, .cal-draft')) return
+    if (e.button !== 0 || (e.target as HTMLElement).closest('.cal-item, .cal-draft')) return
+    // A task picked from "To schedule" (M4): this tap books it here.
+    if (armed) {
+      const t = armed
+      setArmed(null)
+      return void block(t, day, minuteAt(e.clientY, e.currentTarget as HTMLElement))
+    }
+    if (!connected) return
     setEditing(null)
-    drag.current = { kind: 'create', day, from: minuteAt(e.clientY, e.currentTarget as HTMLElement), x0: e.clientX, y0: e.clientY, moved: false }
+    beginDrag({ kind: 'create', day, from: minuteAt(e.clientY, e.currentTarget as HTMLElement), x0: e.clientX, y0: e.clientY, moved: false }, e)
   }
+  /** A new event at the next free half hour today (M5, and the N key). */
+  const newAtNextSlot = () => {
+    const d = new Date()
+    const m = Math.ceil((d.getHours() * 60 + d.getMinutes() + 5) / 30) * 30
+    const taken = items.filter((x) => x.day === today)
+    let at = Math.min(m, 23 * 60)
+    while (taken.some((x) => x.start < at + 30 && x.end > at) && at < 23 * 60) at += 30
+    if (view === 'month' || view === 'agenda') setView('day')
+    setAnchor(today)
+    setDraft({ day: today, start: at, end: Math.min(24 * 60, at + 50) })
+  }
+  const [armed, setArmed] = useState<TodoTask | null>(null)
+
+  // ---- Zoom by Ctrl+scroll / pinch (C2), swipe days (M2), keys (D2) --------
+  const pxRef = useRef(hourPx)
+  pxRef.current = hourPx
+  const goRef = useRef<(dir: number) => void>(() => {})
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  /** Zoom to `next` px an hour, keeping the hour under `y` (px from the scroll box top) in place. */
+  const zoomAt = (next: number, y: number) => {
+    const el = gridRef.current
+    const px = pxRef.current
+    const n = Math.max(PX_MIN, Math.min(PX_MAX, next))
+    if (!el || n === px) return
+    const hourAt = (el.scrollTop + y) / px
+    setHourPx(n)
+    requestAnimationFrame(() => {
+      if (gridRef.current) gridRef.current.scrollTop = hourAt * n - y
+    })
+  }
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      zoomAt(pxRef.current * (e.deltaY < 0 ? 1.08 : 1 / 1.08), e.clientY - el.getBoundingClientRect().top)
+    }
+    // Two fingers: pinch to zoom. One finger, quick and sideways: the next/previous days.
+    let pinch: { d: number; px: number } | null = null
+    let swipe: { x: number; y: number; t: number } | null = null
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const tstart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinch = { d: dist(e.touches), px: pxRef.current }
+        swipe = null
+      } else if (e.touches.length === 1) swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() }
+    }
+    const tmove = (e: TouchEvent) => {
+      if (pinch && e.touches.length === 2) {
+        e.preventDefault()
+        const mid = (e.touches[0].clientY + e.touches[1].clientY) / 2 - el.getBoundingClientRect().top
+        zoomAt(pinch.px * (dist(e.touches) / pinch.d), mid)
+      }
+    }
+    const tend = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinch = null
+      const t = e.changedTouches[0]
+      if (swipe && t && !drag.current && Date.now() - swipe.t < 600) {
+        const dx = t.clientX - swipe.x
+        const dy = t.clientY - swipe.y
+        if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) goRef.current(dx < 0 ? 1 : -1)
+      }
+      swipe = null
+    }
+    el.addEventListener('wheel', wheel, { passive: false })
+    el.addEventListener('touchstart', tstart, { passive: true })
+    el.addEventListener('touchmove', tmove, { passive: false })
+    el.addEventListener('touchend', tend)
+    return () => {
+      el.removeEventListener('wheel', wheel)
+      el.removeEventListener('touchstart', tstart)
+      el.removeEventListener('touchmove', tmove)
+      el.removeEventListener('touchend', tend)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, status])
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keyRef.current(e)
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [])
 
   // ---- Templates ----------------------------------------------------------
   const templateDay = view === 'day' ? anchor : today
@@ -437,13 +623,32 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       </section>
     )
 
-  const step = view === 'day' ? 1 : view === '3day' ? 3 : view === 'week' ? 7 : 14
+  const step = view === 'day' ? 1 : view === '3day' ? 3 : view === 'ndays' ? Math.max(1, prefs.days) : view === 'week' || view === 'workweek' ? 7 : 14
   const go = (dir: number) => {
     if (view === 'month') {
       const d = new Date(`${anchor.slice(0, 7)}-15T12:00:00`)
       d.setMonth(d.getMonth() + dir)
       setAnchor(ymd(d))
     } else setAnchor(addDays(anchor, dir * step))
+  }
+  goRef.current = go
+  // Keys (D2): T today, ←/→, D/W/M/A views, +/− zoom, N new event, G go to date. Not while typing or in a sheet.
+  keyRef.current = (e: KeyboardEvent) => {
+    const t = e.target as HTMLElement | null
+    if (e.ctrlKey || e.metaKey || e.altKey || editing || draft || (t && (t.closest('input, textarea, select, [contenteditable="true"]') || t.isContentEditable))) return
+    const k = e.key
+    const hit = () => e.preventDefault()
+    if (k === 't' || k === 'T') (hit(), setAnchor(today))
+    else if (k === 'ArrowLeft') (hit(), go(-1))
+    else if (k === 'ArrowRight') (hit(), go(1))
+    else if (k === 'd' || k === 'D') (hit(), setView('day'))
+    else if (k === 'w' || k === 'W') (hit(), setView('week'))
+    else if (k === 'm' || k === 'M') (hit(), setView('month'))
+    else if (k === 'a' || k === 'A') (hit(), setView('agenda'))
+    else if (k === '+' || k === '=') (hit(), setHourPx(hourPx * 1.2))
+    else if (k === '-' || k === '_') (hit(), setHourPx(hourPx / 1.2))
+    else if (k === 'n' || k === 'N') (hit(), newAtNextSlot())
+    else if (k === 'g' || k === 'G') (hit(), setMenu('date'))
   }
   const fmt = (d: string, o: Intl.DateTimeFormatOptions) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', o)
   const title =
@@ -454,7 +659,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         : `${fmt(days[0], { day: 'numeric', month: 'short' })} – ${fmt(days[days.length - 1], { day: 'numeric', month: 'short', year: 'numeric' })}`
   const nowMin = now.getHours() * 60 + now.getMinutes()
   const now2 = clock
-  const gridDays = view === 'day' || view === '3day' || view === 'week' ? days : []
+  const gridDays = view === 'day' || view === '3day' || view === 'ndays' || view === 'workweek' || view === 'week' ? days : []
   const closeMenus = (e: React.PointerEvent) => {
     if (menu && !(e.target as HTMLElement).closest('.cal-pop-wrap')) setMenu(null)
     if (moreOpen && !(e.target as HTMLElement).closest('.cal-more-pop, .cal-more')) setMoreOpen(null)
@@ -474,7 +679,14 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
           <button className="btn small ghost" onClick={() => go(1)} aria-label="Forward">
             ›
           </button>
-          <h2 className="cal-title">{title}</h2>
+          <div className="cal-pop-wrap">
+            <button className="cal-title" onClick={() => setMenu(menu === 'date' ? null : 'date')} title="Pick a date (G)" aria-haspopup="dialog">
+              {title}
+              {prefs.weekNumbers && view !== 'month' && view !== 'agenda' && <small className="cal-wk">W{isoWeek(days[0])}</small>}
+              <span aria-hidden> ▾</span>
+            </button>
+            {menu === 'date' && <DatePop value={anchor} today={today} weekStart={prefs.weekStart} onPick={(d) => (setAnchor(d), setMenu(null))} />}
+          </div>
           {connected && (
             <button className={`cal-sync ${sync.error ? 'bad' : sync.busy ? 'busy' : 'ok'}`} onClick={() => void load()} title={sync.error ? `Google: ${sync.error}. Click to try again.` : 'Checks Google Calendar every 15 seconds. Click to check now.'}>
               <i />
@@ -493,6 +705,8 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
               [
                 ['day', 'Day'],
                 ['3day', '3 days'],
+                ...(prefs.days !== 3 && prefs.days !== 1 && prefs.days !== 7 ? ([['ndays', `${prefs.days} days`]] as const) : []),
+                ['workweek', 'Mon–Fri'],
                 ['week', 'Week'],
                 ['month', 'Month'],
                 ['agenda', 'Agenda']
@@ -505,14 +719,23 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
           </div>
           {gridDays.length > 0 && (
             <div className="cal-zoom" aria-label="Zoom">
-              <button className="btn small ghost" onClick={() => setZoom(zoom - 1)} disabled={zoom === 0} title="Zoom out">
+              <button className="btn small ghost" onClick={() => setHourPx(hourPx / 1.2)} disabled={hourPx <= PX_MIN} title="Zoom out (−, or Ctrl+scroll)">
                 −
               </button>
-              <button className="btn small ghost" onClick={() => setZoom(zoom + 1)} disabled={zoom === ZOOMS.length - 1} title="Zoom in">
+              <button className="btn small ghost cal-zoom-n" onClick={() => setHourPx(PX_DEFAULT)} title="Back to the normal size">
+                {Math.round((hourPx / PX_DEFAULT) * 100)}%
+              </button>
+              <button className="btn small ghost" onClick={() => setHourPx(hourPx * 1.2)} disabled={hourPx >= PX_MAX} title="Zoom in (+, or Ctrl+scroll / pinch)">
                 +
               </button>
             </div>
           )}
+          <div className="cal-pop-wrap">
+            <button className={`btn small ${menu === 'view' ? 'on' : 'ghost'}`} onClick={() => setMenu(menu === 'view' ? null : 'view')} title="Hours, days shown, week start">
+              <Icon name="gear" size={13} /> View
+            </button>
+            {menu === 'view' && <ViewPop prefs={prefs} onChange={setPrefs} onView={setView} />}
+          </div>
           {connected && (
             <div className="cal-pop-wrap">
               <button className={`btn small ${menu === 'cals' ? 'on' : 'ghost'}`} onClick={() => setMenu(menu === 'cals' ? null : 'cals')}>
@@ -563,12 +786,23 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       </section>
 
       <div className="cal-body">
+        {!sideOpen ? (
+          <button className="card cal-side-rail" onClick={() => setSideOpen(true)} title="Show the tasks to schedule" aria-label="Show the tasks to schedule">
+            <span>To schedule</span>
+            <b>{toSchedule.length}</b>
+          </button>
+        ) : (
         <aside className="card cal-side">
-          <h3>To schedule</h3>
-          <p className="hint small">Drag a task onto a time for a 50-minute block, or onto a block to add it to that block's checklist. The time goes to Todoist too.</p>
+          <div className="cal-side-head">
+            <h3>To schedule</h3>
+            <button className="btn small ghost" onClick={() => setSideOpen(false)} title="Fold away (more room for the calendar)" aria-label="Fold the list away">
+              ‹
+            </button>
+          </div>
+          <p className="hint small">{armed ? `Now tap a time for "${armed.content}" (tap it again to cancel).` : 'Drag a task onto a time (or tap it, then tap a time) for a block; onto a block to add it to its checklist. The time goes to Todoist too.'}</p>
           <ul className="cal-todo">
             {toSchedule.map((t) => (
-              <li key={t.id} draggable onDragStart={(e) => e.dataTransfer.setData('text/task', t.id)} style={{ ['--c' as string]: areaColor(t) }} title={t.content}>
+              <li key={t.id} className={armed?.id === t.id ? 'armed' : ''} draggable onDragStart={(e) => e.dataTransfer.setData('text/task', t.id)} onClick={() => setArmed(armed?.id === t.id ? null : t)} style={{ ['--c' as string]: areaColor(t) }} title={t.content}>
                 <i />
                 <span>{t.content}</span>
                 {t.due && t.due < today && <em>late</em>}
@@ -577,6 +811,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
             {!toSchedule.length && <li className="hint">Nothing waiting.</li>}
           </ul>
         </aside>
+        )}
 
         <section className="card cal-main">
           {view === 'month' && (
@@ -628,18 +863,23 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                 ))}
               </div>
               <div className="cal-scroll" ref={gridRef}>
-                <div className="cal-grid" style={{ gridTemplateColumns: cols, height: (END_H - START_H) * hourPx }}>
+                <div className="cal-grid" style={{ gridTemplateColumns: cols, height: (endH - startH) * hourPx, ['--hourPx' as string]: `${hourPx}px` }}>
                   <div className="cal-hours">
-                    {Array.from({ length: END_H - START_H }, (_, i) => (
-                      <span key={i} style={{ top: i * hourPx }}>
-                        {pad(START_H + i)}:00
+                    {Array.from({ length: endH - startH }, (_, i) => (
+                      <span key={i} className={startH + i === now.getHours() && gridDays.includes(today) ? 'cur' : ''} style={{ top: i * hourPx }}>
+                        {pad(startH + i)}:00
                       </span>
                     ))}
+                    {gridDays.includes(today) && nowMin >= startH * 60 && nowMin < endH * 60 && (
+                      <span className="cal-now-t" style={{ top: ((nowMin - startH * 60) / 60) * hourPx }}>
+                        {hmOf(nowMin)}
+                      </span>
+                    )}
                   </div>
                   {gridDays.map((d) => {
-                    const lay = layoutDay(items.filter((x) => x.day === d && x.end > START_H * 60))
+                    const lay = layoutDay(items.filter((x) => x.day === d && x.end > startH * 60))
                     const bands = lay.placed.filter((p) => p.backdrop).map((p) => p.it)
-                    const yOf = (m: number) => ((Math.max(m, START_H * 60) - START_H * 60) / 60) * hourPx
+                    const yOf = (m: number) => ((Math.max(m, startH * 60) - startH * 60) / 60) * hourPx
                     return (
                       <div
                         key={d}
@@ -653,13 +893,18 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                           if (t) void block(t, d, minuteAt(e.clientY, e.currentTarget))
                         }}
                       >
-                        {Array.from({ length: END_H - START_H }, (_, i) => (
+                        {/* Outside work hours: shaded (F1). */}
+                        {prefs.workFrom > startH && <i className="cal-off" style={{ top: 0, height: (Math.min(prefs.workFrom, endH) - startH) * hourPx }} />}
+                        {prefs.workTo < endH && <i className="cal-off" style={{ top: (Math.max(prefs.workTo, startH) - startH) * hourPx, height: (endH - Math.max(prefs.workTo, startH)) * hourPx }} />}
+                        {Array.from({ length: endH - startH }, (_, i) => (
                           <i key={i} className="cal-line" style={{ top: i * hourPx }} />
                         ))}
-                        {d === today && nowMin >= START_H * 60 && <i className="cal-now" style={{ top: ((nowMin - START_H * 60) / 60) * hourPx }} />}
+                        {/* Half-hour lines when there's room (C5). */}
+                        {hourPx >= 44 && Array.from({ length: endH - startH }, (_, i) => <i key={`h${i}`} className="cal-line cal-hl" style={{ top: i * hourPx + hourPx / 2 }} />)}
+                        {d === today && nowMin >= startH * 60 && <i className="cal-now" style={{ top: ((nowMin - startH * 60) / 60) * hourPx }} />}
                         {lay.placed.map(({ it, left, width, backdrop }) => {
                           const top = yOf(it.start)
-                          const h = Math.max(22, ((Math.min(it.end, END_H * 60) - Math.max(it.start, START_H * 60)) / 60) * hourPx - 2)
+                          const h = Math.max(22, ((Math.min(it.end, endH * 60) - Math.max(it.start, startH * 60)) / 60) * hourPx - 2)
                           const tiny = h < 34
                           // Events inside a long "window" sit a little in, so the window's name stays visible.
                           const inset = !backdrop && bands.some((b) => b.start < it.end && it.start < b.end) ? 12 : 0
@@ -743,14 +988,14 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                           </div>
                         )}
                         {ghost?.day === d && (
-                          <div className="cal-ghost" style={{ top: ((ghost.start - START_H * 60) / 60) * hourPx, height: Math.max(14, ((ghost.end - ghost.start) / 60) * hourPx - 2), ['--c' as string]: ghost.color }}>
+                          <div className="cal-ghost" style={{ top: ((ghost.start - startH * 60) / 60) * hourPx, height: Math.max(14, ((ghost.end - ghost.start) / 60) * hourPx - 2), ['--c' as string]: ghost.color }}>
                             <b>{ghost.title}</b>
                             <small>
                               {hmOf(ghost.start)}–{hmOf(ghost.end)}
                             </small>
                           </div>
                         )}
-                        {draft?.day === d && <DraftForm top={((draft.start - START_H * 60) / 60) * hourPx} start={draft.start} end={draft.end} day={d} onCancel={() => setDraft(null)} onSave={(t, s, e, r) => createEvent(t, d, s, e, r)} />}
+                        {draft?.day === d && <DraftForm top={((draft.start - startH * 60) / 60) * hourPx} start={draft.start} end={draft.end} day={d} onCancel={() => setDraft(null)} onSave={(t, s, e, r) => createEvent(t, d, s, e, r)} />}
                       </div>
                     )
                   })}
@@ -762,6 +1007,11 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         </section>
       </div>
 
+      {connected && (
+        <button className="cal-fab" onClick={newAtNextSlot} aria-label="New event at the next free half hour" title="New event (N)">
+          +
+        </button>
+      )}
       {editing && (
         <EditSheet
           item={editing}
@@ -1143,6 +1393,118 @@ function TemplatesPop({ templates, day, onApply, onSave, onRemove }: { templates
         <button className="btn small primary" disabled={!name.trim()}>
           Save
         </button>
+      </form>
+    </div>
+  )
+}
+
+/** View settings (F1–F3): the day's hours (or fit to events), work hours, how many days, week start. */
+function ViewPop({ prefs, onChange, onView }: { prefs: CalPrefs; onChange: (p: Partial<CalPrefs>) => void; onView: (v: View) => void }) {
+  const hours = Array.from({ length: 25 }, (_, i) => i)
+  const sel = (v: number, set: (n: number) => void, from: number, to: number, label: string) => (
+    <select value={v} onChange={(e) => set(Number(e.target.value))} aria-label={label}>
+      {hours.filter((h) => h >= from && h <= to).map((h) => (
+        <option key={h} value={h}>
+          {pad(h % 24)}:00{h === 24 ? ' (midnight)' : ''}
+        </option>
+      ))}
+    </select>
+  )
+  return (
+    <div className="cal-pop cal-viewpop">
+      <div className="cal-pop-row">
+        <span>Day shows</span>
+        {sel(prefs.startH, (n) => onChange({ startH: n }), 0, 22, 'Day starts')}
+        <span>to</span>
+        {sel(prefs.endH, (n) => onChange({ endH: n }), prefs.startH + 1, 24, 'Day ends')}
+      </div>
+      <label className="cal-pop-row cal-check">
+        <input type="checkbox" checked={prefs.fit} onChange={(e) => onChange({ fit: e.target.checked })} />
+        <span>Stretch to fit earlier or later events</span>
+      </label>
+      <div className="cal-pop-row">
+        <span>Work hours</span>
+        {sel(prefs.workFrom, (n) => onChange({ workFrom: n }), 0, 23, 'Work from')}
+        <span>to</span>
+        {sel(prefs.workTo, (n) => onChange({ workTo: n }), prefs.workFrom + 1, 24, 'Work until')}
+      </div>
+      <p className="hint small">Hours outside work hours are shaded.</p>
+      <div className="cal-pop-row">
+        <span>Days view</span>
+        <div className="seg">
+          {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={prefs.days === n ? 'on' : ''}
+              onClick={() => {
+                onChange({ days: n })
+                onView(n === 1 ? 'day' : n === 3 ? '3day' : n === 7 ? 'week' : 'ndays')
+              }}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="cal-pop-row">
+        <span>Week starts</span>
+        <div className="seg">
+          {([[1, 'Mon'], [0, 'Sun'], [6, 'Sat']] as const).map(([v, l]) => (
+            <button key={v} type="button" className={prefs.weekStart === v ? 'on' : ''} onClick={() => onChange({ weekStart: v })}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      <label className="cal-pop-row cal-check">
+        <input type="checkbox" checked={prefs.weekNumbers} onChange={(e) => onChange({ weekNumbers: e.target.checked })} />
+        <span>Week numbers</span>
+      </label>
+      <p className="hint small">Keys: T today · ← → back/forward · D W M A views · + − zoom · N new · G go to date</p>
+    </div>
+  )
+}
+
+/** A small month to pick a day from (D1), and a box to type one. */
+function DatePop({ value, today, weekStart, onPick }: { value: string; today: string; weekStart: number; onPick: (d: string) => void }) {
+  const [month, setMonth] = useState(value.slice(0, 7))
+  const [typed, setTyped] = useState(value)
+  const first = weekStartOf(`${month}-01`, weekStart)
+  const cells = Array.from({ length: 42 }, (_, i) => addDays(first, i))
+  const shift = (n: number) => {
+    const d = new Date(`${month}-15T12:00:00`)
+    d.setMonth(d.getMonth() + n)
+    setMonth(ymd(d).slice(0, 7))
+  }
+  const names = Array.from({ length: 7 }, (_, i) => new Date(`${addDays(first, i)}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'narrow' }))
+  return (
+    <div className="cal-pop cal-datepop" role="dialog" aria-label="Pick a date">
+      <div className="cal-dp-head">
+        <button type="button" className="btn small ghost" onClick={() => shift(-1)} aria-label="Previous month">‹</button>
+        <b>{new Date(`${month}-15T12:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</b>
+        <button type="button" className="btn small ghost" onClick={() => shift(1)} aria-label="Next month">›</button>
+      </div>
+      <div className="cal-dp-grid">
+        {names.map((n, i) => (
+          <small key={i}>{n}</small>
+        ))}
+        {cells.map((d) => (
+          <button key={d} type="button" className={`${d.slice(0, 7) !== month ? 'out' : ''} ${d === today ? 'today' : ''} ${d === value ? 'on' : ''}`} onClick={() => onPick(d)}>
+            {Number(d.slice(8))}
+          </button>
+        ))}
+      </div>
+      <form
+        className="cal-dp-go"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (/^\d{4}-\d{2}-\d{2}$/.test(typed)) onPick(typed)
+        }}
+      >
+        <input id="cal-go" type="date" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label="Go to date" />
+        <button className="btn small primary">Go</button>
+        <button type="button" className="btn small" onClick={() => onPick(today)}>Today</button>
       </form>
     </div>
   )
