@@ -130,6 +130,55 @@ try {
     const n = await pg.locator('.cal-item').count()
     if (n < 3) throw new Error(`only ${n} events on the calendar`)
   })
+  // IP6: the desktop island on its own page, with a stand-in for the desktop
+  // bridge: the pill, a click opens the panel, Escape closes it, hover peeks,
+  // a right click opens the quiet menu, a reminder drops down.
+  await step('Desktop island: pill → click → panel → Escape → pill, hover peeks, reminders drop down', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: { text: 'Nice work this morning', at: new Date(now - 60_000).toISOString(), face: '🙂' }, unread: 0, busy: false, steps: [] },
+        running: { subject: 'Write the essay', startedAt: now - 5 * 60_000, endsAt: now + 20 * 60_000 },
+        now: null, next: { title: 'Gym', start: now + 2 * 3600_000, end: now + 3 * 3600_000 },
+        mustdos: [{ i: 0, text: 'Call the bank', done: false }], water: { ml: 500, target: 2000 }, reps: [], alert: null
+      }
+      window.__island = { hot: 0, send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => { window.__island.hot++ },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
+    if (!(await ip.evaluate(() => window.__island.hot > 0))) throw new Error('the island never reported its click area')
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel', { timeout: 5000 })
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    await ip.waitForSelector('.di-pill', { timeout: 5000 })
+    // The mouse rests on it (the desktop says so): it peeks, and goes back when the mouse leaves.
+    await ip.evaluate(() => window.__island.send('hover', true))
+    await ip.waitForSelector('.di-peek', { timeout: 3000 })
+    await ip.evaluate(() => window.__island.send('hover', false))
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
+    // Right click: the quiet menu (the default).
+    await ip.click('.di-pill', { button: 'right' })
+    await ip.waitForSelector('.di-quiet', { timeout: 5000 })
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    // A reminder drops down by itself, and Escape puts it away.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: { id: 'water:1', kind: 'water', title: 'Water', text: 'A glass of water?', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
+    await ip.waitForSelector('.di-peek.alert', { timeout: 5000 })
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-peek.alert', { state: 'detached', timeout: 5000 })
+    await ip.context().close()
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

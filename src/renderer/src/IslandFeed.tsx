@@ -19,6 +19,7 @@ import { capture } from './capture'
 import { parseCapture } from '@core/capture'
 import { useLive } from './live'
 import { logIsland } from './islandLog'
+import { startIslandThemeSync } from './islandTheme'
 import { todoistErrorText } from '@core/islandErrors'
 import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
@@ -772,6 +773,8 @@ export function IslandFeed() {
   actRef.current = act
   useEffect(() => {
     if (!desk?.islandState) return
+    // IP4: the island can match the app's colours.
+    startIslandThemeSync()
     // IPC listeners can't be removed through the bridge: add them once per window.
     if (!listening) {
       listening = true

@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
+import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
 import { createBackups } from './backups'
 import { createVault } from './vault'
 import { createPc } from './pc'
@@ -245,7 +246,19 @@ if (firstCopy) void app.whenReady().then(async () => {
     island.quietUntil()
       ? { label: `Island quiet until ${new Date(island.quietUntil()).toTimeString().slice(0, 5)} · Wake now`, click: () => { island.setQuiet(null); tray.setContextMenu(menu()) } }
       : { label: 'Quiet the island for…', submenu: ([[30, '30 minutes'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'Until tomorrow 06:00']] as const).map(([c, label]) => ({ label, click: () => { island.setQuiet(c); tray.setContextMenu(menu()) } })) },
-    { label: 'Island position', submenu: ([['top', 'Top of the screen'], ['left', 'Left side'], ['right', 'Right side'], ['free', 'Floating (where you drop it)']] as const).map(([p, label]) => ({ label, type: 'radio' as const, checked: island.placement() === p, click: () => { island.setPlacement(p); tray.setContextMenu(menu()) } })) },
+    // IF1: top left / center / right, docked on a side, or floating.
+    { label: 'Island position', submenu: PLACEMENTS.map((p) => ({ label: PLACEMENT_LABEL[p], type: 'radio' as const, checked: island.placement() === p, click: () => { island.setPlacement(p); tray.setContextMenu(menu()) } })) },
+    // IF2: which screen: the main one, one you pick, or it follows the mouse / the window you work in.
+    {
+      label: 'Island screen',
+      submenu: [
+        { label: 'The main screen', type: 'radio' as const, checked: island.monitor() === 'main', click: () => { island.setMonitor('main'); tray.setContextMenu(menu()) } },
+        { label: 'Follow the mouse', type: 'radio' as const, checked: island.monitor() === 'mouse', click: () => { island.setMonitor('mouse'); tray.setContextMenu(menu()) } },
+        { label: 'Follow the window you work in', type: 'radio' as const, checked: island.monitor() === 'window', click: () => { island.setMonitor('window'); tray.setContextMenu(menu()) } },
+        { type: 'separator' as const },
+        ...island.displays().map((d) => ({ label: d.label, type: 'radio' as const, checked: island.monitor() === 'fixed' && d.current, click: () => { island.setMonitor('fixed', d.id); tray.setContextMenu(menu()) } }))
+      ]
+    },
     { label: 'Reset island position', click: () => { island.resetPosition(); tray.setContextMenu(menu()) } },
     { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); tray.setContextMenu(menu()) } },
     { type: 'separator' },

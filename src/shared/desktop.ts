@@ -1,11 +1,15 @@
 import type { UpdateStatus } from './api'
 import type { IslandAck, IslandAction, IslandPrefs, IslandSnapshot } from '../core/islandModel'
 import type { BackupStatus, BackupWhere } from '../desktop/backups'
-import type { IslandDeskPrefs } from '../desktop/islandWin'
+import type { IslandDeskPrefs, Placement } from '../desktop/islandWin'
 export type { IslandDeskPrefs } from '../desktop/islandWin'
 
-/** Where the island lives: top of the screen, docked on a side, or floating. */
-export type IslandPlacement = 'top' | 'left' | 'right' | 'free'
+/** Where the island lives: top center / left / right, docked on a side, or floating (IF1). */
+export type IslandPlacement = Placement
+/** The app's colours, for the island's "Match the app" look (IP4). */
+export interface IslandTheme { dark: boolean; accent: string; accentText: string; surface: string; text: string }
+/** Your island settings as the app window sees them: plus where it is and which screen. */
+export type IslandAllPrefs = IslandPrefs & Partial<IslandDeskPrefs> & { place?: IslandPlacement; displayId?: number }
 
 export interface DesktopApi {
   load(): Promise<Uint8Array | null>
@@ -75,8 +79,14 @@ export interface DesktopApi {
   /** Island window: give it the keyboard (typing to Ben). */
   islandFocus?(): void
   /** App window: your island settings (Settings → Desktop island). */
-  getIslandPrefs?(): Promise<(IslandPrefs & Partial<IslandDeskPrefs>) | null>
-  setIslandPrefs?(p: Partial<IslandPrefs & IslandDeskPrefs>): Promise<{ prefs: IslandPrefs & Partial<IslandDeskPrefs>; shortcutOk: boolean } | null>
+  getIslandPrefs?(): Promise<IslandAllPrefs | null>
+  setIslandPrefs?(p: Partial<IslandPrefs & IslandDeskPrefs> & { place?: IslandPlacement; displayId?: number }): Promise<{ prefs: IslandAllPrefs; shortcutOk: boolean } | null>
+  /** App window: the screens to pick from (IF2). */
+  islandDisplays?(): Promise<{ id: number; label: string; primary: boolean; current: boolean }[]>
+  /** App window: programs seen in front lately, to pick the ones it hides over (IF6). */
+  islandRecentApps?(): Promise<string[]>
+  /** App window: its colours, for the island's "Match the app" look (IP4). */
+  islandTheme?(t: IslandTheme): void
   /** App window: shortcuts another app already uses (Settings shows "taken by another app"). */
   islandShortcutStatus?(): Promise<{ failed: { what: string; accelerator: string }[] } | null>
   /** App window: a shortcut could not be registered (another app has it). `what`: island, quiet, capture or voice. */
@@ -84,7 +94,7 @@ export interface DesktopApi {
   /** The island log kept by the desktop (its own lines and the island page's). */
   islandGetLog?(): Promise<{ at: string; from: 'main' | 'island'; line: string }[]>
   /** Island window: settings changed. */
-  onIslandPrefs?(cb: (p: IslandPrefs & Partial<IslandDeskPrefs> & { scale?: number }) => void): void
+  onIslandPrefs?(cb: (p: IslandPrefs & Partial<IslandDeskPrefs> & { scale?: number; theme?: IslandTheme | null }) => void): void
   /** App window: open a page when the island asks. */
   onNavigate?(cb: (page: string) => void): void
   /** You came back after a long time away from the PC (asleep?): when you were last active, and when you came back. */

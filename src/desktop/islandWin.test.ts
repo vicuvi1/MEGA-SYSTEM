@@ -69,8 +69,8 @@ describe('shortcuts', () => {
     expect(migrateShortcuts({ shortcut: 'Control+Alt+Space', quietShortcut: 'Control+Alt+Q' }, 2)).toEqual({ shortcut: 'Control+Alt+Space', quietShortcut: 'Control+Alt+Q' })
   })
   it('cleans the PC-only settings', () => {
-    expect(cleanDeskPrefs(null)).toEqual({ fullscreen: 'hide', captureShortcut: 'Alt+Shift+N', voiceShortcut: 'Alt+Shift+B' })
-    expect(cleanDeskPrefs({ fullscreen: 'dot', captureShortcut: '', voiceShortcut: 'nope' })).toEqual({ fullscreen: 'dot', captureShortcut: '', voiceShortcut: 'Alt+Shift+B' })
+    expect(cleanDeskPrefs(null)).toMatchObject({ fullscreen: 'hide', captureShortcut: 'Alt+Shift+N', voiceShortcut: 'Alt+Shift+B' })
+    expect(cleanDeskPrefs({ fullscreen: 'dot', captureShortcut: '', voiceShortcut: 'nope' })).toMatchObject({ fullscreen: 'dot', captureShortcut: '', voiceShortcut: 'Alt+Shift+B' })
   })
 })
 

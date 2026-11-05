@@ -2,6 +2,7 @@
 // (Windows), separate from the app window. The app window (running hidden in
 // the tray) sends it a snapshot of your moment; the island sends back taps.
 // This file is the pure part: what it shows, and when it drops down.
+import { normalizeAccelerator } from './islandKeys'
 
 export interface IslandBlock {
   title: string
@@ -57,6 +58,8 @@ export interface IslandAlert {
   text: string
   face?: string
   actions: { label: string; action: IslandAction; primary?: boolean }[]
+  /** A calendar meeting (a call link or other people) starting: its own rule in Settings (IF5). */
+  meeting?: boolean
 }
 
 export interface IslandSnapshot {
@@ -189,6 +192,7 @@ export function pickAlert(a: AlertInput): IslandAlert | null {
         return {
           id,
           kind: 'block',
+          ...(starting.call ? { meeting: true } : {}),
           title: 'Starting now',
           text: starting.title,
           actions: [
@@ -263,7 +267,8 @@ export interface IslandPrefs {
   size: 'compact' | 'normal' | 'large'
   /** Background opacity, 0.55 (see-through) … 1 (solid). */
   opacity: number
-  look: 'black' | 'glass' | 'mood'
+  /** 'app': the app's own colours, light or dark (IP4). */
+  look: 'black' | 'glass' | 'mood' | 'app'
   /** The open card's sections, in your order. */
   sections: { id: IslandSection; on: boolean }[]
   /** A soft chime when it drops down by itself. */
@@ -276,20 +281,59 @@ export interface IslandPrefs {
   callMode: 'hide' | 'dot' | 'normal'
   /** The shortcut that turns quiet mode on and off (Q6), or ''. */
   quietShortcut: string
-  /** Each kind of reminder: shown or not, with or without its sound (P4). */
-  kinds: Record<AlertKindPref, { on: boolean; sound: boolean }>
+  /** Each kind of reminder: drops down, only a dot, or never (IF5), with or without its sound (P4). `on` is false for "never". */
+  kinds: Record<AlertKindPref, { on: boolean; sound: boolean; show?: AlertRule }>
   /** Sound volume, 0 … 1 (A8). */
   volume: number
+  // ---- Make it yours (IF3–IF11, IP3) ----
+  /** What the pill may show, in your order (IF4). */
+  pillOrder: { id: PillItem; on: boolean }[]
+  /** Open the panel this many minutes before a meeting (0 = don't) (IF5). */
+  meetingOpenMin: number
+  /** Peek when the mouse rests on it, or only open on a click (IF7). */
+  openOn: 'hover' | 'click'
+  /** How long the mouse rests before it peeks (ms) (IF7). */
+  hoverMs: number
+  /** What a left, middle and right click on the pill do (IF8). */
+  clicks: { left: ClickAction; middle: ClickAction; right: ClickAction }
+  /** Your quick chips: water amounts (ml), rep counts and focus lengths (min) (IF10). */
+  chips: { water: number[]; reps: number[]; focus: number[] }
+  /** How long a reminder peeks (s), the least time between two (min), and how long the panel stays after the mouse leaves (s) (IF11). */
+  peekSec: number
+  gapMin: number
+  leaveSec: number
+  /** Tuck away after this many minutes with nothing live (0 = never), as a tiny dot or faded (IP3). */
+  idleMin: number
+  idleLook: 'dot' | 'fade'
+  /** Sizes in CSS px before the size setting (IF3). */
+  pillHeight: number
+  peekWidth: number
+  panelWidth: number
 }
 
+/** peek: it drops down; dot: a dot only (it waits in the panel); never: not shown (IF5). */
+export type AlertRule = 'peek' | 'dot' | 'never'
+/** What a click on the pill does (IF8). */
+export type ClickAction = 'panel' | 'timer' | 'app' | 'quiet'
+export const CLICK_LABEL: Record<ClickAction, string> = { panel: 'Open the panel', timer: 'Start / stop the timer', app: 'Open Life System', quiet: 'Quiet menu' }
+/** What the pill can show (IF4). The streak flame is gone on purpose. */
+export type PillItem = 'timer' | 'now' | 'next' | 'ben' | 'bed' | 'water' | 'points' | 'mustdos' | 'tasks'
+export const PILL_LABEL: Record<PillItem, string> = { timer: 'Focus timer', now: 'What’s on now', next: 'What’s next', ben: 'Ben’s new message', bed: 'Bedtime', water: 'Water today', points: 'Points', mustdos: 'Must-dos left', tasks: 'Next Todoist task' }
+export const DEFAULT_PILL_ORDER: { id: PillItem; on: boolean }[] = (['timer', 'now', 'next', 'ben', 'bed', 'water', 'points', 'mustdos', 'tasks'] as PillItem[]).map((id) => ({ id, on: !['points', 'mustdos', 'tasks'].includes(id) }))
+/** The quick picks for "Tucks away" (seconds the panel stays after the mouse leaves). */
+export const HIDE_SEC: Record<'fast' | 'normal' | 'slow', number> = { fast: 1, normal: 2, slow: 4 }
+/** What the size sliders allow (CSS px before the size setting) (IF3). */
+export const SIZE_LIMITS = { pillHeight: [28, 56], peekWidth: [320, 560], panelWidth: [380, 640] } as const
+
 /** The reminder kinds you can turn on/off (P4). */
-export type AlertKindPref = 'water' | 'move' | 'eyes' | 'ben' | 'block' | 'bed' | 'morning' | 'highlight' | 'reward' | 'over'
-export const KIND_LABEL: Record<AlertKindPref, string> = { water: 'Water', move: 'Stretch breaks', eyes: 'Eye breaks (20-20-20)', ben: "Ben's messages", block: 'Blocks starting / ending', bed: 'Bedtime & wind-down', morning: 'Morning', highlight: 'Highlights', reward: 'Rewards', over: 'Focus time is up' }
+export type AlertKindPref = 'meeting' | 'block' | 'water' | 'move' | 'eyes' | 'ben' | 'bed' | 'morning' | 'highlight' | 'reward' | 'over'
+export const KIND_LABEL: Record<AlertKindPref, string> = { meeting: 'Meetings starting', water: 'Water', move: 'Stretch breaks', eyes: 'Eye breaks (20-20-20)', ben: "Ben's messages", block: 'Blocks starting / ending', bed: 'Bedtime & wind-down', morning: 'Morning', highlight: 'Highlights', reward: 'Rewards', over: 'Focus time is up' }
 // Not Ctrl+Alt+<key> by default: that's AltGr on many keyboards (@, ł…) (IS15).
 export const QUIET_SHORTCUTS = ['Alt+Shift+Q', 'Control+Shift+Q', 'Control+Alt+Q', ''] as const
 
-/** Which preference an alert kind falls under. */
-export function alertPref(kind: string): AlertKindPref | null {
+/** Which preference an alert kind falls under (a starting meeting has its own). */
+export function alertPref(kind: string, meeting = false): AlertKindPref | null {
+  if (meeting && kind === 'block') return 'meeting'
   if (kind === 'water') return 'water'
   if (kind === 'move') return 'move'
   if (kind === 'eyes') return 'eyes'
@@ -326,8 +370,22 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   shortcut: 'Control+Shift+Space',
   callMode: 'hide',
   quietShortcut: 'Alt+Shift+Q',
-  kinds: { water: { on: true, sound: true }, move: { on: true, sound: true }, eyes: { on: true, sound: true }, ben: { on: true, sound: true }, block: { on: true, sound: true }, bed: { on: true, sound: true }, morning: { on: true, sound: true }, highlight: { on: true, sound: false }, reward: { on: true, sound: true }, over: { on: true, sound: true } },
-  volume: 0.7
+  kinds: Object.fromEntries((['meeting', 'block', 'water', 'move', 'eyes', 'ben', 'bed', 'morning', 'highlight', 'reward', 'over'] as AlertKindPref[]).map((k) => [k, { on: true, sound: k !== 'highlight', show: 'peek' as AlertRule }])) as IslandPrefs['kinds'],
+  volume: 0.7,
+  pillOrder: DEFAULT_PILL_ORDER,
+  meetingOpenMin: 0,
+  openOn: 'hover',
+  hoverMs: 350,
+  clicks: { left: 'panel', middle: 'timer', right: 'quiet' },
+  chips: { water: [250, 500], reps: [10], focus: [25] },
+  peekSec: 5,
+  gapMin: 3,
+  leaveSec: 2,
+  idleMin: 0,
+  idleLook: 'dot',
+  pillHeight: 38,
+  peekWidth: 400,
+  panelWidth: 460
 }
 export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { compact: 0.88, normal: 1, large: 1.15 }
 export const HIDE_MS: Record<IslandPrefs['hide'], number> = { fast: 250, normal: 450, slow: 1200 }
@@ -345,22 +403,86 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
   return {
     size: ['compact', 'normal', 'large'].includes(p?.size) ? p.size : d.size,
     opacity: Number.isFinite(p?.opacity) ? Math.min(1, Math.max(0.55, Number(p.opacity))) : d.opacity,
-    look: ['black', 'glass', 'mood'].includes(p?.look) ? p.look : d.look,
+    look: ['black', 'glass', 'mood', 'app'].includes(p?.look) ? p.look : d.look,
     sections,
     sound: p?.sound !== false,
     hide: ['fast', 'normal', 'slow'].includes(p?.hide) ? p.hide : d.hide,
-    shortcut: typeof p?.shortcut === 'string' && (SHORTCUTS as readonly string[]).includes(p.shortcut) ? p.shortcut : d.shortcut,
+    // IF9: any real shortcut you record ('' = none).
+    shortcut: cleanShortcut(p?.shortcut, d.shortcut),
     callMode: ['hide', 'dot', 'normal'].includes(p?.callMode) ? p.callMode : d.callMode,
-    quietShortcut: typeof p?.quietShortcut === 'string' && (QUIET_SHORTCUTS as readonly string[]).includes(p.quietShortcut) ? p.quietShortcut : d.quietShortcut,
-    kinds: Object.fromEntries((Object.keys(KIND_LABEL) as AlertKindPref[]).map((k) => [k, { on: typeof p?.kinds?.[k]?.on === 'boolean' ? p.kinds[k].on : d.kinds[k].on, sound: typeof p?.kinds?.[k]?.sound === 'boolean' ? p.kinds[k].sound : d.kinds[k].sound }])) as IslandPrefs['kinds'],
-    volume: Number.isFinite(p?.volume) ? Math.min(1, Math.max(0, Number(p.volume))) : d.volume
+    quietShortcut: cleanShortcut(p?.quietShortcut, d.quietShortcut),
+    kinds: Object.fromEntries((Object.keys(KIND_LABEL) as AlertKindPref[]).map((k) => {
+      const saved = p?.kinds?.[k]
+      // Older settings only had on/off: off is "never".
+      const show: AlertRule = ['peek', 'dot', 'never'].includes(saved?.show) ? saved.show : saved?.on === false ? 'never' : d.kinds[k].show
+      return [k, { on: show !== 'never', sound: typeof saved?.sound === 'boolean' ? saved.sound : d.kinds[k].sound, show }]
+    })) as IslandPrefs['kinds'],
+    volume: Number.isFinite(p?.volume) ? Math.min(1, Math.max(0, Number(p.volume))) : d.volume,
+    pillOrder: cleanOrder(p?.pillOrder),
+    meetingOpenMin: num(p?.meetingOpenMin, 0, 30, d.meetingOpenMin, true),
+    openOn: p?.openOn === 'click' ? 'click' : 'hover',
+    hoverMs: num(p?.hoverMs, 100, 2000, d.hoverMs, true),
+    clicks: {
+      left: cleanClick(p?.clicks?.left, d.clicks.left),
+      middle: cleanClick(p?.clicks?.middle, d.clicks.middle),
+      right: cleanClick(p?.clicks?.right, d.clicks.right)
+    },
+    chips: {
+      water: chipList(p?.chips?.water, 50, 2000, d.chips.water),
+      reps: chipList(p?.chips?.reps, 1, 500, d.chips.reps),
+      focus: chipList(p?.chips?.focus, 1, 240, d.chips.focus)
+    },
+    peekSec: num(p?.peekSec, 2, 60, d.peekSec, true),
+    gapMin: num(p?.gapMin, 0, 60, d.gapMin, true),
+    // Older settings only had the fast / normal / slow pick.
+    leaveSec: num(p?.leaveSec, 0.5, 30, HIDE_SEC[(['fast', 'normal', 'slow'] as const).find((h) => h === p?.hide) ?? 'normal'], false),
+    idleMin: num(p?.idleMin, 0, 240, d.idleMin, true),
+    idleLook: p?.idleLook === 'fade' ? 'fade' : 'dot',
+    pillHeight: num(p?.pillHeight, SIZE_LIMITS.pillHeight[0], SIZE_LIMITS.pillHeight[1], d.pillHeight, true),
+    peekWidth: num(p?.peekWidth, SIZE_LIMITS.peekWidth[0], SIZE_LIMITS.peekWidth[1], d.peekWidth, true),
+    panelWidth: num(p?.panelWidth, SIZE_LIMITS.panelWidth[0], SIZE_LIMITS.panelWidth[1], d.panelWidth, true)
   }
+}
+
+/** A number in [min, max] (whole when `int`, else one decimal), else the default. */
+function num(v: unknown, min: number, max: number, d: number, int: boolean): number {
+  const n = Number(v)
+  if (v == null || v === '' || typeof v === 'boolean' || !Number.isFinite(n)) return d
+  const c = Math.min(max, Math.max(min, n))
+  return int ? Math.round(c) : Math.round(c * 10) / 10
+}
+function cleanShortcut(v: unknown, d: string): string {
+  if (v === '') return ''
+  return normalizeAccelerator(v) ?? d
+}
+function cleanClick(v: unknown, d: ClickAction): ClickAction {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(CLICK_LABEL, v) ? (v as ClickAction) : d
+}
+/** 1–4 different numbers in range, in your order; nothing valid → the default. */
+function chipList(v: unknown, min: number, max: number, d: number[]): number[] {
+  if (!Array.isArray(v)) return d
+  const out: number[] = []
+  for (const x of v) {
+    const n = Math.round(Number(x))
+    if (Number.isFinite(n) && n >= min && n <= max && !out.includes(n)) out.push(n)
+    if (out.length >= 4) break
+  }
+  return out.length ? out : d
+}
+/** Your pill order: unknown items dropped, new ones added at the end (in their default state). */
+export function cleanOrder(v: unknown): { id: PillItem; on: boolean }[] {
+  const known = DEFAULT_PILL_ORDER.map((x) => x.id)
+  const saved: { id: PillItem; on: boolean }[] = []
+  for (const x of Array.isArray(v) ? v : []) {
+    if (x && known.includes(x.id) && !saved.some((y) => y.id === x.id)) saved.push({ id: x.id, on: x.on !== false })
+  }
+  return [...saved, ...DEFAULT_PILL_ORDER.filter((x) => !saved.some((y) => y.id === x.id))]
 }
 
 // ---- Live activities: everything worth showing in the pill right now ----
 
 export interface Activity extends Omit<Pill, 'kind'> {
-  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed'
+  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed' | 'points' | 'mustdos' | 'tasks'
   /** Stable id, so a chosen activity stays chosen as numbers tick. */
   key: string
   /** When it starts (ms): a live countdown in the last 10 minutes (P7). */
@@ -368,30 +490,84 @@ export interface Activity extends Omit<Pill, 'kind'> {
 }
 
 /**
- * The pill's activities, most important first: the running timer, the block
- * now, the next block (within 3 h), Ben's unread message, water left today.
- * The pill shows the first (or the one you scrolled to) with the second as a
- * small bubble beside it.
+ * The pill's activities in your order (IF4; by default: the running timer,
+ * the block now, the next block within 3 h, Ben's unread message, bedtime,
+ * water left today). Something starting within 10 minutes moves up, right
+ * after a running timer, with a live countdown (P7). Items you switched off
+ * never show. The pill shows the first (or the one you picked) with the next
+ * one as a small bubble beside it (see pillBubbles).
  */
-export function activities(s: IslandSnapshot, now: number): Activity[] {
-  const out: Activity[] = []
+export function activities(s: IslandSnapshot, now: number, order: { id: PillItem; on: boolean }[] = DEFAULT_PILL_ORDER): Activity[] {
   const dot = s.ben.unread > 0 || !!s.alert
-  if (s.running) {
-    const left = (s.running.endsAt - now) / 1000
-    out.push({ key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot })
+  const make: Record<PillItem, () => Activity | null> = {
+    timer: () => {
+      if (!s.running) return null
+      const left = (s.running.endsAt - now) / 1000
+      return { key: 'timer', kind: 'timer', text: `${left < 0 ? '+' : ''}${clock(left)}`, sub: s.running.subject, pct: Math.min(1, (now - s.running.startedAt) / Math.max(1, s.running.endsAt - s.running.startedAt)), over: left < 0, dot }
+    },
+    now: () => (s.now ? { key: `now:${s.now.start}`, kind: 'now', text: `${s.now.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot } : null),
+    next: () => (s.next && s.next.start - now <= 3 * 3600_000 ? { key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot, at: s.next.start } : null),
+    ben: () => (s.ben.unread > 0 && s.ben.last ? { key: `ben:${s.ben.last.at}`, kind: 'ben', text: s.ben.last.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 60), sub: 'Ben', pct: 0, over: false, dot } : null),
+    bed: () => (s.sleep?.bed && !s.running ? { key: 'bed', kind: 'bed', text: 'Going to bed?', sub: 'Tap to log it in Waky', pct: 0, over: false, dot } : null),
+    // Water shows even when nothing else is on (P5).
+    water: () => (s.water.target > 0 && s.water.ml < s.water.target ? { key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot } : null),
+    points: () => {
+      const p = s.points
+      if (!p) return null
+      const pct = p.goal ? Math.min(1, p.balance / Math.max(1, p.goal.price)) : 0
+      return { key: 'points', kind: 'points', text: `${p.balance} pts`, sub: p.goal ? (p.balance >= p.goal.price ? `Ready: ${p.goal.title}` : `${p.goal.price - p.balance} to ${p.goal.title}`) : 'Points', pct, over: false, dot }
+    },
+    mustdos: () => {
+      const left = s.mustdos.filter((m) => !m.done)
+      return left.length ? { key: 'mustdos', kind: 'mustdos', text: left[0].text, sub: `${left.length} must-do${left.length === 1 ? '' : 's'} left`, pct: 1 - left.length / s.mustdos.length, over: false, dot } : null
+    },
+    tasks: () => {
+      const t = s.tasks?.[0]
+      return t ? { key: `task:${t.id}`, kind: 'tasks', text: t.content, sub: t.time ?? 'Todoist', pct: 0, over: false, dot } : null
+    }
   }
-  if (s.now) out.push({ key: `now:${s.now.start}`, kind: 'now', text: `${s.now.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot })
-  if (s.next && s.next.start - now <= 3 * 3600_000) {
-    const next: Activity = { key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot, at: s.next.start }
-    // Starting within 10 minutes: it goes first (after a running timer), with a live countdown (P7).
-    if (s.next.start - now <= 10 * 60_000) out.splice(s.running ? 1 : 0, 0, next)
-    else out.push(next)
+  const out: Activity[] = []
+  for (const item of cleanOrder(order)) {
+    if (!item.on) continue
+    const a = make[item.id]()
+    if (a) out.push(a)
   }
-  if (s.ben.unread > 0 && s.ben.last) out.push({ key: `ben:${s.ben.last.at}`, kind: 'ben', text: s.ben.last.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 60), sub: 'Ben', pct: 0, over: false, dot })
-  if (s.sleep?.bed && !s.running) out.push({ key: 'bed', kind: 'bed', text: 'Going to bed?', sub: 'Tap to log it in Waky', pct: 0, over: false, dot })
-  // Water shows even when nothing else is on (P5).
-  if (s.water.target > 0 && s.water.ml < s.water.target) out.push({ key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot })
+  // Starting within 10 minutes: it moves up, right after a running timer (P7).
+  const ni = out.findIndex((a) => a.kind === 'next')
+  if (ni >= 0 && (out[ni].at ?? Infinity) - now <= 10 * 60_000) {
+    const to = out[0]?.kind === 'timer' ? 1 : 0
+    if (ni > to) out.splice(to, 0, ...out.splice(ni, 1))
+  }
   return out
+}
+
+/**
+ * The pill's two bubbles (IF4): the main one (the one you picked, else the
+ * first) and the next one in your order beside it. The pill and its second
+ * bubble both read this, so they always follow the same order.
+ */
+export function pillBubbles(acts: Activity[], pick: string | null = null): { main: Activity | null; second: Activity | null } {
+  const main = acts.find((a) => a.key === pick) ?? acts[0] ?? null
+  const second = acts.find((a) => a !== main) ?? null
+  return { main, second }
+}
+
+/** Something live, worth keeping the pill awake for: a timer, a block now or soon, an alert, Ben's new message, bedtime (IP3). */
+export function isLive(s: IslandSnapshot, now: number): boolean {
+  return !!(s.running || s.now || s.alert || s.ben.unread > 0 || s.sleep?.bed || (s.next && s.next.start - now <= 10 * 60_000))
+}
+
+/** IP3: after `idleMin` minutes with nothing live it tucks away (a tiny dot or faded); the mouse on it, or anything opening, brings it back. */
+export function tuckState(o: { now: number; lastLiveAt: number; idleMin: number; idleLook: 'dot' | 'fade'; over: boolean; view: IslandView }): 'none' | 'dot' | 'fade' {
+  if (!o.idleMin || o.over || o.view !== 'compact') return 'none'
+  return o.now - o.lastLiveAt >= o.idleMin * 60_000 ? o.idleLook : 'none'
+}
+
+/** IF5: a meeting you said yes to starts within `minutes`: its key (open the panel for it once), else null. */
+export function meetingToOpen(s: IslandSnapshot, now: number, minutes: number): string | null {
+  if (!minutes || !s.next || !s.next.call || s.next.maybe) return null
+  const left = s.next.start - now
+  return left > 0 && left <= minutes * 60_000 ? `meet:${s.next.start}:${s.next.title}` : null
 }
 
 // ---- The island's states (desktop command center) --------------------------
@@ -423,21 +599,34 @@ export type IslandUiEvent =
   | { type: 'blur' }
   | { type: 'pin' }
   | { type: 'typing'; on: boolean }
+  /** IF5: a meeting is about to start: the panel opens by itself, and goes after `ms` if you don't touch it. */
+  | { type: 'autoOpen'; ms: number }
 /** undefined: keep the current timer; null: cancel it; else replace it. */
 export interface IslandUiStep { ui: IslandUi; timer?: { ms: number; event: IslandUiEvent } | null; focusInput?: boolean }
 
 export const ISLAND_UI: IslandUi = { view: 'compact', pinned: false, over: false, typing: false, byAlert: false }
 /** How long the pointer must stay to peek, and how long it may be away before it shrinks. */
 export const ISLAND_TIMING = { hoverToPeek: 350, peekLeave: 700, alertPeek: 5000, expandedLeave: { fast: 1000, normal: 2000, slow: 4000 } as Record<IslandPrefs['hide'], number> }
+/** Your timings (IF7, IF11): null hoverToPeek = it never peeks on hover, only opens on a click. */
+export interface IslandTiming { hoverToPeek: number | null; peekLeave: number; alertPeek: number; expandedLeave: number }
+export function islandTiming(p: Partial<Pick<IslandPrefs, 'openOn' | 'hoverMs' | 'peekSec' | 'leaveSec' | 'hide'>>): IslandTiming {
+  return {
+    hoverToPeek: p.openOn === 'click' ? null : Number.isFinite(p.hoverMs) ? p.hoverMs! : ISLAND_TIMING.hoverToPeek,
+    peekLeave: ISLAND_TIMING.peekLeave,
+    alertPeek: Number.isFinite(p.peekSec) ? p.peekSec! * 1000 : ISLAND_TIMING.alertPeek,
+    expandedLeave: Number.isFinite(p.leaveSec) ? p.leaveSec! * 1000 : ISLAND_TIMING.expandedLeave[p.hide ?? 'normal']
+  }
+}
 
-export function islandStep(ui: IslandUi, e: IslandUiEvent, hide: IslandPrefs['hide'] = 'normal'): IslandUiStep {
+export function islandStep(ui: IslandUi, e: IslandUiEvent, hide: IslandPrefs['hide'] | IslandTiming = 'normal'): IslandUiStep {
   const to = (view: IslandView, extra: Partial<IslandUi> = {}): IslandUi => ({ ...ui, view, ...extra })
   const stays = ui.pinned || ui.typing
+  const t: IslandTiming = typeof hide === 'string' ? islandTiming({ hide }) : hide
   switch (e.type) {
     case 'hover':
-      if (e.on) return { ui: { ...ui, over: true }, timer: ui.view === 'compact' ? { ms: ISLAND_TIMING.hoverToPeek, event: { type: 'hoverHeld' } } : null }
-      if (ui.view === 'peek') return { ui: { ...ui, over: false }, timer: { ms: ISLAND_TIMING.peekLeave, event: { type: 'leave' } } }
-      if (ui.view === 'expanded' && !stays) return { ui: { ...ui, over: false }, timer: { ms: ISLAND_TIMING.expandedLeave[hide], event: { type: 'leave' } } }
+      if (e.on) return { ui: { ...ui, over: true }, timer: ui.view === 'compact' && t.hoverToPeek != null ? { ms: t.hoverToPeek, event: { type: 'hoverHeld' } } : null }
+      if (ui.view === 'peek') return { ui: { ...ui, over: false }, timer: { ms: t.peekLeave, event: { type: 'leave' } } }
+      if (ui.view === 'expanded' && !stays) return { ui: { ...ui, over: false }, timer: { ms: t.expandedLeave, event: { type: 'leave' } } }
       return { ui: { ...ui, over: false }, timer: null }
     case 'hoverHeld':
       return ui.over && ui.view === 'compact' ? { ui: to('peek', { byAlert: false }), timer: null } : { ui }
@@ -453,7 +642,7 @@ export function islandStep(ui: IslandUi, e: IslandUiEvent, hide: IslandPrefs['hi
     case 'alert':
       // Something new peeks (never opens the whole panel by itself).
       if (ui.view === 'expanded') return { ui }
-      return { ui: to('peek', { byAlert: true }), timer: { ms: ISLAND_TIMING.alertPeek, event: { type: 'alertEnd' } } }
+      return { ui: to('peek', { byAlert: true }), timer: { ms: t.alertPeek, event: { type: 'alertEnd' } } }
     case 'alertEnd':
       return ui.view === 'peek' && !ui.over ? { ui: to('compact', { byAlert: false }), timer: null } : { ui: { ...ui, byAlert: false } }
     case 'close':
@@ -465,6 +654,9 @@ export function islandStep(ui: IslandUi, e: IslandUiEvent, hide: IslandPrefs['hi
       return { ui: { ...ui, pinned: !ui.pinned }, timer: null }
     case 'typing':
       return e.on ? { ui: { ...ui, typing: true }, timer: null } : { ui: { ...ui, typing: false } }
+    case 'autoOpen':
+      if (ui.view === 'expanded') return { ui }
+      return { ui: to('expanded', { byAlert: true }), timer: { ms: Math.max(1000, e.ms), event: { type: 'leave' } } }
   }
 }
 
@@ -488,15 +680,24 @@ export function alertPriority(kind: string): AlertPriority {
 export type AlertGate = 'peek' | 'silent' | 'drop'
 export const PEEK_GAP_MS = 3 * 60_000
 
-export function alertGate(o: { kind: string; prefs: Pick<IslandPrefs, 'kinds'>; quiet: boolean; call: boolean; lastPeekAt: number; now: number }): AlertGate {
-  const pref = alertPref(o.kind)
-  if (pref && !o.prefs.kinds[pref].on) return 'drop'
+/**
+ * IF5, IF11: your rule for this kind (drops down / a dot only / never), then
+ * quiet, calls, and the least time between two pop-ups (`gapMin`, 3 min by
+ * default; time-up always drops down unless you made it a dot).
+ */
+export function alertGate(o: { kind: string; meeting?: boolean; prefs: Pick<IslandPrefs, 'kinds'> & Partial<Pick<IslandPrefs, 'gapMin'>>; quiet: boolean; call: boolean; lastPeekAt: number; now: number }): AlertGate {
+  const pref = alertPref(o.kind, !!o.meeting)
+  const k = pref ? o.prefs.kinds[pref] : null
+  const rule: AlertRule = !k ? 'peek' : k.show ?? (k.on ? 'peek' : 'never')
+  if (rule === 'never' || (k && k.on === false)) return 'drop'
   const p = alertPriority(o.kind)
   // Quiet: nothing drops down; your own timer running out still waits for you.
   if (o.quiet) return p === 'urgent' ? 'silent' : 'drop'
+  if (rule === 'dot') return 'silent'
   // In a call: only time-up drops down.
   if (o.call) return p === 'urgent' ? 'peek' : 'silent'
-  // At most one pop-up every 3 minutes (time-up always).
-  if (p !== 'urgent' && o.now - o.lastPeekAt < PEEK_GAP_MS) return 'silent'
+  // At most one pop-up every few minutes (time-up always).
+  const gap = Number.isFinite(o.prefs.gapMin) ? o.prefs.gapMin! * 60_000 : PEEK_GAP_MS
+  if (p !== 'urgent' && o.now - o.lastPeekAt < gap) return 'silent'
   return 'peek'
 }

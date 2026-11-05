@@ -7,8 +7,8 @@ html.di-root, html.di-root body, html.di-root #root { background: transparent !i
 html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 
 .di {
-  --bg: rgb(4 4 5 / var(--di-alpha, 1)); --fg: #f5f5f6; --sub: rgb(255 255 255 / 0.56); --line: rgb(255 255 255 / 0.08);
-  --lime: #d4ff3f; --red: #ff5a5f; --glow: rgb(212 255 63 / 0.3);
+  --ink: 255 255 255; --bg: rgb(4 4 5 / var(--di-alpha, 1)); --fg: #f5f5f6; --sub: rgb(var(--ink) / 0.56); --line: rgb(var(--ink) / 0.08);
+  --lime: #d4ff3f; --acc-text: var(--lime); --red: #ff5a5f; --glow: rgb(212 255 63 / 0.3);
   position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
   font: 13px/1.35 Geist, Inter, 'Segoe UI', system-ui, sans-serif; color: var(--fg);
 }
@@ -36,7 +36,7 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di.has-timer.view-compact .di-shape { animation: di-breathe 3.2s ease-in-out infinite; }
 @keyframes di-breathe { 50% { box-shadow: 0 10px 32px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 30px -2px var(--glow); } }
 .di.dropping .di-shape { box-shadow: 0 0 0 2px var(--lime), 0 0 28px -4px var(--lime); }
-.di.look-glass { --bg: rgb(24 27 36 / calc(var(--di-alpha, 1) * 0.78)); --line: rgb(255 255 255 / 0.16); }
+.di.look-glass { --bg: rgb(24 27 36 / calc(var(--di-alpha, 1) * 0.78)); --line: rgb(var(--ink) / 0.16); }
 /* Glass blur only while still (redrawing it on every animation frame is what stutters). */
 .di.look-glass:not(.moving) .di-shape { backdrop-filter: blur(18px) saturate(1.4); }
 .di.look-mood .di-shape { box-shadow: 0 18px 60px rgb(0 0 0 / 0.55), 0 0 0 1.5px var(--glow), 0 0 46px -6px var(--glow); }
@@ -51,12 +51,12 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di.at-right .di-view { margin-right: 0; transform-origin: top right; }
 
 /* compact */
-.di-pill { position: relative; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 9px; min-width: 150px; max-width: 400px; box-sizing: border-box; cursor: pointer; outline: none; touch-action: none; }
+.di-pill { position: relative; display: flex; align-items: center; gap: 8px; height: var(--di-pill-h, 38px); padding: 0 14px 0 9px; min-width: 150px; max-width: var(--di-peek-w, 400px); box-sizing: border-box; cursor: pointer; outline: none; touch-action: none; }
 .di.at-left .di-pill, .di.at-right .di-pill { max-width: 260px; }
-.di-pill.kind-idle { min-width: 0; padding: 0 14px; height: 30px; gap: 6px; }
+.di-pill.kind-idle { min-width: 0; padding: 0 14px; height: calc(var(--di-pill-h, 38px) - 8px); gap: 6px; }
 .di-pill:focus-visible { box-shadow: inset 0 0 0 2px var(--lime); }
-.di-pill-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: rgb(255 255 255 / 0.9); }
-.di-pill-time { flex: none; white-space: nowrap; font-size: 13.5px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--lime); }
+.di-pill-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: rgb(var(--ink) / 0.9); }
+.di-pill-time { flex: none; white-space: nowrap; font-size: 13.5px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--acc-text); }
 .di-pill-time.over { color: var(--red); }
 .kind-next .di-pill-time, .kind-now .di-pill-time { color: var(--sub); font-weight: 500; }
 .di-face-sm { font-size: 17px; line-height: 1; }
@@ -66,35 +66,35 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 @keyframes di-pulse { 50% { box-shadow: 0 0 0 5px rgb(255 90 95 / 0.22); } }
 
 /* peek */
-.di-peek { width: 400px; box-sizing: border-box; padding: 12px 14px; display: grid; gap: 10px; cursor: pointer; touch-action: none; }
+.di-peek { width: var(--di-peek-w, 400px); box-sizing: border-box; padding: 12px 14px; display: grid; gap: 10px; cursor: pointer; touch-action: none; }
 .di-peek-top { display: flex; align-items: center; gap: 12px; }
-.di-peek-face { width: 34px; height: 34px; flex: none; display: grid; place-items: center; font-size: 20px; border-radius: 50%; background: rgb(255 255 255 / 0.07); }
+.di-peek-face { width: 34px; height: 34px; flex: none; display: grid; place-items: center; font-size: 20px; border-radius: 50%; background: rgb(var(--ink) / 0.07); }
 .di-peek-mid { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .di-peek-mid b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .di-peek-mid small { color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .di-peek.alert .di-peek-mid small { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .di-peek-mid .di-pill-time { font-size: 13px; }
-.di-peek-ben { margin: 0; display: flex; gap: 8px; min-width: 0; color: rgb(255 255 255 / 0.8); font-size: 12.5px; overflow: hidden; }
+.di-peek-ben { margin: 0; display: flex; gap: 8px; min-width: 0; color: rgb(var(--ink) / 0.8); font-size: 12.5px; overflow: hidden; }
 .di-peek-ben span { flex: none; }
 /* IS8: the text in its own box, so a long line ends with … */
 .di-peek-ben .di-peek-ben-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .di-peek.kind-over { background: linear-gradient(180deg, rgb(255 90 95 / 0.16), transparent); }
 
 /* expanded: the command center */
-.di-panel { width: 460px; max-height: 600px; box-sizing: border-box; overflow-y: auto; scrollbar-width: none; padding: 12px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+.di-panel { width: var(--di-panel-w, 460px); max-height: 600px; box-sizing: border-box; overflow-y: auto; scrollbar-width: none; padding: 12px; display: flex; flex-direction: column; gap: 10px; position: relative; }
 .di-panel::-webkit-scrollbar { display: none; }
 .di-cmd { display: flex; gap: 6px; }
-.di-cmd input { flex: 1; min-width: 0; border: 0; outline: none; border-radius: 999px; padding: 10px 15px; background: rgb(255 255 255 / 0.08); color: var(--fg); font: inherit; font-size: 13.5px; user-select: text; }
-.di-cmd input::placeholder { color: rgb(255 255 255 / 0.4); }
+.di-cmd input { flex: 1; min-width: 0; border: 0; outline: none; border-radius: 999px; padding: 10px 15px; background: rgb(var(--ink) / 0.08); color: var(--fg); font: inherit; font-size: 13.5px; user-select: text; }
+.di-cmd input::placeholder { color: rgb(var(--ink) / 0.4); }
 .di-cmd input:focus { box-shadow: 0 0 0 1.5px rgb(212 255 63 / 0.6); }
 .di-send { width: 38px; height: 38px; flex: none; border: 0; border-radius: 50%; background: var(--lime); color: #101300; font-weight: 800; cursor: pointer; }
 .di-send:disabled { opacity: 0.3; cursor: default; }
 .di-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: -2px; }
-.di-chips button { border: 0; border-radius: 999px; padding: 6px 11px; background: rgb(255 255 255 / 0.07); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
-.di-chips button:hover { background: rgb(255 255 255 / 0.15); }
-.di-reply { justify-self: start; border: 0; border-radius: 999px; padding: 5px 12px; background: rgb(255 255 255 / 0.08); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.di-chips button { border: 0; border-radius: 999px; padding: 6px 11px; background: rgb(var(--ink) / 0.07); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.di-chips button:hover { background: rgb(var(--ink) / 0.15); }
+.di-reply { justify-self: start; border: 0; border-radius: 999px; padding: 5px 12px; background: rgb(var(--ink) / 0.08); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 
-.di-ring .bg { fill: none; stroke: rgb(255 255 255 / 0.14); }
+.di-ring .bg { fill: none; stroke: rgb(var(--ink) / 0.14); }
 .di-ring .fg { fill: none; stroke: var(--lime); stroke-linecap: round; transition: stroke-dashoffset 1s linear; filter: drop-shadow(0 0 3px rgb(212 255 63 / 0.6)); }
 .di-ring.over .fg { stroke: var(--red); filter: drop-shadow(0 0 4px rgb(255 90 95 / 0.7)); }
 
@@ -111,30 +111,30 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 
 /* ---- sections inside the command center ---- */
 .di-head { display: flex; align-items: center; gap: 10px; padding: 2px 2px 0 4px; }
-.di-face { width: 38px; height: 38px; display: grid; place-items: center; font-size: 22px; border-radius: 50%; background: rgb(255 255 255 / 0.06); box-shadow: 0 0 0 1px var(--line), 0 0 16px -4px var(--glow); }
+.di-face { width: 38px; height: 38px; display: grid; place-items: center; font-size: 22px; border-radius: 50%; background: rgb(var(--ink) / 0.06); box-shadow: 0 0 0 1px var(--line), 0 0 16px -4px var(--glow); }
 .di-who { flex: 1; min-width: 0; display: grid; }
 .di-who b { font-size: 14px; }
 .di-who small { color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.di-icon { width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgb(255 255 255 / 0.06); color: var(--sub); cursor: pointer; font-size: 13px; }
-.di-icon:hover, .di-icon.on { background: rgb(255 255 255 / 0.14); color: var(--fg); }
+.di-icon { width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgb(var(--ink) / 0.06); color: var(--sub); cursor: pointer; font-size: 13px; }
+.di-icon:hover, .di-icon.on { background: rgb(var(--ink) / 0.14); color: var(--fg); }
 
-.di section { background: rgb(255 255 255 / 0.045); border-radius: 20px; padding: 10px 12px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04); }
+.di section { background: rgb(var(--ink) / 0.045); border-radius: 20px; padding: 10px 12px; box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.04); }
 .di-label { display: block; font-size: 11px; color: var(--sub); letter-spacing: 0.02em; margin-bottom: 4px; }
 .di-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .di-actions.col { flex-direction: column; }
 .di button.primary, .di-actions button, .di-go, .di-water button {
-  border: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--fg); background: rgb(255 255 255 / 0.1); border-radius: 999px; padding: 7px 13px; transition: background 0.15s, transform 0.1s;
+  border: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--fg); background: rgb(var(--ink) / 0.1); border-radius: 999px; padding: 7px 13px; transition: background 0.15s, transform 0.1s;
 }
-.di-actions button:hover, .di-go:hover, .di-water button:hover { background: rgb(255 255 255 / 0.18); }
+.di-actions button:hover, .di-go:hover, .di-water button:hover { background: rgb(var(--ink) / 0.18); }
 .di button:active { transform: scale(0.96); }
 .di button.primary, .di-go { background: var(--lime); color: #101300; }
 .di button.primary:hover, .di-go:hover { background: #e2ff70; }
 
-.di-alert { background: linear-gradient(180deg, rgb(212 255 63 / 0.1), rgb(255 255 255 / 0.04)) !important; }
-.di-alert.kind-over { background: linear-gradient(180deg, rgb(255 90 95 / 0.16), rgb(255 255 255 / 0.04)) !important; }
+.di-alert { background: linear-gradient(180deg, rgb(212 255 63 / 0.1), rgb(var(--ink) / 0.04)) !important; }
+.di-alert.kind-over { background: linear-gradient(180deg, rgb(255 90 95 / 0.16), rgb(var(--ink) / 0.04)) !important; }
 .di-alert-top { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .di-alert-top span { font-size: 18px; }
-.di-alert p { margin: 4px 0 10px; color: rgb(255 255 255 / 0.86); line-height: 1.45; }
+.di-alert p { margin: 4px 0 10px; color: rgb(var(--ink) / 0.86); line-height: 1.45; }
 
 .di-timer { display: flex; align-items: center; gap: 14px; }
 .di-timer-mid { flex: 1; display: grid; }
@@ -148,15 +148,15 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-block { display: grid; gap: 2px; min-width: 0; }
 .di-block b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .di-block small { color: var(--sub); }
-.di-block.muted b { color: rgb(255 255 255 / 0.8); font-weight: 500; }
-.di-bar { height: 4px; border-radius: 4px; background: rgb(255 255 255 / 0.1); overflow: hidden; margin-top: 4px; }
+.di-block.muted b { color: rgb(var(--ink) / 0.8); font-weight: 500; }
+.di-bar { height: 4px; border-radius: 4px; background: rgb(var(--ink) / 0.1); overflow: hidden; margin-top: 4px; }
 .di-bar i { display: block; height: 100%; border-radius: 4px; background: var(--lime); transition: width 0.6s; }
 .di-bar.water i { background: linear-gradient(90deg, #47b5ff, #7fd4ff); }
 
 .di-must { display: grid; gap: 2px; }
 .di-check { display: flex; align-items: center; gap: 10px; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 6px 4px; border-radius: 10px; cursor: pointer; }
-.di-check:hover { background: rgb(255 255 255 / 0.05); }
-.di-check i { flex: none; width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.6px rgb(255 255 255 / 0.35); display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 700; color: #101300; }
+.di-check:hover { background: rgb(var(--ink) / 0.05); }
+.di-check i { flex: none; width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.6px rgb(var(--ink) / 0.35); display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 700; color: #101300; }
 .di-check.done i { background: var(--lime); box-shadow: none; }
 .di-check.done span { color: var(--sub); text-decoration: line-through; }
 
@@ -167,14 +167,14 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-water-mid small { color: var(--sub); font-variant-numeric: tabular-nums; }
 .di-water button { padding: 6px 11px; }
 .di-reps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.di-reps button { border: 0; cursor: pointer; font: inherit; color: inherit; background: rgb(255 255 255 / 0.06); border-radius: 14px; padding: 7px 9px; display: grid; grid-template-columns: 1fr auto; text-align: left; row-gap: 1px; }
-.di-reps button:hover { background: rgb(255 255 255 / 0.12); }
+.di-reps button { border: 0; cursor: pointer; font: inherit; color: inherit; background: rgb(var(--ink) / 0.06); border-radius: 14px; padding: 7px 9px; display: grid; grid-template-columns: 1fr auto; text-align: left; row-gap: 1px; }
+.di-reps button:hover { background: rgb(var(--ink) / 0.12); }
 .di-reps span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .di-reps small { color: var(--sub); font-size: 11px; grid-row: 2; }
 .di-reps b { grid-row: 1 / 3; grid-column: 2; align-self: center; color: var(--lime); font-size: 12px; }
 
 .di-ben { display: grid; gap: 8px; }
-.di-last { margin: 0; color: rgb(255 255 255 / 0.86); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; user-select: text; }
+.di-last { margin: 0; color: rgb(var(--ink) / 0.86); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; user-select: text; }
 .di-typing { margin: 0; display: flex; align-items: center; gap: 4px; color: var(--sub); }
 .di-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--sub); animation: di-bounce 1.2s infinite; }
 .di-typing i:nth-child(2) { animation-delay: 0.15s; }
@@ -210,7 +210,7 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-pts-mid { flex: 1; display: grid; gap: 2px; min-width: 0; }
 .di-pts-mid small, small.di-pts-mid { color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .di-bar.gold i { background: linear-gradient(90deg, #ffb84d, #ffe27a); box-shadow: 0 0 8px rgb(255 210 90 / 0.6); }
-.di-points button { border: 0; border-radius: 999px; padding: 5px 10px; background: rgb(255 255 255 / 0.1); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.di-points button { border: 0; border-radius: 999px; padding: 5px 10px; background: rgb(var(--ink) / 0.1); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
 
 /* The good-morning note after a night away. */
 .di-alert.kind-sleep { background: linear-gradient(135deg, rgb(255 190 80 / 0.22), rgb(110 90 220 / 0.25)); }
@@ -241,16 +241,16 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 
 /* ---- phase 3: Todoist, voice, drop to book ---- */
 .di-tasks { display: grid; gap: 4px; }
-.di-task { display: flex; align-items: center; gap: 8px; border: 0; padding: 6px 8px; border-radius: 10px; background: rgb(255 255 255 / 0.04); color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.di-task:hover { background: rgb(255 255 255 / 0.09); }
-.di-task i { flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid rgb(255 255 255 / 0.4); transition: background 0.15s; }
+.di-task { display: flex; align-items: center; gap: 8px; border: 0; padding: 6px 8px; border-radius: 10px; background: rgb(var(--ink) / 0.04); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.di-task:hover { background: rgb(var(--ink) / 0.09); }
+.di-task i { flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid rgb(var(--ink) / 0.4); transition: background 0.15s; }
 .di-task:hover i { background: var(--lime); border-color: var(--lime); }
 .di-task span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .di-task small { color: var(--sub); }
-.di-mic { border: 0; width: 34px; height: 34px; border-radius: 50%; background: rgb(255 255 255 / 0.08); color: inherit; font-size: 14px; cursor: pointer; flex: none; }
+.di-mic { border: 0; width: 34px; height: 34px; border-radius: 50%; background: rgb(var(--ink) / 0.08); color: inherit; font-size: 14px; cursor: pointer; flex: none; }
 .di-mic.on { background: var(--red); color: #fff; animation: di-rec 1s ease-in-out infinite; }
 @keyframes di-rec { 50% { box-shadow: 0 0 0 6px rgb(255 90 95 / 0.25); } }
-.di-alert.kind-clip { background: linear-gradient(135deg, rgb(255 255 255 / 0.08), rgb(0 0 0 / 0)); }
+.di-alert.kind-clip { background: linear-gradient(135deg, rgb(var(--ink) / 0.08), rgb(0 0 0 / 0)); }
 /* Points that pop: '+15 ⭐' floats up from the pill. */
 .di-pop { position: absolute; right: 18px; top: -4px; font-weight: 800; font-size: 13px; color: #ffd451; text-shadow: 0 0 10px rgb(255 212 81 / 0.7); pointer-events: none; animation: di-popup 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
 @keyframes di-popup { 0% { opacity: 0; transform: translateY(8px) scale(0.6); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px) scale(1); } }
@@ -274,13 +274,13 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 @keyframes di-moonbob { 50% { transform: translateY(-1.5px) rotate(-8deg); } }
 .di-quiet { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 10px; border-radius: 16px; background: rgb(120 140 255 / 0.1); }
 .di-quiet span { color: var(--sub); font-size: 12px; margin-right: 2px; }
-.di-quiet button { border: 0; border-radius: 999px; padding: 5px 11px; background: rgb(255 255 255 / 0.09); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.di-quiet button { border: 0; border-radius: 999px; padding: 5px 11px; background: rgb(var(--ink) / 0.09); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .di-quiet button:hover { background: rgb(140 160 255 / 0.3); }
 
 /* Several activities (P6): dots under the pill text; the next one starting soon goes amber (P7). */
 .di-dots { position: absolute; left: 50%; bottom: 3px; translate: -50% 0; display: flex; gap: 3px; }
-.di-dots i { width: 4px; height: 4px; border-radius: 50%; background: rgb(255 255 255 / 0.25); cursor: pointer; transition: width 0.25s, background 0.25s; }
-.di-dots i.on { width: 10px; border-radius: 3px; background: rgb(255 255 255 / 0.75); }
+.di-dots i { width: 4px; height: 4px; border-radius: 50%; background: rgb(var(--ink) / 0.25); cursor: pointer; transition: width 0.25s, background 0.25s; }
+.di-dots i.on { width: 10px; border-radius: 3px; background: rgb(var(--ink) / 0.75); }
 .di-pill-time.soon { color: #ffb547 !important; animation: di-soon 1.6s ease-in-out infinite; }
 @keyframes di-soon { 50% { opacity: 0.65; } }
 
@@ -338,3 +338,24 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di.is-old .di-shape > * { opacity: 0.55; }
 .di-reconnect { color: var(--sub); font-style: italic; }
 .di-reconnect-line { margin: 0; padding: 6px 10px; border-radius: 10px; font-size: 12px; color: var(--sub); background: var(--line); }
+
+/* ---- Make it yours (IF1, IF3, IP3, IP4) ---- */
+/* Top left / top right: the shape hugs that corner (the window sits there). */
+.di.at-top-left { left: 6px; transform: none; transform-origin: top left; }
+.di.at-top-right { left: auto; right: 6px; transform: none; transform-origin: top right; }
+.di.at-top-left .di-view { margin-left: 0; transform-origin: top left; }
+.di.at-top-right .di-view { margin-right: 0; transform-origin: top right; }
+.di.at-top-right .di-toast { left: auto; right: 0; translate: none; }
+.di.at-top-left .di-toast { left: 0; translate: none; }
+/* Tucked away when idle: a tiny dot, or faded; the mouse on it brings it back. */
+.di-tuck-dot { width: 16px; height: 16px; cursor: pointer; touch-action: none; }
+.di.tuck-dot .di-shape { box-shadow: 0 2px 8px rgb(0 0 0 / 0.35), 0 0 0 1px var(--line); }
+.di.tuck-fade .di-shape { opacity: 0.3; }
+.di .di-shape { transition: box-shadow 0.4s, opacity 0.4s ease; }
+/* Match the app: its surface, text and accent; light mode too. */
+.di.look-app { --bg: color-mix(in srgb, var(--app-surface, #0f131b) calc(var(--di-alpha, 1) * 100%), transparent); --fg: var(--app-text, #f5f5f6); --lime: var(--app-accent, #d4ff3f); --acc-text: var(--app-accent-text, var(--lime)); --glow: color-mix(in srgb, var(--lime) 30%, transparent); }
+.di.look-app.theme-light { --ink: 20 25 34; --sub: rgb(var(--ink) / 0.6); --line: rgb(var(--ink) / 0.12); }
+.di.look-app.theme-light .di-shape { box-shadow: 0 10px 30px rgb(20 25 34 / 0.18), 0 0 0 1px var(--line); }
+.di.look-app.theme-light.view-expanded .di-shape { box-shadow: 0 24px 60px rgb(20 25 34 / 0.22), 0 0 0 1px var(--line); }
+.di.look-app.theme-light .di-pill-text { color: rgb(var(--ink) / 0.9); }
+.di.look-app.theme-light .di-cmd input:focus { box-shadow: 0 0 0 1.5px var(--acc-text); }
