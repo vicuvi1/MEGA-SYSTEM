@@ -95,3 +95,23 @@ describe('Body module backend', () => {
     expect(state.weeklyAverages[state.weeklyAverages.length - 1].avg).toBe(78.4)
   })
 })
+
+describe('one workout record per day (P2)', () => {
+  it('a second set joins the day, points once; undo takes back one set', () => {
+    const now = new Date('2026-10-26T10:00:00Z')
+    const a = body.logWorkout({ title: 'Push-ups (+30)', items: [{ exerciseId: 'pushups', name: 'Push-ups', amount: 30, unit: 'reps' }] }, now)
+    const b = body.logWorkout({ title: 'Squats (+20)', items: [{ exerciseId: 'squats', name: 'Squats', amount: 20, unit: 'reps' }] }, new Date('2026-10-26T12:00:00Z'))
+    expect(a.awarded).toBe(true)
+    expect(b.awarded).toBe(false)
+    expect(b.workout.id).toBe(a.workout.id)
+    expect(body.workouts().length).toBe(1)
+    expect(body.workouts()[0].items.length).toBe(2)
+    const before = wallet.summary().balance
+    body.takeBackSet(a.workout.id, 'Squats', 20, now)
+    expect(body.workouts()[0].items.length).toBe(1)
+    expect(wallet.summary().balance).toBe(before)
+    body.takeBackSet(a.workout.id, 'Push-ups', 30, now)
+    expect(body.workouts().length).toBe(0)
+    expect(wallet.summary().balance).toBeLessThan(before)
+  })
+})

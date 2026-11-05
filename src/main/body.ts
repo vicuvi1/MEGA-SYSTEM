@@ -197,6 +197,19 @@ export class Body {
     const ts = now.toISOString()
 
     return this.db.transaction(() => {
+      // One workout record per day (P2): another set the same day joins it
+      // (its items and title), and the day's points are paid once.
+      const same = this.db.prepare('SELECT id, day, ts, title, items_json, note, ledger_id FROM workouts WHERE day = ? ORDER BY ts LIMIT 1').get(today) as DbWorkoutRow | undefined
+      if (same) {
+        const items = [...(JSON.parse(same.items_json) as WorkoutExerciseItem[]), ...input.items]
+        const title = mergedTitle(same.title, input.title.trim())
+        this.db.prepare('UPDATE workouts SET items_json = ?, title = ? WHERE id = ?').run(JSON.stringify(items), title, same.id)
+        return {
+          workout: { id: same.id, day: same.day, ts: same.ts, title, items, note: same.note ?? undefined, ledgerId: same.ledger_id },
+          state: this.state(now),
+          awarded: false
+        }
+      }
       let ledgerId: number | null = null
       let awarded = false
       try {
@@ -232,6 +245,24 @@ export class Body {
         awarded
       }
     })()
+  }
+
+  /**
+   * Takes one set back out of a day's workout (an Undo): the last item with
+   * that name and amount. When nothing is left, the workout and its points go.
+   */
+  takeBackSet(id: number, name: string, amount: number, now = new Date()): BodySummary {
+    const row = this.db.prepare('SELECT items_json FROM workouts WHERE id = ?').get(id) as { items_json: string } | undefined
+    if (!row) throw new LedgerError('Workout not found')
+    const items = JSON.parse(row.items_json) as WorkoutExerciseItem[]
+    const k = (x: string) => String(x ?? '').toLowerCase().replace(/[^a-z]/g, '')
+    let at = -1
+    for (let i = items.length - 1; i >= 0; i--) if (k(items[i].name) === k(name) && Number(items[i].amount) === amount) { at = i; break }
+    if (at < 0) return this.state(now)
+    items.splice(at, 1)
+    if (!items.length) return this.deleteWorkout(id, now)
+    this.db.prepare('UPDATE workouts SET items_json = ? WHERE id = ?').run(JSON.stringify(items), id)
+    return this.state(now)
   }
 
   deleteWorkout(id: number, now = new Date()): BodySummary {
@@ -277,4 +308,11 @@ export class Body {
 
     return this.state(now)
   }
+}
+
+/** "Push-ups (+30)" + "Squats (+20)" → "Push-ups (+30) · Squats (+20)" (kept short). */
+function mergedTitle(a: string, b: string): string {
+  if (!b || a.split(' · ').includes(b)) return a
+  const t = `${a} · ${b}`
+  return t.length > 80 ? `${t.slice(0, 77)}…` : t
 }

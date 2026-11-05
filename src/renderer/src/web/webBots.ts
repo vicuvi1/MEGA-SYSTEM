@@ -1958,8 +1958,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               let gone = ''
               if (op.workout) {
                 try {
-                  svc.body.deleteWorkout(op.workout)
-                  gone = ' · workout and its points removed'
+                  // Just this set: other sets the same day stay (P2); the last one takes the points with it.
+                  svc.body.takeBackSet(op.workout, r.exercise.name, -op.amount)
+                  gone = ' · taken out of today\'s workout'
                 } catch {
                   /* already deleted */
                 }
