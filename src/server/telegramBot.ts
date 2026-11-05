@@ -398,18 +398,28 @@ export { cleanupPrompt, parseCleanup, localCleanup } from '../core/todoistClean'
 // when you're slipping (idle 60+ min with must-dos open), never while paused.
 const TICK_AT = 'coach_tick_at'
 
+// Server-only notes (sys_kv): the tick's clock and the calendar watch change
+// every minute or ten. In settings they made every device download the whole
+// settings table each time (S1); sys_ tables are never copied to devices.
+const SYS_KV = { sql: 'CREATE TABLE IF NOT EXISTS sys_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)', args: [] as any[] }
+/** True when this caller wins the slot (at most once per `gapMs`), atomically. */
+async function sysClaim(db: TursoHttp, key: string, nowMs: number, gapMs: number): Promise<boolean> {
+  const [, rows] = await db.writeAtomic([SYS_KV, { sql: 'INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE CAST(sys_kv.value AS INTEGER) <= ? RETURNING value', args: [key, String(nowMs), nowMs - gapMs] }])
+  return rows.length > 0
+}
+async function sysGet(db: TursoHttp, key: string): Promise<string | null> {
+  await db.writeAtomic([SYS_KV])
+  const [r] = await db.readMany([{ sql: 'SELECT value FROM sys_kv WHERE key = ?', args: [key] }])
+  return r instanceof Error ? null : ((r.rows[0]?.[0] as string | undefined) ?? null)
+}
+const sysSet = (db: TursoHttp, key: string, value: string) => db.writeAtomic([SYS_KV, { sql: 'INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [key, value] }])
+
 export async function runTick(env: BotEnv & { botToken: string; chatId: string; sleepBotToken?: string }, now = new Date()): Promise<string[]> {
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { services, mirror, calendar, bots, SQL } = await botsFor(env)
   // At most once a minute, whoever calls.
-  const fresh = await mirror.write((db) => {
-    const last = Number(getSetting(db as any, TICK_AT) || 0)
-    if (now.getTime() - last < 50_000) return false
-    setSetting(db as any, TICK_AT, String(now.getTime()))
-    return true
-  })
-  if (!fresh) return []
   const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
+  if (!(await sysClaim(healthDb, TICK_AT, now.getTime(), 50_000))) return []
   await beat(healthDb, 'tick', true, undefined, now)
   const sent: string[] = []
   // Ben's log (Coach → Ben's log): everything sent, held back (and why) or failed.
@@ -589,26 +599,21 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // Calendar watch (N10): a class added or cancelled today or tomorrow, checked every 10 minutes.
   if (calendar) {
     try {
-      const last = await mirror.read((db) => Number(getSetting(db as any, 'ben_cal_watch_at') || 0))
-      if (now.getTime() - last >= 10 * 60000) {
+      if (await sysClaim(healthDb, 'ben_cal_watch_at', now.getTime(), 10 * 60000)) {
         const end = new Date(now)
         end.setDate(end.getDate() + 2)
         end.setHours(0, 0, 0, 0)
         const evs = await calendar.events(now.toISOString(), end.toISOString())
         const seenNow: Seen = Object.fromEntries(evs.filter((e) => !e.allDay && !isFocusBlock(e)).map((e) => [e.id, { title: e.title, start: e.start, end: e.end }]))
-        const { prev, must } = await mirror.read((db) => {
-          let p: Seen | null = null
-          try {
-            p = JSON.parse(getSetting(db as any, 'ben_cal_seen') || 'null')
-          } catch {
-            p = null
-          }
-          return { prev: p, must: services.services(db).focus.state(now).plan.items.find((x: any) => !x.done)?.text ?? null }
-        })
-        await mirror.write((db) => {
-          setSetting(db as any, 'ben_cal_seen', JSON.stringify(seenNow))
-          setSetting(db as any, 'ben_cal_watch_at', String(now.getTime()))
-        })
+        let prev: Seen | null = null
+        try {
+          // Older versions kept it in settings: read that once.
+          prev = JSON.parse((await sysGet(healthDb, 'ben_cal_seen')) ?? (await mirror.read((db) => getSetting(db as any, 'ben_cal_seen'))) ?? 'null')
+        } catch {
+          prev = null
+        }
+        const must = await mirror.read((db) => services.services(db).focus.state(now).plan.items.find((x: any) => !x.done)?.text ?? null)
+        await sysSet(healthDb, 'ben_cal_seen', JSON.stringify(seenNow))
         for (const ch of calendarChanges(prev, seenNow, now, must)) {
           const subject = (must ?? 'Focus').split(/\s+/).slice(0, 3).join(' ').slice(0, 28)
           await send(ch.text, ch.kind === 'cancelled' && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{ text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`, callback_data: `fo|${subject}` }]] } : undefined, { always: true }).catch(() => null)

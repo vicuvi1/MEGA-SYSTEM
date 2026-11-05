@@ -20880,16 +20880,39 @@ async function runDaily(env, job) {
 }
 var escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 var TICK_AT = "coach_tick_at";
+var SYS_KV = {
+	sql: "CREATE TABLE IF NOT EXISTS sys_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+	args: []
+};
+/** True when this caller wins the slot (at most once per `gapMs`), atomically. */
+async function sysClaim(db, key, nowMs, gapMs) {
+	const [, rows] = await db.writeAtomic([SYS_KV, {
+		sql: "INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE CAST(sys_kv.value AS INTEGER) <= ? RETURNING value",
+		args: [
+			key,
+			String(nowMs),
+			nowMs - gapMs
+		]
+	}]);
+	return rows.length > 0;
+}
+async function sysGet(db, key) {
+	await db.writeAtomic([SYS_KV]);
+	const [r] = await db.readMany([{
+		sql: "SELECT value FROM sys_kv WHERE key = ?",
+		args: [key]
+	}]);
+	return r instanceof Error ? null : r.rows[0]?.[0] ?? null;
+}
+var sysSet = (db, key, value) => db.writeAtomic([SYS_KV, {
+	sql: "INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+	args: [key, value]
+}]);
 async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { services, mirror, calendar, bots, SQL } = await botsFor(env);
-	if (!await mirror.write((db) => {
-		const last = Number(getSetting(db, TICK_AT) || 0);
-		if (now.getTime() - last < 5e4) return false;
-		setSetting(db, TICK_AT, String(now.getTime()));
-		return true;
-	})) return [];
 	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
+	if (!await sysClaim(healthDb, TICK_AT, now.getTime(), 5e4)) return [];
 	await beat(healthDb, "tick", true, void 0, now);
 	const sent = [];
 	const journal = [];
@@ -21066,8 +21089,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			console.error("health:", e);
 		}
 		if (calendar) try {
-			const last = await mirror.read((db) => Number(getSetting(db, "ben_cal_watch_at") || 0));
-			if (now.getTime() - last >= 6e5) {
+			if (await sysClaim(healthDb, "ben_cal_watch_at", now.getTime(), 6e5)) {
 				const end = new Date(now);
 				end.setDate(end.getDate() + 2);
 				end.setHours(0, 0, 0, 0);
@@ -21077,22 +21099,14 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 					start: e.start,
 					end: e.end
 				}]));
-				const { prev, must } = await mirror.read((db) => {
-					let p = null;
-					try {
-						p = JSON.parse(getSetting(db, "ben_cal_seen") || "null");
-					} catch {
-						p = null;
-					}
-					return {
-						prev: p,
-						must: services.services(db).focus.state(now).plan.items.find((x) => !x.done)?.text ?? null
-					};
-				});
-				await mirror.write((db) => {
-					setSetting(db, "ben_cal_seen", JSON.stringify(seenNow));
-					setSetting(db, "ben_cal_watch_at", String(now.getTime()));
-				});
+				let prev = null;
+				try {
+					prev = JSON.parse(await sysGet(healthDb, "ben_cal_seen") ?? await mirror.read((db) => getSetting(db, "ben_cal_seen")) ?? "null");
+				} catch {
+					prev = null;
+				}
+				const must = await mirror.read((db) => services.services(db).focus.state(now).plan.items.find((x) => !x.done)?.text ?? null);
+				await sysSet(healthDb, "ben_cal_seen", JSON.stringify(seenNow));
 				for (const ch of calendarChanges(prev, seenNow, now, must)) {
 					const subject = (must ?? "Focus").split(/\s+/).slice(0, 3).join(" ").slice(0, 28);
 					await send(ch.text, ch.kind === "cancelled" && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{

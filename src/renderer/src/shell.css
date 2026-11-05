@@ -495,3 +495,23 @@
   color: #fff;
   background: rgb(var(--ink) / 0.08);
 }
+
+/* Phone, inside an embedded app: one tab bar (the app's), Life System's on top as a slim strip (U1). */
+.mobile-embed-strip { display: none; }
+@media (max-width: 768px) {
+  body:has(.embed-host.on) .mobile-nav-bar { display: none; }
+  body:has(.embed-host.on) .shell { padding-bottom: 0 !important; }
+  body:has(.embed-host.on) .mobile-embed-strip {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 101; height: 40px;
+    padding: env(safe-area-inset-top) 8px 0; box-sizing: content-box;
+    background: rgba(13, 15, 21, 0.96); backdrop-filter: blur(16px); border-bottom: 1px solid rgb(var(--ink) / 0.08);
+  }
+  body:has(.embed-host.on) .mobile-embed-strip b { font-size: 13px; font-weight: 600; opacity: 0.85; }
+  body:has(.embed-host.on) .mobile-embed-strip button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: rgb(var(--ink) / 0.07); color: inherit; font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 11px; }
+  /* The top bar keeps only the app / points switch (the strip has the title). */
+  body:has(.embed-host.on) .topbar > :not(.seg-switch) { display: none !important; }
+  body:has(.embed-host.on) .topbar { padding-top: 6px !important; padding-bottom: 6px !important; min-height: 0 !important; }
+  body:has(.embed-host.on) .main-cell, body:has(.embed-host.on) .shell { padding-top: calc(40px + env(safe-area-inset-top)) !important; }
+  html[data-theme='light'] body:has(.embed-host.on) .mobile-embed-strip { background: rgba(250, 250, 247, 0.96); }
+}

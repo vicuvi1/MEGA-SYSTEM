@@ -62,6 +62,17 @@ export function MobileBottomBar({ page, onGo, onQuickCommand }: Props) {
           </div>
         </div>
       )}
+      {/* Phone, inside an embedded app (Finance Helper, Waky…): its own tab bar is
+          the one at the bottom; Life System's shrinks to this strip on top (U1). */}
+      <div className="mobile-embed-strip">
+        <button type="button" onClick={() => go('today')} aria-label="Back to Today">
+          <Icon name="home" size={15} /> Today
+        </button>
+        <b>{[...MODULES, ...MAIN].find((m) => m.id === page)?.label ?? ''}</b>
+        <button type="button" onClick={() => setMore(true)} aria-label="All pages">
+          <Icon name="list" size={15} />
+        </button>
+      </div>
       <nav className="mobile-nav-bar" aria-label="Mobile Navigation">
         {main.slice(0, 2).map(button)}
         <button
