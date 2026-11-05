@@ -28,50 +28,6 @@ export function useGrowth(): Growth | null {
   return g
 }
 
-/** Up/down against a past number, colored by whether it's good (spending: down is good). */
-function Delta({ pct, good, label }: { pct: number | null; good: boolean; label: string }) {
-  if (pct === null) return <span className="gr-delta none">new · {label}</span>
-  if (pct === 0) return <span className="gr-delta same">= {label}</span>
-  const up = pct > 0
-  const ok = up === good
-  return (
-    <span className={`gr-delta ${ok ? 'good' : 'bad'}`}>
-      {up ? '▲' : '▼'} {Math.abs(pct)}% {label}
-    </span>
-  )
-}
-
-function VsPast({ g }: { g: Growth }) {
-  return (
-    <section className="card">
-      <header className="card-head">
-        <h2>
-          <Icon name="chart" size={16} /> You vs past you
-        </h2>
-        <span className="hint">Last 7 days against the 7 before, your 4-week average and your best week</span>
-      </header>
-      <div className="gr-vs">
-        {g.metrics.map((m) => (
-          <div key={m.id} className={`gr-vs-card ${m.record ? 'record' : ''}`}>
-            <span className="gr-vs-label">
-              {m.label}
-              {m.record && <b className="gr-record">🏆 Best week ever</b>}
-            </span>
-            <span className="gr-vs-now">{fmt(m, m.thisWeek)}</span>
-            <Delta pct={m.vsLast} good={m.higherBetter} label={`vs last week (${fmt(m, m.lastWeek)})`} />
-            <Delta pct={m.vsAvg} good={m.higherBetter} label={`vs your average (${fmt(m, m.avg4)})`} />
-            {m.best && !m.record && (
-              <span className="gr-best">
-                {m.higherBetter ? 'Best' : 'Lowest'} week: {fmt(m, m.best.value)} · {weekLabel(m.best.label)}
-                {m.higherBetter && m.best.value > 0 && <i style={{ width: `${Math.min(100, (m.thisWeek / m.best.value) * 100)}%` }} />}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
 
 function useWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement>(null)
@@ -306,9 +262,16 @@ export function GrowthSections() {
   return (
     <>
       <Celebrate g={g} />
-      <VsPast g={g} />
-      <Charts g={g} />
-      <RecordsAndMilestones g={g} />
+      {/* One "Am I improving?": the week score and the area cards above already
+          compare this week with last; the long view folds away here. */}
+      <details className="card pg-more">
+        <summary>
+          <b>Your long view</b>
+          <small>trends by week and month · records · milestones</small>
+        </summary>
+        <Charts g={g} />
+        <RecordsAndMilestones g={g} />
+      </details>
     </>
   )
 }

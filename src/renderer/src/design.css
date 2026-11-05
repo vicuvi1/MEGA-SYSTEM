@@ -1862,3 +1862,11 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .rest-day { border: 0; border-radius: 999px; padding: 2px 8px; background: rgb(var(--ink) / 0.07); color: var(--text); font: inherit; font-size: 11.5px; cursor: pointer; }
 .rest-day:hover { background: rgb(var(--ink) / 0.14); }
 .rest-chip .rest-text { display: inline; }
+
+/* Progress: the long view folds away (C7) */
+.pg-more > summary { display: flex; align-items: baseline; gap: 10px; cursor: pointer; list-style: none; padding: 4px 0; }
+.pg-more > summary::-webkit-details-marker { display: none; }
+.pg-more > summary small { color: var(--muted); }
+.pg-more > summary::after { content: '▾'; margin-left: auto; color: var(--muted); transition: transform 0.2s; }
+.pg-more[open] > summary::after { transform: rotate(180deg); }
+.pg-more[open] > .card { box-shadow: none; border: 0; padding-left: 0; padding-right: 0; }
