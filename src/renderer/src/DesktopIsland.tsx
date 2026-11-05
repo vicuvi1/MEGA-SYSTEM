@@ -11,7 +11,7 @@
 import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, clock, islandStep, islandTiming, isLive, liveActivity, meetingToOpen, pill, pillBubbles, tuckState, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pill, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
 import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desktop'
 import { AlertScene, CountUp, Glass, Marquee, Roll, TypeIn, type WaterSplash } from './IslandScenes'
 import { FeelContext, bump, feelFor, flyId, onFrame, ringColor, setFrameMode, useFeel, type Feel } from './islandFeel'
@@ -26,6 +26,11 @@ import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButton
 import { ActMenu, cacheSnap, cachedSnap, QuickRow, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
 import './island.css'
 import './island-motion.css'
+import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
+import { cursorNear } from '../../desktop/islandPlace'
+import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
+import { CalendarCap, Crescent, DropCap, LiquidBorder, Sky, TodayRing, pageTurn } from './islandShapes'
+import { BenThinking, EveningScene, LiveStack, MomentPill, PillEditor, RECAP_MS, SnapGhost, ThinkWave, leanFor, makeJelly, snapBounceIn } from './islandWidgets'
 
 const desk = () => window.desktop
 /** A clickable area in CSS px of this page (the desktop applies the page zoom) (IS2). */
@@ -505,6 +510,8 @@ export function DesktopIsland() {
       return
     }
     lastPeek.current = Date.now()
+    // IC14: the evening story peeks long enough to be told (~10 s).
+    const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : { type: 'alert' }
     const pref = alertPref(a.kind, !!a.meeting)
     if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume)
     // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce.
@@ -514,12 +521,12 @@ export function DesktopIsland() {
       window.setTimeout(() => {
         setStretch(false)
         // Still the same alert (a newer one restarts this).
-        if (seenAlert.current === a.id) dispatch({ type: 'alert' })
+        if (seenAlert.current === a.id) dispatch(peekEv)
       }, 130)
       window.setTimeout(() => setDropping2(false), 900)
       return
     }
-    dispatch({ type: 'alert' })
+    dispatch(peekEv)
   }, [s.alert, quiet, inCall, dispatch]) // eslint-disable-line react-hooks/exhaustive-deps
   // Back from quiet or a call: what waited, in one line (P3).
   const wasBusy = useRef(false)
@@ -601,8 +608,9 @@ export function DesktopIsland() {
   // IL2: two live things at once (a timer and a meeting soon, or Ben's unread
   // message): the pill plus a small round bubble beside it. The order follows
   // your pill order when you have set one.
-  const second = pillBubbles(acts, pick).second
-  const bubble: Activity | null = liveActivity(main, now) && liveActivity(second, now) ? second : null
+  // IC15: three or more live things: the others stack up beside it and fan out on hover.
+  const stack = useMemo(() => liveStack(acts, pick, now), [acts, pick, now])
+  const bubble: Activity | null = stack.length === 1 ? stack[0] : null
   const run = s.running
   useIslandSounds(place, inCall, run)
 
@@ -866,6 +874,9 @@ export function DesktopIsland() {
   // IS3: a drag needs 8 px and 120 ms held, so a small wobble while clicking is a click.
   // IS21: it always ends (pointer up anywhere, lost capture, the window losing focus).
   const dragged = useRef(false)
+  const jx = useMotionValue(1)
+  const jy = useMotionValue(1)
+  const jelly = useMemo(() => makeJelly(jx, jy, () => fRef.current), [jx, jy])
   const dragProps = {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
       // Every press starts clean: an old drag never eats the next click.
@@ -881,7 +892,9 @@ export function DesktopIsland() {
       let started = false
       let ended = false
       const move = (ev: PointerEvent) => {
-        if (started || ev.pointerId !== id || document.documentElement.classList.contains('di-ring-open')) return
+        if (ev.pointerId !== id || document.documentElement.classList.contains('di-ring-open')) return
+        // IM6: it stretches a little with the drag's speed.
+        if (started) return jelly.move(ev)
         if (Math.hypot(ev.screenX - sx, ev.screenY - sy) < DRAG_PX || performance.now() - t0 < DRAG_MS) return
         started = true
         dragged.current = true
@@ -902,6 +915,7 @@ export function DesktopIsland() {
         window.removeEventListener('island-drag-cancel', onStuck)
         try { if (el.hasPointerCapture?.(id)) el.releasePointerCapture(id) } catch { /* fine */ }
         if (started) {
+          jelly.end()
           document.documentElement.classList.remove('di-dragging')
           desk()?.islandDrag?.(false)
           logIslandUi('drag', `ended (${why})`)
@@ -1096,9 +1110,43 @@ export function DesktopIsland() {
   const goToBed = () => {
     setMoon(true)
     send({ kind: 'bed' })
-    window.setTimeout(() => (setMoon(false), close()), 2600)
+    window.setTimeout(() => (setMoon(false), setAsleep(true), close()), 2600)
   }
   const pts = s.points
+  // IM4: a short celebration (all must-dos done, the day's water, a focus
+  // block ended on time, a new best streak): a burst and the pill stretched
+  // wide with what happened, from the difference between two snapshots. Full only.
+  const [moment, setMoment] = useState<Moment | null>(null)
+  const prevSnap = useRef<IslandSnapshot | null>(null)
+  const momentT = useRef(0)
+  const celebrated = useRef(new Set<string>())
+  useEffect(() => {
+    const before = prevSnap.current
+    prevSnap.current = s
+    const m = momentsFrom(before, s, Date.now()).find((x) => !celebrated.current.has(x.id))
+    if (!m) return
+    celebrated.current.add(m.id)
+    if (!fRef.current.extras || uiRef.current.view === 'expanded') return
+    logIslandUi('moment', m.text)
+    setMoment(m)
+    clearTimeout(momentT.current)
+    momentT.current = window.setTimeout(() => setMoment(null), 2600)
+    window.setTimeout(() => burstFrom(shape.current, m.colors, 60), 160)
+  }, [s])
+  useEffect(() => () => clearTimeout(momentT.current), [])
+  // IC13: after "Going to bed", the pill becomes the moon until morning.
+  const [asleep, setAsleep] = useState(false)
+  useEffect(() => {
+    if (asleep && (s.sleep?.wake || s.running)) setAsleep(false)
+  }, [asleep, s.sleep?.wake, s.running])
+  // IM7: while you drag, where it will snap to.
+  const [ghost, setGhost] = useState<string | null>(null)
+  // IC17: the pill's edit mode in the panel.
+  const [editing, setEditing] = useState(false)
+  const savePillOrder = (pillOrder: IslandPrefs['pillOrder']) => {
+    setPrefs((p) => ({ ...p, pillOrder }))
+    void desk()?.setIslandPrefs?.({ pillOrder })
+  }
   // IL6: new points fly into the pill as a spinning coin, water as a drop;
   // the pill gives a small gulp when they land. A reward unlocking gets confetti.
   const [flights, setFlights] = useState<Flight[]>([])
@@ -1133,7 +1181,6 @@ export function DesktopIsland() {
     // The day's water reached: the glasses shimmer, once.
     if (target > 0 && before < target && ml >= target) setShimmer((n) => n + 1)
   }, [s.water.ml, s.water.target, fly]) // eslint-disable-line react-hooks/exhaustive-deps
-  const confetti = s.alert?.kind === 'reward'
   // Hold 🎤 to talk to Ben (a voice note, like on Telegram).
   const [rec, setRec] = useState<{ r: MediaRecorder; parts: Blob[]; at: number } | null>(null)
   const startRec = async () => {
@@ -1363,24 +1410,17 @@ export function DesktopIsland() {
                   <span>👁️ 20-20-20 eye breaks</span>
                 </label>
               </section>),
+    // IM3: a slow wave while Ben thinks, then his first words fade in.
     ben: s.ben.busy || s.ben.last ? (<section className="di-ben">
-                {s.ben.busy ? (
-                  <p className="di-typing">
-                    <i />
-                    <i />
-                    <i />
-                    <em>{s.ben.steps[s.ben.steps.length - 1] ?? 'thinking'}…</em>
-                  </p>
-                ) : (
-                  s.ben.last && <p className="di-last">{s.ben.last.text.replace(/<[^>]+>/g, '')}</p>
-                )}
-                {!s.ben.busy && <button className="di-reply" {...tp('reply', focusInput)}>Reply</button>}
+                <BenThinking busy={s.ben.busy} step={s.ben.steps[s.ben.steps.length - 1]} last={s.ben.last} onReply={focusInput} />
               </section>) : null
   }
   // ---- compact: the pill ----
   const pillTime = (a: Activity) => {
     if (a.kind === 'timer' && run) return <LiveTimer run={run} />
     if (a.kind === 'next' && a.at && a.at - Date.now() <= 10 * 60_000) return <LiveCountdown at={a.at} />
+    // IC13: the minutes to bed roll down in moonlight blue.
+    if (a.kind === 'winddown') return <Roll className="di-pill-time moon" text={bedClock(windDownLeft(s, now) ?? 0)} />
     const t = a.kind === 'water' ? '' : a.sub
     return <span className={`di-pill-time ${a.over ? 'over' : ''}`}>{place === 'left' || place === 'right' ? String(t ?? '').replace(/\s*left$/i, '') : t}</span>
   }
@@ -1464,14 +1504,21 @@ export function DesktopIsland() {
   const icon = (a: Activity, size = 22) =>
     a.kind === 'timer' && run ? <LiveRing run={run} size={size} />
     : a.kind === 'now' && nowBlock && a.key === `now:${nowBlock.start}` ? <SmoothRing from={nowBlock.start} to={nowBlock.end} size={size} />
+    : a.kind === 'winddown' ? <Crescent pct={a.pct} size={size - 2} />
     : <ActIcon a={a} face={s.ben.face} size={size} />
   // IL4: the activity you switch to slides in from the side you swiped to.
-  const slide = f.moves
-    ? { enter: (d: number) => ({ x: d * 26, opacity: 0 }), center: { x: 0, opacity: 1 }, exit: (d: number) => ({ x: d * -26, opacity: 0 }) }
-    : { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }
+  // IM9: the title turns like a page (perspective on .di-turn); IM13: the icon
+  // and time are the same parts in every activity, so they glide to their new
+  // place and swap (Full). Calm: a crossfade; Off: a jump.
+  const slide = f.moves ? { enter: {}, center: {}, exit: {} } : { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }
+  const turn = pageTurn(f)
+  const slotFade = { enter: { opacity: 0, scale: 0.7 }, center: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.7 } }
+  // IM1: the pill's ends per activity: a calendar tile with the time for a meeting, a drop for water.
+  const meetAt = (a: Activity) => (a.kind === 'now' && s.now?.call ? s.now.start : a.kind === 'next' && s.next?.call ? s.next.start : null)
+  const rings = todayRings(s)
   const compact = (
     <div
-      className={`di-pill kind-${s.locked ? 'locked' : main?.kind ?? 'idle'}`}
+      className={`di-pill kind-${s.locked ? 'locked' : s.ben.busy && main?.kind !== 'timer' ? 'think' : main?.kind ?? 'idle'}`}
       role="button"
       tabIndex={0}
       {...dragProps}
@@ -1487,19 +1534,39 @@ export function DesktopIsland() {
           <span className="di-face-sm">{s.ben.face}</span>
           <span className="di-pill-text di-reconnect">Reconnecting…</span>
         </>
+      ) : s.ben.busy && main?.kind !== 'timer' ? (
+        // IM3: Ben is thinking: a slow wave in the pill.
+        <span className="di-pill-main di-pill-think">
+          <span className="di-face-sm">{s.ben.face}</span>
+          <ThinkWave />
+          <span className="di-pill-text">Ben is thinking…</span>
+        </span>
       ) : !main ? (
         <Fly id="ic-idle">
-          <span className="di-face-sm">{s.ben.face}</span>
+          {/* IC5: today's three rings around Ben's face. */}
+          <TodayRing must={rings.must} water={rings.water} focus={rings.focus} size={28}>
+            <span className="di-face-sm">{s.ben.face}</span>
+          </TodayRing>
         </Fly>
       ) : (
         <AnimatePresence mode="popLayout" initial={false} custom={dir}>
           <motion.span key={main.key} className="di-pill-main" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" transition={f.pop}>
-            <Fly id={`ic-${main.key}`}>{icon(main)}</Fly>
-            <Fly id={`ti-${main.key}`} pos className="di-pill-title">
-              <Marquee className="di-pill-text" text={main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text} />
+            {meetAt(main) != null && <CalendarCap at={meetAt(main)!} />}
+            <Fly id={`ic-${main.key}`}>
+              <motion.span className="di-slot" layoutId={flyId(f, 'pill-ic')} variants={f.moves ? slotFade : undefined} transition={f.fly}>{icon(main)}</motion.span>
             </Fly>
-            <Fly id={`tm-${main.key}`}>{pillTime(main)}</Fly>
+            <span className="di-turn">
+              <motion.span className="di-turn-in" custom={dir} variants={turn} transition={f.pop}>
+                <Fly id={`ti-${main.key}`} pos className="di-pill-title">
+                  <Marquee className="di-pill-text" text={main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.kind === 'winddown' ? 'Bed in' : main.text} />
+                </Fly>
+              </motion.span>
+            </span>
+            <Fly id={`tm-${main.key}`}>
+              <motion.span className="di-slot" layoutId={flyId(f, 'pill-tm')} variants={f.moves ? slotFade : undefined} transition={f.fly}>{pillTime(main)}</motion.span>
+            </Fly>
             {main.kind === 'timer' && <StageDots dots={run?.dots} />}
+            {main.kind === 'water' && <DropCap pct={main.pct} />}
           </motion.span>
         </AnimatePresence>
       )}
@@ -1559,7 +1626,7 @@ export function DesktopIsland() {
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main) ? (
     <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
-      <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />
+      {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
       <div className="di-peek-top">
         <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
         <div className="di-peek-mid">
@@ -1584,7 +1651,9 @@ export function DesktopIsland() {
           </Fly>
         ) : (
           <Fly id="ic-idle">
-            <span className="di-peek-face">{s.ben.face}</span>
+            <TodayRing must={rings.must} water={rings.water} focus={rings.focus} size={38}>
+              <span className="di-peek-face">{s.ben.face}</span>
+            </TodayRing>
           </Fly>
         )}
         <div className="di-peek-mid">
@@ -1624,6 +1693,14 @@ export function DesktopIsland() {
         )}
       </div>
       {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
+      {/* IC5: today in three numbers (the rings' colours). */}
+      {(s.mustdos.length > 0 || s.water.target > 0 || !!s.today) && (
+        <p className="di-peek-today">
+          {s.mustdos.length > 0 && <span className="tr-must"><i />{s.mustdos.filter((m) => m.done).length}/{s.mustdos.length} must-dos</span>}
+          {s.water.target > 0 && <span className="tr-water"><i />{(s.water.ml / 1000).toFixed(1)}/{(s.water.target / 1000).toFixed(1)} L</span>}
+          {s.today && <span className="tr-focus"><i />{s.today.focusMin}/{s.today.focusGoal} min focus</span>}
+        </p>
+      )}
     </div>
   )
 
@@ -1705,7 +1782,7 @@ export function DesktopIsland() {
 
       {a && (
         <section className={`di-alert kind-${a.kind}`}>
-          <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />
+          {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
           <div className="di-alert-top">
             <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
             <b>{a.title}</b>
@@ -1719,6 +1796,12 @@ export function DesktopIsland() {
         </section>
       )}
       {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
+      {/* IC17: edit what the pill shows, like a phone's home screen. */}
+      {editing ? (
+        <PillEditor order={prefs.pillOrder} onChange={savePillOrder} onDone={() => setEditing(false)} />
+      ) : (
+        <button className="di-edit-open" {...tp('edit:open', () => setEditing(true))}>✎ Edit the pill</button>
+      )}
     </div>
   )
 
@@ -1747,7 +1830,15 @@ export function DesktopIsland() {
   )
   // IP3: tucked away as a tiny dot (hover brings the pill back).
   const tuckDot = <div className="di-tuck-dot" role="button" tabIndex={0} {...dragProps} {...clickProps} aria-label="The island is tucked away: hover to see it" />
-  const views = { compact: hushed ? moonPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
+  // IC13: after "Going to bed" the pill is the moon until the morning.
+  const sleepPill = (
+    <div className="di-moon-pill di-sleep-pill" role="button" tabIndex={0} {...dragProps} {...clickProps} aria-label="Sleep well">
+      <span>🌙</span>
+      <small>Sleep well</small>
+    </div>
+  )
+  const showMoment = !!moment && !hushed && !s.locked && !old
+  const views = { compact: hushed ? moonPill : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
   const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
@@ -1777,14 +1868,14 @@ export function DesktopIsland() {
     const an = anchorRef.current
     const l = an === 'left' ? 0 : an === 'right' ? dx : dx / 2
     clip.set(dx < 0.25 && dy < 0.25 ? `inset(0px round ${mr.get().toFixed(2)}px)` : `inset(0px ${(dx - l).toFixed(2)}px ${dy.toFixed(2)}px ${l.toFixed(2)}px round ${mr.get().toFixed(2)}px)`)
-    shadeX.set((w / Math.max(1, b.w)) * lift.get())
-    shadeY.set(h / Math.max(1, b.h))
+    shadeX.set((w / Math.max(1, b.w)) * lift.get() * jx.get())
+    shadeY.set((h / Math.max(1, b.h)) * jy.get())
     besideX.set(an === 'left' ? w : an === 'right' ? -w : w / 2)
-  }, [mw, mh, mr, clip, shadeX, shadeY, besideX, lift])
+  }, [mw, mh, mr, clip, shadeX, shadeY, besideX, lift, jx, jy])
   useEffect(() => {
-    const u = [mw.on('change', drawClip), mh.on('change', drawClip), mr.on('change', drawClip), lift.on('change', drawClip)]
+    const u = [mw.on('change', drawClip), mh.on('change', drawClip), mr.on('change', drawClip), lift.on('change', drawClip), jx.on('change', drawClip), jy.on('change', drawClip)]
     return () => u.forEach((x) => x())
-  }, [mw, mh, mr, lift, drawClip])
+  }, [mw, mh, mr, lift, jx, jy, drawClip])
   useLayoutEffect(drawClip, [box, anchor, drawClip])
   const shapeH = size.h + (stretch ? 8 : 0)
   const firstSize = useRef(true)
@@ -1820,9 +1911,11 @@ export function DesktopIsland() {
     if (shape.current) shape.current.style.transform = 'none'
   }, [ui.view, lift])
   // The click area follows every new shape: the stretch, the bubble, the toast (IA1).
+  const stackOn = stack.length >= 2 && (ui.view === 'compact' || (ui.view === 'peek' && !ui.byAlert)) && !hushedNow && !s.locked && !old && !showMoment
+  const stackOpen = stackOn && ui.over
   useEffect(() => {
     pump(700)
-  }, [stretch, dropping2, bubbleOn, toast?.id, toast?.state, pump, ringCtl.ring == null, menu, wheelText, undo])
+  }, [stretch, dropping2, bubbleOn, toast?.id, toast?.state, pump, ringCtl.ring == null, menu, wheelText, undo, stackOn, stackOpen, stack.length, showMoment, ghost])
   // IP1: the glow pauses while the island is hidden.
   const [docHidden, setDocHidden] = useState(false)
   useEffect(() => {
@@ -1836,6 +1929,42 @@ export function DesktopIsland() {
   useEffect(() => {
     setFrameMode(hidden || tuck !== 'none' ? 'paused' : moving ? 'fast' : 'slow')
   }, [hidden, tuck, moving])
+  // IM4: the particles only in Full, never while hidden or tucked away.
+  useEffect(() => {
+    setParticlesAllowed(f.extras && !hidden && tuck === 'none')
+  }, [f.extras, hidden, tuck])
+  // IM11, IM12: the pointer near the island (the desktop says, ~30 times a
+  // second within 40 px; the page's own pointer moves too): the pill leans
+  // 2–3 px toward it (Full) and a tucked-away dot blinks awake.
+  const nearRef = useRef(false)
+  const leanTo = useCallback((n: { dx: number; dy: number } | null) => {
+    const el = rootEl.current
+    if (!el) return
+    const near = !!n
+    if (near !== nearRef.current) {
+      nearRef.current = near
+      el.classList.toggle('is-near', near)
+    }
+    const ok = fRef.current.moves && uiRef.current.view === 'compact' && !movingRef.current && !document.documentElement.classList.contains('di-dragging')
+    const l = ok ? leanFor(n) : { x: 0, y: 0 }
+    el.style.setProperty('--di-lean', `${l.x}px ${l.y}px`)
+  }, [])
+  useEffect(() => {
+    desk()?.onIslandCursor?.((n) => leanTo(n))
+    desk()?.onIslandSnapGhost?.((p) => setGhost(p))
+    desk()?.onIslandSnapped?.((b) => {
+      snapBounceIn(rootEl.current, b, fRef.current)
+      pump(800)
+    })
+    const move = (e: PointerEvent) => {
+      leanTo(cursorNear({ x: e.clientX, y: e.clientY }, target.current[0]))
+    }
+    window.addEventListener('pointermove', move, { passive: true })
+    return () => window.removeEventListener('pointermove', move)
+  }, [leanTo, pump])
+  useEffect(() => {
+    if (ui.view !== 'compact') leanTo(null)
+  }, [ui.view, leanTo])
   useEffect(() => {
     logIslandUi('visible', hidden ? 'hidden: animations paused' : 'shown')
   }, [hidden])
@@ -1858,7 +1987,10 @@ export function DesktopIsland() {
   }
   const benUnread = s.ben.unread > 0 && !hushed && !s.locked
   const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
-  const sweep = ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old ? (run ? <Sweep from={run.startedAt} to={run.endsAt} freeze={run.pausedAt} /> : s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null) : null
+  const edgeOk = ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old && !showMoment
+  // IM2: while a timer runs the whole outline fills (with a glowing head) instead of the bottom line.
+  const sweep = edgeOk && !run && s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null
+  const border = edgeOk && run && !moving ? <LiquidBorder from={run.startedAt} to={run.endsAt} freeze={run.pausedAt} w={box.w} h={box.h} r={radius} /> : null
   return (
     <FeelContext.Provider value={f}>
       <ViewContext.Provider value={ui.view}>
@@ -1877,7 +2009,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: radius, scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -1887,8 +2019,9 @@ export function DesktopIsland() {
               ref={shape}
               data-hot
               className="di-shape"
-              style={{ width: box.w, height: box.h, borderRadius: radius, clipPath: clip, scale: lift, originX: origin, originY: 0 }}
+              style={{ width: box.w, height: box.h, borderRadius: radius, clipPath: clip, scale: lift, scaleX: jx, scaleY: jy, originX: origin, originY: 0 }}
             >
+              <Sky />
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
                   key={ui.view}
@@ -1903,10 +2036,12 @@ export function DesktopIsland() {
                   {views[ui.view]}
                 </motion.div>
               </AnimatePresence>
+              {border}
               <motion.div className="di-follow" style={{ y: mh }}>{sweep}</motion.div>
             </motion.div>
             <motion.div className={`di-beside at-${anchor}`} style={{ x: besideX }}>
-              <AnimatePresence>{bubbleEl}</AnimatePresence>
+              <AnimatePresence>{stackOn ? null : bubbleEl}</AnimatePresence>
+              {stackOn && <LiveStack items={stack} open={stackOpen} side={side as 1 | -1} icon={bubbleIcon} onPick={pickKey} onMoved={(done) => (done ? sendHot(true) : pump(700))} />}
             </motion.div>
             {/* IC20: while the mouse is on the pill, the panel's sections are kept laid out (hidden), so opening has nothing to build. */}
             {ui.over && ui.view !== 'expanded' && !s.locked && (
@@ -1927,6 +2062,7 @@ export function DesktopIsland() {
             {/* IC7: the menu for this; IC6: the wheel's number. */}
             {menu && <ActMenu items={menu} subject={run?.subject} onPick={pickMenu} onRename={(n) => (setMenu(null), tap({ kind: 'rename', subject: n }))} onClose={() => setMenu(null)} />}
             <WheelBadge text={wheelText} />
+            <SnapGhost spot={ghost} />
             <AnimatePresence>
               {toast && (
                 <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)} onAnimationComplete={() => sendHot(true)}>
@@ -1938,6 +2074,7 @@ export function DesktopIsland() {
             </motion.div>
           </div>
         </LayoutGroup>
+        <IslandParticles />
         {debugOn && <IslandDebug peek={peekBox()} />}
       </MotionConfig>
       </ViewContext.Provider>

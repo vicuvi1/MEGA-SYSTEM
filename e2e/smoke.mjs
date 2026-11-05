@@ -147,11 +147,12 @@ try {
         now: null, next: { title: 'Gym', start: now + 2 * 3600_000, end: now + 3 * 3600_000 },
         mustdos: [{ i: 0, text: 'Call the bank', done: false }], water: { ml: 500, target: 2000 }, reps: [], alert: null
       }
-      window.__island = { hot: 0, take: [], actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.__island = { hot: 0, take: [], actions: [], prefs: [], send: (name, v) => cbs[name]?.(v), snap }
       window.desktop = new Proxy({
         islandHot: () => { window.__island.hot++ },
         islandTakeClicks: (on) => { window.__island.take.push(on) },
         islandAction: (a) => { window.__island.actions.push(a) },
+        setIslandPrefs: async (p) => { window.__island.prefs.push(p); return null },
         onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
         onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
       }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
@@ -325,6 +326,77 @@ try {
     await ip.press('.di-cmd input', 'Enter')
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'water' && a.ml === 500), null, { timeout: 3000 })
     if (await ip.evaluate(() => window.__island.actions.some((a) => a.kind === 'chat'))) throw new Error('Enter sent the line to Ben instead of logging the water')
+    await ip.context().close()
+  })
+  // The island's motion and live widgets (IM1–IM13, IC5, IC13–IC17) on made-up data.
+  await step('Desktop island: progress border, bedtime countdown, a celebration, Ben thinking, the stack, the evening story, edit the pill', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: { text: 'Nice work', at: new Date(now - 60_000).toISOString(), face: '🙂' }, unread: 0, busy: false, steps: [] },
+        running: { subject: 'Write the essay', startedAt: now - 5 * 60_000, endsAt: now + 20 * 60_000 },
+        now: null, next: null, mustdos: [{ i: 0, text: 'Call the bank', done: false }, { i: 1, text: 'Pay rent', done: true }],
+        water: { ml: 500, target: 2000 }, reps: [], alert: null, today: { focusMin: 40, focusGoal: 120 }
+      }
+      window.__island = { prefs: [], snap, send: (name, v) => cbs[name]?.(v) }
+      window.__setSnap = (patch) => { window.__island.snap = { ...window.__island.snap, at: Date.now(), ...patch }; cbs.state?.(window.__island.snap) }
+      window.desktop = new Proxy({
+        setIslandPrefs: async (p) => { window.__island.prefs.push(p); return null },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
+    // IM2: a running timer fills the outline.
+    await ip.waitForSelector('.di-border .di-border-fg', { timeout: 4000 })
+    // IM4: all must-dos done: the pill stretches with what happened.
+    await ip.evaluate(() => window.__setSnap({ mustdos: window.__island.snap.mustdos.map((m) => ({ ...m, done: true })) }))
+    await ip.waitForSelector('.di-moment', { timeout: 3000 })
+    if (!/Both done/.test(await ip.locator('.di-moment').innerText())) throw new Error('the celebration did not say what happened')
+    await ip.waitForSelector('.di-moment', { state: 'detached', timeout: 5000 })
+    // IC13: the hour before bed: a countdown.
+    await ip.evaluate(() => window.__setSnap({ running: null, windDown: { bedAt: '23:00', minutesLeft: 42 }, sleep: { bed: true, wake: false, target: '23:00' } }))
+    await ip.waitForSelector('.di-pill.kind-winddown .di-crescent', { timeout: 3000 })
+    const bed = await ip.evaluate(() => { const e = document.querySelector('.di-pill-time.moon'); return e?.getAttribute('aria-label') ?? e?.textContent ?? '' })
+    if (!/^0:4[12]$/.test(bed)) throw new Error(`no bedtime countdown (${bed})`)
+    // IM3: Ben thinking: the wave.
+    await ip.evaluate(() => window.__setSnap({ windDown: null, sleep: null, ben: { ...window.__island.snap.ben, busy: true, steps: ['reading your day'] } }))
+    await ip.waitForSelector('.di-pill.kind-think .di-think', { timeout: 3000 })
+    // IC15: a timer, a meeting in 5 minutes and Ben's message: the other two stack beside the pill.
+    const t = Date.now()
+    await ip.evaluate((t) => window.__setSnap({ running: { subject: 'Essay', startedAt: t - 60_000, endsAt: t + 600_000 }, next: { title: 'Dentist', start: t + 5 * 60_000, end: t + 3600_000 }, ben: { ...window.__island.snap.ben, busy: false, unread: 1 } }), t)
+    await ip.waitForFunction(() => document.querySelectorAll('.di-stack-b[data-hot]').length === 2, null, { timeout: 3000 })
+    // IC14: the evening story.
+    await ip.evaluate(() => window.__setSnap({ alert: { id: 'recap:x', kind: 'recap', title: 'Your day', text: '1 of 2 must-dos', recap: { mustDone: 1, mustTotal: 2, waterMl: 1500, waterTarget: 2000, focusMin: 80, focusGoal: 120 }, actions: [{ label: 'Nice', action: { kind: 'dismiss', id: 'recap:x' } }] } }))
+    await ip.waitForSelector('.di-peek.alert .ev-scene', { timeout: 4000 })
+    await ip.click('.ev-scene')
+    await ip.waitForSelector('.ev-all', { timeout: 3000 })
+    await ip.keyboard.press('Escape')
+    await ip.evaluate(() => window.__setSnap({ alert: null }))
+    // IC17: edit the pill in the panel: hide an item and it is saved.
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel', { timeout: 5000 })
+    await ip.click('.di-edit-open')
+    await ip.waitForSelector('.di-edit-item', { timeout: 3000 })
+    await ip.click('[data-tap="edit:points"]')
+    await ip.click('[data-tap="edit:done"]')
+    await ip.waitForFunction(() => window.__island.prefs.some((p) => p.pillOrder?.find((x) => x.id === 'points')?.on === true), null, { timeout: 3000 })
+    // Calm and Off: still opens and closes, no celebrations.
+    for (const motion of ['calm', 'off']) {
+      await ip.evaluate((m) => window.__island.send('prefs', { size: 'normal', opacity: 1, look: 'black', motion: m }), motion)
+      await ip.keyboard.press('Escape')
+      await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+      // The mouse is still on it, so it may already peek: a click on the shape opens it either way.
+      await ip.waitForTimeout(400)
+      await ip.click('.di-shape', { position: { x: 24, y: 14 } })
+      await ip.waitForSelector('.di-panel', { timeout: 5000 })
+    }
     await ip.context().close()
   })
   await step('no uncaught page errors', async () => {

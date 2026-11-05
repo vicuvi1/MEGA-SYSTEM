@@ -5,6 +5,7 @@
 // Also the island's small live pieces: the glass, rolling digits, the marquee
 // and the count-up. Pure presentation: no data is changed here. How much moves
 // follows the island's feel (Full / Calm / Off, islandFeel.ts).
+import { burstFrom } from './IslandParticles'
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { useFeel, wavePath } from './islandFeel'
@@ -358,23 +359,16 @@ export function TypeIn({ text, speed = 18 }: { text: string; speed?: number }) {
   )
 }
 
-/** A7: confetti that bursts and falls, and a coin that flies to your points. */
+/** A7: a burst of confetti (the island's one particle engine, Full only) and a coin that flies to your points. */
 export function RewardScene({ title }: { title: string }) {
   const f = useFeel()
   const reduce = useReducedMotion() || !f.extras
-  const bits = useMemo(() => Array.from({ length: 26 }, (_, i) => ({ a: (i / 26) * Math.PI * 2 + (i % 3) * 0.2, v: 60 + ((i * 29) % 70), c: ['#d4ff3f', '#ffd451', '#ff7ab6', '#7fd4ff', '#ffffff'][i % 5], r: (i * 47) % 360 })), [])
+  const el = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!reduce) burstFrom(el.current, ['#d4ff3f', '#ffd451', '#ff7ab6', '#7fd4ff', '#ffffff'], 60)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="sc sc-reward" aria-hidden>
-      {!reduce &&
-        bits.map((b, i) => (
-          <motion.i
-            key={i}
-            style={{ background: b.c }}
-            initial={{ x: 0, y: 0, rotate: 0, opacity: 1 }}
-            animate={{ x: Math.cos(b.a) * b.v, y: [0, Math.sin(b.a) * b.v * 0.6, Math.sin(b.a) * b.v * 0.6 + 70], rotate: b.r * 2, opacity: [1, 1, 0] }}
-            transition={{ duration: 1.6, ease: [0.15, 0.7, 0.3, 1] }}
-          />
-        ))}
+    <div ref={el} className="sc sc-reward" aria-hidden>
       <motion.span className="sc-coin" initial={{ scale: 0.3, y: 10, opacity: 0 }} animate={reduce ? { scale: 1, opacity: 1 } : { scale: [0.3, 1.25, 1], y: [10, -4, 0], opacity: 1 }} transition={{ duration: 0.6 }}>
         🪙
       </motion.span>

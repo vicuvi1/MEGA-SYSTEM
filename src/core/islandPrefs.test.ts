@@ -40,7 +40,7 @@ describe('what the pill shows, in your order (IF4)', () => {
     const acts = activities(snap, at(10, 5))
     expect(pillBubbles(acts)).toMatchObject({ main: { kind: 'timer' }, second: { kind: 'next' } })
     expect(pillBubbles(acts, 'water')).toMatchObject({ main: { kind: 'water' }, second: { kind: 'timer' } })
-    expect(pillBubbles([])).toEqual({ main: null, second: null })
+    expect(pillBubbles([])).toEqual({ main: null, second: null, rest: [] })
   })
   it('never brings back the streak flame', () => {
     expect(cleanIslandPrefs({ pillOrder: [{ id: 'streak', on: true }] }).pillOrder.map((x) => x.id)).not.toContain('streak')

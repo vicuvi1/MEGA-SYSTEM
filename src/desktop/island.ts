@@ -31,6 +31,7 @@ import { cleanIslandPrefs, ISLAND_ZOOM, quietUntil, type IslandPrefs } from '../
 import { applyProfile, autoProfile } from '../core/islandProfiles'
 import { typingFade } from '../core/islandCommands'
 import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
+import { cursorNear, dropPlacement, snapBounce } from './islandPlace'
 import {
   chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
   noteRecentApp, overRects, parseWatcherLine, placeIsland, QUNS_PRESENTATION, rateLimit, rectsToDip, rememberLayout, sampleSeconds, SHORTCUTS_VERSION,
@@ -124,7 +125,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let inWin: boolean | null = null
   /** Island debug (IC13): the last poll's timing, for the overlay. */
   const timing = { lastPoll: 0, jitter: 0, lastTick: 0, lag: 0, flips: 0 }
-  let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number; startedAt: number; lastMove: number; lx: number; ly: number } | null = null
+  let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number; startedAt: number; lastMove: number; lx: number; ly: number; spot?: string } | null = null
   /** The page is listening (IS22): shortcuts pressed before that wait here. */
   let ready = false
   let pending: string[] = []
@@ -366,11 +367,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     savedDisplay = d.id
     const sb = d.bounds
     const wa = d.workArea
-    if (c.x - sb.x < 70) place = 'left'
-    else if (sb.x + sb.width - c.x < 70) place = 'right'
-    // IF1: dropped at the top: its left or right fifth is that corner, the rest is the middle.
-    else if (c.y - sb.y < 50) place = c.x - sb.x < sb.width * 0.2 ? 'top-left' : sb.x + sb.width - c.x < sb.width * 0.2 ? 'top-right' : 'top'
-    else place = 'free'
+    // IM7: a side edge docks; near the top it snaps to the nearest top spot; elsewhere it floats.
+    place = dropPlacement(c, sb)
+    win.webContents.send('island:snapGhost', null)
     // Where you drop it is the spot: no extra offset on top.
     desk = { ...desk, offset: { x: 0, y: 0 } }
     pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * cssScale() * pageZoom() - wa.y) / wa.height))
@@ -379,6 +378,12 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     savePrefs()
     sendPlacement()
     placeWin()
+    // IM7: the window moved once; the page plays the last bit of the way as a bounce.
+    try {
+      const nb = win.getBounds()
+      const bounce = snapBounce({ x: b.x, y: b.y }, { x: nb.x, y: nb.y }, pageZoom())
+      if (why === 'drop' && (bounce.dx || bounce.dy)) win.webContents.send('island:snapped', bounce)
+    } catch { /* fine */ }
     // IS21: clicks pass through again where there's no island (the page takes them again on the next move).
     setIgnore(true, 'drag ended', true)
     if (why === 'stuck') {
@@ -411,6 +416,12 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
           drag.lastMove = t
           // Only the position: the size is set once on drop (no jumps between screens).
           win.setPosition(p.x - drag.offX, p.y - drag.offY)
+          // IM7: the spot it would snap to, for the ghost (only when it changes).
+          const spot = dropPlacement(p, screen.getDisplayNearestPoint(p).bounds)
+          if (spot !== drag.spot) {
+            drag.spot = spot
+            win.webContents.send('island:snapGhost', spot)
+          }
         } else if (dragStale({ now: t, lastMove: drag.lastMove, startedAt: drag.startedAt })) endDrag('stuck')
       }, 16)
     }
@@ -464,6 +475,24 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     win.webContents.send('island:hover', now)
     diag(now ? 'hover-in' : 'hover-out', now ? 'Mouse over the island: it takes clicks' : 'Mouse left the island: clicks pass through')
   }, 50)
+
+  // IM11, IM12: the pointer near the island (within 40 px), ~30 times a second,
+  // only while it is near: the pill leans toward it and a sleeping dot wakes.
+  let leanSent = false
+  setInterval(() => {
+    if (!win || win.isDestroyed() || drag || !win.isVisible() || !hot.length) return
+    const c = screen.getCursorScreenPoint()
+    const b = win.getBounds()
+    const z = pageZoom() || 1
+    const near = cursorNear({ x: (c.x - b.x) / z, y: (c.y - b.y) / z }, hot[0])
+    if (near) {
+      leanSent = true
+      win.webContents.send('island:cursor', near)
+    } else if (leanSent) {
+      leanSent = false
+      win.webContents.send('island:cursor', null)
+    }
+  }, 33)
 
   // ---- Island debug (IC13): what the desktop sees, ~10 times a second ----
   const debugOn = () => desk.debugUntil > Date.now()
@@ -825,7 +854,11 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   // Settings → Desktop island (from the app window).
   ipcMain.handle('island:getPrefs', (e) => (fromApp(e) ? allPrefs() : null))
   ipcMain.handle('island:setPrefs', (e, p: Partial<IslandPrefs & IslandDeskPrefs> & { place?: unknown; displayId?: unknown }) => {
-    if (!fromApp(e)) return null
+    // IC17: the island's edit mode may save its pill order, and nothing else.
+    if (!fromApp(e)) {
+      if (!fromIsland(e) || !p || !Array.isArray(p.pillOrder)) return null
+      p = { pillOrder: p.pillOrder }
+    }
     const before = allPrefs()
     prefs = cleanIslandPrefs({ ...prefs, ...p })
     // Saved spots are the desktop's own: Settings can't overwrite them.

@@ -81,7 +81,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap'
   title: string
   text: string
   face?: string
@@ -90,7 +90,12 @@ export interface IslandAlert {
   meeting?: boolean
   /** SI6: you've been ignoring this kind: only a dot, it waits in the panel. */
   dot?: boolean
+  /** IC14: the evening story's numbers (kind 'recap'). */
+  recap?: IslandRecap
 }
+
+/** IC14: the day in a few numbers, told as a short story in the evening. */
+export interface IslandRecap { mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; focusMin: number; focusGoal: number; streak?: number }
 
 export interface IslandSnapshot {
   at: number
@@ -122,7 +127,9 @@ export interface IslandSnapshot {
   /** Wind-down: the hour before your bedtime target. */
   windDown?: { bedAt: string; minutesLeft: number } | null
   /** Your best streak right now (sport / focus / water), and whether it's at risk today. */
-  streak?: { days: number; kind: 'sport' | 'focus' | 'water'; atRisk: boolean } | null
+  streak?: { days: number; kind: 'sport' | 'focus' | 'water'; atRisk: boolean; /** IM4: your best ever (a new best is celebrated). */ best?: number } | null
+  /** IC5: today's focus minutes and goal (the Today ring). */
+  today?: { focusMin: number; focusGoal: number }
   /** How much of today is done, 0–100 (the day ring around the pill). */
   dayPct?: number
   /** Todoist: your next tasks for today (tick them on the island). */
@@ -383,7 +390,7 @@ export function alertPref(kind: string, meeting = false): AlertKindPref | null {
   if (kind === 'block' || kind === 'drift' || kind === 'end' || kind === 'quality') return 'block'
   if (kind === 'bed' || kind === 'winddown' || kind === 'sleep') return 'bed'
   if (kind === 'morning') return 'morning'
-  if (kind === 'highlight') return 'highlight'
+  if (kind === 'highlight' || kind === 'recap') return 'highlight'
   if (kind === 'reward') return 'reward'
   if (kind === 'over') return 'over'
   return null
@@ -528,7 +535,7 @@ export function cleanOrder(v: unknown): { id: PillItem; on: boolean }[] {
 // ---- Live activities: everything worth showing in the pill right now ----
 
 export interface Activity extends Omit<Pill, 'kind'> {
-  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed' | 'points' | 'mustdos' | 'tasks'
+  kind: 'timer' | 'now' | 'next' | 'idle' | 'ben' | 'water' | 'bed' | 'winddown' | 'points' | 'mustdos' | 'tasks'
   /** Stable id, so a chosen activity stays chosen as numbers tick. */
   key: string
   /** When it starts (ms): a live countdown in the last 10 minutes (P7). */
@@ -556,7 +563,13 @@ export function activities(s: IslandSnapshot, now: number, order: { id: PillItem
     now: () => (s.now ? { key: `now:${s.now.start}`, kind: 'now', text: `${s.now.call ? '📞 ' : ''}${s.now.title}`, sub: `${mins(s.now.end - now)} left`, pct: (now - s.now.start) / Math.max(1, s.now.end - s.now.start), over: false, dot } : null),
     next: () => (s.next && s.next.start - now <= 3 * 3600_000 ? { key: `next:${s.next.start}`, kind: 'next', text: s.next.title, sub: `in ${mins(s.next.start - now)}`, pct: 0, over: false, dot, at: s.next.start } : null),
     ben: () => (s.ben.unread > 0 && s.ben.last ? { key: `ben:${s.ben.last.at}`, kind: 'ben', text: s.ben.last.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 60), sub: 'Ben', pct: 0, over: false, dot } : null),
-    bed: () => (s.sleep?.bed && !s.running ? { key: 'bed', kind: 'bed', text: 'Going to bed?', sub: 'Tap to log it in Waky', pct: 0, over: false, dot } : null),
+    bed: () => {
+      if (s.running) return null
+      // IC13: the hour before bed: a countdown ("Bed in 0:42") that fills a crescent.
+      const left = windDownLeft(s, now)
+      if (left != null && s.windDown) return { key: 'winddown', kind: 'winddown', text: `Bed in ${bedClock(left)}`, sub: `Bed at ${s.windDown.bedAt}`, pct: Math.min(1, Math.max(0, 1 - left / 60)), over: false, dot, at: now + left * 60_000 }
+      return s.sleep?.bed ? { key: 'bed', kind: 'bed', text: 'Going to bed?', sub: 'Tap to log it in Waky', pct: 0, over: false, dot } : null
+    },
     // Water shows even when nothing else is on (P5).
     water: () => (s.water.target > 0 && s.water.ml < s.water.target ? { key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot } : null),
     points: () => {
@@ -594,10 +607,33 @@ export function activities(s: IslandSnapshot, now: number, order: { id: PillItem
  * first) and the next one in your order beside it. The pill and its second
  * bubble both read this, so they always follow the same order.
  */
-export function pillBubbles(acts: Activity[], pick: string | null = null): { main: Activity | null; second: Activity | null } {
+export function pillBubbles(acts: Activity[], pick: string | null = null): { main: Activity | null; second: Activity | null; rest: Activity[] } {
   const main = acts.find((a) => a.key === pick) ?? acts[0] ?? null
-  const second = acts.find((a) => a !== main) ?? null
-  return { main, second }
+  const rest = acts.filter((a) => a !== main)
+  return { main, second: rest[0] ?? null, rest }
+}
+
+/**
+ * IC15: the live things beside the pill, in your order. With a live pill:
+ * one is the round bubble (IL2); two or more stack up and fan out on hover.
+ * Nothing beside a pill that isn't live itself.
+ */
+export function liveStack(acts: Activity[], pick: string | null, now: number, max = 4): Activity[] {
+  const { main, rest } = pillBubbles(acts, pick)
+  if (!liveActivity(main, now)) return []
+  return rest.filter((a) => liveActivity(a, now)).slice(0, max)
+}
+
+/** IC13: minutes left until bed (from the wind-down hour in the snapshot), or null. */
+export function windDownLeft(s: IslandSnapshot, now: number): number | null {
+  if (!s.windDown) return null
+  const left = s.windDown.minutesLeft - (s.at > 0 ? Math.max(0, now - s.at) / 60_000 : 0)
+  return left > 0 ? left : null
+}
+/** "0:42" for 42 minutes, "1:00" for an hour (rounded up to the minute). */
+export function bedClock(minutes: number): string {
+  const m = Math.max(0, Math.ceil(minutes))
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
 }
 
 /** Something live, worth keeping the pill awake for: a timer, a block now or soon, an alert, Ben's new message, bedtime (IP3). */
@@ -624,7 +660,7 @@ export function meetingToOpen(s: IslandSnapshot, now: number, minutes: number): 
  * round bubble beside it.
  */
 export function liveActivity(a: Activity | null, now: number): boolean {
-  return !!a && (a.kind === 'timer' || a.kind === 'ben' || (a.kind === 'next' && a.at != null && a.at - now <= 10 * 60_000))
+  return !!a && (a.kind === 'timer' || a.kind === 'ben' || a.kind === 'winddown' || (a.kind === 'next' && a.at != null && a.at - now <= 10 * 60_000))
 }
 
 // ---- The island's states (desktop command center) --------------------------
@@ -650,7 +686,8 @@ export type IslandUiEvent =
   | { type: 'leave' }
   | { type: 'click' }
   | { type: 'toggle' }
-  | { type: 'alert' }
+  /** `ms`: how long it peeks, when not your usual (the evening story needs ~10 s). */
+  | { type: 'alert'; ms?: number }
   | { type: 'alertEnd' }
   | { type: 'close' }
   | { type: 'blur' }
@@ -699,7 +736,7 @@ export function islandStep(ui: IslandUi, e: IslandUiEvent, hide: IslandPrefs['hi
     case 'alert':
       // Something new peeks (never opens the whole panel by itself).
       if (ui.view === 'expanded') return { ui }
-      return { ui: to('peek', { byAlert: true }), timer: { ms: t.alertPeek, event: { type: 'alertEnd' } } }
+      return { ui: to('peek', { byAlert: true }), timer: { ms: Number.isFinite(e.ms) ? Math.max(t.alertPeek, e.ms!) : t.alertPeek, event: { type: 'alertEnd' } } }
     case 'alertEnd':
       return ui.view === 'peek' && !ui.over ? { ui: to('compact', { byAlert: false }), timer: null } : { ui: { ...ui, byAlert: false } }
     case 'close':

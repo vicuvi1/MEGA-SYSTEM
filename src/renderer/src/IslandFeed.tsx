@@ -11,6 +11,7 @@ import { eyesAlert, morningAlert, moveAlert, waterAlert, windDown, windDownAlert
 import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
 import { dayHighlight, highlightAlert, rewardAlert } from '@core/islandFeel'
 import { liveScore } from '@core/liveScore'
+import { recapAlert } from '@core/islandMoments'
 import { isDeclined, isInvite, isMarker, isRealMeeting, isTentative } from '@core/calResponse'
 import type { TodoTask } from '@core/todoist'
 import { currentSession, sessionValid } from './web/session'
@@ -252,6 +253,16 @@ async function todayBlocks(): Promise<IslandBlock[]> {
 }
 
 let listening = false
+/** IC14: your evening review time (Ben's rhythm), checked every 10 minutes. */
+let evening = { at: 0, hm: '21:00' }
+async function eveningAt(now: number): Promise<string> {
+  if (now - evening.at > 10 * 60_000) {
+    evening.at = now
+    const rh = await life.coach?.rhythm?.('state').catch(() => null)
+    if (rh?.prefs?.evening) evening.hm = rh.prefs.evening
+  }
+  return evening.hm
+}
 
 export { ISLAND_LOG, type IslandLogEntry } from './islandLog'
 
@@ -398,6 +409,10 @@ export function IslandFeed() {
     const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusMin: status.today.focusMin, focusGoal: Math.max(50, status.goals.reduce((t, g) => t + g.perDayMin, 0)), waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone })
     const highlight = dayHighlight({ focusMin: status.today.focusMin, focusBefore: status.week.filter((d) => d.day < todayKey).map((d) => d.min), mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone, sportStreak: body?.streak ?? 0 })
     const celebrated = get<Record<string, number>>(CELEBRATED, {})
+    // IC5, IC14: today's focus against its goal (the Today ring, the evening story).
+    const focusGoal = Math.max(50, status.goals.reduce((t, g) => t + g.perDayMin, 0))
+    const evAt = await eveningAt(now)
+    const sportStreak = body?.streak ?? 0
     // IS19: a failed fetch keeps the old list marked stale and tries again soon.
     // CL2: fresh every 5 minutes (it was every minute); ticking a task off refreshes it at once.
     if (now - todoCache.at > (todoCache.failed ? 60_000 : 5 * 60_000) && life.todoist?.today) {
@@ -480,6 +495,7 @@ export function IslandFeed() {
           moveAlert(body) ??
           waterAlert(body) ??
           eyesAlert(body) ??
+          (busy ? null : recapAlert({ now, eveningAt: evAt, dismissed, recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget: status.today.waterTarget || WATER_TARGET_ML, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined } })) ??
           highlightAlert(highlight, now, dismissed) ??
           (call ? null : pick)
         )
@@ -496,6 +512,9 @@ export function IslandFeed() {
       tasksAt: todoCache.okAt || undefined,
       tasksStale: todoCache.failed,
       dayPct: live.score,
+      today: { focusMin: status.today.focusMin, focusGoal },
+      // IM4: a new best streak is celebrated on the island.
+      streak: body && body.streak > 0 ? { days: body.streak, kind: 'sport', atRisk: false, best: Number((body as { bestStreak?: number }).bestStreak) || body.streak } : null,
       windDown: (() => {
         const logs = sleep?.recentLogs ?? []
         const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'

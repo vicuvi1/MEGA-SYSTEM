@@ -64,6 +64,9 @@ const api: DesktopApi = {
   onIslandTyping: (cb) => void ipcRenderer.on('island:typing', (_e, on) => cb(!!on)),
   onIslandPlacement: (cb) => void ipcRenderer.on('island:placement', (_e, p) => cb(p)),
   onIslandToggle: (cb) => void ipcRenderer.on('island:toggle', () => cb()),
+  onIslandCursor: (cb) => void ipcRenderer.on('island:cursor', (_e, n) => cb(n && Number.isFinite(n.dx) && Number.isFinite(n.dy) ? { dx: Number(n.dx), dy: Number(n.dy), dist: Number(n.dist) || 0 } : null)),
+  onIslandSnapGhost: (cb) => void ipcRenderer.on('island:snapGhost', (_e, p) => cb(['top', 'top-left', 'top-right', 'left', 'right', 'free'].includes(p) ? p : null)),
+  onIslandSnapped: (cb) => void ipcRenderer.on('island:snapped', (_e, b) => cb({ dx: Number(b?.dx) || 0, dy: Number(b?.dy) || 0 })),
   islandReady: () => ipcRenderer.send('island:ready'),
   showApp: (page) => ipcRenderer.send('island:showApp', page),
   // Ben on this PC (P1–P20)

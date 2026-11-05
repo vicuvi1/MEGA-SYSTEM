@@ -168,6 +168,12 @@ export interface DesktopApi {
   onIslandPlacement?(cb: (p: IslandPlacement) => void): void
   /** Island window: the shortcut was pressed. */
   onIslandToggle?(cb: () => void): void
+  /** Island window (IM11, IM12): the pointer's offset from the island's middle while it is within 40 px (CSS px), or null once it went away. */
+  onIslandCursor?(cb: (near: { dx: number; dy: number; dist: number } | null) => void): void
+  /** Island window (IM7): while dragging, the spot it would snap to (null when the drag ends). */
+  onIslandSnapGhost?(cb: (spot: IslandPlacement | null) => void): void
+  /** Island window (IM7): the window jumped to its spot; play the last `dx`/`dy` CSS px as a bounce. */
+  onIslandSnapped?(cb: (b: { dx: number; dy: number }) => void): void
   /** Island window: listening now (send placement + latest snapshot). */
   islandReady?(): void
   /** Island window: the real mouse pointer entered / left the pill. */
