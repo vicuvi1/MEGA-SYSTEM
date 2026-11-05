@@ -1943,3 +1943,11 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .ss-bars span.short { background: var(--orange); }
 @media (max-width: 480px) { .ss-nums b { font-size: 18px; } }
 .ss-guard { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--orange) 16%, transparent); }
+
+/* Urge crusher: strength before/after and one action (H11) */
+.urge-scale { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; margin: 10px 0; }
+.urge-scale small { width: 100%; text-align: center; color: var(--muted); margin-bottom: 2px; }
+.urge-scale button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.urge-scale button.on { background: var(--accent); color: var(--accent-ink, #111); border-color: transparent; }
+.urge-action { text-align: center; margin: 10px 0; }
+.urge-action p { margin: 4px 0 8px; }

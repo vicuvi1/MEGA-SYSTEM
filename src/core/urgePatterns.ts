@@ -3,7 +3,7 @@
 // on one weekday; a reset weighs more than an urge you beat.
 
 export interface UrgeEvent { kind: 'urge' | 'reset'; ts: string }
-export interface TriggerNote { at: string; kind: 'urge' | 'reset'; trigger: string }
+export interface TriggerNote { at: string; kind: 'urge' | 'reset'; trigger: string; before?: number; after?: number; action?: string }
 export interface RiskWindow {
   /** 0..11: 2-hour block of the day (5 = 10:00–12:00). */
   slot: number

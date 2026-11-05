@@ -15,7 +15,13 @@ export function loadTriggers(db: any): TriggerNote[] {
 }
 
 export function addTrigger(db: any, note: TriggerNote): void {
-  const list = [...loadTriggers(db), { at: note.at, kind: note.kind === 'reset' ? 'reset' : 'urge', trigger: String(note.trigger).slice(0, 60) }].slice(-300)
+  const lvl = (v: unknown) => (typeof v === 'number' && v >= 1 && v <= 10 ? Math.round(v) : undefined)
+  const entry: TriggerNote = { at: note.at, kind: note.kind === 'reset' ? 'reset' : 'urge', trigger: String(note.trigger).slice(0, 60) }
+  // How strong it was before and after the crusher, and what you did (H11).
+  if (lvl(note.before) != null) entry.before = lvl(note.before)
+  if (lvl(note.after) != null) entry.after = lvl(note.after)
+  if (note.action) entry.action = String(note.action).slice(0, 40)
+  const list = [...loadTriggers(db), entry].slice(-300)
   setSetting(db, TRIGGER_KEY, JSON.stringify(list))
 }
 

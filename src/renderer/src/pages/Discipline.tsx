@@ -9,6 +9,7 @@ import { Icon } from '../Icon'
 import { Coins, useAction } from '../ui'
 import { mmss } from './planUi'
 import { useTicker } from '../useTicker'
+import { pickUrgeAction } from '@core/urgeAction'
 
 interface Props {
   state: DisciplineState
@@ -329,8 +330,39 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
   const elapsed = startedAt ? now - Date.parse(startedAt) : 0
   const left = Math.max(0, total - elapsed)
   const phase = BREATH[Math.floor(elapsed / 4000) % 4]
-  const minute = Math.floor(elapsed / 60000)
-  const prompts = ['Stand up. Breathe with the circle.', 'Drop and do 10 push-ups.', 'Cold water on your face, then breathe.']
+  // H11: one action from your most common trigger, and how strong it was before/after.
+  const [trigger, setTrigger] = useState<string | null>(null)
+  const [before, setBefore] = useState<number | null>(null)
+  const [after, setAfter] = useState<number | null>(null)
+  const [did, setDid] = useState(false)
+  useEffect(() => {
+    life.discipline.patterns?.().then((p) => setTrigger(p.triggers[0] ?? null)).catch(() => {})
+  }, [])
+  const action = pickUrgeAction(trigger)
+  const doAction = async () => {
+    try {
+      if (action.kind === 'pushups' && action.reps) await life.body.logWorkout({ title: 'Push-ups (urge crusher)', items: [{ exerciseId: 'pushups', name: 'Push-ups', unit: 'reps', amount: action.reps }], note: 'Urge crusher' })
+      if (action.kind === 'focus' && action.minutes) await life.focus.start('Urge → focus', action.minutes, null)
+      setDid(true)
+      window.dispatchEvent(new CustomEvent('life-body-changed'))
+    } catch {
+      setDid(true)
+    }
+  }
+  const finish = () => {
+    void life.discipline.note?.('urge', trigger ?? 'Other', { ...(before != null ? { before } : {}), ...(after != null ? { after } : {}), action: action.kind }).catch(() => {})
+    onFinish()
+  }
+  const Scale = ({ value, onPick, label }: { value: number | null; onPick: (n: number) => void; label: string }) => (
+    <div className="urge-scale" role="radiogroup" aria-label={label}>
+      <small>{label}</small>
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+        <button key={n} role="radio" aria-checked={value === n} className={value === n ? 'on' : ''} onClick={() => onPick(n)}>
+          {n}
+        </button>
+      ))}
+    </div>
+  )
   return (
     <motion.div className="urge" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="urge-inner">
@@ -343,10 +375,23 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
           <span>{phase}</span>
         </motion.div>
         <div className="urge-time">{mmss(left)}</div>
-        <p className="urge-prompt">{prompts[Math.min(minute, prompts.length - 1)]}</p>
+        {before == null ? (
+          <Scale value={before} onPick={setBefore} label="How strong is it? (1–10)" />
+        ) : (
+          <div className="urge-action">
+            <b>{action.title}</b>
+            <p className="hint">{action.how}</p>
+            {(action.kind === 'pushups' || action.kind === 'focus') && (
+              <button className="btn small" disabled={did} onClick={() => void doAction()}>
+                {did ? '✓ Done' : action.kind === 'pushups' ? `Log ${action.reps} push-ups` : `Start ${action.minutes} min`}
+              </button>
+            )}
+          </div>
+        )}
         <p className="hint">The urge peaks and passes. Stay here until the timer ends.</p>
+        {left === 0 && <Scale value={after} onPick={setAfter} label="And now? (1–10)" />}
         <div className="row center">
-          <button className="btn primary" disabled={left > 0} onClick={onFinish}>
+          <button className="btn primary" disabled={left > 0} onClick={finish}>
             {left > 0 ? 'Keep going…' : 'I crushed it'}
           </button>
           <button className="btn ghost" onClick={onCancel}>

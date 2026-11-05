@@ -1036,7 +1036,7 @@ export function createTursoWebBridge(): Bridge {
     economy: S('economy') as Bridge['economy'],
     discipline: S('discipline', {
       state: async () => withMan(await (await svcP).discipline.state()),
-      note: async (kind: 'urge' | 'reset', trigger: string) => (await svcP).write((s) => addTrigger(s.db, { at: new Date().toISOString(), kind, trigger })),
+      note: async (kind: 'urge' | 'reset', trigger: string, extra?: { before?: number; after?: number; action?: string }) => (await svcP).write((s) => addTrigger(s.db, { at: new Date().toISOString(), kind, trigger, ...(extra ?? {}) })),
       patterns: async () =>
         (await svcP).read((s) => ({
           windows: riskWindows(urgeEvents(s.db)).map(windowLabel),
