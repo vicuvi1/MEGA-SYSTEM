@@ -79,4 +79,24 @@ describe('server: Telegram webhook and tick (S5)', () => {
     expect(q("SELECT COUNT(*) FROM settings WHERE key = 'coach_tick_at'")[0][0]).toBe(0)
     expect(Number(q("SELECT value FROM sys_kv WHERE key = 'coach_tick_at'")[0][0])).toBe(at.getTime())
   }, 30_000)
+
+  it('what Ben sends on his own is logged with its kind, and his daily counters use the app day (LT12, LT4)', async () => {
+    const { env, q, sent } = world()
+    // 01:30 at night: still the evening of the 25th in the app (the day turns at 04:00).
+    const at = new Date('2026-10-26T01:30:00Z')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(at)
+    q(`INSERT INTO settings (key, value) VALUES ('notif_settings', '{"quiet":{"on":false}}')`)
+    // A water nudge Telegram refused on the last tick: this tick sends it again.
+    const out = JSON.stringify([{ text: '💧 Water 0.3 of 2.7 L and the day is going.', markup: null, at: at.getTime() - 60_000 }])
+    q(`INSERT INTO settings (key, value) VALUES ('ben_outbox', '${out}')`)
+    q(`INSERT INTO settings (key, value) VALUES ('ben_sent_count', '{"day":"2026-10-25","n":3}')`)
+    await runTick({ ...env, botToken: TOKEN, chatId: CHAT }, at)
+    expect(sent.some((s) => s.method === 'sendMessage' && /Water 0\.3/.test(s.body?.text))).toBe(true)
+    const log = JSON.parse(String(q("SELECT value FROM settings WHERE key = 'coach_log'")[0][0]))
+    const nudge = log.find((e: any) => e.proactive && /Water 0\.3/.test(e.text))
+    expect(nudge.kind).toBe('water')
+    // The count for the app day (the 25th) goes on; at midnight it used to start again.
+    expect(JSON.parse(String(q("SELECT value FROM settings WHERE key = 'ben_sent_count'")[0][0]))).toEqual({ day: '2026-10-25', n: 4 })
+  }, 30_000)
 })

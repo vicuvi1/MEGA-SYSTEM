@@ -9,6 +9,9 @@ import { calendarDay } from './dates'
 // - and a "New since 11:45" line where unread messages start (CN8).
 // Pure: no DOM, no React.
 
+export type NudgeKind = 'plan' | 'water' | 'block' | 'calendar' | 'mood' | 'idle' | 'slip' | 'reminder' | 'other'
+const NUDGE_KINDS: readonly NudgeKind[] = ['plan', 'water', 'block', 'calendar', 'mood', 'idle', 'slip', 'reminder', 'other']
+
 export interface FeedEntry {
   role: 'me' | 'coach'
   text: string
@@ -16,9 +19,11 @@ export interface FeedEntry {
   proactive?: boolean
   pending?: boolean
   done?: string[]
+  /** LT12: what kind of nudge this is, saved when it was sent (older entries: read from the words). */
+  kind?: NudgeKind
+  /** LT12: its title/time/length, saved when it was sent. */
+  info?: NudgeInfo
 }
-
-export type NudgeKind = 'plan' | 'water' | 'block' | 'calendar' | 'mood' | 'idle' | 'slip' | 'reminder' | 'other'
 /** 'raw' = every message, nothing folded or replaced (while searching). */
 export type Filter = 'all' | 'talk' | 'nudges' | 'logged' | 'raw'
 
@@ -51,6 +56,21 @@ export function nudgeKind(text: string): NudgeKind {
   if (/yesterday slipped|never miss twice/i.test(t)) return 'slip'
   if (/^(🔔|⏰)/u.test(t)) return 'reminder'
   return 'other'
+}
+
+/**
+ * LT12: kind and info for a nudge as it is created, from the fixed template
+ * (before Ben rewrites it in his own words, which the regexes can't read).
+ */
+export function tagNudge(template: string): { kind: NudgeKind; info?: NudgeInfo } {
+  const kind = nudgeKind(template)
+  const info = nudgeInfo(template, kind)
+  return Object.keys(info).some((k) => (info as any)[k] != null) ? { kind, info } : { kind }
+}
+
+/** The stored kind when there is a valid one, else read from the words (old entries). */
+function kindOf(e: FeedEntry): NudgeKind {
+  return e.kind && NUDGE_KINDS.includes(e.kind) ? e.kind : nudgeKind(e.text)
 }
 
 /** The title, time and length in a block or calendar nudge. */
@@ -138,8 +158,8 @@ export function buildFeed(log: FeedEntry[], opts: { now?: Date; seenAt?: string 
   const now = opts.now ?? new Date()
   const filter = opts.filter ?? 'all'
   const meta = log.map((e) => {
-    const kind: NudgeKind | 'talk' = e.role === 'coach' && e.proactive ? nudgeKind(e.text) : 'talk'
-    const info = kind === 'talk' ? {} : nudgeInfo(e.text, kind)
+    const kind: NudgeKind | 'talk' = e.role === 'coach' && e.proactive ? kindOf(e) : 'talk'
+    const info = kind === 'talk' ? {} : e.kind === kind && e.info && typeof e.info === 'object' ? e.info : nudgeInfo(e.text, kind)
     return { kind, info, key: kind === 'talk' ? null : sameKey(e, kind, info) }
   })
   // CN3: a later nudge about the same thing replaces the earlier ones.

@@ -30,6 +30,7 @@ import { loadTriggers, urgeEvents } from './disciplinePatterns'
 import { DESK_ACTIONS, minutesUntil } from '@core/benStakes'
 import { readPurchase } from '@core/benMoney'
 import { UNTRUSTED_NOTE } from '@core/benSafety'
+import type { NudgeInfo, NudgeKind } from '@core/chatFeed'
 import { pluginActionsHelp, pluginContext, readPluginAction, type PluginActionCall } from '../../../plugins'
 import { WATER_MAX_ML } from '@core/defaults'
 
@@ -137,6 +138,9 @@ export interface LogEntry {
   chips?: string[]
   /** Sent by the coach on its own (check-ins, plans, reviews, nudges). */
   proactive?: boolean
+  /** LT12: for a nudge, its kind and title/time, saved when it was sent (the chat reads these first). */
+  kind?: NudgeKind
+  info?: NudgeInfo
   /** Buttons and mini-widgets under the reply (interactive replies). */
   buttons?: { label: string; do: string }[]
   show?: string[]

@@ -69,6 +69,7 @@ import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginsOn, readData, writ
 import { cleanHealth, mergeDay, type HealthData } from '../plugins/health/health'
 import { HEALTH } from '../plugins/health'
 import { BEN_DAILY_MESSAGES, DEFAULT_TZ } from '@core/defaults'
+import { tagNudge } from '@core/chatFeed'
 
 /** What Ben already said today, by kind (each kind once a day). */
 const BEN_SENT = 'ben_sent_today'
@@ -632,7 +633,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       .write((db) => {
         const plain = text.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
         const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith('🔔') ? 'annoyed' : 'chill'])[0]
-        appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood }])
+        // LT12: its kind from the fixed template (Ben may have reworded the text).
+        const tag = tagNudge(original.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))
+        appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood, ...tag }])
         // …and in the bell, with the one thing to do about it.
         const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
         if (n) addNotif(db as any, n)

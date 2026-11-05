@@ -24983,6 +24983,59 @@ async function runPluginJobs(deps, opts = {}) {
 	}
 	return ran;
 }
+// src/core/chatFeed.ts
+var stripTags = (s) => s.replace(/<[^>]+>/g, "");
+/** What kind of automatic message this is, from its words. */
+function nudgeKind(text) {
+	const t = stripTags(text).trim();
+	if (/^(📅|🚶)/u.test(t)) return "calendar";
+	if (/(starts at \d{1,2}:\d{2}|is on now)/i.test(t) && /start the timer/i.test(t)) return "block";
+	if (/how do you feel right now|how was today, really/i.test(t)) return "mood";
+	if (/^💧/u.test(t) || /\bwater\b.*\b(of|\/)\s*\d/i.test(t)) return "water";
+	if (/your plan for today|^\W*your day\b|must-dos\b[\s\S]*approve/i.test(t)) return "plan";
+	if (/since your last thing|pick anything on your list/i.test(t)) return "idle";
+	if (/yesterday slipped|never miss twice/i.test(t)) return "slip";
+	if (/^(🔔|⏰)/u.test(t)) return "reminder";
+	return "other";
+}
+/**
+* LT12: kind and info for a nudge as it is created, from the fixed template
+* (before Ben rewrites it in his own words, which the regexes can't read).
+*/
+function tagNudge(template) {
+	const kind = nudgeKind(template);
+	const info = nudgeInfo(template, kind);
+	return Object.keys(info).some((k) => info[k] != null) ? {
+		kind,
+		info
+	} : { kind };
+}
+/** The title, time and length in a block or calendar nudge. */
+function nudgeInfo(text, kind) {
+	const t = stripTags(text).replace(/^[\p{Extended_Pictographic}️‍\s]+/u, "").trim();
+	if (kind === "block") {
+		const m = t.match(/^(.*?)\s+(?:starts at (\d{1,2}:\d{2})|is on now)/i);
+		const min = t.match(/(\d+)\s*min/);
+		return {
+			title: m?.[1]?.trim(),
+			time: m?.[2],
+			minutes: min ? Number(min[1]) : void 0
+		};
+	}
+	if (kind === "calendar") {
+		const first = t.split("\n")[0];
+		const title = first.replace(/\s+(in \d+\s*min|now|starts?.*)$/i, "").trim();
+		const range = t.match(/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/);
+		const inMin = first.match(/in (\d+)\s*min/i);
+		return {
+			title,
+			time: range?.[1],
+			end: range?.[2],
+			minutes: inMin ? Number(inMin[1]) : void 0
+		};
+	}
+	return {};
+}
 // src/core/todoistClean.ts
 var MAX_TASKS = 150;
 var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -26177,6 +26230,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			await mirror.write((db) => {
 				const plain = text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 				const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith("🔔") ? "annoyed" : "chill"])[0];
+				const tag = tagNudge(original.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"));
 				appendLog(db, [{
 					role: "coach",
 					bot: "mega",
@@ -26184,7 +26238,8 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 					text: plain,
 					at: (/* @__PURE__ */ new Date()).toISOString(),
 					proactive: true,
-					mood
+					mood,
+					...tag
 				}]);
 				const n = opts.notif ?? notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
 				if (n) addNotif(db, n);

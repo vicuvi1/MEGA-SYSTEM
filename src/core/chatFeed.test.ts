@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeed, isSettled, momentChips, nudgeInfo, nudgeKind, partOfDay, readSlash, tidyText, type FeedEntry } from './chatFeed'
+import { buildFeed, isSettled, momentChips, nudgeInfo, nudgeKind, partOfDay, readSlash, tagNudge, tidyText, type FeedEntry } from './chatFeed'
 
 const at = (h: number, m = 0, day = 5) => new Date(2026, 10, day, h, m).toISOString()
 const ben = (h: number, m: number, text: string): FeedEntry => ({ role: 'coach', text, at: at(h, m), proactive: true })
@@ -20,6 +20,24 @@ describe('chat feed (Night 7)', () => {
   it('reads block and calendar details', () => {
     expect(nudgeInfo('📚 🎯 Deep block (afternoon) starts at 14:00 · 100 min · +30 points', 'block')).toEqual({ title: 'Deep block (afternoon)', time: '14:00', minutes: 100 })
     expect(nudgeInfo('📅 🎯 Deep block (afternoon) in 9 min\n14:00–15:40', 'calendar')).toEqual({ title: 'Deep block (afternoon)', time: '14:00', end: '15:40', minutes: 9 })
+  })
+  it('LT12: a nudge is tagged from its template when it is sent', () => {
+    expect(tagNudge('💧 Water 0.3 of 2.7 L and the day is going.')).toEqual({ kind: 'water' })
+    expect(tagNudge('📚 🎯 Deep block starts at 14:00 · 100 min · +30 points if you focus.\nStart the timer?')).toEqual({ kind: 'block', info: { title: 'Deep block', time: '14:00', minutes: 100 } })
+  })
+  it('LT12: the stored kind wins over the words (Ben reworded it); old entries still use the words', () => {
+    const reworded: FeedEntry = { ...ben(13, 32, 'Hey, drink something, you are way behind today.'), kind: 'water' }
+    const old = ben(13, 34, '💧 Water 0.3 of 2.7 L.')
+    const junk = { ...ben(13, 36, '🔗 Yesterday slipped (no focus yesterday).'), kind: 'nonsense' as any }
+    const kinds = (log: FeedEntry[]) => (buildFeed(log, { filter: 'raw', now: new Date(at(14)) }).filter((x) => x.t === 'msg') as any[]).map((x) => x.kind)
+    expect(kinds([reworded])).toEqual(['water'])
+    expect(kinds([old])).toEqual(['water'])
+    expect(kinds([junk])).toEqual(['slip'])
+    // the stored info is used for a block whose words no longer say the time
+    const block: FeedEntry = { ...ben(13, 50, 'Your deep work is up, go!'), kind: 'block', info: { title: 'Deep block', time: '14:00', minutes: 100 } }
+    const m = buildFeed([block], { filter: 'raw', now: new Date(at(13, 55)) }).find((x) => x.t === 'msg') as any
+    expect(m.info).toEqual({ title: 'Deep block', time: '14:00', minutes: 100 })
+    expect(m.settled).toBe(false)
   })
   it('CL5: one icon, the rest is text', () => {
     expect(tidyText('📅 🎯 Deep block in 9 min')).toEqual({ icon: '📅', text: 'Deep block in 9 min' })

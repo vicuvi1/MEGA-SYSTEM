@@ -6,10 +6,11 @@ import { life } from './bridge'
 import { useAction } from './ui'
 import type { CoachStatus } from './web/coachStatus'
 import { readDo } from '@core/coachButtons'
+import type { NudgeInfo, NudgeKind } from '@core/chatFeed'
 import { CoachPlan } from './CoachPlan'
 
 /** One chat message (the Coach page's log entry). */
-export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; proactive?: boolean; streamed?: boolean; quote?: string }
+export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string }
 
 /** Coach text with numbers in bold (and search hits marked); a new reply types itself out. */
 /** CL5: at most `maxBold` numbers in bold (the ones that matter come first). */
