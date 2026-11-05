@@ -251,9 +251,15 @@ export function createTursoWebBridge(): Bridge {
         .then(async (j: any) => {
           // Point the bots at the server so they answer 24/7 (no device
           // needed); when that works this page stops reading them itself.
+          // Once a day is enough (Y10): the webhook stays set between visits.
+          const SETUP = 'life_bot_setup_ok'
+          const lastOk = Number(store?.getItem(SETUP) ?? 0)
+          if (Date.now() - lastOk < 24 * 3600_000) return { ...DEFAULT_WEB_BOT_CONFIG, ...(j?.bots ?? {}), serverBots: true }
           const setup = await fetch('/api/bot-setup', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}` } })
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null)
+          if (setup?.ok) store?.setItem(SETUP, String(Date.now()))
+          else store?.removeItem(SETUP)
           return { ...DEFAULT_WEB_BOT_CONFIG, ...(j?.bots ?? {}), serverBots: !!setup?.ok }
         })
         .catch(() => DEFAULT_WEB_BOT_CONFIG)
@@ -389,11 +395,12 @@ export function createTursoWebBridge(): Bridge {
       }
     }
     // How lively to be: you're using it (every 3 s), it's open but you're away
-    // (every 20 s), away for long or in the background (every 60 s). Fewer
+    // (every 20 s), away for long (every 60 s), in the background (5 min). Fewer
     // server calls, and changes still show within seconds when you look.
     const pace = (): { db: number; todo: number; ext: number } => {
       const idle = Date.now() - lastUse
-      if (document.visibilityState !== 'visible') return { db: 60_000, todo: Infinity, ext: Infinity }
+      // In the background: every 5 minutes (coming back checks at once anyway: Y10).
+      if (document.visibilityState !== 'visible') return { db: 300_000, todo: Infinity, ext: Infinity }
       if (idle < 3 * 60_000 && document.hasFocus()) return { db: 3000, todo: 5000, ext: 30_000 }
       if (idle < 15 * 60_000) return { db: 20_000, todo: 60_000, ext: 120_000 }
       return { db: 60_000, todo: 300_000, ext: 300_000 }
