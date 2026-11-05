@@ -137,6 +137,8 @@ export function shouldNudge(st: NudgeState, f: NudgeFacts, now = new Date()): bo
   if (st.pausedDay === f.today) return false
   if (st.snoozeUntil && Date.parse(st.snoozeUntil) > now.getTime()) return false
   if (f.time < '09:00' || f.time > '21:30') return false
+  // No wake-up logged yet this morning: maybe still asleep, so no "nothing done" (T2).
+  if (!f.wakeLogged && f.time < '11:00') return false
   if (f.focusRunning) return false
   if (f.openMustDos === 0 && f.focusMinToday >= 50) return false
   if (f.idleMin < 60) return false

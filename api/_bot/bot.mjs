@@ -6590,6 +6590,7 @@ function shouldNudge(st, f, now = /* @__PURE__ */ new Date()) {
 	if (st.pausedDay === f.today) return false;
 	if (st.snoozeUntil && Date.parse(st.snoozeUntil) > now.getTime()) return false;
 	if (f.time < "09:00" || f.time > "21:30") return false;
+	if (!f.wakeLogged && f.time < "11:00") return false;
 	if (f.focusRunning) return false;
 	if (f.openMustDos === 0 && f.focusMinToday >= 50) return false;
 	if (f.idleMin < 60) return false;
@@ -20963,13 +20964,29 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			const f = svc.focus.state(now);
 			const lastLedger = svc.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
 			const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
-			const last = Math.max(0, ...lastLedger, ...lastFocus);
+			const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
+			let sportAt = 0;
+			try {
+				sportAt = num(JSON.parse(getSetting(db, "sport_tracker_json") || "null")?.savedAt);
+			} catch {
+				sportAt = 0;
+			}
+			const chatAt = loadLog(db).filter((e) => e.role === "me").pop()?.at;
+			const workoutAt = db.prepare("SELECT MAX(ts) AS ts FROM workouts WHERE day = ?").get(today)?.ts;
+			const extra = [
+				sportAt,
+				Date.parse(String(chatAt ?? "")),
+				Date.parse(String(workoutAt ?? ""))
+			].filter((t) => Number.isFinite(t) && t > 0 && t <= now.getTime());
+			const last = Math.max(0, ...lastLedger, ...lastFocus, ...extra);
+			const woke = db.prepare("SELECT wake_time FROM sleep_logs WHERE day = ?").get(today)?.wake_time;
 			return {
 				nudge,
 				today,
 				focus: f,
 				idleMin: last ? (now.getTime() - last) / 6e4 : Infinity,
-				tone: loadStyle(db).tone
+				tone: loadStyle(db).tone,
+				wakeLogged: !!woke
 			};
 		});
 		let nudge = st.nudge.day === st.today ? st.nudge : {
@@ -21007,7 +21024,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			focusMinToday: st.focus.todayMin,
 			openMustDos: openMustDos.length,
 			idleMin: st.idleMin,
-			wakeLogged: true
+			wakeLogged: st.wakeLogged
 		};
 		if (!sent.length && inEvent && !paused && shouldNudge(nudge, facts, now)) note("skipped", "Nudge: nothing done for a while", "You were in a class or meeting", "nudge");
 		const quiet = await mirror.read((db) => quietNow(quietRules(loadFeedback(db)), now)).catch(() => null);

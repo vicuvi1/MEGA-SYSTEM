@@ -107,3 +107,11 @@ describe('coach mood', () => {
     expect(f.why).toContain('4 promises missed this week')
   })
 })
+
+describe('nudges know if you are up (T2)', () => {
+  it('no "nothing done" before 11:00 while no wake-up is logged', () => {
+    const f: NudgeFacts = { today: '2026-11-01', time: '10:00', focusRunning: false, focusMinToday: 0, openMustDos: 2, idleMin: 600, wakeLogged: false }
+    expect(shouldNudge({}, f, new Date('2026-11-01T10:00:00'))).toBe(false)
+    expect(shouldNudge({}, { ...f, wakeLogged: true }, new Date('2026-11-01T10:00:00'))).toBe(true)
+  })
+})

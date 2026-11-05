@@ -17,7 +17,7 @@ import { Mirror } from '../renderer/src/web/mirror'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
 import { createWebBots, focusKeyboard, type AskModel, type CalendarLike } from '../renderer/src/web/webBots'
-import { appendLog } from '../renderer/src/web/botBrain'
+import { appendLog, loadLog } from '../renderer/src/web/botBrain'
 import { GOOGLE_SETTING as GSET, createCalendarApi as makeCal, type GoogleEnv, type GoogleStored } from './googleCalendar'
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
@@ -631,8 +631,21 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     const f = svc.focus.state(now)
     const lastLedger = svc.wallet.entries().filter((e: any) => e.day === today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
     const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
-    const last = Math.max(0, ...lastLedger, ...lastFocus)
-    return { nudge, today, focus: f, idleMin: last ? (now.getTime() - last) / 60000 : Infinity, tone: loadStyle(db).tone }
+    // Water, reps (Sport Track's last save), a workout or a message to Ben count as doing something too (T2).
+    const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+    let sportAt = 0
+    try {
+      sportAt = num(JSON.parse(getSetting(db as any, 'sport_tracker_json') || 'null')?.savedAt)
+    } catch {
+      sportAt = 0
+    }
+    const chatAt = loadLog(db as any).filter((e) => e.role === 'me').pop()?.at
+    const workoutAt = (db.prepare('SELECT MAX(ts) AS ts FROM workouts WHERE day = ?').get(today) as any)?.ts
+    const extra = [sportAt, Date.parse(String(chatAt ?? '')), Date.parse(String(workoutAt ?? ''))].filter((t) => Number.isFinite(t) && t > 0 && t <= now.getTime())
+    const last = Math.max(0, ...lastLedger, ...lastFocus, ...extra)
+    // Up yet? From today's sleep log, not assumed (T2).
+    const woke = (db.prepare('SELECT wake_time FROM sleep_logs WHERE day = ?').get(today) as any)?.wake_time
+    return { nudge, today, focus: f, idleMin: last ? (now.getTime() - last) / 60000 : Infinity, tone: loadStyle(db).tone, wakeLogged: !!woke }
   })
   let nudge: NudgeState = st.nudge.day === st.today ? st.nudge : { ...st.nudge, day: st.today, count: 0, announced: [] }
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -656,7 +669,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     }
   }
   const openMustDos = st.focus.plan.items.filter((x) => !x.done)
-  const facts: NudgeFacts = { today: st.today, time, focusRunning: !!st.focus.running, focusMinToday: st.focus.todayMin, openMustDos: openMustDos.length, idleMin: st.idleMin, wakeLogged: true }
+  const facts: NudgeFacts = { today: st.today, time, focusRunning: !!st.focus.running, focusMinToday: st.focus.todayMin, openMustDos: openMustDos.length, idleMin: st.idleMin, wakeLogged: st.wakeLogged }
   // Never "nothing done for 1h" while he's in class or a meeting.
   if (!sent.length && inEvent && !paused && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', 'You were in a class or meeting', 'nudge')
   // Your 👎 at this time of the week became a quiet rule (N9).
