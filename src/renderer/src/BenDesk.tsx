@@ -671,8 +671,16 @@ function CallCard({ v, change }: { v: DeskView; change: Change }) {
 // --------------------------------------------------------------------- You
 
 function YouTab({ v, slots }: { v: DeskView; slots: { score: ReactNode; about: ReactNode } }) {
+  // Nothing learned yet: one clear card instead of four empty ones (V9).
+  const learning = !v.patterns.length && !v.energy.ready && v.moodAvg == null && !v.excuses.length
   return (
     <>
+      {learning && (
+        <Card title="Ben is still getting to know you" icon="🌱" sub="Your patterns, best hours, mood and repeat excuses show up here after about two weeks of focus sessions, sleep and workouts.">
+          <p className="hint small">Speed it up: tap a mood on Today twice a day, and tell Ben about yourself below (goals, exams, what works for you).</p>
+        </Card>
+      )}
+      {!learning && (<>
       <Card title="Your weekly pattern report" icon="🔍" sub="From your own last 8 weeks. Each comes with one change to try.">
         {v.patterns.length ? (
           <div className="bd-patterns">
@@ -706,6 +714,7 @@ function YouTab({ v, slots }: { v: DeskView; slots: { score: ReactNode; about: R
           <p className="hint small">No excuses logged. Keep it that way 😎</p>
         )}
       </Card>
+      </>)}
       <Card
         title="Ben's profile of you"
         icon="📓"
