@@ -32,16 +32,29 @@ describe("Ben's water and workout cards", () => {
     expect(applyWorkoutTap(st, '2026-11-03', '0|10').exercises[0].doneToday).toBe(10)
   })
 
-  it('raises targets after 3 full days in a row', () => {
+  it('harder after the full target twice, and only while you keep up', () => {
     let log: WorkoutLog = { days: {} }
     let st = defaultSport(today)
-    for (const d of ['2026-10-31', '2026-11-01', '2026-11-02']) {
+    for (const d of ['2026-11-01', '2026-11-02']) {
       st = applyWorkoutTap({ ...st, lastDate: d }, d, 'all')
       log = recordWorkoutDay(log, st, d)
     }
-    const up = progression(log, st)
-    expect(up.find((x) => x.name === 'Push-ups')).toEqual({ name: 'Push-ups', from: 100, to: 105 })
-    expect(progression({ days: { [today]: log.days[today] } }, st)).toEqual([])
+    const up = progression(log, st, '2026-11-02')
+    expect(up.find((x) => x.name === 'Push-ups')).toMatchObject({ from: 100, to: 105 })
+    // At the new target, the old full days don't count: no second jump yet.
+    st = setExercise(st, '2026-11-02', 'Push-ups', 105).st
+    expect(progression(log, st, '2026-11-02').find((x) => x.name === 'Push-ups')).toBeUndefined()
+    expect(progression({ days: { [today]: log.days['2026-11-02'] } }, st)).toEqual([])
+  })
+
+  it('lighter after two weeks away (not for someone new)', () => {
+    let log: WorkoutLog = { days: {} }
+    let st = defaultSport('2026-10-01')
+    st = applyWorkoutTap({ ...st, lastDate: '2026-10-01' }, '2026-10-01', 'all')
+    log = recordWorkoutDay(log, st, '2026-10-01')
+    const down = progression(log, st, '2026-11-05').find((x) => x.name === 'Push-ups')
+    expect(down).toMatchObject({ from: 100, to: 90 })
+    expect(progression({ days: {} }, defaultSport(today), today)).toEqual([])
   })
 
   it('edits the plan', () => {

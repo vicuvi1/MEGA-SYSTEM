@@ -753,11 +753,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             }
             log = recordWorkoutDay(log, st, day)
             setSetting(db as any, 'ben_workouts', JSON.stringify(log))
-            const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st)
+            const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st, day)
             for (const u of ups) st = setExercise(st, day, u.name, u.to).st
             if (ups.length) save(st)
             const body = svc.body.state()
-            extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? '' : 's'} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `📈 ${u.name}: ${u.from} → ${u.to} (3 full days in a row)`)].join('\n')
+            extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? '' : 's'} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `${u.to > u.from ? '📈' : '📉'} ${u.name}: ${u.from} → ${u.to} (${u.why})`)].join('\n')
             toast = 'Workout done! 🔥'
           }
         }

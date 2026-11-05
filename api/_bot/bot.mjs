@@ -14426,27 +14426,55 @@ function recordWorkoutDay(log, st, today) {
 	return { days: Object.fromEntries(keep.map((d) => [d, days[d]])) };
 }
 /**
-* Auto-progression (like Sporty): an exercise done in full at its current
-* target on the last 3 recorded days goes up 5% (at least +1).
+* Real progression, per exercise:
+* - harder: the full target done on the last 2 days it was trained at this
+*   target → +5% (at least +1); the next step needs 2 more full days at the
+*   new target, so it only climbs while you keep up;
+* - lighter: not trained for real (half the target) in the last 14 days,
+*   though you trained before → −10%, so coming back is doable.
 */
-function progression(log, st, needed = 3, pct = 5) {
-	const recent = Object.keys(log.days ?? {}).sort().slice(-needed);
-	if (recent.length < needed) return [];
+function progression(log, st, today, needed = 2, pct = 5) {
+	const days = Object.keys(log.days ?? {}).sort();
 	const out = [];
+	const same = (a, b) => a.toLowerCase() === b.toLowerCase();
 	for (const e of activeExercises(st)) {
 		const cur = Number(e.target) || 0;
 		if (!cur) continue;
-		if (recent.every((d) => {
-			const r = log.days[d].find((x) => x.name.toLowerCase() === String(e.name).toLowerCase());
-			return r && r.target >= cur && r.done >= r.target;
-		})) out.push({
-			name: String(e.name),
+		const name = String(e.name);
+		const rows = days.map((d) => ({
+			d,
+			r: log.days[d].find((x) => same(x.name, name))
+		})).filter((x) => x.r);
+		if (today) {
+			const from = isoAdd(today, -14);
+			const real = rows.some((x) => x.d >= from && x.d < today && x.r.done >= x.r.target * .5);
+			const before = rows.some((x) => x.d < from && x.r.done > 0);
+			if (!real && before) {
+				const to = Math.max(1, Math.round(cur * .9));
+				if (to < cur) out.push({
+					name,
+					from: cur,
+					to,
+					why: "2 weeks without it: a bit lighter to come back"
+				});
+				continue;
+			}
+		}
+		const atTarget = rows.filter((x) => x.r.target >= cur && x.r.done > 0).slice(-needed);
+		if (atTarget.length >= needed && atTarget.every((x) => x.r.done >= x.r.target)) out.push({
+			name,
 			from: cur,
-			to: cur + Math.max(1, Math.ceil(cur * pct / 100))
+			to: cur + Math.max(1, Math.ceil(cur * pct / 100)),
+			why: `full target ${needed} times`
 		});
 	}
 	return out;
 }
+var isoAdd = (day, n) => {
+	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+};
 /** Exercise plan changes from Ben: set a target, add an exercise, remove one. */
 function setExercise(st, today, name, target, unit = "reps") {
 	const s = sportForDay(st, today);
@@ -15293,11 +15321,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						}
 						log = recordWorkoutDay(log, st, day);
 						setSetting(db, "ben_workouts", JSON.stringify(log));
-						const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st);
+						const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st, day);
 						for (const u of ups) st = setExercise(st, day, u.name, u.to).st;
 						if (ups.length) save(st);
 						const body = svc.body.state();
-						extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? "" : "s"} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `📈 ${u.name}: ${u.from} → ${u.to} (3 full days in a row)`)].join("\n");
+						extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? "" : "s"} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `${u.to > u.from ? "📈" : "📉"} ${u.name}: ${u.from} → ${u.to} (${u.why})`)].join("\n");
 						toast = "Workout done! 🔥";
 					}
 				}
