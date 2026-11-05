@@ -37,6 +37,7 @@ import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
 import { askedFor, confirmButton,
   loggedInText, readConfirm, riskOf } from '@core/benSafety'
+import { startsNow } from '@core/startNow'
 import { notMoney } from '@core/moneyGuess'
 import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
@@ -1483,7 +1484,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
     if (confirmed) acts = [confirmed]
     // A focus timer starts only when he asked for it now; otherwise it becomes a ▶ button he can tap.
-    const askedToStart = /\b(start|go|begin|timer|focus now|let'?s go|incep|încep|porne|start\w*|начн|запуст|поехали)\b/i.test(text)
+    // "I'll start at 5" or "later" is not now (X10).
+    const askedToStart = startsNow(text)
     if (!askedToStart) {
       for (const a of acts) {
         if (a.kind !== 'focus') continue

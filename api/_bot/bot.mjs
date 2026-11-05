@@ -14271,6 +14271,15 @@ function findExercise(s, name) {
 		return id.includes(key) || n.includes(key) || n.length > 3 && key.includes(n);
 	}) ?? null;
 }
+// src/core/startNow.ts
+var START = /\b(start|go|begin|timer|focus now|let'?s go|incep|încep|porne|start\w*|начн|запуст|поехали)\b/i;
+var FUTURE = /\b(later|tomorrow|tonight|this (?:evening|afternoon)|after (?:lunch|dinner|class|school|work|this)|at \d{1,2}|by \d{1,2}|in \d+\s*(?:min|minutes|h|hours?)|will|i'?ll|going to|gonna|plan(?:ning)? to|want to|should|maybe|soon|next|on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|mâine|maine|diseară|diseara|mai târziu|mai tarziu|завтра|позже|вечером)\b/i;
+function startsNow(text) {
+	const t = String(text ?? "");
+	if (!START.test(t)) return false;
+	if (/\b(now|right now|acum|сейчас)\b/i.test(t)) return true;
+	return !FUTURE.test(t);
+}
 // src/core/coachNext.ts
 function nextMove(m, now = Date.now()) {
 	if (m.running) {
@@ -17186,7 +17195,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		let expense = false;
 		let acts = out.actions.map(readAction).filter((a) => !!a);
 		if (confirmed) acts = [confirmed];
-		if (!/\b(start|go|begin|timer|focus now|let'?s go|incep|încep|porne|start\w*|начн|запуст|поехали)\b/i.test(text)) {
+		if (!startsNow(text)) {
 			for (const a of acts) {
 				if (a.kind !== "focus") continue;
 				const label = `▶ ${a.minutes} min ${a.subject}`.slice(0, 32);
