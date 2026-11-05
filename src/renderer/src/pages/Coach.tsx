@@ -2,7 +2,7 @@
 // bots, so the conversation continues wherever you are), what it remembers
 // about you (edit or delete), and the goals & rules it holds you to.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { dayKey } from '@core/dates'
+import { calendarDay, dayKey } from '@core/dates'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
@@ -185,7 +185,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [tab, setTabRaw] = useState<DeskTab>(() => {
     try {
       // Sunday: the weekly review first (D6), once per Sunday.
-      const today = new Date().toLocaleDateString('sv-SE')
+      const today = calendarDay()
       if (new Date().getDay() === 0 && localStorage.getItem('ls.sundayOpened') !== today) {
         localStorage.setItem('ls.sundayOpened', today)
         return 'sunday'

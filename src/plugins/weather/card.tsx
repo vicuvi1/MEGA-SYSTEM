@@ -2,11 +2,12 @@
 import { Icon } from '../../renderer/src/Icon'
 import { usePluginData } from '../usePluginData'
 import { weatherAdvice, type WeatherData } from './weather'
+import { calendarDay } from '../../core/dates'
 
 export function WeatherCard() {
   const data = usePluginData<WeatherData>('plugin_weather_data')
   const now = new Date()
-  const w = data?.days.find((d) => d.day === now.toLocaleDateString('sv-SE'))
+  const w = data?.days.find((d) => d.day === calendarDay(now))
   if (!data || !w) return null
   const advice = weatherAdvice(w, now.toTimeString().slice(0, 5))
   return (

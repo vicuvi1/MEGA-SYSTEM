@@ -1,3 +1,4 @@
+import { calendarDay } from '../../core/dates'
 // GitHub commits and CTFtime events: pure helpers (the job fetches, these count).
 
 export interface CtfEvent {
@@ -19,7 +20,7 @@ export interface GithubData {
   ctfs: CtfEvent[]
 }
 
-const localDay = (iso: string) => new Date(iso).toLocaleDateString('sv-SE')
+const localDay = (iso: string) => calendarDay(new Date(iso))
 
 const addDays = (day: string, n: number) => {
   const d = new Date(`${day}T12:00:00Z`)

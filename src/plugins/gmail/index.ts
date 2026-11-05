@@ -7,10 +7,11 @@
 import { definePlugin, type PluginJobCtx } from '../types'
 import { listOf, readData } from '../store'
 import { GMAIL_SCOPE, digestPrompt, gmailLine, gmailQuery, heuristicDigest, itemText, parseDigest, readMessage, type GmailData, type MailMsg } from './gmail'
+import { calendarDay } from '../../core/dates'
 
 export const GMAIL = 'gmail'
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me'
-const dayOf = (d: Date) => d.toLocaleDateString('sv-SE')
+const dayOf = (d: Date) => calendarDay(d)
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 async function job(ctx: PluginJobCtx) {

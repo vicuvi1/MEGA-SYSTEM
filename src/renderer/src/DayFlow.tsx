@@ -2,7 +2,7 @@
 // (one next step, a live timer while focusing), habit chips, and one list:
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
 import { askConfirm } from './confirmSheet'
-import { appHour } from '@core/dates'
+import { appHour, calendarDay } from '@core/dates'
 import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { capture } from './capture'
@@ -113,7 +113,7 @@ const clock = (ms: number) => {
 const tomorrowOf = (day: string) => {
   const d = new Date(`${day}T12:00:00`)
   d.setDate(d.getDate() + 1)
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return calendarDay(d)
 }
 const storeGet = (k: string) => {
   try {

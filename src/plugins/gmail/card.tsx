@@ -2,10 +2,11 @@
 import { Icon } from '../../renderer/src/Icon'
 import { usePluginData } from '../usePluginData'
 import { itemText, type GmailData } from './gmail'
+import { calendarDay } from '../../core/dates'
 
 export function GmailCard() {
   const d = usePluginData<GmailData>('plugin_gmail_data')
-  const today = new Date().toLocaleDateString('sv-SE')
+  const today = calendarDay()
   if (!d || d.day !== today || !d.items.length) return null
   return (
     <section className="pl-card" aria-label="From your mail">

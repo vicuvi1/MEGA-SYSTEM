@@ -2,11 +2,12 @@
 import { Icon } from '../../renderer/src/Icon'
 import { usePluginData } from '../usePluginData'
 import { daysBetween, type GithubData } from './github'
+import { calendarDay } from '../../core/dates'
 
 export function GithubCard() {
   const d = usePluginData<GithubData>('plugin_github_data')
   if (!d) return null
-  const since = d.lastCommit ? daysBetween(d.lastCommit, new Date().toLocaleDateString('sv-SE')) : null
+  const since = d.lastCommit ? daysBetween(d.lastCommit, calendarDay()) : null
   const ctf = d.ctfs[0]
   return (
     <section className="pl-card" aria-label="GitHub">

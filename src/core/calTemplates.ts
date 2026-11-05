@@ -4,6 +4,7 @@
 //   on another day (skipping times that are already taken);
 // - repeat rules for blocks (daily, weekdays, weekly) with a sensible end.
 import type { CalEvent } from './dayTime'
+import { calendarDay } from './dates'
 
 export interface TemplateBlock {
   title: string
@@ -23,7 +24,7 @@ const hmOf = (iso: string) => {
 }
 const dayOf = (iso: string) => {
   const d = new Date(iso)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return calendarDay(d)
 }
 
 /** Places items with start/end minutes into columns so overlaps sit side by side. */

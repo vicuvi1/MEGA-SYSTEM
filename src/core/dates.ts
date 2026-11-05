@@ -4,9 +4,8 @@ export const DAY_START_HOUR = 4
 
 const fmtCache = new Map<string, Intl.DateTimeFormat>()
 
-function formatter(timeZone?: string): Intl.DateTimeFormat {
-  const key = timeZone ?? ''
-  let f = fmtCache.get(key)
+function formatter(timeZone: string): Intl.DateTimeFormat {
+  let f = fmtCache.get(timeZone)
   if (!f) {
     f = new Intl.DateTimeFormat('en-CA', {
       timeZone,
@@ -14,16 +13,34 @@ function formatter(timeZone?: string): Intl.DateTimeFormat {
       month: '2-digit',
       day: '2-digit'
     })
-    fmtCache.set(key, f)
+    fmtCache.set(timeZone, f)
   }
   return f
 }
 
-/** Local day key (YYYY-MM-DD) for an instant, shifted by DAY_START_HOUR. */
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/** YYYY-MM-DD of an instant: in `timeZone`, or in the local zone when none is given.
+ * The local case reads the Date's own fields, so it follows a process.env.TZ set at
+ * runtime (a cached Intl formatter would keep the zone it was made in). */
+function ymdOf(t: Date, timeZone?: string): string {
+  if (timeZone) return formatter(timeZone).format(t)
+  return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`
+}
+
+/** The APP day (YYYY-MM-DD) for an instant: it turns at DAY_START_HOUR (04:00), so
+ * 01:30 still belongs to the evening before. Use this for anything you "did today":
+ * points, habits, focus, water, Ben's once-a-day counters. */
 export function dayKey(at: Date | string, timeZone?: string, startHour = DAY_START_HOUR): string {
   const t = typeof at === 'string' ? new Date(at) : at
-  const shifted = new Date(t.getTime() - startHour * 3600_000)
-  return formatter(timeZone).format(shifted)
+  return ymdOf(new Date(t.getTime() - startHour * 3600_000), timeZone)
+}
+
+/** The CALENDAR date (YYYY-MM-DD) for an instant: it turns at midnight. Use this only
+ * where the real date matters: the calendar grid, an event's date, a date you type,
+ * file and snapshot names. For "today" in the app's sense use dayKey. */
+export function calendarDay(at: Date | string = new Date(), timeZone?: string): string {
+  return ymdOf(typeof at === 'string' ? new Date(at) : at, timeZone)
 }
 
 function toUtc(day: string): number {

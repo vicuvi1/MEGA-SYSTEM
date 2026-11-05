@@ -3,7 +3,7 @@
 // sport and spending, and the profile note Ben keeps current. Everything is
 // computed from your own data; nothing here calls a model.
 
-import { addDays } from './dates'
+import { addDays, calendarDay } from './dates'
 
 // ---------------------------------------------------------------- energy map
 
@@ -320,7 +320,7 @@ export function addMood(list: MoodEntry[], e: MoodEntry): MoodEntry[] {
 /** Which check-in is due now (12–15 noon, 19–23 evening), if not done today. */
 export function moodDue(list: MoodEntry[], now: Date): MoodSlot | null {
   const h = now.getHours()
-  const day = now.toLocaleDateString('sv-SE')
+  const day = calendarDay(now)
   const slot: MoodSlot | null = h >= 12 && h < 15 ? 'noon' : h >= 19 && h < 23 ? 'evening' : null
   return slot && !list.some((x) => x.day === day && x.slot === slot) ? slot : null
 }

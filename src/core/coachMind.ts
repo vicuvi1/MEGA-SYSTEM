@@ -4,7 +4,7 @@
 // - patterns it finds in your own history ("after a late night you focus
 //   40% less"), so advice is about you, not people in general;
 // - a short sleep diary and the week ahead, in plain lines for the prompt.
-import { addDays } from './dates'
+import { addDays, calendarDay } from './dates'
 
 export interface MindGoal {
   title: string
@@ -266,7 +266,7 @@ export function sleepDiary(logs: { day: string; wakeTime: string; onTime: boolea
 export function weekAhead(events: { start: string; end: string; allDay?: boolean; title: string }[], today: string, days = 7): string {
   const local = (iso: string) => {
     const d = new Date(iso)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return calendarDay(d)
   }
   const parts: string[] = []
   for (let i = 1; i <= days; i++) {

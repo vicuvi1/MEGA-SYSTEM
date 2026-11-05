@@ -6,6 +6,7 @@
 //   allowed ("follow up until I act", but never spam, and never when paused).
 import type { CalEvent } from './dayTime'
 import type { TodoTask } from './todoist'
+import { calendarDay } from './dates'
 
 export interface Refs {
   events: Map<string, CalEvent>
@@ -18,7 +19,7 @@ const hm = (iso: string) => {
 }
 const dayOf = (iso: string) => {
   const d = new Date(iso)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return calendarDay(d)
 }
 
 /** E1… for events (time order), T1… for tasks; the lines the model sees. */

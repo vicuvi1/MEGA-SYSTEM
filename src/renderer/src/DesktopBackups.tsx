@@ -6,10 +6,11 @@ import type { BackupStatus, BackupWhere } from '../../desktop/backups'
 import { life } from './bridge'
 import { Icon } from './Icon'
 import { timeAgo, useAction } from './ui'
+import { calendarDay } from '@core/dates'
 
 const localDay = () => {
   const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return calendarDay(d)
 }
 
 async function backupNow(): Promise<BackupStatus | null> {

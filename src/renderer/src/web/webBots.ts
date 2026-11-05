@@ -19,7 +19,7 @@ import {
   formatWorkoutResponse,
   parseTelegramText
 } from '@core/botCommands'
-import { addDays } from '@core/dates'
+import { addDays, calendarDay } from '@core/dates'
 import { formatMoney } from '@core/money'
 import { getSetting, setSetting } from '../../../main/settings'
 import { queueFinanceExpense } from './financeInbox'
@@ -1106,7 +1106,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const ev = evs.find((e) => e.id === id)
         if (ev) {
           const len = Math.round((Date.parse(ev.end) - Date.parse(ev.start)) / 60000)
-          const dayKey = day.toLocaleDateString('sv-SE')
+          const dayKey = calendarDay(day)
           const slot = nextSlot(evs.filter((e) => e.id !== id), dayKey, day.toTimeString().slice(0, 5), len)
           if (slot && (await calendar.move(ev.calendarId, ev.id, new Date(`${dayKey}T${slot.start}:00`).toISOString(), new Date(`${dayKey}T${slot.end}:00`).toISOString()).then(() => true).catch(() => false))) text = `↪️ ${ev.title} → ${slot.start}–${slot.end}, your next free time.`
           else if (!slot) text = 'No free time left today for it. Drop it, or tell me where it goes.'
@@ -1639,7 +1639,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (preset) out = { reply: preset.reply, actions: direct ? direct.lines : [], remember: [], chips: preset.chips, buttons: preset.buttons }
       else {
         // A question about history: its numbers are looked up first, so one call answers it (B9).
-        const pre = media ? [] : preLookups(text, dayStart.toLocaleDateString('sv-SE')).map((n) => answerLocal(n, look)).filter((x): x is string => !!x && !/not available|give dates/.test(x))
+        const pre = media ? [] : preLookups(text, calendarDay(dayStart)).map((n) => answerLocal(n, look)).filter((x): x is string => !!x && !/not available|give dates/.test(x))
         if (pre.length) step('Looked up your history')
         out = parseBrain(await ask(pre.length ? pre.join('\n') : undefined))
       }
@@ -1800,7 +1800,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             }
             // B11: repaired in code, no second AI call: a day in the past becomes today, and a time
             // that clashes with another event (one he didn't name himself) snaps to the next free slot.
-            const todayKey = new Date().toLocaleDateString('sv-SE')
+            const todayKey = calendarDay()
             let day = a.day < todayKey ? todayKey : a.day
             let time = a.time
             let note = ''
@@ -1862,7 +1862,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               done.push(`🗑 Deleted from Todoist: ${t.content}`)
             } else if (a.kind === 'star' && todoist.update) {
               const labels = a.on ? [...new Set([...(t.labels ?? []), 'today'])] : (t.labels ?? []).filter((l) => l !== 'today')
-              await todoist.update(t.id, { labels, ...(a.on && !(t.due && t.due <= new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)) ? { due: 'today' } : {}) })
+              await todoist.update(t.id, { labels, ...(a.on && !(t.due && t.due <= calendarDay()) ? { due: 'today' } : {}) })
               done.push(a.on ? `⭐ Must-do today: ${t.content}` : `☆ No longer a must-do: ${t.content}`)
             } else if (a.kind === 'edit' && todoist.update) {
               await todoist.update(t.id, { content: a.title, priority: a.priority, due: a.due, description: a.details })

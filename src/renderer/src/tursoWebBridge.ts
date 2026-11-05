@@ -8,7 +8,7 @@ import initSqlJs from 'sql.js'
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import type { Bridge } from './bridge'
 import { createMockApi } from './mock'
-import { addDays, dayKey } from '@core/dates'
+import { addDays, calendarDay, dayKey } from '@core/dates'
 import type { BodyState, BotBridgeConfig, ConnectionsState, DisciplineState, Summary } from '@shared/api'
 import { Mirror, indexedDbStore } from './web/mirror'
 import { TursoHttp } from './web/tursoHttp'
@@ -778,7 +778,7 @@ export function createTursoWebBridge(): Bridge {
           }
         })
         const n = new Date()
-        const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+        const today = calendarDay(n)
         return { checks: healthChecks({ now: n, beats: h.beats, sportySeen: sporty, latestSnapshot: h.latestSnapshot, today, errors: h.errors }), errors: h.errors }
       },
       beat: (key: string, ok: boolean, msg?: string) => beat(turso, key, ok, msg),

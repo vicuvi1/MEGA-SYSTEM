@@ -6,7 +6,7 @@
 // - ⋯: rename, details, area, how long it takes, not today, delete.
 // Drag the row to reorder it, onto another area to move it, or onto free
 // time in "Your day" to block it in your calendar.
-import { dayLabel } from '@core/dates'
+import { calendarDay, dayLabel } from '@core/dates'
 import { useEffect, useRef, useState } from 'react'
 import type { Area, TodoTask } from '@core/todoist'
 import { plainName } from '@core/todoist'
@@ -15,7 +15,7 @@ import { Icon } from './Icon'
 export const P_COLOR: Record<number, string> = { 4: '#FF5D6C', 3: '#FF9F43', 2: '#5BA8FF', 1: 'var(--faint)' }
 const P_NAME: Record<number, string> = { 4: 'P1 · urgent', 3: 'P2 · high', 2: 'P3 · medium', 1: 'P4 · none' }
 const pad = (n: number) => String(n).padStart(2, '0')
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const ymd = (d: Date) => calendarDay(d)
 const addDays = (day: string, n: number) => {
   const d = new Date(`${day}T12:00:00`)
   d.setDate(d.getDate() + n)

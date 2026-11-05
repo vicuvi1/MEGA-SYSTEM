@@ -17,6 +17,7 @@ import { parseCapture } from '@core/capture'
 import { useLive } from './live'
 import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
+import { calendarDay } from '@core/dates'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
@@ -53,7 +54,7 @@ function bodyTick(sec: number) {
 }
 const localDayOf = (t: number) => {
   const d = new Date(t)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return calendarDay(d)
 }
 interface Guard { startedAt: number; endsAt: number; subject: string; idle: number; last: number; distract?: number }
 
@@ -220,7 +221,7 @@ const put = (k: string, v: unknown) => {
 
 async function todayBlocks(): Promise<IslandBlock[]> {
   const d = new Date()
-  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const day = calendarDay(d)
   const on = !!(await life.google?.status().catch(() => null))?.connected
   if (on) {
     const events = await life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => [])

@@ -736,8 +736,7 @@ function neutral(text) {
 var STEALTH_NOTE = "Stealth mode is on: never name the discipline challenge, urges, relapses, porn or MAN. Say \"the challenge\", \"a tough moment\", \"your streak\". Messages may be seen by others.";
 var fmtCache = /* @__PURE__ */ new Map();
 function formatter(timeZone) {
-	const key = timeZone ?? "";
-	let f = fmtCache.get(key);
+	let f = fmtCache.get(timeZone);
 	if (!f) {
 		f = new Intl.DateTimeFormat("en-CA", {
 			timeZone,
@@ -745,15 +744,30 @@ function formatter(timeZone) {
 			month: "2-digit",
 			day: "2-digit"
 		});
-		fmtCache.set(key, f);
+		fmtCache.set(timeZone, f);
 	}
 	return f;
 }
-/** Local day key (YYYY-MM-DD) for an instant, shifted by DAY_START_HOUR. */
+var pad2 = (n) => String(n).padStart(2, "0");
+/** YYYY-MM-DD of an instant: in `timeZone`, or in the local zone when none is given.
+* The local case reads the Date's own fields, so it follows a process.env.TZ set at
+* runtime (a cached Intl formatter would keep the zone it was made in). */
+function ymdOf(t, timeZone) {
+	if (timeZone) return formatter(timeZone).format(t);
+	return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
+}
+/** The APP day (YYYY-MM-DD) for an instant: it turns at DAY_START_HOUR (04:00), so
+* 01:30 still belongs to the evening before. Use this for anything you "did today":
+* points, habits, focus, water, Ben's once-a-day counters. */
 function dayKey(at, timeZone, startHour = 4) {
 	const t = typeof at === "string" ? new Date(at) : at;
-	const shifted = /* @__PURE__ */ new Date(t.getTime() - startHour * 36e5);
-	return formatter(timeZone).format(shifted);
+	return ymdOf(/* @__PURE__ */ new Date(t.getTime() - startHour * 36e5), timeZone);
+}
+/** The CALENDAR date (YYYY-MM-DD) for an instant: it turns at midnight. Use this only
+* where the real date matters: the calendar grid, an event's date, a date you type,
+* file and snapshot names. For "today" in the app's sense use dayKey. */
+function calendarDay(at = /* @__PURE__ */ new Date(), timeZone) {
+	return ymdOf(typeof at === "string" ? new Date(at) : at, timeZone);
 }
 function toUtc(day) {
 	const [y, m, d] = day.split("-").map(Number);
@@ -1214,8 +1228,7 @@ function localHM(iso) {
 /** The local day (YYYY-MM-DD) an event starts on. */
 function localDay$1(iso) {
 	if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
-	const d = new Date(iso);
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+	return calendarDay(new Date(iso));
 }
 /** Timed events of one day as minute ranges, clipped to the day window. */
 function busy(events, day, from, to) {
@@ -2184,8 +2197,7 @@ function sleepDiary(logs, today, nights = 7) {
 /** The week ahead from calendar events: per day, how many blocks and busy hours. */
 function weekAhead(events, today, days = 7) {
 	const local = (iso) => {
-		const d = new Date(iso);
-		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+		return calendarDay(new Date(iso));
 	};
 	const parts = [];
 	for (let i = 1; i <= days; i++) {
@@ -3044,7 +3056,7 @@ function weekOf$1(day) {
 }
 /** The call is due Saturday 18:00 → Monday 12:00 when this week has none. */
 function callDue(calls, now) {
-	const day = now.toLocaleDateString("sv-SE");
+	const day = calendarDay(now);
 	const dow = now.getDay();
 	const h = now.getHours();
 	if (!(dow === 6 && h >= 18 || dow === 0 || dow === 1 && h < 12)) return false;
@@ -3561,7 +3573,7 @@ function readCoords(text) {
 }
 // src/plugins/weather/index.ts
 var WEATHER = "weather";
-var dayOf$5 = (d) => d.toLocaleDateString("sv-SE");
+var dayOf$5 = (d) => calendarDay(d);
 var hmOf$1 = (d) => d.toTimeString().slice(0, 5);
 var job$2 = async (ctx) => {
 	const cfg = JSON.parse(await ctx.get(`plugin_weather`) || "{}");
@@ -3647,7 +3659,7 @@ var weather_default = definePlugin({
 	}]
 });
 // src/plugins/github/github.ts
-var localDay = (iso) => new Date(iso).toLocaleDateString("sv-SE");
+var localDay = (iso) => calendarDay(new Date(iso));
 var addDays$4 = (day, n) => {
 	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
 	d.setUTCDate(d.getUTCDate() + n);
@@ -3712,7 +3724,7 @@ var ctftimeUrl = (now, days = 30) => {
 var validUser = (u) => /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i.test(u);
 // src/plugins/github/index.ts
 var GITHUB = "github";
-var dayOf$4 = (d) => d.toLocaleDateString("sv-SE");
+var dayOf$4 = (d) => calendarDay(d);
 async function job$1(ctx) {
 	const cfg = JSON.parse(await ctx.get(`plugin_github`) || "{}");
 	const user = String(cfg.user ?? "").trim().replace(/^@/, "");
@@ -3916,7 +3928,7 @@ function gmailLine(d, today, yesterday) {
 // src/plugins/gmail/index.ts
 var GMAIL = "gmail";
 var API$1 = "https://gmail.googleapis.com/gmail/v1/users/me";
-var dayOf$3 = (d) => d.toLocaleDateString("sv-SE");
+var dayOf$3 = (d) => calendarDay(d);
 var esc$4 = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 async function job(ctx) {
 	const cfg = JSON.parse(await ctx.get(`plugin_gmail`) || "{}");
@@ -4391,7 +4403,7 @@ function parseSteps(arg) {
 }
 // src/plugins/health/index.ts
 var HEALTH = "health";
-var dayOf$2 = (d) => d.toLocaleDateString("sv-SE");
+var dayOf$2 = (d) => calendarDay(d);
 var health_default = definePlugin({
 	id: HEALTH,
 	title: "Phone health numbers",
@@ -5213,7 +5225,7 @@ var WORD = /[\p{L}\p{N}]{4,}/gu;
 * or the recent chat), then the newest, at most `max`. The rest stays in memory
 * and Ben can still look things up.
 */
-function pickFacts(facts, about, max = 24, today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv-SE")) {
+function pickFacts(facts, about, max = 24, today = calendarDay()) {
 	if (facts.length <= max) return facts;
 	const words = new Set((about.toLowerCase().match(WORD) ?? []).map((w) => w.slice(0, 6)));
 	const hits = (f) => (f.t.toLowerCase().match(WORD) ?? []).some((w) => words.has(w.slice(0, 6)));
@@ -8618,7 +8630,7 @@ function addMood(list, e) {
 /** Which check-in is due now (12–15 noon, 19–23 evening), if not done today. */
 function moodDue(list, now) {
 	const h = now.getHours();
-	const day = now.toLocaleDateString("sv-SE");
+	const day = calendarDay(now);
 	const slot = h >= 12 && h < 15 ? "noon" : h >= 19 && h < 23 ? "evening" : null;
 	return slot && !list.some((x) => x.day === day && x.slot === slot) ? slot : null;
 }
@@ -8905,8 +8917,7 @@ var hm$2 = (iso) => {
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 var dayOf$1 = (iso) => {
-	const d = new Date(iso);
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+	return calendarDay(new Date(iso));
 };
 /** E1… for events (time order), T1… for tasks; the lines the model sees. */
 function makeRefs(events, tasks) {
@@ -9957,7 +9968,7 @@ function noteExcuse(db, text, today, now = /* @__PURE__ */ new Date()) {
 	})).excuses, kind, today);
 }
 function logMood(db, mood, now = /* @__PURE__ */ new Date()) {
-	const day = now.toLocaleDateString("sv-SE");
+	const day = calendarDay(now);
 	const slot = now.getHours() < 17 ? "noon" : "evening";
 	return editDesk(db, (x) => ({
 		...x,
@@ -16950,8 +16961,7 @@ function cleanProposal(raw, fallback, events, now) {
 	};
 }
 var localDayOf = (iso) => {
-	const d = new Date(iso);
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+	return calendarDay(new Date(iso));
 };
 var minOfIso = (iso) => {
 	const d = new Date(iso);
@@ -17184,7 +17194,7 @@ function bookBig3(big3, events, days, nowIso, perTask = 2, minutes = 50) {
 	const out = [];
 	const taken = [...events];
 	const now = new Date(nowIso);
-	const todayKey = now.toLocaleDateString("sv-SE");
+	const todayKey = calendarDay(now);
 	const left = new Map(big3.map((t) => [t, perTask]));
 	for (const day of days) for (const title of big3) {
 		if ((left.get(title) ?? 0) <= 0) continue;
@@ -17412,12 +17422,8 @@ function nudgeText(n, idle, first, focusMin, tone) {
 }
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
-/** Today on this device, YYYY-MM-DD in local time (a new day starts at your midnight). */
 /** Your day for water and reps: it turns at 04:00, like the rest of the app (S4). */
-var sportDay = (d = /* @__PURE__ */ new Date()) => {
-	const x = /* @__PURE__ */ new Date(d.getTime() - 144e5);
-	return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
-};
+var sportDay = (d = /* @__PURE__ */ new Date()) => dayKey(d);
 /** Sport Track's data with today's checklist (reset if its day has passed). */
 function readSport() {
 	try {
@@ -17757,7 +17763,7 @@ function learnAreaWords(map, text, area) {
 }
 // src/core/benQuick.ts
 var pad$1 = (n) => String(n).padStart(2, "0");
-var ymd = (d) => `${d.getFullYear()}-${pad$1(d.getMonth() + 1)}-${pad$1(d.getDate())}`;
+var ymd = (d) => calendarDay(d);
 var at = (day) => /* @__PURE__ */ new Date(`${day}T12:00:00`);
 var plus = (day, n) => {
 	const d = at(day);
@@ -20400,7 +20406,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				const ev = evs.find((e) => e.id === id);
 				if (ev) {
 					const len = Math.round((Date.parse(ev.end) - Date.parse(ev.start)) / 6e4);
-					const dayKey = day.toLocaleDateString("sv-SE");
+					const dayKey = calendarDay(day);
 					const slot = nextSlot(evs.filter((e) => e.id !== id), dayKey, day.toTimeString().slice(0, 5), len);
 					if (slot && await calendar.move(ev.calendarId, ev.id, (/* @__PURE__ */ new Date(`${dayKey}T${slot.start}:00`)).toISOString(), (/* @__PURE__ */ new Date(`${dayKey}T${slot.end}:00`)).toISOString()).then(() => true).catch(() => false)) text = `↪️ ${ev.title} → ${slot.start}–${slot.end}, your next free time.`;
 					else if (!slot) text = "No free time left today for it. Drop it, or tell me where it goes.";
@@ -21028,7 +21034,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				buttons: preset.buttons
 			};
 			else {
-				const pre = media ? [] : preLookups(text, dayStart.toLocaleDateString("sv-SE")).map((n) => answerLocal(n, look)).filter((x) => !!x && !/not available|give dates/.test(x));
+				const pre = media ? [] : preLookups(text, calendarDay(dayStart)).map((n) => answerLocal(n, look)).filter((x) => !!x && !/not available|give dates/.test(x));
 				if (pre.length) step("Looked up your history");
 				out = parseBrain(await ask(pre.length ? pre.join("\n") : void 0));
 			}
@@ -21181,7 +21187,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							noCal();
 							continue;
 						}
-						const todayKey = (/* @__PURE__ */ new Date()).toLocaleDateString("sv-SE");
+						const todayKey = calendarDay();
 						let day = a.day < todayKey ? todayKey : a.day;
 						let time = a.time;
 						let note = "";
@@ -21257,7 +21263,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							const labels = a.on ? [.../* @__PURE__ */ new Set([...t.labels ?? [], "today"])] : (t.labels ?? []).filter((l) => l !== "today");
 							await todoist.update(t.id, {
 								labels,
-								...a.on && !(t.due && t.due <= (/* @__PURE__ */ new Date(Date.now() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4)).toISOString().slice(0, 10)) ? { due: "today" } : {}
+								...a.on && !(t.due && t.due <= calendarDay()) ? { due: "today" } : {}
 							});
 							done.push(a.on ? `⭐ Must-do today: ${t.content}` : `☆ No longer a must-do: ${t.content}`);
 						} else if (a.kind === "edit" && todoist.update) {
@@ -23496,7 +23502,7 @@ async function logBen(t, list, now = /* @__PURE__ */ new Date()) {
 	await t.writeAtomic([
 		BEN_TABLE,
 		...list.slice(0, 40).map((e) => {
-			const day = now.toLocaleDateString("sv-SE");
+			const day = calendarDay(now);
 			const args = [
 				at(e),
 				day,
@@ -24834,7 +24840,7 @@ var hhmm = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
-var dayOf = (iso) => new Date(iso).toLocaleDateString("sv-SE");
+var dayOf = (iso) => calendarDay(new Date(iso));
 /** Events that count: timed, not yours (focus blocks warn on their own), not declined or free. */
 var warnable = (e) => !e.allDay && !e.ours && !e.declined && !e.free;
 /**
@@ -25663,6 +25669,16 @@ async function payTodoistDone(env, opts = {}) {
 		done: items.length
 	};
 }
+/**
+* Your time zone for this request. Much of src/core reads local hours
+* (getHours, setHours), so the server's clock is set to it here, once per entry
+* point; the day helpers (dayKey, calendarDay) are also given it explicitly.
+*/
+function lifeTz(env) {
+	const tz = env.timeZone || "Europe/Chisinau";
+	process.env.TZ = tz;
+	return tz;
+}
 /** Midnight `daysAgo` days back, in process.env.TZ. */
 function localMidnight(daysAgo) {
 	const d = /* @__PURE__ */ new Date();
@@ -25672,7 +25688,7 @@ function localMidnight(daysAgo) {
 }
 /** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
 async function coachChat(env, text, onStep, media) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	if (!env.model) return {
 		ok: false,
 		reply: "Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.",
@@ -25695,13 +25711,13 @@ async function coachChat(env, text, onStep, media) {
 }
 /** The app: take back what the coach did in one reply (all, or one line). */
 async function coachUndo(env, at, index) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	const { bots } = await botsFor(env);
 	return bots.undoReply(at, index);
 }
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 async function handleTelegramUpdate(env, token, update) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	const { bots, mirror } = await botsFor(env);
 	const msgChat = update?.message?.chat?.id;
 	if (msgChat != null && await bots.allowedChat(msgChat)) await mirror.write((db) => {
@@ -25721,7 +25737,7 @@ async function handleTelegramUpdate(env, token, update) {
 * "Am I improving?".
 */
 async function runDaily(env, job) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	const { services, mirror } = await botsFor(env);
 	if (job === "morning" || job === "reask" || job === "evening" || job === "midday") {
 		if (await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) {
@@ -25961,7 +25977,7 @@ var sysSet = (db, key, value) => db.writeAtomic([SYS_KV, {
 	args: [key, value]
 }]);
 async function runTick(env, now = /* @__PURE__ */ new Date()) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	const tz = lifeTz(env);
 	const { services, mirror, calendar, bots, SQL } = await botsFor(env);
 	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
 	if (!await sysClaim(healthDb, TICK_AT, now.getTime(), 5e4)) return [];
@@ -25984,19 +26000,19 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const voiced = async (template) => {
 			const kind = voiceKind(template);
 			if (!kind || !env.model) return template;
-			const dayKey = now.toLocaleDateString("sv-SE");
+			const today = dayKey(now, tz);
 			if (!await mirror.write((db) => {
 				let v = {
-					day: dayKey,
+					day: today,
 					kinds: []
 				};
 				try {
 					const raw = JSON.parse(getSetting(db, "voiced_kinds") || "null");
-					if (raw?.day === dayKey && Array.isArray(raw.kinds)) v = raw;
+					if (raw?.day === today && Array.isArray(raw.kinds)) v = raw;
 				} catch {}
 				if (v.kinds.includes(kind)) return false;
 				setSetting(db, "voiced_kinds", JSON.stringify({
-					day: dayKey,
+					day: today,
 					kinds: [...v.kinds, kind]
 				}));
 				return true;
@@ -26010,7 +26026,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 						tone: loadStyle(db).tone
 					};
 				});
-				const day = now.toLocaleDateString("sv-SE");
+				const day = calendarDay(now, tz);
 				const next = (calendar ? await calendar.events(now.toISOString(), (/* @__PURE__ */ new Date(`${day}T23:59:59`)).toISOString()).catch(() => []) : []).filter((e) => !e.allDay && Date.parse(e.start) > now.getTime()).sort((a, b) => a.start.localeCompare(b.start))[0];
 				const tasks = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((l) => l.map((t) => t.content).slice(0, 5), () => []) : [];
 				const hm = (iso) => new Date(iso).toTimeString().slice(0, 5);
@@ -26036,13 +26052,13 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				note("skipped", text, `Quiet hours (${notifSet.quiet.from}–${notifSet.quiet.to}): in the bell instead`);
 				return false;
 			}
-			const dayKey = now.toLocaleDateString("sv-SE");
+			const today = dayKey(now, tz);
 			const own = !opts.urgent && !opts.notif && !/^\s*(🔔|⏰)/u.test(text);
 			if (own) {
 				if (await mirror.read((db) => {
 					try {
 						const c = JSON.parse(getSetting(db, "ben_sent_count") || "null");
-						return c?.day === dayKey ? Number(c.n) || 0 : 0;
+						return c?.day === today ? Number(c.n) || 0 : 0;
 					} catch {
 						return 0;
 					}
@@ -26061,7 +26077,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				try {
 					prev = JSON.parse(getSetting(db, BEN_SENT) || "null");
 				} catch {}
-				return sendOnce(prev, text, now.toLocaleDateString("sv-SE"));
+				return sendOnce(prev, text, dayKey(now, tz));
 			});
 			if (once && !once.send) {
 				note("skipped", original, "Already sent one like it today");
@@ -26103,24 +26119,24 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				} catch {
 					prev = null;
 				}
-				const r = sendOnce(prev, original, now.toLocaleDateString("sv-SE"));
+				const r = sendOnce(prev, original, dayKey(now, tz));
 				if (r.send) setSetting(db, BEN_SENT, JSON.stringify(r.next));
 			}).catch(() => null);
 			beat(healthDb, "telegram", true);
 			if (own) await mirror.write((db) => {
 				let c = {
-					day: dayKey,
+					day: today,
 					n: 0
 				};
 				try {
 					const p = JSON.parse(getSetting(db, "ben_sent_count") || "null");
-					if (p?.day === dayKey) c = {
-						day: dayKey,
+					if (p?.day === today) c = {
+						day: today,
 						n: Number(p.n) || 0
 					};
 				} catch {}
 				setSetting(db, "ben_sent_count", JSON.stringify({
-					day: dayKey,
+					day: today,
 					n: c.n + 1
 				}));
 			}).catch(() => null);
@@ -26235,9 +26251,9 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 						const e0 = Date.parse(ch.ev.end);
 						const hit = evs.filter((e) => isFocusBlock(e) && e.ours && Date.parse(e.start) < e0 && Date.parse(e.end) > s0);
 						for (const b of hit) {
-							const day = new Date(b.start).toLocaleDateString("sv-SE");
+							const day = calendarDay(b.start, tz);
 							const len = Math.round((Date.parse(b.end) - Date.parse(b.start)) / 6e4);
-							const after = day === now.toLocaleDateString("sv-SE") ? now.toTimeString().slice(0, 5) : "08:00";
+							const after = day === calendarDay(now, tz) ? now.toTimeString().slice(0, 5) : "08:00";
 							const slot = nextSlot(evs.filter((e) => e.id !== b.id), day, after, len);
 							if (slot && await calendar.move(b.calendarId, b.id, (/* @__PURE__ */ new Date(`${day}T${slot.start}:00`)).toISOString(), (/* @__PURE__ */ new Date(`${day}T${slot.end}:00`)).toISOString()).then(() => true).catch(() => false)) ch.text += `\n↪️ It was on top of <b>${escapeHtml(b.title)}</b>, so I moved that to ${slot.start}–${slot.end}.`;
 						}
@@ -26469,7 +26485,7 @@ async function deskTick(mirror, services, now, send, esc) {
 		}]] }).catch(() => null);
 	}
 	const h = now.getHours();
-	const today = now.toLocaleDateString("sv-SE");
+	const today = dayKey(now);
 	const due = dueTopics(d.study, today);
 	if (due.length && h >= 10 && h < 21) await send(`📚 Review time: ${due.slice(0, 4).map((t) => `<b>${esc(t.exam)}</b> · ${esc(t.topic)}`).join(", ")}${due.length > 4 ? ` +${due.length - 4}` : ""}. 15 minutes each, from memory first.`, { inline_keyboard: due.slice(0, 3).map((t) => [{
 		text: `✅ Reviewed: ${t.topic}`.slice(0, 40),
@@ -26501,7 +26517,7 @@ async function deskTick(mirror, services, now, send, esc) {
 * throwaway database: Ben warns you if a backup wouldn't come back.
 */
 async function backupTick(t, SQL, mirror, now) {
-	const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+	const day = calendarDay(now);
 	await t.writeAtomic([{
 		sql: "CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)",
 		args: []
@@ -26526,7 +26542,7 @@ async function backupTick(t, SQL, mirror, now) {
 			]
 		}, {
 			sql: "DELETE FROM cloud_snapshots WHERE day < ?",
-			args: [`${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, "0")}-${String(cut.getDate()).padStart(2, "0")}`]
+			args: [calendarDay(cut)]
 		}]);
 	} catch (e) {
 		logError(t, "server", `snapshot: ${e.message}`);
@@ -26558,7 +26574,7 @@ async function healthTick(t, mirror, now, send) {
 				return null;
 			}
 		})(),
-		today: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+		today: calendarDay(now)
 	}));
 	const checks = healthChecks({
 		now,
@@ -26855,7 +26871,7 @@ async function rhythmTick(env, now, send) {
 }
 /** The app: today's rhythm (state), or an action on it. */
 async function coachRhythm(env, op) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	const { bots, mirror, services } = await botsFor(env);
 	if (op.action === "month") {
 		const { story, goals } = await mirror.read((db) => {
@@ -26902,7 +26918,7 @@ var localIsoHM = (iso) => {
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 async function sportShared(env, body) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	const { mirror, services } = await botsFor(env);
 	const today = sportToday();
 	const read = (db) => {
@@ -27056,7 +27072,7 @@ async function pluginJobs(env, mirror, healthDb, now, send, opts = {}) {
 }
 /** "Refresh now" in Settings → Plugins: runs the plugins' fetch jobs at once (no messages). */
 async function runPlugins(env, opts = {}) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	const { mirror } = await botsFor(env);
 	return {
 		ok: true,
@@ -27072,10 +27088,10 @@ async function runPlugins(env, opts = {}) {
 * steps and sleep to the daily record Ben reads. No points are paid.
 */
 async function healthPush(env, body) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	const tz = lifeTz(env);
 	const { mirror, services } = await botsFor(env);
 	const now = /* @__PURE__ */ new Date();
-	const r = cleanHealth(body, now.toLocaleDateString("sv-SE"));
+	const r = cleanHealth(body, calendarDay(now, tz));
 	if (!r.ok) return {
 		ok: false,
 		error: r.error
@@ -27115,7 +27131,7 @@ async function healthPush(env, body) {
 * own executor, so points, undo and the coach log match Ben exactly.
 */
 async function mcpCall(env, body, ctx) {
-	process.env.TZ = env.timeZone || "Europe/Chisinau";
+	lifeTz(env);
 	const life = async () => {
 		const { bots, mirror, services, calendar } = await botsFor(env);
 		return {

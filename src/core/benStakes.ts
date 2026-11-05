@@ -2,7 +2,7 @@
 // lose, enforced on time), check-ins at a clock time, the Sunday coach call
 // (5 questions → next week's big 3) and the month's progress story.
 
-import { addDays } from './dates'
+import { addDays, calendarDay } from './dates'
 
 // ------------------------------------------------------------------- stakes
 
@@ -145,7 +145,7 @@ export function weekOf(day: string): string {
 
 /** The call is due Saturday 18:00 → Monday 12:00 when this week has none. */
 export function callDue(calls: CoachCall[], now: Date): boolean {
-  const day = now.toLocaleDateString('sv-SE')
+  const day = calendarDay(now)
   const dow = now.getDay()
   const h = now.getHours()
   const open = (dow === 6 && h >= 18) || dow === 0 || (dow === 1 && h < 12)

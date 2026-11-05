@@ -5,6 +5,7 @@
 import type { Beats, ErrorEntry } from '@core/health'
 import type { BenLogEntry } from '@core/benLog'
 import type { TursoHttp } from './tursoHttp'
+import { calendarDay } from '@core/dates'
 
 const ENSURE = [
   { sql: 'CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)', args: [] },
@@ -98,7 +99,7 @@ export async function logBen(t: TursoHttp, list: BenLogEntry[], now = new Date()
     .writeAtomic([
       BEN_TABLE,
       ...list.slice(0, 40).map((e) => {
-        const day = now.toLocaleDateString('sv-SE')
+        const day = calendarDay(now)
         const args = [at(e), day, e.status, String(e.kind || 'message').slice(0, 40), e.reason ? String(e.reason).slice(0, 200) : null, e.text ? String(e.text).replace(/<[^>]+>/g, '').slice(0, 500) : null]
         return e.status === 'skipped'
           ? { sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM sys_ben_log WHERE day = ?2 AND status = 'skipped' AND kind = ?4 AND reason IS ?5)", args }

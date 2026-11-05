@@ -1,3 +1,4 @@
+import { calendarDay } from './dates'
 // Ben answers without the AI when he can (pure, tested):
 // - B3: common short questions ("what now?", "water?", "my streak?", "spent
 //   this week?", "focus this month?") come from your own data, instantly;
@@ -8,7 +9,7 @@
 export type Topic = 'spending' | 'focus' | 'workouts' | 'sleep' | 'tasks' | 'points'
 
 const pad = (n: number) => String(n).padStart(2, '0')
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const ymd = (d: Date) => calendarDay(d)
 const at = (day: string) => new Date(`${day}T12:00:00`)
 const plus = (day: string, n: number) => {
   const d = at(day)

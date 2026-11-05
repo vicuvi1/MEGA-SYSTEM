@@ -12,6 +12,7 @@ import type { WeekTime } from '@core/plannedVsReal'
 import type { MonthView, MoodView } from '../web/lifeExtras'
 import type { YearRecap } from '@core/yearRecap'
 import '../lifeExtras.css'
+import { calendarDay } from '@core/dates'
 
 export type InsightsTab = 'week' | 'month' | 'year'
 const TAB_KEY = 'ls.insightsTab'
@@ -42,7 +43,7 @@ export function openYear(onGo?: (p: PageId) => void) {
 
 const hm = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(Math.round(min % 60)).padStart(2, '0') : ''}` : `${Math.round(min)}m`)
 const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
-const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const localDay = (d = new Date()) => calendarDay(d)
 
 /** This week's calendar (Monday to now), or nothing when Google isn't connected. */
 async function weekEvents(): Promise<CalEvent[]> {

@@ -5,6 +5,7 @@
 import type { CalEvent } from './dayTime'
 import type { Notif } from './notify'
 import { inQuietHours } from './notifyRules'
+import { calendarDay } from './dates'
 
 /** Synced notification settings (settings.notif_settings). */
 export interface NotifSettings {
@@ -55,7 +56,7 @@ const hhmm = (iso: string) => {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
-const dayOf = (iso: string) => new Date(iso).toLocaleDateString('sv-SE')
+const dayOf = (iso: string) => calendarDay(new Date(iso))
 
 /** Events that count: timed, not yours (focus blocks warn on their own), not declined or free. */
 export const warnable = (e: CalEvent) => !e.allDay && !e.ours && !e.declined && !e.free
@@ -95,7 +96,7 @@ export function bedtimeAlert(bedTarget: string, now: Date, s: NotifSettings): Om
   if (h < 4 && now.getHours() >= 12) bed.setDate(bed.getDate() + 1)
   const at = bed.getTime() - 30 * 60_000
   if (now.getTime() < at || now.getTime() >= at + 10 * 60_000) return null
-  return { id: `bedtime:${bed.toLocaleDateString('sv-SE')}`, at: now.toISOString(), kind: 'bedtime', title: `Bed in 30 min (${bedTarget})`, body: 'Screens off soon. Tomorrow starts tonight.', action: { kind: 'page', page: 'today', label: 'Close my day' } }
+  return { id: `bedtime:${calendarDay(bed)}`, at: now.toISOString(), kind: 'bedtime', title: `Bed in 30 min (${bedTarget})`, body: 'Screens off soon. Tomorrow starts tonight.', action: { kind: 'page', page: 'today', label: 'Close my day' } }
 }
 
 /**
@@ -109,5 +110,5 @@ export function waterAlert(ml: number, target: number, now: Date, s: NotifSettin
   const expected = (target * (h - 8)) / 13
   if (expected - ml < 600) return null
   const slot = Math.floor(now.getHours() / 3)
-  return { id: `water:${now.toLocaleDateString('sv-SE')}:${slot}`, at: now.toISOString(), kind: 'water', title: `💧 Water: ${(ml / 1000).toFixed(1)} of ${(target / 1000).toFixed(1)} L`, body: `About ${Math.round((expected - ml) / 50) * 50} ml behind for this time of day.`, action: { kind: 'page', page: 'body', label: 'Log water' } }
+  return { id: `water:${calendarDay(now)}:${slot}`, at: now.toISOString(), kind: 'water', title: `💧 Water: ${(ml / 1000).toFixed(1)} of ${(target / 1000).toFixed(1)} L`, body: `About ${Math.round((expected - ml) / 50) * 50} ml behind for this time of day.`, action: { kind: 'page', page: 'body', label: 'Log water' } }
 }

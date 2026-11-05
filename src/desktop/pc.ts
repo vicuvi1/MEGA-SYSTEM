@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { activityLine, addActivity, appLabel, classifyApp, cleanPcPrefs, type AppKind, type DayActivity, type PcPrefs } from '../core/pcActivity'
 import { addFocusSample, FOCUS_SAMPLE_SEC, focusAppsSummary, newFocusApps, type FocusApps } from '../core/focusApps'
 import { browserDistraction } from './history'
+import { calendarDay } from '../core/dates'
 
 export const SITE_PORT = 47321
 
@@ -28,7 +29,7 @@ export interface PcHandle {
   actionFrom(argv: string[]): string | null
 }
 
-const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const dayKey = (d = new Date()) => calendarDay(d)
 
 export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p: PcPrefs) => void; onAction: (a: string) => void }): Promise<PcHandle> {
   const file = join(o.dir, 'pc.json')

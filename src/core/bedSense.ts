@@ -1,3 +1,4 @@
+import { calendarDay } from './dates'
 // Knowing when you went to bed without watching your screen: the desktop app
 // notes the last moment you used the PC (mouse/keys, before it locked, slept
 // or shut down). When you come back after hours, and that last moment was in
@@ -41,7 +42,7 @@ export function showWakeButton(now: Date, wakeLogged: boolean): boolean {
 
 /** Was a bedtime logged for the night that ends this morning / starts tonight? */
 export function bedLoggedTonight(logs: { day: string; bedTime: string | null }[], now: Date): boolean {
-  const day = (d: Date) => d.toLocaleDateString('sv-SE')
+  const day = (d: Date) => calendarDay(d)
   const today = day(now)
   const yesterday = day(new Date(now.getTime() - 86400000))
   const tomorrow = day(new Date(now.getTime() + 86400000))

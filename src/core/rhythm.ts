@@ -6,6 +6,7 @@
 //   top 3) and the Sunday review (the week, next week's focus and big 3).
 // When each is due comes from the tick (every few minutes) and this state.
 import { freeGaps, suggestBlocks, type CalEvent } from './dayTime'
+import { calendarDay } from './dates'
 
 export interface PlanBlock {
   title: string
@@ -235,7 +236,7 @@ export function cleanProposal(raw: any, fallback: DayProposal, events: CalEvent[
 
 const localDayOf = (iso: string) => {
   const d = new Date(iso)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return calendarDay(d)
 }
 const minOfIso = (iso: string) => {
   const d = new Date(iso)
@@ -427,7 +428,7 @@ export function bookBig3(big3: string[], events: CalEvent[], days: string[], now
   const out: { title: string; day: string; start: string; end: string }[] = []
   const taken: CalEvent[] = [...events]
   const now = new Date(nowIso)
-  const todayKey = now.toLocaleDateString('sv-SE')
+  const todayKey = calendarDay(now)
   const left = new Map(big3.map((t) => [t, perTask]))
   for (const day of days) {
     for (const title of big3) {

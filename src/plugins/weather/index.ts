@@ -5,9 +5,10 @@
 import { definePlugin, type PluginJobCtx } from '../types'
 import { readConfig, readData } from '../store'
 import { forecastUrl, geocodeUrl, readCoords, summarizeDay, weatherAdvice, weatherLine, type WeatherData } from './weather'
+import { calendarDay } from '../../core/dates'
 
 export const WEATHER = 'weather'
-const dayOf = (d: Date) => d.toLocaleDateString('sv-SE')
+const dayOf = (d: Date) => calendarDay(d)
 const hmOf = (d: Date) => d.toTimeString().slice(0, 5)
 
 const job = async (ctx: PluginJobCtx) => {

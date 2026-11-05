@@ -5,9 +5,10 @@
 import { definePlugin, type PluginJobCtx } from '../types'
 import { readData } from '../store'
 import { commitStats, ctftimeUrl, eventsUrl, githubLine, pickCtfs, validUser, type CtfEvent, type GithubData } from './github'
+import { calendarDay } from '../../core/dates'
 
 export const GITHUB = 'github'
-const dayOf = (d: Date) => d.toLocaleDateString('sv-SE')
+const dayOf = (d: Date) => calendarDay(d)
 
 async function job(ctx: PluginJobCtx) {
   const cfg = JSON.parse((await ctx.get(`plugin_${GITHUB}`)) || '{}') as { user?: string }

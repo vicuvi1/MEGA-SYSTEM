@@ -9,7 +9,7 @@ import { parseTelegramText } from '@core/botCommands'
 import { cleanFacts, dateIn, factLine, toRecord, type Fact } from '@core/factTypes'
 import { STEALTH_NOTE } from '@core/stealth'
 import type { BotBridgeConfig } from '@shared/api'
-import { addDays } from '@core/dates'
+import { addDays, calendarDay } from '@core/dates'
 import { parseSets } from '@core/strength'
 import { hm } from '@core/focus'
 import { progressReport } from '@core/progress'
@@ -651,7 +651,7 @@ const WORD = /[\p{L}\p{N}]{4,}/gu
  * or the recent chat), then the newest, at most `max`. The rest stays in memory
  * and Ben can still look things up.
  */
-export function pickFacts(facts: Memory['facts'], about: string, max = 24, today = new Date().toLocaleDateString('sv-SE')): Memory['facts'] {
+export function pickFacts(facts: Memory['facts'], about: string, max = 24, today = calendarDay()): Memory['facts'] {
   if (facts.length <= max) return facts
   const words = new Set((about.toLowerCase().match(WORD) ?? []).map((w) => w.slice(0, 6)))
   const hits = (f: { t: string }) => (f.t.toLowerCase().match(WORD) ?? []).some((w) => words.has(w.slice(0, 6)))

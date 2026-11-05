@@ -1,3 +1,4 @@
+import { calendarDay } from './dates'
 // Type the time instead of picking it (pure, D4): "fri 18:00", "tomorrow
 // 9-10:30", "in 2h", "today 14:00 for 45m", "every mon 8:00", "12 nov 10:00".
 // English plus a few Romanian words. Returns null when it doesn't read as a time.
@@ -14,7 +15,7 @@ export interface When {
 const DAYS: Record<string, number> = { sun: 0, sunday: 0, dum: 0, mon: 1, monday: 1, lun: 1, tue: 2, tues: 2, tuesday: 2, mar: 2, wed: 3, wednesday: 3, mie: 3, thu: 4, thur: 4, thurs: 4, thursday: 4, joi: 4, fri: 5, friday: 5, vin: 5, sat: 6, saturday: 6, sam: 6 }
 const MONTHS: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11, ian: 0, mai: 4, iun: 5, iul: 6, noi: 10 }
 const pad = (n: number) => String(n).padStart(2, '0')
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const ymd = (d: Date) => calendarDay(d)
 
 /** "18", "18:30", "6pm", "6:30pm", "18.30" → minutes, or null. */
 function time(t: string): number | null {

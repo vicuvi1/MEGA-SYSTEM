@@ -1,3 +1,4 @@
+import { calendarDay } from './dates'
 // Your day in time: Google Calendar events, the free gaps between them
 // (07:00–23:00) and time blocks that fit your must-dos and big tasks into
 // those gaps. Pure: the app, the bots and the coach use it.
@@ -67,7 +68,7 @@ export function localHM(iso: string): string {
 export function localDay(iso: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
   const d = new Date(iso)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return calendarDay(d)
 }
 
 /** Timed events of one day as minute ranges, clipped to the day window. */

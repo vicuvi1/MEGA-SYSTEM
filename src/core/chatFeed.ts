@@ -1,3 +1,4 @@
+import { calendarDay } from './dates'
 // Night 7: how Ben's chat is laid out. The log is a list of messages; the feed
 // is what the Coach page shows:
 // - Ben's automatic messages (nudges) are told apart from the conversation (CN1),
@@ -90,7 +91,7 @@ export function partOfDay(hour: number): string {
   return PARTS.find(([to]) => hour < to)![1]
 }
 
-const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const localDay = (d: Date) => calendarDay(d)
 const hm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 
 function dayName(d: Date, now: Date): string {

@@ -11,7 +11,7 @@ import { urgeEvents } from './disciplinePatterns'
 import { EXPERIMENTS, measureExperiment, pickExperiment, type ExpMetric, type ExpResult, type ExpState, type Experiment, type Series } from '@core/experiment'
 import { nightMinutes } from '@core/readiness'
 import { getSetting, setSetting } from '../../../main/settings'
-import { addDays } from '@core/dates'
+import { addDays, calendarDay } from '@core/dates'
 import { financeSpending } from '@core/progress'
 import { addExcuse, addMood, energyMap, excuseCallout, excuseCounts, excuseLine, hoursText, moodDue, moodLine, profileCorrections, profileNote, PROFILE_NOTE, weeklyPatterns, classifyExcuse, type EnergyMap, type Excuse, type ExcuseCount, type MoodEntry, type MoodSlot, type Pattern } from '@core/benKnows'
 import { addTopic, dueTopics, nextReview, parseStack, reviewTopic, stackRate, stackStreak, tickStack, type Stack, type StudyTopic } from '@core/benPlans'
@@ -307,7 +307,7 @@ export function noteExcuse(db: any, text: string, today: string, now = new Date(
 }
 
 export function logMood(db: any, mood: number, now = new Date()): Desk {
-  const day = now.toLocaleDateString('sv-SE')
+  const day = calendarDay(now)
   const slot: MoodSlot = now.getHours() < 17 ? 'noon' : 'evening'
   return editDesk(db, (x) => ({ ...x, moods: addMood(x.moods, { day, slot, mood, at: now.toISOString() }) }))
 }

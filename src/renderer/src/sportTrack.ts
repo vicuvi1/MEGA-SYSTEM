@@ -2,14 +2,12 @@
 // banner, the Telegram bot and the Body page. Sport Track starts a new
 // checklist when its `lastDate` (your local date) changes; everything that
 // adds reps here applies the same rule first, so reps never land on yesterday.
+import { dayKey } from '@core/dates'
+
 const KEY = 'life_sport_tracker_v1'
 
-/** Today on this device, YYYY-MM-DD in local time (a new day starts at your midnight). */
 /** Your day for water and reps: it turns at 04:00, like the rest of the app (S4). */
-export const sportDay = (d = new Date()) => {
-  const x = new Date(d.getTime() - 4 * 3600_000)
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
-}
+export const sportDay = (d = new Date()) => dayKey(d)
 
 /** Sport Track's data with today's checklist (reset if its day has passed). */
 export function readSport(): any | null {

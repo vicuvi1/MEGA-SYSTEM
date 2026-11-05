@@ -23,6 +23,7 @@ import type { PageId } from '../modules'
 import { useAction, useToast } from '../ui'
 import { useLive } from '../live'
 import { soundSuccess } from '../sound'
+import { calendarDay } from '@core/dates'
 
 type View = 'day' | '3day' | 'ndays' | 'workweek' | 'week' | 'month' | 'agenda'
 /** Hour height: 72 px by default (C1), any size from 32 to 160 (C2). */
@@ -41,7 +42,7 @@ export const isoWeek = (day: string) => {
   return Math.ceil(((t.getTime() - y0.getTime()) / 86400000 + 1) / 7)
 }
 const pad = (n: number) => String(n).padStart(2, '0')
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const ymd = (d: Date) => calendarDay(d)
 const addDays = (day: string, n: number) => {
   const d = new Date(`${day}T12:00:00`)
   d.setDate(d.getDate() + n)

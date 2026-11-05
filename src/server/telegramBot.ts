@@ -27,7 +27,7 @@ import { bedtimeNudge, coachFacts, coachPrompt, coachText, deadlineFacts, wakeSl
 import { deadlineRadar } from '@core/todoist'
 import { shouldPlan } from '@core/weekPlan'
 import { targetForDay } from '@core/sleep'
-import { addDays } from '@core/dates'
+import { addDays, calendarDay, dayKey } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
 import { messageKind, sendOnce, type SentToday } from '../core/benOnce'
@@ -210,6 +210,17 @@ export async function payTodoistDone(env: BotEnv, opts: { since?: Date; minGapMs
   return { paid, done: items.length }
 }
 
+/**
+ * Your time zone for this request. Much of src/core reads local hours
+ * (getHours, setHours), so the server's clock is set to it here, once per entry
+ * point; the day helpers (dayKey, calendarDay) are also given it explicitly.
+ */
+function lifeTz(env: BotEnv): string {
+  const tz = env.timeZone || 'Europe/Chisinau'
+  process.env.TZ = tz
+  return tz
+}
+
 /** Midnight `daysAgo` days back, in process.env.TZ. */
 function localMidnight(daysAgo: number): Date {
   const d = new Date()
@@ -220,7 +231,7 @@ function localMidnight(daysAgo: number): Date {
 
 /** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
 export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   if (!env.model) return { ok: false, reply: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.', done: [] }
   const { bots } = await botsFor(env)
   const r = await bots.think(text, `app:${Date.now()}`, onStep, media)
@@ -229,7 +240,7 @@ export async function coachChat(env: BotEnv, text: string, onStep?: (step: strin
 
 /** The app: take back what the coach did in one reply (all, or one line). */
 export async function coachUndo(env: BotEnv, at: string, index?: number): Promise<{ ok: boolean; lines: string[] }> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   const { bots } = await botsFor(env)
   return bots.undoReply(at, index)
 }
@@ -237,7 +248,7 @@ export async function coachUndo(env: BotEnv, at: string, index?: number): Promis
 /** Handles one Telegram update for the bot with this token; returns the reply sent. */
 export async function handleTelegramUpdate(env: BotEnv, token: string, update: unknown): Promise<string | null> {
   // Days, wake-up times and streaks follow your time zone, not the server's.
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   const { bots, mirror } = await botsFor(env)
   // You wrote something: open check-ins stop asking (you answered). Only
   // from your own chats: a stranger writing to the bot changes nothing (A5).
@@ -266,7 +277,7 @@ export type DailyJob = 'morning' | 'reask' | 'midday' | 'evening' | 'night'
  * "Am I improving?".
  */
 export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string>; appUrl?: string; sleepBotToken?: string }, job: DailyJob): Promise<string[]> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   const { services, mirror } = await botsFor(env)
   // The daily rhythm (the tick) sends the morning plan and the evening and Sunday reviews now.
   if (job === 'morning' || job === 'reask' || job === 'evening' || job === 'midday') {
@@ -454,7 +465,7 @@ async function sysGet(db: TursoHttp, key: string): Promise<string | null> {
 const sysSet = (db: TursoHttp, key: string, value: string) => db.writeAtomic([SYS_KV, { sql: 'INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [key, value] }])
 
 export async function runTick(env: BotEnv & { botToken: string; chatId: string; sleepBotToken?: string }, now = new Date()): Promise<string[]> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const tz = lifeTz(env)
   const { services, mirror, calendar, bots, SQL } = await botsFor(env)
   // At most once a minute, whoever calls.
   const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
@@ -476,18 +487,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     if (!kind || !env.model) return template
     // B16/W10: the AI writes only the first nudge of each kind per day; the rest use the
     // template with live numbers (no model call, no calendar or Todoist round trip).
-    const dayKey = now.toLocaleDateString('sv-SE')
+    // The app day (turns at 04:00), like everything else Ben counts per day.
+    const today = dayKey(now, tz)
     const fresh = await mirror
       .write((db) => {
-        let v: { day: string; kinds: string[] } = { day: dayKey, kinds: [] }
+        let v: { day: string; kinds: string[] } = { day: today, kinds: [] }
         try {
           const raw = JSON.parse(getSetting(db as any, 'voiced_kinds') || 'null')
-          if (raw?.day === dayKey && Array.isArray(raw.kinds)) v = raw
+          if (raw?.day === today && Array.isArray(raw.kinds)) v = raw
         } catch {
           /* new day */
         }
         if (v.kinds.includes(kind)) return false
-        setSetting(db as any, 'voiced_kinds', JSON.stringify({ day: dayKey, kinds: [...v.kinds, kind] }))
+        setSetting(db as any, 'voiced_kinds', JSON.stringify({ day: today, kinds: [...v.kinds, kind] }))
         return true
       })
       .catch(() => false)
@@ -498,7 +510,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
         const f = svc.focus.state(now)
         return { focusMin: f.todayMin, mustDos: f.plan.items.filter((x) => !x.done).map((x) => x.text).slice(0, 4), tone: loadStyle(db).tone }
       })
-      const day = now.toLocaleDateString('sv-SE')
+      const day = calendarDay(now, tz)
       const events = calendar ? await calendar.events(now.toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => []) : []
       const next = events.filter((e) => !e.allDay && Date.parse(e.start) > now.getTime()).sort((a, b) => a.start.localeCompare(b.start))[0]
       const tasks = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((l) => l.map((t) => t.content).slice(0, 5), () => []) : []
@@ -526,13 +538,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     }
     // W21: at most 15 messages a day on his own; the rest go to the bell. Your reminders (🔔 ⏰),
     // urgent things (leave now) and event warnings always go through.
-    const dayKey = now.toLocaleDateString('sv-SE')
+    // The app day (turns at 04:00), so a message at 00:30 still counts for the evening before.
+    const today = dayKey(now, tz)
     const own = !opts.urgent && !opts.notif && !/^\s*(🔔|⏰)/u.test(text)
     if (own) {
       const count = await mirror.read((db) => {
         try {
           const c = JSON.parse(getSetting(db as any, 'ben_sent_count') || 'null')
-          return c?.day === dayKey ? Number(c.n) || 0 : 0
+          return c?.day === today ? Number(c.n) || 0 : 0
         } catch {
           return 0
         }
@@ -559,7 +572,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
           } catch {
             /* start fresh */
           }
-          return sendOnce(prev, text, now.toLocaleDateString('sv-SE'))
+          return sendOnce(prev, text, dayKey(now, tz))
         })
     if (once && !once.send) {
       note('skipped', original, 'Already sent one like it today')
@@ -591,7 +604,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
           } catch {
             prev = null
           }
-          const r = sendOnce(prev, original, now.toLocaleDateString('sv-SE'))
+          const r = sendOnce(prev, original, dayKey(now, tz))
           if (r.send) setSetting(db as any, BEN_SENT, JSON.stringify(r.next))
         })
         .catch(() => null)
@@ -600,14 +613,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     if (own)
       await mirror
         .write((db) => {
-          let c = { day: dayKey, n: 0 }
+          let c = { day: today, n: 0 }
           try {
             const p = JSON.parse(getSetting(db as any, 'ben_sent_count') || 'null')
-            if (p?.day === dayKey) c = { day: dayKey, n: Number(p.n) || 0 }
+            if (p?.day === today) c = { day: today, n: Number(p.n) || 0 }
           } catch {
             /* new day */
           }
-          setSetting(db as any, 'ben_sent_count', JSON.stringify({ day: dayKey, n: c.n + 1 }))
+          setSetting(db as any, 'ben_sent_count', JSON.stringify({ day: today, n: c.n + 1 }))
         })
         .catch(() => null)
     sent.push(text)
@@ -733,9 +746,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
             const e0 = Date.parse(ch.ev.end)
             const hit = evs.filter((e) => isFocusBlock(e) && e.ours && Date.parse(e.start) < e0 && Date.parse(e.end) > s0)
             for (const b of hit) {
-              const day = new Date(b.start).toLocaleDateString('sv-SE')
+              const day = calendarDay(b.start, tz)
               const len = Math.round((Date.parse(b.end) - Date.parse(b.start)) / 60000)
-              const after = day === now.toLocaleDateString('sv-SE') ? now.toTimeString().slice(0, 5) : '08:00'
+              const after = day === calendarDay(now, tz) ? now.toTimeString().slice(0, 5) : '08:00'
               const slot = nextSlot(evs.filter((e) => e.id !== b.id), day, after, len)
               if (slot && (await calendar.move(b.calendarId, b.id, new Date(`${day}T${slot.start}:00`).toISOString(), new Date(`${day}T${slot.end}:00`).toISOString()).then(() => true).catch(() => false))) ch.text += `\n↪️ It was on top of <b>${escapeHtml(b.title)}</b>, so I moved that to ${slot.start}–${slot.end}.`
             }
@@ -922,7 +935,8 @@ async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: s
     if (t) await send(esc(t), { inline_keyboard: [[{ text: '✅ Done', callback_data: `sk|${st.id}` }]] }).catch(() => null)
   }
   const h = now.getHours()
-  const today = now.toLocaleDateString('sv-SE')
+  // The app day (04:00): Ben's once-a-day "never miss twice" marker follows it.
+  const today = dayKey(now)
   // 2) Study topics due for review (between 10:00 and 21:00).
   const due = dueTopics(d.study, today)
   if (due.length && h >= 10 && h < 21) {
@@ -957,7 +971,7 @@ async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: s
  * throwaway database: Ben warns you if a backup wouldn't come back.
  */
 async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: Date): Promise<void> {
-  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const day = calendarDay(now)
   await t.writeAtomic([{ sql: 'CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)', args: [] }] as any)
   const [have, notes] = await t.readMany([
     { sql: 'SELECT 1 FROM cloud_snapshots WHERE day = ?', args: [day] },
@@ -969,7 +983,7 @@ async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: D
       const cut = new Date(now.getTime() - 30 * 86400000)
       await t.writeAtomic([
         { sql: 'INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING', args: [day, now.toISOString(), Buffer.byteLength(data), data] },
-        { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [`${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`] }
+        { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [calendarDay(cut)] }
       ] as any)
     } catch (e) {
       void logError(t, 'server', `snapshot: ${(e as Error).message}`)
@@ -1002,7 +1016,7 @@ async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: 
         return null
       }
     })(),
-    today: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    today: calendarDay(now)
   }))
   const checks = healthChecks({ now, beats: h.beats, sportySeen: local.sporty, latestSnapshot: h.latestSnapshot, today: local.today, errors: h.errors })
   const d = alertDecisions(checks, h.notes.alerted ?? {}, now)
@@ -1225,7 +1239,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
 
 /** The app: today's rhythm (state), or an action on it. */
 export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month'; note?: string; prefs?: any }): Promise<any> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   const { bots, mirror, services } = await botsFor(env)
   // The month's letter: Ben's honest take on the month's story (saved; the app shows it).
   if (op.action === 'month') {
@@ -1281,7 +1295,7 @@ const localIsoHM = (iso: string) => {
 //   {op:'poll', version, behind, latest}  → {update: true} when the Update Sporty button was pressed
 //   {op:'updated', ok, updated, version}  → how that update went
 export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean; state?: SharedSport; exercise?: unknown; error?: string }> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   const { mirror, services } = await botsFor(env)
   const today = sportToday()
   const read = (db: any) => {
@@ -1389,7 +1403,7 @@ async function pluginJobs(env: BotEnv, mirror: Mirror, healthDb: TursoHttp, now:
 
 /** "Refresh now" in Settings → Plugins: runs the plugins' fetch jobs at once (no messages). */
 export async function runPlugins(env: BotEnv, opts: { only?: string } = {}): Promise<{ ok: boolean; ran: string[] }> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   const { mirror } = await botsFor(env)
   const ran = await pluginJobs(env, mirror, new TursoHttp(env.tursoUrl, env.tursoToken), new Date(), undefined, { force: true, only: opts.only })
   return { ok: true, ran }
@@ -1401,10 +1415,10 @@ export async function runPlugins(env: BotEnv, opts: { only?: string } = {}): Pro
  * steps and sleep to the daily record Ben reads. No points are paid.
  */
 export async function healthPush(env: BotEnv, body: unknown): Promise<{ ok: boolean; saved?: string[]; day?: string; error?: string }> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const tz = lifeTz(env)
   const { mirror, services } = await botsFor(env)
   const now = new Date()
-  const r = cleanHealth(body, now.toLocaleDateString('sv-SE'))
+  const r = cleanHealth(body, calendarDay(now, tz))
   if (!r.ok) return { ok: false, error: r.error }
   const input = r.input
   try {
@@ -1435,7 +1449,7 @@ export { handleMcp, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, NEEDS_WR
  * own executor, so points, undo and the coach log match Ben exactly.
  */
 export async function mcpCall(env: BotEnv, body: unknown, ctx: McpCtx): Promise<unknown | null> {
-  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  lifeTz(env)
   const life = async (): Promise<McpLife> => {
     const { bots, mirror, services, calendar } = await botsFor(env)
     return {

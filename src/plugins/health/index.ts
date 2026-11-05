@@ -5,9 +5,10 @@
 import { definePlugin } from '../types'
 import { readData, writeData } from '../store'
 import { healthLine, mergeDay, parseSteps, type HealthData } from './health'
+import { calendarDay } from '../../core/dates'
 
 export const HEALTH = 'health'
-const dayOf = (d: Date) => d.toLocaleDateString('sv-SE')
+const dayOf = (d: Date) => calendarDay(d)
 
 export default definePlugin({
   id: HEALTH,

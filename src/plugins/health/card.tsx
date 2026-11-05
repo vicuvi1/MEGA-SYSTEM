@@ -2,10 +2,11 @@
 import { Icon } from '../../renderer/src/Icon'
 import { usePluginData } from '../usePluginData'
 import type { HealthData } from './health'
+import { calendarDay } from '../../core/dates'
 
 export function HealthCard() {
   const d = usePluginData<HealthData>('plugin_health_data')
-  const t = d?.days[new Date().toLocaleDateString('sv-SE')]
+  const t = d?.days[calendarDay()]
   if (!t) return null
   return (
     <section className="pl-card" aria-label="From your phone">

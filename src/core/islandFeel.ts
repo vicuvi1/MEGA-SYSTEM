@@ -2,6 +2,7 @@
 // it's at risk, the time of day for its colors, today's highlight, and the
 // moment a reward unlocks.
 import type { IslandAlert } from './islandModel'
+import { calendarDay } from './dates'
 
 export type DayPart = 'morning' | 'day' | 'evening' | 'night'
 export function dayPart(now: number): DayPart {
@@ -17,7 +18,7 @@ export function runOf(days: { day: string; ok: boolean }[], today: string): { da
   const d = new Date(`${today}T12:00:00`)
   for (;;) {
     d.setDate(d.getDate() - 1)
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const k = calendarDay(d)
     if (!map.get(k)) break
     n++
   }

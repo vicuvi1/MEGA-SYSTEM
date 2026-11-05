@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FocusState } from '@shared/api'
 import type { WeekRow } from '@core/coachImpact'
+import { calendarDay } from '@core/dates'
 import { missCost, planGoal, type GoalPlan } from '@core/goalPlan'
 import { life } from './bridge'
 import { Icon } from './Icon'
@@ -89,7 +90,7 @@ export function GoalPlans() {
   useEffect(load, [load])
   useLive(load)
   if (!focus) return null
-  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+  const today = calendarDay()
   const plans = focus.goals.map((g) => planGoal(g, today, focus.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))
   const book = async (id?: number) => {
     setBusy(id ?? 'all')
