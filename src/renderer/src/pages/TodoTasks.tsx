@@ -5,6 +5,7 @@
 // another area. "Clean up" asks the coach for fixes you approve one by one.
 // Keys: n new task, / search, e edit, 1–4 priority, x complete (on the task
 // under the mouse or keyboard focus). Every change goes straight to Todoist.
+import { dayLabel } from '@core/dates'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AREA_COLORS, defaultAreaColor, plainName, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life } from '../bridge'
@@ -32,7 +33,7 @@ const addDays = (day: string, n: number) => {
 const dueLabel = (t: TodoTask, today: string) => {
   if (!t.due) return null
   const tm = t.dueTime ? ` ${t.dueTime}` : ''
-  if (t.due < today) return { text: `late · ${t.due.slice(8)}.${t.due.slice(5, 7)}`, cls: 'late' }
+  if (t.due < today) return { text: `late · ${dayLabel(t.due, false)}`, cls: 'late' }
   if (t.due === today) return { text: `today${tm}`, cls: 'today' }
   if (t.due === addDays(today, 1)) return { text: `tomorrow${tm}`, cls: '' }
   const wd = new Date(`${t.due}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })

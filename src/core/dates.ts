@@ -49,3 +49,11 @@ export const appHour = (now = new Date()) => {
   const h = now.getHours()
   return h < DAY_START_HOUR ? h + 24 : h
 }
+
+/** One way to show a day everywhere (V11): "Thu 5 Nov" (no weekday: "5 Nov"). */
+export function dayLabel(day: string, weekday = true): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  return d.toLocaleDateString('en-GB', { ...(weekday ? { weekday: 'short' as const } : {}), day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(',', '')
+}
+/** "30 Oct – 5 Nov" (V11). */
+export const dayRange = (from: string, to: string) => `${dayLabel(from, false)} – ${dayLabel(to, false)}`

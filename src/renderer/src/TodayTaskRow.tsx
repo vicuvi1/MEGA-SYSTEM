@@ -6,6 +6,7 @@
 // - ⋯: rename, details, area, how long it takes, not today, delete.
 // Drag the row to reorder it, onto another area to move it, or onto free
 // time in "Your day" to block it in your calendar.
+import { dayLabel } from '@core/dates'
 import { useEffect, useRef, useState } from 'react'
 import type { Area, TodoTask } from '@core/todoist'
 import { plainName } from '@core/todoist'
@@ -24,7 +25,7 @@ const addDays = (day: string, n: number) => {
 export function dueText(t: TodoTask, today: string): { text: string; late: boolean } | null {
   if (!t.due) return null
   const tm = t.dueTime ? ` ${t.dueTime}` : ''
-  if (t.due < today) return { text: `late · ${t.due.slice(8)}.${t.due.slice(5, 7)}`, late: true }
+  if (t.due < today) return { text: `late · ${dayLabel(t.due, false)}`, late: true }
   if (t.due === today) return { text: t.dueTime ? t.dueTime : 'today', late: false }
   if (t.due === addDays(today, 1)) return { text: `tomorrow${tm}`, late: false }
   return { text: new Date(`${t.due}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + tm, late: false }

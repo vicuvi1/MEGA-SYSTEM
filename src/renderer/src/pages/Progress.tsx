@@ -1,6 +1,7 @@
 // "Am I improving?": every area in one place. A week score, then for each
 // area: the last 7 days against last week, a bar toward a good week, the 7
 // days one by one and your last 6 weeks (numbers from @core/progress).
+import { dayRange } from '@core/dates'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Metric, ProgressReport } from '@core/progress'
 import { life } from '../bridge'
@@ -299,7 +300,7 @@ export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWal
       <section className="panel pg-hero">
         <ScoreRing score={r.score} />
         <div className="pg-hero-text">
-          <span className="pg-kicker">Week score · {r.from.slice(5).replace('-', '/')} to {r.to.slice(5).replace('-', '/')}</span>
+          <span className="pg-kicker">Week score · {dayRange(r.from, r.to)}</span>
           <h2>{r.verdict}</h2>
           <div className="pg-hero-chips">
             <span className={`pg-chip ${diff > 0 ? 'better' : diff < 0 ? 'worse' : ''}`}>

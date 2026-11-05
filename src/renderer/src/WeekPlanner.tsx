@@ -1,6 +1,7 @@
 // The Sunday plan in about 15 minutes: look back (score, weakest area), pick
 // ONE area to focus on, pick your 3 big tasks. The coach checks that focus
 // all week; the big 3 sit on Today with ▶ focus buttons.
+import { dayLabel } from '@core/dates'
 import { useCallback, useEffect, useState } from 'react'
 import type { MetricId, ProgressReport } from '@core/progress'
 import type { TodoTask } from '@core/todoist'
@@ -36,7 +37,6 @@ const HINT: Record<MetricId, string> = {
 
 export const LABEL: Record<MetricId, string> = { focus: 'Focus time', wake: 'On-time wake-ups', sport: 'Workouts', clean: 'Clean days', todoist: 'Todoist tasks done', mustdo: 'Must-dos done', spend: 'Spending' }
 
-const dm = (day: string) => `${day.slice(8)}.${day.slice(5, 7)}`
 
 export function WeekPlanner({ report, plan, today, onDone }: { report: ProgressReport; plan: WeekPlan | null; today: string; onDone?: () => void }) {
   const act = useAction()
@@ -78,7 +78,7 @@ export function WeekPlanner({ report, plan, today, onDone }: { report: ProgressR
     <section className="panel wp">
       <header className="wp-head">
         <h2>
-          <Icon name="calendar" /> Plan your week · from {dm(week)}
+          <Icon name="calendar" /> Plan your week · from {dayLabel(week)}
         </h2>
         <span className="hint">about 15 minutes</span>
       </header>
