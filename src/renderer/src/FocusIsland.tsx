@@ -6,6 +6,7 @@
 // quick start. Time up: it flashes and chimes. Everything is customizable
 // (gear inside), saved on this device only.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { FocusState } from '@shared/api'
 import { life } from './bridge'
 import { useLive } from './live'
@@ -61,6 +62,7 @@ function Ring({ pct, over, size = 22 }: { pct: number; over: boolean; size?: num
 }
 
 export function FocusIsland() {
+  const reduce = useReducedMotion()
   const act = useAction()
   const [prefs, setPrefsState] = useState<IslandPrefs>(loadPrefs)
   const setPrefs = (p: Partial<IslandPrefs>) =>
@@ -225,8 +227,18 @@ export function FocusIsland() {
       {/* The hot zone: move the mouse to the top (under the camera) and it opens. */}
       <div className={`isl-zone pos-${prefs.pos}`} onMouseEnter={enter} onMouseLeave={leave} aria-hidden />
       {(run || showIdlePill) && (
-        <div className={cls} onMouseEnter={enter} onMouseLeave={leave} role="region" aria-label="Focus island">
-          <button className="isl-pill" onClick={() => (setPinned((p) => !p), setOpen(true))} aria-expanded={open} title={pinned ? 'Unpin' : 'Pin open'}>
+        <motion.div
+          layout
+          className={cls}
+          onMouseEnter={enter}
+          onMouseLeave={leave}
+          role="region"
+          aria-label="Focus island"
+          // The shape springs between the pill and the open card (I3); framer keeps the corners round while it scales.
+          style={{ borderRadius: open ? 28 : 22 }}
+          transition={reduce ? { duration: 0 } : { layout: { type: 'spring', stiffness: 360, damping: 30, mass: 0.85 } }}
+        >
+          <motion.button layout="position" className="isl-pill" onClick={() => (setPinned((p) => !p), setOpen(true))} aria-expanded={open} title={pinned ? 'Unpin' : 'Pin open'}>
             {run ? (
               <>
                 <Ring pct={pct} over={over} size={prefs.size === 'large' ? 26 : 20} />
@@ -241,10 +253,18 @@ export function FocusIsland() {
             ) : (
               <span className="isl-idle">{idleText}</span>
             )}
-          </button>
+          </motion.button>
 
+          <AnimatePresence initial={false}>
           {open && (
-            <div className="isl-body">
+            <motion.div
+              key="body"
+              layout="position"
+              className="isl-body"
+              initial={reduce ? false : { opacity: 0, filter: 'blur(6px)', scale: 0.97 }}
+              animate={{ opacity: 1, filter: 'blur(0px)', scale: 1, transition: reduce ? { duration: 0 } : { delay: 0.05, duration: 0.22 } }}
+              exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, filter: 'blur(4px)', transition: { duration: 0.1 } }}
+            >
               {gear ? (
                 <IslandSettings prefs={prefs} setPrefs={setPrefs} onBack={() => setGear(false)} />
               ) : run ? (
@@ -337,9 +357,10 @@ export function FocusIsland() {
                   </span>
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
-        </div>
+          </AnimatePresence>
+        </motion.div>
       )}
     </>
   )

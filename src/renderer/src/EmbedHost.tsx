@@ -222,6 +222,15 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       const cs = getComputedStyle(root)
       const light = root.dataset.theme === 'light' || (root.dataset.theme !== 'dark' && window.matchMedia?.('(prefers-color-scheme: light)').matches)
       const css = appKey === 'finance' ? FINANCE_IN_LIFE : `${on ? embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light)) : ''}${embedPhoneCss(appKey)}`
+      // Finance Helper follows Life System's light / dark (U2), unless you
+      // picked a theme or a design inside Finance Helper itself.
+      if (appKey === 'finance' && on) {
+        const mode = light ? 'light' : 'dark'
+        void runIn(
+          el,
+          `(() => { const r = document.documentElement; if (r.dataset.design || (r.dataset.theme && r.dataset.lifeTheme !== '1')) return; r.dataset.theme = '${mode}'; r.dataset.lifeTheme = '1'; })()`
+        ).catch(() => null)
+      }
       try {
         if (typeof el.insertCSS === 'function') {
           // Desktop webview: replace the previous sheet.
