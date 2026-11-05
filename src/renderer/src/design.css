@@ -2004,3 +2004,9 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .ds-block.band > small { display: none; }
 .cal-item.band > b { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100%; }
 .cal-item.band > small { display: none; }
+
+/* Points shown once (V7): with the sidebar open, its "You" card shows them,
+   so the header chip hides (it stays on phones and with the sidebar folded). */
+@media (min-width: 761px) {
+  .shell:not(.rail) .main > .topbar .tb-me { display: none; }
+}
