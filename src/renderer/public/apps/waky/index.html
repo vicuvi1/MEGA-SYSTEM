@@ -51,8 +51,8 @@
           <div class="muted small" id="streak-best"></div>
         </div>
         <button class="card stat-card clickable reveal" data-goto="rewards">
-          <div class="label">Coins</div>
-          <div class="big"><span id="coin-balance">0</span><small>🪙</small></div>
+          <div class="label">Points</div>
+          <div class="big"><span id="coin-balance">0</span><small>⭐</small></div>
           <div class="bar"><div class="bar-fill" id="goal-bar"></div></div>
           <div class="muted small" id="goal-sub"></div>
         </button>
@@ -107,13 +107,9 @@
         <div class="card">
           <h2>How the game works</h2>
           <ul class="earn">
-            <li><b>+10</b> coins when you're up on time, <b>+15</b> before your target</li>
-            <li><b>+5</b> every 7 days in a row, <b>+20</b> for a new rank</li>
-            <li><b>🎁</b> a chest for every new journey day, every 7-day run and every new rank</li>
-            <li><b>🛡️</b> Streak Shield: saves your streak if you miss one day</li>
-            <li><b>⚡</b> Double Coins: your next on-time morning pays double</li>
-            <li><b>🎟️</b> Voucher: one reward of that tier, free</li>
-            <li class="muted">Late mornings earn nothing, but never cost coins.</li>
+            <li><b>⭐</b> Points in Life System when you're up on time (logged as you get up), and when you're in bed on time</li>
+            <li><b>🏅</b> A badge for every new journey day and every new rank: a keepsake, not points</li>
+            <li class="muted">Late mornings earn nothing, but never cost points. Rewards live in Life System → Rewards.</li>
           </ul>
         </div>
       </div>
@@ -156,7 +152,7 @@
         </div>
         <div class="card recap-card">
           <div class="card-head"><h2>📊 Monthly recap</h2></div>
-          <p class="muted small">Your month as a short story: best morning, longest streak, sleep, coins, rank.</p>
+          <p class="muted small">Your month as a short story: best morning, longest streak, sleep, moods.</p>
           <div class="recap-months" id="recap-months"></div>
         </div>
       </div>
@@ -219,7 +215,7 @@
 
         <div class="card set-card">
           <div class="card-head"><h2>🌙 Bedtime</h2><input type="checkbox" id="s-bedtimeOn" class="switch" aria-label="Bedtime on"></div>
-          <p class="muted small">Your bedtime is your wake-up time minus your sleep goal. In bed on time: +5 coins.</p>
+          <p class="muted small">Your bedtime is your wake-up time minus your sleep goal. In bed on time: points in Life System.</p>
           <div class="form row-2" id="bed-form">
             <label>Sleep goal<select id="s-sleepGoal"><option value="360">6 h</option><option value="390">6 h 30 min</option><option value="420">7 h</option><option value="450">7 h 30 min</option><option value="480">8 h</option><option value="510">8 h 30 min</option><option value="540">9 h</option><option value="570">9 h 30 min</option><option value="600">10 h</option></select></label>
             <label>Remind me<select id="s-bedRemind"><option value="0">No reminder</option><option value="15">15 min before</option><option value="30">30 min before</option><option value="45">45 min before</option><option value="60">1 hour before</option><option value="90">1.5 hours before</option></select></label>
@@ -304,7 +300,7 @@
       <p class="done-why" id="done-why" hidden></p>
       <p id="done-sub" class="muted"></p>
       <div class="done-row">
-        <div class="done-stat"><span id="done-coins">+10</span><small>coins</small></div>
+        <div class="done-stat"><span id="done-coins">+0</span><small>points</small></div>
         <div class="done-stat"><span id="done-streak">1</span><small id="done-streak-label">day streak</small></div>
       </div>
       <div class="milestone-hit" id="done-milestone" hidden></div>
@@ -392,7 +388,7 @@
       <div class="su-icon">🕒</div>
       <h1>Still up?</h1>
       <p class="muted">Prove you didn't go back to bed. <b id="su-left"></b></p>
-      <button class="btn primary big-tap" id="su-yes">Yes, I'm up (+5 coins)</button>
+      <button class="btn primary big-tap" id="su-yes">Yes, I'm up</button>
     </div>
   </div>
 

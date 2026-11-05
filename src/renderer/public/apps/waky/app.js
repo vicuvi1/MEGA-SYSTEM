@@ -104,7 +104,7 @@ function renderToday() {
       <div>
         <div class="eyebrow">Done for today</div>
         <div class="target">${esc(t.record.time)}</div>
-        <div class="status ${t.ontime ? "ok" : "late"}">${how}${t.record.reps ? ` · ${plural(t.record.reps, "push-up")}` : ""}${t.coins ? ` · +${t.coins} coins` : ""}</div>
+        <div class="status ${t.ontime ? "ok" : "late"}">${how}${t.record.reps ? ` · ${plural(t.record.reps, "push-up")}` : ""}${t.coins ? ` · +${t.coins} points` : ""}</div>
         ${stillUpLine(t.stillUp, t.record, t.ontime)}
         ${s.sleep.last ? `<div class="su-line sleep-line">😴 Slept ${fmtDur(s.sleep.last)}</div>` : ""}
         <div class="mood-ask inline">${moodButtons(t.record.mood)}</div>
@@ -131,13 +131,11 @@ function renderToday() {
     const prizeCoins = (missed ? pv.onTime : early ? pv.early : pv.onTime) * (pv.double ? 2 : 1);
     const gm = state.stats.game;
     const chips = [
-      `<span class="chip gold">🪙 +${prizeCoins} coins${!missed && early ? " (early bonus)" : ""}</span>`,
+      prizeCoins ? `<span class="chip gold">⭐ +${prizeCoins} points in Life System</span>` : "",
       pv.stage ? `<span class="chip">🧠 Day ${pv.stage.days} · ${esc(pv.stage.title)}</span>` : "",
       pv.levelUp ? `<span class="chip rank">⚔️ Become ${pv.stage.rank === "Agoge" ? "an Agoge trainee" : `a ${esc(pv.stage.rank)}`}</span>` : "",
       pv.streak > 1 ? `<span class="chip">🔥 ${pv.streak}-day streak</span>` : "",
-      pv.double ? `<span class="chip gold">⚡ Double Coins active</span>` : "",
-      gm.shieldSave && !missed ? `<span class="chip shield">🛡️ Shield ready: saves your ${gm.shieldSave}-day streak</span>` : "",
-      pv.stage ? `<span class="chip">🎁 ${pv.stage.bonus ? "Rank" : "Milestone"} chest</span>` : "",
+      pv.stage ? `<span class="chip">🏅 ${pv.stage.bonus ? "Rank" : "Milestone"} badge</span>` : "",
     ].join("");
     const frac = missed ? 1 : nowMin < target ? 1 : Math.max(0, (deadline - nowMin) / Math.max(1, state.settings.grace));
     const calling = !missed && nowMin >= target - 30 && nowMin <= deadline;
@@ -273,7 +271,7 @@ function renderJourney() {
       <div class="s-medal">${st.days}</div>
       <div class="card">
         <div class="s-top"><span class="s-day">Day ${st.days}</span><span class="s-title">${esc(st.title)}</span>
-          ${st.bonus ? `<span class="s-bonus">+20 🪙 level bonus</span>` : ""}${tag ? `<span class="s-tag">${tag}</span>` : ""}</div>
+          ${st.bonus ? `<span class="s-bonus">⚔️ new rank</span>` : ""}${tag ? `<span class="s-tag">${tag}</span>` : ""}</div>
         <p>${esc(st.text)}</p>
         <div class="s-meta"><span>💭 ${esc(st.feel)}</span><span>💡 ${esc(st.tip)}</span></div>
       </div></li>`;
@@ -301,6 +299,7 @@ function renderJourney() {
 
 const RARITY = { common: "Common", rare: "Rare", epic: "Epic", legendary: "Legendary" };
 const ITEMS = {
+  badge: ["🏅", "Milestone badge", "A keepsake for this milestone (points come only from what you do)"],
   shield: ["🛡️", "Streak Shield", "Saves your streak if you miss one day"],
   double: ["⚡", "Double Coins", "Your next on-time morning pays double"],
   voucher: ["🎟️", "Voucher", "One reward of this tier, free"],
@@ -318,14 +317,14 @@ function chestSvg(kind) {
 }
 
 function itemLine(it) {
-  if (it.type === "coins") return `<div class="pz-item"><span class="pz-ico">🪙</span><div><b>+${it.amount} coins</b></div></div>`;
+  if (it.type === "coins") return `<div class="pz-item"><span class="pz-ico">🪙</span><div><b>${it.amount} old Waky coins</b></div></div>`;
   const [ico, name, desc] = ITEMS[it.type];
   const title = it.type === "voucher" ? `${it.tier[0].toUpperCase() + it.tier.slice(1)} ${name}` : name;
   return `<div class="pz-item"><span class="pz-ico">${ico}</span><div><b>${title}</b><small>${desc}</small></div></div>`;
 }
 
 function prizeShort(p) {
-  return p.items.map((it) => it.type === "coins" ? `${it.amount} coins` : it.type === "voucher" ? `${it.tier} voucher` : ITEMS[it.type][1]).join(" + ");
+  return p.items.map((it) => it.type === "coins" ? `${it.amount} old Waky coins` : it.type === "voucher" ? `${it.tier} voucher` : (ITEMS[it.type] || ITEMS.badge)[1]).join(" + ");
 }
 
 function renderRewards() {
@@ -337,18 +336,16 @@ function renderRewards() {
 
   $("treasury").innerHTML = `
     <div class="tr-coins">
-      <div class="label">Treasury</div>
-      <div class="balance"><span id="r-balance">${c.balance}</span><i class="coin"></i></div>
-      <p class="muted small">${c.earned} earned · ${c.spent} spent${c.goal ? ` · next: ${esc(c.goal.emoji)} ${esc(c.goal.name)} in ${c.goal.cost - c.balance}` : ""}</p>
+      <div class="label">Life System points</div>
+      <div class="balance"><span id="r-balance">${c.balance}</span> ⭐</div>
+      <p class="muted small">${c.goal ? `Next reward: ${esc(c.goal.emoji)} ${esc(c.goal.name)} in ${Math.max(0, c.goal.cost - c.balance)}` : "Rewards live in Life System → Rewards"}</p>
     </div>
     <div class="tr-rank"><div class="label">Rank</div><div class="tr-rank-name">${esc(j.rank)}</div>
-      <div class="muted small">Unlocks ${g.tiers.filter((t) => t.unlocked).map((t) => t.name).join(", ")} rewards</div></div>
+      <div class="muted small">Day ${j.good} of your journey</div></div>
     <div class="tr-inv">
-      <div class="label">Power-ups</div>
+      <div class="label">Badges</div>
       <div class="inv">
-        <div class="inv-item ${inv.shields ? "" : "none"}" title="${ITEMS.shield[2]}"><span>🛡️</span><b>${inv.shields}</b><small>Shield${inv.shields === 1 ? "" : "s"}</small></div>
-        <div class="inv-item ${inv.doubles ? "" : "none"}" title="${ITEMS.double[2]}"><span>⚡</span><b>${inv.doubles}</b><small>Double</small></div>
-        <div class="inv-item ${inv.vouchers.length ? "" : "none"}" title="${ITEMS.voucher[2]}"><span>🎟️</span><b>${inv.vouchers.length}</b><small>${inv.vouchers.length ? Object.entries(vouchers).map(([t, n]) => `${n}× ${t}`).join(", ") : "Vouchers"}</small></div>
+        <div class="inv-item ${inv.badges ? "" : "none"}" title="${ITEMS.badge[2]}"><span>🏅</span><b>${inv.badges || 0}</b><small>Milestone badge${inv.badges === 1 ? "" : "s"}</small></div>
       </div>
     </div>`;
 
@@ -360,7 +357,7 @@ function renderRewards() {
         <div class="chest-name">${esc(x.name)}</div><div class="muted small">${esc(x.reason)}</div>
         <span class="btn primary small">Open</span>
       </button>`).join("") : `<div class="no-chests"><div class="chest-ghost">${chestSvg("milestone")}</div>
-        <div><b>No chests waiting</b><p class="muted small">${j.next ? `Your next one comes with day ${j.next.days} of your journey.` : "Keep your streak going for streak chests."}</p></div></div>`)
+        <div><b>No chests waiting</b><p class="muted small">${j.next ? `Your next badge comes with day ${j.next.days} of your journey.` : "You have every badge."}</p></div></div>`)
     + (opened.length ? `<div class="opened"><div class="label">Opened</div>${opened.map((x) => `
       <div class="opened-row r-${x.prize.rarity}"><span class="rar">${RARITY[x.prize.rarity]}</span>${esc(x.name)} · ${esc(prizeShort(x.prize))}</div>`).join("")}</div>` : "");
 
@@ -442,8 +439,8 @@ function stillUpLine(su, rec, ontime) {
   const text = {
     waiting: `🕒 Still-up check at ${su.due}. Be at your desk.`,
     open: `🕒 Still-up check is open until ${su.deadline}.`,
-    done: `✓ Still up at ${rec.stillUp}${ontime ? " · +5 coins" : ""}`,
-    missed: ontime ? "✗ Missed the still-up check: this morning pays half." : "✗ Missed the still-up check.",
+    done: `✓ Still up at ${rec.stillUp}`,
+    missed: "✗ Missed the still-up check.",
   }[su.state];
   return `<div class="su-line su-${su.state}">${text}</div>`;
 }
@@ -537,7 +534,7 @@ function renderSettings() {
   $("pcalarm-form").classList.toggle("off", !st.pcAlarm);
   $("stillup-form").classList.toggle("off", !st.stillUp);
   $("stillup-desc").textContent = st.stillUp
-    ? `${st.stillUpAfter} minutes after you check in, Waky chimes and asks if you're still up. Answer at the PC within ${st.stillUpWindow} minutes: +5 coins. Miss it: that morning pays half.`
+    ? `${st.stillUpAfter} minutes after you check in, Waky chimes and asks if you're still up. Answer at the PC within ${st.stillUpWindow} minutes. It's a check for you, not points.`
     : "Off. Turn it on to make sure you don't go back to bed after checking in.";
   const pa = state.pcAlarm;
   $("pcalarm-status").innerHTML = !st.pcAlarm ? `<span class="muted">Off</span>`
@@ -673,7 +670,7 @@ function showDone(prevStreak) {
   $("done-title").textContent = t.ontime ? "You're up." : "You're up. Late, but up.";
   $("done-sub").textContent = `Checked in at ${t.record.time}` + (t.record.reps ? ` · ${plural(t.record.reps, "push-up")}` : "");
   $("done-coins").textContent = `+${t.coins}`;
-  $("done-coins").nextElementSibling.textContent = t.coins ? `coins · ${t.coinReasons.join(", ")}` : "coins (late mornings earn none)";
+  $("done-coins").nextElementSibling.textContent = t.coins ? "points in Life System" : "points (late mornings earn none)";
   $("done-why").hidden = !state.settings.why;
   $("done-why").textContent = state.settings.why ? `“${state.settings.why}”` : "";
   $("done-quote").innerHTML = `${esc(t.quote.text)}<cite>${esc(t.quote.who)}</cite>`;
@@ -682,19 +679,18 @@ function showDone(prevStreak) {
   $("done-milestone").className = `milestone-hit${s.levelUp ? " level" : ""}`;
   if (m) {
     $("done-milestone").innerHTML = s.levelUp
-      ? `<small>New level</small><b class="rank-up">${m.rank === "Agoge" ? "You've entered the Agoge" : `You are now a ${esc(m.rank)}`}</b>Level ${m.level} · ${esc(m.levelName)}. Day ${m.days}: ${esc(m.title)}. ${esc(m.text)}<span>+20 coins level bonus</span>`
+      ? `<small>New level</small><b class="rank-up">${m.rank === "Agoge" ? "You've entered the Agoge" : `You are now a ${esc(m.rank)}`}</b>Level ${m.level} · ${esc(m.levelName)}. Day ${m.days}: ${esc(m.title)}. ${esc(m.text)}<span>🏅 A rank badge is waiting in Chests</span>`
       : `<b>🧠 Day ${m.days} · ${esc(m.title)}</b>${esc(m.text)}<span>How it may feel: ${esc(m.feel)}</span>`;
   }
   const extras = [];
   if (t.record.shieldUsed) extras.push("🛡️ A Streak Shield saved your streak");
-  if (t.record.boost) extras.push("⚡ Double Coins used");
-  s.game.newChests.forEach((x) => extras.push(`🎁 New ${x.name.toLowerCase()}! Open it in Rewards`));
-  if (t.stillUp.state === "waiting") extras.push(`🕒 At ${t.stillUp.due} Waky asks if you're still up. Be at your desk: +5 coins.`);
+  s.game.newChests.forEach((x) => extras.push(`🏅 New ${x.name.toLowerCase()}: open it in Chests`));
+  if (t.stillUp.state === "waiting") extras.push(`🕒 At ${t.stillUp.due} Waky asks if you're still up. Be at your desk.`);
   $("done-extras").innerHTML = extras.map((x) => `<div>${esc(x)}</div>`).join("");
   $("done-open").hidden = !s.game.unopened;
   $("done-mood").innerHTML = `<div class="muted small">How do you feel?</div>${moodButtons(t.record.mood)}`;
   const g = s.coins.goal;
-  $("done-goal").textContent = g ? `${s.coins.balance} / ${g.cost} coins to ${g.emoji} ${g.name}` : `${s.coins.balance} coins: you can claim any reward`;
+  $("done-goal").textContent = g ? `${s.coins.balance} / ${g.cost} points to ${g.emoji} ${g.name}` : `${s.coins.balance} points`;
   $("done").hidden = false;
   $("done-streak-label").textContent = s.streak ? "day streak" : "Streak reset. On time tomorrow starts a new one.";
   $("done-streak").hidden = !s.streak;
@@ -971,7 +967,7 @@ $("alarm-up").onclick = async () => {
 };
 $("alarm-stop-test").onclick = () => act("POST", "/api/alarm", { action: "stop" });
 $("alarm-test").onclick = () => act("POST", "/api/alarm", { action: "test" }, "Ringing for 15 seconds");
-$("su-yes").onclick = () => act("POST", "/api/stillup", {}, "Still up! +5 coins").then((ok) => ok && confetti($("chest-confetti"), 90));
+$("su-yes").onclick = () => act("POST", "/api/stillup", {}, "Still up! 💪").then((ok) => ok && confetti($("chest-confetti"), 90));
 $("s-pcalarm").onchange = (e) => saveSetting("pcAlarm", e.target.checked);
 const SETTING_SELECTS = ["alarmOffset", "alarmSound", "alarmRamp", "alarmVolume", "alarmMax", "stillUpAfter", "stillUpWindow", "sleepGoal", "bedRemind", "sunrise"];
 $("s-notifications").onchange = (e) => saveSetting("notifications", e.target.checked);
@@ -1005,7 +1001,7 @@ function renderNight() {
       body = `
         <div class="nc-main"><div class="eyebrow">Good night 🌙</div>
           <div class="nc-big">In bed at ${esc(n.record.time)}</div>
-          <div class="status ${n.onTime ? "ok" : ""}">${n.onTime ? `On time · +${n.coins} coins` : "After bedtime · no coins tonight"} · alarm ${esc(n.wake)}</div></div>
+          <div class="status ${n.onTime ? "ok" : ""}">${n.onTime ? `On time · +${n.coins} points` : "After bedtime · no points tonight"} · alarm ${esc(n.wake)}</div></div>
         <div class="nc-cta"><button class="btn primary" id="nc-sleep">😴 Put the PC to sleep</button>
           <button class="btn ghost small" id="nc-undo">Undo</button>
           <span class="muted small">Asleep, not shut down: then the PC alarm can wake it.</span></div>`;
@@ -1017,7 +1013,7 @@ function renderNight() {
       body = `
         <div class="nc-main"><div class="eyebrow">Tonight</div><div class="nc-big">${head}</div><div class="status">${sub}</div></div>
         <div class="nc-cta"><button class="btn ${n.state === "evening" ? "ghost" : "primary"} ${n.state === "due" ? "calling" : ""}" id="nc-bed">🌙 Going to bed</button>
-          <span class="muted small">${n.state === "late" ? "Too late for coins tonight" : `+${n.coins} coins if you're in bed by ${addMin(n.bedtime, state.settings.grace)}`}</span></div>`;
+          <span class="muted small">${n.state === "late" ? "Too late for points tonight" : `+${n.coins} points if you're in bed by ${addMin(n.bedtime, state.settings.grace)}`}</span></div>`;
     }
     card.className = `card night-card s-${n.state}`;
     card.innerHTML = `<div class="nc-moon"></div>${body}`;
@@ -1050,7 +1046,7 @@ async function goToBed() {
   if (!ok) return;
   $("bed-prompt").hidden = true;
   const n = state.stats.night;
-  toast(n.onTime ? `Good night. +${n.coins} coins 🌙` : "Good night 🌙");
+  toast(n.onTime ? `Good night. +${n.coins} points 🌙` : "Good night 🌙");
   sound("done");
 }
 
@@ -1157,7 +1153,7 @@ async function openRecap(month) {
     r.earliest ? `<div class="st-kicker">Your earliest morning</div><div class="st-huge">${esc(r.earliest.time)}</div><p>${new Date(r.earliest.date + "T12:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>` : null,
     `<div class="st-kicker">Longest streak</div><div class="st-huge">${r.longestStreak}<small> days</small></div><p>${r.longestStreak >= 7 ? "A full week and more. That's a Spartan." : "Next month: beat it."}</p>`,
     r.avgSleep ? `<div class="st-kicker">Sleep</div><div class="st-huge">${r.sleepHours}<small> h</small></div><p>${fmtDur(r.avgSleep)} a night on average.</p>` : null,
-    `<div class="st-kicker">Treasury</div><div class="st-huge">+${r.coins}<small> coins</small></div><p>${r.chests ? `${r.chests} chests opened${r.bestChest ? `, the best one ${RAR[r.bestChest]}` : ""}.` : "No chests opened."}</p>`,
+    `<div class="st-kicker">Badges</div><div class="st-huge">${r.chests}<small> badge${r.chests === 1 ? "" : "s"}</small></div><p>${r.chests ? "Milestones you reached this month." : "No new milestones this month."}</p>`,
     moods ? `<div class="st-kicker">How you felt</div><div class="st-moods"><div>⚡<b>${r.moods.great}</b></div><div>🙂<b>${r.moods.okay}</b></div><div>😴<b>${r.moods.tired}</b></div></div>` : null,
     `<div class="st-kicker">For next month</div><blockquote>${esc(r.quote.text)}</blockquote><cite>${esc(r.quote.who)}</cite>`,
   ].filter(Boolean);

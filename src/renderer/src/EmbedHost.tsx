@@ -75,7 +75,21 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
       }
 
       // Bedtime in Waky: the sleep log gets it (and "in bed on time" once, like logging it here).
-      if (data.type === 'WAKY_BED_LOGGED') {
+      const wakyAct = (name: string) => data.type === name || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === name)
+      // Waky's wake-up targets are Life System's (WK5): one setting everywhere.
+      if (wakyAct('WAKY_TARGETS')) {
+        const { weekday, weekend } = data.payload ?? {}
+        if (/^\d{2}:\d{2}$/.test(weekday) && /^\d{2}:\d{2}$/.test(weekend)) {
+          await life.sleep.setTargets(weekday, weekend).catch(() => null)
+          window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+        }
+      }
+      // The mood after check-in is the night's sleep quality (WK13).
+      if (wakyAct('WAKY_MOOD')) {
+        const { date, quality } = data.payload ?? {}
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date) && [1, 2, 3, 4, 5].includes(Number(quality))) await life.sleep.setQuality?.(date, Number(quality)).catch(() => null)
+      }
+      if (wakyAct('WAKY_BED_LOGGED')) {
         const time = typeof data.payload?.time === 'string' && /^\d{2}:\d{2}$/.test(data.payload.time) ? data.payload.time : undefined
         try {
           const r = await life.sleep.logBed(time)
@@ -88,7 +102,7 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
 
       // A morning edited or added in Waky's History: Life System's sleep
       // record gets the same time (coins only for today, as in "Fix wake-up").
-      if (data.type === 'WAKY_DAY_EDITED') {
+      if (wakyAct('WAKY_DAY_EDITED')) {
         const { date, time } = data.payload ?? {}
         if (/^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time)) {
           try {
@@ -284,6 +298,23 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         }
         // The desktop app keeps Waky's storage apart: write it there too.
         void runIn(el, `localStorage.setItem('life_points', ${JSON.stringify(data)}); window.dispatchEvent(new Event('life-points'))`).catch(() => null)
+        // WK2: one sleep record: your real log and targets, which Waky shows instead of its own copy.
+        const [st, logs] = await Promise.all([life.sleep.state(), life.sleep.logs?.().catch(() => null) ?? Promise.resolve(null)])
+        const sleep = JSON.stringify({
+          today: st.today,
+          weekday: st.weekdayTarget,
+          weekend: st.weekendTarget,
+          bedTarget: st.bedTarget ?? null,
+          logs: (logs ?? st.recentLogs).map((l) => ({ day: l.day, wakeTime: l.wakeTime, wakeTarget: l.wakeTarget, bedTime: l.bedTime, bedTarget: l.bedTarget, bedOnTime: l.bedOnTime, quality: l.quality })),
+          at: Date.now()
+        })
+        if (gone) return
+        try {
+          localStorage.setItem('life_sleep', sleep)
+        } catch {
+          /* private window */
+        }
+        void runIn(el, `localStorage.setItem('life_sleep', ${JSON.stringify(sleep)}); window.dispatchEvent(new Event('life-points'))`).catch(() => null)
       } catch {
         /* not unlocked yet: the next wallet change tries again */
       }
@@ -292,10 +323,12 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     const ev = typeof el.insertCSS === 'function' ? 'dom-ready' : 'load'
     el.addEventListener(ev, push)
     window.addEventListener('life-wallet-changed', push)
+    window.addEventListener('life-sleep-changed', push)
     return () => {
       gone = true
       el.removeEventListener(ev, push)
       window.removeEventListener('life-wallet-changed', push)
+      window.removeEventListener('life-sleep-changed', push)
     }
   }, [appKey])
 

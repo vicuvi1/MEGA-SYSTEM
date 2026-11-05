@@ -12906,7 +12906,11 @@ syncFinance: (recordDays) => write((s) => {
 			setWake: (day, time) => write((s) => s.sleep.setWake(day, time), W),
 			/** Waky's wake-ups and bedtimes into the sleep log, where it has none yet. */
 			fromWaky: () => write((s) => s.sleep.fromWaky(), W),
-			setTargets: (weekday, weekend, bedtime) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime))
+			setTargets: (weekday, weekend, bedtime) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime)),
+			/** Every logged night (newest first), for Waky (one sleep record, WK2). */
+			logs: () => read((s) => s.sleep.logs().slice(0, 400)),
+			/** How you slept, 1–5 (Waky's mood after check-in, WK13). */
+			setQuality: (day, quality) => write((s) => s.sleep.setQuality(day, quality), "life-sleep-changed")
 		},
 		money: {
 			state: () => read((s) => s.money.state()),

@@ -6,16 +6,17 @@
     // (the Turso key stays on the server).
     const tursoSession = () => { try { return localStorage.getItem('life_web_session') || ''; } catch { return ''; } };
 
-  // Seed with Victor's real PC data from waky.json
+  // A clean start: no personal data in this public file. Inside Life System the
+  // real record (wake-ups, bedtimes, targets) comes from Life System (WK2).
   const SEED_DATA = {
     "version": 2,
     "settings": {
-      "weekday": "06:30",
-      "weekend": "06:30",
+      "weekday": "07:00",
+      "weekend": "08:30",
       "grace": 20,
       "reps": 20,
       "sound": true,
-      "why": "The man I'm becoming doesn't stay in bed.",
+      "why": "",
       "pcAlarm": true,
       "stillUp": true,
       "alarmOffset": -1,
@@ -26,46 +27,19 @@
       "stillUpAfter": 10,
       "stillUpWindow": 10,
       "bedtimeOn": true,
-      "sleepGoal": 420,
+      "sleepGoal": 450,
       "bedRemind": 30,
       "sunrise": 10,
       "theme": "dawn",
       "notifications": true
     },
-    "days": {
-      "2026-10-25": { "time": "06:32", "target": "06:30", "reps": 0, "mode": "button", "sent": true },
-      "2026-10-26": { "time": "06:31", "target": "06:30", "reps": 0, "mode": "button", "sent": true, "stillUpDue": "06:41", "stillUpWindow": 10, "stillUpPinged": true, "stillUp": "06:41" },
-      "2026-10-27": { "time": "06:50", "target": "06:30", "reps": 0, "mode": "button", "sent": true, "stillUpDue": "07:00", "stillUpWindow": 10, "mood": "okay", "stillUpPinged": true },
-      "2026-10-28": { "time": "06:32", "target": "06:30", "reps": 0, "mode": "button", "sent": true, "stillUpDue": "06:42", "stillUpWindow": 10, "mood": "okay", "stillUpPinged": true, "stillUp": "06:42" },
-      "2026-10-29": { "time": "06:21", "target": "06:30", "reps": 0, "mode": "button", "sent": true, "stillUpDue": "06:31", "stillUpWindow": 10, "stillUpPinged": true, "stillUp": "06:31" }
-    },
-    "telegram": {
-      "chat_id": 1900611848,
-      "name": "_",
-      "bot": "wakysss_bot",
-      "pin": 19
-    },
-    "rewards": [
-      { "id": "b1", "tier": "bronze", "emoji": "🍿", "name": "My favourite snack", "cost": 100 },
-      { "id": "b2", "tier": "bronze", "emoji": "🎮", "name": "1 hour of gaming, guilt-free", "cost": 150 },
-      { "id": "s1", "tier": "silver", "emoji": "🎬", "name": "Movie night", "cost": 300 },
-      { "id": "s2", "tier": "silver", "emoji": "🍕", "name": "Pizza or shawarma", "cost": 400 },
-      { "id": "g1", "tier": "gold", "emoji": "🍽️", "name": "Dinner out", "cost": 800 },
-      { "id": "g2", "tier": "gold", "emoji": "🕹️", "name": "A new game", "cost": 1000 },
-      { "id": "l1", "tier": "legendary", "emoji": "🎁", "name": "Something big I've wanted", "cost": 2500 }
-    ],
+    "days": {},
+    "rewards": [],
     "spent": [],
-    "opened": {
-      "stage-1": { "prize": { "rarity": "common", "items": [{ "type": "coins", "amount": 30 }] }, "openedOn": "2026-10-25" },
-      "stage-2": { "prize": { "rarity": "rare", "items": [{ "type": "coins", "amount": 42 }] }, "openedOn": "2026-10-26" }
-    },
+    "opened": {},
     "shielded": [],
-    "nights": {
-      "2026-10-26": { "time": "23:09", "target": "23:30" },
-      "2026-10-27": { "time": "23:15", "target": "23:30" },
-      "2026-10-28": { "time": "23:23", "target": "23:30" }
-    },
-    "bedReminders": { "2026-10-28:remind": true }
+    "nights": {},
+    "bedReminders": {}
   };
 
   const JOURNEY = [
@@ -136,18 +110,63 @@
       if (s) {
         const parsed = JSON.parse(s);
         if (parsed && typeof parsed === 'object') {
-          parsed.days = { ...SEED_DATA.days, ...(parsed.days || {}) };
+          parsed.days = parsed.days || {};
           parsed.settings = { ...SEED_DATA.settings, ...(parsed.settings || {}) };
-          parsed.rewards = parsed.rewards && parsed.rewards.length ? parsed.rewards : SEED_DATA.rewards;
-          parsed.opened = { ...SEED_DATA.opened, ...(parsed.opened || {}) };
-          parsed.nights = { ...SEED_DATA.nights, ...(parsed.nights || {}) };
+          parsed.rewards = parsed.rewards || [];
+          parsed.opened = parsed.opened || {};
+          parsed.nights = parsed.nights || {};
+          // Older copies carried a Telegram link from the first seed: not needed here.
+          delete parsed.telegram;
+          mergeLife(parsed);
           return parsed;
         }
       }
     } catch {}
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_DATA));
-    return JSON.parse(JSON.stringify(SEED_DATA));
+    const fresh = JSON.parse(JSON.stringify(SEED_DATA));
+    mergeLife(fresh);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+    return fresh;
   }
+
+  // ---- WK2: one sleep record. Life System writes your real sleep log and
+  // targets here (localStorage 'life_sleep'); Waky shows that, not its own copy.
+  function lifeSleep() {
+    try {
+      const v = JSON.parse(localStorage.getItem('life_sleep') || 'null');
+      return v && Array.isArray(v.logs) ? v : null;
+    } catch { return null; }
+  }
+  const QUALITY_MOOD = { 5: 'great', 4: 'great', 3: 'okay', 2: 'tired', 1: 'tired' };
+  const MOOD_QUALITY = { great: 5, okay: 3, tired: 1 };
+  const dayBefore = (d) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 1); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  function mergeLife(data) {
+    const L = lifeSleep();
+    if (!L) return false;
+    data.settings = data.settings || {};
+    if (L.weekday) data.settings.weekday = L.weekday;
+    if (L.weekend) data.settings.weekend = L.weekend;
+    if (L.bedTarget) data.settings.bedtime = L.bedTarget;
+    const days = {};
+    const nights = {};
+    for (const l of L.logs) {
+      if (!l || !/^\d{4}-\d{2}-\d{2}$/.test(l.day)) continue;
+      const own = (data.days || {})[l.day] || {};
+      if (l.wakeTime) days[l.day] = Object.assign({}, own, { time: l.wakeTime, target: l.wakeTarget || own.target, sent: true, mode: own.mode || 'life' }, l.quality ? { mood: QUALITY_MOOD[l.quality] } : {});
+      // Life keeps a bedtime on the morning it ends in; Waky files it under the evening.
+      if (l.bedTime) nights[dayBefore(l.day)] = { time: l.bedTime, target: l.bedTarget || L.bedTarget || '23:00', onTime: !!l.bedOnTime };
+    }
+    // A check-in or bedtime from the last two days that Life System hasn't saved yet stays.
+    const recent = dayBefore(dayBefore(L.today || new Date().toISOString().slice(0, 10)));
+    for (const [k, v] of Object.entries(data.days || {})) if (k >= recent && !days[k]) days[k] = v;
+    for (const [k, v] of Object.entries(data.nights || {})) if (k >= recent && !nights[k]) nights[k] = v;
+    data.days = days;
+    data.nights = nights;
+    return true;
+  }
+  // Messages to Life System: the typed bridge, to our own page only (WK6).
+  const tell = (action, payload) => {
+    try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action, payload }, location.origin); } catch {}
+  };
 
   function save(data) {
     try {
@@ -200,8 +219,34 @@
     });
 
     const goodTotal = goodMornings.length;
-    const streak = goodTotal;
-    const best = Math.max(streak, 5);
+    // WK3: real streaks: on-time mornings in a row (today not logged yet doesn't break it).
+    const isGood = (k) => days[k] && toMin(days[k].time) <= toMin(days[k].target) + grace;
+    const prev = (k) => { const x = new Date(k + 'T12:00:00'); x.setDate(x.getDate() - 1); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+    let streak = 0;
+    let k0 = days[todayDateStr] ? todayDateStr : prev(todayDateStr);
+    while (isGood(k0)) { streak++; k0 = prev(k0); }
+    let best = 0;
+    let run = 0;
+    let last = null;
+    for (const k of dayKeys) {
+      run = isGood(k) && last && prev(k) === last && isGood(last) ? run + 1 : isGood(k) ? 1 : 0;
+      best = Math.max(best, run);
+      last = k;
+    }
+    best = Math.max(best, streak);
+    const recent30 = dayKeys.filter((k) => k > (() => { let x = todayDateStr; for (let n = 0; n < 30; n++) x = prev(x); return x; })());
+    const rate = recent30.length ? Math.round((100 * recent30.filter(isGood).length) / recent30.length) : null;
+    const last14 = dayKeys.slice(-14);
+    const avg = last14.length ? fromMin(last14.reduce((t, k) => t + toMin(days[k].time), 0) / last14.length) : null;
+    // Real nights: bedtime (the evening before) to wake-up.
+    const sleepOf = (morning) => {
+      const n = nights[prev(morning)];
+      const d = days[morning];
+      if (!n || !d) return null;
+      let m = toMin(d.time) - toMin(n.time);
+      if (m <= 0) m += 1440;
+      return m >= 120 && m <= 16 * 60 ? m : null;
+    };
 
     // Calculate level
     let level = 1;
@@ -233,6 +278,7 @@
       name: LEVELS[lv],
       text: LEVEL_INFO[lv],
       from: LEVEL_STARTS[lv],
+      to: LEVEL_STARTS[lv + 1] ? LEVEL_STARTS[lv + 1] - 1 : '…',
       reached: goodTotal >= LEVEL_STARTS[lv],
       current: level === lv
     }));
@@ -304,14 +350,20 @@
       });
     }
 
-    // Chests
-    const chests = [
-      { id: 'stage-1', kind: 'milestone', date: '2026-10-25', reason: 'Day 1 of your journey', opened: Boolean(opened['stage-1']), prize: opened['stage-1']?.prize || null, name: 'Milestone chest', info: 'For every new day on your journey.' },
-      { id: 'stage-2', kind: 'milestone', date: '2026-10-26', reason: 'Day 2 of your journey', opened: Boolean(opened['stage-2']), prize: opened['stage-2']?.prize || null, name: 'Milestone chest', info: 'For every new day on your journey.' },
-      { id: 'stage-3', kind: 'milestone', date: '2026-10-27', reason: 'Day 3 of your journey', opened: Boolean(opened['stage-3']), prize: opened['stage-3']?.prize || null, name: 'Milestone chest', info: 'For every new day on your journey.' },
-      { id: 'stage-4', kind: 'milestone', date: '2026-10-28', reason: 'Day 4 of your journey', opened: Boolean(opened['stage-4']), prize: opened['stage-4']?.prize || null, name: 'Milestone chest', info: 'For every new day on your journey.' },
-      { id: 'rank-5', kind: 'rank', date: '2026-10-29', reason: 'Reached day 5 · Agoge Rank', opened: Boolean(opened['rank-5']), prize: opened['rank-5']?.prize || null, name: 'Rank chest', info: 'For every new rank. The best loot.' }
-    ];
+    // Chests: one for each journey day you really reached, on the date you reached it.
+    // Inside Life System they hold a badge (a keepsake), never points or power-ups (WK4).
+    const reachedOn = {};
+    goodMornings.forEach((k, n) => { reachedOn[n + 1] = k; });
+    const chests = stages.filter((st) => st.reached).map((st) => ({
+      id: `stage-${st.days}`,
+      kind: st.bonus ? 'rank' : 'milestone',
+      date: reachedOn[st.days] || todayDateStr,
+      reason: `Day ${st.days} of your journey${st.bonus ? ` · ${st.rank}` : ''}`,
+      opened: Boolean(opened[`stage-${st.days}`]),
+      prize: opened[`stage-${st.days}`]?.prize || null,
+      name: st.bonus ? 'Rank chest' : 'Milestone chest',
+      info: 'A badge for this milestone.'
+    }));
 
     const todayRec = days[todayDateStr] || null;
     const isTodayOnTime = todayRec ? toMin(todayRec.time) <= toMin(todayRec.target) + grace : false;
@@ -319,7 +371,7 @@
     return {
       today: {
         date: todayDateStr,
-        target: todayRec ? todayRec.target : settings.weekday || '06:30',
+        target: todayRec ? todayRec.target : ((today.getDay() === 0 || today.getDay() === 6) ? settings.weekend : settings.weekday) || '07:00',
         weekend: today.getDay() === 0 || today.getDay() === 6,
         record: todayRec,
         ontime: isTodayOnTime,
@@ -334,8 +386,8 @@
       },
       streak,
       best,
-      rate: 100,
-      avg: '06:33',
+      rate,
+      avg,
       total: dayKeys.length,
       calendar,
       chart,
@@ -356,6 +408,7 @@
       preview: {
         onTime: L ? L.wake : 10,
         early: L ? L.wake : 15,
+        // A rank never pays extra inside Life System.
         stage: nextStage,
         levelUp: false,
         streak: streak + 1,
@@ -364,8 +417,8 @@
       night: {
         morning: new Date(today.getTime() + 864e5).toISOString().slice(0, 10),
         wake: settings.weekday || '06:30',
-        bedtime: '23:30',
-        remindAt: '23:00',
+        bedtime: settings.bedtime || '23:00',
+        remindAt: fromMin(toMin(settings.bedtime || '23:00') - (settings.bedRemind || 30)),
         state: 'day',
         record: null,
         minutesLeft: 420,
@@ -374,14 +427,22 @@
         enabled: true,
         coins: L ? L.bed : 5
       },
-      sleep: {
-        last: 442,
-        avg: 442,
-        goal: settings.sleepGoal || 420,
-        chart: chart.map(c => ({ date: c.date, minutes: c.ontime ? 440 : null })),
-        nightsOnGoal: 3,
-        nights: 3
-      },
+      sleep: (() => {
+        const goal = settings.sleepGoal || 450;
+        const chartS = chart.map((c) => ({ date: c.date, minutes: sleepOf(c.date), bed: nights[prev(c.date)]?.time || null, wake: days[c.date]?.time || null }));
+        const known = chartS.filter((c) => c.minutes);
+        const week = known.slice(-7);
+        return {
+          last: sleepOf(todayDateStr) || (known.length ? known[known.length - 1].minutes : null),
+          avg: week.length ? Math.round(week.reduce((t, c) => t + c.minutes, 0) / week.length) : null,
+          goal,
+          chart: chartS,
+          nightsOnGoal: week.filter((c) => c.minutes >= goal).length,
+          nights: week.length,
+          // WK7: what the last 7 nights are short of the goal (nights not logged don't count).
+          debt: week.length ? Math.max(0, week.reduce((t, c) => t + (goal - c.minutes), 0)) : 0
+        };
+      })(),
       game: {
         chests,
         unopened: chests.filter(c => !c.opened).length,
@@ -389,7 +450,8 @@
           shields: 0,
           doubles: 0,
           vouchers: [],
-          chestCoins
+          chestCoins,
+          badges: Object.values(opened).filter((o) => o?.prize?.items?.some((it) => it.type === 'badge')).length
         },
         tiers: TIERS.map(t => ({
           ...t,
@@ -448,7 +510,7 @@
           const lines = logged >= 7 ? [`You felt great on ${counts.great} of ${logged} mornings you logged.`] : [];
           return { logged, counts, lines, needed: 7 };
         })(),
-        recapMonths: ['2026-10'],
+        recapMonths: [...new Set(Object.keys(data.days || {}).map((d) => d.slice(0, 7)))].sort().reverse().slice(0, 12),
         spent: data.spent || [],
         stats: stats,
         telegram: { connected: false },
@@ -482,7 +544,7 @@
       data.days[body.date] = Object.assign({ reps: 0, mode: 'manual', sent: true }, data.days[body.date] || {}, { time, target: (data.days[body.date] || {}).target || targetFor(body.date) });
       save(data);
       // Life System corrects its sleep record too (coins only for today).
-      try { window.parent && window.parent !== window && window.parent.postMessage({ type: 'WAKY_DAY_EDITED', payload: { date: body.date, time } }, '*'); } catch {}
+      tell('WAKY_DAY_EDITED', { date: body.date, time });
       return reply();
     }
 
@@ -517,11 +579,30 @@
     }
 
     if (u.includes('/api/recap')) {
+      // WK18: the month from your real record.
       const month = (u.split('month=')[1] || today.slice(0, 7)).slice(0, 7);
-      const days = Object.entries(data.days || {}).filter(([d]) => d.startsWith(month));
-      const onTime = days.filter(([, r]) => r.time <= (r.target || '06:30')).length;
-      const earliest = days.slice().sort((a, b) => a[1].time.localeCompare(b[1].time))[0];
-      return new Response(JSON.stringify({ label: month, rankFrom: '', rankTo: '', mornings: days.length, onTime, earliest: earliest ? { date: earliest[0], time: earliest[1].time } : null, longestStreak: 0, avgSleep: 0, sleepHours: 0, coins: 0, chests: 0, bestChest: null, moods: { great: 0, okay: 0, tired: 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      const grace = data.settings?.grace || 20;
+      const entries = Object.entries(data.days || {}).filter(([d]) => d.startsWith(month)).sort((a, b) => a[0].localeCompare(b[0]));
+      const good = (r) => toMin(r.time) <= toMin(r.target || '07:00') + grace;
+      const onTime = entries.filter(([, r]) => good(r)).length;
+      const earliest = entries.slice().sort((a, b) => a[1].time.localeCompare(b[1].time))[0];
+      let longest = 0, run = 0, prevD = null;
+      for (const [d, r] of entries) {
+        run = good(r) && prevD && dayBefore(d) === prevD ? run + 1 : good(r) ? 1 : 0;
+        longest = Math.max(longest, run);
+        prevD = good(r) ? d : null;
+      }
+      const sleeps = entries.map(([d, r]) => {
+        const n = (data.nights || {})[dayBefore(d)];
+        if (!n) return null;
+        let m = toMin(r.time) - toMin(n.time);
+        if (m <= 0) m += 1440;
+        return m >= 120 && m <= 960 ? m : null;
+      }).filter(Boolean);
+      const avgSleep = sleeps.length ? Math.round(sleeps.reduce((a, b) => a + b, 0) / sleeps.length) : 0;
+      const moods = { great: 0, okay: 0, tired: 0 };
+      for (const [, r] of entries) if (moods[r.mood] !== undefined) moods[r.mood]++;
+      return new Response(JSON.stringify({ label: month, rankFrom: '', rankTo: '', mornings: entries.length, onTime, earliest: earliest ? { date: earliest[0], time: earliest[1].time } : null, longestStreak: longest, avgSleep, sleepHours: Math.round(sleeps.reduce((a, b) => a + b, 0) / 60), coins: 0, chests: Object.values(data.opened || {}).filter((o) => String(o.openedOn || '').startsWith(month)).length, bestChest: null, moods }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (u.includes('/api/checkin')) {
@@ -530,7 +611,7 @@
       data.days = data.days || {};
       data.days[today] = {
         time: timeStr,
-        target: data.settings?.weekday || '06:30',
+        target: targetFor(today),
         reps: body.reps || 0,
         mode: body.mode || 'button',
         sent: true,
@@ -538,21 +619,20 @@
         stillUpWindow: 10
       };
       save(data);
-      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-        try {
-          window.parent.postMessage({ type: 'WAKY_CHECKIN_LOGGED', payload: data.days[today] }, '*');
-        } catch {}
-      }
+      tell('WAKY_CHECKIN_LOGGED', data.days[today]);
       const stats = computeStats(data, today);
       return reply({ ok: true, day: data.days[today], stats });
     }
 
     if (u.includes('/api/bed')) {
       data.nights = data.nights || {};
-      data.nights[nightKey] = { time: timeStr, target: '23:30', onTime: true };
+      // On time = by your bedtime target (past midnight counts as late).
+      const bedT = data.settings?.bedtime || '23:00';
+      const late = (t) => (toMin(t) < 12 * 60 ? toMin(t) + 1440 : toMin(t));
+      data.nights[nightKey] = { time: timeStr, target: bedT, onTime: late(timeStr) <= late(bedT) + (data.settings?.grace || 20) };
       save(data);
       // Life System's sleep log gets the bedtime too (on the morning it ends in).
-      try { window.parent && window.parent !== window && window.parent.postMessage({ type: 'WAKY_BED_LOGGED', payload: { time: timeStr } }, '*'); } catch {}
+      tell('WAKY_BED_LOGGED', { time: timeStr });
       return reply({ ok: true });
     }
 
@@ -570,6 +650,8 @@
       if (data.days && data.days[today]) {
         data.days[today].mood = body.mood || 'great';
         save(data);
+        // WK13: the same 1–5 sleep quality Ben asks about.
+        tell('WAKY_MOOD', { date: today, quality: MOOD_QUALITY[data.days[today].mood] || 3 });
       }
       return reply({ ok: true });
     }
@@ -580,7 +662,7 @@
       const chestId = body.id || 'rank-5';
       data.opened = data.opened || {};
       // In Life System, points come only from what you did: a chest gives a streak shield, not coins.
-      const prize = lifeWallet() ? { rarity: 'rare', items: [{ type: 'shield' }] } : { rarity: 'rare', items: [{ type: 'coins', amount: 35 }] };
+      const prize = lifeWallet() ? { rarity: chestId.includes('stage-') && [5, 10, 25, 75].includes(Number(chestId.split('-')[1])) ? 'epic' : 'common', items: [{ type: 'badge' }] } : { rarity: 'rare', items: [{ type: 'coins', amount: 35 }] };
       data.opened[chestId] = { prize, openedOn: today };
       save(data);
       return reply({ ok: true, prize });
@@ -601,6 +683,8 @@
       try { body = JSON.parse(options.body || '{}'); } catch {}
       data.settings = Object.assign(data.settings || {}, body);
       save(data);
+      // WK5: one set of wake-up targets: Life System's change too.
+      if (body.weekday || body.weekend) tell('WAKY_TARGETS', { weekday: data.settings.weekday, weekend: data.settings.weekend });
       return reply({ ok: true });
     }
 
