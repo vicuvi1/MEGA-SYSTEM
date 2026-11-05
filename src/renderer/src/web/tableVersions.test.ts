@@ -42,6 +42,21 @@ describe('download only what changed', () => {
     expect(catchUpPlan('v2', { '*': 'v2', c: 'v2' }, 'v1', {}, all)).toEqual({ kind: 'full' })
   })
 
+  it("writing to a table another device just changed still brings that change in (Y2)", async () => {
+    fakeTurso()
+    const turso = () => new TursoHttp('https://fake.turso.io', 't')
+    const a = new Mirror(SQL, turso())
+    await a.ready
+    const b = new Mirror(SQL, turso())
+    await b.ready
+    await a.write((db) => db.prepare("INSERT INTO day_notes (day, wake_time) VALUES ('2026-11-04', '07:10')").run())
+    // b writes the same table without refreshing first…
+    await b.write((db) => db.prepare("INSERT INTO day_notes (day, wake_time) VALUES ('2026-11-05', '06:50')").run())
+    // …and its next refresh still gets a's row.
+    await b.refresh()
+    expect(await b.read((db) => db.prepare('SELECT COUNT(*) AS n FROM day_notes').get())).toEqual({ n: 2 })
+  })
+
   it('a second device reloads only the table the first one changed; an untracked change reloads everything once', async () => {
     const { remote, fullReads } = fakeTurso()
     const turso = () => new TursoHttp('https://fake.turso.io', 't')

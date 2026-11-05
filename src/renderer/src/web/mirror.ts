@@ -13,7 +13,7 @@ import { DEFAULT_EXERCISES } from '@core/body'
 import { BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
 import { decodePending, diffRows, encodePending, schemaInfo, sendPending, touchedTables, type Remap } from './desktopSync'
-import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackStatements, type TableVersions } from './tableVersions'
+import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackStatements, versionsBefore, type TableVersions } from './tableVersions'
 
 // cloud_snapshots: 30 full backups, read straight from Turso when needed, never copied to every device.
 const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/
@@ -178,11 +178,13 @@ export class Mirror {
       const touched = touchedTables(changes)
       const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)]
       try {
-        await this.turso.writeAtomic([...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
-        // Our tables are up to date; this.version stays, so the next refresh
-        // still picks up what others changed just before us.
+        const before = versionsBefore(touched)
+        const out = await this.turso.writeAtomic([...before, ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
+        // A table we wrote is marked current only if nobody else changed it since
+        // we last read it (Y2); otherwise the next refresh re-reads it and gets both.
         if (this.tv) {
-          for (const t of touched) this.tv[t] = version
+          const remote = new Map((out[1] ?? []).map((r) => [String(r[0]), String(r[1])]))
+          for (const t of touched) if ((remote.get(t) ?? '') === (this.tv[t] ?? '')) this.tv[t] = version
           this.saveTv()
         }
         this.lastError = null

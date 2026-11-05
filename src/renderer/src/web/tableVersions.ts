@@ -66,3 +66,12 @@ export function catchUpPlan(remoteVersion: string, remote: TableVersions | null,
   if (tables.some((t) => !localTables.has(t))) return { kind: 'full' }
   return { kind: 'tables', tables: tables.sort() }
 }
+
+/**
+ * Read inside a write, before it (Y2): each touched table's version as Turso
+ * has it right then. A table still at the version this device last saw can be
+ * marked current after the write; one another device changed meanwhile can't.
+ */
+export function versionsBefore(tables: string[]): Change[] {
+  return [ENSURE, { sql: `SELECT name, v FROM sys_table_versions WHERE name IN (${tables.map(() => '?').join(', ') || "''"})`, args: tables }]
+}

@@ -3604,9 +3604,9 @@ var TursoHttp = class {
 			};
 		});
 	}
-	/** Runs the statements in one transaction: all of them, or none. */
+	/** Runs the statements in one transaction: all of them, or none. Returns each statement's rows. */
 	async writeAtomic(stmts) {
-		if (!stmts.length) return;
+		if (!stmts.length) return [];
 		const steps = [{ stmt: { sql: "BEGIN" } }];
 		stmts.forEach((s, i) => steps.push({
 			condition: {
@@ -3647,6 +3647,7 @@ var TursoHttp = class {
 			const firstErr = errs.find((e) => e);
 			throw new Error(firstErr?.message ?? "Turso did not save the change");
 		}
+		return stmts.map((_, i) => (res?.step_results?.[i + 1]?.rows ?? []).map((row) => row.map(fromHrana$1)));
 	}
 };
 // src/core/schema.ts
@@ -4742,6 +4743,17 @@ function catchUpPlan(remoteVersion, remote, localVersion, local, localTables) {
 		tables: tables.sort()
 	};
 }
+/**
+* Read inside a write, before it (Y2): each touched table's version as Turso
+* has it right then. A table still at the version this device last saw can be
+* marked current after the write; one another device changed meanwhile can't.
+*/
+function versionsBefore(tables) {
+	return [ENSURE$1, {
+		sql: `SELECT name, v FROM sys_table_versions WHERE name IN (${tables.map(() => "?").join(", ") || "''"})`,
+		args: tables
+	}];
+}
 // src/renderer/src/web/desktopSync.ts
 var SKIP$1 = /^(sqlite_|libsql_|_litestream|_cf_|desktop_)/;
 var encodePending = (write) => JSON.stringify(write, (_key, value) => value instanceof Uint8Array ? { blob: Array.from(value) } : value);
@@ -5238,7 +5250,9 @@ var Mirror = class Mirror {
 				const touched = touchedTables(changes);
 				const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)];
 				try {
-					await this.turso.writeAtomic([
+					const before = versionsBefore(touched);
+					const out = await this.turso.writeAtomic([
+						...before,
 						...checks,
 						...changes,
 						...trackStatements(touched, version),
@@ -5249,7 +5263,8 @@ var Mirror = class Mirror {
 						}] : []
 					]);
 					if (this.tv) {
-						for (const t of touched) this.tv[t] = version;
+						const remote = new Map((out[1] ?? []).map((r) => [String(r[0]), String(r[1])]));
+						for (const t of touched) if ((remote.get(t) ?? "") === (this.tv[t] ?? "")) this.tv[t] = version;
 						this.saveTv();
 					}
 					this.lastError = null;

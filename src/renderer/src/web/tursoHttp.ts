@@ -86,9 +86,9 @@ export class TursoHttp {
     })
   }
 
-  /** Runs the statements in one transaction: all of them, or none. */
-  async writeAtomic(stmts: Change[]): Promise<void> {
-    if (!stmts.length) return
+  /** Runs the statements in one transaction: all of them, or none. Returns each statement's rows. */
+  async writeAtomic(stmts: Change[]): Promise<Param[][][]> {
+    if (!stmts.length) return []
     const steps: unknown[] = [{ stmt: { sql: 'BEGIN' } }]
     stmts.forEach((s, i) => steps.push({ condition: { type: 'ok', step: i }, stmt: { sql: s.sql, args: s.args.map(toHrana) } }))
     const last = steps.length - 1
@@ -103,5 +103,7 @@ export class TursoHttp {
       const firstErr = errs.find((e) => e) as { message?: string } | undefined
       throw new Error(firstErr?.message ?? 'Turso did not save the change')
     }
+    // Step 0 is BEGIN: statement i is step i + 1.
+    return stmts.map((_, i) => ((res?.step_results?.[i + 1]?.rows ?? []) as any[][]).map((row) => row.map(fromHrana)))
   }
 }
