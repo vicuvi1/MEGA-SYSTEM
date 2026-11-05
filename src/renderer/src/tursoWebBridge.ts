@@ -451,6 +451,22 @@ export function createTursoWebBridge(): Bridge {
         })
     })
 
+  /** "gz:" + base64 of the gzipped JSON (plain JSON when the browser can't compress). */
+  const packSnapshot = async (json: string): Promise<string> => {
+    if (typeof CompressionStream === 'undefined') return json
+    const buf = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()
+    let bin = ''
+    const bytes = new Uint8Array(buf)
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    return `gz:${btoa(bin)}`
+  }
+  const unpackSnapshot = async (data: string): Promise<string> => {
+    if (!data.startsWith('gz:')) return data
+    const bin = atob(data.slice(3))
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
+    return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+  }
+
   const ensureSnapshotsTable = () =>
     turso.writeAtomic([{ sql: 'CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)', args: [] }])
 
@@ -489,7 +505,7 @@ export function createTursoWebBridge(): Bridge {
   const snapshotDays = async (): Promise<string[]> => ((await bridge.data.cloudSnapshots?.()) ?? []).map((x: any) => x.day)
   const backupStatus = async () => {
     const days = await snapshotDays()
-    return { dir: 'Turso cloud (daily snapshot, 30 kept)', driveAvailable: false, passphraseSet: true, last: days[0] ? { name: days[0], at: days[0] } : null, pending: 0, count: days.length, lastError: null }
+    return { dir: 'Turso cloud (daily snapshot, 30 kept)', driveAvailable: false, passphraseSet: true, last: days[0] ? { name: days[0], at: days[0] } : null, pending: 0, count: days.length, lastError: store?.getItem('life_snapshot_error') ?? null }
   }
   const aiOnP: Promise<boolean> = direct
     ? Promise.resolve(false)
@@ -887,9 +903,20 @@ export function createTursoWebBridge(): Bridge {
         return backupStatus()
       },
       list: async () => (await snapshotDays()).reverse(),
+      // Opens the newest snapshot and says what's inside, before you'd restore it (Y8).
       verifyLatest: async () => {
         const days = await snapshotDays()
-        return { ok: days.length > 0, name: days[0] ?? null, detail: days.length ? `Cloud snapshot of ${days[0]}` : 'No snapshot yet' }
+        if (!days.length) return { ok: false, name: null, detail: store?.getItem('life_snapshot_error') || 'No snapshot yet' }
+        try {
+          const [res] = await turso.readMany([{ sql: 'SELECT data FROM cloud_snapshots WHERE day = ?', args: [days[0]] }])
+          if (res instanceof Error || !res.rows.length) throw new Error('not readable')
+          const snap = JSON.parse(await unpackSnapshot(String(res.rows[0][0])))
+          const n = (t: string) => (Array.isArray(snap.tables?.[t]) ? snap.tables[t].length : 0)
+          const parts = [`${n('ledger')} points entries`, `${n('workouts')} workouts`, `${n('sleep_logs')} nights`, `${n('expenses')} expenses`, `${Object.keys(snap.tables ?? {}).length} tables`]
+          return { ok: true, name: days[0], detail: `Cloud snapshot of ${days[0]}: ${parts.join(', ')}` }
+        } catch {
+          return { ok: false, name: days[0], detail: `The snapshot of ${days[0]} could not be opened` }
+        }
       },
       restore: async (name: string) => {
         if (!(await bridge.data.restoreCloudSnapshot?.(name))) throw new Error('That snapshot could not be restored')
@@ -1201,7 +1228,12 @@ export function createTursoWebBridge(): Bridge {
           const day = dayKey(new Date())
           const [have] = await turso.readMany([{ sql: 'SELECT 1 FROM cloud_snapshots WHERE day = ?', args: [day] }])
           if (!(have instanceof Error) && have.rows.length) return true
-          const data = JSON.stringify(await snapshot())
+          // Packed (gzip) so a big history fits the 4.5 MB a request may carry (Y8).
+          const data = await packSnapshot(JSON.stringify(await snapshot()))
+          if (data.length > 4_200_000) {
+            store?.setItem('life_snapshot_error', `Today's cloud backup is too big to save (${(data.length / 1e6).toFixed(1)} MB). Download a backup from Settings → Data instead.`)
+            return false
+          }
           await turso.writeAtomic([
             {
               sql: `INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?)
@@ -1210,8 +1242,11 @@ export function createTursoWebBridge(): Bridge {
             },
             { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [addDays(day, -30)] }
           ])
+          store?.removeItem('life_snapshot_error')
           return true
-        } catch {
+        } catch (e) {
+          // Never silent (Y8): the sync panel shows why today's backup is missing.
+          store?.setItem('life_snapshot_error', `Today's cloud backup failed: ${String((e as Error)?.message ?? e).slice(0, 160)}`)
           return false
         }
       },
@@ -1224,7 +1259,7 @@ export function createTursoWebBridge(): Bridge {
       restoreCloudSnapshot: async (day: string) => {
         const [res] = await turso.readMany([{ sql: 'SELECT data FROM cloud_snapshots WHERE day = ?', args: [day] }])
         if (res instanceof Error || !res.rows.length) return false
-        return bridge.data.restoreSnapshot!(String(res.rows[0][0]))
+        return bridge.data.restoreSnapshot!(await unpackSnapshot(String(res.rows[0][0])))
       },
       /**
        * Puts a backup back (a daily file, an export, a cloud snapshot), all in

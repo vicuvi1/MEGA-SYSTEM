@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { gunzipSync } from "node:zlib";
 import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 // src/core/calWatch.ts
@@ -21125,7 +21126,8 @@ async function backupTick(t, SQL, mirror, now) {
 		args: []
 	}]);
 	if (snap instanceof Error || !snap.rows.length) return;
-	const r = restoreDrill(SQL, String(snap.rows[0][1]));
+	const raw = String(snap.rows[0][1]);
+	const r = restoreDrill(SQL, raw.startsWith("gz:") ? gunzipSync(Buffer.from(raw.slice(3), "base64")).toString("utf8") : raw);
 	await beat(t, "restoreDrill", r.ok, r.ok ? void 0 : `${snap.rows[0][0]}: ${r.msg}`, now);
 }
 async function healthTick(t, mirror, now, send) {

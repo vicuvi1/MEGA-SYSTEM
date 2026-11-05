@@ -3,6 +3,7 @@
 // handled exactly like the app does (same services, same Turso transaction
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
+import { gunzipSync } from 'node:zlib'
 import { calendarChanges, type Seen } from '../core/calWatch'
 import { loadFeedback } from '../renderer/src/web/botBrain'
 import { quietNow, quietRules } from '../core/benTiming'
@@ -770,7 +771,10 @@ async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: D
   await setNote(t, 'drill', now.toISOString())
   const [snap] = await t.readMany([{ sql: 'SELECT day, data FROM cloud_snapshots ORDER BY day DESC LIMIT 1', args: [] }] as any)
   if (snap instanceof Error || !snap.rows.length) return
-  const r = restoreDrill(SQL, String(snap.rows[0][1]))
+  // Snapshots saved by the app are gzipped ("gz:" + base64, Y8).
+  const raw = String(snap.rows[0][1])
+  const text = raw.startsWith('gz:') ? gunzipSync(Buffer.from(raw.slice(3), 'base64')).toString('utf8') : raw
+  const r = restoreDrill(SQL, text)
   await beat(t, 'restoreDrill', r.ok, r.ok ? undefined : `${snap.rows[0][0]}: ${r.msg}`, now)
 }
 
