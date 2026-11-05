@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Body } from './body'
 import { openDb, type DB } from './db'
 import { Discipline } from './discipline'
@@ -159,6 +159,9 @@ describe('TelegramBotHub service', () => {
   })
 
   it('processes /oath and /checkin', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(new Date().setHours(20, 0, 0, 0))) // the check-in opens at 19:00
+    afterEach(() => vi.useRealTimers())
     discipline.setStart('2026-10-25')
     const oathRes = await hub.handleIncomingCommand('/oath', '12345678')
     expect(oathRes).toContain('Morning Oath Affirmed')

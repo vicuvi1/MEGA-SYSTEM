@@ -60,7 +60,7 @@ export function Sleep({ state, onState, onWallet, openEditor = 0 }: { state: Con
             icon="moon"
             color="#6EE7D8"
             {...w}
-            what="Waky stays your alarm and check-in app. Connect it and every on-time wake-up (+10) and bedtime (+5) lands in this wallet."
+            what="Waky stays your alarm and check-in app. Connect it and every on-time wake-up and bedtime lands in this wallet."
             onState={onState}
             onWallet={onWallet}
           />
@@ -366,7 +366,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
                 </label>
               </div>
               <motion.button className="btn primary block-btn" whileTap={{ scale: 0.96 }} onClick={handleLogWake}>
-                <Icon name="sun" size={15} /> Log Wake-Up Check-in (+10 🪙)
+                <Icon name="sun" size={15} /> I'm up
               </motion.button>
             </div>
           )}
@@ -396,7 +396,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
                 </label>
               </div>
               <motion.button className="btn block-btn" whileTap={{ scale: 0.96 }} onClick={handleLogBed}>
-                <Icon name="moon" size={15} /> Log Bedtime Check-in (+5 🪙)
+                <Icon name="moon" size={15} /> Going to bed
               </motion.button>
             </div>
           )}

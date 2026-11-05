@@ -64,20 +64,35 @@ export class Discipline {
     this.record('start', day, now)
   }
 
+  /**
+   * The clean-day check-in is for a day you lived (H2): from 19:00 (until the
+   * day turns at 04:00) for today; in the morning (until 12:00) for
+   * yesterday, if you didn't check it in. Earlier in the day it waits.
+   */
   checkIn(now = new Date()): void {
     this.db.transaction(() => {
-      const today = this.wallet.today(now)
+      const appToday = this.wallet.today(now)
+      const h = now.getHours()
+      let today = appToday
+      if (h >= 4 && h < 19) {
+        const yesterday = addDays(appToday, -1)
+        const evs = this.events()
+        const start = startOf(evs)
+        const yesterdayOpen = h < 12 && !!start && yesterday >= start.day && !evs.some((e) => (e.kind === 'checkin' || e.kind === 'reset') && e.day === yesterday)
+        if (!yesterdayOpen) throw new LedgerError('The clean-day check-in opens at 19:00, when the day is done.')
+        today = yesterday
+      }
       planCheckIn(this.events(), today)
       // A rule you turned off (or a used limit) never blocks the check-in itself (P7).
       try {
-        this.wallet.awardRule('discipline.clean_day', { now, ref: `discipline:checkin:${today}` })
+        this.wallet.awardRule('discipline.clean_day', { now, day: today, ref: `discipline:checkin:${today}` })
       } catch (e) {
         if (!(e instanceof LedgerError)) throw e
       }
       this.record('checkin', today, now)
       // Milestones you reached are paid straight away, no "Claim" tap needed (P7).
       const events = this.events()
-      for (const m of this.milestones(events, today)) if (m.status === 'claimable') this.claim(m.days, now)
+      for (const m of this.milestones(events, appToday)) if (m.status === 'claimable') this.claim(m.days, now)
     }).immediate()
   }
 

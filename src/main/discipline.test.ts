@@ -12,7 +12,7 @@ let wallet: Wallet
 let d: Discipline
 
 const t = (iso: string) => new Date(iso)
-const oct25 = t('2026-10-25T10:00:00Z')
+const oct25 = t('2026-10-25T20:00:00Z') // the check-in opens at 19:00 (H2)
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'life-disc-'))
@@ -113,5 +113,16 @@ describe('discipline service', () => {
     summary = wallet.summary(oct25)
     expect(summary.balance).toBe(23) // 20 + 3
     expect(summary.totalXp).toBe(45) // 40 + 5
+  })
+
+  it('the clean-day check-in waits for the evening; in the morning it is for yesterday (H2)', () => {
+    d.setStart('2026-10-15', oct25)
+    expect(() => d.checkIn(t('2026-10-25T15:00:00Z'))).toThrow(/19:00/)
+    d.checkIn(t('2026-10-26T08:00:00Z')) // the morning after: yesterday's
+    const days = db.prepare("SELECT day FROM discipline_events WHERE kind = 'checkin'").all().map((r: any) => r.day)
+    expect(days).toEqual(['2026-10-25'])
+    expect(() => d.checkIn(t('2026-10-26T09:00:00Z'))).toThrow(/19:00/) // yesterday done, today not over
+    d.checkIn(t('2026-10-26T21:00:00Z'))
+    expect(db.prepare("SELECT COUNT(*) AS n FROM discipline_events WHERE kind = 'checkin'").get()).toMatchObject({ n: 2 })
   })
 })

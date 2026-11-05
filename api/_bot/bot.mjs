@@ -509,36 +509,38 @@ function formatHelpMessage() {
 		`• <code>/done &lt;num&gt;</code> — Complete a task (e.g. <code>/done 1</code>)`,
 		``,
 		`⚡ <b>Sport & Athletic Tracking</b>`,
-		`• <code>/sport &lt;activity&gt; &lt;amount&gt;</code> — e.g. <code>/sport run 5km</code> (+15 🪙)`,
+		`• <code>/sport &lt;activity&gt; &lt;amount&gt;</code> — e.g. <code>/sport run 5km</code>`,
 		`• <code>/run &lt;km&gt;</code> — e.g. <code>/run 5km</code>`,
 		`• <code>/football &lt;min&gt;</code> — e.g. <code>/football 90m</code>`,
 		`• <code>/boxing &lt;min&gt;</code> — e.g. <code>/boxing 45m</code>`,
 		`• <code>/gym &lt;min&gt;</code> — e.g. <code>/gym 60m</code>`,
 		`• <code>/bench &lt;kg&gt;</code> — e.g. <code>/bench 80kg</code>`,
-		`• <code>/weight &lt;kg&gt;</code> — e.g. <code>/weight 74.5</code> (+5 🪙)`,
-		`• <code>/waist &lt;cm&gt;</code> — e.g. <code>/waist 82</code> (+5 🪙)`,
+		`• <code>/weight &lt;kg&gt;</code> — e.g. <code>/weight 74.5</code>`,
+		`• <code>/waist &lt;cm&gt;</code> — e.g. <code>/waist 82</code>`,
 		`• <code>/sport status</code> — Your training stats & records`,
 		``,
 		`💪 <b>Quick Body Exercises</b>`,
 		`• <code>/pushups &lt;reps&gt;</code> — Quick log push-ups`,
 		`• <code>/pullups &lt;reps&gt;</code> — Quick log pull-ups`,
 		`• <code>/squats &lt;reps&gt;</code> — Quick log squats`,
-		`• <code>/workout &lt;reps&gt; &lt;exercise&gt;</code> — e.g. <code>/workout 50 pushups</code> (+10 🪙)`,
+		`• <code>/workout &lt;reps&gt; &lt;exercise&gt;</code> — e.g. <code>/workout 50 pushups</code>`,
 		``,
 		`🛡️ <b>Discipline & Standard</b>`,
-		`• <code>/checkin</code> — Log daily clean check-in (+20 🪙)`,
-		`• <code>/oath</code> — Take morning oath (+3 🪙)`,
+		`• <code>/checkin</code> — Clean day check-in (from 19:00, or yesterday's in the morning)`,
+		`• <code>/oath</code> — Take morning oath`,
 		`• <code>/panic</code> — Instant urge crusher emergency protocol`,
 		``,
 		`💳 <b>Money & Expenses</b>`,
 		`• <code>coffee 35</code> or <code>taxi 50</code> — Fast natural expense logging`,
 		`• <code>/balance</code> — View accounts, coins & vault balances`,
 		`• <code>/expense &lt;amount&gt; &lt;category&gt; [note]</code>`,
-		`  e.g. <code>/expense 45 food lunch</code> (+3 🪙)`,
+		`  e.g. <code>/expense 45 food lunch</code>`,
 		``,
 		`🌙 <b>Sleep & Wake</b>`,
-		`• <code>/wake</code> — Log on-time morning check-in (+10 🪙)`,
-		`• <code>/bed</code> — Log bedtime check-in (+5 🪙)`
+		`• <code>/wake</code> — Log your wake-up (points only when you log it as you get up)`,
+		`• <code>/bed</code> — Log bedtime`,
+		``,
+		`🪙 Habits pay +2 each, focus +3 per 10 min, a must-do +10 (Rewards → How you earn).`
 	].join("\n");
 }
 function formatTodayStatus(data) {
@@ -8244,13 +8246,28 @@ var Discipline = class {
 		validateStart(day, this.wallet.today(now), events);
 		this.record("start", day, now);
 	}
+	/**
+	* The clean-day check-in is for a day you lived (H2): from 19:00 (until the
+	* day turns at 04:00) for today; in the morning (until 12:00) for
+	* yesterday, if you didn't check it in. Earlier in the day it waits.
+	*/
 	checkIn(now = /* @__PURE__ */ new Date()) {
 		this.db.transaction(() => {
-			const today = this.wallet.today(now);
+			const appToday = this.wallet.today(now);
+			const h = now.getHours();
+			let today = appToday;
+			if (h >= 4 && h < 19) {
+				const yesterday = addDays$3(appToday, -1);
+				const evs = this.events();
+				const start = startOf(evs);
+				if (!(h < 12 && !!start && yesterday >= start.day && !evs.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === yesterday))) throw new LedgerError("The clean-day check-in opens at 19:00, when the day is done.");
+				today = yesterday;
+			}
 			planCheckIn(this.events(), today);
 			try {
 				this.wallet.awardRule("discipline.clean_day", {
 					now,
+					day: today,
 					ref: `discipline:checkin:${today}`
 				});
 			} catch (e) {
@@ -8258,7 +8275,7 @@ var Discipline = class {
 			}
 			this.record("checkin", today, now);
 			const events = this.events();
-			for (const m of this.milestones(events, today)) if (m.status === "claimable") this.claim(m.days, now);
+			for (const m of this.milestones(events, appToday)) if (m.status === "claimable") this.claim(m.days, now);
 		}).immediate();
 	}
 	oath(now = /* @__PURE__ */ new Date()) {
@@ -10002,8 +10019,11 @@ var SleepService = class {
 		if (existing && existing.on_time && !onTime) this.unpay("sleep.up_on_time", today, now);
 		if (existing) this.db.prepare("UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?").run(wakeTime, target, onTime ? 1 : 0, quality ?? existing.quality, today);
 		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)").run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString());
+		const nowMin = now.getHours() * 60 + now.getMinutes();
+		const [wh, wm] = wakeTime.split(":").map(Number);
+		const live = !time || Math.abs(nowMin - (wh * 60 + wm)) <= 20;
 		let awarded = false;
-		if (onTime) try {
+		if (onTime && live) try {
 			awarded = !!this.wallet.payOnce("sleep.up_on_time", {
 				day: today,
 				ref: `up:${today}`,

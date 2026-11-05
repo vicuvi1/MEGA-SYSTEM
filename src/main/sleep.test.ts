@@ -100,8 +100,15 @@ describe('a corrected sleep time takes its points back (P3)', () => {
     expect(byDay['2026-10-27']).toMatchObject({ wakeTime: '06:10', bedTime: '23:15' })
     expect(byDay['2026-10-29']).toMatchObject({ wakeTime: '06:20', bedTime: '00:40' })
     expect(byDay['2026-09-01']).toBeUndefined()
-    // Today's on-time wake-up pays once; running again changes nothing.
-    expect(r.awarded).toBe(true)
+    // Synced hours later: recorded, not paid (only a live wake-up pays, H1).
+    expect(r.awarded).toBe(false)
     expect(sleep.fromWaky(now)).toMatchObject({ wakes: 0, beds: 0, awarded: false })
+  })
+
+  it('only a wake-up logged as you get up pays; a time typed later is recorded only (H1)', () => {
+    const late = sleep.logWake('06:30', undefined, new Date('2026-10-27T09:40:00Z'))
+    expect(late).toMatchObject({ awarded: false, log: { wakeTime: '06:30', onTime: true } })
+    const db2 = sleep.logWake('06:31', undefined, new Date('2026-10-28T06:40:00Z'))
+    expect(db2.awarded).toBe(true)
   })
 })

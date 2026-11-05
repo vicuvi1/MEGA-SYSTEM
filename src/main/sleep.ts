@@ -109,8 +109,14 @@ export class SleepService {
         .run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString())
     }
 
+    // Points only for a wake-up logged as you get up (a tap, the Waky alarm,
+    // or a time within 20 minutes of now). A time typed later is recorded,
+    // not paid (H1).
+    const nowMin = now.getHours() * 60 + now.getMinutes()
+    const [wh, wm] = wakeTime.split(':').map(Number)
+    const live = !time || Math.abs(nowMin - (wh * 60 + wm)) <= 20
     let awarded = false
-    if (onTime) {
+    if (onTime && live) {
       try {
         awarded = !!this.wallet.payOnce('sleep.up_on_time', { day: today, ref: `up:${today}`, note: `Up at ${wakeTime} (target ${target})`, now })
       } catch {

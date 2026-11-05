@@ -65,7 +65,7 @@ describe('SyncService', () => {
         id: 'evt_101',
         type: 'checkin',
         day: '2026-10-25',
-        ts: '2026-10-25T14:00:00Z',
+        ts: '2026-10-25T20:00:00Z',
         payload: {},
         source: 'telegram_bot'
       },
