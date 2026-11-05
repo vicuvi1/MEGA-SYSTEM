@@ -59,7 +59,7 @@ export function createWebAuth(mirror: Mirror) {
       failures = 0
       locked = false
       // Upgrade an old plain-text PIN so the desktop can read it again.
-      if (s && !s.includes(':') && (await pinMatches(s, pin))) save(await hashPin(pin)).catch(() => {})
+      if (s && !s.includes(":") && (await pinMatches(s, pin))) void hashPin(pin).then(save).catch(() => {})
       return status()
     },
     setPin: async (pin: string, currentPin?: string): Promise<AuthStatus> => {

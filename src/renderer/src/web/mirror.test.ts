@@ -56,6 +56,22 @@ describe('Mirror', () => {
     expect(count(remote, 'SELECT COUNT(*) FROM rules')).toBeGreaterThan(5)
   })
 
+  it('a long history (many pages) loads complete and in order', async () => {
+    const remote = fakeTurso()
+    remote.run('BEGIN')
+    const ins = remote.prepare(`INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES ('2026-10-30T08:00:00Z', '2026-10-30', 'body', 'earn', ?, 0, 'made up')`)
+    for (let i = 1; i <= 4600; i++) ins.run([i % 7])
+    ins.free()
+    remote.run('COMMIT')
+    const mirror = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await mirror.ready
+    const ids = await mirror.read((db) => (db.prepare('SELECT id FROM ledger ORDER BY rowid').all() as { id: number }[]).map((r) => r.id))
+    expect(ids.length).toBe(4600)
+    expect(ids.every((id, i) => id === i + 1)).toBe(true)
+    const total = await mirror.read((db) => new Wallet(db as any).summary().balance)
+    expect(total).toBe(count(remote, 'SELECT SUM(coins) FROM ledger'))
+  })
+
   it('a change lands in Turso with the same ids, so undo points at the right row', async () => {
     const remote = fakeTurso()
     const mirror = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))

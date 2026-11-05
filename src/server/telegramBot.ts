@@ -862,7 +862,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     const svc = services.services(db)
     const today = svc.wallet.today(now)
     const f = svc.focus.state(now)
-    const lastLedger = svc.wallet.entries().filter((e: any) => e.day === today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
+    const lastLedger = svc.wallet.entriesOn(today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
     const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
     // Water, reps (Sport Track's last save), a workout or a message to Ben count as doing something too (T2).
     const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)

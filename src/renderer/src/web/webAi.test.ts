@@ -71,6 +71,26 @@ describe('OpenRouter first, Gemini as backup', () => {
     expect((await askModel('hi', {}, env, down)).text).toBe('backup')
   })
 
+  it('keeps every answer, with all its fallbacks, inside one time limit per request', async () => {
+    // @ts-expect-error plain JS module without types
+    const { askModel, slot } = await import('../../../../api/ai.mjs?deadline')
+    expect(slot(30_000, Date.now() + 50_000)).toBe(30_000)
+    expect(slot(30_000, Date.now() + 10_000)).toBeLessThanOrEqual(7_000)
+    expect(() => slot(30_000, Date.now() + 4_000)).toThrow(/too long/)
+    // Every model hangs until its own time limit stops it.
+    const env = { OPENROUTER_API_KEY: 'or', GEMINI_API_KEY: 'g', OPENROUTER_MODEL: 'deepseek/x', OPENROUTER_STRONG_MODEL: 'deepseek/y' }
+    const tries: string[] = []
+    const hang = ((url: string, init?: any) => {
+      tries.push(url.includes('openrouter') ? JSON.parse(init.body).model : 'gemini')
+      return new Promise((_ok, no) => init?.signal?.addEventListener('abort', () => no(init.signal.reason ?? new Error('aborted'))))
+    }) as unknown as typeof fetch
+    const t0 = Date.now()
+    await expect(askModel('plan my week', { strong: true, deadline: Date.now() + 5_000 }, env, hang)).rejects.toThrow(/too long/)
+    // The first try got the time that was left (less 3 s); then nothing else was tried.
+    expect(Date.now() - t0).toBeLessThan(3_500)
+    expect(tries).toEqual(['deepseek/y'])
+  })
+
   it('the coach prompt carries your goals and rules', async () => {
     const { brainPrompt } = await import('./botBrain')
     const p = brainPrompt('mega', 'ctx', { facts: [], chat: [] }, 'hi', undefined, { about: 'Student in Chisinau', goals: ['Pass the DS exam'], rules: ['No phone in bed'] })

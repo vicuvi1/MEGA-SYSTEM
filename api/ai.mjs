@@ -19,6 +19,7 @@ export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
   for (const model of MODELS) {
     const r = await fetchImpl(`${API}${model}:generateContent`, {
       method: 'POST',
+      ...(opts.deadline ? { signal: AbortSignal.timeout(slot(40_000, opts.deadline)) } : {}),
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
         ...(splitPrompt(prompt).system ? { systemInstruction: { parts: [{ text: splitPrompt(prompt).system }] } } : {}),
@@ -52,6 +53,30 @@ export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
 }
 
 const OPENROUTER = 'https://openrouter.ai/api/v1'
+
+/**
+ * One time limit per request: a server function is stopped at 60 s, so every
+ * answer (with all its fallbacks) must be in by 50 s. Each try gets its own
+ * limit or the time that is left (less 3 s to send the answer), whichever is
+ * shorter; when too little is left, the remaining fallbacks are skipped.
+ */
+export const AI_DEADLINE_MS = 50_000
+export const deadlineIn = (ms = AI_DEADLINE_MS) => Date.now() + ms
+export class TimeUpError extends Error {
+  constructor() {
+    super('Ben took too long to answer. Try again in a moment.')
+    this.timeUp = true
+  }
+}
+/** The time this try may take: min(its own limit, time left − 3 s). Throws when time is up. */
+export function slot(limit, deadline) {
+  if (!deadline) return limit
+  const left = deadline - Date.now() - 3000
+  if (left < 1500) throw new TimeUpError()
+  return Math.min(limit, left)
+}
+/** The model for one request (a webhook, a tick): every call shares its deadline. */
+export const modelUntil = (deadline, env = process.env, fetchImpl = fetch) => async (prompt, opts = {}) => (await askModel(prompt, { ...opts, deadline: opts.deadline ?? deadline }, env, fetchImpl)).text
 
 /**
  * LT9: the models Ben uses unless you pick others (Settings → Ben → Brain) or
@@ -276,7 +301,7 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
   // Even a test run respects a used-up budget (A7).
   if (opts.model) {
     if ((await budgetState(env, fetchImpl)).tier === 'minimal') throw Object.assign(new Error('AI budget used up this month: model tests are paused'), { budget: true })
-    return callOpenRouter(key, opts.model, prompt, fetchImpl, { ...opts, think: !!opts.strong }, 45_000, 'low')
+    return callOpenRouter(key, opts.model, prompt, fetchImpl, { ...opts, think: !!opts.strong }, slot(45_000, opts.deadline), 'low')
   }
   // The budget decides first: near the limit no strong model, past it only the cheap one.
   const plan = budgetPlan((await budgetState(env, fetchImpl)).tier, opts)
@@ -286,8 +311,9 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
   const mine = opts.strong ? pick.deep || pick.chat : pick.chat
   if (mine) {
     try {
-      return await callOpenRouter(key, mine, prompt, fetchImpl, { ...opts, think: !!opts.strong }, opts.strong ? 60_000 : 45_000, 'medium')
+      return await callOpenRouter(key, mine, prompt, fetchImpl, { ...opts, think: !!opts.strong }, slot(opts.strong ? 60_000 : 45_000, opts.deadline), 'medium')
     } catch (e) {
+      if (e.timeUp) throw e
       console.warn(`chosen model ${mine} failed, using automatic:`, e.message)
     }
   }
@@ -296,23 +322,25 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
     const flash = await openRouterModel(env, fetchImpl)
     if (strong && strong !== flash) {
       try {
-        return await callOpenRouter(key, strong, prompt, fetchImpl, { ...opts, think: true }, 35_000, 'medium')
+        return await callOpenRouter(key, strong, prompt, fetchImpl, { ...opts, think: true }, slot(35_000, opts.deadline), 'medium')
       } catch (e) {
+        if (e.timeUp) throw e
         console.warn('strong model failed, using flash:', e.message)
-        return callOpenRouter(key, flash, prompt, fetchImpl, { ...opts, think: false }, 20_000)
+        return callOpenRouter(key, flash, prompt, fetchImpl, { ...opts, think: false }, slot(20_000, opts.deadline))
       }
     }
   }
   const model = await openRouterModel(env, fetchImpl)
   try {
-    return await callOpenRouter(key, model, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000)
+    return await callOpenRouter(key, model, prompt, fetchImpl, opts, slot(opts.think ? 40_000 : 30_000, opts.deadline))
   } catch (e) {
+    if (e.timeUp) throw e
     // The pinned model was refused as unknown: the newest one keeps Ben talking (LT9).
     const ids = /\b(400|404)\b|not a valid model|no endpoints|not found/i.test(String(e?.message)) ? await modelIds(fetchImpl) : null
     const backup = ids ? newestFlash(ids) : null
     if (!backup || backup === model) throw e
     console.warn(`model ${model} failed, using ${backup}:`, e.message)
-    return callOpenRouter(key, backup, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000)
+    return callOpenRouter(key, backup, prompt, fetchImpl, opts, slot(opts.think ? 40_000 : 30_000, opts.deadline))
   }
 }
 
@@ -414,6 +442,10 @@ async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effo
     // opts.think: big asks (plans, reviews, reshuffles) get the model's reasoning.
     body: JSON.stringify({ model, messages: messagesFor(prompt), ...(/^deepseek\//.test(model) ? { provider: { order: ['deepseek'], allow_fallbacks: true } } : {}), temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(streaming ? { stream: true } : {}), ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
     signal: AbortSignal.timeout(timeout)
+  }).catch((e) => {
+    // Our own time limit ran out: past the request's deadline, no fallback is worth trying.
+    if (opts.deadline && Date.now() >= opts.deadline - 3500) throw new TimeUpError()
+    throw e
   })
   if (streaming && r.ok && r.body) {
     const s = await streamOpenRouter(r, opts.onDelta)
@@ -436,13 +468,14 @@ async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effo
  * notes and photos, and Gemini as the backup when OpenRouter fails.
  */
 export async function askModel(prompt, opts = {}, env = process.env, fetchImpl = fetch) {
+  opts = { ...opts, deadline: opts.deadline ?? deadlineIn() }
   const orKey = (env.OPENROUTER_API_KEY || '').trim()
   const gKey = (env.GEMINI_API_KEY || '').trim()
   if (orKey && !opts.media?.length) {
     try {
       return await askOpenRouter(orKey, prompt, fetchImpl, opts, env)
     } catch (e) {
-      if (!gKey || e.budget) throw e
+      if (!gKey || e.budget || e.timeUp) throw e
     }
   }
   if (!gKey) throw new Error('Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use the AI coach')

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
+import { Suspense, createElement, lazy, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import { AnimatePresence, m } from 'framer-motion'
 import { MotionRoot, viewSwitch } from './motionKit'
 import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
@@ -39,9 +39,35 @@ import { useTodayEvents } from './todayEvents'
 import { storageWakesApp } from './islandLog'
 import { watchDayTurn } from './dayTurn'
 
-// Pages and pop-ups load when first opened (Today and the lock screen come at once).
+// Pages and pop-ups load when first opened (Today and the lock screen come at
+// once), and every page is fetched in the background once Today is up
+// (preloadPages). A page whose code is already here draws at once, without
+// the loading skeleton (React holds a skeleton at least 300 ms).
+const preloaders: (() => Promise<unknown>)[] = []
 function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) {
-  return lazy(() => load().then((m) => ({ default: m[name] })))
+  let Loaded: M[K] | null = null
+  let loading: Promise<M[K]> | null = null
+  const get = () => (loading ??= load().then((m) => (Loaded = m[name])).catch((e) => ((loading = null), Promise.reject(e))))
+  const Lazy = lazy(() => get().then((c) => ({ default: c })))
+  // Chosen once per mount, so a page never swaps under itself (that would reset it).
+  const Page = (props: any) => {
+    const [Ready] = useState(() => Loaded)
+    return Ready ? createElement(Ready, props) : createElement(Lazy, props)
+  }
+  preloaders.push(get)
+  return Page as unknown as M[K]
+}
+let preloaded = false
+/** Fetches every page's code, one at a time while the page is idle. */
+function preloadPages(): void {
+  if (preloaded) return
+  preloaded = true
+  const queue = [...preloaders]
+  const next = () => {
+    const load = queue.shift()
+    if (load) whenIdle(() => void load().catch(() => {}).finally(next), 3000)
+  }
+  next()
 }
 const History = lazyNamed(() => import('./pages/History'), 'History')
 const Settings = lazyNamed(() => import('./pages/Settings'), 'Settings')
@@ -60,6 +86,17 @@ const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPa
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
 
+
+/** Runs `fn` once the page is idle (at the latest after `ms`); returns a cancel. */
+function whenIdle(fn: () => void, ms = 2000): () => void {
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void }
+  if (w.requestIdleCallback) {
+    const id = w.requestIdleCallback(fn, { timeout: ms })
+    return () => w.cancelIdleCallback?.(id)
+  }
+  const id = setTimeout(fn, Math.min(ms, 1200))
+  return () => clearTimeout(id)
+}
 
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
@@ -336,9 +373,15 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     return () => clearInterval(interval)
   }, [refresh])
 
+  // Today first; the bots' check runs beside it (it loads their code and asks
+  // the server) and redraws only if it handled something. The daily backup
+  // (the whole database, zipped) waits until the page is idle.
   useEffect(() => {
-    life.bots?.pollOnce?.().catch(() => {}).finally(() => refresh())
-    life.data.saveDailySnapshot?.().catch(() => {})
+    refresh()
+    life.bots?.pollOnce?.().then((res) => {
+      if (res && res.processedCount > 0) refresh()
+    }).catch(() => {})
+    return whenIdle(() => void life.data.saveDailySnapshot?.().catch(() => {}), 4000)
   }, [refresh])
 
   // A connected app paid something in the background.
@@ -381,6 +424,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     window.addEventListener('life-discipline-synced', handleDisciplineSynced)
     return () => window.removeEventListener('life-discipline-synced', handleDisciplineSynced)
   }, [onWallet])
+
+  // Today is up: fetch the other pages' code in the background.
+  useEffect(() => {
+    if (summary) preloadPages()
+  }, [summary])
 
   // Coins flying into the wallet whenever the balance changes, from anywhere.
   const lastBalance = useRef<number | null>(null)

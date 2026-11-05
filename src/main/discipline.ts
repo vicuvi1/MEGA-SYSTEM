@@ -3,7 +3,7 @@ import {
   checkInWindow, dayNumber, milestoneRef, milestonesOf, planCheckIn, planUrgeFinish, quoteFor, rankFor, resetUndoable, RESET_UNDO_MINUTES, startOf, statsOf, validateStart,
   type DisciplineEvent, type DisciplineKind
 } from '@core/discipline'
-import { effective, LedgerError } from '@core/ledger'
+import { LedgerError } from '@core/ledger'
 import type { DisciplineState } from '@shared/api'
 import type { DB } from './db'
 import { getSetting, setSetting, readSetting, writeSetting } from './settings'
@@ -34,7 +34,7 @@ export class Discipline {
   }
 
   private claimedRefs(): Set<string> {
-    return new Set(effective(this.wallet.entries()).map((e) => e.ref ?? '').filter((r) => r.startsWith('milestone:')))
+    return new Set(this.wallet.effective().map((e) => e.ref ?? '').filter((r) => r.startsWith('milestone:')))
   }
 
   private milestones(events: DisciplineEvent[], today: string) {

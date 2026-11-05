@@ -670,7 +670,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           const ps = promiseStats(list)
           const now = new Date()
           const todayKey = svc.wallet.today(now)
-          const lastLedger = svc.wallet.entries().filter((e: any) => e.day === todayKey).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
+          const lastLedger = svc.wallet.entriesOn(todayKey).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
           const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
           const last = Math.max(0, ...lastLedger, ...lastFocus)
           return coachMood({

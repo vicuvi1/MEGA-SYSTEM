@@ -1,7 +1,7 @@
 import type { UnifiedEconomyService } from './unifiedEconomy'
 import { earnPerDay } from '@core/shop'
 import { dayKey, monthKey } from '@core/dates'
-import { balance, effective, LedgerError, totalXp } from '@core/ledger'
+import { balance, LedgerError, totalXp } from '@core/ledger'
 import { levelInfo } from '@core/levels'
 import { chestRef, planRedeem, rollChest, unopenedChests, validateReward, type Reward, type Tier } from '@core/shop'
 import type { RewardInput, ShopState } from '@shared/api'
@@ -63,18 +63,18 @@ export class Shop {
     return rows.filter((r) => !undoneIds.has(r.ledger_id)).reduce((s, r) => s + r.real_cost, 0)
   }
 
-  private undoneIds(): Set<number> {
-    const all = this.wallet.entries()
-    const live = new Set(effective(all).map((e) => e.id))
+  private undoneIds(all = this.wallet.entries(), liveRows = this.wallet.effective()): Set<number> {
+    const live = new Set(liveRows.map((e) => e.id))
     return new Set(all.filter((e) => e.kind !== 'undo' && !live.has(e.id)).map((e) => e.id))
   }
 
   state(now = new Date()): ShopState {
     const all = this.wallet.entries()
+    const liveRows = this.wallet.effective()
     const day = dayKey(now, this.timeZone)
-    const undone = this.undoneIds()
+    const undone = this.undoneIds(all, liveRows)
     const level = levelInfo(totalXp(all)).level
-    const openedRefs = effective(all).map((e) => e.ref ?? '').filter((r) => r.startsWith('chest:'))
+    const openedRefs = liveRows.map((e) => e.ref ?? '').filter((r) => r.startsWith('chest:'))
     const recent = this.db.prepare('SELECT ledger_id, title, real_cost, day FROM redemptions ORDER BY id DESC LIMIT 8').all() as { ledger_id: number; title: string; real_cost: number; day: string }[]
     return {
       rewards: this.rewards(),

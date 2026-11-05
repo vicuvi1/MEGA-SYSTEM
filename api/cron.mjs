@@ -11,7 +11,7 @@ import { bearer, bearerIs, botDefaults, checkWebhooks, config, countCall, cronSe
 import { DAILY_GAP_MS, dailyDue, dailyGate, healthAlarm, healthPush, localMinute, runDaily, runPlugins, runTick, selfCheck, sportShared, tickHealth, webhookVerdict } from './_bot/bot.mjs'
 import { dropHealthKey, healthKeyOk, listHealthKeys, newHealthKey } from './_health.mjs'
 import { readBody } from './_lib.mjs'
-import { askModel, pingModel, rollupUsage } from './ai.mjs'
+import { deadlineIn, modelUntil, pingModel, rollupUsage } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 import { pushNew } from './_push.mjs'
 import { newestSnapshot } from './_snapshots.mjs'
@@ -19,9 +19,9 @@ import { newestSnapshot } from './_snapshots.mjs'
 const appUrl = () => process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '')
 const sleepBotOf = () => serverBots().find((b) => b.name === 'WAKY_BOT_TOKEN') ?? serverBots().find((b) => b.name === 'MAN_BOT_TOKEN')
 /** What runDaily needs (the same from the Vercel cron and from the tick). */
-function dailyEnv(cfg, bot, chatId) {
+function dailyEnv(cfg, bot, chatId, deadline = deadlineIn()) {
   // The coach speaks in its own words when an AI key is set up.
-  const ai = (process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || '').trim() ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+  const ai = (process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || '').trim() ? modelUntil(deadline) : undefined
   return { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, ai, sleepBotToken: sleepBotOf()?.token, appUrl: appUrl() }
 }
 
@@ -91,6 +91,8 @@ export default async function handler(req, res) {
 }
 
 async function tick(req, res) {
+  // One time limit for every AI answer in this run (the function stops at 60 s).
+  const deadline = deadlineIn()
   const cfg = config()
   const bot = serverBots().find((b) => b.name === 'MEGA_BOT_TOKEN') ?? serverBots()[0]
   const chatId = process.env.TELEGRAM_CHAT_ID || ''
@@ -109,7 +111,7 @@ async function tick(req, res) {
   try {
     // The model plans the day and writes the reviews (the daily rhythm); plain text without one.
     const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
-    const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+    const model = hasAi ? modelUntil(deadline) : undefined
     const sent = await runTick({ tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, model, sleepBotToken: sleepBotOf()?.token, timer })
     // Phones with push on (N11): woken for anything new and unread.
     await pushNew(cfg).catch((e) => console.error('push:', e))
@@ -117,7 +119,7 @@ async function tick(req, res) {
     const daily = []
     for (const job of dailyDue(localMinute(new Date(), process.env.LIFE_TZ || 'Europe/Chisinau'))) {
       if (!(await gate(cfg, dailyGate(job), DAILY_GAP_MS).catch(() => false))) continue
-      daily.push(...(await runDaily(dailyEnv(cfg, bot, chatId), job).catch((e) => (console.error(`daily ${job}:`, e), []))))
+      daily.push(...(await runDaily(dailyEnv(cfg, bot, chatId, deadline), job).catch((e) => (console.error(`daily ${job}:`, e), []))))
     }
     // LT8: AI usage older than 90 days becomes one row per month (once a day).
     if (await gate(cfg, 'ai-usage-rollup', 24 * 3600_000).catch(() => false)) await rollupUsage().catch((e) => console.error('usage rollup:', e))
@@ -207,7 +209,7 @@ async function plugins(req, res) {
   try {
     if (!(await gate(cfg, 'plugins-now', 20_000))) return send(res, 429, { error: 'Just refreshed: try again in a moment' })
     const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
-    const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+    const model = hasAi ? modelUntil(deadlineIn()) : undefined
     const only = new URL(req.url, 'http://x').searchParams.get('only') || undefined
     send(res, 200, await runPlugins({ ...botEnv(cfg), google: googleEnv(cfg), model }, { only }))
   } catch (e) {

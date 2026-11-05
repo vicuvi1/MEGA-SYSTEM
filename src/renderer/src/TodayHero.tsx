@@ -59,7 +59,7 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   const loadShop = useCallback(() => void life.shop?.state().then(setShop).catch(() => {}), [])
   useEffect(loadShop, [loadShop])
   useLive(loadShop)
-  const focusMin = useCountUp(st?.today.focusMin ?? 0)
+  const focusMin = useCountUp(st?.today.focusMin ?? 0, 400, { ready: !!st })
   // The one "Do this now", decided by the Now card below (same pick, same button).
   const shared = useSharedNow()
   // What's on now (or soon) in your calendar: the Now card.

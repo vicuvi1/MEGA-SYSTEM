@@ -44,15 +44,24 @@ export function Tick({ lazy }: { lazy?: boolean }) {
 /**
  * A number that counts to its value (AF7): requestAnimationFrame, 400 ms
  * ease-out, from what it showed before (so a change mid-count carries on).
- * `fromZero`: the first value counts up from 0 too. Jumps straight there with
- * "reduce motion" or in a hidden window. Show it with tabular numbers
- * (.num / <CountUp>) so the digits don't wobble.
+ * `fromZero`: the first value counts up from 0 too. `ready: false` while its
+ * data is still loading: until then, and for the first loaded value, it shows
+ * the value as it is (the card is final on its first draw). Jumps straight
+ * there with "reduce motion" or in a hidden window. Show it with tabular
+ * numbers (.num / <CountUp>) so the digits don't wobble.
  */
-export function useCountUp(value: number, ms = 400, opts: { fromZero?: boolean } = {}): number {
+export function useCountUp(value: number, ms = 400, opts: { fromZero?: boolean; ready?: boolean } = {}): number {
   const start0 = opts.fromZero && !reducedMotion() ? 0 : value
   const [n, setN] = useState(start0)
   const shown = useRef(start0)
+  const ready = opts.ready ?? true
+  const primed = useRef(ready)
   useEffect(() => {
+    if (!primed.current) {
+      if (ready) primed.current = true
+      shown.current = value
+      return setN(value)
+    }
     if (shown.current === value) return
     if (typeof document === 'undefined' || document.hidden || reducedMotion()) {
       shown.current = value
@@ -70,7 +79,7 @@ export function useCountUp(value: number, ms = 400, opts: { fromZero?: boolean }
     }
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
-  }, [value, ms])
+  }, [value, ms, ready])
   return n
 }
 

@@ -18,6 +18,27 @@ const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
 db.run("INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES (?, ?, 'quests', 'adjust', 500, 0, 'starting coins')", [new Date().toISOString(), day(3)])
 db.run("INSERT INTO discipline_events (kind, day, ts) VALUES ('start', ?, ?)", [day(10), new Date().toISOString()])
 db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
+// Speed tests (e2e/perf.mjs): E2E_LEDGER_ROWS made-up points rows spread over
+// the last two years, about 1 in 40 undone, to see how the app copes with a long history.
+{
+  const n = Number(process.env.E2E_LEDGER_ROWS || 0)
+  if (n > 0) {
+    const mods = [['tasks', 'task_done', 5], ['focus', 'focus_block', 10], ['sleep', 'bed_on_time', 8], ['body', 'workout', 12], ['money', 'spending_logged', 3], ['quests', null, 4]]
+    const ins = db.prepare('INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, ref, note, undo_of) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    const days = 730
+    let id = Number(db.exec('SELECT MAX(id) FROM ledger')[0].values[0][0])
+    db.run('BEGIN')
+    for (let i = 0; i < n; i++) {
+      const d = day(days - Math.floor((i * days) / n))
+      const [m, rule, c] = mods[i % mods.length]
+      ins.run([`${d}T${String(6 + (i % 16)).padStart(2, '0')}:00:00.000Z`, d, m, 'earn', c, c, rule, `perf:${i}`, 'made-up row', null])
+      id++
+      if (i % 40 === 39) (ins.run([`${d}T23:00:00.000Z`, d, m, 'undo', 0, 0, rule, null, 'made-up undo', id]), id++)
+    }
+    db.run('COMMIT')
+    ins.free()
+  }
+}
 // A made-up chat with Ben (Night 7 smoke): his automatic messages and a short talk.
 {
   const ago = (min) => new Date(Date.now() - min * 60000).toISOString()
@@ -226,7 +247,7 @@ const vercelHeaders = JSON.parse(readFileSync(join(repo, 'vercel.json'), 'utf8')
 const withHeaders = (pathname, r) => {
   for (const h of vercelHeaders) if (h.re.test(pathname)) for (const { key, value } of h.headers) r.setHeader(key, value)
 }
-const dist = join(repo, 'dist')
+const dist = process.env.E2E_DIST || join(repo, 'dist')
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }
 http
   .createServer((q, r) => {

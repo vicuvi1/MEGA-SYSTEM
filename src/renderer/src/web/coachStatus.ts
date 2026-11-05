@@ -68,7 +68,7 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
   const rh = rhythmFor(json(db, RHYTHM), today)
   const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))
   const water = waterToday(db, s, now)
-  const lastLedger = s.wallet.entries().filter((e: any) => e.day === today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
+  const lastLedger = s.wallet.entriesOn(today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
   const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
   const last = Math.max(0, ...lastLedger, ...lastFocus)
   const open = f.plan.items.filter((x) => !x.done)

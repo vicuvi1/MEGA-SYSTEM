@@ -41,12 +41,59 @@ const toRule = (r: RuleRow): Rule => ({
   dailyCap: r.daily_cap, cooldownMin: r.cooldown_min, enabled: !!r.enabled
 })
 
+/**
+ * The whole points history, read once and kept per database until the ledger
+ * may have changed. Services are built per call (one new Wallet each time), so
+ * the copy lives here, keyed by the database object. The key is SQLite's own
+ * count of changed rows on this connection plus the newest id: any write
+ * (ours, a sync that reloads tables, an undo) moves it. Inside a transaction
+ * nothing is cached or reused, so a rolled-back change can never stick.
+ */
+interface LedgerCache { key: string; entries: LedgerEntry[]; live: LedgerEntry[] | null }
+const ledgerCache = new WeakMap<object, LedgerCache>()
+
 /** Database side of the wallet; all decisions are made by the pure core. */
 export class Wallet {
   constructor(private db: DB, private timeZone?: string) {}
 
-  entries(): LedgerEntry[] {
+  private readAll(): LedgerEntry[] {
     return (this.db.prepare('SELECT * FROM ledger ORDER BY id').all() as LedgerRow[]).map(toEntry)
+  }
+
+  private cached(): LedgerCache | null {
+    const db = this.db as unknown as { inTransaction?: boolean }
+    if (!db || typeof db !== 'object' || db.inTransaction) return null
+    let key: string
+    try {
+      const r = this.db.prepare('SELECT total_changes() AS t, MAX(id) AS m FROM ledger').get() as { t: number; m: number | null } | undefined
+      key = `${r?.t ?? ''}:${r?.m ?? ''}`
+    } catch {
+      return null
+    }
+    const hit = ledgerCache.get(db)
+    if (hit && hit.key === key) return hit
+    const fresh: LedgerCache = { key, entries: this.readAll(), live: null }
+    ledgerCache.set(db, fresh)
+    return fresh
+  }
+
+  /** Every ledger row, oldest first (a fresh array each call; rows are shared). */
+  entries(): LedgerEntry[] {
+    const c = this.cached()
+    return c ? c.entries.slice() : this.readAll()
+  }
+
+  /** The rows that still count (not undo rows, not undone): core `effective(entries())`. */
+  effective(): LedgerEntry[] {
+    const c = this.cached()
+    if (!c) return effective(this.readAll())
+    c.live ??= effective(c.entries)
+    return c.live.slice()
+  }
+
+  /** All ledger rows booked on one day, oldest first (undo rows included). */
+  entriesOn(day: string): LedgerEntry[] {
+    return (this.db.prepare('SELECT * FROM ledger WHERE day = ? ORDER BY id').all(day) as LedgerRow[]).map(toEntry)
   }
 
   /** Appends a row the core already validated. Call inside a transaction. */

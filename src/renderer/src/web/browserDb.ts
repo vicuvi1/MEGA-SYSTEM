@@ -68,6 +68,11 @@ export class BrowserDb {
 
   constructor(public readonly raw: SqlJsDatabase) {}
 
+  /** Like better-sqlite3: true while a transaction (or savepoint) is open. */
+  get inTransaction(): boolean {
+    return this.depth > 0
+  }
+
   takeChanges(): Change[] {
     const c = this.changes
     this.changes = []
@@ -106,7 +111,15 @@ export class BrowserDb {
     try {
       stmt.bind(args as SqlValue[])
       const out: Record<string, unknown>[] = []
-      while (stmt.step()) out.push(stmt.getAsObject() as Record<string, unknown>)
+      // Like getAsObject, with the column names read once (not once per row).
+      let cols: string[] | null = null
+      while (stmt.step()) {
+        cols ??= stmt.getColumnNames()
+        const vals = stmt.get()
+        const row: Record<string, unknown> = {}
+        for (let i = 0; i < cols.length; i++) row[cols[i]] = vals[i]
+        out.push(row)
+      }
       return out
     } finally {
       stmt.free()

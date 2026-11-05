@@ -5,7 +5,7 @@
 // brain (OpenRouter DeepSeek, Gemini as backup), memory, goals & rules.
 import { bearer, botDefaults, config, readBody, send, requireSession, countCall } from './_lib.mjs'
 import { coachChat, coachRhythm, coachUndo } from './_bot/bot.mjs'
-import { askModel } from './ai.mjs'
+import { deadlineIn, modelUntil } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
 export default async function handler(req, res) {
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     return send(res, 400, { error: 'Bad request' })
   }
   const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
-  const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+  const model = hasAi ? modelUntil(deadlineIn()) : undefined
   const env = { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg) }
   // {op:'rhythm', action, note}: today's plan from the coach (Today and Coach in the app).
   if (body?.op === 'rhythm') {

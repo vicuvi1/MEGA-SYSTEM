@@ -594,13 +594,39 @@ export class Mirror {
     const loaded = new Map<string, { cols: string[]; rows: unknown[][] }>()
     const groups: string[][] = []
     for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8))
+    // A long table (two years of points) also says how many rows it has, so
+    // its other pages are asked for side by side, one page per request as
+    // before, a few at a time, instead of one after the other.
+    const count = (t: string) => {
+      const f = filter(t)
+      return { sql: `SELECT COUNT(*) FROM "${t}"${f ? ` WHERE ${f.where}` : ''}`, args: f ? f.args : [] }
+    }
     await Promise.all(groups.map(async (group) => {
-      const first = await this.turso.readMany(group.map((t) => page(t, 0)))
+      const first = await this.turso.readMany([...group.map((t) => page(t, 0)), ...group.map(count)])
       for (let k = 0; k < group.length; k++) {
         const t = group[k]
         let res = first[k]
         if (res instanceof Error) throw new MirrorError(`Could not read ${t}: ${res.message}`)
         const all = { cols: res.cols, rows: [...res.rows] }
+        const n = first[group.length + k]
+        const total = n instanceof Error ? 0 : Number(n.rows[0]?.[0] ?? 0)
+        if (res.rows.length === PAGE && total > PAGE) {
+          const offsets: number[] = []
+          for (let o = PAGE; o < total; o += PAGE) offsets.push(o)
+          const pages: (typeof res)[] = new Array(offsets.length)
+          let next = 0
+          await Promise.all(Array.from({ length: Math.min(6, offsets.length) }, async () => {
+            while (next < offsets.length) {
+              const i = next++
+              const [r] = await this.turso.readMany([page(t, offsets[i])])
+              if (r instanceof Error) throw new MirrorError(`Could not read ${t}: ${r.message}`)
+              pages[i] = r
+            }
+          }))
+          for (const r of pages) all.rows.push(...r.rows)
+          res = pages[pages.length - 1]
+        }
+        // Rows added meanwhile (or no count): the rest, page by page.
         while (res.rows.length === PAGE) {
           const [next] = await this.turso.readMany([page(t, all.rows.length)])
           if (next instanceof Error) throw new MirrorError(`Could not read ${t}: ${next.message}`)

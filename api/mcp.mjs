@@ -15,7 +15,7 @@
 import { bearer, botDefaults, checkPin, clientIp, config, gate, readBody, requireSession, send } from './_lib.mjs'
 import { authorizePage, authorizeRequest, createToken, exchangeCode, listTokens, makeCode, rateOk, registerClient, resourceMeta, revokeToken, serverMeta, tokenAuth } from './_mcpauth.mjs'
 import { mcpCall } from './_bot/bot.mjs'
-import { askModel } from './ai.mjs'
+import { deadlineIn, modelUntil } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
 /** This site's address, for the OAuth metadata (APP_URL wins). */
@@ -63,7 +63,7 @@ function unauthorized(res, req, why) {
 
 function botEnv(cfg) {
   const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
-  const model = hasAi ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+  const model = hasAi ? modelUntil(deadlineIn()) : undefined
   return { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg) }
 }
 

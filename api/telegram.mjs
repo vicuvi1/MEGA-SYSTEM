@@ -4,8 +4,11 @@
 import { timingSafeEqual } from 'node:crypto'
 import { botDefaults, config, readBody, send, serverBots, webhookSecret, countCall } from './_lib.mjs'
 import { handleTelegramUpdate } from './_bot/bot.mjs'
-import { askModel } from './ai.mjs'
+import { deadlineIn, modelUntil } from './ai.mjs'
 import { googleEnv } from './google.mjs'
+
+/** When the webhook answers Telegram at the latest (the function stops at 60 s). */
+export const WEBHOOK_ANSWER_MS = 55_000
 
 const same = (a, b) => {
   const x = Buffer.from(String(a))
@@ -23,19 +26,31 @@ export default async function handler(req, res) {
   if (!same(req.headers['x-telegram-bot-api-secret-token'] || '', webhookSecret(cfg, id))) return send(res, 401, { error: 'Bad secret' })
   // The coach's brain (free text, voice, photos) when Gemini is set up.
   const key = (process.env.GEMINI_API_KEY || '').trim()
-  const model = key || (process.env.OPENROUTER_API_KEY || '').trim() ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
+  // One time limit for the whole message: every AI answer is in by 50 s.
+  const model = key || (process.env.OPENROUTER_API_KEY || '').trim() ? modelUntil(deadlineIn()) : undefined
+  // The function is stopped at 60 s, and a webhook that never answered is sent
+  // again by Telegram: at 55 s say "got it" (each message is handled once).
+  let late = null
   try {
     const update = await readBody(req)
-    await handleTelegramUpdate(
+    const work = handleTelegramUpdate(
       { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg) },
       bot.token,
       update
     )
+    const timeUp = new Promise((ok) => (late = setTimeout(() => ok('late'), WEBHOOK_ANSWER_MS)))
+    if ((await Promise.race([work, timeUp])) === 'late') {
+      console.warn('telegram webhook: still working at 55 s, answered Telegram anyway')
+      work.catch((e) => console.error('telegram webhook (late):', e))
+      return send(res, 200, { ok: true, late: true })
+    }
     send(res, 200, { ok: true })
   } catch (e) {
     // Turso or Telegram unreachable: Telegram sends it again later (each
     // message is handled once, so a retry never logs it twice).
     console.error('telegram webhook:', e)
     send(res, 500, { error: e.message || 'failed' })
+  } finally {
+    clearTimeout(late)
   }
 }

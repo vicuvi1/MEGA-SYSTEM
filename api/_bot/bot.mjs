@@ -2916,7 +2916,7 @@ var Discipline = class {
 		this.db.prepare("INSERT INTO discipline_events (kind, day, ts) VALUES (?, ?, ?)").run(kind, day, now.toISOString());
 	}
 	claimedRefs() {
-		return new Set(effective(this.wallet.entries()).map((e) => e.ref ?? "").filter((r) => r.startsWith("milestone:")));
+		return new Set(this.wallet.effective().map((e) => e.ref ?? "").filter((r) => r.startsWith("milestone:")));
 	}
 	milestones(events, today) {
 		return milestonesOf(events, today, this.claimedRefs(), (start) => this.wallet.today(new Date(start.ts)));
@@ -7299,6 +7299,10 @@ var BrowserDb = class BrowserDb {
 	constructor(raw) {
 		this.raw = raw;
 	}
+	/** Like better-sqlite3: true while a transaction (or savepoint) is open. */
+	get inTransaction() {
+		return this.depth > 0;
+	}
 	takeChanges() {
 		const c = this.changes;
 		this.changes = [];
@@ -7334,7 +7338,14 @@ var BrowserDb = class BrowserDb {
 		try {
 			stmt.bind(args);
 			const out = [];
-			while (stmt.step()) out.push(stmt.getAsObject());
+			let cols = null;
+			while (stmt.step()) {
+				cols ??= stmt.getColumnNames();
+				const vals = stmt.get();
+				const row = {};
+				for (let i = 0; i < cols.length; i++) row[cols[i]] = vals[i];
+				out.push(row);
+			}
 			return out;
 		} finally {
 			stmt.free();
@@ -8509,8 +8520,15 @@ var Mirror = class Mirror {
 		const loaded = /* @__PURE__ */ new Map();
 		const groups = [];
 		for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8));
+		const count = (t) => {
+			const f = filter(t);
+			return {
+				sql: `SELECT COUNT(*) FROM "${t}"${f ? ` WHERE ${f.where}` : ""}`,
+				args: f ? f.args : []
+			};
+		};
 		await Promise.all(groups.map(async (group) => {
-			const first = await this.turso.readMany(group.map((t) => page(t, 0)));
+			const first = await this.turso.readMany([...group.map((t) => page(t, 0)), ...group.map(count)]);
 			for (let k = 0; k < group.length; k++) {
 				const t = group[k];
 				let res = first[k];
@@ -8519,6 +8537,24 @@ var Mirror = class Mirror {
 					cols: res.cols,
 					rows: [...res.rows]
 				};
+				const n = first[group.length + k];
+				const total = n instanceof Error ? 0 : Number(n.rows[0]?.[0] ?? 0);
+				if (res.rows.length === PAGE && total > PAGE) {
+					const offsets = [];
+					for (let o = PAGE; o < total; o += PAGE) offsets.push(o);
+					const pages = new Array(offsets.length);
+					let next = 0;
+					await Promise.all(Array.from({ length: Math.min(6, offsets.length) }, async () => {
+						while (next < offsets.length) {
+							const i = next++;
+							const [r] = await this.turso.readMany([page(t, offsets[i])]);
+							if (r instanceof Error) throw new MirrorError(`Could not read ${t}: ${r.message}`);
+							pages[i] = r;
+						}
+					}));
+					for (const r of pages) all.rows.push(...r.rows);
+					res = pages[pages.length - 1];
+				}
 				while (res.rows.length === PAGE) {
 					const [next] = await this.turso.readMany([page(t, all.rows.length)]);
 					if (next instanceof Error) throw new MirrorError(`Could not read ${t}: ${next.message}`);
@@ -12274,7 +12310,7 @@ var Tasks = class {
 		this.economy = economy;
 	}
 	liveLedgerIds() {
-		return new Set(effective(this.wallet.entries()).map((e) => e.id));
+		return new Set(this.wallet.effective().map((e) => e.id));
 	}
 	/** Days each task was completed, ignoring completions undone in History. */
 	doneDays(live) {
@@ -12293,7 +12329,7 @@ var Tasks = class {
 		return toTask(row);
 	}
 	coinsToday(today) {
-		return effective(this.wallet.entries()).filter((e) => e.module === "tasks" && e.day === today && e.ref?.startsWith("task:")).reduce((s, e) => s + Math.max(0, e.coins), 0);
+		return this.wallet.effective().filter((e) => e.module === "tasks" && e.day === today && e.ref?.startsWith("task:")).reduce((s, e) => s + Math.max(0, e.coins), 0);
 	}
 	categories() {
 		return this.db.prepare("SELECT id, label, color FROM categories WHERE archived = 0 ORDER BY sort, label").all();
@@ -13305,17 +13341,17 @@ var Shop = class {
 	monthSpent(day, undoneIds) {
 		return this.db.prepare("SELECT ledger_id, real_cost FROM redemptions WHERE substr(day, 1, 7) = ?").all(monthKey$1(day)).filter((r) => !undoneIds.has(r.ledger_id)).reduce((s, r) => s + r.real_cost, 0);
 	}
-	undoneIds() {
-		const all = this.wallet.entries();
-		const live = new Set(effective(all).map((e) => e.id));
+	undoneIds(all = this.wallet.entries(), liveRows = this.wallet.effective()) {
+		const live = new Set(liveRows.map((e) => e.id));
 		return new Set(all.filter((e) => e.kind !== "undo" && !live.has(e.id)).map((e) => e.id));
 	}
 	state(now = /* @__PURE__ */ new Date()) {
 		const all = this.wallet.entries();
+		const liveRows = this.wallet.effective();
 		const day = dayKey(now, this.timeZone);
-		const undone = this.undoneIds();
+		const undone = this.undoneIds(all, liveRows);
 		const level = levelInfo(totalXp(all)).level;
-		const openedRefs = effective(all).map((e) => e.ref ?? "").filter((r) => r.startsWith("chest:"));
+		const openedRefs = liveRows.map((e) => e.ref ?? "").filter((r) => r.startsWith("chest:"));
 		const recent = this.db.prepare("SELECT ledger_id, title, real_cost, day FROM redemptions ORDER BY id DESC LIMIT 8").all();
 		return {
 			rewards: this.rewards(),
@@ -15716,6 +15752,7 @@ var toRule = (r) => ({
 	cooldownMin: r.cooldown_min,
 	enabled: !!r.enabled
 });
+var ledgerCache = /* @__PURE__ */ new WeakMap();
 /** Database side of the wallet; all decisions are made by the pure core. */
 var Wallet = class {
 	db;
@@ -15724,8 +15761,44 @@ var Wallet = class {
 		this.db = db;
 		this.timeZone = timeZone;
 	}
-	entries() {
+	readAll() {
 		return this.db.prepare("SELECT * FROM ledger ORDER BY id").all().map(toEntry);
+	}
+	cached() {
+		const db = this.db;
+		if (!db || typeof db !== "object" || db.inTransaction) return null;
+		let key;
+		try {
+			const r = this.db.prepare("SELECT total_changes() AS t, MAX(id) AS m FROM ledger").get();
+			key = `${r?.t ?? ""}:${r?.m ?? ""}`;
+		} catch {
+			return null;
+		}
+		const hit = ledgerCache.get(db);
+		if (hit && hit.key === key) return hit;
+		const fresh = {
+			key,
+			entries: this.readAll(),
+			live: null
+		};
+		ledgerCache.set(db, fresh);
+		return fresh;
+	}
+	/** Every ledger row, oldest first (a fresh array each call; rows are shared). */
+	entries() {
+		const c = this.cached();
+		return c ? c.entries.slice() : this.readAll();
+	}
+	/** The rows that still count (not undo rows, not undone): core `effective(entries())`. */
+	effective() {
+		const c = this.cached();
+		if (!c) return effective(this.readAll());
+		c.live ??= effective(c.entries);
+		return c.live.slice();
+	}
+	/** All ledger rows booked on one day, oldest first (undo rows included). */
+	entriesOn(day) {
+		return this.db.prepare("SELECT * FROM ledger WHERE day = ? ORDER BY id").all(day).map(toEntry);
 	}
 	/** Appends a row the core already validated. Call inside a transaction. */
 	append(e) {
@@ -18839,7 +18912,7 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 	const rh = rhythmFor(json$1(db, RHYTHM), today);
 	const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)));
 	const water = waterToday(db, s, now);
-	const lastLedger = s.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
+	const lastLedger = s.wallet.entriesOn(today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
 	const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
 	const last = Math.max(0, ...lastLedger, ...lastFocus);
 	const open = f.plan.items.filter((x) => !x.done);
@@ -22676,7 +22749,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					const ps = promiseStats(list);
 					const now = /* @__PURE__ */ new Date();
 					const todayKey = svc.wallet.today(now);
-					const lastLedger = svc.wallet.entries().filter((e) => e.day === todayKey).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
+					const lastLedger = svc.wallet.entriesOn(todayKey).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
 					const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
 					const last = Math.max(0, ...lastLedger, ...lastFocus);
 					return coachMood({
@@ -27784,7 +27857,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			const svc = services.services(db);
 			const today = svc.wallet.today(now);
 			const f = svc.focus.state(now);
-			const lastLedger = svc.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
+			const lastLedger = svc.wallet.entriesOn(today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
 			const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
 			const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 			let sportAt = 0;

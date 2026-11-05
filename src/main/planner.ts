@@ -1,4 +1,4 @@
-import { effective, LedgerError } from '@core/ledger'
+import { LedgerError } from '@core/ledger'
 import {
   BLOCK_RULES, blockOn, blocksToMiss, finishAllowedAt, isOverdue, planFinish, planSkip, planTaskComplete, sortTasks,
   taskOn, TASKS_DAILY_COIN_CAP, validateBlock, validateTask, type Block, type BlockStatus, type Task
@@ -73,7 +73,7 @@ export class Tasks {
   }
 
   private liveLedgerIds(): Set<number> {
-    return new Set(effective(this.wallet.entries()).map((e) => e.id))
+    return new Set(this.wallet.effective().map((e) => e.id))
   }
 
   /** Days each task was completed, ignoring completions undone in History. */
@@ -95,7 +95,7 @@ export class Tasks {
   }
 
   private coinsToday(today: string): number {
-    return effective(this.wallet.entries())
+    return this.wallet.effective()
       .filter((e) => e.module === 'tasks' && e.day === today && e.ref?.startsWith('task:'))
       .reduce((s, e) => s + Math.max(0, e.coins), 0)
   }

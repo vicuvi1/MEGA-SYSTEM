@@ -35,12 +35,22 @@ if (isIsland) {
   void Promise.all([import('./appStyles'), import('./HudBar')]).then(([, { HudBar }]) => root.render(<StrictMode><HudBar /></StrictMode>))
 } else {
   void import('./errorReport').then((m) => m.installErrorReport())
-  void Promise.all([import('./App'), import('./DesktopBar'), import('./IslandFeed'), import('./DesktopBackups'), import('./appStyles')]).then(([{ App }, { DesktopBar }, { IslandFeed }, { DesktopAutoBackup }]) =>
+  // The desktop-only parts (title bar, island feed, auto backups) load only in
+  // the desktop app; the website never downloads them.
+  const desk = window.desktop
+  const none = Promise.resolve(null)
+  void Promise.all([
+    import('./App'),
+    desk ? import('./DesktopBar') : none,
+    desk?.islandState ? import('./IslandFeed') : none,
+    desk?.writeBackup ? import('./DesktopBackups') : none,
+    import('./appStyles')
+  ]).then(([{ App }, bar, feed, backups]) =>
     root.render(
       <StrictMode>
-        <DesktopBar />
-        {window.desktop?.islandState && <IslandFeed />}
-        {window.desktop?.writeBackup && <DesktopAutoBackup />}
+        {bar && <bar.DesktopBar />}
+        {feed && <feed.IslandFeed />}
+        {backups && <backups.DesktopAutoBackup />}
         <App />
       </StrictMode>
     )
