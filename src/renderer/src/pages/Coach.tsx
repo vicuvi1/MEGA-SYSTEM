@@ -290,7 +290,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               setTimeout(() => window.dispatchEvent(new CustomEvent('life-settings-tab', { detail: 'ben' })), 300)
             }}
           >
-            🧠 {model ? model.replace(/^.*\//, '').replace(/-\d{3,}$/, '') : 'coach'}
+            {/* The model's name and cost live in Settings → Ben (V8); here just the way there. */}
+            🧠 Ben's brain
           </button>
           <button className="cx-model" title="Your notebook: what Ben knows about you, his notes, your journal" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'notebook' }))}>
             📓 Notebook
