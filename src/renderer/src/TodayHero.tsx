@@ -10,6 +10,7 @@ import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
 import { blockSubject, localDay } from '@core/dayTime'
 import { focusStreak, liveScore } from '@core/liveScore'
+import { runSharedNow, useSharedNow } from './nowStore'
 
 /** A number that counts up to its value (calm, quick). */
 export function useCountUp(value: number, ms = 700): number {
@@ -63,6 +64,8 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   useEffect(loadShop, [loadShop])
   useLive(loadShop)
   const focusMin = useCountUp(st?.today.focusMin ?? 0)
+  // The one "Do this now", decided by the Now card below (same pick, same button).
+  const shared = useSharedNow()
   // What's on now (or soon) in your calendar: the Now card.
   const { events } = useTodayEvents()
   const [tick, setTick] = useState(Date.now())
@@ -122,7 +125,9 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   const soon = !evening && !block && m.kind !== 'running' && m.kind !== 'answer' && nextBlock && Date.parse(nextBlock.start) - tick < 60 * 60000 ? nextBlock : null
   const b = block ?? soon
   const left = b ? Math.max(5, Math.round((Date.parse(b.end) - Math.max(tick, Date.parse(b.start))) / 60000)) : 0
-  const now = evening
+  const now = shared
+    ? { tag: shared.tag, title: shared.title, btn: shared.button, go: runSharedNow, why: shared.why }
+    : evening
     ? { tag: 'Evening', title: 'Close your day · 2 minutes', btn: 'Close my day', go: () => window.dispatchEvent(new CustomEvent('life-close-day')) }
     : b
       ? {
@@ -145,7 +150,7 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
       </button>
       <div className={`thb-now ${evening ? 'evening' : ''} ${m.kind === 'running' ? 'running' : ''}`}>
         <small>{now.tag}</small>
-        <b title={now.title}>{now.title}</b>
+        <b title={'why' in now && now.why ? `${now.title}: ${now.why}` : now.title}>{now.title}</b>
       </div>
       <div className="thb-act">
         {m.kind === 'running' && (

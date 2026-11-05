@@ -4,6 +4,8 @@
 import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
+import { decideNow, type DoNow } from '@core/doNow'
+import { publishNow } from './nowStore'
 import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, plainName, sortToday, whenText, type Area, type TodoTask } from '@core/todoist'
 import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
@@ -215,7 +217,6 @@ export function DayFlow(props: Props) {
     // tick keeps it fresh while focusing; the 30 s live reload otherwise
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calEvents, st?.running, today, tick])
-  const [blockSkipped, setBlockSkipped] = useState<string | null>(null)
 
   const week = weekPlan ? activePlan(weekPlan, today) : null
   const reviewed = !!st && (!!st.plan.review || st.plan.reasons.length > 0)
@@ -242,11 +243,42 @@ export function DayFlow(props: Props) {
       today
     })
   }, [st, todo, habits, connections, today, reviewed])
-  const key = (a: NowAction) => `${a.kind}:${a.title}`
   // The morning/evening card already covers planning and the review.
   const hiddenKinds = mode === 'morning' ? ['plan', 'log-wake'] : mode === 'evening' ? ['review'] : []
   const shown = actions.filter((a) => !hiddenKinds.includes(a.kind))
-  const now = shown.find((a) => !skipped.includes(key(a))) ?? shown[0]
+  // Ben's side of "now": a promise he's waiting on, a plan to approve (shared, cached).
+  const [coachNow, setCoachNow] = useState<{ awaiting: string | null; proposed: boolean }>({ awaiting: null, proposed: false })
+  const loadCoachNow = useCallback(() => {
+    life.coach?.status?.()
+      .then((c) => setCoachNow({ awaiting: c.move.kind === 'answer' ? c.move.promise : null, proposed: c.move.kind === 'approve' }))
+      .catch(() => {})
+  }, [])
+  useEffect(loadCoachNow, [loadCoachNow, st?.running, st?.plan.items.length])
+  useLive(loadCoachNow)
+  const nextBlock = useMemo(() => {
+    const t = Date.now()
+    return calEvents.filter((e) => !e.allDay && dayKey(e.start) === today && isFocusBlock(e) && Date.parse(e.start) > t).sort((a, b) => a.start.localeCompare(b.start))[0] ?? null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calEvents, today, tick])
+  // THE one thing to do now (core/doNow), with why. The top row shows the same.
+  const decision: DoNow | null = st
+    ? decideNow({
+        now: Date.now(),
+        hour: new Date().getHours(),
+        running: st.running ? { subject: st.running.subject, title: st.running.task?.title } : null,
+        awaiting: coachNow.awaiting,
+        planProposed: coachNow.proposed,
+        blockNow: blockNow ? { id: blockNow.id, title: blockNow.title, start: blockNow.start, end: blockNow.end } : null,
+        nextBlock: nextBlock ? { id: nextBlock.id, title: nextBlock.title, start: nextBlock.start, end: nextBlock.end } : null,
+        dayClosed: mode === 'evening' || storeGet('ls.dayClosed') === new Date().toDateString(),
+        actions: shown,
+        skipped
+      })
+    : null
+  useEffect(() => {
+    publishNow(decision)
+  })
+  useEffect(() => () => publishNow(null), [])
 
   const refresh = () => {
     loadFocus()
@@ -409,17 +441,29 @@ export function DayFlow(props: Props) {
         return onGo('progress')
     }
   }
-  const BUTTON: Record<NowAction['kind'], string> = {
-    'stop-focus': 'Stop & log',
-    'log-wake': "I'm up",
-    plan: 'Plan my day',
-    review: 'Shut down my day',
-    mustdo: 'Start 50 min focus',
-    'focus-goal': 'Start 50 min focus',
-    todo: 'Mark done',
-    habit: 'Do it now',
-    done: 'See my week'
+  /** Runs the one "Do this now" step (the card's button, or the top row's). */
+  async function runDecision(d: DoNow) {
+    if (d.kind === 'running') return runNow({ kind: 'stop-focus', title: d.title, detail: '' })
+    if (d.kind === 'block') return startFocus(blockSubject(d.block.title), null, d.minutes)
+    if (d.kind === 'close-day') return window.dispatchEvent(new CustomEvent('life-close-day'))
+    if (d.kind === 'approve') {
+      await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')
+      return refresh()
+    }
+    if (d.kind === 'answer') {
+      const r = await act(() => life.coach!.chat(`Done: ${d.promise}`))
+      if (r?.reply) await act(async () => r, r.reply.slice(0, 140))
+      return loadCoachNow()
+    }
+    return runNow(d.action)
   }
+  const decisionRef = useRef<DoNow | null>(null)
+  decisionRef.current = decision
+  useEffect(() => {
+    const on = () => decisionRef.current && void runDecision(decisionRef.current)
+    window.addEventListener('life-do-now', on)
+    return () => window.removeEventListener('life-do-now', on)
+  })
 
   const todoList = useMemo(() => (todo ? sortToday(todo, today) : null), [todo, today])
   const bigIds = useMemo(() => new Set((week?.big3 ?? []).map((b) => b.todoistId).filter(Boolean) as string[]), [week])
@@ -739,44 +783,23 @@ export function DayFlow(props: Props) {
           </div>
         </section>
       )}
-      {blockNow && !ended && blockSkipped !== blockNow.id && (() => {
-        const left = Math.round((Date.parse(blockNow.end) - Date.now()) / 60000)
-        const minutes = Math.min(180, left)
-        return (
-          <section className="now-card block" aria-label="Calendar block now">
-            <span className="now-label">Calendar block · now</span>
-            <h2>{blockNow.title}</h2>
-            <p>
-              Until {new Date(blockNow.end).toTimeString().slice(0, 5)} · {left} min left. Start the timer and it counts: +{focusCoins(minutes)} points.
-            </p>
-            <div className="row">
-              <button className="btn primary now-go" onClick={() => void startFocus(blockSubject(blockNow.title), null, minutes)}>
-                ▶ Start focus · {minutes} min
-              </button>
-              <button className="btn ghost" onClick={() => setBlockSkipped(blockNow.id)}>
-                Not now
-              </button>
-            </div>
-          </section>
-        )
-      })()}
-      {now && !ended && (!blockNow || blockSkipped === blockNow.id) && (
-        <section className={`now-card ${running ? 'running' : ''}`} aria-label="What to do now">
-          <span className="now-label">{running ? 'Focusing' : 'Now'}</span>
+      {decision && !ended && (
+        <section className={`now-card ${running ? 'running' : ''} ${decision.kind === 'block' ? 'block' : ''}`} aria-label="Do this now">
+          <span className="now-label">{decision.tag}</span>
           <div className="now-main">
             <div>
-              <h2>{running ? running.task?.title ?? running.subject : now.title}</h2>
-              <p>{running ? <RunningClock run={running} part="left" /> : now.detail}</p>
+              <h2>{decision.title}</h2>
+              <p>{running ? <RunningClock run={running} part="left" /> : <span className="now-why">{decision.why}</span>}</p>
             </div>
             {running && <RunningClock run={running} part="clock" />}
           </div>
           {running && <RunningClock run={running} part="bar" />}
           <div className="row">
-            <button className="btn primary now-go" onClick={() => void runNow(now)}>
-              {BUTTON[now.kind]}
+            <button className="btn primary now-go" onClick={() => void runDecision(decision)}>
+              {decision.button}
             </button>
-            {now.kind === 'mustdo' && (
-              <button className="btn ghost" onClick={() => void tickMustDo(now.index)}>
+            {decision.kind === 'action' && decision.action.kind === 'mustdo' && (
+              <button className="btn ghost" onClick={() => void tickMustDo((decision.action as Extract<NowAction, { kind: 'mustdo' }>).index)}>
                 <Icon name="check" size={13} /> It's done
               </button>
             )}
@@ -785,9 +808,9 @@ export function DayFlow(props: Props) {
                 Cancel
               </button>
             )}
-            {shown.length > 1 && !running && (
-              <button className="btn ghost" onClick={() => setSkipped((s) => [...s, key(now)])}>
-                Skip
+            {!running && decision.kind !== 'answer' && !(decision.kind === 'action' && decision.action.kind === 'done') && (
+              <button className="btn ghost" onClick={() => setSkipped((x) => [...x, decision.key])}>
+                {decision.kind === 'block' ? 'Not now' : 'Skip'}
               </button>
             )}
           </div>
