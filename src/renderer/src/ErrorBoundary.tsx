@@ -18,6 +18,19 @@ interface State {
   backMsg?: string | null
 }
 
+/** "Failed to fetch dynamically imported module …": the page is older than the site. */
+export const staleBuild = (e: unknown) => /dynamically imported module|Importing a module script failed|error loading dynamically imported|Unable to preload CSS/i.test(String((e as Error)?.message ?? e))
+export function reloadForNewVersion(): void {
+  try {
+    const last = Number(sessionStorage.getItem('ls.staleReload') || 0)
+    if (Date.now() - last < 60_000) return
+    sessionStorage.setItem('ls.staleReload', String(Date.now()))
+  } catch {
+    /* private window: reload anyway */
+  }
+  window.location.reload()
+}
+
 /**
  * Catches a crash inside one section so the rest of Life System keeps
  * working, shows what happened, and saves it to the log.
@@ -30,6 +43,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: { componentStack?: string | null }) {
+    // A new version went live while this page was open: its old files are
+    // gone. Load the new version (once a minute at most) instead of showing it (U8).
+    if (staleBuild(error)) return reloadForNewVersion()
     life.app.reportError(`${this.props.area}: ${error.message}`, `${error.stack ?? ''}\n${info.componentStack ?? ''}`).catch(() => {})
     reportError(window.desktop ? 'desktop' : 'web', `${this.props.area}: ${error.message}`, `${error.stack ?? ''}\n${info.componentStack ?? ''}`)
   }

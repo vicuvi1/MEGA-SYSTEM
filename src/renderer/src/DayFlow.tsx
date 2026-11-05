@@ -94,8 +94,6 @@ function useHabits({ summary, discipline, connections, body, onChange, onGo, rul
   ]
 }
 
-/** Ask "Your day" to suggest blocks in your free time (DayTimeline listens). */
-export const planDayInCalendar = () => window.dispatchEvent(new Event('life-plan-day'))
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const clock = (ms: number) => {
@@ -857,7 +855,9 @@ export function DayFlow(props: Props) {
           </div>
         </section>
       )}
-      {decision && !ended && (
+      {/* The top row (TodayHero) is the one "Do this now" on Today (D5); this card
+          only shows while a session runs, with its clock and controls. */}
+      {decision && !ended && running && (
         <section className={`now-card ${running ? 'running' : ''} ${decision.kind === 'block' ? 'block' : ''}`} aria-label="Do this now">
           <span className="now-label">{decision.tag}</span>
           <div className="now-main">

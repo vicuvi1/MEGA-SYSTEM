@@ -501,7 +501,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   if (overdue) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
   const nextBlock = schedule && schedule.day === schedule.today ? schedule.blocks.find((b) => b.status === 'pending' && Date.parse(b.startsAt) > Date.now()) : undefined
   if (nextBlock && Date.parse(nextBlock.startsAt) - Date.now() < 60 * 60_000) {
-    alerts.push({ id: `block-${nextBlock.id}`, tone: 'info', icon: 'calendar', title: `${nextBlock.title} at ${nextBlock.start}`, body: 'Starts within the hour', page: 'schedule' })
+    alerts.push({ id: `block-${nextBlock.id}`, tone: 'info', icon: 'calendar', title: `${nextBlock.title} at ${nextBlock.start}`, body: 'Starts within the hour', page: 'calendar' })
   }
   if (shop?.chests.length) alerts.push({ id: 'chest', tone: 'good', icon: 'gift', title: `${shop.chests.length} chest${shop.chests.length > 1 ? 's' : ''} to open`, page: 'shop' })
 

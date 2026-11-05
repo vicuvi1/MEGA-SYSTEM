@@ -9,6 +9,19 @@ const isHud = search.includes('hud=1')
 const isIsland = search.includes('island=1')
 const root = createRoot(document.getElementById('root')!)
 
+// A new version went live while this page was open (its old files are gone):
+// load the new one instead of failing (U8).
+window.addEventListener('vite:preloadError', (e) => {
+  e.preventDefault()
+  try {
+    if (Date.now() - Number(sessionStorage.getItem('ls.staleReload') || 0) < 60_000) return
+    sessionStorage.setItem('ls.staleReload', String(Date.now()))
+  } catch {
+    /* private window */
+  }
+  window.location.reload()
+})
+
 // The desktop island is its own small window: it loads only itself (never the
 // data layer), so the app window stays the one owner of your data.
 if (isIsland) {

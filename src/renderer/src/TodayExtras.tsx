@@ -162,6 +162,8 @@ export function WeekStrip() {
   const diff = total - (st.prevWeekMin ?? 0)
   const today = localDay(new Date().toISOString())
   const h = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`)
+  // An empty week is not news (D5): it shows once there's focus to compare.
+  if (total === 0 && !(st.prevWeekMin ?? 0)) return null
   return (
     <section className="ws" aria-label="This week">
       <header>

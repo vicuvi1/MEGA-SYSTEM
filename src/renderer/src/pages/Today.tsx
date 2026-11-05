@@ -18,7 +18,7 @@ import { useLive } from '../live'
 import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
-import { DeepWork, QuickCapture, WeekStrip } from '../TodayExtras'
+import { DeepWork, WeekStrip } from '../TodayExtras'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -124,8 +124,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         <section className="panel">
           <header className="panel-head">
             <h2>Quick log</h2>
-            <button className="btn small ghost" onClick={() => onGo('rules')} title="Add your own habits, change coins, limits and cooldowns">
-              <Icon name="edit" size={13} /> Edit habits & points
+            <button className="btn small ghost" onClick={() => onGo('shop')} title="What each thing pays (Rewards → How you earn)">
+              <Icon name="coin" size={13} /> How points work
             </button>
           </header>
           <p className="hint block">Tap what you just did. Limits and cooldowns apply.</p>
@@ -194,7 +194,6 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       <DeepWork />
       <div className="cmd">
         <div className="cmd-main">
-          <QuickCapture />
           {on.filter((x) => MAIN.includes(x.id)).map((x) => (
             <Fragment key={x.id}>{sections[x.id]()}</Fragment>
           ))}

@@ -2039,3 +2039,9 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .mode-sleep { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 6px 0 2px; }
 .mode-sleep label { display: inline-flex; align-items: center; gap: 6px; }
 .mode-sleep input[type='time'] { border: 1px solid var(--line, rgb(255 255 255 / 0.12)); border-radius: 10px; padding: 5px 8px; background: transparent; color: inherit; font: inherit; }
+
+/* Ben's bubble never sits on the last card (U3): room for it below every page. */
+body:has(.bb-bubble) main { padding-bottom: 96px; }
+@media (max-width: 760px) { body:has(.bb-bubble) main { padding-bottom: 72px; } }
+/* Smaller and quieter while you scroll a page. */
+.bb-bubble:not(.open) { opacity: 0.92; }
