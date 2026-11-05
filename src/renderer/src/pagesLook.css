@@ -1,0 +1,77 @@
+/* Calmer Calendar, Notebook and Tasks screens, and Ben's face that keeps out of
+   the way (UI6, UI7, UI16, UI22). Tokens only, so dark and light both work. */
+
+/* ---------- UI6: Calendar ---------- */
+/* The time-zone note: one quiet line, not a yellow box. */
+.cal-tzwarn { display: none; }
+.cal-tznote { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; margin: 0 0 8px; padding: 2px 2px 2px 4px; font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.cal-tznote > span { flex: 1 1 180px; min-width: 0; }
+.cal-tznote button { border: 0; background: transparent; font: inherit; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.cal-tznote-link { color: var(--accent-text); font-weight: 600; }
+.cal-tznote-x { color: var(--muted); font-size: 12px; line-height: 1; }
+.cal-tznote button:hover { background: rgb(var(--ink) / 0.06); color: var(--text); }
+
+/* The view picker: tabs on a wide screen, one small menu on a phone. */
+.cal-view-pick { display: none; position: relative; }
+.cal-view-pick select { appearance: none; -webkit-appearance: none; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 30px 7px 12px; border-radius: 10px; cursor: pointer; }
+.cal-view-pick::after { content: '▾'; position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; pointer-events: none; }
+@media (max-width: 760px) {
+  .cal-tools .cal-view-tabs { display: none; }
+  .cal-view-pick { display: inline-flex; }
+}
+
+/* Every day number sits in the same 32 px box, so today's circle lines up
+   (a general ".today" rule gave today's column a 12 px gap). */
+.cal-dayname, .cal-dayname.today { display: flex; gap: 0; }
+.cal-dayname b { width: 32px; height: 32px; display: grid; place-items: center; line-height: 1; border-radius: 50%; }
+
+/* The current time: white on a deep red, easy to read. */
+.cal-hours .cal-now-t { color: #fff; background: color-mix(in srgb, var(--red) 82%, #000); font-size: 11px; line-height: 17px; padding: 0 5px; opacity: 1; }
+
+/* ---------- UI7: Ben's face ---------- */
+/* On a phone it floats above the bottom bar with a gap, never under it. */
+@media (max-width: 768px) {
+  :root { --bb-min-bottom: calc(62px + 16px + env(safe-area-inset-bottom, 0px)); }
+  .bb-bubble { right: max(14px, env(safe-area-inset-right, 0px)); bottom: var(--bb-min-bottom); }
+  .bb-panel { bottom: calc(var(--bb-min-bottom) + 62px); height: min(520px, calc(100dvh - var(--bb-min-bottom) - 130px)); }
+}
+/* A page with its own floating button keeps it to itself. */
+body:has(.cal-fab, .cx-newbtn) .bb-bubble:not(.open) { display: none; }
+
+/* ---------- UI16: Notebook ---------- */
+.nb-item { gap: 2px; padding: 9px 10px; width: 100%; }
+.nb-item-prev { display: block; max-width: 100%; color: var(--muted); font-size: 12.5px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-item small { font-size: 12px; }
+/* Long previews end in "…" instead of widening the page on a phone. */
+.nb-side, .nb-list, .nb-item { min-width: 0; }
+@media (max-width: 900px) { :root .nb { grid-template-columns: minmax(0, 1fr); } }
+.nb-chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text); background: rgb(var(--ink) / 0.07); border: 1px solid var(--border-strong); }
+.nb-chip.ben { color: var(--accent-text); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* ---------- UI22: Tasks ---------- */
+/* One area uses the whole width. */
+:root .ta-cols.one { grid-template-columns: minmax(0, 1fr); }
+/* "New area" is a small text button under the areas. */
+.ta-newarea { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; padding: 6px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.ta-newarea:hover { color: var(--accent-text); background: rgb(var(--ink) / 0.05); }
+.ta-newarea-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 520px; }
+.ta-newarea-form input { flex: 1 1 220px; min-width: 0; }
+.ta-newarea-form .row { display: flex; gap: 6px; }
+/* Search and the P1/P2/P3 flags in one box. */
+:root .ta-filters { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; overflow: visible; }
+.ta-find { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 3px 4px 3px 10px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface); color: var(--muted); }
+.ta-find > svg { flex: none; width: 14px; height: 14px; }
+.ta-find:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--border-strong)); }
+:root .ta-find .ta-search { flex: 1 1 auto; width: 170px; min-width: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; outline: none; padding: 5px 2px !important; color: var(--text); font: inherit; font-size: 13.5px; }
+.ta-find-flags { display: flex; gap: 2px; flex: none; padding-left: 6px; border-left: 1px solid var(--border); }
+:root .ta-find .ta-pf { border: 1px solid transparent; background: transparent; color: var(--c); font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 8px; }
+:root .ta-find .ta-pf:hover { background: rgb(var(--ink) / 0.06); }
+:root .ta-find .ta-pf.on { background: color-mix(in srgb, var(--c) 18%, transparent); border-color: color-mix(in srgb, var(--c) 60%, transparent); }
+@media (max-width: 760px) {
+  :root .ta-filters { width: 100%; }
+  .ta-find { flex: 1 1 auto; }
+  :root .ta-find .ta-search { width: auto; flex: 1 1 auto; }
+}
+@media (max-width: 440px) {
+  .ta-clean > span { display: none; }
+}

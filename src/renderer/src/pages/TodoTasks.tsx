@@ -374,14 +374,20 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
             ))}
           </div>
           <div className="ta-filters">
-            {[4, 3, 2].map((p) => (
-              <button key={p} className={`ta-pf ${prio === p ? 'on' : ''}`} style={{ ['--c' as string]: P_COLOR[p] }} onClick={() => setPrio(prio === p ? null : p)}>
-                ⚑ P{5 - p}
-              </button>
-            ))}
-            <input ref={searchRef} className="ta-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={TOUCH ? "Search…" : "Search…  /"} />
-            <button className="btn small ta-clean" onClick={() => setCleaning(true)} disabled={!data.tasks.length} title="The coach suggests fixes: typos, short titles, areas, priorities, dates, duplicates. You approve each one.">
-              <Icon name="spark" size={13} /> Clean up
+            {/* UI22: search and the priority flags are one box: both narrow the list. */}
+            <div className="ta-find" role="search">
+              <Icon name="search" size={14} />
+              <input ref={searchRef} className="ta-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={TOUCH ? 'Search…' : 'Search…  /'} aria-label="Search tasks" />
+              <span className="ta-find-flags" role="group" aria-label="Only this priority">
+                {[4, 3, 2].map((p) => (
+                  <button key={p} type="button" aria-pressed={prio === p} className={`ta-pf ${prio === p ? 'on' : ''}`} style={{ ['--c' as string]: P_COLOR[p] }} onClick={() => setPrio(prio === p ? null : p)} title={`Only ${P_LABEL[p]}`}>
+                    P{5 - p}
+                  </button>
+                ))}
+              </span>
+            </div>
+            <button className="btn small ta-clean" onClick={() => setCleaning(true)} disabled={!data.tasks.length} aria-label="Clean up" title="The coach suggests fixes: typos, short titles, areas, priorities, dates, duplicates. You approve each one.">
+              <Icon name="spark" size={13} /> <span>Clean up</span>
             </button>
           </div>
         </div>
@@ -396,7 +402,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
       )}
 
       {view === 'areas' && (
-        <div className="ta-cols">
+        <div className={`ta-cols ${shownAreas.length === 1 ? 'one' : ''}`}>
           {shownAreas.map((a) => {
             const list = sortTasks(filtered.filter((t) => areaOf(t) === a.key), today)
             const c = color(a)
@@ -468,9 +474,9 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
               </section>
             )
           })}
-          <NewArea onCreate={async (name) => { if (await act(() => life.todoist!.addArea!(name), 'Area added')) void load() }} />
         </div>
       )}
+      {view === 'areas' && <NewArea onCreate={async (name) => { if (await act(() => life.todoist!.addArea!(name), 'Area added')) void load() }} />}
 
       {view !== 'areas' && (
         <section className="panel">
@@ -666,13 +672,13 @@ function NewArea({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
   const [v, setV] = useState('')
   if (!open)
     return (
-      <button className="ta-col ta-new" onClick={() => setOpen(true)}>
-        <Icon name="plus" size={18} /> New area
+      <button className="ta-newarea" onClick={() => setOpen(true)}>
+        <Icon name="plus" size={14} /> New area
       </button>
     )
   return (
     <form
-      className="ta-col ta-new-form"
+      className="ta-newarea-form"
       onSubmit={async (e) => {
         e.preventDefault()
         if (!v.trim()) return

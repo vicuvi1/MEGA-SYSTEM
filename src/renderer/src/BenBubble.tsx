@@ -236,7 +236,8 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
       )}
       <button
         className={`bb-bubble mood-${status?.mood ?? 'chill'} ${open ? 'open' : ''}`}
-        style={pos ? { right: pos.right, bottom: pos.bottom, left: 'auto', top: 'auto' } : undefined}
+        /* UI7: a moved face still keeps clear of the phone's bottom bar (--bb-min-bottom). */
+        style={pos ? { right: pos.right, bottom: `max(${pos.bottom}px, var(--bb-min-bottom, 8px))`, left: 'auto', top: 'auto' } : undefined}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}

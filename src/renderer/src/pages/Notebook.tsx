@@ -37,8 +37,11 @@ function inline(text: string, open: (title: string) => void, known: (title: stri
 }
 
 /** Block Markdown: headings, lists, checkboxes, quotes, paragraphs. */
-function Markdown({ body, open, known, onToggle }: { body: string; open: (t: string) => void; known: (t: string) => boolean; onToggle: (line: number) => void }) {
+function Markdown({ body, title, open, known, onToggle }: { body: string; title?: string; open: (t: string) => void; known: (t: string) => boolean; onToggle: (line: number) => void }) {
   const lines = body.split('\n')
+  // UI16: the title is already the page header: don't show it twice.
+  const first = lines.findIndex((l) => l.trim())
+  const skip = title && first >= 0 && /^#\s+/.test(lines[first]) && noteKey(lines[first].replace(/^#\s+/, '')) === noteKey(title) ? first : -1
   const out: ReactNode[] = []
   let list: { n: number; node: ReactNode }[] = []
   const flush = () => {
@@ -46,6 +49,7 @@ function Markdown({ body, open, known, onToggle }: { body: string; open: (t: str
     list = []
   }
   lines.forEach((raw, n) => {
+    if (n === skip) return
     const l = raw.trimEnd()
     const h = /^(#{1,3})\s+(.*)$/.exec(l)
     const task = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/.exec(l)
@@ -78,6 +82,26 @@ function Markdown({ body, open, known, onToggle }: { body: string; open: (t: str
   })
   flush()
   return <div className="nb-md">{out}</div>
+}
+
+/** UI16: the first real line of a note, as plain text, for the list. */
+function preview(n: Note): string {
+  for (const raw of n.body.split('\n')) {
+    const l = raw.trim()
+    if (!l) continue
+    const h = /^#{1,6}\s+(.*)$/.exec(l)
+    if (h && noteKey(h[1]) === noteKey(n.title)) continue
+    const text = l
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/^>\s?/, '')
+      .replace(/^(?:[-*]|\d+\.)(?:\s+|$)(?:\[( |x|X)\](?:\s+|$))?/, '')
+      .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a: string, b?: string) => (b ?? a).trim())
+      .replace(/(\*\*|__|`)/g, '')
+      .replace(/(^|\s)[*_]([^*_]+)[*_]/g, '$1$2')
+      .trim()
+    if (text) return text
+  }
+  return ''
 }
 
 export function Notebook() {
@@ -161,6 +185,9 @@ export function Notebook() {
     const list = searchNotes(notes ?? [], q)
     return list.filter((n) => (filter === 'me' ? n.author === 'me' && !/^journal\//i.test(n.title) : filter === 'ben' ? n.author === 'ben' && !/^journal\//i.test(n.title) : filter === 'journal' ? /^journal\//i.test(n.title) : true))
   }, [notes, q, filter])
+  // UI16: a time only helps when the notes differ; "just now" on every note looks broken.
+  const when = (n: Note) => (Number.isNaN(Date.parse(n.updatedAt)) ? '' : timeAgo(n.updatedAt))
+  const showTimes = new Set((notes ?? []).map(when).filter(Boolean)).size > 1
   const back = cur && notes ? backlinks(notes, cur.title) : []
   const outLinks = draft ? linksOf(draft.body) : []
 
@@ -198,10 +225,10 @@ export function Notebook() {
                 {n.pinned ? '📌 ' : ''}
                 {n.title}
               </b>
-              <small>
-                {n.author === 'ben' ? '🤖 Ben · ' : ''}
-                {timeAgo(n.updatedAt)}
-              </small>
+              {preview(n) && <span className="nb-item-prev">{preview(n)}</span>}
+              {(n.author === 'ben' || (showTimes && when(n))) && (
+                <small>{[n.author === 'ben' ? 'Ben' : '', showTimes ? when(n) : ''].filter(Boolean).join(' · ')}</small>
+              )}
             </button>
           ))}
           {notes && !shown.length && <p className="hint">Nothing matches.</p>}
@@ -217,7 +244,7 @@ export function Notebook() {
               ) : (
                 <h1 className="nb-title">{draft.title}</h1>
               )}
-              <span className={`chip ${cur.author === 'ben' ? 'ok' : 'muted'}`}>{cur.author === 'ben' ? 'Started by Ben' : 'Yours'}</span>
+              <span className={`nb-chip ${cur.author === 'ben' ? 'ben' : ''}`}>{cur.author === 'ben' ? 'Started by Ben' : 'Yours'}</span>
               <div className="nb-actions">
                 <button className={`btn small ${edit ? 'primary' : ''}`} onClick={() => (edit && saveT.current ? (clearTimeout(saveT.current), void save(draft, false)) : null, setEdit(!edit))}>
                   {edit ? '✓ Done' : '✎ Edit'}
@@ -243,7 +270,7 @@ export function Notebook() {
               <textarea className="nb-edit" value={draft.body} onChange={(e) => change({ ...draft, body: e.target.value })} autoFocus spellCheck placeholder="Write in Markdown: # heading, - list, - [ ] task, **bold**, [[Another note]]" />
             ) : (
               <div className="nb-view" onDoubleClick={() => setEdit(true)}>
-                <Markdown body={draft.body} open={(t) => void open(t)} known={known} onToggle={toggleTask} />
+                <Markdown body={draft.body} title={draft.title} open={(t) => void open(t)} known={known} onToggle={toggleTask} />
               </div>
             )}
             <footer className="nb-foot">

@@ -784,6 +784,15 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const tz2 = prefs.tz2 && prefs.tz2 !== deviceTz() ? prefs.tz2 : ''
   const tz2Ahead = tz2 ? tzAhead(tz2, new Date(`${anchor}T12:00:00`)) : 0
   const cols = `${tz2 ? 88 : 52}px repeat(${gridDays.length}, minmax(0, 1fr))`
+  const viewChoices = [
+    ['day', 'Day'],
+    ['3day', '3 days'],
+    ...(prefs.days !== 3 && prefs.days !== 1 && prefs.days !== 7 ? ([['ndays', `${prefs.days} days`]] as const) : []),
+    ['workweek', 'Mon–Fri'],
+    ['week', 'Week'],
+    ['month', 'Month'],
+    ['agenda', 'Agenda']
+  ] as const
 
   return (
     <div className="cal cal2" onPointerDownCapture={closeMenus}>
@@ -819,23 +828,23 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
               <Icon name="calendar" size={13} /> Connect Google Calendar
             </button>
           )}
-          <div className="ta-tabs" role="tablist" aria-label="View">
-            {(
-              [
-                ['day', 'Day'],
-                ['3day', '3 days'],
-                ...(prefs.days !== 3 && prefs.days !== 1 && prefs.days !== 7 ? ([['ndays', `${prefs.days} days`]] as const) : []),
-                ['workweek', 'Mon–Fri'],
-                ['week', 'Week'],
-                ['month', 'Month'],
-                ['agenda', 'Agenda']
-              ] as const
-            ).map(([v, l]) => (
+          <div className="ta-tabs cal-view-tabs" role="tablist" aria-label="View">
+            {viewChoices.map(([v, l]) => (
               <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>
                 {l}
               </button>
             ))}
           </div>
+          {/* UI6: on a phone the views are one small menu, so nothing is cut off. */}
+          <label className="cal-view-pick">
+            <select value={view} onChange={(e) => setView(e.target.value as typeof view)} aria-label="View">
+              {viewChoices.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
           {gridDays.length > 0 && (
             <div className="cal-zoom" aria-label="Zoom">
               <button className="btn small ghost" onClick={() => setHourPx(hourPx / 1.2)} disabled={hourPx <= PX_MIN} title="Zoom out (−, or Ctrl+scroll)">
@@ -934,13 +943,16 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
 
         <section className="card cal-main">
           {serverTz && deviceTz() && serverTz !== deviceTz() && tzOk !== `${deviceTz()}|${serverTz}` && (
-            <p className="cal-tzwarn" role="status">
-              🌍 This device is on <b>{tzShort(deviceTz())}</b> time, but your plan and Ben run on <b>{tzShort(serverTz)}</b> ({tzAhead(serverTz) === 0 ? 'same clock now' : `${tzAhead(serverTz) > 0 ? '+' : '−'}${lenLabel(Math.abs(tzAhead(serverTz)))}`}). Times here are this device's.{' '}
-              <button className="btn small ghost" onClick={() => (setPrefs({ tz2: serverTz }), setTzOk(`${deviceTz()}|${serverTz}`), store.set('ls.calTzOk', `${deviceTz()}|${serverTz}`))}>
+            <p className="cal-tznote" role="status">
+              <span>
+                Times shown in this device's time (Ben uses {tzShort(serverTz)}
+                {tzAhead(serverTz) === 0 ? ', same clock now' : `, ${tzAhead(serverTz) > 0 ? '+' : '−'}${lenLabel(Math.abs(tzAhead(serverTz))).replace(' ', '')}`})
+              </span>
+              <button type="button" className="cal-tznote-link" onClick={() => (setPrefs({ tz2: serverTz }), setTzOk(`${deviceTz()}|${serverTz}`), store.set('ls.calTzOk', `${deviceTz()}|${serverTz}`))}>
                 Show both
               </button>
-              <button className="btn small ghost" onClick={() => (setTzOk(`${deviceTz()}|${serverTz}`), store.set('ls.calTzOk', `${deviceTz()}|${serverTz}`))}>
-                OK
+              <button type="button" className="cal-tznote-x" aria-label="Hide this note" title="Hide this note" onClick={() => (setTzOk(`${deviceTz()}|${serverTz}`), store.set('ls.calTzOk', `${deviceTz()}|${serverTz}`))}>
+                ✕
               </button>
             </p>
           )}
