@@ -5251,7 +5251,8 @@ var Mirror = class Mirror {
 				const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)];
 				try {
 					const before = versionsBefore(touched);
-					const out = await this.turso.writeAtomic([
+					const batch = [
+						...writeOnce(version),
 						...before,
 						...checks,
 						...changes,
@@ -5261,9 +5262,19 @@ var Mirror = class Mirror {
 							sql: "DELETE FROM sys_cas",
 							args: []
 						}] : []
-					]);
+					];
+					let out;
+					try {
+						out = await this.turso.writeAtomic(batch);
+					} catch (e) {
+						if (!isRetryable(e) || e instanceof UnauthorizedError) throw e;
+						out = await this.turso.writeAtomic(batch).catch((e2) => {
+							if (isAlreadySaved(e2)) return [];
+							throw e2;
+						});
+					}
 					if (this.tv) {
-						const remote = new Map((out[1] ?? []).map((r) => [String(r[0]), String(r[1])]));
+						const remote = new Map((out[4] ?? []).map((r) => [String(r[0]), String(r[1])]));
 						for (const t of touched) if ((remote.get(t) ?? "") === (this.tv[t] ?? "")) this.tv[t] = version;
 						this.saveTv();
 					}
@@ -5271,6 +5282,7 @@ var Mirror = class Mirror {
 				} catch (e) {
 					if (isOffline(e)) {
 						this.queueOffline([
+							...writeOnce(version),
 							...checks,
 							...changes,
 							...trackStatements(touched, version),
@@ -5287,7 +5299,7 @@ var Mirror = class Mirror {
 					this.lastError = e.message;
 					await this.rebuild().catch(() => {});
 					this.emit();
-					if (isCasConflict(e) && attempt < 3) continue;
+					if ((isCasConflict(e) || isUniqueClash(e)) && attempt < 3) continue;
 					throw new MirrorError(navigator.onLine === false ? "You are offline, so this was not saved. Try again when you are back online." : `Not saved: ${e.message}`);
 				}
 				this.persist();
@@ -5350,6 +5362,10 @@ var Mirror = class Mirror {
 			await this.turso.writeAtomic(batch);
 			sent++;
 		} catch (e) {
+			if (isAlreadySaved(e)) {
+				sent++;
+				continue;
+			}
 			if (isOffline(e) || isRetryable(e)) break;
 			this.saveFailed([...this.failedSync, {
 				at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -5756,6 +5772,26 @@ function rowCasStatements(rows, haveTable) {
 		args: [r.id, r.value]
 	}))];
 }
+/**
+* Each write carries its own id (Y5): sent twice (a timeout, then a retry),
+* the second copy fails on that id instead of saving everything again.
+*/
+var writeOnce = (id) => [
+	{
+		sql: "CREATE TABLE IF NOT EXISTS sys_writes (id TEXT PRIMARY KEY, at INTEGER NOT NULL)",
+		args: []
+	},
+	{
+		sql: "INSERT INTO sys_writes (id, at) VALUES (?, ?)",
+		args: [id, Date.now()]
+	},
+	{
+		sql: "DELETE FROM sys_writes WHERE at < ?",
+		args: [Date.now() - 6048e5]
+	}
+];
+var isAlreadySaved = (e) => /UNIQUE constraint failed: sys_writes\.id/i.test(String(e?.message ?? e));
+var isUniqueClash = (e) => /UNIQUE constraint failed/i.test(String(e?.message ?? e)) && !isAlreadySaved(e);
 /** A failure worth retrying: locked (PIN), a 5xx, a timeout, too many requests (Y1). */
 var isRetryable = (e) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String(e?.message ?? "")) || e?.name === "TimeoutError" || e?.name === "AbortError";
 /** A failure because there's no connection (not a refusal by the database). */

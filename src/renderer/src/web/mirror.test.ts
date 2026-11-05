@@ -82,18 +82,37 @@ describe('Mirror', () => {
     expect(count(remote, 'SELECT SUM(coins) FROM ledger')).toBe(1000 - reward.price)
   })
 
-  it('when another device wrote meanwhile, the change is refused cleanly and the copy reloads', async () => {
+  it('when another device wrote meanwhile (same new id), the copy reloads and the change runs again on it (Y5)', async () => {
     const remote = fakeTurso()
     const mirror = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
     await mirror.ready
     // The phone logs something the PC's copy doesn't know about yet.
     remote.run(`INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES ('2026-10-31T07:00:00Z', '2026-10-31', 'body', 'earn', 7, 0, NULL, 'phone')`)
-    await expect(mirror.write((db) => new Wallet(db as any).award('sleep.up_on_time'))).rejects.toBeInstanceOf(MirrorError)
-    // Reloaded: it now sees the phone's row, and the retry works.
+    await mirror.write((db) => new Wallet(db as any).award('sleep.up_on_time'))
+    // Both rows are there: the phone's and ours, once.
     const seen = await mirror.read((db) => db.prepare("SELECT COUNT(*) AS n FROM ledger WHERE note = 'phone'").get() as { n: number })
     expect(seen.n).toBe(1)
-    await mirror.write((db) => new Wallet(db as any).award('sleep.up_on_time'))
     expect(count(remote, "SELECT COUNT(*) FROM ledger WHERE rule_id = 'sleep.up_on_time'")).toBe(1)
+    expect(count(remote, "SELECT COUNT(*) FROM ledger WHERE note = 'phone'")).toBe(1)
+  })
+
+  it('a write sent twice (timeout, then retry) is saved once (Y5)', async () => {
+    const remote = fakeTurso()
+    const http = new TursoHttp('https://fake.turso.io', 't')
+    const mirror = new Mirror(SQL, http)
+    await mirror.ready
+    const real = http.writeAtomic.bind(http)
+    let first = true
+    http.writeAtomic = async (stmts) => {
+      const r = await real(stmts)
+      if (first) {
+        first = false
+        throw Object.assign(new Error('The operation timed out'), { name: 'TimeoutError' })
+      }
+      return r
+    }
+    await mirror.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('y5', 'once')").run())
+    expect(count(remote, "SELECT COUNT(*) FROM settings WHERE key = 'y5'")).toBe(1)
   })
 
   it('adds tables and columns Turso is missing, without touching the rest', async () => {

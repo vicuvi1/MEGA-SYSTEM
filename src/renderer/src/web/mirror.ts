@@ -179,11 +179,24 @@ export class Mirror {
       const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)]
       try {
         const before = versionsBefore(touched)
-        const out = await this.turso.writeAtomic([...before, ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
+        const batch = [...writeOnce(version), ...before, ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])]
+        let out: Param[][][]
+        try {
+          out = await this.turso.writeAtomic(batch)
+        } catch (e) {
+          // Timed out: it may have been saved anyway. Send the very same batch once
+          // more; "already saved" (its write id exists) counts as saved (Y5).
+          if (!isRetryable(e) || e instanceof UnauthorizedError) throw e
+          out = await this.turso.writeAtomic(batch).catch((e2) => {
+            if (isAlreadySaved(e2)) return []
+            throw e2
+          })
+        }
+        const shift = 3 // writeOnce's three statements come first
         // A table we wrote is marked current only if nobody else changed it since
         // we last read it (Y2); otherwise the next refresh re-reads it and gets both.
         if (this.tv) {
-          const remote = new Map((out[1] ?? []).map((r) => [String(r[0]), String(r[1])]))
+          const remote = new Map((out[shift + 1] ?? []).map((r) => [String(r[0]), String(r[1])]))
           for (const t of touched) if ((remote.get(t) ?? '') === (this.tv[t] ?? '')) this.tv[t] = version
           this.saveTv()
         }
@@ -194,7 +207,7 @@ export class Mirror {
           // With its checks (Y3): sent later, it must still find the rows as they were read
           // here; if another device changed them meanwhile, it goes to "couldn't sync" (Y1)
           // instead of overwriting their newer edit.
-          this.queueOffline([...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
+          this.queueOffline([...writeOnce(version), ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
           this.persist()
           this.emit()
           return result
@@ -203,7 +216,8 @@ export class Mirror {
         // Put the copy back the way Turso has it.
         await this.rebuild().catch(() => {})
         this.emit()
-        if (isCasConflict(e) && attempt < 3) continue
+        // Changed elsewhere, or the same new id taken on another device: fresh copy, run again (Y5).
+        if ((isCasConflict(e) || isUniqueClash(e)) && attempt < 3) continue
         throw new MirrorError(
           navigator.onLine === false
             ? 'You are offline, so this was not saved. Try again when you are back online.'
@@ -281,6 +295,11 @@ export class Mirror {
       } catch (e) {
         // No connection, locked (PIN), a server hiccup or a timeout: keep it and
         // try again later, never drop it (Y1).
+        // Sent before but the answer got lost: it's in Turso already (Y5).
+        if (isAlreadySaved(e)) {
+          sent++
+          continue
+        }
         if (isOffline(e) || isRetryable(e)) break
         // Refused by the database for good (e.g. a row deleted elsewhere): kept
         // in "couldn't sync" (Settings shows it) instead of vanishing.
@@ -697,6 +716,19 @@ export function rowCasStatements(rows: { table: string; id: unknown; cols: strin
     ...rows.map((r) => ({ sql: `INSERT INTO sys_cas (ok) VALUES ((SELECT ${r.cols.map((c) => `quote("${c}")`).join(" || '|' || ")} FROM "${r.table}" WHERE id = ?) IS ?)`, args: [r.id, r.value] as Param[] }))
   ]
 }
+
+/**
+ * Each write carries its own id (Y5): sent twice (a timeout, then a retry),
+ * the second copy fails on that id instead of saving everything again.
+ */
+const writeOnce = (id: string): Change[] => [
+  { sql: 'CREATE TABLE IF NOT EXISTS sys_writes (id TEXT PRIMARY KEY, at INTEGER NOT NULL)', args: [] },
+  { sql: 'INSERT INTO sys_writes (id, at) VALUES (?, ?)', args: [id, Date.now()] },
+  // Ids older than a week can't come back; keep the table tiny.
+  { sql: 'DELETE FROM sys_writes WHERE at < ?', args: [Date.now() - 7 * 86400_000] }
+]
+const isAlreadySaved = (e: unknown) => /UNIQUE constraint failed: sys_writes\.id/i.test(String((e as Error)?.message ?? e))
+const isUniqueClash = (e: unknown) => /UNIQUE constraint failed/i.test(String((e as Error)?.message ?? e)) && !isAlreadySaved(e)
 
 /** A failure worth retrying: locked (PIN), a 5xx, a timeout, too many requests (Y1). */
 const isRetryable = (e: unknown) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String((e as Error)?.message ?? '')) || (e as Error)?.name === 'TimeoutError' || (e as Error)?.name === 'AbortError'
