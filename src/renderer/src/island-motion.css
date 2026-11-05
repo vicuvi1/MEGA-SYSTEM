@@ -1,0 +1,22 @@
+/* Motion for the desktop island (IM1–IM13) and its live widgets (IC5, IC13–IC17).
+   Rules: only transform and opacity animate; nothing paints in a loop; every
+   moving thing follows Settings → Animations (.motion-full / -calm / -off)
+   and stops while the island is hidden (.doc-hidden) or tucked away. */
+
+/* ---- IM5: grow with the GPU ----
+   The shape's box takes its new size once; what you see is revealed with a
+   clip-path that springs (DesktopIsland). The shadow, glow and breathing
+   glow live on .di-shade, a layer the size of the box that is scaled with
+   transform (a blurred shadow doesn't mind being stretched a little). */
+.di-shade { position: absolute; top: 0; left: 0; pointer-events: none; transform-origin: top center; will-change: transform; }
+.di.at-left .di-shade, .di.at-top-left .di-shade { transform-origin: top left; }
+.di.at-right .di-shade, .di.at-top-right .di-shade { transform-origin: top right; }
+.di-shade > .di-breath, .di-shade > .di-glow { border-radius: inherit; }
+.di-shape { will-change: clip-path; }
+/* What sits on the visible shape's bottom edge or beside it follows the clip, not the box. */
+.di-follow { position: absolute; top: 0; left: 0; right: 0; height: 0; pointer-events: none; }
+.di-follow > * { pointer-events: auto; }
+.di-follow > .di-sweep { pointer-events: none; }
+.di-beside { position: absolute; top: 0; width: 0; height: 0; left: 50%; }
+.di-beside.at-left { left: 0; }
+.di-beside.at-right { left: 100%; }

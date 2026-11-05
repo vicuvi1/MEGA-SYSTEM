@@ -21,6 +21,7 @@ import { installTaps, isPressed, onPress, tp } from './islandTap'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
 import './island.css'
+import './island-motion.css'
 
 const desk = () => window.desktop
 /** A clickable area in CSS px of this page (the desktop applies the page zoom) (IS2). */
@@ -586,6 +587,25 @@ export function DesktopIsland() {
   const [size, setSize] = useState({ w: 120, h: 30 })
   const sizeRef = useRef(size)
   sizeRef.current = size
+  // IM5: the shape grows with the GPU. Its box takes the new size once (the
+  // larger of where it is and where it goes, then the end size); what you see
+  // is a clip-path whose width, height and corners spring. Nothing is laid
+  // out again while it moves.
+  const mw = useMotionValue(size.w)
+  const mh = useMotionValue(size.h)
+  const mr = useMotionValue<number>(ISLAND_SHAPE.compact.radius)
+  const [box, setBox] = useState(size)
+  const boxRef = useRef(box)
+  boxRef.current = box
+  /** The part of the shape you see (screen px), from its box's rect. */
+  const visibleRect = useCallback((b: DOMRect, anchor: 'left' | 'right' | 'center') => {
+    const kx = b.width / Math.max(1, boxRef.current.w)
+    const ky = b.height / Math.max(1, boxRef.current.h)
+    const w = Math.min(b.width, mw.get() * kx)
+    const h = Math.min(b.height, mh.get() * ky)
+    const left = anchor === 'left' ? b.left : anchor === 'right' ? b.right - w : b.left + (b.width - w) / 2
+    return { left, top: b.top, width: w, height: h }
+  }, [mw, mh])
   // IC12: each view's own element (a view that is still fading out is never the one measured).
   const viewEls = useRef<Partial<Record<string, HTMLElement | null>>>({})
   const viewRef = useMemo(() => {
@@ -637,9 +657,10 @@ export function DesktopIsland() {
     if (!root || !sh) return
     const sc = scaleRef.current || 1
     const pl = placeRef.current
-    const now = sh.getBoundingClientRect()
     const box = root.getBoundingClientRect()
     const anchor = pl === 'left' || pl === 'top-left' ? 'left' : pl === 'right' || pl === 'top-right' ? 'right' : 'center'
+    // IM5: what you see is the clip inside the shape's box, not the box itself.
+    const now = visibleRect(sh.getBoundingClientRect(), anchor)
     const end = finalShapeRect({
       anchor, ax: anchor === 'left' ? box.left : anchor === 'right' ? box.right : box.left + box.width / 2, top: now.top,
       w: sizeRef.current.w * sc, h: (sizeRef.current.h + (stretchRef.current ? 8 : 0)) * sc
@@ -1566,6 +1587,59 @@ export function DesktopIsland() {
     pump(450)
     return () => c.stop()
   }, [liftOn]) // eslint-disable-line react-hooks/exhaustive-deps
+  // IM5: spring the visible shape to its new size; the box is set once at the start and once at the end.
+  const anchor: 'left' | 'right' | 'center' = place === 'left' || place === 'top-left' ? 'left' : place === 'right' || place === 'top-right' ? 'right' : 'center'
+  const anchorRef = useRef(anchor)
+  anchorRef.current = anchor
+  const clip = useMotionValue('none')
+  const shadeX = useMotionValue(1)
+  const shadeY = useMotionValue(1)
+  const besideX = useMotionValue(size.w)
+  const drawClip = useCallback(() => {
+    const b = boxRef.current
+    const w = mw.get()
+    const h = mh.get()
+    const dx = Math.max(0, b.w - w)
+    const dy = Math.max(0, b.h - h)
+    const an = anchorRef.current
+    const l = an === 'left' ? 0 : an === 'right' ? dx : dx / 2
+    clip.set(dx < 0.25 && dy < 0.25 ? `inset(0px round ${mr.get().toFixed(2)}px)` : `inset(0px ${(dx - l).toFixed(2)}px ${dy.toFixed(2)}px ${l.toFixed(2)}px round ${mr.get().toFixed(2)}px)`)
+    shadeX.set((w / Math.max(1, b.w)) * lift.get())
+    shadeY.set(h / Math.max(1, b.h))
+    besideX.set(an === 'left' ? w : an === 'right' ? -w : w / 2)
+  }, [mw, mh, mr, clip, shadeX, shadeY, besideX, lift])
+  useEffect(() => {
+    const u = [mw.on('change', drawClip), mh.on('change', drawClip), mr.on('change', drawClip), lift.on('change', drawClip)]
+    return () => u.forEach((x) => x())
+  }, [mw, mh, mr, lift, drawClip])
+  useLayoutEffect(drawClip, [box, anchor, drawClip])
+  const shapeH = size.h + (stretch ? 8 : 0)
+  const firstSize = useRef(true)
+  useLayoutEffect(() => {
+    const tw = size.w
+    const th = shapeH
+    const jump = firstSize.current || f.mode === 'off' || hidden
+    firstSize.current = false
+    if (jump || (Math.abs(mw.get() - tw) < 0.5 && Math.abs(mh.get() - th) < 0.5 && Math.abs(mr.get() - radius) < 0.5)) {
+      mw.jump(tw)
+      mh.jump(th)
+      mr.jump(radius)
+      setBox((o) => (o.w === tw && o.h === th ? o : { w: tw, h: th }))
+      drawClip()
+      if (movingRef.current) onDone()
+      return
+    }
+    setBox({ w: Math.max(tw, Math.ceil(mw.get())), h: Math.max(th, Math.ceil(mh.get())) })
+    onStart()
+    let left = 3
+    const end = () => {
+      if (--left) return
+      setBox({ w: tw, h: th })
+      onDone()
+    }
+    const cs = [animate(mw, tw, { ...transition, onComplete: end }), animate(mh, th, { ...transition, onComplete: end }), animate(mr, radius, { ...transition, onComplete: end })]
+    return () => cs.forEach((c) => c.stop())
+  }, [size.w, shapeH, radius]) // eslint-disable-line react-hooks/exhaustive-deps
   // Leaving the pill: the lift is gone at once, so what flies to the peek or panel lands exactly.
   useLayoutEffect(() => {
     if (ui.view === 'compact' || lift.get() === 1) return
@@ -1632,18 +1706,15 @@ export function DesktopIsland() {
             }}
             className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
           >
-            <i className="di-breath" style={{ borderRadius: radius }} aria-hidden />
-            <motion.i className="di-glow" style={{ scale: lift, originX: origin, originY: 0 }} animate={{ borderRadius: radius }} transition={transition} aria-hidden />
+            <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: radius, scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
+              <i className="di-breath" />
+              <i className="di-glow" />
+            </motion.div>
             <motion.div
               ref={shape}
               data-hot
               className="di-shape"
-              initial={false}
-              style={{ scale: lift, originX: origin, originY: 0 }}
-              animate={{ width: size.w, height: size.h + (stretch ? 8 : 0), borderRadius: radius }}
-              transition={transition}
-              onAnimationStart={onStart}
-              onAnimationComplete={onDone}
+              style={{ width: box.w, height: box.h, borderRadius: radius, clipPath: clip, scale: lift, originX: origin, originY: 0 }}
             >
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
@@ -1659,14 +1730,17 @@ export function DesktopIsland() {
                   {views[ui.view]}
                 </motion.div>
               </AnimatePresence>
-              {sweep}
+              <motion.div className="di-follow" style={{ y: mh }}>{sweep}</motion.div>
             </motion.div>
-            <AnimatePresence>{bubbleEl}</AnimatePresence>
+            <motion.div className={`di-beside at-${anchor}`} style={{ x: besideX }}>
+              <AnimatePresence>{bubbleEl}</AnimatePresence>
+            </motion.div>
             <div className="di-flights" aria-hidden={!flights.length}>
               {flights.map((fl) => (
                 <FlyIn key={fl.id} fl={fl} f={f} />
               ))}
             </div>
+            <motion.div className="di-follow" style={{ y: mh }}>
             <AnimatePresence>
               {toast && (
                 <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)} onAnimationComplete={() => sendHot(true)}>
@@ -1674,6 +1748,7 @@ export function DesktopIsland() {
                 </motion.div>
               )}
             </AnimatePresence>
+            </motion.div>
           </div>
         </LayoutGroup>
         {debugOn && <IslandDebug peek={peekBox()} />}

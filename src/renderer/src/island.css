@@ -28,21 +28,25 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di.winddown { --glow: rgb(255 170 70 / 0.45); --bg: rgb(20 11 4 / var(--di-alpha, 1)); }
 
 /* ---- the shape ---- */
+/* IM5: the shape's box is laid out once per change; what you see grows with
+   clip-path (no width/height animation). Its shadow is a separate layer
+   (.di-shade, island-motion.css) scaled with transform, since clip-path cuts shadows. */
 .di-shape {
   position: relative; overflow: hidden; background: var(--bg);
-  box-shadow: 0 10px 32px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 20px -6px var(--glow);
-  transition: box-shadow 0.4s;
 }
-.di.view-expanded .di-shape { box-shadow: 0 24px 70px rgb(0 0 0 / 0.6), 0 0 0 1px var(--line), 0 0 40px -12px var(--glow); }
+.di-shade {
+  box-shadow: 0 10px 32px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 20px -6px var(--glow);
+}
+.di.view-expanded .di-shade { box-shadow: 0 24px 70px rgb(0 0 0 / 0.6), 0 0 0 1px var(--line), 0 0 40px -12px var(--glow); }
 /* IC10: a running timer's pill breathes: a glow drawn once, only its opacity changes (no shadow repainted every frame). */
 .di-breath { position: absolute; inset: 0; pointer-events: none; opacity: 0; will-change: opacity; box-shadow: 0 0 30px -2px var(--glow); }
 .di.has-timer.view-compact .di-breath { animation: di-breath 3.2s ease-in-out infinite; }
 @keyframes di-breath { 50% { opacity: 1; } }
-.di.dropping .di-shape { box-shadow: 0 0 0 2px var(--lime), 0 0 28px -4px var(--lime); }
+.di.dropping .di-shade { box-shadow: 0 0 0 2px var(--lime), 0 0 28px -4px var(--lime); }
 .di.look-glass { --bg: rgb(24 27 36 / calc(var(--di-alpha, 1) * 0.78)); --line: rgb(var(--ink) / 0.16); }
 /* Glass blur only while still (redrawing it on every animation frame is what stutters). */
 .di.look-glass:not(.moving) .di-shape { backdrop-filter: blur(12px); }
-.di.look-mood .di-shape { box-shadow: 0 18px 60px rgb(0 0 0 / 0.55), 0 0 0 1.5px var(--glow), 0 0 46px -6px var(--glow); }
+.di.look-mood .di-shade { box-shadow: 0 18px 60px rgb(0 0 0 / 0.55), 0 0 0 1.5px var(--glow), 0 0 46px -6px var(--glow); }
 .di.look-mood .di-face { box-shadow: 0 0 0 2px var(--glow), 0 0 22px -2px var(--glow); }
 .di.tod-morning .di-v-expanded { background-image: radial-gradient(circle at 15% 0%, rgb(255 190 90 / 0.13), transparent 55%); }
 .di.tod-evening .di-v-expanded { background-image: radial-gradient(circle at 85% 0%, rgb(170 110 255 / 0.14), transparent 55%); }
@@ -346,14 +350,15 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di.at-top-left .di-toast { left: 0; translate: none; }
 /* Tucked away when idle: a tiny dot, or faded; the mouse on it brings it back. */
 .di-tuck-dot { width: 16px; height: 16px; cursor: pointer; touch-action: none; }
-.di.tuck-dot .di-shape { box-shadow: 0 2px 8px rgb(0 0 0 / 0.35), 0 0 0 1px var(--line); }
+.di.tuck-dot .di-shade { box-shadow: 0 2px 8px rgb(0 0 0 / 0.35), 0 0 0 1px var(--line); }
 .di.tuck-fade .di-shape { opacity: 0.3; }
-.di .di-shape { transition: box-shadow 0.4s, opacity 0.4s ease; }
+.di .di-shape, .di .di-shade { transition: box-shadow 0.4s, opacity 0.4s ease; }
+.di.tuck-fade .di-shade { opacity: 0.3; }
 /* Match the app: its surface, text and accent; light mode too. */
 .di.look-app { --bg: color-mix(in srgb, var(--app-surface, #0f131b) calc(var(--di-alpha, 1) * 100%), transparent); --fg: var(--app-text, #f5f5f6); --lime: var(--app-accent, #d4ff3f); --acc-text: var(--app-accent-text, var(--lime)); --glow: color-mix(in srgb, var(--lime) 30%, transparent); }
 .di.look-app.theme-light { --ink: 20 25 34; --sub: rgb(var(--ink) / 0.6); --line: rgb(var(--ink) / 0.12); }
-.di.look-app.theme-light .di-shape { box-shadow: 0 10px 30px rgb(20 25 34 / 0.18), 0 0 0 1px var(--line); }
-.di.look-app.theme-light.view-expanded .di-shape { box-shadow: 0 24px 60px rgb(20 25 34 / 0.22), 0 0 0 1px var(--line); }
+.di.look-app.theme-light .di-shade { box-shadow: 0 10px 30px rgb(20 25 34 / 0.18), 0 0 0 1px var(--line); }
+.di.look-app.theme-light.view-expanded .di-shade { box-shadow: 0 24px 60px rgb(20 25 34 / 0.22), 0 0 0 1px var(--line); }
 .di.look-app.theme-light .di-pill-text { color: rgb(var(--ink) / 0.9); }
 .di.look-app.theme-light .di-cmd input:focus { box-shadow: 0 0 0 1.5px var(--acc-text); }
 
@@ -364,7 +369,7 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di.motion-calm :is(.tick, .di-moon, .di-moon-sm, .di-sun, .sc-fig, .sc-arms, .sc-over b, .sc-burst, .di-moon-pill span, .di-alert-top span, .di-peek-face.ben-in, .di-alert.kind-drift) { animation: none !important; }
 
 /* IA5: the pill lifts (scale comes from framer) and its shadow deepens while the mouse is on it. */
-.di.is-hover.view-compact .di-shape { box-shadow: 0 16px 40px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.12), 0 0 28px -4px var(--glow); }
+.di.is-hover.view-compact .di-shade { box-shadow: 0 16px 40px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.12), 0 0 28px -4px var(--glow); }
 .di.is-hover.has-timer.view-compact .di-shape { animation: none; }
 
 /* IA2: what flies between the pill, the peek and the panel. */
