@@ -48,8 +48,23 @@ function exitNow(code: number): void {
   } catch {
     /* helpers are best effort */
   }
-  app.exit(code)
-  setTimeout(() => process.exit(code), 2000).unref()
+  // app.exit could block on Windows (the release check never closed): close the
+  // windows ourselves, then end the process, with a harder stop as a backup.
+  for (const w of BrowserWindow.getAllWindows()) {
+    try {
+      w.destroy()
+    } catch {
+      /* already gone */
+    }
+  }
+  setTimeout(() => {
+    try {
+      process.kill(process.pid, 'SIGKILL')
+    } catch {
+      /* nothing more to do */
+    }
+  }, 1500).unref()
+  process.exit(code)
 }
 if (smoke) {
   smokeLog('start')
