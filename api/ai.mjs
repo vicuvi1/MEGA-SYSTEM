@@ -280,7 +280,7 @@ async function usageReport(orKey, fetchImpl = fetch) {
         q(sum, [since(7)]),
         q(sum, [since(30)]),
         q('SELECT model, COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0) + COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ? GROUP BY model ORDER BY 3 DESC, 2 DESC', [since(30)]),
-        q('SELECT at, model, kind, prompt_tokens, completion_tokens, cost FROM ai_usage ORDER BY id DESC LIMIT 25'),
+        q('SELECT at, model, kind, prompt_tokens, completion_tokens, cost FROM ai_usage ORDER BY id DESC LIMIT 60'),
         { type: 'close' }
       ]
     }, fetchImpl).catch(() => ({ json: null }))

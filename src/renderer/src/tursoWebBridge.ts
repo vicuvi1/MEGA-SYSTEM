@@ -37,7 +37,7 @@ import { coachStatus } from './web/coachStatus'
 import { backupTables, redactRows, restoreStatements } from '@core/backupPlan'
 import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
 import { healthChecks } from '@core/health'
-import { beat, logError, logErrors, readHealth, type ErrorReport } from './web/systemHealth'
+import { beat, logError, logErrors, readBenLog, readHealth, type ErrorReport } from './web/systemHealth'
 import { addTrigger, loadTriggers, urgeEvents } from './web/disciplinePatterns'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport } from '@core/sportCards'
@@ -745,7 +745,8 @@ export function createTursoWebBridge(): Bridge {
       },
       beat: (key: string, ok: boolean, msg?: string) => beat(turso, key, ok, msg),
       logError: (source: string, msg: string) => logError(turso, source, msg),
-      logErrors: (list: ErrorReport[]) => logErrors(turso, list)
+      logErrors: (list: ErrorReport[]) => logErrors(turso, list),
+      benLog: () => readBenLog(turso)
     },
     // Your Todoist: today's tasks, complete (+coins), quick add, and coins for
     // what you completed in Todoist itself (checked at most every 5 minutes).

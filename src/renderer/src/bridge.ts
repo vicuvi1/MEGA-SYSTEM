@@ -92,6 +92,8 @@ export type Bridge = LifeApi & {
     logError(source: string, msg: string): Promise<void>
     /** Several errors (with stack, build and screen) in one write. */
     logErrors?(list: import('./web/systemHealth').ErrorReport[]): Promise<void>
+    /** Ben's log: messages sent, held back (and why) or failed. */
+    benLog?(): Promise<(import('./web/systemHealth').BenLogEntry & { at: string })[]>
   }
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */

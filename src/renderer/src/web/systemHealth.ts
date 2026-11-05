@@ -3,6 +3,7 @@
 // so checking health never slows sync down. Used by the server (Ben's tick)
 // and by the apps (website, desktop, island).
 import type { Beats, ErrorEntry } from '@core/health'
+import type { BenLogEntry } from '@core/benLog'
 import type { TursoHttp } from './tursoHttp'
 
 const ENSURE = [
@@ -83,4 +84,34 @@ export async function readHealth(t: TursoHttp): Promise<{ beats: Beats; errors: 
           .reverse()
   const latestSnapshot = s instanceof Error ? null : ((s.rows[0]?.[0] as string | null) ?? null)
   return { beats, errors, notes, latestSnapshot }
+}
+
+export type { BenLogEntry }
+
+const BEN_TABLE = { sql: 'CREATE TABLE IF NOT EXISTS sys_ben_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, kind TEXT, reason TEXT, text TEXT)', args: [] }
+
+/** Write Ben's decisions (one write). A held-back message of the same kind is noted once a day. Last 400 kept. Never throws. */
+export async function logBen(t: TursoHttp, list: BenLogEntry[], now = new Date()): Promise<void> {
+  if (!list.length) return
+  const at = (e: BenLogEntry) => e.at || now.toISOString()
+  await t
+    .writeAtomic([
+      BEN_TABLE,
+      ...list.slice(0, 40).map((e) => {
+        const day = now.toLocaleDateString('sv-SE')
+        const args = [at(e), day, e.status, String(e.kind || 'message').slice(0, 40), e.reason ? String(e.reason).slice(0, 200) : null, e.text ? String(e.text).replace(/<[^>]+>/g, '').slice(0, 500) : null]
+        return e.status === 'skipped'
+          ? { sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM sys_ben_log WHERE day = ?2 AND status = 'skipped' AND kind = ?4 AND reason IS ?5)", args }
+          : { sql: 'INSERT INTO sys_ben_log (at, day, status, kind, reason, text) VALUES (?, ?, ?, ?, ?, ?)', args }
+      }),
+      { sql: 'DELETE FROM sys_ben_log WHERE id <= (SELECT MAX(id) FROM sys_ben_log) - 400', args: [] }
+    ] as any)
+    .catch(() => {})
+}
+
+/** Ben's log, newest first. */
+export async function readBenLog(t: TursoHttp, limit = 150): Promise<(BenLogEntry & { at: string })[]> {
+  const [r] = await t.readMany([{ sql: 'SELECT at, status, kind, reason, text FROM sys_ben_log ORDER BY id DESC LIMIT ?', args: [limit] }] as any)
+  if (r instanceof Error) return []
+  return (r.rows as (string | null)[][]).map(([at, status, kind, reason, text]) => ({ at: String(at), status: status as BenLogEntry['status'], kind: String(kind ?? ''), ...(reason ? { reason: String(reason) } : {}), ...(text ? { text: String(text) } : {}) }))
 }

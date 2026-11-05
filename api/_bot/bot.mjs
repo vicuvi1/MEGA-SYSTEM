@@ -18126,6 +18126,40 @@ async function readHealth(t) {
 		latestSnapshot: s instanceof Error ? null : s.rows[0]?.[0] ?? null
 	};
 }
+var BEN_TABLE = {
+	sql: "CREATE TABLE IF NOT EXISTS sys_ben_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, kind TEXT, reason TEXT, text TEXT)",
+	args: []
+};
+/** Write Ben's decisions (one write). A held-back message of the same kind is noted once a day. Last 400 kept. Never throws. */
+async function logBen(t, list, now = /* @__PURE__ */ new Date()) {
+	if (!list.length) return;
+	const at = (e) => e.at || now.toISOString();
+	await t.writeAtomic([
+		BEN_TABLE,
+		...list.slice(0, 40).map((e) => {
+			const day = now.toLocaleDateString("sv-SE");
+			const args = [
+				at(e),
+				day,
+				e.status,
+				String(e.kind || "message").slice(0, 40),
+				e.reason ? String(e.reason).slice(0, 200) : null,
+				e.text ? String(e.text).replace(/<[^>]+>/g, "").slice(0, 500) : null
+			];
+			return e.status === "skipped" ? {
+				sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM sys_ben_log WHERE day = ?2 AND status = 'skipped' AND kind = ?4 AND reason IS ?5)",
+				args
+			} : {
+				sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) VALUES (?, ?, ?, ?, ?, ?)",
+				args
+			};
+		}),
+		{
+			sql: "DELETE FROM sys_ben_log WHERE id <= (SELECT MAX(id) FROM sys_ben_log) - 400",
+			args: []
+		}
+	]).catch(() => {});
+}
 // src/renderer/src/web/restoreDrill.ts
 /** Every data table of a database, as a backup (same shape as the apps' export). */
 function snapshotOf(db, source, now = /* @__PURE__ */ new Date()) {
@@ -19025,7 +19059,14 @@ async function runDaily(env, job) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { services, mirror } = await botsFor(env);
 	if (job === "morning" || job === "reask" || job === "evening" || job === "midday") {
-		if (await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) return [];
+		if (await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) {
+			await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{
+				status: "skipped",
+				kind: `${job} message`,
+				reason: "The daily rhythm sends this one instead"
+			}]);
+			return [];
+		}
 	}
 	const send = async (text, reply_markup, token = env.botToken) => {
 		const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -19039,6 +19080,14 @@ async function runDaily(env, job) {
 			})
 		});
 		const j = await res.json().catch(() => ({}));
+		const at = (/* @__PURE__ */ new Date()).toISOString();
+		await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{
+			at,
+			status: j.ok ? "sent" : "failed",
+			kind: `${job} message`,
+			reason: j.ok ? void 0 : `Telegram: ${j.description ?? res.status}`,
+			text
+		}]);
 		if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`);
 	};
 	const todo = await payTodoistDone(env, { since: localMidnight(job === "morning" ? 1 : 0) }).catch(() => null);
@@ -19186,233 +19235,254 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
 	await beat(healthDb, "tick", true, void 0, now);
 	const sent = [];
-	const voiced = async (template) => {
-		const kind = voiceKind(template);
-		if (!kind || !env.model) return template;
-		try {
-			const ctx = await mirror.read((db) => {
-				const f = services.services(db).focus.state(now);
-				return {
-					focusMin: f.todayMin,
-					mustDos: f.plan.items.filter((x) => !x.done).map((x) => x.text).slice(0, 4),
-					tone: loadStyle(db).tone
-				};
-			});
-			const day = now.toLocaleDateString("sv-SE");
-			const next = (calendar ? await calendar.events(now.toISOString(), (/* @__PURE__ */ new Date(`${day}T23:59:59`)).toISOString()).catch(() => []) : []).filter((e) => !e.allDay && Date.parse(e.start) > now.getTime()).sort((a, b) => a.start.localeCompare(b.start))[0];
-			const tasks = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((l) => l.map((t) => t.content).slice(0, 5), () => []) : [];
-			const hm = (iso) => new Date(iso).toTimeString().slice(0, 5);
-			return cleanVoice(await env.model(voicePrompt(kind, template, {
-				time: hm(now.toISOString()),
-				...ctx,
-				nextEvent: next ? `${next.title} at ${hm(next.start)}` : null,
-				tasks,
-				water: null
-			}), { kind: "nudge" }), template) ?? template;
-		} catch {
-			return template;
-		}
-	};
-	const send = async (text, reply_markup, opts = {}) => {
-		const original = text;
-		const once = opts.always ? null : await mirror.read((db) => {
-			let prev = null;
+	const journal = [];
+	const note = (status, text, reason, kind) => journal.push({
+		at: (/* @__PURE__ */ new Date()).toISOString(),
+		status,
+		kind: kind ?? messageKind(text) ?? (/^⏰/u.test(text.replace(/<[^>]+>/g, "").trim()) ? "reminder" : "message"),
+		reason,
+		text
+	});
+	try {
+		return await tickBody();
+	} finally {
+		await logBen(healthDb, journal, now);
+	}
+	async function tickBody() {
+		const voiced = async (template) => {
+			const kind = voiceKind(template);
+			if (!kind || !env.model) return template;
 			try {
-				prev = JSON.parse(getSetting(db, BEN_SENT) || "null");
-			} catch {}
-			return sendOnce(prev, text, now.toLocaleDateString("sv-SE"));
-		});
-		if (once && !once.send) return false;
-		text = await voiced(text);
-		const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				chat_id: env.chatId,
-				text,
-				parse_mode: "HTML",
-				...reply_markup ? { reply_markup } : {}
-			})
-		}).catch((e) => ({
-			status: 0,
-			json: async () => ({
-				ok: false,
-				description: e.message
-			})
-		}));
-		const j = await res.json().catch(() => ({}));
-		if (!j.ok) {
-			beat(healthDb, "telegram", false, j.description ?? `HTTP ${res.status}`);
-			if (!opts.always) await mirror.write((db) => setSetting(db, OUTBOX, JSON.stringify(outboxAdd(readOutbox(db), {
-				text: original,
-				markup: reply_markup ?? null,
-				at: now.getTime()
-			})))).catch(() => null);
-			throw new Error(`Telegram: ${j.description ?? res.status}`);
-		}
-		if (once) await mirror.write((db) => {
-			let prev = null;
-			try {
-				prev = JSON.parse(getSetting(db, BEN_SENT) || "null");
+				const ctx = await mirror.read((db) => {
+					const f = services.services(db).focus.state(now);
+					return {
+						focusMin: f.todayMin,
+						mustDos: f.plan.items.filter((x) => !x.done).map((x) => x.text).slice(0, 4),
+						tone: loadStyle(db).tone
+					};
+				});
+				const day = now.toLocaleDateString("sv-SE");
+				const next = (calendar ? await calendar.events(now.toISOString(), (/* @__PURE__ */ new Date(`${day}T23:59:59`)).toISOString()).catch(() => []) : []).filter((e) => !e.allDay && Date.parse(e.start) > now.getTime()).sort((a, b) => a.start.localeCompare(b.start))[0];
+				const tasks = env.todoistToken ? await createTodoistApi(env.todoistToken, todoistFetch(env)).today().then((l) => l.map((t) => t.content).slice(0, 5), () => []) : [];
+				const hm = (iso) => new Date(iso).toTimeString().slice(0, 5);
+				return cleanVoice(await env.model(voicePrompt(kind, template, {
+					time: hm(now.toISOString()),
+					...ctx,
+					nextEvent: next ? `${next.title} at ${hm(next.start)}` : null,
+					tasks,
+					water: null
+				}), { kind: "nudge" }), template) ?? template;
 			} catch {
-				prev = null;
+				return template;
 			}
-			const r = sendOnce(prev, original, now.toLocaleDateString("sv-SE"));
-			if (r.send) setSetting(db, BEN_SENT, JSON.stringify(r.next));
-		}).catch(() => null);
-		beat(healthDb, "telegram", true);
-		sent.push(text);
-		await mirror.write((db) => {
-			const plain = text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
-			const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith("🔔") ? "annoyed" : "chill"])[0];
-			appendLog(db, [{
-				role: "coach",
-				bot: "mega",
-				via: "telegram",
-				text: plain,
-				at: (/* @__PURE__ */ new Date()).toISOString(),
-				proactive: true,
-				mood
-			}]);
-			const n = notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
-			if (n) addNotif(db, n);
-		}).catch(() => null);
-		return true;
-	};
-	const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-	const pauseRow = [{
-		text: "😴 30 min",
-		callback_data: "ns|"
-	}, {
-		text: "⏸ Pause today",
-		callback_data: "np|"
-	}];
-	const box = await mirror.read((db) => readOutbox(db));
-	if (box.length) {
-		await mirror.write((db) => setSetting(db, OUTBOX, "[]")).catch(() => null);
-		for (const m of box.filter((x) => now.getTime() - x.at < 216e5)) await send(m.text, m.markup ?? void 0).catch(() => null);
-	}
-	const today0 = await mirror.read((db) => services.services(db).wallet.today(now));
-	const tone = await mirror.read((db) => loadStyle(db).tone);
-	const reminders = await mirror.read((db) => {
-		try {
-			return JSON.parse(getSetting(db, "coach_reminders") || "[]");
-		} catch {
-			return [];
-		}
-	});
-	let list = reminders;
-	for (const r of dueReminders(list, now)) try {
-		if (!await send(r.kind === "checkin" ? followUpText({
-			...r,
-			text: esc(r.text)
-		}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0, { always: true })) continue;
-		list = afterSend(list, r.id, now);
-		if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
-	} catch {}
-	if (list !== reminders) await mirror.write((db) => setSetting(db, REMINDERS, JSON.stringify(list)));
-	try {
-		await rhythmTick(env, now, send);
-	} catch (e) {
-		console.error("rhythm:", e);
-		logError(healthDb, "server", `rhythm: ${e.message}`);
-	}
-	try {
-		await deskTick(mirror, services, now, send, esc);
-	} catch (e) {
-		console.error("desk:", e);
-	}
-	try {
-		await backupTick(healthDb, SQL, mirror, now);
-		await healthTick(healthDb, mirror, now, send);
-	} catch (e) {
-		console.error("health:", e);
-	}
-	const st = await mirror.read((db) => {
-		let nudge = {};
-		try {
-			nudge = JSON.parse(getSetting(db, "coach_nudges") || "{}");
-		} catch {
-			nudge = {};
-		}
-		const svc = services.services(db);
-		const today = svc.wallet.today(now);
-		const f = svc.focus.state(now);
-		const lastLedger = svc.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
-		const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
-		const last = Math.max(0, ...lastLedger, ...lastFocus);
-		return {
-			nudge,
-			today,
-			focus: f,
-			idleMin: last ? (now.getTime() - last) / 6e4 : Infinity,
-			tone: loadStyle(db).tone
 		};
-	});
-	let nudge = st.nudge.day === st.today ? st.nudge : {
-		...st.nudge,
-		day: st.today,
-		count: 0,
-		announced: []
-	};
-	const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-	const paused = nudge.pausedDay === st.today;
-	const events = calendar ? await calendar.events((/* @__PURE__ */ new Date(now.getTime() - 144e5)).toISOString(), new Date(now.getTime() + 9e5).toISOString()).catch(() => []) : [];
-	const inEvent = events.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime());
-	if (calendar && !st.focus.running && !paused) {
-		const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
-		if (starting) {
-			const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 6e4);
-			const subject = blockSubject(starting.title).slice(0, 28);
+		const send = async (text, reply_markup, opts = {}) => {
+			const original = text;
+			const once = opts.always ? null : await mirror.read((db) => {
+				let prev = null;
+				try {
+					prev = JSON.parse(getSetting(db, BEN_SENT) || "null");
+				} catch {}
+				return sendOnce(prev, text, now.toLocaleDateString("sv-SE"));
+			});
+			if (once && !once.send) {
+				note("skipped", original, "Already sent one like it today");
+				return false;
+			}
+			text = await voiced(text);
+			const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					chat_id: env.chatId,
+					text,
+					parse_mode: "HTML",
+					...reply_markup ? { reply_markup } : {}
+				})
+			}).catch((e) => ({
+				status: 0,
+				json: async () => ({
+					ok: false,
+					description: e.message
+				})
+			}));
+			const j = await res.json().catch(() => ({}));
+			if (!j.ok) {
+				beat(healthDb, "telegram", false, j.description ?? `HTTP ${res.status}`);
+				if (!opts.always) await mirror.write((db) => setSetting(db, OUTBOX, JSON.stringify(outboxAdd(readOutbox(db), {
+					text: original,
+					markup: reply_markup ?? null,
+					at: now.getTime()
+				})))).catch(() => null);
+				note("failed", text, `Telegram: ${j.description ?? `HTTP ${res.status}`}${opts.always ? "" : " (kept, tried again on the next tick)"}`);
+				throw new Error(`Telegram: ${j.description ?? res.status}`);
+			}
+			if (once) await mirror.write((db) => {
+				let prev = null;
+				try {
+					prev = JSON.parse(getSetting(db, BEN_SENT) || "null");
+				} catch {
+					prev = null;
+				}
+				const r = sendOnce(prev, original, now.toLocaleDateString("sv-SE"));
+				if (r.send) setSetting(db, BEN_SENT, JSON.stringify(r.next));
+			}).catch(() => null);
+			beat(healthDb, "telegram", true);
+			sent.push(text);
+			note("sent", text, text !== original ? "In his own words for this moment" : void 0, messageKind(original) ?? void 0);
+			await mirror.write((db) => {
+				const plain = text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+				const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith("🔔") ? "annoyed" : "chill"])[0];
+				appendLog(db, [{
+					role: "coach",
+					bot: "mega",
+					via: "telegram",
+					text: plain,
+					at: (/* @__PURE__ */ new Date()).toISOString(),
+					proactive: true,
+					mood
+				}]);
+				const n = notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
+				if (n) addNotif(db, n);
+			}).catch(() => null);
+			return true;
+		};
+		const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		const pauseRow = [{
+			text: "😴 30 min",
+			callback_data: "ns|"
+		}, {
+			text: "⏸ Pause today",
+			callback_data: "np|"
+		}];
+		const box = await mirror.read((db) => readOutbox(db));
+		if (box.length) {
+			await mirror.write((db) => setSetting(db, OUTBOX, "[]")).catch(() => null);
+			for (const m of box.filter((x) => now.getTime() - x.at < 216e5)) await send(m.text, m.markup ?? void 0).catch(() => null);
+		}
+		const today0 = await mirror.read((db) => services.services(db).wallet.today(now));
+		const tone = await mirror.read((db) => loadStyle(db).tone);
+		const reminders = await mirror.read((db) => {
 			try {
-				await send(`📚 <b>${esc(starting.title)}</b> ${Date.parse(starting.start) > now.getTime() ? `starts at ${localIsoHM(starting.start)}` : "is on now"} · ${mins} min · +${focusCoins(mins)} points if you focus.\nStart the timer?`, { inline_keyboard: [[{
-					text: `▶ Start: ${subject}`,
+				return JSON.parse(getSetting(db, "coach_reminders") || "[]");
+			} catch {
+				return [];
+			}
+		});
+		let list = reminders;
+		for (const r of dueReminders(list, now)) try {
+			if (!await send(r.kind === "checkin" ? followUpText({
+				...r,
+				text: esc(r.text)
+			}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0, { always: true })) continue;
+			list = afterSend(list, r.id, now);
+			if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
+		} catch {}
+		if (list !== reminders) await mirror.write((db) => setSetting(db, REMINDERS, JSON.stringify(list)));
+		try {
+			await rhythmTick(env, now, send);
+		} catch (e) {
+			console.error("rhythm:", e);
+			logError(healthDb, "server", `rhythm: ${e.message}`);
+		}
+		try {
+			await deskTick(mirror, services, now, send, esc);
+		} catch (e) {
+			console.error("desk:", e);
+		}
+		try {
+			await backupTick(healthDb, SQL, mirror, now);
+			await healthTick(healthDb, mirror, now, send);
+		} catch (e) {
+			console.error("health:", e);
+		}
+		const st = await mirror.read((db) => {
+			let nudge = {};
+			try {
+				nudge = JSON.parse(getSetting(db, "coach_nudges") || "{}");
+			} catch {
+				nudge = {};
+			}
+			const svc = services.services(db);
+			const today = svc.wallet.today(now);
+			const f = svc.focus.state(now);
+			const lastLedger = svc.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
+			const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
+			const last = Math.max(0, ...lastLedger, ...lastFocus);
+			return {
+				nudge,
+				today,
+				focus: f,
+				idleMin: last ? (now.getTime() - last) / 6e4 : Infinity,
+				tone: loadStyle(db).tone
+			};
+		});
+		let nudge = st.nudge.day === st.today ? st.nudge : {
+			...st.nudge,
+			day: st.today,
+			count: 0,
+			announced: []
+		};
+		const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+		const paused = nudge.pausedDay === st.today;
+		const events = calendar ? await calendar.events((/* @__PURE__ */ new Date(now.getTime() - 144e5)).toISOString(), new Date(now.getTime() + 9e5).toISOString()).catch(() => []) : [];
+		const inEvent = events.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime());
+		if (calendar && !st.focus.running && !paused) {
+			const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
+			if (starting) {
+				const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 6e4);
+				const subject = blockSubject(starting.title).slice(0, 28);
+				try {
+					await send(`📚 <b>${esc(starting.title)}</b> ${Date.parse(starting.start) > now.getTime() ? `starts at ${localIsoHM(starting.start)}` : "is on now"} · ${mins} min · +${focusCoins(mins)} points if you focus.\nStart the timer?`, { inline_keyboard: [[{
+						text: `▶ Start: ${subject}`,
+						callback_data: `fo|${subject}`
+					}], pauseRow] });
+					nudge = {
+						...nudge,
+						announced: [...nudge.announced ?? [], starting.id]
+					};
+				} catch {}
+			}
+		}
+		const openMustDos = st.focus.plan.items.filter((x) => !x.done);
+		const facts = {
+			today: st.today,
+			time,
+			focusRunning: !!st.focus.running,
+			focusMinToday: st.focus.todayMin,
+			openMustDos: openMustDos.length,
+			idleMin: st.idleMin,
+			wakeLogged: true
+		};
+		if (!sent.length && inEvent && !paused && shouldNudge(nudge, facts, now)) note("skipped", "Nudge: nothing done for a while", "You were in a class or meeting", "nudge");
+		if (!sent.length && !inEvent && shouldNudge(nudge, facts, now)) {
+			const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1;
+			const first = openMustDos[0]?.text;
+			const text = nudgeText(n, Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ""}${Math.round(st.idleMin % 60)}m` : "all day", first, st.focus.todayMin, st.tone);
+			const subject = (first ?? "Focus").split(/\s+/).slice(0, 4).join(" ").slice(0, 28);
+			try {
+				if (await send(text, { inline_keyboard: [[{
+					text: `▶ 50 min: ${subject}`,
 					callback_data: `fo|${subject}`
-				}], pauseRow] });
-				nudge = {
-					...nudge,
-					announced: [...nudge.announced ?? [], starting.id]
-				};
+				}], pauseRow] }, { always: true })) nudge = nudged(nudge, st.today, now);
 			} catch {}
 		}
-	}
-	const openMustDos = st.focus.plan.items.filter((x) => !x.done);
-	const facts = {
-		today: st.today,
-		time,
-		focusRunning: !!st.focus.running,
-		focusMinToday: st.focus.todayMin,
-		openMustDos: openMustDos.length,
-		idleMin: st.idleMin,
-		wakeLogged: true
-	};
-	if (!sent.length && !inEvent && shouldNudge(nudge, facts, now)) {
-		const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1;
-		const first = openMustDos[0]?.text;
-		const text = nudgeText(n, Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ""}${Math.round(st.idleMin % 60)}m` : "all day", first, st.focus.todayMin, st.tone);
-		const subject = (first ?? "Focus").split(/\s+/).slice(0, 4).join(" ").slice(0, 28);
+		if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));
 		try {
-			if (await send(text, { inline_keyboard: [[{
-				text: `▶ 50 min: ${subject}`,
-				callback_data: `fo|${subject}`
-			}], pauseRow] }, { always: true })) nudge = nudged(nudge, st.today, now);
-		} catch {}
-	}
-	if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));
-	try {
-		const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget());
-		const before = (Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5)) - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440;
-		if (before >= 25 && before <= 50) {
-			if (await mirror.write((db) => {
-				if (getSetting(db, "wind_down_day") === today0) return false;
-				setSetting(db, "wind_down_day", today0);
-				return true;
-			})) sent.push(...await runDaily(env, "night"));
+			const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget());
+			const before = (Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5)) - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440;
+			if (before >= 25 && before <= 50) {
+				if (await mirror.write((db) => {
+					if (getSetting(db, "wind_down_day") === today0) return false;
+					setSetting(db, "wind_down_day", today0);
+					return true;
+				})) sent.push(...await runDaily(env, "night"));
+			}
+		} catch (e) {
+			console.error("wind-down:", e);
 		}
-	} catch (e) {
-		console.error("wind-down:", e);
+		return sent;
 	}
-	return sent;
 }
 var OUTBOX = "ben_outbox";
 var readOutbox = (db) => {

@@ -30,7 +30,7 @@
 .cx-info { background: var(--surface); }
 .cx-info-head { padding: 16px 16px 10px; }
 .bd { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.bd-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 0 12px 10px; padding: 4px; border-radius: 14px; background: rgb(var(--ink) / 0.04); }
+.bd-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0 12px 10px; padding: 4px; border-radius: 14px; background: rgb(var(--ink) / 0.04); }
 .bd-tabs button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; border: none; background: none; color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 600; padding: 7px 2px 6px; border-radius: 10px; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .bd-tabs button span { font-size: 16px; line-height: 1; filter: grayscale(0.6); transition: filter 0.2s, transform 0.2s; }
 .bd-tabs button:hover { color: var(--text); }
@@ -279,3 +279,17 @@
 @media (min-width: 1200px) { .cx.info-open .cx-info-head { display: none; } .cx.info-open .bd-tabs { margin-top: 12px; } }
 .cx-deck { mask-image: linear-gradient(90deg, #000 85%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); padding-right: 30px; }
 .bd-buy .bd-form.inline { grid-template-columns: minmax(0, 1.6fr) minmax(70px, 0.7fr) auto; }
+
+/* Ben's log (desk → Log) */
+.ben-log .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 10px; }
+.ben-log .seg button { border: 1px solid var(--border); background: transparent; color: var(--muted); font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+.ben-log .seg button.on { background: var(--accent-soft); color: var(--text); border-color: transparent; font-weight: 600; }
+.bl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.bl-list li { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: start; padding: 8px 10px; border-radius: 10px; background: rgb(var(--ink) / 0.03); }
+.bl-list li small { color: var(--muted); }
+.bl-list time { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.bl-ic { font-size: 15px; line-height: 1.4; }
+.bl-why { font-size: 12px; color: var(--muted); }
+.bl-text { font-size: 12.5px; margin-top: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.bl-failed { box-shadow: inset 3px 0 0 var(--red); }
+.bl-skipped { opacity: 0.85; }

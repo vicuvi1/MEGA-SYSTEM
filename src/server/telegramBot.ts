@@ -23,11 +23,11 @@ import { targetForDay } from '@core/sleep'
 import { addDays } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting } from '../main/settings'
-import { sendOnce, type SentToday } from '../core/benOnce'
+import { messageKind, sendOnce, type SentToday } from '../core/benOnce'
 import { cleanVoice, voiceKind, voicePrompt } from '../core/benVoice'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
 import { alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
-import { beat, logError, readHealth, setNote } from '../renderer/src/web/systemHealth'
+import { beat, logBen, logError, readHealth, setNote, type BenLogEntry } from '../renderer/src/web/systemHealth'
 import { restoreDrill, snapshotOf } from '../renderer/src/web/restoreDrill'
 import { loadTriggers, urgeEvents } from '../renderer/src/web/disciplinePatterns'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, pollSporty, sportyUpdated, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
@@ -237,7 +237,10 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
   // The daily rhythm (the tick) sends the morning plan and the evening and Sunday reviews now.
   if (job === 'morning' || job === 'reask' || job === 'evening' || job === 'midday') {
     const on = await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db as any, RHYTHM_PREFS) || 'null')).on).catch(() => true)
-    if (on) return []
+    if (on) {
+      await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{ status: 'skipped', kind: `${job} message`, reason: 'The daily rhythm sends this one instead' }])
+      return []
+    }
   }
   const send = async (text: string, reply_markup?: unknown, token = env.botToken) => {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -246,6 +249,8 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       body: JSON.stringify({ chat_id: env.chatId, text, parse_mode: 'HTML', ...(reply_markup ? { reply_markup } : {}) })
     })
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string }
+    const at = new Date().toISOString()
+    await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{ at, status: j.ok ? 'sent' : 'failed', kind: `${job} message`, reason: j.ok ? undefined : `Telegram: ${j.description ?? res.status}`, text }])
     if (!j.ok) throw new Error(`Telegram: ${j.description ?? res.status}`)
   }
   // Todoist tasks you completed in Todoist pay here even if no device opened
@@ -385,6 +390,16 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
   await beat(healthDb, 'tick', true, undefined, now)
   const sent: string[] = []
+  // Ben's log (Coach → Ben's log): everything sent, held back (and why) or failed.
+  const journal: BenLogEntry[] = []
+  const note = (status: BenLogEntry['status'], text: string, reason?: string, kind?: string) =>
+    journal.push({ at: new Date().toISOString(), status, kind: kind ?? messageKind(text) ?? (/^⏰/u.test(text.replace(/<[^>]+>/g, '').trim()) ? 'reminder' : 'message'), reason, text })
+  try {
+    return await tickBody()
+  } finally {
+    await logBen(healthDb, journal, now)
+  }
+  async function tickBody(): Promise<string[]> {
   const voiced = async (template: string): Promise<string> => {
     const kind = voiceKind(template)
     if (!kind || !env.model) return template
@@ -424,7 +439,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
           }
           return sendOnce(prev, text, now.toLocaleDateString('sv-SE'))
         })
-    if (once && !once.send) return false
+    if (once && !once.send) {
+      note('skipped', original, 'Already sent one like it today')
+      return false
+    }
     // Nudges in Ben's own words for this moment of your day (the fixed line if that fails).
     text = await voiced(text)
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
@@ -437,6 +455,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       void beat(healthDb, 'telegram', false, j.description ?? `HTTP ${res.status}`)
       // Kept for the next ticks (up to 6 hours), so nothing is lost when Telegram hiccups.
       if (!opts.always) await mirror.write((db) => setSetting(db as any, OUTBOX, JSON.stringify(outboxAdd(readOutbox(db), { text: original, markup: reply_markup ?? null, at: now.getTime() })))).catch(() => null)
+      note('failed', text, `Telegram: ${j.description ?? `HTTP ${res.status}`}${opts.always ? '' : ' (kept, tried again on the next tick)'}`)
       throw new Error(`Telegram: ${j.description ?? res.status}`)
     }
     if (once) {
@@ -455,6 +474,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     }
     void beat(healthDb, 'telegram', true)
     sent.push(text)
+    note('sent', text, text !== original ? 'In his own words for this moment' : undefined, messageKind(original) ?? undefined)
     // What the coach says on its own shows in the app's chat too (live).
     await mirror
       .write((db) => {
@@ -571,6 +591,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   const openMustDos = st.focus.plan.items.filter((x) => !x.done)
   const facts: NudgeFacts = { today: st.today, time, focusRunning: !!st.focus.running, focusMinToday: st.focus.todayMin, openMustDos: openMustDos.length, idleMin: st.idleMin, wakeLogged: true }
   // Never "nothing done for 1h" while he's in class or a meeting.
+  if (!sent.length && inEvent && !paused && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', 'You were in a class or meeting', 'nudge')
   if (!sent.length && !inEvent && shouldNudge(nudge, facts, now)) {
     const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
     const first = openMustDos[0]?.text
@@ -602,6 +623,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     console.error('wind-down:', e)
   }
   return sent
+  }
 }
 
 const OUTBOX = 'ben_outbox'

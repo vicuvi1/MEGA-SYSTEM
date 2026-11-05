@@ -17,14 +17,16 @@ import { purchaseCheck, type PurchaseVerdict } from '@core/benMoney'
 import { isFocusBlock, type CalEvent } from '@core/dayTime'
 import { addDays } from '@core/dates'
 import { PROFILE_NOTE } from '@core/benKnows'
+import { BenLog } from './BenLog'
 
-export type DeskTab = 'today' | 'plan' | 'you' | 'money' | 'month'
+export type DeskTab = 'today' | 'plan' | 'you' | 'money' | 'month' | 'log'
 export const DESK_TABS: { id: DeskTab; label: string; icon: string }[] = [
   { id: 'today', label: 'Today', icon: '☀️' },
   { id: 'plan', label: 'Plan', icon: '🗓' },
   { id: 'you', label: 'You', icon: '🧠' },
   { id: 'money', label: 'Money', icon: '💸' },
-  { id: 'month', label: 'Month', icon: '📖' }
+  { id: 'month', label: 'Month', icon: '📖' },
+  { id: 'log', label: 'Log', icon: '🧾' }
 ]
 
 const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
@@ -102,6 +104,8 @@ export function BenDesk({ tab, setTab, status, slots, onChange, onSay }: { tab: 
           <YouTab v={v} slots={slots} />
         ) : tab === 'money' ? (
           <MoneyTab v={v} />
+        ) : tab === 'log' ? (
+          <BenLog />
         ) : (
           <MonthTab v={v} reload={load} />
         )}
