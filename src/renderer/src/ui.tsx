@@ -1,3 +1,4 @@
+import { moduleLabel } from './modules'
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LedgerEntry } from '@shared/api'
@@ -81,5 +82,5 @@ export function timeAgo(iso: string): string {
 
 export function describeEntry(e: LedgerEntry, ruleTitles: Record<string, string>): string {
   if (e.kind === 'undo') return `Undo: ${e.note ?? ''}`
-  return (e.ruleId && ruleTitles[e.ruleId]) || e.note || e.module
+  return (e.ruleId && ruleTitles[e.ruleId]) || e.note || moduleLabel(e.module)
 }

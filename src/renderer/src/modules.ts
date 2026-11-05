@@ -39,3 +39,12 @@ export const SYSTEM_PAGES: ModuleDef[] = [
 export const MODULE_LABEL: Record<string, string> = {
   sleep: 'Sleep', schedule: 'Schedule', quests: 'Quests', discipline: 'Discipline', body: 'Body', tasks: 'Tasks', money: 'Money', shop: 'Shop'
 }
+
+/** A section name for any module: known ones by name, others readable, never a stray code like "x". */
+export function moduleLabel(m: string | null | undefined): string {
+  const k = String(m ?? '').trim()
+  if (MODULE_LABEL[k]) return MODULE_LABEL[k]
+  if (k.length < 3 || !/^[a-z][a-z0-9_.-]*$/i.test(k)) return 'Other'
+  const words = k.replace(/[_.-]+/g, ' ')
+  return words[0].toUpperCase() + words.slice(1)
+}

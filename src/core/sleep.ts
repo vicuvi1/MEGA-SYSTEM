@@ -120,3 +120,46 @@ export function computeSleepStats(
 export function bedNightDay(appToday: string, hour: number): string {
   return hour >= 12 || hour < 4 ? new Date(Date.parse(`${appToday}T12:00:00Z`) + 86400000).toISOString().slice(0, 10) : appToday
 }
+
+/** What Waky has that the sleep log is missing: wake-ups and bedtimes to copy over. */
+export interface WakyFill {
+  wakes: { day: string; time: string }[]
+  /** `day`: the morning row the night belongs to. */
+  beds: { day: string; time: string }[]
+}
+
+const HHMM = /^(\d{1,2}):(\d{2})$/
+const cleanTime = (t: unknown): string | null => {
+  const m = HHMM.exec(String(t ?? '').trim())
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null
+  return `${m[1].padStart(2, '0')}:${m[2]}`
+}
+const isDay = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d)
+
+/**
+ * Waky's mornings (`days[date].time`) and nights (`nights[evening date].time`,
+ * the night of that evening) for the last `horizon` days, where the sleep log
+ * has no time yet. Times already in the log are never overwritten: a time you
+ * typed in Life System wins (Waky's own edits come through "Edit day").
+ */
+export function wakyFill(waky: unknown, logs: Pick<SleepLog, 'day' | 'wakeTime' | 'bedTime'>[], today: string, horizon = 14): WakyFill {
+  const w = (waky && typeof waky === 'object' ? waky : {}) as { days?: Record<string, { time?: unknown }>; nights?: Record<string, { time?: unknown }> }
+  const byDay = new Map(logs.map((l) => [l.day, l]))
+  const recent = (d: string) => isDay(d) && d <= today && daysBetween(d, today) <= horizon
+  const wakes: WakyFill['wakes'] = []
+  for (const [day, rec] of Object.entries(w.days ?? {})) {
+    const time = cleanTime(rec?.time)
+    if (!time || !recent(day) || byDay.get(day)?.wakeTime) continue
+    wakes.push({ day, time })
+  }
+  const beds: WakyFill['beds'] = []
+  for (const [evening, rec] of Object.entries(w.nights ?? {})) {
+    const time = cleanTime(rec?.time)
+    if (!time || !isDay(evening)) continue
+    const day = addDays(evening, 1)
+    if (!recent(day) && day !== addDays(today, 1)) continue
+    if (byDay.get(day)?.bedTime) continue
+    beds.push({ day, time })
+  }
+  return { wakes: wakes.sort((a, b) => a.day.localeCompare(b.day)), beds: beds.sort((a, b) => a.day.localeCompare(b.day)) }
+}

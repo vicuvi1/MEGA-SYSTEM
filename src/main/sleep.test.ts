@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDb, type DB } from './db'
 import { SleepService } from './sleep'
+import { setSetting } from './settings'
 import { Wallet } from './wallet'
 
 let dir: string
@@ -82,5 +83,25 @@ describe('a corrected sleep time takes its points back (P3)', () => {
     const before = wallet.summary(at).balance
     sleep.logWake('09:30', undefined, new Date(2026, 9, 26, 10, 0))
     expect(wallet.summary(at).balance).toBeLessThan(before)
+  })
+
+  it("copies Waky's mornings and nights into the sleep log, never over a time already there", () => {
+    sleep.logWake('06:10', undefined, new Date('2026-10-27T06:10:00Z')) // typed here: stays
+    const waky = {
+      days: { '2026-10-26': { time: '6:40' }, '2026-10-27': { time: '06:50' }, '2026-10-29': { time: '06:20' }, '2026-09-01': { time: '06:00' }, bad: { time: 'x' } },
+      nights: { '2026-10-26': { time: '23:15' }, '2026-10-28': { time: '00:40' } }
+    }
+    setSetting(db, 'app_sync_waky', JSON.stringify({ savedAt: 1, data: waky }))
+    const now = new Date('2026-10-29T10:00:00Z')
+    const r = sleep.fromWaky(now)
+    expect(r).toMatchObject({ wakes: 2, beds: 2 })
+    const byDay = Object.fromEntries(sleep.logs().map((l) => [l.day, l]))
+    expect(byDay['2026-10-26'].wakeTime).toBe('06:40')
+    expect(byDay['2026-10-27']).toMatchObject({ wakeTime: '06:10', bedTime: '23:15' })
+    expect(byDay['2026-10-29']).toMatchObject({ wakeTime: '06:20', bedTime: '00:40' })
+    expect(byDay['2026-09-01']).toBeUndefined()
+    // Today's on-time wake-up pays once; running again changes nothing.
+    expect(r.awarded).toBe(true)
+    expect(sleep.fromWaky(now)).toMatchObject({ wakes: 0, beds: 0, awarded: false })
   })
 })

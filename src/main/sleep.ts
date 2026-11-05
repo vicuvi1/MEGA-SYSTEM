@@ -1,4 +1,4 @@
-import { bedNightDay, computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, type SleepLog, type SleepSummary } from '@core/sleep'
+import { bedNightDay, computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, wakyFill, type SleepLog, type SleepSummary } from '@core/sleep'
 import { daysBetween } from '@core/dates'
 import { LedgerError } from '@core/ledger'
 import type { DB } from './db'
@@ -216,5 +216,52 @@ export class SleepService {
       state: this.state(now),
       awarded
     }
+  }
+
+  /** A bedtime for a past night (the morning row `day`): the record only, no coins. */
+  setBed(day: string, time: string, now = new Date()): SleepLog {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)) throw new LedgerError('Use a day and a time like 23:30')
+    const target = this.bedtimeTarget()
+    const onTime = isBedOnTime(time, target) ? 1 : 0
+    const existing = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow | undefined
+    if (existing) this.db.prepare('UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?').run(time, target, onTime, day)
+    else
+      this.db
+        .prepare('INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)')
+        .run(day, '', targetForDay(day, this.weekdayTarget(), this.weekendTarget()), time, target, onTime, now.toISOString())
+    return toLog(this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow)
+  }
+
+  /**
+   * Copies Waky's wake-ups and bedtimes (its synced data) into the sleep log
+   * where the log has no time yet. Today's wake-up and tonight's bedtime pay
+   * like logging them here (once); earlier days are records only.
+   */
+  fromWaky(now = new Date()): { wakes: number; beds: number; awarded: boolean } {
+    let waky: unknown = null
+    try {
+      waky = JSON.parse(getSetting(this.db, 'app_sync_waky') || 'null')?.data ?? JSON.parse(getSetting(this.db, 'waky_backup_json') || 'null')
+    } catch {
+      return { wakes: 0, beds: 0, awarded: false }
+    }
+    if (!waky) return { wakes: 0, beds: 0, awarded: false }
+    const today = this.wallet.today(now)
+    const plan = wakyFill(waky, this.logs(), today)
+    let awarded = false
+    for (const w of plan.wakes) {
+      try {
+        awarded = (w.day === today ? this.logWake(w.time, undefined, now) : this.setWake(w.day, w.time, now)).awarded || awarded
+      } catch {
+        /* out of range: Waky keeps it */
+      }
+    }
+    // Tonight's bedtime (it's evening or night now): like logging it here.
+    const night = now.getHours() >= 12 || now.getHours() < 4
+    const tonight = bedNightDay(today, now.getHours())
+    for (const b of plan.beds) {
+      if (night && b.day === tonight) awarded = this.logBed(b.time, now).awarded || awarded
+      else this.setBed(b.day, b.time, now)
+    }
+    return { wakes: plan.wakes.length, beds: plan.beds.length, awarded }
   }
 }

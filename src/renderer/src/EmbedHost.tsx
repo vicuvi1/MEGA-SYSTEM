@@ -74,6 +74,18 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         }
       }
 
+      // Bedtime in Waky: the sleep log gets it (and "in bed on time" once, like logging it here).
+      if (data.type === 'WAKY_BED_LOGGED') {
+        const time = typeof data.payload?.time === 'string' && /^\d{2}:\d{2}$/.test(data.payload.time) ? data.payload.time : undefined
+        try {
+          const r = await life.sleep.logBed(time)
+          window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+          if (r.awarded) window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          console.error('[EmbedHost Waky] bedtime error:', err)
+        }
+      }
+
       // A morning edited or added in Waky's History: Life System's sleep
       // record gets the same time (coins only for today, as in "Fix wake-up").
       if (data.type === 'WAKY_DAY_EDITED') {

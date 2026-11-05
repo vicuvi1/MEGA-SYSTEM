@@ -36,7 +36,8 @@ const parse = (raw: string | null): any => {
   }
 }
 
-export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null) {
+/** `onSynced`: after each sync run (e.g. Waky's times go into the sleep log). */
+export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null, onSynced?: () => void) {
   const SYNCED = `life_sync_${spec.setting}` // what both sides last agreed on
   const EDITED = `life_sync_${spec.setting}_edited`
   const share = spec.share ?? ((x: any) => x)
@@ -122,7 +123,10 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       .catch(() => {
         /* offline or another device saved first: the next run retries */
       })
-      .finally(() => (running = null))
+      .finally(() => {
+        running = null
+        onSynced?.()
+      })
     return running
   }
 

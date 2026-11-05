@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LedgerEntry, Rule, Summary } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
-import { MODULE_LABEL } from '../modules'
+import { moduleLabel } from '../modules'
 import { Coins, describeEntry, useAction } from '../ui'
 
 export function History({ rules, onChange }: { rules: Rule[]; onChange: (s: Summary) => void }) {
@@ -21,7 +21,7 @@ export function History({ rules, onChange }: { rules: Rule[]; onChange: (s: Summ
       if (dir === 'in' && !(e.coins > 0)) return false
       if (dir === 'out' && !(e.coins < 0)) return false
       if (!words) return true
-      return `${describeEntry(e, titles)} ${MODULE_LABEL[e.module] ?? e.module} ${e.note ?? ''}`.toLowerCase().includes(words)
+      return `${describeEntry(e, titles)} ${moduleLabel(e.module)} ${e.note ?? ''}`.toLowerCase().includes(words)
     })
   }, [rows, q, dir, titles])
   const total = shown.filter((e) => e.kind !== 'undo' && !undone.has(e.id)).reduce((t, e) => t + e.coins, 0)
@@ -78,7 +78,7 @@ export function History({ rules, onChange }: { rules: Rule[]; onChange: (s: Summ
           {shown.map((e) => (
             <tr key={e.id} className={e.kind === 'undo' || undone.has(e.id) ? 'muted' : ''}>
               <td>{new Date(e.ts).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
-              <td>{MODULE_LABEL[e.module] ?? e.module}</td>
+              <td>{moduleLabel(e.module)}</td>
               <td>{describeEntry(e, titles)}</td>
               <td className="num">{e.kind !== 'undo' && <Coins n={e.coins} sign />}</td>
               <td className="num">{e.kind !== 'undo' && e.xp > 0 ? `+${e.xp}` : ''}</td>

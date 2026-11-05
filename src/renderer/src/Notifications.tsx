@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { LedgerEntry, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon, type IconName } from './Icon'
-import { MODULE_LABEL, type PageId } from './modules'
+import { MODULE_LABEL, moduleLabel, type PageId } from './modules'
 import { Coins, describeEntry, timeAgo } from './ui'
 
 export interface Alert {
@@ -228,7 +228,7 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
                         <span className="ni-body">
                           <b>{describeEntry(e, titles)}</b>
                           <small>
-                            {MODULE_LABEL[e.module] ?? e.module} · {timeAgo(e.ts)}
+                            {moduleLabel(e.module)} · {timeAgo(e.ts)}
                             {e.xp > 0 ? ` · +${e.xp} XP` : ''}
                           </small>
                         </span>

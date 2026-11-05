@@ -393,7 +393,11 @@
 
     const data = load();
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
+    // Your own calendar day (not UTC: in Chisinau that turned at 02:00/03:00).
+    const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const today = ymd(now);
+    // A night is filed under its evening: bed at 00:40 is still "last night".
+    const nightKey = now.getHours() < 4 ? ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12)) : today;
     const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
     if (u.includes('/api/ping')) {
@@ -466,7 +470,7 @@
     }
 
     if (u.includes('/api/bed') && method === 'DELETE') {
-      if (data.nights) delete data.nights[today];
+      if (data.nights) delete data.nights[nightKey];
       save(data);
       return reply();
     }
@@ -528,8 +532,10 @@
 
     if (u.includes('/api/bed')) {
       data.nights = data.nights || {};
-      data.nights[today] = { time: timeStr, target: '23:30', onTime: true };
+      data.nights[nightKey] = { time: timeStr, target: '23:30', onTime: true };
       save(data);
+      // Life System's sleep log gets the bedtime too (on the morning it ends in).
+      try { window.parent && window.parent !== window && window.parent.postMessage({ type: 'WAKY_BED_LOGGED', payload: { time: timeStr } }, '*'); } catch {}
       return reply({ ok: true });
     }
 

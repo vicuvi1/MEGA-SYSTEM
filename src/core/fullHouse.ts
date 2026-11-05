@@ -5,7 +5,7 @@ export interface FullHouse { hit: boolean; got: string[]; missing: string[] }
 
 export function fullHouse(i: FullHouseInput): FullHouse {
   const checks: [boolean, string, string][] = [
-    [(i.sleepScore ?? 0) >= 70, 'Steady sleep', `steady sleep (${i.sleepScore ?? '–'}/100, need 70)`],
+    [(i.sleepScore ?? 0) >= 70, 'Steady sleep', i.sleepScore == null ? 'steady sleep (log 3 nights for a score, need 70)' : `steady sleep (${i.sleepScore}/100, need 70)`],
     [i.workouts >= 3, `${i.workouts} workouts`, `${Math.max(0, 3 - i.workouts)} more workout${3 - i.workouts === 1 ? '' : 's'}`],
     [i.slips === 0, 'A clean week', 'a clean week'],
     [i.usualSpent > 0 ? i.spent <= i.usualSpent : true, 'Under budget', `spending under your usual (${Math.round(i.spent)} of ${Math.round(i.usualSpent)} lei)`]

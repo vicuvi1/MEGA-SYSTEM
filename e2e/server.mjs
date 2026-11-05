@@ -15,7 +15,7 @@ const SQL = await require('sql.js')({ locateFile: (f) => require.resolve('sql.js
 const db = new SQL.Database()
 for (const m of [...readFileSync(join(repo, 'src/core/schema.ts'), 'utf8').matchAll(/`([\s\S]*?)`/g)].map((x) => x[1])) db.exec(m)
 const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
-db.run("INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES (?, ?, 'x', 'adjust', 500, 0, 'starting coins')", [new Date().toISOString(), day(3)])
+db.run("INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES (?, ?, 'quests', 'adjust', 500, 0, 'starting coins')", [new Date().toISOString(), day(3)])
 db.run("INSERT INTO discipline_events (kind, day, ts) VALUES ('start', ?, ?)", [day(10), new Date().toISOString()])
 db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
 
