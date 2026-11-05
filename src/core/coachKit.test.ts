@@ -126,3 +126,16 @@ describe('only a reply about it answers a check-in (T3)', () => {
     expect(answered(sent, now, 'taxi 45', true)[0].done).toBe(true)
   })
 })
+
+describe('promise reliability by kind (B12)', () => {
+  it('says where he keeps promises and where to ask small', async () => {
+    const { promiseReliability } = await import('./coachKit')
+    const now = new Date('2026-11-05T12:00:00')
+    const mk = (text: string, kept: boolean, i: number) => ({ id: `r${text}${i}`, at: now.toISOString(), text, kind: 'checkin' as const, createdAt: new Date(now.getTime() - i * 86400000).toISOString(), outcome: kept ? ('kept' as const) : ('broken' as const) })
+    const list = [...[0, 1, 2, 3].map((i) => mk('study algebra 1h', i === 0, i)), ...[0, 1, 2].map((i) => mk('gym after class', true, i))]
+    const line = promiseReliability(list as any, now)
+    expect(line).toContain('study 1/4 kept → ask for something tiny')
+    expect(line).toContain('training 3/3 kept → he delivers')
+    expect(promiseReliability([], now)).toBe('')
+  })
+})

@@ -24,7 +24,7 @@ import {
   type DayProposal,
   type DayResult,
   type RhythmPrefs,
-  type RhythmState, blocksKept } from '@core/rhythm'
+  type RhythmState, blocksKept, editPlan } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
 import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStory, pickFacts, saveLetter, saveMind, sportState } from './botBrain'
 import { REMINDERS, promiseLine, promiseStats } from '@core/coachKit'
@@ -234,6 +234,21 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
   /** A plan for today (a new version when you ask to change or redo it). */
   async function propose(note = ''): Promise<{ plan: DayProposal; version: number }> {
     const now = new Date()
+    // B22: "move gym to 19", "drop the reading block": changed in code, no AI call.
+    if (note.trim()) {
+      const edited = await mirror.write((db) => {
+        const today = services.services(db).wallet.today(now)
+        const st = load(db, today)
+        const cur = st.briefing
+        if (!cur || cur.plan.day !== today) return null
+        const plan = editPlan(cur.plan, note)
+        if (!plan) return null
+        const version = (cur.version ?? 0) + 1
+        save(db, { ...st, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version } })
+        return { plan, version }
+      })
+      if (edited) return edited
+    }
     const [events, tasks, upcoming] = await Promise.all([
       calendar ? calendar.events(...dayBounds()).catch(() => []) : Promise.resolve([]),
       todoist ? todoist.today().catch(() => [] as TodoTask[]) : Promise.resolve([] as TodoTask[]),
@@ -304,7 +319,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         ]
           .filter(Boolean)
           .join('\n')
-        const raw = await withTimeout(ai(prompt, { json: true, think: true, strong: true }), 35_000)
+        const raw = await withTimeout(ai(prompt, { json: true, think: true, strong: true, kind: 'plan' }), 35_000)
         const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
         plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now))
       } catch {
@@ -430,7 +445,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
             context,
             talk.feedback ? `\n== His feedback on your replies today ==\n${talk.feedback}` : ''
           ].join('\n'),
-          { json: true, think: true, strong: true }
+          { json: true, think: true, strong: true, kind: 'review' }
         ), 35_000)
         const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
         if (talk.chat) await saveSelfNotes(today, j).catch(() => [])
@@ -513,7 +528,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
             '',
             context
           ].join('\n'),
-          { json: true, think: true, strong: true }
+          { json: true, think: true, strong: true, kind: 'weekly' }
         ), 35_000)
         const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
         const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)
@@ -561,7 +576,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           '',
           context
         ].join('\n'),
-        { json: true, think: true, strong: true }
+        { json: true, think: true, strong: true, kind: 'letter' }
       ), 35_000)
       const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
       const text = String(j.letter ?? '').trim().slice(0, 2000)
@@ -600,7 +615,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           data.chat,
           data.feedback ? `\n== His feedback today ==\n${data.feedback}` : ''
         ].join('\n'),
-        { json: true, think: true }
+        { json: true, think: true, kind: 'self-review' }
       ), 35_000)
       const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}')
       const notes = await saveSelfNotes(data.today, j)
@@ -644,7 +659,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           data.journal ? `== His journal this week ==\n${data.journal}` : '',
           data.chat ? `== This week's chat ==\n${data.chat}` : ''
         ].join('\n'),
-        { json: true }
+        { json: true, kind: 'story' }
       ), 30_000)
       const story = String(JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? '{}').story ?? '').trim().slice(0, 700)
       if (!story) return null

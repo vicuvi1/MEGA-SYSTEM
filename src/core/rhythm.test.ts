@@ -114,3 +114,17 @@ describe('autopilot morning (N12)', () => {
     expect(dueRhythm(st, DEFAULT_RHYTHM_PREFS, f('07:30', '09:00'))).not.toContain('briefing') // weekend lie-in
   })
 })
+
+describe('plan changes in code (B22)', () => {
+  it('moves, drops and resizes blocks and training', async () => {
+    const { editPlan } = await import('./rhythm')
+    const plan = { day: '2026-11-05', headline: 'x', mustdos: [], blocks: [{ title: 'Algebra: chapter 4', start: '09:00', minutes: 50 }, { title: 'Reading', start: '14:00', minutes: 30 }], training: { time: '18:00', what: 'Gym' }, waterMl: 2700 }
+    expect(editPlan(plan, 'move gym to 19')?.training?.time).toBe('19:00')
+    expect(editPlan(plan, 'put algebra at 10:30')?.blocks.find((b) => b.title.startsWith('Algebra'))?.start).toBe('10:30')
+    expect(editPlan(plan, 'drop the reading block')?.blocks.map((b) => b.title)).toEqual(['Algebra: chapter 4'])
+    expect(editPlan(plan, 'no training today')?.training).toBeNull()
+    expect(editPlan(plan, 'make algebra 90 min')?.blocks[0].minutes).toBe(90)
+    expect(editPlan(plan, 'plan something fun for the evening and move reading')).toBeNull()
+    expect(editPlan(plan, 'move chemistry to 12')).toBeNull()
+  })
+})

@@ -210,6 +210,42 @@ export function promiseStats(list: Reminder[], now = new Date()): PromiseStats {
   }
 }
 
+/** What a promise is about, from its words (B12). */
+export function promiseKind(text: string): 'study' | 'training' | 'sleep' | 'money' | 'tasks' | 'other' {
+  const t = text.toLowerCase()
+  if (/\b(stud|learn|read|lab|exam|homework|course|lecture|chapter|math|algebra|code|coding|practice)/.test(t)) return 'study'
+  if (/\b(gym|train|workout|run|pushup|squat|exercise|walk|stretch)/.test(t)) return 'training'
+  if (/\b(sleep|bed|wake|up at|alarm|phone away)/.test(t)) return 'sleep'
+  if (/\b(spend|buy|money|budget|save|lei|pay)/.test(t)) return 'money'
+  if (/\b(task|email|call|send|finish|submit|clean|cv|apply)/.test(t)) return 'tasks'
+  return 'other'
+}
+
+/**
+ * B12: how reliable each kind of promise is over 30 days, so Ben asks small
+ * where Victor usually fails and asks more where he delivers.
+ * "Promise reliability (30 days): study 3/10 kept → ask for 15 minutes, not hours; training 6/7 kept → he delivers, raise the bar."
+ */
+export function promiseReliability(list: Reminder[], now = new Date()): string {
+  const month = list.filter((r) => r.kind === 'checkin' && Date.parse(r.createdAt) > now.getTime() - 30 * 86400000 && (r.outcome || r.ignored))
+  const by = new Map<string, { kept: number; all: number }>()
+  for (const r of month) {
+    const k = promiseKind(r.text)
+    const v = by.get(k) ?? { kept: 0, all: 0 }
+    v.all++
+    if (r.outcome === 'kept') v.kept++
+    by.set(k, v)
+  }
+  const parts = [...by]
+    .filter(([, v]) => v.all >= 3)
+    .sort((a, b) => b[1].all - a[1].all)
+    .map(([k, v]) => {
+      const rate = v.kept / v.all
+      return `${k} ${v.kept}/${v.all} kept → ${rate < 0.4 ? 'ask for something tiny (10–15 min) and timed' : rate >= 0.75 ? 'he delivers, raise the bar a little' : 'keep it small and concrete'}`
+    })
+  return parts.length ? `Promise reliability (30 days): ${parts.join('; ')}.` : ''
+}
+
 /** One line for the coach (and the escalating follow-ups). */
 export function promiseLine(s: PromiseStats): string {
   if (!s.kept && !s.broken && !s.ignored) return ''

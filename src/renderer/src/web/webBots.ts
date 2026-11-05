@@ -31,7 +31,7 @@ import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTim
 import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
 import { shownMood } from '@core/benActs'
-import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
+import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseReliability, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
@@ -49,6 +49,7 @@ import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus, waterToday } from './coachStatus'
 import { nextSlot } from '@core/benActs'
+import { AREA_WORDS, learnAreaWords } from '@core/areaWords'
 import { amountIn, codeFix, preLookups, quickKind, quickReply } from '@core/benQuick'
 import { createRhythm } from './rhythmBot'
 import { addReps, addWater, parseWater, sharedView, sportForDay, sportToday } from '@core/sportShared'
@@ -203,7 +204,8 @@ export interface CalendarLike {
   remove?(calendarId: string, id: string): Promise<void>
 }
 
-export type AskModel = (prompt: string, opts?: { json?: boolean; think?: boolean; strong?: boolean; media?: { mime: string; data: string }[] }) => Promise<string>
+/** `kind` labels the call for the usage page (B20): chat, lookup, retry, repair, plan, review, weekly, letter, story, nudge, area. */
+export type AskModel = (prompt: string, opts?: { json?: boolean; think?: boolean; strong?: boolean; media?: { mime: string; data: string }[]; kind?: string }) => Promise<string>
 
 /** What the bot needs from Todoist (the server calls it directly, the page through /api/todoist). */
 export interface TodoistLike {
@@ -1466,7 +1468,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           } catch {
             list = []
           }
-          return { ...promiseRefs(list), stats: promiseLine(promiseStats(list)) }
+          return { ...promiseRefs(list), stats: [promiseLine(promiseStats(list)), promiseReliability(list)].filter(Boolean).join('\n') }
         })(),
         money: recentMoney(db as any, svc.wallet.today()),
         notes: (() => {
@@ -1502,8 +1504,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // One reply must fit Vercel's 60 s, actions and sending included: the model
     // gets what's left of a 38 s budget, so the reply is never cut off (T6).
     const deadline = Date.now() + 38_000
-    const ask = (found?: string, extraNote = '') =>
-      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined }), Math.max(4_000, deadline - Date.now()))
+    const ask = (found?: string, extraNote = '', kind = media ? 'media' : big ? 'chat-deep' : 'chat') =>
+      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind }), Math.max(4_000, deadline - Date.now()))
     let out: BrainOut
     try {
       if (preset) out = { reply: preset.reply, actions: [], remember: [], chips: preset.chips, buttons: preset.buttons }
@@ -1541,12 +1543,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           } else found.push(`${need}: not available.`)
         }
         made = makeRefs(allEvents, allTasks)
-        out = parseBrain(await ask(found.join('\n') || 'Nothing found.'))
+        out = parseBrain(await ask(found.join('\n') || 'Nothing found.', '', 'lookup'))
       }
       // He's correcting a mistake but it answered with words only: once more, it must fix it.
       if (correcting && !out.actions.length && !out.need?.length) {
         step('Fixing it')
-        const again = parseBrain(await ask(undefined, 'Note for the coach: he is correcting something that went wrong. Fix it NOW with actions (delmoney / editmoney / water / sleep / edit …), then confirm in one line. Words alone change nothing.'))
+        const again = parseBrain(await ask(undefined, 'Note for the coach: he is correcting something that went wrong. Fix it NOW with actions (delmoney / editmoney / water / sleep / edit …), then confirm in one line. Words alone change nothing.', 'retry'))
         if (again.actions.length) out = again
       }
     } catch (e) {
@@ -1737,6 +1739,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               }
               await todoist.move(t.id, area.key)
               done.push(`📂 ${t.content} → ${area.name}`)
+              // Your moves teach where tasks go (B17).
+              await mirror.write((db) => setSetting(db as any, AREA_WORDS, JSON.stringify(learnAreaWords(JSON.parse(getSetting(db as any, AREA_WORDS) || '{}'), t.content, area.name)))).catch(() => null)
             }
             continue
           }
@@ -1989,7 +1993,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       step('Fixing what failed')
       try {
         const fix = parseBrain(
-          await ask(undefined, `RESULTS of your actions just now:\n${done.join('\n')}\nSome failed (⚠️). Fix them now with different actions if you can (another time, the right E/T/M ref, a valid day), without repeating what already worked. Your new reply replaces the old one: say what is done and, honestly, what is not.`)
+          await ask(undefined, `RESULTS of your actions just now:\n${done.join('\n')}\nSome failed (⚠️). Fix them now with different actions if you can (another time, the right E/T/M ref, a valid day), without repeating what already worked. Your new reply replaces the old one: say what is done and, honestly, what is not.`, 'repair')
         )
         const again = fix.actions.map(readAction).filter((a): a is BrainAction => !!a && a.kind !== 'focus')
         if (again.length) await runActs(again, 'f')

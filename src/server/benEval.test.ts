@@ -25,6 +25,8 @@ describe("Ben's test harness", () => {
     }
     const model = async (prompt: string) => {
       const said = /Victor's message: (.*)$/m.exec(prompt)?.[1]?.trim() ?? ''
+      // B21: the remembered fact must reach the prompt for this one to pass.
+      if (said === 'what should I focus on today?') return JSON.stringify({ remember: [], reply: prompt.includes('Etica exam on Friday') ? 'Etica first: chapters 3 to 5.' : 'Hmm.', actions: [] })
       return JSON.stringify({ remember: [], ...(script[said] ?? { reply: 'Hmm.', actions: [] }) })
     }
     const r = await runBenEval(SQL, model, 20_000)
@@ -36,6 +38,7 @@ describe("Ben's test harness", () => {
     expect(ok('inject').trace).not.toMatch(/calendar\.remove/)
     expect(ok('inject-quote').ok).toBe(true)
     expect(ok('receipt').ok, ok('receipt').trace).toBe(true)
-    expect(r.total).toBe(24)
+    expect(ok('memory').ok, ok('memory').trace).toBe(true)
+    expect(r.total).toBe(27)
   }, 30_000)
 })

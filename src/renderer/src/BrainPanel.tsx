@@ -30,6 +30,8 @@ interface Usage {
   week: Totals | null
   month: Totals | null
   byModel: { model: string; calls: number; cost: number; tokens: number }[]
+  /** What the calls were for (B20): chat, lookup, plan, review, nudge… */
+  byKind?: { kind: string; calls: number; cost: number }[]
   recent: { at: string; model: string; kind: string | null; prompt: number | null; completion: number | null; cost: number | null }[]
   credits: { total: number; used: number; left: number } | null
   budget?: { budget: number; spent: number; tier: 'normal' | 'save' | 'minimal' }
@@ -253,6 +255,9 @@ function TestBen({ models, current }: { models: ModelInfo[]; current: string | n
   )
 }
 
+/** Plain names for what an AI call was for (B20). */
+const KIND_NAME: Record<string, string> = { chat: 'Chat', 'chat-deep': 'Chat (thinking)', lookup: 'Looking things up', retry: 'Fixing a correction', repair: 'Fixing a failed action', media: 'Photos and voice', plan: 'Morning plan', 'plan-names': 'Plan names', review: 'Evening review', weekly: 'Sunday review', letter: 'Weekly letter', 'self-review': "Ben's self-review", story: 'Story so far', nudge: 'Nudges', area: 'Task areas', eval: 'Test Ben', deep: 'Thinking' }
+
 export function BrainPanel() {
   const toast = useToast()
   const [status, setStatus] = useState<Status | null>(null)
@@ -342,6 +347,21 @@ export function BrainPanel() {
               <i style={{ ['--p' as string]: `${(m.cost / maxModel) * 100}%` }} />
               <em>
                 {usd(m.cost, true)} · {m.calls}
+              </em>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {usage && !!usage.byKind?.length && (
+        <div className="brain-models">
+          <small className="brain-sub">What it was for · 30 days</small>
+          {usage.byKind.map((k) => (
+            <div key={k.kind} className="brain-model">
+              <span>{KIND_NAME[k.kind] ?? k.kind}</span>
+              <i style={{ ['--p' as string]: `${(k.cost / Math.max(0.000001, ...usage.byKind!.map((x) => x.cost))) * 100}%` }} />
+              <em>
+                {usd(k.cost, true)} · {k.calls}
               </em>
             </div>
           ))}

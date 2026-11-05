@@ -6,7 +6,7 @@ import { parseTelegramText } from '@core/botCommands'
 // and can act: log things, add must-dos, start focus, add Todoist tasks, set
 // goals. Each bot is a specialist (Mega: head + training, Finance: money,
 // Waky: sleep). Pure helpers here; webBots.ts runs it.
-import { cleanFacts, factLine, toRecord, type Fact } from '@core/factTypes'
+import { cleanFacts, dateIn, factLine, toRecord, type Fact } from '@core/factTypes'
 import { STEALTH_NOTE } from '@core/stealth'
 import type { BotBridgeConfig } from '@shared/api'
 import { addDays } from '@core/dates'
@@ -638,21 +638,68 @@ const WORD = /[\p{L}\p{N}]{4,}/gu
  * or the recent chat), then the newest, at most `max`. The rest stays in memory
  * and Ben can still look things up.
  */
-export function pickFacts(facts: Memory['facts'], about: string, max = 24): Memory['facts'] {
+export function pickFacts(facts: Memory['facts'], about: string, max = 24, today = new Date().toLocaleDateString('sv-SE')): Memory['facts'] {
   if (facts.length <= max) return facts
   const words = new Set((about.toLowerCase().match(WORD) ?? []).map((w) => w.slice(0, 6)))
   const hits = (f: { t: string }) => (f.t.toLowerCase().match(WORD) ?? []).some((w) => words.has(w.slice(0, 6)))
-  const relevant = facts.filter(hits).slice(-Math.ceil(max / 2))
-  const rest = facts.filter((f) => !relevant.includes(f)).slice(-(max - relevant.length))
-  const keep = new Set([...relevant, ...rest])
+  // B15: always kept: people he names now (capitalised words), exams and deadlines in the next 14 days.
+  const names = new Set((about.match(/\b\p{Lu}[\p{L}]{2,}\b/gu) ?? []).map((w) => w.toLowerCase()))
+  const soon = (f: Fact) => {
+    if (f.type !== 'exam' && !/\b(exam|deadline|due|test|interview)\b/i.test(f.t)) return false
+    const d = dateIn(f.t, today)
+    return !!d && d >= today && d <= addDays(today, 14)
+  }
+  const named = (f: Fact) => names.size > 0 && (f.t.match(/\b\p{Lu}[\p{L}]{2,}\b/gu) ?? []).some((w) => names.has(w.toLowerCase()))
+  const must = facts.filter((f) => soon(f) || named(f)).slice(-Math.ceil(max / 3))
+  const relevant = facts.filter((f) => !must.includes(f) && hits(f)).slice(-Math.ceil(max / 2))
+  // The rest by confidence and recency: things said several times beat one-off guesses.
+  // Ties go to the newest (later in the list).
+  const pos = new Map(facts.map((f, i) => [f, i]))
+  const rank = (f: Fact) => (f.conf ?? 0.5) + Math.min(5, f.seen ?? 1) * 0.1 + (pos.get(f) ?? 0) / (facts.length * 100)
+  const left = max - must.length - relevant.length
+  const rest = facts.filter((f) => !must.includes(f) && !relevant.includes(f)).sort((a, b) => rank(b) - rank(a)).slice(0, Math.max(0, left))
+  const keep = new Set([...must, ...relevant, ...rest])
   return facts.filter((f) => keep.has(f))
+}
+
+/**
+ * B13: a shorter picture of his day for the AI: lines that say nothing
+ * ("none logged", "nothing yet", "0 of 0") and headings left empty are
+ * dropped, spaces squeezed. 20–30% fewer tokens, same facts.
+ */
+export function compactContext(text: string): string {
+  const empty = /:\s*(none( logged| yet| today)?|nothing( yet| logged| today)?|n\/a|—|-|0 of 0|\(none\)|no data|not set)\.?\s*$/i
+  const lines = text.split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trimEnd()).filter((l) => !empty.test(l))
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i]
+    const heading = /^(==.*==|[A-Z][^:]{0,60}:)$/.test(l.trim())
+    const next = lines[i + 1]
+    if (heading && (next === undefined || next.trim() === '' || /^(==.*==|[A-Z][^:]{0,60}:)$/.test(next.trim()))) continue
+    if (l.trim() === '' && (out.length === 0 || out[out.length - 1].trim() === '')) continue
+    out.push(l)
+  }
+  return out.join('\n').trim()
+}
+
+/**
+ * B14: Ben's past replies as one-line gists in the prompt ("you said: … · did:
+ * ✅ water 250"), his own words kept longer. More history for fewer tokens.
+ */
+export function chatGist(c: { role: 'me' | 'coach'; text: string }): string {
+  const plain = c.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  if (c.role === 'me') return plain.slice(0, 240)
+  const [reply, ...done] = plain.split(' | ')
+  const first = (reply.match(/^.{20,}?[.!?](\s|$)/)?.[0] ?? reply).trim().slice(0, 120)
+  const did = done.filter((d) => d && d !== '(nothing saved)').map((d) => d.slice(0, 50)).slice(0, 3)
+  return did.length ? `${first} · did: ${did.join('; ')}` : first
 }
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
 export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean; allActions?: boolean } = {}): string {
   // Prompt diet: the last 12 turns (240 chars each) and only the facts that matter now.
   const turns = memory.chat.slice(-12)
-  const chat = turns.map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 240)}`)
+  const chat = turns.map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${chatGist(c)}`)
   const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(' ')}`)
   return [
     PERSONA[persona],
@@ -687,7 +734,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     extra.selfReview ? `== Your notes to yourself from last night ==\n${extra.selfReview}` : '',
     extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : '',
     '== Victor right now ==',
-    context,
+    compactContext(context),
     extra.refs ? `\n${extra.refs}` : '',
     extra.found ? `\n== Answers to what you asked for ==\n${extra.found}` : '',
     '',

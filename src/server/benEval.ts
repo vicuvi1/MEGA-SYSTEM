@@ -11,6 +11,7 @@ import { Mirror } from '../renderer/src/web/mirror'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebBots, type AskModel } from '../renderer/src/web/webBots'
 import { createWebServices } from '../renderer/src/web/webServices'
+import { setSetting } from '../main/settings'
 
 async function runOne(SQL: SqlJsStatic, model: AskModel, c: (typeof EVAL_CASES)[number]): Promise<EvalResult> {
   const t0 = Date.now()
@@ -53,6 +54,7 @@ async function runOne(SQL: SqlJsStatic, model: AskModel, c: (typeof EVAL_CASES)[
     move: async (id: string, area: string) => void log.push(`todoist.move ${id} ${area}`),
     remove: async (id: string) => void log.push(`todoist.remove ${id}`)
   }
+  if (c.facts?.length) await mirror.write((db) => setSetting(db as any, 'coach_memory', JSON.stringify({ facts: c.facts!.map((t) => ({ t, at: today })), chat: [] })))
   const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model })
   try {
     const r = await bots.think(c.say, `eval:${c.id}`)

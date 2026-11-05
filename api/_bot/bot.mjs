@@ -1029,7 +1029,7 @@ var isStarred = (t) => !!t.labels?.includes(TODAY_LABEL);
 /** The area name without its emoji: "🎓 University" → "University". */
 var plainName = (name) => name.replace(/[^\p{L}\p{N}&\s'-]/gu, "").replace(/\s+/g, " ").trim();
 /** Words that point to an area, matched against the area's name. */
-var AREA_WORDS = [
+var AREA_WORDS$1 = [
 	{
 		area: /univ|study|school|facult/i,
 		words: /\b(univ\w*|lab\w*|exam\w*|curs\w*|course\w*|lecture\w*|seminar\w*|homework|teza|referat\w*|colloq\w*|coloc\w*|etica|thesis|assignment|professor|prof|teacher|grade)\b/i
@@ -1065,7 +1065,7 @@ var AREA_WORDS = [
 ];
 /** The area a new task most likely belongs to, by its words (null when unclear). */
 function guessArea(text, areas) {
-	for (const rule of AREA_WORDS) {
+	for (const rule of AREA_WORDS$1) {
 		if (!rule.words.test(text)) continue;
 		const hit = areas.find((a) => rule.area.test(plainName(a.name)));
 		if (hit) return hit;
@@ -2981,19 +2981,65 @@ var WORD = /[\p{L}\p{N}]{4,}/gu;
 * or the recent chat), then the newest, at most `max`. The rest stays in memory
 * and Ben can still look things up.
 */
-function pickFacts(facts, about, max = 24) {
+function pickFacts(facts, about, max = 24, today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv-SE")) {
 	if (facts.length <= max) return facts;
 	const words = new Set((about.toLowerCase().match(WORD) ?? []).map((w) => w.slice(0, 6)));
 	const hits = (f) => (f.t.toLowerCase().match(WORD) ?? []).some((w) => words.has(w.slice(0, 6)));
-	const relevant = facts.filter(hits).slice(-Math.ceil(max / 2));
-	const rest = facts.filter((f) => !relevant.includes(f)).slice(-(max - relevant.length));
-	const keep = /* @__PURE__ */ new Set([...relevant, ...rest]);
+	const names = new Set((about.match(/\b\p{Lu}[\p{L}]{2,}\b/gu) ?? []).map((w) => w.toLowerCase()));
+	const soon = (f) => {
+		if (f.type !== "exam" && !/\b(exam|deadline|due|test|interview)\b/i.test(f.t)) return false;
+		const d = dateIn(f.t, today);
+		return !!d && d >= today && d <= addDays$3(today, 14);
+	};
+	const named = (f) => names.size > 0 && (f.t.match(/\b\p{Lu}[\p{L}]{2,}\b/gu) ?? []).some((w) => names.has(w.toLowerCase()));
+	const must = facts.filter((f) => soon(f) || named(f)).slice(-Math.ceil(max / 3));
+	const relevant = facts.filter((f) => !must.includes(f) && hits(f)).slice(-Math.ceil(max / 2));
+	const pos = new Map(facts.map((f, i) => [f, i]));
+	const rank = (f) => (f.conf ?? .5) + Math.min(5, f.seen ?? 1) * .1 + (pos.get(f) ?? 0) / (facts.length * 100);
+	const left = max - must.length - relevant.length;
+	const rest = facts.filter((f) => !must.includes(f) && !relevant.includes(f)).sort((a, b) => rank(b) - rank(a)).slice(0, Math.max(0, left));
+	const keep = /* @__PURE__ */ new Set([
+		...must,
+		...relevant,
+		...rest
+	]);
 	return facts.filter((f) => keep.has(f));
+}
+/**
+* B13: a shorter picture of his day for the AI: lines that say nothing
+* ("none logged", "nothing yet", "0 of 0") and headings left empty are
+* dropped, spaces squeezed. 20–30% fewer tokens, same facts.
+*/
+function compactContext(text) {
+	const empty = /:\s*(none( logged| yet| today)?|nothing( yet| logged| today)?|n\/a|—|-|0 of 0|\(none\)|no data|not set)\.?\s*$/i;
+	const lines = text.split("\n").map((l) => l.replace(/[ \t]+/g, " ").trimEnd()).filter((l) => !empty.test(l));
+	const out = [];
+	for (let i = 0; i < lines.length; i++) {
+		const l = lines[i];
+		const heading = /^(==.*==|[A-Z][^:]{0,60}:)$/.test(l.trim());
+		const next = lines[i + 1];
+		if (heading && (next === void 0 || next.trim() === "" || /^(==.*==|[A-Z][^:]{0,60}:)$/.test(next.trim()))) continue;
+		if (l.trim() === "" && (out.length === 0 || out[out.length - 1].trim() === "")) continue;
+		out.push(l);
+	}
+	return out.join("\n").trim();
+}
+/**
+* B14: Ben's past replies as one-line gists in the prompt ("you said: … · did:
+* ✅ water 250"), his own words kept longer. More history for fewer tokens.
+*/
+function chatGist(c) {
+	const plain = c.text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+	if (c.role === "me") return plain.slice(0, 240);
+	const [reply, ...done] = plain.split(" | ");
+	const first = (reply.match(/^.{20,}?[.!?](\s|$)/)?.[0] ?? reply).trim().slice(0, 120);
+	const did = done.filter((d) => d && d !== "(nothing saved)").map((d) => d.slice(0, 50)).slice(0, 3);
+	return did.length ? `${first} · did: ${did.join("; ")}` : first;
 }
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
 function brainPrompt(persona, context, memory, message, media, profile = DEFAULT_PROFILE, extra = {}) {
 	const turns = memory.chat.slice(-12);
-	const chat = turns.map((c) => `${c.role === "me" ? "Victor" : c.bot === "mega" ? "Ben" : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, "").slice(0, 240)}`);
+	const chat = turns.map((c) => `${c.role === "me" ? "Victor" : c.bot === "mega" ? "Ben" : `Coach (${c.bot})`}: ${chatGist(c)}`);
 	const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(" ")}`);
 	return [
 		PERSONA[persona],
@@ -3025,7 +3071,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		extra.selfReview ? `== Your notes to yourself from last night ==\n${extra.selfReview}` : "",
 		extra.mood ? `== How you feel about his day (from the data) ==\n${extra.mood}` : "",
 		"== Victor right now ==",
-		context,
+		compactContext(context),
 		extra.refs ? `\n${extra.refs}` : "",
 		extra.found ? `\n== Answers to what you asked for ==\n${extra.found}` : "",
 		"",
@@ -6747,6 +6793,40 @@ function promiseStats(list, now = /* @__PURE__ */ new Date()) {
 		open: week.filter((r) => !r.done).length,
 		misses: missed.slice(-5).reverse().map((r) => r.text)
 	};
+}
+/** What a promise is about, from its words (B12). */
+function promiseKind(text) {
+	const t = text.toLowerCase();
+	if (/\b(stud|learn|read|lab|exam|homework|course|lecture|chapter|math|algebra|code|coding|practice)/.test(t)) return "study";
+	if (/\b(gym|train|workout|run|pushup|squat|exercise|walk|stretch)/.test(t)) return "training";
+	if (/\b(sleep|bed|wake|up at|alarm|phone away)/.test(t)) return "sleep";
+	if (/\b(spend|buy|money|budget|save|lei|pay)/.test(t)) return "money";
+	if (/\b(task|email|call|send|finish|submit|clean|cv|apply)/.test(t)) return "tasks";
+	return "other";
+}
+/**
+* B12: how reliable each kind of promise is over 30 days, so Ben asks small
+* where Victor usually fails and asks more where he delivers.
+* "Promise reliability (30 days): study 3/10 kept → ask for 15 minutes, not hours; training 6/7 kept → he delivers, raise the bar."
+*/
+function promiseReliability(list, now = /* @__PURE__ */ new Date()) {
+	const month = list.filter((r) => r.kind === "checkin" && Date.parse(r.createdAt) > now.getTime() - 2592e6 && (r.outcome || r.ignored));
+	const by = /* @__PURE__ */ new Map();
+	for (const r of month) {
+		const k = promiseKind(r.text);
+		const v = by.get(k) ?? {
+			kept: 0,
+			all: 0
+		};
+		v.all++;
+		if (r.outcome === "kept") v.kept++;
+		by.set(k, v);
+	}
+	const parts = [...by].filter(([, v]) => v.all >= 3).sort((a, b) => b[1].all - a[1].all).map(([k, v]) => {
+		const rate = v.kept / v.all;
+		return `${k} ${v.kept}/${v.all} kept → ${rate < .4 ? "ask for something tiny (10–15 min) and timed" : rate >= .75 ? "he delivers, raise the bar a little" : "keep it small and concrete"}`;
+	});
+	return parts.length ? `Promise reliability (30 days): ${parts.join("; ")}.` : "";
 }
 /** One line for the coach (and the escalating follow-ups). */
 function promiseLine(s) {
@@ -13472,8 +13552,8 @@ var KEYWORDS = {
 	]
 };
 var fold$2 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-var STOP = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store magazin".split(" "));
-var words = (note) => [...new Set(fold$2(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP.has(w));
+var STOP$1 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store magazin".split(" "));
+var words = (note) => [...new Set(fold$2(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP$1.has(w));
 function matchRule(state, note, type) {
 	const n = fold$2(note);
 	if (!n) return null;
@@ -14658,6 +14738,92 @@ function nameAndRank(rules, raw) {
 		headline
 	};
 }
+var PLAN_STOP = /* @__PURE__ */ new Set([
+	"the",
+	"my",
+	"block",
+	"session",
+	"to",
+	"at",
+	"a",
+	"an"
+]);
+var planWords = (s) => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").split(/\s+/).filter((w) => w.length >= 3 && !PLAN_STOP.has(w));
+/** "18", "18:30", "6pm", "7.30" → "HH:MM". */
+function planTime(t) {
+	const m = /^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i.exec(t.trim());
+	if (!m) return null;
+	let h = Number(m[1]);
+	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
+	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
+	const min = Number(m[2] ?? 0);
+	return h <= 23 && min <= 59 ? `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}` : null;
+}
+var TRAINING = /^(gym|training|workout|train|sport|run)$/;
+/**
+* "move gym to 19", "put algebra at 10:30", "drop the reading block",
+* "no training today", "make algebra 90 min": the plan changes at once,
+* without the AI. null when the note isn't one of these (then the AI re-plans).
+*/
+function editPlan(plan, note) {
+	const t = note.trim().toLowerCase().replace(/[.!]+$/, "");
+	if (!t || t.length > 80 || /[,;]| and | then /.test(t)) return null;
+	const find = (name) => {
+		const want = planWords(name);
+		if (!want.length) return -1;
+		return plan.blocks.findIndex((b) => planWords(b.title).some((w) => want.some((x) => w.startsWith(x.slice(0, 5)) || x.startsWith(w.slice(0, 5)))));
+	};
+	const isTraining = (name) => planWords(name).some((w) => TRAINING.test(w));
+	let m = /^(?:move|put|shift|change)\s+(.+?)\s+(?:to|at)\s+(\S+(?:\s*[ap]m)?)$/.exec(t);
+	if (m) {
+		const at = planTime(m[2]);
+		if (!at) return null;
+		if (isTraining(m[1]) && plan.training) return {
+			...plan,
+			training: {
+				...plan.training,
+				time: at
+			}
+		};
+		const i = find(m[1]);
+		if (i < 0) return null;
+		return {
+			...plan,
+			blocks: plan.blocks.map((b, k) => k === i ? {
+				...b,
+				start: at
+			} : b).sort((a, b) => a.start.localeCompare(b.start))
+		};
+	}
+	m = /^(?:drop|remove|skip|delete|cancel|no)\s+(.+?)(?:\s+today)?$/.exec(t);
+	if (m) {
+		if (isTraining(m[1])) return plan.training ? {
+			...plan,
+			training: null
+		} : null;
+		const i = find(m[1]);
+		if (i < 0) return null;
+		return {
+			...plan,
+			blocks: plan.blocks.filter((_, k) => k !== i)
+		};
+	}
+	m = /^(?:make\s+)?(.+?)\s+(\d{2,3})\s*(?:m|min|mins|minutes)$/.exec(t);
+	if (m) {
+		const minutes = Number(m[2]);
+		if (minutes < 15 || minutes > 180) return null;
+		const i = find(m[1]);
+		if (i < 0) return null;
+		return {
+			...plan,
+			blocks: plan.blocks.map((b, k) => k === i ? {
+				...b,
+				minutes
+			} : b)
+		};
+	}
+	return null;
+}
 // src/core/benActs.ts
 /** At 10:00–19:59 a proposed plan nobody approved gets approved. */
 function autoApproveDue(status, time, already) {
@@ -15011,6 +15177,68 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 			}
 		})()
 	};
+}
+// src/core/areaWords.ts
+var AREA_WORDS = "area_words";
+var STOP = /* @__PURE__ */ new Set([
+	"the",
+	"and",
+	"for",
+	"with",
+	"from",
+	"this",
+	"that",
+	"today",
+	"tomorrow",
+	"monday",
+	"tuesday",
+	"wednesday",
+	"thursday",
+	"friday",
+	"saturday",
+	"sunday",
+	"next",
+	"week",
+	"call",
+	"buy",
+	"get",
+	"make",
+	"do",
+	"fix",
+	"check",
+	"send",
+	"pay",
+	"some",
+	"new"
+]);
+/** The words that say something about a task (4+ letters, not dates or filler). */
+function taskWords(text) {
+	return [...new Set((text.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((w) => !STOP.has(w)).map((w) => w.slice(0, 8)))];
+}
+/** An area most of the task's known words point to (seen at least twice, nothing against it), else null. */
+function areaFromWords(map, text, names) {
+	const score = /* @__PURE__ */ new Map();
+	for (const w of taskWords(text)) {
+		const votes = map[w];
+		if (!votes) continue;
+		const entries = Object.entries(votes).filter(([a]) => names.includes(a));
+		const total = entries.reduce((t, [, n]) => t + n, 0);
+		for (const [a, n] of entries) if (n >= 2 && n / total >= .8) score.set(a, (score.get(a) ?? 0) + n);
+	}
+	const best = [...score].sort((a, b) => b[1] - a[1]);
+	if (!best.length || best[1] && best[1][1] >= best[0][1] * .7) return null;
+	return best[0][0];
+}
+/** Remembers the pick (your own moves count too). At most 400 words kept. */
+function learnAreaWords(map, text, area) {
+	const next = { ...map };
+	for (const w of taskWords(text)) next[w] = {
+		...next[w] ?? {},
+		[area]: ((next[w] ?? {})[area] ?? 0) + 1
+	};
+	const keys = Object.keys(next);
+	if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) delete next[k];
+	return next;
 }
 // src/core/benQuick.ts
 var pad$1 = (n) => String(n).padStart(2, "0");
@@ -15534,6 +15762,31 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 	/** A plan for today (a new version when you ask to change or redo it). */
 	async function propose(note = "") {
 		const now = /* @__PURE__ */ new Date();
+		if (note.trim()) {
+			const edited = await mirror.write((db) => {
+				const today = services.services(db).wallet.today(now);
+				const st = load(db, today);
+				const cur = st.briefing;
+				if (!cur || cur.plan.day !== today) return null;
+				const plan = editPlan(cur.plan, note);
+				if (!plan) return null;
+				const version = (cur.version ?? 0) + 1;
+				save(db, {
+					...st,
+					briefing: {
+						status: "proposed",
+						sentAt: (/* @__PURE__ */ new Date()).toISOString(),
+						plan,
+						version
+					}
+				});
+				return {
+					plan,
+					version
+				};
+			});
+			if (edited) return edited;
+		}
 		const [events, tasks, upcoming] = await Promise.all([
 			calendar ? calendar.events(...dayBounds()).catch(() => []) : Promise.resolve([]),
 			todoist ? todoist.today().catch(() => []) : Promise.resolve([]),
@@ -15611,7 +15864,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			].filter(Boolean).join("\n"), {
 				json: true,
 				think: true,
-				strong: true
+				strong: true,
+				kind: "plan"
 			}), 35e3);
 			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
 			plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now));
@@ -15764,7 +16018,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			].join("\n"), {
 				json: true,
 				think: true,
-				strong: true
+				strong: true,
+				kind: "review"
 			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			if (talk.chat) await saveSelfNotes(today, j).catch(() => []);
@@ -15878,7 +16133,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			].join("\n"), {
 				json: true,
 				think: true,
-				strong: true
+				strong: true,
+				kind: "weekly"
 			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			const big3 = (Array.isArray(j.big3) ? j.big3 : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
@@ -15938,7 +16194,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			].join("\n"), {
 				json: true,
 				think: true,
-				strong: true
+				strong: true,
+				kind: "letter"
 			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			const text = String(j.letter ?? "").trim().slice(0, 2e3);
@@ -15979,7 +16236,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				data.feedback ? `\n== His feedback today ==\n${data.feedback}` : ""
 			].join("\n"), {
 				json: true,
-				think: true
+				think: true,
+				kind: "self-review"
 			}), 35e3);
 			const j = JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}");
 			const notes = await saveSelfNotes(data.today, j);
@@ -16016,7 +16274,10 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				data.facts ? `== What you remember ==\n${data.facts}` : "",
 				data.journal ? `== His journal this week ==\n${data.journal}` : "",
 				data.chat ? `== This week's chat ==\n${data.chat}` : ""
-			].join("\n"), { json: true }), 3e4);
+			].join("\n"), {
+				json: true,
+				kind: "story"
+			}), 3e4);
 			const story = String(JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}").story ?? "").trim().slice(0, 700);
 			if (!story) return null;
 			await mirror.write((db) => setSetting(db, COACH_STORY, JSON.stringify({
@@ -18032,7 +18293,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					}
 					return {
 						...promiseRefs(list),
-						stats: promiseLine(promiseStats(list))
+						stats: [promiseLine(promiseStats(list)), promiseReliability(list)].filter(Boolean).join("\n")
 					};
 				})(),
 				money: recentMoney(db, svc.wallet.today()),
@@ -18064,7 +18325,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const big = isBigAsk(text) || correcting;
 		if (big) step("Thinking it through");
 		const deadline = Date.now() + 38e3;
-		const ask = (found, extraNote = "") => withTimeout(ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
+		const ask = (found, extraNote = "", kind = media ? "media" : big ? "chat-deep" : "chat") => withTimeout(ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
 			refs: [
 				made.lines,
 				moneyLines,
@@ -18088,7 +18349,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			media: media ? [{
 				mime: media.mime,
 				data: media.data
-			}] : void 0
+			}] : void 0,
+			kind
 		}), Math.max(4e3, deadline - Date.now()));
 		let out;
 		try {
@@ -18131,11 +18393,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					} else found.push(`${need}: not available.`);
 				}
 				made = makeRefs(allEvents, allTasks);
-				out = parseBrain(await ask(found.join("\n") || "Nothing found."));
+				out = parseBrain(await ask(found.join("\n") || "Nothing found.", "", "lookup"));
 			}
 			if (correcting && !out.actions.length && !out.need?.length) {
 				step("Fixing it");
-				const again = parseBrain(await ask(void 0, "Note for the coach: he is correcting something that went wrong. Fix it NOW with actions (delmoney / editmoney / water / sleep / edit …), then confirm in one line. Words alone change nothing."));
+				const again = parseBrain(await ask(void 0, "Note for the coach: he is correcting something that went wrong. Fix it NOW with actions (delmoney / editmoney / water / sleep / edit …), then confirm in one line. Words alone change nothing.", "retry"));
 				if (again.actions.length) out = again;
 			}
 		} catch (e) {
@@ -18333,6 +18595,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							}
 							await todoist.move(t.id, area.key);
 							done.push(`📂 ${t.content} → ${area.name}`);
+							await mirror.write((db) => setSetting(db, AREA_WORDS, JSON.stringify(learnAreaWords(JSON.parse(getSetting(db, "area_words") || "{}"), t.content, area.name)))).catch(() => null);
 						}
 						continue;
 					}
@@ -18649,7 +18912,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (done.some((d) => d.startsWith("⚠️"))) {
 			step("Fixing what failed");
 			try {
-				const fix = parseBrain(await ask(void 0, `RESULTS of your actions just now:\n${done.join("\n")}\nSome failed (⚠️). Fix them now with different actions if you can (another time, the right E/T/M ref, a valid day), without repeating what already worked. Your new reply replaces the old one: say what is done and, honestly, what is not.`));
+				const fix = parseBrain(await ask(void 0, `RESULTS of your actions just now:\n${done.join("\n")}\nSome failed (⚠️). Fix them now with different actions if you can (another time, the right E/T/M ref, a valid day), without repeating what already worked. Your new reply replaces the old one: say what is done and, honestly, what is not.`, "repair"));
 				const again = fix.actions.map(readAction).filter((a) => !!a && a.kind !== "focus");
 				if (again.length) await runActs(again, "f");
 				if (fix.reply) out.reply = /^\p{Extended_Pictographic}/u.test(fix.reply) ? fix.reply : `${MOOD_FACE[mood]} ${fix.reply}`;
@@ -20951,6 +21214,28 @@ var EVAL_CASES = [
 		say: "receipt from Linella: total 245.50 lei",
 		want: "logs the receipt total 245.50",
 		must: [/Logged:[^\n]*245/i]
+	},
+	{
+		id: "memory",
+		say: "what should I focus on today?",
+		want: "uses what Ben remembers (the Etica exam on Friday)",
+		must: [/REPLY:[^\n]*(etica|exam|chapter)/i],
+		never: [/calendar\.remove|todoist\.(close|remove)/i],
+		facts: ["Etica exam on Friday, chapters 3 to 5", "Studies best before noon in 25-minute blocks"]
+	},
+	{
+		id: "memory-person",
+		say: "should I call my sister tonight?",
+		want: "knows his sister is Ana",
+		must: [/REPLY:[^\n]*\bAna\b/i],
+		facts: ["His sister is Ana, she is 15"]
+	},
+	{
+		id: "real-count",
+		say: "how many calendar blocks do I have today?",
+		want: "answers with the real number of blocks (4)",
+		must: [/REPLY:[^\n]*\b(4|four)\b/i],
+		never: [/calendar\.(create|move|remove)/i]
 	}
 ];
 /** Pass or fail for one case, from its trace. */
@@ -21135,6 +21420,43 @@ async function runOne(SQL, model, c) {
 		task("t2", "sport"),
 		task("t3", "laborator 4 PC")
 	];
+	const calendar = {
+		events: async () => events,
+		create: async (e) => {
+			log.push(`calendar.create ${e.title} ${localIso$1(e.start)} → ${localIso$1(e.end)}`);
+			return {
+				...e,
+				id: "new",
+				calendarId: "cal",
+				allDay: false
+			};
+		},
+		move: async (_cal, id, start, end) => void log.push(`calendar.move ${id} ${localIso$1(start)} → ${localIso$1(end)}`),
+		remove: async (_cal, id) => void log.push(`calendar.remove ${id}`)
+	};
+	const todoist = {
+		today: async () => tasks,
+		upcoming: async () => [],
+		everything: async () => ({
+			tasks,
+			areas: [{
+				key: "p:inbox",
+				name: "Inbox"
+			}]
+		}),
+		close: async (id) => void log.push(`todoist.close ${id}`),
+		quickAdd: async (text) => (log.push(`todoist.quickAdd ${text}`), task("t9", text)),
+		update: async (id, patch) => void log.push(`todoist.update ${id} ${JSON.stringify(patch)}`),
+		move: async (id, area) => void log.push(`todoist.move ${id} ${area}`),
+		remove: async (id) => void log.push(`todoist.remove ${id}`)
+	};
+	if (c.facts?.length) await mirror.write((db) => setSetting(db, "coach_memory", JSON.stringify({
+		facts: c.facts.map((t) => ({
+			t,
+			at: today
+		})),
+		chat: []
+	})));
 	const bots = createWebBots({
 		mirror,
 		services,
@@ -21142,36 +21464,8 @@ async function runOne(SQL, model, c) {
 			botToken: "1:eval",
 			chatId: "1"
 		},
-		todoist: {
-			today: async () => tasks,
-			upcoming: async () => [],
-			everything: async () => ({
-				tasks,
-				areas: [{
-					key: "p:inbox",
-					name: "Inbox"
-				}]
-			}),
-			close: async (id) => void log.push(`todoist.close ${id}`),
-			quickAdd: async (text) => (log.push(`todoist.quickAdd ${text}`), task("t9", text)),
-			update: async (id, patch) => void log.push(`todoist.update ${id} ${JSON.stringify(patch)}`),
-			move: async (id, area) => void log.push(`todoist.move ${id} ${area}`),
-			remove: async (id) => void log.push(`todoist.remove ${id}`)
-		},
-		calendar: {
-			events: async () => events,
-			create: async (e) => {
-				log.push(`calendar.create ${e.title} ${localIso$1(e.start)} → ${localIso$1(e.end)}`);
-				return {
-					...e,
-					id: "new",
-					calendarId: "cal",
-					allDay: false
-				};
-			},
-			move: async (_cal, id, start, end) => void log.push(`calendar.move ${id} ${localIso$1(start)} → ${localIso$1(end)}`),
-			remove: async (_cal, id) => void log.push(`calendar.remove ${id}`)
-		},
+		todoist,
+		calendar,
 		ai: model
 	});
 	try {
@@ -21308,8 +21602,12 @@ async function botsFor(env) {
 		}
 	} : void 0;
 	const pickArea = model ? async (text, names) => {
-		const r = (await model(`Which ONE of these life areas does this task belong to? Areas: ${names.join(", ")}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, "");
-		return /^none$/i.test(r) ? null : r;
+		const known = await mirror.read((db) => areaFromWords(JSON.parse(getSetting(db, "area_words") || "{}"), text, names)).catch(() => null);
+		if (known) return known;
+		const r = (await model(`Which ONE of these life areas does this task belong to? Areas: ${names.join(", ")}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`, { kind: "area" })).trim().replace(/^"|"$/g, "");
+		const area = /^none$/i.test(r) ? null : names.find((n) => n.toLowerCase() === r.toLowerCase()) ?? r;
+		if (area) await mirror.write((db) => setSetting(db, AREA_WORDS, JSON.stringify(learnAreaWords(JSON.parse(getSetting(db, "area_words") || "{}"), text, area)))).catch(() => null);
+		return area;
 	} : void 0;
 	const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, todoistFetch(env), { pickArea }) : null;
 	const calendar = calendarFor(env, mirror);
@@ -21660,6 +21958,23 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const voiced = async (template) => {
 			const kind = voiceKind(template);
 			if (!kind || !env.model) return template;
+			const dayKey = now.toLocaleDateString("sv-SE");
+			if (!await mirror.write((db) => {
+				let v = {
+					day: dayKey,
+					kinds: []
+				};
+				try {
+					const raw = JSON.parse(getSetting(db, "voiced_kinds") || "null");
+					if (raw?.day === dayKey && Array.isArray(raw.kinds)) v = raw;
+				} catch {}
+				if (v.kinds.includes(kind)) return false;
+				setSetting(db, "voiced_kinds", JSON.stringify({
+					day: dayKey,
+					kinds: [...v.kinds, kind]
+				}));
+				return true;
+			}).catch(() => false)) return template;
 			try {
 				const ctx = await mirror.read((db) => {
 					const f = services.services(db).focus.state(now);

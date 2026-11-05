@@ -43,6 +43,7 @@ import { NUDGES as NUDGES_KEY, REMINDERS as REMINDERS_KEY, afterSend, answered a
 import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { notifFromMessage, type Notif } from '@core/notify'
 import { addNotif } from '../renderer/src/web/notifications'
+import { AREA_WORDS, areaFromWords, learnAreaWords } from '@core/areaWords'
 import { autoApproveDue, planWaitingText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
 import { loadStyle } from '../renderer/src/web/botBrain'
 import { deskChange, deskView, loadDesk, saveDesk } from '../renderer/src/web/benDesk'
@@ -160,10 +161,15 @@ async function botsFor(env: BotEnv) {
         }
       }
     : undefined
+  // B17: words → area learned from earlier picks; the AI is asked only for tasks with no known word.
   const pickArea = model
     ? async (text: string, names: string[]) => {
-        const r = (await model!(`Which ONE of these life areas does this task belong to? Areas: ${names.join(', ')}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`)).trim().replace(/^"|"$/g, '')
-        return /^none$/i.test(r) ? null : r
+        const known = await mirror.read((db) => areaFromWords(JSON.parse(getSetting(db as any, AREA_WORDS) || '{}'), text, names)).catch(() => null)
+        if (known) return known
+        const r = (await model!(`Which ONE of these life areas does this task belong to? Areas: ${names.join(', ')}.\nTask: "${text}"\nReply with exactly one area name from the list, or "none".`, { kind: 'area' } as any)).trim().replace(/^"|"$/g, '')
+        const area = /^none$/i.test(r) ? null : names.find((n) => n.toLowerCase() === r.toLowerCase()) ?? r
+        if (area) await mirror.write((db) => setSetting(db as any, AREA_WORDS, JSON.stringify(learnAreaWords(JSON.parse(getSetting(db as any, AREA_WORDS) || '{}'), text, area)))).catch(() => null)
+        return area
       }
     : undefined
   const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, todoistFetch(env), { pickArea }) : null
@@ -445,6 +451,24 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   const voiced = async (template: string): Promise<string> => {
     const kind = voiceKind(template)
     if (!kind || !env.model) return template
+    // B16/W10: the AI writes only the first nudge of each kind per day; the rest use the
+    // template with live numbers (no model call, no calendar or Todoist round trip).
+    const dayKey = now.toLocaleDateString('sv-SE')
+    const fresh = await mirror
+      .write((db) => {
+        let v: { day: string; kinds: string[] } = { day: dayKey, kinds: [] }
+        try {
+          const raw = JSON.parse(getSetting(db as any, 'voiced_kinds') || 'null')
+          if (raw?.day === dayKey && Array.isArray(raw.kinds)) v = raw
+        } catch {
+          /* new day */
+        }
+        if (v.kinds.includes(kind)) return false
+        setSetting(db as any, 'voiced_kinds', JSON.stringify({ day: dayKey, kinds: [...v.kinds, kind] }))
+        return true
+      })
+      .catch(() => false)
+    if (!fresh) return template
     try {
       const ctx = await mirror.read((db) => {
         const svc = services.services(db)

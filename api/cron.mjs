@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   if (!cfg.ok || !bot || !chatId) return send(res, 200, { ok: false, reason: 'No bot or chat set up' })
   // The coach speaks in its own words when Gemini is set up (GEMINI_API_KEY).
   const key = (process.env.GEMINI_API_KEY || '').trim()
-  const ai = key || (process.env.OPENROUTER_API_KEY || '').trim() ? async (prompt) => (await askModel(prompt)).text : undefined
+  const ai = key || (process.env.OPENROUTER_API_KEY || '').trim() ? async (prompt, opts) => (await askModel(prompt, opts)).text : undefined
   try {
     const sent = await runDaily(
       { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, ai, sleepBotToken: sleepBot?.token, appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '') },

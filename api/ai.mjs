@@ -13,6 +13,7 @@ const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
  * opts.json: answer as JSON; opts.media: [{mime, data (base64)}] (a voice
  * note, a photo) sent with the prompt.
  */
+const noThinkCfg = new Set()
 export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
   let last = ''
   for (const model of MODELS) {
@@ -22,9 +23,18 @@ export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
       body: JSON.stringify({
         ...(splitPrompt(prompt).system ? { systemInstruction: { parts: [{ text: splitPrompt(prompt).system }] } } : {}),
         contents: [{ parts: [{ text: splitPrompt(prompt).user }, ...(opts.media ?? []).map((m) => ({ inline_data: { mime_type: m.mime, data: m.data } }))] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4096, ...(opts.json ? { responseMimeType: 'application/json' } : {}) }
+        // B18: the backup model thinks only a little for chat and nudges (faster, cheaper); more for big asks.
+        generationConfig: { temperature: 0.7, maxOutputTokens: opts.think ? 4096 : 2048, ...(opts.json ? { responseMimeType: 'application/json' } : {}), ...(noThinkCfg.has(model) ? {} : { thinkingConfig: { thinkingBudget: opts.think ? 2048 : 256 } }) }
       })
     })
+    // A model that doesn't take a thinking budget: ask again without it (and remember).
+    if (r.status === 400 && !noThinkCfg.has(model)) {
+      const err = await r.clone().json().catch(() => ({}))
+      if (/thinking/i.test(err?.error?.message ?? '')) {
+        noThinkCfg.add(model)
+        return askGemini(key, prompt, fetchImpl, opts)
+      }
+    }
     if (r.status === 404) {
       last = `${model} is not available`
       continue
@@ -32,7 +42,7 @@ export async function askGemini(key, prompt, fetchImpl = fetch, opts = {}) {
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(`Gemini ${r.status}: ${j?.error?.message || 'request failed'}`)
     const um = j?.usageMetadata ?? {}
-    await recordUsage({ model: `google/${model}`, kind: opts.media?.length ? 'media' : 'chat', prompt: um.promptTokenCount, completion: um.candidatesTokenCount, cost: null }, process.env, fetchImpl)
+    await recordUsage({ model: `google/${model}`, kind: opts.kind || (opts.media?.length ? 'media' : 'chat'), prompt: um.promptTokenCount, completion: um.candidatesTokenCount, cost: null }, process.env, fetchImpl)
     const parts = j?.candidates?.[0]?.content?.parts ?? []
     const text = parts.filter((p) => !p.thought && typeof p.text === 'string').map((p) => p.text).join('')
     if (!text) throw new Error('Gemini gave an empty answer')
@@ -344,7 +354,7 @@ async function listModels(fetchImpl = fetch) {
 /** What the coach cost: today, 7 and 30 days, by model, the last calls, and OpenRouter's balance. */
 async function usageReport(orKey, fetchImpl = fetch) {
   const cfg = config()
-  const out = { today: null, week: null, month: null, byModel: [], recent: [], credits: null }
+  const out = { today: null, week: null, month: null, byModel: [], byKind: [], recent: [], credits: null }
   if (cfg.ok) {
     const day0 = new Date()
     day0.setHours(0, 0, 0, 0)
@@ -359,6 +369,7 @@ async function usageReport(orKey, fetchImpl = fetch) {
         q(sum, [since(30)]),
         q('SELECT model, COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0) + COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ? GROUP BY model ORDER BY 3 DESC, 2 DESC', [since(30)]),
         q('SELECT at, model, kind, prompt_tokens, completion_tokens, cost FROM ai_usage ORDER BY id DESC LIMIT 60'),
+        q("SELECT COALESCE(kind, 'chat'), COUNT(*), COALESCE(SUM(cost),0) FROM ai_usage WHERE at >= ? GROUP BY 1 ORDER BY 3 DESC, 2 DESC", [since(30)]),
         { type: 'close' }
       ]
     }, fetchImpl).catch(() => ({ json: null }))
@@ -372,6 +383,7 @@ async function usageReport(orKey, fetchImpl = fetch) {
     out.week = tot(2)
     out.month = tot(3)
     out.byModel = rows(4).map((r) => ({ model: v(r[0]), calls: Number(v(r[1])), cost: Number(v(r[2])), tokens: Number(v(r[3])) }))
+    out.byKind = rows(6).map((r) => ({ kind: v(r[0]), calls: Number(v(r[1])), cost: Number(v(r[2])) }))
     out.recent = rows(5).map((r) => ({ at: v(r[0]), model: v(r[1]), kind: v(r[2]), prompt: v(r[3]) == null ? null : Number(v(r[3])), completion: v(r[4]) == null ? null : Number(v(r[4])), cost: v(r[5]) == null ? null : Number(v(r[5])) }))
   }
   if (orKey) {

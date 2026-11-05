@@ -66,3 +66,24 @@ describe('cheaper prompts (B1, B8)', () => {
     expect(actionGroups('hey', true)).toContain('Todoist')
   })
 })
+
+describe('shorter prompts (B13–B15)', () => {
+  it('drops empty lines and headings from the day', async () => {
+    const { compactContext } = await import('./botBrain')
+    const c = compactContext('Focus today: 40 min\nHabits: none logged\nWorkouts:\n\n\nWater: 1.2 of 2.7 L')
+    expect(c).toBe('Focus today: 40 min\n\nWater: 1.2 of 2.7 L')
+  })
+  it("keeps Ben's replies as gists and Victor's words longer", async () => {
+    const { chatGist } = await import('./botBrain')
+    expect(chatGist({ role: 'coach', text: '🎯 Nice, that was a real block. Next: 25 min on the lab report before lunch, then a break. | 💧 Water +250 ml | (nothing saved)' })).toBe('🎯 Nice, that was a real block. · did: 💧 Water +250 ml')
+    expect(chatGist({ role: 'me', text: 'x'.repeat(300) }).length).toBe(240)
+  })
+  it('always keeps people he names and exams in the next two weeks', async () => {
+    const { pickFacts } = await import('./botBrain')
+    const facts = Array.from({ length: 60 }, (_, i) => ({ t: `filler ${i}`, at: '2026-10-01' }))
+    facts.splice(2, 0, { t: 'Maxim is his lab partner', at: '2026-09-01' }, { t: 'Etica exam on 12 Nov', at: '2026-09-02', type: 'exam' } as any)
+    const kept = pickFacts(facts as any, 'should I text Maxim?', 24, '2026-11-05')
+    expect(kept.some((f) => f.t.startsWith('Maxim'))).toBe(true)
+    expect(kept.some((f) => f.t.startsWith('Etica exam'))).toBe(true)
+  })
+})

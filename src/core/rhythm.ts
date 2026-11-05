@@ -392,3 +392,60 @@ export function nameAndRank(rules: DayProposal, raw: any): DayProposal {
   const headline = typeof raw.headline === 'string' && raw.headline.trim() ? raw.headline.trim().slice(0, 120) : rules.headline
   return { ...rules, blocks, mustdos, headline }
 }
+
+// ---- B22: simple plan changes, done in code -----------------------------
+
+const PLAN_STOP = new Set(['the', 'my', 'block', 'session', 'to', 'at', 'a', 'an'])
+const planWords = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter((w) => w.length >= 3 && !PLAN_STOP.has(w))
+/** "18", "18:30", "6pm", "7.30" → "HH:MM". */
+function planTime(t: string): string | null {
+  const m = /^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i.exec(t.trim())
+  if (!m) return null
+  let h = Number(m[1])
+  if (m[3]?.toLowerCase() === 'pm' && h < 12) h += 12
+  if (m[3]?.toLowerCase() === 'am' && h === 12) h = 0
+  const min = Number(m[2] ?? 0)
+  return h <= 23 && min <= 59 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null
+}
+const TRAINING = /^(gym|training|workout|train|sport|run)$/
+
+/**
+ * "move gym to 19", "put algebra at 10:30", "drop the reading block",
+ * "no training today", "make algebra 90 min": the plan changes at once,
+ * without the AI. null when the note isn't one of these (then the AI re-plans).
+ */
+export function editPlan(plan: DayProposal, note: string): DayProposal | null {
+  const t = note.trim().toLowerCase().replace(/[.!]+$/, '')
+  if (!t || t.length > 80 || /[,;]| and | then /.test(t)) return null
+  const find = (name: string) => {
+    const want = planWords(name)
+    if (!want.length) return -1
+    return plan.blocks.findIndex((b) => planWords(b.title).some((w) => want.some((x) => w.startsWith(x.slice(0, 5)) || x.startsWith(w.slice(0, 5)))))
+  }
+  const isTraining = (name: string) => planWords(name).some((w) => TRAINING.test(w))
+  let m = /^(?:move|put|shift|change)\s+(.+?)\s+(?:to|at)\s+(\S+(?:\s*[ap]m)?)$/.exec(t)
+  if (m) {
+    const at = planTime(m[2])
+    if (!at) return null
+    if (isTraining(m[1]) && plan.training) return { ...plan, training: { ...plan.training, time: at } }
+    const i = find(m[1])
+    if (i < 0) return null
+    return { ...plan, blocks: plan.blocks.map((b, k) => (k === i ? { ...b, start: at } : b)).sort((a, b) => a.start.localeCompare(b.start)) }
+  }
+  m = /^(?:drop|remove|skip|delete|cancel|no)\s+(.+?)(?:\s+today)?$/.exec(t)
+  if (m) {
+    if (isTraining(m[1])) return plan.training ? { ...plan, training: null } : null
+    const i = find(m[1])
+    if (i < 0) return null
+    return { ...plan, blocks: plan.blocks.filter((_, k) => k !== i) }
+  }
+  m = /^(?:make\s+)?(.+?)\s+(\d{2,3})\s*(?:m|min|mins|minutes)$/.exec(t)
+  if (m) {
+    const minutes = Number(m[2])
+    if (minutes < 15 || minutes > 180) return null
+    const i = find(m[1])
+    if (i < 0) return null
+    return { ...plan, blocks: plan.blocks.map((b, k) => (k === i ? { ...b, minutes } : b)) }
+  }
+  return null
+}
