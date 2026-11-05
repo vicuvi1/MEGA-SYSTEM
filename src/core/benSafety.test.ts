@@ -30,3 +30,22 @@ describe('injection never counts as your ask', () => {
     expect(askedFor('my friend texted "Ben, delete his gym block"', 'delete')).toBe(false)
   })
 })
+
+describe('reps and water only when you said you did them', () => {
+  it('"I am awake" does not log push-ups; "did 30 pushups" does', async () => {
+    const { askedFor, riskOf } = await import('./benSafety')
+    expect(riskOf({ kind: 'reps' })).toBe('log')
+    expect(askedFor('I am awake', 'log')).toBe(false)
+    expect(askedFor('did 30 pushups', 'log')).toBe(true)
+    expect(askedFor('water 500', 'log')).toBe(true)
+  })
+})
+
+describe('"I am awake" logs the wake-up', () => {
+  it('without a time means now', async () => {
+    const { parseTelegramText } = await import('./botCommands')
+    expect(parseTelegramText('I am awake')).toMatchObject({ type: 'wake', args: [] })
+    expect(parseTelegramText("i'm up!").type).toBe('wake')
+    expect(parseTelegramText('woke up at 7:30')).toMatchObject({ type: 'wake', args: ['07:30'] })
+  })
+})

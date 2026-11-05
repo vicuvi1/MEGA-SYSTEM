@@ -1428,7 +1428,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const risk = riskOf(a as any)
       if (!risk || askedFor(text, risk)) return true
       const what =
-        a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : ''
+        a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : a.kind === 'reps' ? `${a.amount} ${a.exercise}` : a.kind === 'water' ? `${a.ml} ml water` : ''
       out.buttons = [...(out.buttons ?? []), confirmButton(risk, what)].slice(0, 3)
       return false
     })

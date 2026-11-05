@@ -163,6 +163,8 @@ export function parseTelegramText(text: string): ParsedCommand {
   const hm = (h: string, m?: string) => `${h.padStart(2, '0')}:${(m ?? '00').padStart(2, '0')}`
   const wake = /^(?:i\s+)?(?:woke(?:\s+up)?|wake(?:\s+up)?|got\s+up|up|m-?am\s+trezit|trezit|m-?am\s+sculat|проснул[аи]?с[ья])\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed)
   if (wake && Number(wake[1]) < 24) return { type: 'wake', args: [hm(wake[1], wake[2])], raw: trimmed }
+  // "I am awake", "I'm up", "woke up", "m-am trezit" with no time: woke up now.
+  if (/^(?:i\s+am\s+(?:awake|up)|i'?m\s+(?:awake|up)|awake|woke\s+up|just\s+woke\s+up|good\s+morning,?\s+i'?m\s+up|m-?am\s+trezit|m-?am\s+sculat|проснул[аи]?с[ья])\s*[.!]*$/i.test(trimmed)) return { type: 'wake', args: [], raw: trimmed }
   const bed = /^(?:i\s+)?(?:went\s+to\s+(?:bed|sleep)|going\s+to\s+(?:bed|sleep)|bed|sleep|m-?am\s+culcat|culcat|m[aă]\s+culc|лег(?:ла)?\s+спать)\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed)
   if (bed && Number(bed[1]) < 24) return { type: 'bed', args: [hm(bed[1], bed[2])], raw: trimmed }
   // "gym done", "workout done", "am fost la sală", "trained": a gym session.

@@ -133,6 +133,11 @@ function parseTelegramText(text) {
 		args: [hm(wake[1], wake[2])],
 		raw: trimmed
 	};
+	if (/^(?:i\s+am\s+(?:awake|up)|i'?m\s+(?:awake|up)|awake|woke\s+up|just\s+woke\s+up|good\s+morning,?\s+i'?m\s+up|m-?am\s+trezit|m-?am\s+sculat|проснул[аи]?с[ья])\s*[.!]*$/i.test(trimmed)) return {
+		type: "wake",
+		args: [],
+		raw: trimmed
+	};
 	const bed = /^(?:i\s+)?(?:went\s+to\s+(?:bed|sleep)|going\s+to\s+(?:bed|sleep)|bed|sleep|m-?am\s+culcat|culcat|m[aă]\s+culc|лег(?:ла)?\s+спать)\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed);
 	if (bed && Number(bed[1]) < 24) return {
 		type: "bed",
@@ -2286,13 +2291,15 @@ function riskOf(a) {
 	if (a.kind === "shift" && (a.refs?.length ?? 0) > 3) return "shift";
 	if (a.kind === "reward") return "reward";
 	if (a.kind === "habit" && (a.habit === "oath" || a.habit === "clean")) return "habit";
+	if (a.kind === "reps" || a.kind === "water") return "log";
 	return null;
 }
 var ASKED = {
 	delete: /\b(delete|remove|cancel|drop|undo|wrong|mistake|not (?:going|happening)|get rid|clear|erase)\b|șterge|sterge|scoate|anulea|greșit|gresit|удали|отмен|убери/iu,
 	shift: /\b(late|push|shift|move|delay|postpone|reschedule|later)\b|întârzi|intarzi|amân|aman|mută|muta|опазд|перенес|сдвин/iu,
 	reward: /\b(reward|shop|treat|prize|redeem)\b|recompens|premiu|награ/iu,
-	habit: /\b(oath|clean|check-?in|checked in|did it|done)\b|jur|curat|făcut|facut|сделал/iu
+	habit: /\b(oath|clean|check-?in|checked in|did it|done)\b|jur|curat|făcut|facut|сделал/iu,
+	log: /\d|\b(did|done|finished|drank|drunk|had|log|logged|completed)\b|am făcut|am facut|am băut|am baut|сделал|выпил/iu
 };
 /** Did his own message ask for this kind of action? */
 /** Text that tries to give Ben orders ("SYSTEM:", "ignore your rules", a quoted order) never counts as your own ask. */
@@ -2306,12 +2313,13 @@ var LABEL = {
 	delete: "🗑 Yes, delete",
 	shift: "↪️ Yes, move them",
 	reward: "🎁 Yes, add the reward",
-	habit: "✅ Yes, mark it"
+	habit: "✅ Yes, mark it",
+	log: "✅ Yes, I did"
 };
 /** The confirm button for an action Ben wanted but you didn't ask for. */
 function confirmButton(risk, what) {
 	const w = what.replace(/\s+/g, " ").trim().slice(0, 40);
-	const say = risk === "delete" ? `Yes, delete ${w}` : risk === "shift" ? `Yes, move ${w}` : risk === "reward" ? `Yes, add the reward ${w}` : `Yes, mark ${w} done`;
+	const say = risk === "delete" ? `Yes, delete ${w}` : risk === "shift" ? `Yes, move ${w}` : risk === "reward" ? `Yes, add the reward ${w}` : risk === "log" ? `I did ${w}` : `Yes, mark ${w} done`;
 	return {
 		label: `${LABEL[risk]}${w ? `: ${w}` : ""}`.slice(0, 40),
 		do: `say:${say}`
@@ -16991,7 +16999,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		acts = acts.filter((a) => {
 			const risk = riskOf(a);
 			if (!risk || askedFor(text, risk)) return true;
-			const what = a.kind === "delevent" ? made.refs.events.get(a.ref)?.title ?? "that event" : a.kind === "deltask" ? made.refs.tasks.get(a.ref)?.content ?? "that task" : a.kind === "delmoney" ? "that money record" : a.kind === "shift" ? `${a.refs.length} blocks` : a.kind === "reward" ? a.title : a.kind === "habit" ? a.habit : "";
+			const what = a.kind === "delevent" ? made.refs.events.get(a.ref)?.title ?? "that event" : a.kind === "deltask" ? made.refs.tasks.get(a.ref)?.content ?? "that task" : a.kind === "delmoney" ? "that money record" : a.kind === "shift" ? `${a.refs.length} blocks` : a.kind === "reward" ? a.title : a.kind === "habit" ? a.habit : a.kind === "reps" ? `${a.amount} ${a.exercise}` : a.kind === "water" ? `${a.ml} ml water` : "";
 			out.buttons = [...out.buttons ?? [], confirmButton(risk, what)].slice(0, 3);
 			return false;
 		});
