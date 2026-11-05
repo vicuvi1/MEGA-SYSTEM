@@ -115,7 +115,8 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       soundCoin()
       triggerRpgPopup({
         main: `+${amount} ${exName}`,
-        sub: '+10 STR XP',
+        // No made-up "+10 STR XP": only what really happened (Z5).
+        sub: 'logged',
         kind: 'xp',
         x: rect.left + rect.width / 2,
         y: rect.top
@@ -145,8 +146,8 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
 
       soundCoin()
       triggerRpgPopup({
-        main: `+${addedMl}ml Water`,
-        sub: '+5 VIT XP',
+        main: `+${addedMl} ml water`,
+        sub: 'logged',
         kind: 'xp',
         x: rect.left + rect.width / 2,
         y: rect.top
@@ -160,8 +161,8 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
   const handleCompleteAll = useCallback(async () => {
     soundSuccess()
     triggerRpgPopup({
-      main: 'QUEST COMPLETE!',
-      sub: '+50 Gold · +100 XP',
+      main: 'All done for today',
+      sub: 'every target reached',
       kind: 'gold'
     })
 
