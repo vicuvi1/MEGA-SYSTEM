@@ -104,8 +104,14 @@ jobs:
           if (-not (Test-Path 'release\win-unpacked\resources\app-update.yml')) { throw 'app-update.yml is missing: installed apps could not update' }
           $dir = Join-Path $env:RUNNER_TEMP 'life-smoke'
           $env:LIFE_SMOKE = '1'
-          $p = Start-Process -FilePath 'release\win-unpacked\Life System.exe' -ArgumentList "--user-data-dir=$dir" -PassThru
-          if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id -Force; throw 'Life System did not open within 2 minutes' }
+          $p = Start-Process -FilePath 'release\win-unpacked\Life System.exe' -ArgumentList "--user-data-dir=$dir","--enable-logging","--log-file=$dir\electron.log" -PassThru
+          if (-not $p.WaitForExit(120000)) {
+            Write-Host '--- smoke-log.txt'; Get-Content (Join-Path $dir 'smoke-log.txt') -ErrorAction SilentlyContinue
+            Write-Host '--- processes'; Get-Process | Where-Object { $_.ProcessName -like '*Life*' -or $_.ProcessName -like 'powershell*' } | Format-Table Id, ProcessName, CPU, WS -AutoSize | Out-String | Write-Host
+            Write-Host '--- electron.log (last 60 lines)'; Get-Content (Join-Path $dir 'electron.log') -Tail 60 -ErrorAction SilentlyContinue
+            Stop-Process -Id $p.Id -Force; throw 'Life System did not open within 2 minutes'
+          }
+          Get-Content (Join-Path $dir 'smoke-log.txt') -ErrorAction SilentlyContinue
           Get-Content (Join-Path $dir 'smoke.txt') -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "Life System did not open properly (exit code $($p.ExitCode))" }
       # Create the release up front as a DRAFT: electron-builder uploads its

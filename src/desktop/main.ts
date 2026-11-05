@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, session, shell, Tray } from 'electron'
 import { clipWorthSaving } from '../core/islandActions'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -26,7 +26,23 @@ app.setPath('userData', app.commandLine.getSwitchValue('user-data-dir') || join(
 // Release check (LIFE_SMOKE=1): start, show the page, report, quit. The release
 // workflow runs this on Windows, so a version that doesn't open never ships.
 const smoke = process.env.LIFE_SMOKE === '1'
-if (smoke) setTimeout(() => app.exit(3), 90_000)
+/** The release check's step-by-step log (smoke-log.txt), so a hang on Windows shows where it stopped. */
+const t0 = Date.now()
+const smokeLog = (step: string): void => {
+  if (!smoke) return
+  try {
+    appendFileSync(join(app.getPath('userData'), 'smoke-log.txt'), `${((Date.now() - t0) / 1000).toFixed(1)}s ${step}\n`)
+  } catch {
+    /* no log */
+  }
+}
+if (smoke) {
+  smokeLog('start')
+  setTimeout(() => {
+    smokeLog('90 s passed: giving up')
+    app.exit(3)
+  }, 90_000)
+}
 // Only one copy runs; a second start just brings the first one forward.
 const firstCopy = app.requestSingleInstanceLock()
 if (!firstCopy) app.quit()
@@ -34,6 +50,7 @@ if (!firstCopy) app.quit()
 if (process.platform === 'win32') app.setAppUserModelId('com.vicuvi1.lifesystem')
 // Keep this on its own line (never behind an if/else): it starts the whole app.
 if (firstCopy) void app.whenReady().then(async () => {
+  smokeLog('ready')
   // Camera, microphone, location…: only the app itself may ask for the
   // microphone (voice notes) and notifications; everything else is refused,
   // and the embedded apps get nothing.
@@ -371,10 +388,13 @@ if (firstCopy) void app.whenReady().then(async () => {
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => { if (isMain && code !== -3) remember(`It could not load (${desc}).`) })
   win.webContents.on('did-finish-load', async () => {
     if (smoke) {
+      smokeLog('page loaded')
       setTimeout(async () => {
+        smokeLog('reading the page')
         const seen = await win.webContents.executeJavaScript('document.body.innerText.trim().length').catch(() => 0)
         // The updater must be able to read its config (else every download fails).
         const updates = await (autoUpdater as unknown as { configOnDisk: { value: Promise<{ provider?: string }> } }).configOnDisk.value.then((c) => c?.provider ?? 'none', (e: Error) => `error ${e.message}`)
+        smokeLog(`page text ${seen}, updates ${updates}`)
         const ok = win.isVisible() && Number(seen) > 0 && updates === 'github'
         await writeFile(join(dir, 'smoke.txt'), `visible=${win.isVisible()} text=${seen} updates=${updates}\n`).catch(() => {})
         app.exit(ok ? 0 : 1)
@@ -388,7 +408,9 @@ if (firstCopy) void app.whenReady().then(async () => {
     } catch { /* none */ }
   })
 
+  smokeLog('loading the page')
   await win.loadURL(origin + '/')
+  smokeLog('loadURL done')
   // When you go to bed, without watching the screen: the last moment you used
   // the PC (mouse/keys; before it locked, slept or shut down) is kept on disk.
   // Coming back hours later tells the app, which logs the bedtime in Waky.
