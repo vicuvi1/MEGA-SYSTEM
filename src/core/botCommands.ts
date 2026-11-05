@@ -558,17 +558,15 @@ export function formatSportResponse(
   unit: string,
   streak: number,
   coins: number,
-  xp: number
+  _xp = 0
 ): string {
+  // BG10: only what was really paid; no made-up "attribute gains".
   return [
     `🏃 <b>Workout logged</b>`,
     ``,
-    `• <b>Sport / Activity:</b> ${activity} (${amount} ${unit})`,
-    `• <b>Attribute Gains:</b> +2 STR · +2 VIT · +1 AGI`,
-    `• <b>Points:</b> +${coins}`,
-    `• <b>Continuous Streak:</b> ${streak} days active!`,
-    ``,
-    `<i>"Your physical combat power ascends. The System acknowledges your relentless dedication!"</i>`
+    `• ${activity} (${amount} ${unit})`,
+    coins > 0 ? `• Points: +${coins}` : `• No points (already paid today, or the rule is off)`,
+    `• Streak: ${streak} day${streak === 1 ? '' : 's'}`
   ].join('\n')
 }
 
@@ -681,14 +679,13 @@ export function formatBalanceResponse(data: {
   return lines.join('\n')
 }
 
-export function formatCleanCheckinResponse(streak: number, coins: number): string {
+/** BG10: the day that was checked in and the points really paid. */
+export function formatCleanCheckinResponse(streak: number, coins: number, day?: string, today?: string): string {
   return [
-    `🛡️ <b>Clean Day Affirmed!</b>`,
+    `🛡️ <b>Clean day checked in${day && today && day !== today ? ` for yesterday (${day})` : ''}</b>`,
     ``,
-    `• <b>Current Streak:</b> ${streak} days clean!`,
-    `• <b>Reward:</b> +${coins} points`,
-    ``,
-    `<i>"Stand fast, keep the standard, give today everything."</i>`
+    `• Streak: ${streak} day${streak === 1 ? '' : 's'}`,
+    coins > 0 ? `• Points: +${coins}` : `• No points this time (the rule is off or today's limit is used)`
   ].join('\n')
 }
 

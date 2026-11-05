@@ -14,6 +14,9 @@ export default async function handler(req, res) {
     const problem = pipelineProblem(body)
     if (problem) return send(res, 403, { error: problem })
     const r = await turso(cfg, body)
+    // BG5: only our own session check may answer 401. Turso refusing the
+    // server's key (expired, rotated) is a server problem: 503, never a sign-out.
+    if (r.status === 401 || r.status === 403) return send(res, 503, { error: 'The database refused the server key: check TURSO_TOKEN in Vercel' })
     send(res, r.status, r.json)
   } catch (e) {
     send(res, 502, { error: e.message || 'Database request failed' })

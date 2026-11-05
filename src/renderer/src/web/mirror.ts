@@ -161,6 +161,14 @@ export class Mirror {
     await this.ready
     if (this.desktop) return this.writeDesktop(fn)
     return this.lock(async () => {
+     // BG2: changes still waiting from a hiccup go first. If they still can't
+     // go, this one waits behind them (sent alone, it could clash with them
+     // and wipe them from this copy).
+     let behind = false
+     if (this.outbox().length) {
+       await this.flushOffline()
+       behind = this.outbox().length > 0
+     }
      // A setting changed elsewhere since our copy (another device, the server's tick):
      // Turso refuses the write, we reload and run the change again on fresh data.
      for (let attempt = 0; ; attempt++) {
@@ -177,6 +185,12 @@ export class Mirror {
       const mark = { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [version] }
       const touched = touchedTables(changes)
       const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)]
+      if (behind) {
+        this.queueOffline([...writeOnce(version), ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
+        this.persist()
+        this.emit()
+        return result
+      }
       try {
         const before = versionsBefore(touched)
         const batch = [...writeOnce(version), ...before, ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])]
@@ -254,6 +268,9 @@ export class Mirror {
       }
       // Changes made offline go first, so the fresh copy has them.
       if (!this.desktop) await this.flushOffline()
+      // BG8: while changes still wait, a fresh copy from Turso would hide them
+      // on screen (and you'd type them again). Wait until they're sent.
+      if (!this.desktop && this.outbox().length) return false
       return this.catchUp()
     })
       .then((changed) => {

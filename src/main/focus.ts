@@ -182,20 +182,20 @@ export class FocusService {
     return this.state(now)
   }
 
-  /** A session you did without the timer (today pays coins; earlier days count without). */
+  /** A session you did without the timer: it counts in your stats, but only timed sessions pay (BG11). */
   add(subject: string, minutes: number, day?: string, now = new Date()) {
     const name = String(subject || '').trim().slice(0, 40)
     if (!name) throw new LedgerError('Which subject?')
     const m = Math.round(minutes)
     if (!(m >= 1 && m <= 600)) throw new LedgerError('Minutes from 1 to 600')
-    return this.db.transaction(() => this.log(name, m, now, null, day))()
+    return this.db.transaction(() => this.log(name, m, now, null, day, false))()
   }
 
-  private log(subject: string, minutes: number, now: Date, startedAt: string | null, day?: string) {
+  private log(subject: string, minutes: number, now: Date, startedAt: string | null, day?: string, pays = true) {
     const today = this.wallet.today(now)
     const d = day && day <= today && day >= addDays(today, -14) ? day : today
     const earned = this.sessions(today).filter((s) => s.day === today).reduce((t, s) => t + s.coins, 0)
-    const coins = d === today ? Math.max(0, Math.min(focusCoins(minutes), FOCUS_DAILY_COINS - earned)) : 0
+    const coins = pays && d === today ? Math.max(0, Math.min(focusCoins(minutes), FOCUS_DAILY_COINS - earned)) : 0
     const end = now.toISOString()
     const start = startedAt ?? new Date(now.getTime() - minutes * 60000).toISOString()
     // The same timer logged twice (two devices stopping it): keep the first.

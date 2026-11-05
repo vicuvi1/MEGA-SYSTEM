@@ -262,6 +262,35 @@ describe('offline on the phone', () => {
     expect(remote.exec("SELECT value FROM settings WHERE key = 's3'")[0].values[0][0]).toBe('kept')
   })
 
+  it('BG2/BG8: a second edit of the same setting during a hiccup waits behind the first, and a refresh keeps both on screen', async () => {
+    const remote = fakeTurso()
+    const realFetch = globalThis.fetch
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) })
+    vi.stubGlobal('window', { addEventListener: () => {}, dispatchEvent: () => true })
+    vi.stubGlobal('navigator', { onLine: true })
+    const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await m.ready
+    const set = (v: string) => m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('bg2', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(v))
+    const get = () => m.read((db) => (db.prepare("SELECT value FROM settings WHERE key = 'bg2'").get() as any)?.value)
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 503, statusText: 'Unavailable', text: async () => 'busy' }))
+    await set('first')
+    // The server answers again, but only for reads: the queue can't go yet.
+    let calls = 0
+    vi.stubGlobal('fetch', async (u: string, init: any) => (calls++ < 1 ? { ok: false, status: 503, statusText: 'Unavailable', text: async () => 'busy' } : realFetch(u, init)))
+    await set('second')
+    expect(m.pendingOffline).toBe(2)
+    expect(await get()).toBe('second')
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 503, statusText: 'Unavailable', text: async () => 'busy' }))
+    await m.refresh().catch(() => null)
+    expect(await get()).toBe('second')
+    vi.stubGlobal('fetch', realFetch)
+    await m.refresh()
+    expect(m.pendingOffline).toBe(0)
+    expect(m.failedSync).toHaveLength(0)
+    expect(remote.exec("SELECT value FROM settings WHERE key = 'bg2'")[0].values[0][0]).toBe('second')
+  })
+
   it("storage full: the change still goes out from this tab, and you're told (S3)", async () => {
     fakeTurso()
     const realFetch = globalThis.fetch

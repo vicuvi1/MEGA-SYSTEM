@@ -125,3 +125,14 @@ describe('wallet.payOnce (P4)', () => {
     expect(wallet.payOnce('sleep.bed_on_time', { ref: 'bed:2026-10-26', now })).toBeGreaterThan(0)
   })
 })
+
+describe('BG1: past days', () => {
+  it('a workout told for a past day is saved but pays nothing', () => {
+    const now = new Date('2026-11-05T12:00:00Z')
+    const r = body.logWorkout({ title: 'Push-ups', day: '2026-11-03', items: [{ exerciseId: 'pushups', name: 'Push-ups', amount: 20, unit: 'reps' }] }, now)
+    expect(r.awarded).toBe(false)
+    expect(r.workout.day).toBe('2026-11-03')
+    expect(wallet.summary(now).balance).toBe(0)
+    expect(body.logWorkout({ title: 'Push-ups', items: [{ exerciseId: 'pushups', name: 'Push-ups', amount: 20, unit: 'reps' }] }, now).awarded).toBe(true)
+  })
+})

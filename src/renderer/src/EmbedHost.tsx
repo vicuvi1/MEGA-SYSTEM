@@ -430,7 +430,9 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         if (!data) return
 
         // 1. If MAN is checked in today, but Life System is not
-        if (data.lastCheckin === today && !d.checkedInToday && !d.resetToday) {
+        // BG4: only while today itself can be checked in (from 19:00). In the
+        // morning the check-in is for yesterday, and MAN's tap is about today.
+        if (data.lastCheckin === today && !d.checkedInToday && !d.resetToday && (d.checkIn?.mode ?? 'today') === 'today') {
           if (!d.setup) {
             const streak = Number(data.streakDays) || 1
             const startDay = streak > 1 ? addDays(today, -streak + 1) : today
@@ -465,7 +467,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
             await life.discipline.setStart(startDay)
           }
           const cur = await life.discipline.state()
-          if (!cur.checkedInToday && !cur.resetToday) {
+          if (!cur.checkedInToday && !cur.resetToday && (cur.checkIn?.mode ?? 'today') === 'today') {
             await life.discipline.checkIn()
             window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'checkin', ...payload } }))
           }

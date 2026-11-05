@@ -105,14 +105,16 @@ export function saveProfile(db: any, p: CoachProfile): CoachProfile {
 /** Every coach conversation (Telegram and the app), newest last, for the Coach page. */
 /** How to take back one thing the coach did (the Undo on its action cards). */
 export type UndoOp =
-  | { k: 'water'; ml: number }
-  | { k: 'reps'; ex: string; amount: number; workout?: number }
+  // BG3: the day it was logged on, so undo changes that day (not today).
+  | { k: 'water'; ml: number; day?: string }
+  | { k: 'reps'; ex: string; amount: number; workout?: number; day?: string }
   | { k: 'money'; id: string }
   | { k: 'event'; cal: string; id: string }
   | { k: 'task'; id: string }
   | { k: 'remind'; id: string }
-  | { k: 'mustdo'; text: string }
-  | { k: 'focus' }
+  | { k: 'mustdo'; text: string; day?: string }
+  /** startedAt: only that timer is cancelled, never a newer one. */
+  | { k: 'focus'; startedAt?: string }
 
 export interface LogEntry {
   role: 'me' | 'coach'

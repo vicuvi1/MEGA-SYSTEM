@@ -213,6 +213,9 @@ export class Body {
       }
       let ledgerId: number | null = null
       let awarded = false
+      // BG1: a workout told for a past day is a record only. Points are for
+      // what you log on the day you did it (like focus and sleep).
+      if (today === this.wallet.today(now))
       try {
         ledgerId = this.wallet.awardRule('body.workout_done', {
           note: input.title,

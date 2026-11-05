@@ -7,7 +7,7 @@ import type { PcPrefs } from '@core/pcActivity'
 import { Row, Switch } from './settingsUi'
 import { useAction } from './ui'
 
-type Info = { prefs: PcPrefs; port: number; token: string; now: { label: string; kind: string } | null; windows: boolean }
+type Info = { prefs: PcPrefs; port: number; token: string; now: { label: string; kind: string } | null; windows: boolean; siteServer?: string | null }
 
 export function PcPrivacyPanel() {
   const desk = window.desktop
@@ -98,6 +98,7 @@ export function PcPrivacyPanel() {
       <Row title="Keep distracting sites away" hint="With the browser helper (below): during a focus timer these sites show “after the block” instead.">
         <Switch label="Block sites during focus" on={p.blockSites} onChange={(v) => void set({ blockSites: v })} />
       </Row>
+      {info.siteServer && <p className="hint warn-text">⚠ {info.siteServer}</p>}
       <label className="pc-list">
         <span>Sites</span>
         <input defaultValue={list(p.sites)} onBlur={(e) => void set({ sites: read(e.target.value) })} />

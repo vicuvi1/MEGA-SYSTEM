@@ -114,7 +114,9 @@ export class SleepService {
     // not paid (H1).
     const nowMin = now.getHours() * 60 + now.getMinutes()
     const [wh, wm] = wakeTime.split(':').map(Number)
-    const live = !time || Math.abs(nowMin - (wh * 60 + wm)) <= 20
+    // BG18: around midnight 23:55 and 00:05 are 10 minutes apart, not 1430.
+    const gap = Math.abs(nowMin - (wh * 60 + wm)) % 1440
+    const live = !time || Math.min(gap, 1440 - gap) <= 20
     let awarded = false
     if (onTime && live) {
       try {

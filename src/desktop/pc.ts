@@ -8,7 +8,7 @@
 //   focus (P19): 127.0.0.1 only, with a secret token.
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { execFile } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -77,7 +77,7 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
 
   // ---- IPC (only the app window) ----
   const mine = (e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => e.sender === o.win.webContents
-  ipcMain.handle('pc:getPrefs', (e) => (mine(e) ? { prefs, port: SITE_PORT, token, now: current, windows: process.platform === 'win32' } : null))
+  ipcMain.handle('pc:getPrefs', (e) => (mine(e) ? { prefs, port: SITE_PORT, token, now: current, windows: process.platform === 'win32', siteServer: serverProblem } : null))
   ipcMain.handle('pc:setPrefs', async (e, p: Partial<PcPrefs>) => {
     if (!mine(e)) return null
     prefs = cleanPcPrefs({ ...prefs, ...p })
@@ -120,27 +120,49 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
   })
 
   // ---- P19: the browser helper asks "is a focus block on, and which sites?" ----
+  // BG17: if the port is busy it tries again (30 s, 1 min, 2 min… up to 10 min)
+  // and the PC privacy page shows why. LT20: the token is compared in
+  // constant time, and only the browser helper (an extension) may read it.
   let server: Server | null = null
+  let serverProblem: string | null = null
+  let retry: NodeJS.Timeout | null = null
+  let delay = 30_000
+  const sameToken = (got: string | null) => {
+    const a = Buffer.from(String(got ?? ''))
+    const b = Buffer.from(token)
+    return a.length === b.length && b.length > 0 && timingSafeEqual(a, b)
+  }
   const startServer = () => {
     if (server) return
-    server = createServer((req, res) => {
+    const srv = createServer((req, res) => {
       const u = new URL(req.url ?? '/', `http://127.0.0.1:${SITE_PORT}`)
-      res.setHeader('Access-Control-Allow-Origin', '*')
+      const origin = String(req.headers.origin ?? '')
+      if (/^(chrome|moz)-extension:\/\//.test(origin)) res.setHeader('Access-Control-Allow-Origin', origin)
       res.setHeader('Content-Type', 'application/json')
-      if (u.pathname !== '/focus' || u.searchParams.get('token') !== token) {
+      if (u.pathname !== '/focus' || !sameToken(u.searchParams.get('token'))) {
         res.statusCode = 403
         return res.end('{"error":"no"}')
       }
       const on = prefs.blockSites && focusState.running && focusState.endsAt > Date.now()
       res.end(JSON.stringify({ on, subject: on ? focusState.subject : '', endsAt: on ? focusState.endsAt : 0, sites: on ? prefs.sites : [] }))
     })
-    server.on('error', () => {
+    srv.on('error', (err: NodeJS.ErrnoException) => {
       server = null
+      serverProblem = err.code === 'EADDRINUSE' ? `Port ${SITE_PORT} is used by another program; trying again soon` : `The site blocker couldn't start (${err.code ?? err.message}); trying again soon`
+      if (retry) clearTimeout(retry)
+      retry = setTimeout(startServer, delay)
+      delay = Math.min(delay * 2, 10 * 60_000)
     })
-    server.listen(SITE_PORT, '127.0.0.1')
+    srv.on('listening', () => {
+      serverProblem = null
+      delay = 30_000
+    })
+    server = srv
+    srv.listen(SITE_PORT, '127.0.0.1')
   }
   startServer()
   app.on('will-quit', () => {
+    if (retry) clearTimeout(retry)
     try {
       server?.close()
     } catch {

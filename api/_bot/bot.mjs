@@ -567,16 +567,13 @@ function formatWorkoutResponse(exName, amount, streak, coins) {
 		`<i>The iron never lies. Keep pushing forward!</i>`
 	].join("\n");
 }
-function formatSportResponse(activity, amount, unit, streak, coins, xp) {
+function formatSportResponse(activity, amount, unit, streak, coins, _xp = 0) {
 	return [
 		`🏃 <b>Workout logged</b>`,
 		``,
-		`• <b>Sport / Activity:</b> ${activity} (${amount} ${unit})`,
-		`• <b>Attribute Gains:</b> +2 STR · +2 VIT · +1 AGI`,
-		`• <b>Points:</b> +${coins}`,
-		`• <b>Continuous Streak:</b> ${streak} days active!`,
-		``,
-		`<i>"Your physical combat power ascends. The System acknowledges your relentless dedication!"</i>`
+		`• ${activity} (${amount} ${unit})`,
+		coins > 0 ? `• Points: +${coins}` : `• No points (already paid today, or the rule is off)`,
+		`• Streak: ${streak} day${streak === 1 ? "" : "s"}`
 	].join("\n");
 }
 function formatMetricResponse(type, val, unit, coins, xp) {
@@ -626,14 +623,13 @@ function formatBalanceResponse(data) {
 	if (data.dailyBudgetLeftMdl != null) lines.push(``, `📊 <b>Today's Spending Budget:</b> ${data.dailyBudgetLeftMdl.toFixed(2)} ${data.currency} remaining`);
 	return lines.join("\n");
 }
-function formatCleanCheckinResponse(streak, coins) {
+/** BG10: the day that was checked in and the points really paid. */
+function formatCleanCheckinResponse(streak, coins, day, today) {
 	return [
-		`🛡️ <b>Clean Day Affirmed!</b>`,
+		`🛡️ <b>Clean day checked in${day && today && day !== today ? ` for yesterday (${day})` : ""}</b>`,
 		``,
-		`• <b>Current Streak:</b> ${streak} days clean!`,
-		`• <b>Reward:</b> +${coins} points`,
-		``,
-		`<i>"Stand fast, keep the standard, give today everything."</i>`
+		`• Streak: ${streak} day${streak === 1 ? "" : "s"}`,
+		coins > 0 ? `• Points: +${coins}` : `• No points this time (the rule is off or today's limit is used)`
 	].join("\n");
 }
 function formatUrgeResponse() {
@@ -2007,6 +2003,536 @@ function warningText(w, topTrigger, stealth = false) {
 	const what = [w.urges ? `${w.urges} urge${w.urges === 1 ? "" : "s"}` : "", w.resets ? `${w.resets} reset${w.resets === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ");
 	return `🛡️ <b>Heads-up</b>: ${w.from}–${w.to} is your risky time lately (${what}). ${tip}\nIf an urge hits: open the urge crusher, 3 minutes, you win.`;
 }
+// src/core/ledger.ts
+var LedgerError = class extends Error {
+	name = "LedgerError";
+};
+/** Rows that still count: not undo rows and not undone. */
+function effective(entries) {
+	const undone = /* @__PURE__ */ new Set();
+	for (const e of entries) if (e.kind === "undo" && e.undoOf != null) undone.add(e.undoOf);
+	return entries.filter((e) => e.kind !== "undo" && !undone.has(e.id));
+}
+function balance(entries) {
+	return effective(entries).reduce((s, e) => s + e.coins, 0);
+}
+/** XP only ever goes up; undoing an earn is the one way it is corrected. */
+function totalXp(entries) {
+	return effective(entries).reduce((s, e) => s + Math.max(0, e.xp), 0);
+}
+/**
+* Penalties dock coins but never push the balance below zero, so one bad day
+* can't wipe out the wallet.
+*/
+function clampPenalty(currentBalance, coins) {
+	if (coins >= 0) return coins;
+	return Math.max(coins, -Math.max(0, currentBalance));
+}
+/** Validates an undo and returns the row to insert. */
+function planUndo(entries, id, note, ts, day) {
+	if (!note.trim()) throw new LedgerError("An undo needs a reason");
+	const target = entries.find((e) => e.id === id);
+	if (!target) throw new LedgerError("Entry not found");
+	if (target.kind === "undo") throw new LedgerError("Cannot undo an undo");
+	if (target.ref?.startsWith("chest:")) throw new LedgerError("Chest prizes are final");
+	if (target.coins < 0 && /^(bank:|goal:)/.test(target.ref ?? "")) throw new LedgerError("Take them back out of the bank or goal instead");
+	if (entries.some((e) => e.kind === "undo" && e.undoOf === id)) throw new LedgerError("Already undone");
+	if (balance(entries) - target.coins < 0) throw new LedgerError("Those coins were already spent");
+	return {
+		ts,
+		day,
+		module: target.module,
+		kind: "undo",
+		coins: 0,
+		xp: 0,
+		ruleId: target.ruleId ?? null,
+		ref: target.ref ?? null,
+		note,
+		undoOf: id
+	};
+}
+// src/core/streaks.ts
+/**
+* Consecutive days ending today. If today isn't done yet the streak is still
+* alive as long as yesterday was.
+*/
+function dayStreak(doneDays, today, restDays = []) {
+	const set = new Set(doneDays);
+	const rest = new Set([...restDays].filter((d) => !set.has(d)));
+	let cursor = set.has(today) || rest.has(today) ? today : addDays$3(today, -1);
+	let n = 0;
+	while (set.has(cursor) || rest.has(cursor)) {
+		if (set.has(cursor)) n++;
+		cursor = addDays$3(cursor, -1);
+	}
+	return n;
+}
+function bestDayStreak(doneDays, restDays = []) {
+	const done = new Set(doneDays);
+	const days = [.../* @__PURE__ */ new Set([...done, ...restDays])].sort();
+	let best = 0;
+	let run = 0;
+	for (let i = 0; i < days.length; i++) {
+		if (i > 0 && daysBetween$1(days[i - 1], days[i]) !== 1) run = 0;
+		if (done.has(days[i])) run++;
+		best = Math.max(best, run);
+	}
+	return best;
+}
+/**
+* Clean-day stats derived from a start date and relapse dates. The count is
+* the number of whole days since the last reset, so it can't be bumped by hand.
+*/
+function cleanStats(start, relapses, today) {
+	if (!start) return {
+		current: 0,
+		best: 0,
+		totalClean: 0,
+		relapses: 0,
+		since: null
+	};
+	const resets = relapses.filter((d) => d >= start && d <= today).sort();
+	const points = [
+		start,
+		...resets,
+		today
+	];
+	const segments = [];
+	for (let i = 0; i < points.length - 1; i++) segments.push(Math.max(0, daysBetween$1(points[i], points[i + 1])));
+	const since = resets.length ? resets[resets.length - 1] : start;
+	return {
+		current: segments[segments.length - 1] ?? 0,
+		best: Math.max(0, ...segments),
+		totalClean: segments.reduce((s, n) => s + n, 0),
+		relapses: resets.length,
+		since
+	};
+}
+// src/core/discipline.ts
+var MILESTONES$1 = [
+	{
+		days: 3,
+		coins: 15
+	},
+	{
+		days: 7,
+		coins: 40
+	},
+	{
+		days: 10,
+		coins: 60
+	},
+	{
+		days: 14,
+		coins: 80
+	},
+	{
+		days: 30,
+		coins: 200
+	},
+	{
+		days: 60,
+		coins: 350
+	},
+	{
+		days: 90,
+		coins: 600
+	},
+	{
+		days: 180,
+		coins: 1e3
+	},
+	{
+		days: 365,
+		coins: 2e3
+	}
+];
+var DISCIPLINE_RANKS = [
+	{
+		days: 0,
+		name: "Initiate"
+	},
+	{
+		days: 3,
+		name: "Squire"
+	},
+	{
+		days: 7,
+		name: "Warrior"
+	},
+	{
+		days: 14,
+		name: "Guardian"
+	},
+	{
+		days: 30,
+		name: "Knight"
+	},
+	{
+		days: 60,
+		name: "Champion"
+	},
+	{
+		days: 90,
+		name: "Spartan"
+	},
+	{
+		days: 180,
+		name: "Legend"
+	}
+];
+var QUOTES = [
+	"Discipline is choosing what you want most over what you want now.",
+	"The urge is a wave. You do not have to surf it, you only have to let it pass.",
+	"Every clean day is a vote for the person you are becoming.",
+	"You are not your impulses. You are the one who notices them.",
+	"Hard choices, easy life. Easy choices, hard life.",
+	"One day at a time is still a day won.",
+	"Boredom is not an emergency. Stand up, move, breathe.",
+	"Strong is built in the moments nobody sees.",
+	"A slip is a lesson, not a verdict. Start again today.",
+	"Your future self is watching. Give them a reason to be proud.",
+	"Energy saved is energy you get to spend on your goals.",
+	"Comfort is the enemy of progress. Do the harder thing.",
+	"The first five minutes are the hardest. After that it gets quiet.",
+	"You have done hard things before. This is one more.",
+	"Win the morning, win the day.",
+	"Control the phone or the phone controls you.",
+	"Real confidence is a promise to yourself, kept.",
+	"Cold water, ten push-ups, fresh air. Then decide.",
+	"Small daily wins beat big rare ones.",
+	"The streak is the proof. Keep stacking days."
+];
+function quoteFor(day) {
+	return QUOTES[(daysBetween$1("2026-01-01", day) % QUOTES.length + QUOTES.length) % QUOTES.length];
+}
+function rankFor(days) {
+	let i = 0;
+	for (let k = 0; k < DISCIPLINE_RANKS.length; k++) if (days >= DISCIPLINE_RANKS[k].days) i = k;
+	const next = DISCIPLINE_RANKS[i + 1];
+	return {
+		name: DISCIPLINE_RANKS[i].name,
+		next: next ?? null
+	};
+}
+/** The current start date is the latest `start` event. */
+function startOf(events) {
+	const starts = events.filter((e) => e.kind === "start").sort((a, b) => a.id - b.id);
+	return starts[starts.length - 1] ?? null;
+}
+function statsOf(events, today) {
+	return cleanStats(startOf(events)?.day ?? null, events.filter((e) => e.kind === "reset").map((e) => e.day), today);
+}
+function milestoneRef(since, days) {
+	return `milestone:${since}:${days}`;
+}
+/**
+* Milestones of the current streak. A milestone whose day came before the
+* streak was entered in the app shows as reached but pays nothing, so a
+* backdated start date can't unlock a pile of coins at once.
+*/
+function milestonesOf(events, today, claimedRefs, setupDay) {
+	const start = startOf(events);
+	const stats = statsOf(events, today);
+	if (!start || !stats.since) return MILESTONES$1.map((m) => ({
+		...m,
+		status: "locked",
+		reachedOn: null
+	}));
+	const recorded = setupDay(start);
+	return MILESTONES$1.map((m) => {
+		if (stats.current < m.days) return {
+			...m,
+			status: "locked",
+			reachedOn: null
+		};
+		const reachedOn = addDays$3(stats.since, m.days);
+		if (claimedRefs.has(milestoneRef(stats.since, m.days))) return {
+			...m,
+			status: "claimed",
+			reachedOn
+		};
+		return {
+			...m,
+			status: reachedOn < recorded ? "before-setup" : "claimable",
+			reachedOn
+		};
+	});
+}
+function validateStart(day, today, events) {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new LedgerError("Pick a date");
+	if (day > today) throw new LedgerError("The start date cannot be in the future");
+	if (daysBetween$1(day, today) > 3650) throw new LedgerError("That date is too far back");
+	if (events.some((e) => e.kind === "reset")) throw new LedgerError("After a reset the date comes from the reset itself");
+}
+function planCheckIn(events, today) {
+	if (!startOf(events)) throw new LedgerError("Set your start date first");
+	if (events.some((e) => e.kind === "reset" && e.day === today)) throw new LedgerError("Today was a reset day. Check in again tomorrow.");
+	if (events.some((e) => e.kind === "checkin" && e.day === today)) throw new LedgerError("Already checked in today");
+}
+function planUrgeFinish(startedAt, now) {
+	if (!startedAt) throw new LedgerError("Start the urge crusher first");
+	const elapsed = (now.getTime() - Date.parse(startedAt)) / 1e3;
+	if (elapsed < 170) throw new LedgerError(`Stay with it ${Math.ceil(170 - elapsed)} more seconds`);
+}
+/**
+* The streak as "Day N", everywhere (Today, MAN, Ben, Telegram, the island).
+* The start day is Day 1; a reset day is Day 0 and the next day Day 1.
+* (`current` counts whole days since the start / last reset.)
+*/
+function dayNumber(s) {
+	if (s.setup === false) return 0;
+	return s.current + (s.resets === 0 ? 1 : 0);
+}
+/**
+* When the clean-day check-in can be done (MN3, H2): from 19:00 (until the day
+* turns at 04:00) it is for today; in the morning (until 12:00) for yesterday,
+* if yesterday wasn't checked in or reset; otherwise it waits for 19:00.
+*/
+function checkInWindow(events, appToday, hour) {
+	if (hour >= 19 || hour < 4) return {
+		mode: "today",
+		day: appToday
+	};
+	const yesterday = addDays$3(appToday, -1);
+	const start = startOf(events);
+	return hour < 12 && !!start && yesterday >= start.day && !events.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === yesterday) ? {
+		mode: "yesterday",
+		day: yesterday
+	} : {
+		mode: "wait",
+		day: appToday
+	};
+}
+function resetUndoable(events, today, now) {
+	const r = [...events].reverse().find((e) => e.kind === "reset");
+	if (!r || r.day !== today) return null;
+	return now.getTime() - Date.parse(r.ts) <= 6e5 ? r : null;
+}
+// src/main/discipline.ts
+var UNDONE_KEY = "discipline_undone_resets";
+/** Resets that were taken back in their first 10 minutes (MN7). */
+function undoneResets(db) {
+	try {
+		const v = JSON.parse(getSetting(db, UNDONE_KEY) || "[]");
+		return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "number") : []);
+	} catch {
+		return /* @__PURE__ */ new Set();
+	}
+}
+var Discipline = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	events() {
+		const undone = undoneResets(this.db);
+		const all = this.db.prepare("SELECT id, kind, day, ts FROM discipline_events ORDER BY id").all();
+		return undone.size ? all.filter((e) => !undone.has(e.id)) : all;
+	}
+	record(kind, day, now) {
+		this.db.prepare("INSERT INTO discipline_events (kind, day, ts) VALUES (?, ?, ?)").run(kind, day, now.toISOString());
+	}
+	claimedRefs() {
+		return new Set(effective(this.wallet.entries()).map((e) => e.ref ?? "").filter((r) => r.startsWith("milestone:")));
+	}
+	milestones(events, today) {
+		return milestonesOf(events, today, this.claimedRefs(), (start) => this.wallet.today(new Date(start.ts)));
+	}
+	state(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const events = this.events();
+		const stats = statsOf(events, today);
+		const rank = rankFor(stats.current);
+		const weekAgo = addDays$3(today, -6);
+		const has = (kind) => events.some((e) => e.kind === kind && e.day === today);
+		return {
+			setup: !!startOf(events),
+			today,
+			since: stats.since,
+			current: stats.current,
+			day: dayNumber({
+				current: stats.current,
+				resets: stats.relapses,
+				setup: !!startOf(events)
+			}),
+			best: stats.best,
+			totalClean: stats.totalClean,
+			resets: stats.relapses,
+			rank: rank.name,
+			nextRank: rank.next,
+			checkedInToday: has("checkin"),
+			oathToday: has("oath"),
+			resetToday: has("reset"),
+			canEditStart: !events.some((e) => e.kind === "reset"),
+			milestones: this.milestones(events, today),
+			urgeStartedAt: getSetting(this.db, "urge_started_at") || null,
+			urgesThisWeek: events.filter((e) => e.kind === "urge" && e.day >= weekAgo).length,
+			stealth: getSetting(this.db, "discipline_stealth") === "1",
+			quote: quoteFor(today),
+			checkIn: (() => {
+				const w = checkInWindow(events, today, now.getHours());
+				return {
+					mode: events.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === w.day) && w.mode !== "wait" ? "done" : w.mode,
+					day: w.day
+				};
+			})(),
+			history: events.filter((e) => e.day >= addDays$3(today, -84) && e.kind !== "start").map((e) => ({
+				day: e.day,
+				kind: e.kind,
+				hour: new Date(e.ts).getHours()
+			})),
+			undoResetUntil: (() => {
+				const r = resetUndoable(events, today, now);
+				return r ? new Date(Date.parse(r.ts) + 6e5).toISOString() : null;
+			})()
+		};
+	}
+	/**
+	* Take back a reset made in the last 10 minutes (MN7: a test, or a wrong
+	* tap). The reset is removed and its coin penalty is given back.
+	*/
+	undoReset(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			const r = resetUndoable(this.events(), today, now);
+			if (!r) throw new LedgerError("A reset can only be taken back in the first 10 minutes.");
+			setSetting(this.db, UNDONE_KEY, JSON.stringify([...undoneResets(this.db), r.id]));
+			const undone = new Set(this.wallet.entries().filter((e) => e.kind === "undo").map((e) => e.undoOf));
+			for (const e of this.wallet.entries()) {
+				if (undone.has(e.id) || e.kind === "undo" || e.ts < r.ts.slice(0, 19)) continue;
+				if (e.ruleId === "discipline.reset" || e.ref === "perk:rulers_authority") this.wallet.undo(e.id, "Reset taken back", now);
+			}
+		}).immediate();
+	}
+	setStart(day, now = /* @__PURE__ */ new Date()) {
+		const events = this.events();
+		validateStart(day, this.wallet.today(now), events);
+		this.record("start", day, now);
+	}
+	/**
+	* The clean-day check-in is for a day you lived (H2): from 19:00 (until the
+	* day turns at 04:00) for today; in the morning (until 12:00) for
+	* yesterday, if you didn't check it in. Earlier in the day it waits.
+	*/
+	/** Returns the day it was for and the points really paid (BG10). */
+	checkIn(now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const appToday = this.wallet.today(now);
+			const win = checkInWindow(this.events(), appToday, now.getHours());
+			if (win.mode === "wait") throw new LedgerError("The clean-day check-in opens at 19:00, when the day is done.");
+			const today = win.day;
+			planCheckIn(this.events(), today);
+			let coins = 0;
+			try {
+				const id = this.wallet.awardRule("discipline.clean_day", {
+					now,
+					day: today,
+					ref: `discipline:checkin:${today}`
+				});
+				coins = this.wallet.entries().find((e) => e.id === id)?.coins ?? 0;
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+			this.record("checkin", today, now);
+			const events = this.events();
+			for (const m of this.milestones(events, appToday)) if (m.status === "claimable") this.claim(m.days, now);
+			return {
+				day: today,
+				coins
+			};
+		}).immediate();
+	}
+	oath(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			if (this.events().some((e) => e.kind === "oath" && e.day === today)) throw new LedgerError("Oath already sworn today");
+			this.wallet.awardRule("discipline.oath", { now });
+			this.record("oath", today, now);
+		}).immediate();
+	}
+	/** An honest reset: the current streak starts again; best and total stay. */
+	reset(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			const events = this.events();
+			if (!startOf(events)) throw new LedgerError("Set your start date first");
+			if (events.some((e) => e.kind === "reset" && e.day === today)) throw new LedgerError("Already reset today. Tomorrow is day 1.");
+			let penaltyAwarded = false;
+			try {
+				this.wallet.awardRule("discipline.reset", { now });
+				penaltyAwarded = true;
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+			if (penaltyAwarded) try {
+				if (this.wallet.summary(now).level.perks.some((p) => p.id === "rulers_authority" && p.unlocked)) {
+					const entries = this.wallet.entries();
+					const lastEntry = entries[entries.length - 1];
+					if (lastEntry && lastEntry.ruleId === "discipline.reset" && lastEntry.coins < 0) {
+						const refundCoins = Math.round(Math.abs(lastEntry.coins) * .5);
+						if (refundCoins > 0) this.wallet.append({
+							ts: now.toISOString(),
+							day: today,
+							module: "perks",
+							kind: "earn",
+							coins: refundCoins,
+							xp: 0,
+							ref: "perk:rulers_authority",
+							note: "Ruler's Authority: 50% Urge Reset Penalty Refund"
+						});
+					}
+				}
+			} catch {}
+			this.record("reset", today, now);
+			setSetting(this.db, "urge_started_at", "");
+		}).immediate();
+	}
+	claim(days, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const today = this.wallet.today(now);
+			const events = this.events();
+			const m = this.milestones(events, today).find((x) => x.days === days);
+			if (!m || m.status !== "claimable") throw new LedgerError("Nothing to claim for that milestone");
+			const since = statsOf(events, today).since;
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: today,
+				module: "discipline",
+				kind: "earn",
+				coins: m.coins,
+				xp: m.coins,
+				ref: milestoneRef(since, days),
+				note: `${days}-day milestone`
+			});
+			return m.coins;
+		}).immediate();
+	}
+	startUrge(now = /* @__PURE__ */ new Date()) {
+		if (getSetting(this.db, "urge_started_at")) return;
+		setSetting(this.db, "urge_started_at", now.toISOString());
+	}
+	finishUrge(now = /* @__PURE__ */ new Date()) {
+		this.db.transaction(() => {
+			planUrgeFinish(getSetting(this.db, "urge_started_at") || null, now);
+			try {
+				this.wallet.awardRule("discipline.urge_resisted", { now });
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+			this.record("urge", this.wallet.today(now), now);
+			setSetting(this.db, "urge_started_at", "");
+		}).immediate();
+	}
+	cancelUrge() {
+		setSetting(this.db, "urge_started_at", "");
+	}
+	setStealth(on) {
+		setSetting(this.db, "discipline_stealth", on ? "1" : "0");
+	}
+};
 function loadTriggers(db) {
 	try {
 		const v = JSON.parse(getSetting(db, "discipline_triggers") || "[]");
@@ -2017,7 +2543,8 @@ function loadTriggers(db) {
 }
 function urgeEvents(db) {
 	try {
-		return db.prepare("SELECT kind, ts FROM discipline_events WHERE kind IN ('urge', 'reset') ORDER BY id DESC LIMIT 400").all().map((r) => ({
+		const undone = undoneResets(db);
+		return db.prepare("SELECT id, kind, ts FROM discipline_events WHERE kind IN ('urge', 'reset') ORDER BY id DESC LIMIT 400").all().filter((r) => !undone.has(r.id)).map((r) => ({
 			kind: r.kind,
 			ts: r.ts
 		}));
@@ -4221,54 +4748,6 @@ var MIGRATIONS = [
   CREATE UNIQUE INDEX IF NOT EXISTS notes_title ON notes(lower(title));
   `
 ];
-// src/core/ledger.ts
-var LedgerError = class extends Error {
-	name = "LedgerError";
-};
-/** Rows that still count: not undo rows and not undone. */
-function effective(entries) {
-	const undone = /* @__PURE__ */ new Set();
-	for (const e of entries) if (e.kind === "undo" && e.undoOf != null) undone.add(e.undoOf);
-	return entries.filter((e) => e.kind !== "undo" && !undone.has(e.id));
-}
-function balance(entries) {
-	return effective(entries).reduce((s, e) => s + e.coins, 0);
-}
-/** XP only ever goes up; undoing an earn is the one way it is corrected. */
-function totalXp(entries) {
-	return effective(entries).reduce((s, e) => s + Math.max(0, e.xp), 0);
-}
-/**
-* Penalties dock coins but never push the balance below zero, so one bad day
-* can't wipe out the wallet.
-*/
-function clampPenalty(currentBalance, coins) {
-	if (coins >= 0) return coins;
-	return Math.max(coins, -Math.max(0, currentBalance));
-}
-/** Validates an undo and returns the row to insert. */
-function planUndo(entries, id, note, ts, day) {
-	if (!note.trim()) throw new LedgerError("An undo needs a reason");
-	const target = entries.find((e) => e.id === id);
-	if (!target) throw new LedgerError("Entry not found");
-	if (target.kind === "undo") throw new LedgerError("Cannot undo an undo");
-	if (target.ref?.startsWith("chest:")) throw new LedgerError("Chest prizes are final");
-	if (target.coins < 0 && /^(bank:|goal:)/.test(target.ref ?? "")) throw new LedgerError("Take them back out of the bank or goal instead");
-	if (entries.some((e) => e.kind === "undo" && e.undoOf === id)) throw new LedgerError("Already undone");
-	if (balance(entries) - target.coins < 0) throw new LedgerError("Those coins were already spent");
-	return {
-		ts,
-		day,
-		module: target.module,
-		kind: "undo",
-		coins: 0,
-		xp: 0,
-		ruleId: target.ruleId ?? null,
-		ref: target.ref ?? null,
-		note,
-		undoOf: id
-	};
-}
 // src/core/rules.ts
 var DEFAULT_RULES = [
 	{
@@ -4486,63 +4965,6 @@ function planAward(rule, entries, now, day, note) {
 		ref: null,
 		note: note ?? null,
 		undoOf: null
-	};
-}
-// src/core/streaks.ts
-/**
-* Consecutive days ending today. If today isn't done yet the streak is still
-* alive as long as yesterday was.
-*/
-function dayStreak(doneDays, today, restDays = []) {
-	const set = new Set(doneDays);
-	const rest = new Set([...restDays].filter((d) => !set.has(d)));
-	let cursor = set.has(today) || rest.has(today) ? today : addDays$3(today, -1);
-	let n = 0;
-	while (set.has(cursor) || rest.has(cursor)) {
-		if (set.has(cursor)) n++;
-		cursor = addDays$3(cursor, -1);
-	}
-	return n;
-}
-function bestDayStreak(doneDays, restDays = []) {
-	const done = new Set(doneDays);
-	const days = [.../* @__PURE__ */ new Set([...done, ...restDays])].sort();
-	let best = 0;
-	let run = 0;
-	for (let i = 0; i < days.length; i++) {
-		if (i > 0 && daysBetween$1(days[i - 1], days[i]) !== 1) run = 0;
-		if (done.has(days[i])) run++;
-		best = Math.max(best, run);
-	}
-	return best;
-}
-/**
-* Clean-day stats derived from a start date and relapse dates. The count is
-* the number of whole days since the last reset, so it can't be bumped by hand.
-*/
-function cleanStats(start, relapses, today) {
-	if (!start) return {
-		current: 0,
-		best: 0,
-		totalClean: 0,
-		relapses: 0,
-		since: null
-	};
-	const resets = relapses.filter((d) => d >= start && d <= today).sort();
-	const points = [
-		start,
-		...resets,
-		today
-	];
-	const segments = [];
-	for (let i = 0; i < points.length - 1; i++) segments.push(Math.max(0, daysBetween$1(points[i], points[i + 1])));
-	const since = resets.length ? resets[resets.length - 1] : start;
-	return {
-		current: segments[segments.length - 1] ?? 0,
-		best: Math.max(0, ...segments),
-		totalClean: segments.reduce((s, n) => s + n, 0),
-		relapses: resets.length,
-		since
 	};
 }
 // src/core/body.ts
@@ -5468,6 +5890,11 @@ var Mirror = class Mirror {
 		await this.ready;
 		if (this.desktop) return this.writeDesktop(fn);
 		return this.lock(async () => {
+			let behind = false;
+			if (this.outbox().length) {
+				await this.flushOffline();
+				behind = this.outbox().length > 0;
+			}
 			for (let attempt = 0;; attempt++) {
 				const db = this.current;
 				db.dropChanges();
@@ -5483,6 +5910,22 @@ var Mirror = class Mirror {
 				};
 				const touched = touchedTables(changes);
 				const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)];
+				if (behind) {
+					this.queueOffline([
+						...writeOnce(version),
+						...checks,
+						...changes,
+						...trackStatements(touched, version),
+						mark,
+						...checks.length ? [{
+							sql: "DELETE FROM sys_cas",
+							args: []
+						}] : []
+					]);
+					this.persist();
+					this.emit();
+					return result;
+				}
 				try {
 					const before = versionsBefore(touched);
 					const batch = [
@@ -5557,6 +6000,7 @@ var Mirror = class Mirror {
 				if (this.pending().length) return false;
 			}
 			if (!this.desktop) await this.flushOffline();
+			if (!this.desktop && this.outbox().length) return false;
 			return this.catchUp();
 		}).then((changed) => {
 			if (changed) this.emit();
@@ -8433,7 +8877,7 @@ var Body = class {
 			}
 			let ledgerId = null;
 			let awarded = false;
-			try {
+			if (today === this.wallet.today(now)) try {
 				ledgerId = this.wallet.awardRule("body.workout_done", {
 					note: input.title,
 					now,
@@ -8630,424 +9074,6 @@ var DataExportService = class {
 	exportCsv(kind) {
 		if (kind === "workouts") return toWorkoutsCsv(this.body.workouts(1e3));
 		return toExpensesCsv(this.money.expenses(1e3), this.money.currency());
-	}
-};
-// src/core/discipline.ts
-var MILESTONES$1 = [
-	{
-		days: 3,
-		coins: 15
-	},
-	{
-		days: 7,
-		coins: 40
-	},
-	{
-		days: 10,
-		coins: 60
-	},
-	{
-		days: 14,
-		coins: 80
-	},
-	{
-		days: 30,
-		coins: 200
-	},
-	{
-		days: 60,
-		coins: 350
-	},
-	{
-		days: 90,
-		coins: 600
-	},
-	{
-		days: 180,
-		coins: 1e3
-	},
-	{
-		days: 365,
-		coins: 2e3
-	}
-];
-var DISCIPLINE_RANKS = [
-	{
-		days: 0,
-		name: "Initiate"
-	},
-	{
-		days: 3,
-		name: "Squire"
-	},
-	{
-		days: 7,
-		name: "Warrior"
-	},
-	{
-		days: 14,
-		name: "Guardian"
-	},
-	{
-		days: 30,
-		name: "Knight"
-	},
-	{
-		days: 60,
-		name: "Champion"
-	},
-	{
-		days: 90,
-		name: "Spartan"
-	},
-	{
-		days: 180,
-		name: "Legend"
-	}
-];
-var QUOTES = [
-	"Discipline is choosing what you want most over what you want now.",
-	"The urge is a wave. You do not have to surf it, you only have to let it pass.",
-	"Every clean day is a vote for the person you are becoming.",
-	"You are not your impulses. You are the one who notices them.",
-	"Hard choices, easy life. Easy choices, hard life.",
-	"One day at a time is still a day won.",
-	"Boredom is not an emergency. Stand up, move, breathe.",
-	"Strong is built in the moments nobody sees.",
-	"A slip is a lesson, not a verdict. Start again today.",
-	"Your future self is watching. Give them a reason to be proud.",
-	"Energy saved is energy you get to spend on your goals.",
-	"Comfort is the enemy of progress. Do the harder thing.",
-	"The first five minutes are the hardest. After that it gets quiet.",
-	"You have done hard things before. This is one more.",
-	"Win the morning, win the day.",
-	"Control the phone or the phone controls you.",
-	"Real confidence is a promise to yourself, kept.",
-	"Cold water, ten push-ups, fresh air. Then decide.",
-	"Small daily wins beat big rare ones.",
-	"The streak is the proof. Keep stacking days."
-];
-function quoteFor(day) {
-	return QUOTES[(daysBetween$1("2026-01-01", day) % QUOTES.length + QUOTES.length) % QUOTES.length];
-}
-function rankFor(days) {
-	let i = 0;
-	for (let k = 0; k < DISCIPLINE_RANKS.length; k++) if (days >= DISCIPLINE_RANKS[k].days) i = k;
-	const next = DISCIPLINE_RANKS[i + 1];
-	return {
-		name: DISCIPLINE_RANKS[i].name,
-		next: next ?? null
-	};
-}
-/** The current start date is the latest `start` event. */
-function startOf(events) {
-	const starts = events.filter((e) => e.kind === "start").sort((a, b) => a.id - b.id);
-	return starts[starts.length - 1] ?? null;
-}
-function statsOf(events, today) {
-	return cleanStats(startOf(events)?.day ?? null, events.filter((e) => e.kind === "reset").map((e) => e.day), today);
-}
-function milestoneRef(since, days) {
-	return `milestone:${since}:${days}`;
-}
-/**
-* Milestones of the current streak. A milestone whose day came before the
-* streak was entered in the app shows as reached but pays nothing, so a
-* backdated start date can't unlock a pile of coins at once.
-*/
-function milestonesOf(events, today, claimedRefs, setupDay) {
-	const start = startOf(events);
-	const stats = statsOf(events, today);
-	if (!start || !stats.since) return MILESTONES$1.map((m) => ({
-		...m,
-		status: "locked",
-		reachedOn: null
-	}));
-	const recorded = setupDay(start);
-	return MILESTONES$1.map((m) => {
-		if (stats.current < m.days) return {
-			...m,
-			status: "locked",
-			reachedOn: null
-		};
-		const reachedOn = addDays$3(stats.since, m.days);
-		if (claimedRefs.has(milestoneRef(stats.since, m.days))) return {
-			...m,
-			status: "claimed",
-			reachedOn
-		};
-		return {
-			...m,
-			status: reachedOn < recorded ? "before-setup" : "claimable",
-			reachedOn
-		};
-	});
-}
-function validateStart(day, today, events) {
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new LedgerError("Pick a date");
-	if (day > today) throw new LedgerError("The start date cannot be in the future");
-	if (daysBetween$1(day, today) > 3650) throw new LedgerError("That date is too far back");
-	if (events.some((e) => e.kind === "reset")) throw new LedgerError("After a reset the date comes from the reset itself");
-}
-function planCheckIn(events, today) {
-	if (!startOf(events)) throw new LedgerError("Set your start date first");
-	if (events.some((e) => e.kind === "reset" && e.day === today)) throw new LedgerError("Today was a reset day. Check in again tomorrow.");
-	if (events.some((e) => e.kind === "checkin" && e.day === today)) throw new LedgerError("Already checked in today");
-}
-function planUrgeFinish(startedAt, now) {
-	if (!startedAt) throw new LedgerError("Start the urge crusher first");
-	const elapsed = (now.getTime() - Date.parse(startedAt)) / 1e3;
-	if (elapsed < 170) throw new LedgerError(`Stay with it ${Math.ceil(170 - elapsed)} more seconds`);
-}
-/**
-* The streak as "Day N", everywhere (Today, MAN, Ben, Telegram, the island).
-* The start day is Day 1; a reset day is Day 0 and the next day Day 1.
-* (`current` counts whole days since the start / last reset.)
-*/
-function dayNumber(s) {
-	if (s.setup === false) return 0;
-	return s.current + (s.resets === 0 ? 1 : 0);
-}
-/**
-* When the clean-day check-in can be done (MN3, H2): from 19:00 (until the day
-* turns at 04:00) it is for today; in the morning (until 12:00) for yesterday,
-* if yesterday wasn't checked in or reset; otherwise it waits for 19:00.
-*/
-function checkInWindow(events, appToday, hour) {
-	if (hour >= 19 || hour < 4) return {
-		mode: "today",
-		day: appToday
-	};
-	const yesterday = addDays$3(appToday, -1);
-	const start = startOf(events);
-	return hour < 12 && !!start && yesterday >= start.day && !events.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === yesterday) ? {
-		mode: "yesterday",
-		day: yesterday
-	} : {
-		mode: "wait",
-		day: appToday
-	};
-}
-function resetUndoable(events, today, now) {
-	const r = [...events].reverse().find((e) => e.kind === "reset");
-	if (!r || r.day !== today) return null;
-	return now.getTime() - Date.parse(r.ts) <= 6e5 ? r : null;
-}
-// src/main/discipline.ts
-var UNDONE_KEY = "discipline_undone_resets";
-/** Resets that were taken back in their first 10 minutes (MN7). */
-function undoneResets(db) {
-	try {
-		const v = JSON.parse(getSetting(db, UNDONE_KEY) || "[]");
-		return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "number") : []);
-	} catch {
-		return /* @__PURE__ */ new Set();
-	}
-}
-var Discipline = class {
-	db;
-	wallet;
-	constructor(db, wallet) {
-		this.db = db;
-		this.wallet = wallet;
-	}
-	events() {
-		const undone = undoneResets(this.db);
-		const all = this.db.prepare("SELECT id, kind, day, ts FROM discipline_events ORDER BY id").all();
-		return undone.size ? all.filter((e) => !undone.has(e.id)) : all;
-	}
-	record(kind, day, now) {
-		this.db.prepare("INSERT INTO discipline_events (kind, day, ts) VALUES (?, ?, ?)").run(kind, day, now.toISOString());
-	}
-	claimedRefs() {
-		return new Set(effective(this.wallet.entries()).map((e) => e.ref ?? "").filter((r) => r.startsWith("milestone:")));
-	}
-	milestones(events, today) {
-		return milestonesOf(events, today, this.claimedRefs(), (start) => this.wallet.today(new Date(start.ts)));
-	}
-	state(now = /* @__PURE__ */ new Date()) {
-		const today = this.wallet.today(now);
-		const events = this.events();
-		const stats = statsOf(events, today);
-		const rank = rankFor(stats.current);
-		const weekAgo = addDays$3(today, -6);
-		const has = (kind) => events.some((e) => e.kind === kind && e.day === today);
-		return {
-			setup: !!startOf(events),
-			today,
-			since: stats.since,
-			current: stats.current,
-			day: dayNumber({
-				current: stats.current,
-				resets: stats.relapses,
-				setup: !!startOf(events)
-			}),
-			best: stats.best,
-			totalClean: stats.totalClean,
-			resets: stats.relapses,
-			rank: rank.name,
-			nextRank: rank.next,
-			checkedInToday: has("checkin"),
-			oathToday: has("oath"),
-			resetToday: has("reset"),
-			canEditStart: !events.some((e) => e.kind === "reset"),
-			milestones: this.milestones(events, today),
-			urgeStartedAt: getSetting(this.db, "urge_started_at") || null,
-			urgesThisWeek: events.filter((e) => e.kind === "urge" && e.day >= weekAgo).length,
-			stealth: getSetting(this.db, "discipline_stealth") === "1",
-			quote: quoteFor(today),
-			checkIn: (() => {
-				const w = checkInWindow(events, today, now.getHours());
-				return {
-					mode: events.some((e) => (e.kind === "checkin" || e.kind === "reset") && e.day === w.day) && w.mode !== "wait" ? "done" : w.mode,
-					day: w.day
-				};
-			})(),
-			history: events.filter((e) => e.day >= addDays$3(today, -84) && e.kind !== "start").map((e) => ({
-				day: e.day,
-				kind: e.kind,
-				hour: new Date(e.ts).getHours()
-			})),
-			undoResetUntil: (() => {
-				const r = resetUndoable(events, today, now);
-				return r ? new Date(Date.parse(r.ts) + 6e5).toISOString() : null;
-			})()
-		};
-	}
-	/**
-	* Take back a reset made in the last 10 minutes (MN7: a test, or a wrong
-	* tap). The reset is removed and its coin penalty is given back.
-	*/
-	undoReset(now = /* @__PURE__ */ new Date()) {
-		this.db.transaction(() => {
-			const today = this.wallet.today(now);
-			const r = resetUndoable(this.events(), today, now);
-			if (!r) throw new LedgerError("A reset can only be taken back in the first 10 minutes.");
-			setSetting(this.db, UNDONE_KEY, JSON.stringify([...undoneResets(this.db), r.id]));
-			const undone = new Set(this.wallet.entries().filter((e) => e.kind === "undo").map((e) => e.undoOf));
-			for (const e of this.wallet.entries()) {
-				if (undone.has(e.id) || e.kind === "undo" || e.ts < r.ts.slice(0, 19)) continue;
-				if (e.ruleId === "discipline.reset" || e.ref === "perk:rulers_authority") this.wallet.undo(e.id, "Reset taken back", now);
-			}
-		}).immediate();
-	}
-	setStart(day, now = /* @__PURE__ */ new Date()) {
-		const events = this.events();
-		validateStart(day, this.wallet.today(now), events);
-		this.record("start", day, now);
-	}
-	/**
-	* The clean-day check-in is for a day you lived (H2): from 19:00 (until the
-	* day turns at 04:00) for today; in the morning (until 12:00) for
-	* yesterday, if you didn't check it in. Earlier in the day it waits.
-	*/
-	checkIn(now = /* @__PURE__ */ new Date()) {
-		this.db.transaction(() => {
-			const appToday = this.wallet.today(now);
-			const win = checkInWindow(this.events(), appToday, now.getHours());
-			if (win.mode === "wait") throw new LedgerError("The clean-day check-in opens at 19:00, when the day is done.");
-			const today = win.day;
-			planCheckIn(this.events(), today);
-			try {
-				this.wallet.awardRule("discipline.clean_day", {
-					now,
-					day: today,
-					ref: `discipline:checkin:${today}`
-				});
-			} catch (e) {
-				if (!(e instanceof LedgerError)) throw e;
-			}
-			this.record("checkin", today, now);
-			const events = this.events();
-			for (const m of this.milestones(events, appToday)) if (m.status === "claimable") this.claim(m.days, now);
-		}).immediate();
-	}
-	oath(now = /* @__PURE__ */ new Date()) {
-		this.db.transaction(() => {
-			const today = this.wallet.today(now);
-			if (this.events().some((e) => e.kind === "oath" && e.day === today)) throw new LedgerError("Oath already sworn today");
-			this.wallet.awardRule("discipline.oath", { now });
-			this.record("oath", today, now);
-		}).immediate();
-	}
-	/** An honest reset: the current streak starts again; best and total stay. */
-	reset(now = /* @__PURE__ */ new Date()) {
-		this.db.transaction(() => {
-			const today = this.wallet.today(now);
-			const events = this.events();
-			if (!startOf(events)) throw new LedgerError("Set your start date first");
-			if (events.some((e) => e.kind === "reset" && e.day === today)) throw new LedgerError("Already reset today. Tomorrow is day 1.");
-			let penaltyAwarded = false;
-			try {
-				this.wallet.awardRule("discipline.reset", { now });
-				penaltyAwarded = true;
-			} catch (e) {
-				if (!(e instanceof LedgerError)) throw e;
-			}
-			if (penaltyAwarded) try {
-				if (this.wallet.summary(now).level.perks.some((p) => p.id === "rulers_authority" && p.unlocked)) {
-					const entries = this.wallet.entries();
-					const lastEntry = entries[entries.length - 1];
-					if (lastEntry && lastEntry.ruleId === "discipline.reset" && lastEntry.coins < 0) {
-						const refundCoins = Math.round(Math.abs(lastEntry.coins) * .5);
-						if (refundCoins > 0) this.wallet.append({
-							ts: now.toISOString(),
-							day: today,
-							module: "perks",
-							kind: "earn",
-							coins: refundCoins,
-							xp: 0,
-							ref: "perk:rulers_authority",
-							note: "Ruler's Authority: 50% Urge Reset Penalty Refund"
-						});
-					}
-				}
-			} catch {}
-			this.record("reset", today, now);
-			setSetting(this.db, "urge_started_at", "");
-		}).immediate();
-	}
-	claim(days, now = /* @__PURE__ */ new Date()) {
-		return this.db.transaction(() => {
-			const today = this.wallet.today(now);
-			const events = this.events();
-			const m = this.milestones(events, today).find((x) => x.days === days);
-			if (!m || m.status !== "claimable") throw new LedgerError("Nothing to claim for that milestone");
-			const since = statsOf(events, today).since;
-			this.wallet.append({
-				ts: now.toISOString(),
-				day: today,
-				module: "discipline",
-				kind: "earn",
-				coins: m.coins,
-				xp: m.coins,
-				ref: milestoneRef(since, days),
-				note: `${days}-day milestone`
-			});
-			return m.coins;
-		}).immediate();
-	}
-	startUrge(now = /* @__PURE__ */ new Date()) {
-		if (getSetting(this.db, "urge_started_at")) return;
-		setSetting(this.db, "urge_started_at", now.toISOString());
-	}
-	finishUrge(now = /* @__PURE__ */ new Date()) {
-		this.db.transaction(() => {
-			planUrgeFinish(getSetting(this.db, "urge_started_at") || null, now);
-			try {
-				this.wallet.awardRule("discipline.urge_resisted", { now });
-			} catch (e) {
-				if (!(e instanceof LedgerError)) throw e;
-			}
-			this.record("urge", this.wallet.today(now), now);
-			setSetting(this.db, "urge_started_at", "");
-		}).immediate();
-	}
-	cancelUrge() {
-		setSetting(this.db, "urge_started_at", "");
-	}
-	setStealth(on) {
-		setSetting(this.db, "discipline_stealth", on ? "1" : "0");
 	}
 };
 // src/core/money.ts
@@ -10705,7 +10731,8 @@ var SleepService = class {
 		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)").run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString());
 		const nowMin = now.getHours() * 60 + now.getMinutes();
 		const [wh, wm] = wakeTime.split(":").map(Number);
-		const live = !time || Math.abs(nowMin - (wh * 60 + wm)) <= 20;
+		const gap = Math.abs(nowMin - (wh * 60 + wm)) % 1440;
+		const live = !time || Math.min(gap, 1440 - gap) <= 20;
 		let awarded = false;
 		if (onTime && live) try {
 			awarded = !!this.wallet.payOnce("sleep.up_on_time", {
@@ -10982,19 +11009,19 @@ var FocusService = class {
 		setSetting(this.db, RUNNING, "null");
 		return this.state(now);
 	}
-	/** A session you did without the timer (today pays coins; earlier days count without). */
+	/** A session you did without the timer: it counts in your stats, but only timed sessions pay (BG11). */
 	add(subject, minutes, day, now = /* @__PURE__ */ new Date()) {
 		const name = String(subject || "").trim().slice(0, 40);
 		if (!name) throw new LedgerError("Which subject?");
 		const m = Math.round(minutes);
 		if (!(m >= 1 && m <= 600)) throw new LedgerError("Minutes from 1 to 600");
-		return this.db.transaction(() => this.log(name, m, now, null, day))();
+		return this.db.transaction(() => this.log(name, m, now, null, day, false))();
 	}
-	log(subject, minutes, now, startedAt, day) {
+	log(subject, minutes, now, startedAt, day, pays = true) {
 		const today = this.wallet.today(now);
 		const d = day && day <= today && day >= addDays$3(today, -14) ? day : today;
 		const earned = this.sessions(today).filter((s) => s.day === today).reduce((t, s) => t + s.coins, 0);
-		const coins = d === today ? Math.max(0, Math.min(focusCoins(minutes), 80 - earned)) : 0;
+		const coins = pays && d === today ? Math.max(0, Math.min(focusCoins(minutes), 80 - earned)) : 0;
 		const end = now.toISOString();
 		const start = startedAt ?? (/* @__PURE__ */ new Date(now.getTime() - minutes * 6e4)).toISOString();
 		if (startedAt) {
@@ -17821,9 +17848,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					tasksLeft: s.tasks.state().tasks.filter((t) => !t.done).length
 				}) };
 			}
-			case "checkin":
-				s.discipline.checkIn();
-				return { reply: formatCleanCheckinResponse(s.discipline.state().day, ruleCoins(s, "discipline.clean_day", 20)) };
+			case "checkin": {
+				const paid = s.discipline.checkIn();
+				return { reply: formatCleanCheckinResponse(s.discipline.state().day, paid.coins, paid.day, s.wallet.today()) };
+			}
 			case "oath":
 				s.discipline.oath();
 				return { reply: "📜 <b>Morning Oath Affirmed!</b>\n\n<i>\"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery.\"</i>\n\n+" + ruleCoins(s, "discipline.oath", 3) + " points!" };
@@ -17869,7 +17897,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					}],
 					note: `Logged via Telegram (${amount} ${rawUnit})`
 				});
-				return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0, res.awarded ? 25 : 0) };
+				return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0) };
 			}
 			case "weight": {
 				const w = parsed.metricWeight;
@@ -19515,7 +19543,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								save(next);
 								opNow = {
 									k: "water",
-									ml: -a.ml
+									ml: -a.ml,
+									day
 								};
 								const v = sharedView(next, day);
 								return `💧 ${a.ml > 0 ? "+" : ""}${a.ml} ml · ${(v.water.ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(v.water.target / 1e3).toFixed(1)} L today`;
@@ -19526,7 +19555,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							opNow = {
 								k: "reps",
 								ex: a.exercise,
-								amount: -a.amount
+								amount: -a.amount,
+								day
 							};
 							if (a.amount > 0) {
 								const svc = services.services(db);
@@ -19661,7 +19691,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							svc.focus.setPlan([...p.items.map((x) => x.text), a.text]);
 							opNow = {
 								k: "mustdo",
-								text: a.text
+								text: a.text,
+								day: svc.wallet.today()
 							};
 							return `📝 Must-do added: ${a.text}${todoist ? " (⭐ in Todoist)" : ""}`;
 						}
@@ -19677,7 +19708,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						}
 						if (a.kind === "focus") {
 							svc.focus.start(a.subject, a.minutes);
-							opNow = { k: "focus" };
+							opNow = {
+								k: "focus",
+								startedAt: svc.focus.state().running?.startedAt
+							};
 							keyboard = STOP_KEYBOARD;
 							return `⏱ Focus started: ${a.subject} · ${a.minutes} min`;
 						}
@@ -19774,12 +19808,28 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	* Each line once; the log remembers what was undone.
 	*/
 	async function undoReply(at, index) {
-		const entry = await mirror.read((db) => loadLog(db).find((e) => e.role === "coach" && e.at === at) ?? null);
-		if (!entry?.undo) return {
+		const claim = await mirror.write((db) => {
+			const log = loadLog(db);
+			const e = log.find((x) => x.role === "coach" && x.at === at);
+			if (!e?.undo) return null;
+			const ids = e.undo.map((op, k) => op && !e.undone?.[k] && (index == null || index === k) ? k : -1).filter((k) => k >= 0);
+			if (ids.length) {
+				const undone = e.undone ?? [];
+				for (const k of ids) undone[k] = true;
+				e.undone = undone;
+				saveLog(db, log);
+			}
+			return {
+				entry: e,
+				idx: ids
+			};
+		});
+		if (!claim) return {
 			ok: false,
 			lines: ["Nothing to undo there"]
 		};
-		const idx = entry.undo.map((op, k) => op && !entry.undone?.[k] && (index == null || index === k) ? k : -1).filter((k) => k >= 0);
+		const { entry, idx } = claim;
+		const ops = entry.undo;
 		if (!idx.length) return {
 			ok: false,
 			lines: ["Already undone"]
@@ -19787,7 +19837,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const lines = [];
 		const ok = [];
 		for (const k of idx) {
-			const op = entry.undo[k];
+			const op = ops[k];
 			try {
 				if (op.k === "event") {
 					if (!calendar?.remove) throw new Error("Calendar not connected");
@@ -19804,6 +19854,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							const st = sportState(db);
 							if (!st) return "⚠️ Sport Track data is gone";
 							const day = sportToday();
+							if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`;
 							if (op.k === "water") {
 								setSetting(db, "sport_tracker_json", JSON.stringify({
 									savedAt: Date.now(),
@@ -19843,11 +19894,15 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							return "↩ Reminder cancelled";
 						}
 						if (op.k === "mustdo") {
+							if (op.day && op.day !== svc.wallet.today()) return `⚠️ That must-do was for ${op.day}: it's gone with that day`;
 							const rest = svc.focus.plan(svc.wallet.today()).items.map((x) => x.text).filter((t) => t.toLowerCase() !== op.text.toLowerCase());
 							if (!rest.length) return "⚠️ It is your only must-do: tick it or replace it";
 							svc.focus.setPlan(rest);
 							return `↩ Must-do removed: ${op.text}`;
 						}
+						const run = svc.focus.state().running;
+						if (!run) return "⚠️ That focus timer already ended";
+						if (op.startedAt && run.startedAt !== op.startedAt) return "⚠️ That timer already ended; a newer one is running, so it stays";
 						svc.focus.cancel();
 						return "↩ Focus timer cancelled";
 					});
@@ -19859,13 +19914,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				lines.push(`⚠️ ${e.message}`);
 			}
 		}
-		if (ok.length) await mirror.write((db) => {
+		const failed = idx.filter((k) => !ok.includes(k));
+		if (failed.length) await mirror.write((db) => {
 			const log = loadLog(db);
 			const e = log.find((x) => x.role === "coach" && x.at === at);
-			if (e) {
-				const undone = e.undone ?? [];
-				for (const k of ok) undone[k] = true;
-				e.undone = undone;
+			if (e?.undone) {
+				for (const k of failed) e.undone[k] = false;
 				saveLog(db, log);
 			}
 		});
@@ -19895,7 +19949,19 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			chat_id: chat,
 			action: "typing"
 		}).catch(() => null);
-		const r = await think(personaFor(botId, cfg), text, key, media);
+		let r;
+		try {
+			r = await think(personaFor(botId, cfg), text, key, media);
+		} catch (e) {
+			const reply = `⚠️ I couldn't reach your data just now (${esc(e.message || "no connection")}). Send that again in a minute.`;
+			addLog(text || `[${media?.kind}]`, chat, false, reply);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: reply,
+				parse_mode: "HTML"
+			}).catch(() => null);
+			return reply;
+		}
 		const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join("\n")}` : ""].join("\n").trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`;
 		addLog(text || `[${media?.kind}]`, chat, r.ok, reply);
 		const rows = [

@@ -5,6 +5,7 @@
 // the next "sign out everywhere".
 import { randomBytes } from 'node:crypto'
 import { run } from './_lib.mjs'
+import { dropPush } from './_push.mjs'
 
 export const T_DEVICES = 'CREATE TABLE IF NOT EXISTS sys_devices (sid TEXT PRIMARY KEY, label TEXT, created INTEGER NOT NULL, last_seen INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)'
 export const newSid = () => randomBytes(9).toString('base64url')
@@ -61,6 +62,7 @@ export async function listDevices(cfg, fetchImpl = fetch) {
 export async function revokeDevice(cfg, sid, fetchImpl = fetch) {
   await run(cfg, [[T_DEVICES], ['INSERT INTO sys_devices (sid, label, created, last_seen, revoked) VALUES (?, ?, 0, 0, 1) ON CONFLICT(sid) DO UPDATE SET revoked = 1', [String(sid), 'Signed out']]], fetchImpl)
   await removeDevicePasskeys(cfg, sid, fetchImpl)
+  await dropPush(cfg, sid, false, fetchImpl).catch(() => {}) // BG7
   forgetRevoked()
 }
 

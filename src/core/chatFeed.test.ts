@@ -80,4 +80,11 @@ describe('chat feed (Night 7)', () => {
     expect(momentChips({ hour: 8, planStatus: 'none', mustLeft: 0 })[0]).toBe('Plan my day')
     expect(partOfDay(3)).toBe('Night')
   })
+  it('BG15: no empty divider for messages inside a fold', () => {
+    const log = [ben(11, 0, '💧 Water 0.3 of 2.7 L.'), ben(12, 30, '🎯 3h since your last thing.'), ben(13, 0, '😐 Lunch check-in: how do you feel right now?')]
+    const f = buildFeed(log, { now: new Date(at(14)) })
+    // Morning has the fold; Afternoon starts with the next shown item, never directly followed by another divider.
+    for (let k = 0; k < f.length - 1; k++) expect(f[k].t === 'divider' && f[k + 1].t === 'divider').toBe(false)
+    expect(f[f.length - 1].t).toBe('msg')
+  })
 })

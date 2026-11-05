@@ -17,7 +17,7 @@ export interface DesktopApi {
   /** A Windows notification (silent: the page plays its own chime). */
   notify?(n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[]; urgent?: boolean }): Promise<boolean>
   // ---- Ben on this PC (P1–P20; optional: older desktops don't have it) ----
-  pcGetPrefs?(): Promise<{ prefs: import('../core/pcActivity').PcPrefs; port: number; token: string; now: { label: string; kind: string } | null; windows: boolean } | null>
+  pcGetPrefs?(): Promise<{ prefs: import('../core/pcActivity').PcPrefs; port: number; token: string; now: { label: string; kind: string } | null; windows: boolean; siteServer?: string | null } | null>
   pcSetPrefs?(p: Partial<import('../core/pcActivity').PcPrefs>): Promise<import('../core/pcActivity').PcPrefs | null>
   pcToday?(): Promise<{ line: string; apps: Record<string, { sec: number; kind: string }> } | null>
   pcClear?(): Promise<boolean>

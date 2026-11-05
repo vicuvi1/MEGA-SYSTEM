@@ -113,16 +113,19 @@ export class Discipline {
    * day turns at 04:00) for today; in the morning (until 12:00) for
    * yesterday, if you didn't check it in. Earlier in the day it waits.
    */
-  checkIn(now = new Date()): void {
-    this.db.transaction(() => {
+  /** Returns the day it was for and the points really paid (BG10). */
+  checkIn(now = new Date()): { day: string; coins: number } {
+    return this.db.transaction(() => {
       const appToday = this.wallet.today(now)
       const win = checkInWindow(this.events(), appToday, now.getHours())
       if (win.mode === 'wait') throw new LedgerError('The clean-day check-in opens at 19:00, when the day is done.')
       const today = win.day
       planCheckIn(this.events(), today)
       // A rule you turned off (or a used limit) never blocks the check-in itself (P7).
+      let coins = 0
       try {
-        this.wallet.awardRule('discipline.clean_day', { now, day: today, ref: `discipline:checkin:${today}` })
+        const id = this.wallet.awardRule('discipline.clean_day', { now, day: today, ref: `discipline:checkin:${today}` })
+        coins = this.wallet.entries().find((e) => e.id === id)?.coins ?? 0
       } catch (e) {
         if (!(e instanceof LedgerError)) throw e
       }
@@ -130,6 +133,7 @@ export class Discipline {
       // Milestones you reached are paid straight away, no "Claim" tap needed (P7).
       const events = this.events()
       for (const m of this.milestones(events, appToday)) if (m.status === 'claimable') this.claim(m.days, now)
+      return { day: today, coins }
     }).immediate()
   }
 

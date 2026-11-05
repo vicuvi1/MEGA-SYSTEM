@@ -2,6 +2,7 @@
 // bots, so the conversation continues wherever you are), what it remembers
 // about you (edit or delete), and the goals & rules it holds you to.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { dayKey } from '@core/dates'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
@@ -944,7 +945,7 @@ function GoalsRules({ profile, onSave }: { profile: Profile; onSave: (p: Profile
 }
 
 function FactList({ facts, onSave }: { facts: { t: string; at: string }[]; onSave: (f: { t: string; at: string }[]) => void }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = dayKey(new Date())
   return (
     <ListEditor
       items={facts.map((f) => f.t)}
@@ -957,7 +958,7 @@ function FactList({ facts, onSave }: { facts: { t: string; at: string }[]; onSav
 /** What the coach is learning about you: goals it tracks, what works, patterns. Delete what's wrong. */
 function Learning({ mind, onSave }: { mind: CoachMind; onSave: (m: CoachMind) => void }) {
   const empty = !mind.goals.length && !mind.works.length && !mind.fails.length && !mind.patterns.length && !(mind.people ?? []).length
-  const today = new Date().toISOString().slice(0, 10)
+  const today = dayKey(new Date())
   const left = (d: string) => Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000)
   const row = (key: string, text: string, sub: string, remove: () => void) => (
     <li key={key} className="co-learn-row">

@@ -195,6 +195,9 @@ export function buildFeed(log: FeedEntry[], opts: { now?: Date; seenAt?: string 
   let prev: { role: string; at: number; proactive: boolean } | null = null
   for (const i of idx) {
     const e = log[i]
+    // BG15: an entry hidden inside a fold (not the fold's first) adds nothing,
+    // so no divider or "new" line is drawn for it.
+    if (folded.has(i) && !fold.get(i)) continue
     const d = new Date(e.at)
     const day = localDay(d)
     const part = partOfDay(d.getHours())

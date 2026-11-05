@@ -23,9 +23,20 @@ export function validEndpoint(e) {
   }
 }
 
-export async function subscribe(cfg, endpoint, fetchImpl = fetch) {
+/** BG7: the device (session id) a push address belongs to, so signing it out stops its pushes. */
+const ADD_SID = 'ALTER TABLE sys_push ADD COLUMN sid TEXT'
+export async function subscribe(cfg, endpoint, fetchImpl = fetch, sid = null) {
   if (!validEndpoint(endpoint)) throw new Error('Not a push address')
-  await run(cfg, [[T_PUSH], ['INSERT INTO sys_push (endpoint, created) VALUES (?, ?) ON CONFLICT(endpoint) DO NOTHING', [endpoint, Date.now()]], ['DELETE FROM sys_push WHERE endpoint NOT IN (SELECT endpoint FROM sys_push ORDER BY created DESC LIMIT 10)']], fetchImpl)
+  await run(cfg, [[T_PUSH]], fetchImpl)
+  await run(cfg, [[ADD_SID]], fetchImpl).catch(() => {}) // already there
+  await run(cfg, [['INSERT INTO sys_push (endpoint, created, sid) VALUES (?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET sid = excluded.sid', [endpoint, Date.now(), sid]], ['DELETE FROM sys_push WHERE endpoint NOT IN (SELECT endpoint FROM sys_push ORDER BY created DESC LIMIT 10)']], fetchImpl)
+}
+
+/** Drops push addresses when devices are signed out: one device's, or (keep) every one but that device's. */
+export async function dropPush(cfg, sid, keep = false, fetchImpl = fetch) {
+  await run(cfg, [[T_PUSH]], fetchImpl)
+  await run(cfg, [[ADD_SID]], fetchImpl).catch(() => {}) // already there
+  await run(cfg, [[keep ? 'DELETE FROM sys_push WHERE sid IS NOT ?' : 'DELETE FROM sys_push WHERE sid = ?', [sid == null ? null : String(sid)]]], fetchImpl)
 }
 export async function unsubscribe(cfg, endpoint, fetchImpl = fetch) {
   await run(cfg, [[T_PUSH], ['DELETE FROM sys_push WHERE endpoint = ?', [String(endpoint)]]], fetchImpl)

@@ -554,10 +554,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
       }
       case 'checkin': {
-        s.discipline.checkIn()
+        const paid = s.discipline.checkIn()
         // The same "Day N" MAN and every screen show (dayNumber: P7).
         const st = s.discipline.state()
-        return { reply: formatCleanCheckinResponse(st.day, ruleCoins(s, 'discipline.clean_day', 20)) }
+        return { reply: formatCleanCheckinResponse(st.day, paid.coins, paid.day, s.wallet.today()) }
       }
       case 'oath':
         s.discipline.oath()
@@ -583,7 +583,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           items: [{ exerciseId: name.toLowerCase().replace(/\s+/g, '_'), name, amount, unit }],
           note: `Logged via Telegram (${amount} ${rawUnit})`
         })
-        return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0, res.awarded ? 25 : 0) }
+        return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0) }
       }
       case 'weight': {
         const w = parsed.metricWeight
@@ -1969,14 +1969,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               if (a.kind === 'water') {
                 const next = addWater(st, a.ml, day)
                 save(next)
-                opNow = { k: 'water', ml: -a.ml }
+                opNow = { k: 'water', ml: -a.ml, day }
                 const v = sharedView(next, day)
                 return `💧 ${a.ml > 0 ? '+' : ''}${a.ml} ml · ${(v.water.ml / 1000).toFixed(2).replace(/0$/, '')} of ${(v.water.target / 1000).toFixed(1)} L today`
               }
               const r = addReps(st, a.exercise, a.amount, day)
               if (!r) return `⚠️ No "${a.exercise}" on your Sport Track checklist`
               save(r.st)
-              opNow = { k: 'reps', ex: a.exercise, amount: -a.amount }
+              opNow = { k: 'reps', ex: a.exercise, amount: -a.amount, day }
               // Real reps also count as a workout (streak and points), like "30 pushups".
               // Undo removes that workout and its points too (X7).
               if (a.amount > 0) {
@@ -2078,7 +2078,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const p = svc.focus.plan(svc.wallet.today())
               if (p.items.some((x) => x.text.toLowerCase() === a.text.toLowerCase())) return null
               svc.focus.setPlan([...p.items.map((x) => x.text), a.text])
-              opNow = { k: 'mustdo', text: a.text }
+              opNow = { k: 'mustdo', text: a.text, day: svc.wallet.today() }
               return `📝 Must-do added: ${a.text}${todoist ? ' (⭐ in Todoist)' : ''}`
             }
             if (a.kind === 'stopfocus') {
@@ -2093,7 +2093,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             }
             if (a.kind === 'focus') {
               svc.focus.start(a.subject, a.minutes)
-              opNow = { k: 'focus' }
+              opNow = { k: 'focus', startedAt: svc.focus.state().running?.startedAt }
               keyboard = STOP_KEYBOARD
               return `⏱ Focus started: ${a.subject} · ${a.minutes} min`
             }
@@ -2167,14 +2167,29 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * Each line once; the log remembers what was undone.
    */
   async function undoReply(at: string, index?: number): Promise<{ ok: boolean; lines: string[] }> {
-    const entry = await mirror.read((db) => loadLog(db).find((e) => e.role === 'coach' && e.at === at) ?? null)
-    if (!entry?.undo) return { ok: false, lines: ['Nothing to undo there'] }
-    const idx = entry.undo.map((op, k) => (op && !entry.undone?.[k] && (index == null || index === k) ? k : -1)).filter((k) => k >= 0)
+    // BG6: the lines are marked undone first, in one write, so two taps (the
+    // app and Telegram, or two servers) can't both take the same thing back.
+    const claim = await mirror.write((db) => {
+      const log = loadLog(db)
+      const e = log.find((x) => x.role === 'coach' && x.at === at)
+      if (!e?.undo) return null
+      const ids = e.undo.map((op, k) => (op && !e.undone?.[k] && (index == null || index === k) ? k : -1)).filter((k) => k >= 0)
+      if (ids.length) {
+        const undone = e.undone ?? []
+        for (const k of ids) undone[k] = true
+        e.undone = undone
+        saveLog(db, log)
+      }
+      return { entry: e, idx: ids }
+    })
+    if (!claim) return { ok: false, lines: ['Nothing to undo there'] }
+    const { entry, idx } = claim
+    const ops = entry.undo!
     if (!idx.length) return { ok: false, lines: ['Already undone'] }
     const lines: string[] = []
     const ok: number[] = []
     for (const k of idx) {
-      const op = entry.undo[k]!
+      const op = ops[k]!
       try {
         if (op.k === 'event') {
           if (!calendar?.remove) throw new Error('Calendar not connected')
@@ -2191,6 +2206,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const st = sportState(db)
               if (!st) return '⚠️ Sport Track data is gone'
               const day = sportToday()
+              // BG3: the checklist only holds today. A past day's water or reps
+              // are closed; taking them off today would be wrong.
+              if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`
               if (op.k === 'water') {
                 setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: addWater(st, op.ml, day) }))
                 return `↩ Water ${op.ml > 0 ? '+' : ''}${op.ml} ml`
@@ -2233,12 +2251,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               return '↩ Reminder cancelled'
             }
             if (op.k === 'mustdo') {
+              if (op.day && op.day !== svc.wallet.today()) return `⚠️ That must-do was for ${op.day}: it's gone with that day`
               const p = svc.focus.plan(svc.wallet.today())
               const rest = p.items.map((x) => x.text).filter((t) => t.toLowerCase() !== op.text.toLowerCase())
               if (!rest.length) return '⚠️ It is your only must-do: tick it or replace it'
               svc.focus.setPlan(rest)
               return `↩ Must-do removed: ${op.text}`
             }
+            const run = svc.focus.state().running
+            if (!run) return '⚠️ That focus timer already ended'
+            if (op.startedAt && run.startedAt !== op.startedAt) return '⚠️ That timer already ended; a newer one is running, so it stays'
             svc.focus.cancel()
             return '↩ Focus timer cancelled'
           })
@@ -2250,14 +2272,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         lines.push(`⚠️ ${(e as Error).message}`)
       }
     }
-    if (ok.length)
+    // Lines that couldn't be taken back are open again.
+    const failed = idx.filter((k) => !ok.includes(k))
+    if (failed.length)
       await mirror.write((db) => {
         const log = loadLog(db)
         const e = log.find((x) => x.role === 'coach' && x.at === at)
-        if (e) {
-          const undone = e.undone ?? []
-          for (const k of ok) undone[k] = true
-          e.undone = undone
+        if (e?.undone) {
+          for (const k of failed) e.undone[k] = false
           saveLog(db, log)
         }
       })
@@ -2283,7 +2305,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
     const chat = String(update.message?.chat?.id ?? '')
     void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
-    const r = await think(personaFor(botId, cfg), text, key, media)
+    // BG9: the message is already marked seen, so Telegram won't send it
+    // again. If Ben can't think (a database hiccup), he still answers.
+    let r: Awaited<ReturnType<typeof think>>
+    try {
+      r = await think(personaFor(botId, cfg), text, key, media)
+    } catch (e) {
+      const reply = `⚠️ I couldn't reach your data just now (${esc((e as Error).message || 'no connection')}). Send that again in a minute.`
+      addLog(text || `[${media?.kind}]`, chat, false, reply)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
+      return reply
+    }
     const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join('\n')}` : ''].join('\n').trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`
     addLog(text || `[${media?.kind}]`, chat, r.ok, reply)
     // Buttons the coach attached (one tap instead of typing), then ↩ Undo.

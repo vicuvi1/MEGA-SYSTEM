@@ -4,6 +4,7 @@
 // are not functions on Vercel.
 import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { removeDevicePasskeys, revokedSids } from './_devices.mjs'
+import { dropPush } from './_push.mjs'
 
 const DEFAULT_PIN = '2007' // only while no PIN was ever set, like the app
 const SESSION_DAYS = 30
@@ -169,6 +170,8 @@ export async function signOutAll(cfg, now = Date.now(), fetchImpl = fetch, sid =
   await authState(cfg, fetchImpl)
   await run(cfg, [["UPDATE sys_auth SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'session_epoch'"]], fetchImpl)
   await removeDevicePasskeys(cfg, sid, fetchImpl, true)
+  // BG7: the other devices' push addresses go too (a lost phone stops getting notification text).
+  await dropPush(cfg, sid, true, fetchImpl).catch(() => {})
   forgetEpoch()
   return makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now), sid || undefined)
 }

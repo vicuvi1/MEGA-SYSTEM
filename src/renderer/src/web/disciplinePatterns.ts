@@ -1,3 +1,4 @@
+import { undoneResets } from '../../../main/discipline'
 // Urge / reset history with what set it off (shared by the app, Ben and the
 // server). Times come from discipline_events; triggers from a small setting.
 import type { TriggerNote, UrgeEvent } from '@core/urgePatterns'
@@ -27,7 +28,11 @@ export function addTrigger(db: any, note: TriggerNote): void {
 
 export function urgeEvents(db: any): UrgeEvent[] {
   try {
-    return (db.prepare("SELECT kind, ts FROM discipline_events WHERE kind IN ('urge', 'reset') ORDER BY id DESC LIMIT 400").all() as { kind: 'urge' | 'reset'; ts: string }[]).map((r) => ({ kind: r.kind, ts: r.ts }))
+    // BG12: a reset taken back in its first 10 minutes isn't a relapse.
+    const undone = undoneResets(db)
+    return (db.prepare("SELECT id, kind, ts FROM discipline_events WHERE kind IN ('urge', 'reset') ORDER BY id DESC LIMIT 400").all() as { id: number; kind: 'urge' | 'reset'; ts: string }[])
+      .filter((r) => !undone.has(r.id))
+      .map((r) => ({ kind: r.kind, ts: r.ts }))
   } catch {
     return []
   }

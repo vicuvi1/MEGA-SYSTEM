@@ -95,7 +95,7 @@ export function FocusInsights({ onWallet }: { onWallet: () => void }) {
           )}
         </ul>
         <details className="focus-add">
-          <summary>Did a session without the timer?</summary>
+          <summary>Did a session without the timer? (It counts in your stats; only timed sessions pay points.)</summary>
           <div className="row">
             <input value={addMin.subject} onChange={(e) => setAddMin({ ...addMin, subject: e.target.value })} placeholder="Subject" maxLength={40} />
             <input type="number" min={1} max={600} value={addMin.minutes} onChange={(e) => setAddMin({ ...addMin, minutes: Number(e.target.value) })} style={{ width: 90 }} />

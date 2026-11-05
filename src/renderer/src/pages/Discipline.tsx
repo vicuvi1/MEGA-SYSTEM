@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { dayKey } from '@core/dates'
 import { campaignMap, disciplineCharts, URGE_SECONDS } from '@core/discipline'
 import { TRIGGERS } from '@core/urgePatterns'
 import { addReflection, lastReflections, REFLECTION_TITLE, reflectionPrompt } from '@core/reflections'
@@ -312,7 +313,8 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function Setup({ man, onState }: { man: ManSuggestion; onState: (s: DisciplineState) => void }) {
   const act = useAction()
-  const today = new Date().toISOString().slice(0, 10)
+  // BG14: the app's day in your time, not the UTC date (wrong just after midnight).
+  const today = dayKey(new Date())
   const [day, setDay] = useState(man?.start ?? today)
   return (
     <section className="panel setup">
@@ -502,7 +504,9 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
 function CheckInButton({ state, onCheckIn }: { state: DisciplineState; onCheckIn: () => void }) {
   const w = state.checkIn
   const done = state.checkedInToday || w?.mode === 'done'
-  const label = state.resetToday
+  // BG13: a reset today still leaves yesterday's check-in open in the morning.
+  const blockedByReset = state.resetToday && w?.mode !== 'yesterday'
+  const label = blockedByReset
     ? 'Check in tomorrow evening'
     : done
       ? 'Checked in'
@@ -512,7 +516,7 @@ function CheckInButton({ state, onCheckIn }: { state: DisciplineState; onCheckIn
           ? 'Check in yesterday as clean'
           : 'Check in: today was clean'
   return (
-    <button className="btn primary" disabled={done || state.resetToday || w?.mode === 'wait'} onClick={onCheckIn} title="You check in a day once you've lived it: from 19:00, or the next morning until 12:00">
+    <button className="btn primary" disabled={done || blockedByReset || w?.mode === 'wait'} onClick={onCheckIn} title="You check in a day once you've lived it: from 19:00, or the next morning until 12:00">
       <Icon name="check" size={15} />
       {label}
     </button>
