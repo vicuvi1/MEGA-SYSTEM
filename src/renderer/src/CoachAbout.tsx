@@ -125,7 +125,7 @@ const TONE_LABEL = ['', 'Gentle', 'Warm', 'Tough love', 'Hard', 'Drill sergeant'
 /** How Ben talks: length and tone (he also changes it when you tell him "be shorter"). */
 function StylePanel() {
   const act = useAction()
-  const [st, setSt] = useState<{ length: 'short' | 'normal' | 'detailed'; tone: number } | null>(null)
+  const [st, setSt] = useState<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' } | null>(null)
   useEffect(() => {
     life.coach?.style?.().then(setSt).catch(() => {})
   }, [])
@@ -154,6 +154,14 @@ function StylePanel() {
       <div className="ab-tone-ends">
         <span>😊 Gentle</span>
         <span>😡 Drill sergeant</span>
+      </div>
+      <small className="ab-when">Language</small>
+      <div className="isl-seg ab-seg">
+        {(['en', 'ro', 'ru', 'auto'] as const).map((l) => (
+          <button key={l} className={(st.lang ?? 'en') === l ? 'on' : ''} onClick={() => void save({ lang: l })}>
+            {l === 'en' ? 'English' : l === 'ro' ? 'Română' : l === 'ru' ? 'Русский' : 'Like my message'}
+          </button>
+        ))}
       </div>
     </section>
   )

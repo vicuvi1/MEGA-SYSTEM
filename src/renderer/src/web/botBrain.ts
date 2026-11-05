@@ -399,27 +399,31 @@ export interface CoachStyle {
   length: 'short' | 'normal' | 'detailed'
   /** 1 = gentle friend … 5 = drill sergeant. */
   tone: number
+  /** Reply language (T9): 'en' (default), 'ro', 'ru', or 'auto' = the language he wrote in. */
+  lang?: 'en' | 'ro' | 'ru' | 'auto'
 }
+const LANGS = ['en', 'ro', 'ru', 'auto']
 export const COACH_STYLE = 'coach_style'
 export const DEFAULT_STYLE: CoachStyle = { length: 'short', tone: 4 }
 export function loadStyle(db: any): CoachStyle {
   try {
     const j = JSON.parse(getSetting(db, COACH_STYLE) || 'null')
-    return { length: ['short', 'normal', 'detailed'].includes(j?.length) ? j.length : DEFAULT_STYLE.length, tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone))) }
+    return { length: ['short', 'normal', 'detailed'].includes(j?.length) ? j.length : DEFAULT_STYLE.length, tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone))), lang: LANGS.includes(j?.lang) ? j.lang : 'en' }
   } catch {
     return DEFAULT_STYLE
   }
 }
 export function saveStyle(db: any, st: Partial<CoachStyle>): CoachStyle {
   const next = { ...loadStyle(db), ...st }
-  const clean = { length: ['short', 'normal', 'detailed'].includes(next.length) ? next.length : 'short', tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4))) } as CoachStyle
+  const clean = { length: ['short', 'normal', 'detailed'].includes(next.length) ? next.length : 'short', tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4))), lang: LANGS.includes(next.lang as string) ? next.lang : 'en' } as CoachStyle
   setSetting(db, COACH_STYLE, JSON.stringify(clean))
   return clean
 }
 const TONES = ['', 'gentle and encouraging, no anger', 'warm friend, honest, light push', 'friend with tough love (angry only when clearly earned)', 'tough love, direct, calls out excuses, angry when he slips', 'drill sergeant: blunt, demanding, zero excuses (still on his side, never insulting)']
 export function styleText(st: CoachStyle): string {
   const len = st.length === 'short' ? 'SHORT: 2–4 short lines.' : st.length === 'normal' ? 'NORMAL length: up to 6–8 lines when useful.' : 'DETAILED when he asks for depth: clear sections, still no fluff.'
-  return `His chosen style: ${len} Tone ${st.tone}/5: ${TONES[st.tone]}.`
+  const lang = st.lang === 'ro' ? 'Reply in Romanian.' : st.lang === 'ru' ? 'Reply in Russian.' : st.lang === 'auto' ? 'Reply in the language his message is written in (English, Romanian or Russian).' : 'Reply in English (he may write in Romanian or Russian; understand it, answer in English).'
+  return `His chosen style: ${len} Tone ${st.tone}/5: ${TONES[st.tone]}. ${lang}`
 }
 
 /** Victor's 👍 / 👎 / "too long" / "wrong" on Ben's replies: Ben adjusts from them. */
@@ -625,7 +629,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     (extra.tone ?? 4) >= 5
       ? 'Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits.'
       : 'Start the reply with ONE face: 😎/🔥 proud, 😄 happy, 🙂 chill, 🎯 focused (he is slipping: you help him move). NEVER angry faces or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. Then 1–2 more emoji at most. When he just chats, chat back like a friend, short.',
-    'Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see "How he wants you to write"; default short: 3–4 lines). Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).',
+    'Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see "How he wants you to write"; default short: 3–4 lines). Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language his chosen style says (English unless he picked another).',
     '',
     ACTIONS,
     DESK_ACTIONS,

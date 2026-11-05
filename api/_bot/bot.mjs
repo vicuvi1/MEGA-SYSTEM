@@ -2699,6 +2699,12 @@ function nowContext(s, db, events, finance, now = /* @__PURE__ */ new Date()) {
 	out.push(`DATA SOURCES: ${fresh.join("; ")}. ${workouts} ${sporty || "Sporty (his workout bot) is NOT connected yet: anything he logs there does not reach you. If he says he trained on days that are missing, believe him and log those days with \"workout: <YYYY-MM-DD> | <what>\", and tell him the fix (update Sporty so it syncs)."} Never blame "sync" vaguely; say exactly where the number comes from.`);
 	return out;
 }
+var LANGS = [
+	"en",
+	"ro",
+	"ru",
+	"auto"
+];
 var COACH_STYLE = "coach_style";
 var DEFAULT_STYLE = {
 	length: "short",
@@ -2713,7 +2719,8 @@ function loadStyle(db) {
 				"normal",
 				"detailed"
 			].includes(j?.length) ? j.length : DEFAULT_STYLE.length,
-			tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone)))
+			tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone))),
+			lang: LANGS.includes(j?.lang) ? j.lang : "en"
 		};
 	} catch {
 		return DEFAULT_STYLE;
@@ -2730,7 +2737,8 @@ function saveStyle(db, st) {
 			"normal",
 			"detailed"
 		].includes(next.length) ? next.length : "short",
-		tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4)))
+		tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4))),
+		lang: LANGS.includes(next.lang) ? next.lang : "en"
 	};
 	setSetting(db, COACH_STYLE, JSON.stringify(clean));
 	return clean;
@@ -2744,7 +2752,9 @@ var TONES = [
 	"drill sergeant: blunt, demanding, zero excuses (still on his side, never insulting)"
 ];
 function styleText(st) {
-	return `His chosen style: ${st.length === "short" ? "SHORT: 2–4 short lines." : st.length === "normal" ? "NORMAL length: up to 6–8 lines when useful." : "DETAILED when he asks for depth: clear sections, still no fluff."} Tone ${st.tone}/5: ${TONES[st.tone]}.`;
+	const len = st.length === "short" ? "SHORT: 2–4 short lines." : st.length === "normal" ? "NORMAL length: up to 6–8 lines when useful." : "DETAILED when he asks for depth: clear sections, still no fluff.";
+	const lang = st.lang === "ro" ? "Reply in Romanian." : st.lang === "ru" ? "Reply in Russian." : st.lang === "auto" ? "Reply in the language his message is written in (English, Romanian or Russian)." : "Reply in English (he may write in Romanian or Russian; understand it, answer in English).";
+	return `His chosen style: ${len} Tone ${st.tone}/5: ${TONES[st.tone]}. ${lang}`;
 }
 var COACH_FEEDBACK = "coach_feedback";
 function loadFeedback(db) {
@@ -2931,7 +2941,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		"Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don't have a number, don't make one up; ask for it with \"need\" or leave it out.",
 		"Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count (\"3rd promise missed this week\"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn't).",
 		(extra.tone ?? 4) >= 5 ? "Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits." : "Start the reply with ONE face: 😎/🔥 proud, 😄 happy, 🙂 chill, 🎯 focused (he is slipping: you help him move). NEVER angry faces or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. Then 1–2 more emoji at most. When he just chats, chat back like a friend, short.",
-		"Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see \"How he wants you to write\"; default short: 3–4 lines). Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Always reply in English (he may write in Romanian or Russian; understand it, answer in English).",
+		"Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see \"How he wants you to write\"; default short: 3–4 lines). Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language his chosen style says (English unless he picked another).",
 		"",
 		ACTIONS,
 		DESK_ACTIONS,

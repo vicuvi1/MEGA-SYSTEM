@@ -51,8 +51,8 @@ export type Bridge = LifeApi & {
     /** A change on the desk (mood, stake, study topic, habit stack, coach call). Returns a line for the toast. */
     deskDo?(op: DeskOp): Promise<string>
     feedback?(at: string, kind: 'up' | 'down' | 'long' | 'wrong'): Promise<void>
-    style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>
-    setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number }>
+    style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
+    setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang: 'en' | 'ro' | 'ru' | 'auto' }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
     status?(): Promise<CoachStatus>
     /** Sporty on your server: connected, version, updates waiting; update() presses its Update button. */
     sporty?(): Promise<SportyView>

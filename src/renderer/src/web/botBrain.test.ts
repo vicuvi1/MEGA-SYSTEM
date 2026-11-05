@@ -124,6 +124,10 @@ describe('how Ben talks and learns', () => {
     expect(readAction('style: detailed')).toEqual({ kind: 'style', length: 'detailed' })
     expect(readAction('style: whatever')).toBeNull()
     expect(styleText({ length: 'short', tone: 5 })).toContain('drill sergeant')
+    // The reply language you picked (T9).
+    expect(styleText({ length: 'short', tone: 3 })).toContain('Reply in English')
+    expect(styleText({ length: 'short', tone: 3, lang: 'ro' })).toContain('Reply in Romanian')
+    expect(styleText({ length: 'short', tone: 3, lang: 'auto' })).toContain('language his message is written in')
     const now = new Date('2026-11-02T12:00:00Z')
     const fb = feedbackText([{ at: '2026-11-01T10:00:00Z', kind: 'long', text: 'A very long answer about planning' }, { at: '2026-11-02T09:00:00Z', kind: 'up', text: 'ok' }, { at: '2026-09-01T09:00:00Z', kind: 'down', text: 'old' }], now)
     expect(fb).toContain('👍 1, 👎 0, too long 1, wrong 0')
