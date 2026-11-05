@@ -12,6 +12,7 @@ import { useTodayEvents } from './todayEvents'
 import { blockSubject, localDay } from '@core/dayTime'
 import { focusStreak, liveScore } from '@core/liveScore'
 import { runSharedNow, skipSharedNow, useSharedNow } from './nowStore'
+import { meetingNow } from '@core/dayGlance'
 
 /** A number that counts up to its value (calm, quick). */
 export function useCountUp(value: number, ms = 700): number {
@@ -137,7 +138,16 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   const soon = !evening && !block && m.kind !== 'running' && m.kind !== 'answer' && nextBlock && Date.parse(nextBlock.start) - tick < 60 * 60000 ? nextBlock : null
   const b = block ?? soon
   const left = b ? Math.max(5, Math.round((Date.parse(b.end) - Math.max(tick, Date.parse(b.start))) / 60000)) : 0
-  const now = shared
+  // In a class or meeting (T4): it says so; Join instead of "Start focus".
+  const inMeeting = m.kind !== 'running' ? meetingNow(timed, tick) : null
+  const now = inMeeting
+    ? {
+        tag: `In ${inMeeting.meet || (inMeeting.attendees ?? 0) > 1 ? 'a meeting' : 'class'} until ${hm(inMeeting.end)}`,
+        title: inMeeting.title,
+        btn: inMeeting.meet ? '🎥 Join' : '',
+        go: () => inMeeting.meet && window.open(inMeeting.meet, '_blank', 'noopener')
+      }
+    : shared
     ? { tag: shared.tag, title: shared.title, btn: shared.button, go: runSharedNow, why: shared.why }
     : evening
     ? { tag: 'Evening', title: 'Close your day · 2 minutes', btn: 'Close my day', go: () => window.dispatchEvent(new CustomEvent('life-close-day')) }
@@ -170,9 +180,11 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
             ⛶ Deep work
           </button>
         )}
-        <button className="btn small primary" disabled={busy} onClick={now.go}>
-          {now.btn}
-        </button>
+        {now.btn && (
+          <button className="btn small primary" disabled={busy} onClick={now.go}>
+            {now.btn}
+          </button>
+        )}
         {shared && shared.kind !== 'running' && shared.key !== 'action:done:All done for today 🎉' && (
           <button className="btn small ghost" onClick={skipSharedNow} title="Not now: show the next thing (comes back tomorrow)">
             Skip

@@ -2124,3 +2124,21 @@ body:has(.bb-bubble) main { padding-bottom: 96px; }
 .nq-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .nq-add input { border: 1px solid var(--border, rgb(var(--ink) / 0.14)); border-radius: 8px; padding: 6px 9px; background: transparent; color: inherit; font: inherit; }
 .nq-add input[type='number'] { width: 70px; }
+
+/* Next up and the day in one line (T1, T3) */
+.nub { display: flex; align-items: center; justify-content: space-between; gap: 10px 18px; flex-wrap: wrap; margin: 10px 0 12px; padding: 10px 14px; border-radius: 14px; background: var(--surface, var(--panel)); border: 1px solid var(--border, rgb(var(--ink) / 0.1)); }
+.nub-next { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.nub-next small { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.nub-next b { font-size: 15px; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nub-cd { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent, var(--lime)); }
+.nub.soon .nub-cd { color: var(--orange, #ff9b3d); }
+.nub.soon { border-color: color-mix(in srgb, var(--orange, #ff9b3d) 45%, transparent); }
+.nub-meta { color: var(--muted); font-size: 13px; }
+.nub-day { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+:root[data-theme='light'] .nub-cd { color: var(--lime-text, #3f5700); }
+
+/* Today's timeline: all-day chips (E1) and travel bands (E6) */
+.ds-allday { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.ds-chip { display: inline-flex; align-items: center; max-width: 100%; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--text); text-decoration: none; background: color-mix(in srgb, var(--c) 22%, transparent); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-travel { position: absolute; left: 44px; right: 8px; z-index: 1; border-radius: 6px; background: repeating-linear-gradient(135deg, rgb(var(--ink) / 0.07) 0 6px, transparent 6px 12px); border: 1px dashed rgb(var(--ink) / 0.18); display: flex; align-items: center; padding: 0 8px; pointer-events: none; }
+.ds-travel span { font-size: 10.5px; color: var(--muted); }

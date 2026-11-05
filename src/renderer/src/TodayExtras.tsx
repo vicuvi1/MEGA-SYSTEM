@@ -17,6 +17,7 @@ import { useFocus } from './pages/Focus'
 import { reloadToday, useTodayEvents } from './todayEvents'
 import { soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
+import { countdown, daySummary, isMeeting, nextUp } from '@core/dayGlance'
 
 export function QuickCapture() {
   const toast = useToast()
@@ -187,6 +188,64 @@ export function WeekStrip() {
           </small>
         ))}
       </div>
+    </section>
+  )
+}
+
+/**
+ * Next up and the day in one line (T1, T3): "Next: Algebra · in 23 min ·
+ * 14:00–15:30 · Room 204 · Join · Start early", and "3 events · 2 blocks ·
+ * 4h free · done at 18:30 · bed 23:30". The countdown ticks every second
+ * in the last 10 minutes.
+ */
+export function NextUpBar() {
+  const { events } = useTodayEvents()
+  const [now, setNow] = useState(Date.now())
+  const [bed, setBed] = useState<string | null>(null)
+  useEffect(() => {
+    life.sleep.state().then((s: any) => setBed(s?.bedTarget ?? null)).catch(() => {})
+  }, [])
+  const today = localDay(new Date(now).toISOString())
+  const todays = events.filter((e) => localDay(e.start) === today)
+  const next = nextUp(todays, now)
+  const soon = next ? Date.parse(next.start) - now < 10 * 60_000 : false
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), soon ? 1000 : 30_000)
+    return () => clearInterval(t)
+  }, [soon])
+  const sum = daySummary(todays, now, bed)
+  const hm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (!todays.length && !next) return null
+  const mins = next ? Math.max(5, Math.min(180, Math.round((Date.parse(next.end) - Date.parse(next.start)) / 60000))) : 0
+  return (
+    <section className={`nub ${soon ? 'soon' : ''}`} aria-label="Next up">
+      {next ? (
+        <div className="nub-next">
+          <small>Next</small>
+          <b title={next.title}>{next.title}</b>
+          <span className="nub-cd">{countdown(Date.parse(next.start) - now)}</span>
+          <span className="nub-meta">
+            {hm(next.start)}–{hm(next.end)}
+            {next.location ? ` · ${next.location}` : ''}
+          </span>
+          {next.meet && (
+            <a className="btn small primary" href={next.meet} target="_blank" rel="noopener noreferrer">
+              🎥 Join
+            </a>
+          )}
+          {!isMeeting(next) && (
+            <button className="btn small" onClick={() => void life.focus.start(next.title, mins, null).then(() => window.dispatchEvent(new CustomEvent('life-focus-changed')))}>
+              ▶ Start early
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="nub-next">
+          <small>Next</small>
+          <b>Nothing more in your calendar today</b>
+        </div>
+      )}
+      <span className="nub-day">{sum.text}</span>
     </section>
   )
 }

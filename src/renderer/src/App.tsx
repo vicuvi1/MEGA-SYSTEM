@@ -32,6 +32,8 @@ import { reloadToday } from './todayEvents'
 import { capture } from './capture'
 import type { TodoTask } from '@core/todoist'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
+import { countdown, nextUp } from '@core/dayGlance'
+import { useTodayEvents } from './todayEvents'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at once).
 function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) {
@@ -380,6 +382,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
   const tab = embed ? (hiddenByStealth ? 'system' : view[page] ?? 'app') : 'system'
   const activeEmbed = embed && tab === 'app' ? embed.kind : null
+  const { events: todayEvents } = useTodayEvents()
 
   const toggleSidebar = useCallback(() => {
     setPeek(false)
@@ -497,11 +500,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // On the desktop the title bar offers 'Restart to update' itself.
   if (updateReady && !window.desktop) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
   if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Backups are off', body: backup.lastError, page: 'settings' })
-  if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current} · +20 points`, page: 'discipline' })
+  if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current}`, page: 'discipline' })
   if (overdue) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
-  const nextBlock = schedule && schedule.day === schedule.today ? schedule.blocks.find((b) => b.status === 'pending' && Date.parse(b.startsAt) > Date.now()) : undefined
-  if (nextBlock && Date.parse(nextBlock.startsAt) - Date.now() < 60 * 60_000) {
-    alerts.push({ id: `block-${nextBlock.id}`, tone: 'info', icon: 'calendar', title: `${nextBlock.title} at ${nextBlock.start}`, body: 'Starts within the hour', page: 'calendar' })
+  // The next thing in your real calendar within the hour (T2; it read an old, empty schedule).
+  const nextEv = nextUp(todayEvents, Date.now())
+  if (nextEv && Date.parse(nextEv.start) - Date.now() < 60 * 60_000) {
+    alerts.push({ id: `event-${nextEv.id}`, tone: 'info', icon: 'calendar', title: `${nextEv.title} at ${new Date(nextEv.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, body: `Starts ${countdown(Date.parse(nextEv.start) - Date.now())}${nextEv.location ? ` · ${nextEv.location}` : ''}`, page: 'calendar' })
   }
   if (shop?.chests.length) alerts.push({ id: 'chest', tone: 'good', icon: 'gift', title: `${shop.chests.length} chest${shop.chests.length > 1 ? 's' : ''} to open`, page: 'shop' })
 

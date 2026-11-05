@@ -21,6 +21,7 @@ import { useFocus } from './pages/Focus'
 import { localToday, calendarToday, reloadToday, useTodayEvents } from './todayEvents'
 import { soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
+import { travelFor } from '@core/eventAlerts'
 
 const START_H = 6
 const END_H = 24
@@ -82,6 +83,11 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   const scroller = useRef<HTMLDivElement>(null)
   // Pixels per hour: 06–24 fills the column's height (scrolls only if very short).
   const [px, setPx] = useState(48)
+  // Travel times (E6): a shaded band before events at your places.
+  const [travel, setTravel] = useState<{ place: string; minutes: number }[]>([])
+  useEffect(() => {
+    life.notifications?.settings?.().then((x) => setTravel(x.travel)).catch(() => {})
+  }, [])
   useEffect(() => {
     const el = scroller.current
     if (!el) return
@@ -288,6 +294,20 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
         )}
       </header>
       {!connected && <p className="hint small">Connect Google Calendar in Settings to see and move your blocks here.</p>}
+      {(() => {
+        // All-day events and birthdays (E1), as chips above the timeline.
+        const allDay = events.filter((e) => e.allDay && !e.declined && e.start.slice(0, 10) <= today && (e.end.slice(0, 10) > today || e.end.slice(0, 10) === e.start.slice(0, 10)))
+        return allDay.length ? (
+          <div className="ds-allday" aria-label="All day">
+            {allDay.map((e) => (
+              <a key={e.id} className="ds-chip" href={e.htmlLink ?? undefined} target="_blank" rel="noopener noreferrer" style={{ ['--c' as string]: e.color ?? '#7cc4ff' }} title={e.title}>
+                {/birthday|ziua|день рожд/i.test(e.title) ? '🎂 ' : ''}
+                {e.title}
+              </a>
+            ))}
+          </div>
+        ) : null
+      })()}
       <div className="ds-scroll" ref={scroller} style={{ ['--px' as string]: `${px}px` }}>
         <div
           className={`ds-track ${dropAt ? 'dropping' : ''}`}
@@ -317,6 +337,16 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
               {pad(START_H + i)}
             </span>
           ))}
+          {todayEvents.map((e) => {
+            const t = travelFor(e.location, travel)
+            if (!t) return null
+            const s0 = toMin(localHM(e.start))
+            return (
+              <div key={`tr-${e.id}`} className="ds-travel" style={{ top: yOf(Math.max(START_H * 60, s0 - t)), height: Math.max(10, yOf(s0) - yOf(Math.max(START_H * 60, s0 - t)) - 1) }} title={`Travel ${t} min to ${e.location}`}>
+                <span>🚶 {t}m</span>
+              </div>
+            )
+          })}
           {gaps.map((g) => (
             <button key={g.start} className="ds-gap" style={{ top: yOf(toMin(g.start)) + 2, height: Math.max(22, yOf(toMin(g.end)) - yOf(toMin(g.start)) - 4) }} onClick={() => onBook(tasks.find((t) => !t.dueTime) ?? tasks[0], toMin(g.start))} title="Fill this with your top task" disabled={!tasks.length}>
               free {g.minutes >= 60 ? `${Math.floor(g.minutes / 60)}h${g.minutes % 60 ? ` ${g.minutes % 60}m` : ''}` : `${g.minutes}m`}

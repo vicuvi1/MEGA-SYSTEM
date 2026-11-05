@@ -18,7 +18,7 @@ import { useLive } from '../live'
 import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
-import { DeepWork, MissTwiceCard, WeekStrip } from '../TodayExtras'
+import { DeepWork, MissTwiceCard, NextUpBar, WeekStrip } from '../TodayExtras'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -192,6 +192,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   return (
     <div className="today td2">
       <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
+      <NextUpBar />
       <DeepWork />
       <div className="cmd">
         <div className="cmd-main">
