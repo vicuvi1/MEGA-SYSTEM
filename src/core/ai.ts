@@ -27,86 +27,6 @@ export interface TaskDecompositionResult {
   modelUsed?: string
 }
 
-export interface SystemCoachContext {
-  level: number
-  hunterTitle: string
-  hunterGrade: string
-  attributes: {
-    str: number
-    agi: number
-    vit: number
-    int: number
-    sen: number
-    totalCombatPower: number
-  }
-  coinsBalance: number
-  cleanStreakDays: number
-  todayTasksSummary?: string
-  calendarAgenda?: string
-  currentDate?: string
-  currentTime?: string
-  latestWeight?: number | null
-  latestWaist?: number | null
-}
-
-export interface AgentToolCall {
-  tool:
-    | 'complete_task'
-    | 'add_task'
-    | 'delete_task'
-    | 'log_workout'
-    | 'log_water'
-    | 'log_clean_checkin'
-    | 'log_expense'
-    | 'log_metric'
-    | 'award_coins'
-  args: Record<string, any>
-}
-
-export interface ToolExecutionResult {
-  tool: string
-  result: string
-  success: boolean
-  data?: any
-}
-
-export function parseAgentToolCalls(text: string): { cleanedText: string; toolCalls: AgentToolCall[] } {
-  const toolCalls: AgentToolCall[] = []
-  const regex = /```(?:tool_call|tool|json)?\s*(\{\s*"tool"[\s\S]*?\})\s*```/gi
-
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(match[1])
-      if (parsed && typeof parsed.tool === 'string') {
-        toolCalls.push({
-          tool: parsed.tool as any,
-          args: parsed.args || {}
-        })
-      }
-    } catch {}
-  }
-
-  if (toolCalls.length === 0) {
-    const rawRegex = /\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"args"\s*:\s*\{[\s\S]*?\}\s*\}/gi
-    while ((match = rawRegex.exec(text)) !== null) {
-      try {
-        const parsed = JSON.parse(match[0])
-        if (parsed && typeof parsed.tool === 'string') {
-          toolCalls.push({
-            tool: parsed.tool as any,
-            args: parsed.args || {}
-          })
-        }
-      } catch {}
-    }
-  }
-
-  let cleanedText = text.replace(/```(?:tool_call|tool|json)?\s*\{\s*"tool"[\s\S]*?\}\s*```/gi, '').trim()
-  cleanedText = cleanedText.replace(/\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"args"\s*:\s*\{[\s\S]*?\}\s*\}/gi, '').trim()
-
-  return { cleanedText, toolCalls }
-}
 
 export interface ModelChoice {
   provider: 'gemini' | 'openrouter'
@@ -132,52 +52,6 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   geminiKey: '',
   selectedModel: 'auto',
   enabled: true
-}
-
-/**
- * Intelligently routes tasks to the best configured model based on workload type and user keys.
- */
-export function selectModelForTask(
-  config: AIConfig,
-  task: AITask
-): { provider: 'gemini' | 'openrouter'; model: string } {
-  const hasGemini = Boolean(config.geminiKey?.trim())
-  const hasOpenRouter = Boolean(config.openRouterKey?.trim())
-
-  if (!hasGemini && !hasOpenRouter) {
-    throw new Error('No AI API key found. Please add a Google Gemini (Free) or OpenRouter API key in Settings.')
-  }
-
-  // If user selected a specific model manually (not 'auto')
-  if (config.selectedModel && config.selectedModel !== 'auto') {
-    const isGeminiModel = config.selectedModel.startsWith('gemini')
-    if (isGeminiModel && hasGemini) {
-      return { provider: 'gemini', model: config.selectedModel }
-    }
-    if (!isGeminiModel && hasOpenRouter) {
-      return { provider: 'openrouter', model: config.selectedModel }
-    }
-    // Fallback if chosen provider's key is not set
-    if (hasGemini) return { provider: 'gemini', model: 'gemini-3.5-flash' }
-    return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
-  }
-
-  // AUTO Routing based on task complexity:
-  // 1. Reward ideas & task decomposition & product inspection -> Fast response (Gemini Flash or DeepSeek V3)
-  if (task === 'reward_ideas' || task === 'decompose_task' || task === 'inspect_product') {
-    if (hasGemini) return { provider: 'gemini', model: 'gemini-3.5-flash' }
-    return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
-  }
-
-  // 2. Performance conclusion report -> Deep analytical reasoning (DeepSeek R1 or Gemini Pro)
-  if (task === 'performance_report') {
-    if (hasOpenRouter) return { provider: 'openrouter', model: 'deepseek/deepseek-r1' }
-    if (hasGemini) return { provider: 'gemini', model: 'gemini-3.1-pro-preview' }
-  }
-
-  // 3. Coach chat / advice
-  if (hasOpenRouter) return { provider: 'openrouter', model: 'deepseek/deepseek-chat' }
-  return { provider: 'gemini', model: 'gemini-3.5-flash' }
 }
 
 export interface AIRewardContext {
@@ -527,68 +401,6 @@ export function parsePerformanceResponse(text: string, modelUsed = 'AI'): AIPerf
     generatedAt: new Date().toISOString(),
     modelUsed
   }
-}
-
-export function buildSystemOraclePrompt(
-  ctx: SystemCoachContext,
-  userMessage: string,
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>
-): string {
-  const historyText = history && history.length > 0
-    ? '\nConversation History:\n' + history.map((h) => `${h.role === 'user' ? 'Victor' : 'Oracle'}: ${h.content}`).join('\n') + '\n'
-    : ''
-
-  const tasksText = ctx.todayTasksSummary ? `\nActive Quests & Tasks:\n${ctx.todayTasksSummary}\n` : '\nActive Quests: None currently pending.\n'
-  const calText = ctx.calendarAgenda ? `\nSchedule & Calendar Events:\n${ctx.calendarAgenda}\n` : ''
-  const nowStr = ctx.currentDate || new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const timeStr = ctx.currentTime || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-
-  return `You are Victor's personal coach inside his Life System. Tough love: direct, honest, you call out excuses, and you always give one clear next step.
-Current Real-World Time: ${nowStr}, ${timeStr}.
-
-User Telemetry:
-- Clean Discipline Streak: ${ctx.cleanStreakDays} Days
-- Points: ${ctx.coinsBalance}
-${ctx.latestWeight ? `- Current Weight: ${ctx.latestWeight} kg\n` : ''}${ctx.latestWaist ? `- Current Waist: ${ctx.latestWaist} cm\n` : ''}${tasksText}${calText}
-CORE DIRECTIVES & COMMUNICATION STYLE:
-1. ANSWER WHAT VICTOR ACTUALLY ASKS FIRST: If Victor asks a specific question (e.g. date calculations, days until an event, advice, or status), answer it directly, accurately, and conversationally in the very first sentence. Never evade the question or replace it with generic boilerplate.
-2. DO NOT USE FORCED TEMPLATES: DO NOT use repetitive, rigid formulas (like "• Immediate Focus / • Secondary Move / • Discipline Anchor") unless explicitly asked for a structured breakdown. Be natural, adaptable, sharp, and high-IQ.
-3. NO PREACHY OR PATRONIZING LECTURES: Do not lecture him or say cliché phrases like "cool isn't a feeling" or nag him about complacency. Be the honest coach who respects him enough to push.
-4. CALCULATE DATES ACCURATELY: Use the current real-world date (${nowStr}) for all day-counting or calendar calculations.
-5. CONCISE & PUNCHY: Keep responses focused, sharp, and easy to read.
-
-AGENTIC SYSTEM TOOLS (YOU CAN MODIFY APP DATA!):
-You have direct authorization to execute actions and modify data in Life System on Victor's behalf.
-When Victor asks you to log something, complete a task, add a quest, record an expense, or take an action, or when taking action directly fulfills his intent, emit a tool call in a code block:
-
-\`\`\`tool_call
-{ "tool": "<tool_name>", "args": { ... } }
-\`\`\`
-
-Available Tools:
-• complete_task: { "task": "<task title or partial keyword or id>" }
-  (Marks an open quest complete, awarding coins and XP)
-• add_task: { "title": "<string>", "priority": 1|2|3, "category": "study"|"code"|"gym"|"life"|"work", "due": "YYYY-MM-DD" }
-  (Adds a new quest to his active task list)
-• delete_task: { "task": "<task title or keyword>" }
-  (Archives or deletes a quest)
-• log_workout: { "exercise": "Pushups"|"Sit-ups"|"Running"|"Gym"|"Boxing"|"Squats", "amount": <number>, "unit": "reps"|"km"|"sets"|"minutes"|"kg" }
-  (Logs an athletic workout, awarding +15 coins and +35 XP)
-• log_water: { "amountMl": 250|500|1000 }
-  (Logs water intake into the hydration tracker)
-• log_clean_checkin: {}
-  (Affirms today's clean streak check-in, +20 coins, +40 XP)
-• log_expense: { "amount": <number>, "category": "food"|"transit"|"bills"|"gear"|"fun", "note": "<string>" }
-  (Logs an expense in MDL against daily budget)
-• log_metric: { "weight": <number>, "waist": <number> }
-  (Records body weight in kg or waist circumference in cm)
-• award_coins: { "amount": <number>, "reason": "<string>" }
-  (Grants bonus points for real milestones)
-
-You can call multiple tools if needed. Always confirm the action clearly to Victor.
-${historyText}
-Victor: ${userMessage}
-Coach:`
 }
 
 export function buildTaskDecomposePrompt(

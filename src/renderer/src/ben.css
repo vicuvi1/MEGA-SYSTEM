@@ -30,7 +30,8 @@
 .cx-info { background: var(--surface); }
 .cx-info-head { padding: 16px 16px 10px; }
 .bd { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.bd-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0 12px 10px; padding: 4px; border-radius: 14px; background: rgb(var(--ink) / 0.04); }
+/* 7 tabs on one row (K5); on narrow screens the row scrolls sideways. */
+.bd-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(52px, 1fr); overflow-x: auto; scrollbar-width: none; gap: 4px; margin: 0 12px 10px; padding: 4px; border-radius: 14px; background: rgb(var(--ink) / 0.04); }
 .bd-tabs button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; border: none; background: none; color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 600; padding: 7px 2px 6px; border-radius: 10px; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .bd-tabs button span { font-size: 16px; line-height: 1; filter: grayscale(0.6); transition: filter 0.2s, transform 0.2s; }
 .bd-tabs button:hover { color: var(--text); }
@@ -318,3 +319,9 @@
 
 /* One starter card (V5), centred. */
 .co-cards.one { grid-template-columns: minmax(0, 360px); justify-content: center; }
+
+/* A message that didn't go out (K4) */
+.cx .co-row.me.failed .co-bubble, .cx .co-msg.me:has(.cx-failed) .co-bubble { opacity: 0.75; }
+.cx-failed { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--danger, #e5484d); background: var(--surface); border-radius: 8px; padding: 3px 8px; width: fit-content; margin-left: auto; }
+.cx-failed button { border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+.bd-tabs::-webkit-scrollbar { display: none; }

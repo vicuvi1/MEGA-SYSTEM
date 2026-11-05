@@ -5,8 +5,7 @@ import type {
   InspectedProductResult,
   ModelChoice,
   TaskDecompositionItem,
-  TaskDecompositionResult,
-  SystemCoachContext
+  TaskDecompositionResult
 } from '@core/ai'
 import { POPULAR_MODELS } from '@core/ai'
 import type {
@@ -56,7 +55,7 @@ export type { CalendarConfig, CalendarEvent }
 export type { SyncEvent, SyncResult }
 export { DEFAULT_CALENDAR_CONFIG }
 
-export type { TaskDecompositionItem, TaskDecompositionResult, SystemCoachContext }
+export type { TaskDecompositionItem, TaskDecompositionResult }
 export type { QuestState }
 export type { LedgerEntry, LevelInfo, HunterRankDef, HunterAttributes, StatAllocation, HunterPerkDef, HunterPerk, Rule, Reward, Tier, EffortEquivalence, Block, BlockKind, BlockStatus, Repeat, Task }
 export { calculateEffortEquivalence }
@@ -606,14 +605,6 @@ export interface LifeApi {
     test(provider?: 'gemini' | 'openrouter'): Promise<{ ok: boolean; message: string; model: string }>
     generateRewards(userPrompt?: string): Promise<{ rewards: GeneratedReward[]; modelUsed: string }>
     performanceReport(): Promise<AIPerformanceReport>
-    askCoach(
-      message: string,
-      history?: Array<{ role: 'user' | 'assistant'; content: string }>
-    ): Promise<{
-      reply: string
-      modelUsed: string
-      toolExecutions?: Array<{ tool: string; result: string; success: boolean }>
-    }>
     decomposeTask(title: string, notes?: string, category?: string): Promise<TaskDecompositionResult>
     inspectProduct(queryOrUrl: string): Promise<InspectedProductResult>
   }

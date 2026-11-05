@@ -24,8 +24,7 @@ import {
   type DayProposal,
   type DayResult,
   type RhythmPrefs,
-  type RhythmState
-} from '@core/rhythm'
+  type RhythmState, blocksKept } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
 import { COACH_SELFREVIEW, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMind, loadProfile, saveLetter, saveMind, sportState } from './botBrain'
 import { applyMind } from '@core/coachMind'
@@ -311,14 +310,16 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const f = svc.focus.state()
       const plan = svc.focus.plan(today)
       const water = waterToday(db, svc)
-      const blocks = st.briefing?.status === 'approved' ? st.briefing.plan.blocks : []
+      // An approved plan counts, and so does one you never approved (K8): ignoring it isn't free.
+      const blocks = st.briefing ? st.briefing.plan.blocks : []
       return {
         mustdosDone: plan.items.filter((x) => x.done).length,
         mustdosTotal: plan.items.length,
         focusMin: f.todayMin,
         plannedFocusMin: blocks.reduce((t, b) => t + b.minutes, 0),
-        blocksDone: 0,
-        blocksPlanned: 0,
+        blocksDone: blocksKept(blocks, f.todaySessions, today),
+        blocksPlanned: blocks.length,
+        planApproved: st.briefing ? st.briefing.status === 'approved' : null,
         waterMl: water.ml,
         waterTarget: water.target,
         workoutDone: (svc.wallet.summary().todayRules ?? []).includes('body.workout_done') || !!svc.body.state().restToday,
@@ -570,9 +571,17 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const sport = sportState(db)
       if (!sport) return null
       const w = sharedView(sport, sportToday()).water
-      save(db, { ...st, water: [...st.water, hmNow()] })
       const glasses = Math.max(1, Math.ceil((w.target - w.ml) / w.glass / 3))
       return `💧 Water ${(w.ml / 1000).toFixed(1)} of ${(w.target / 1000).toFixed(1)} L and the day is going. Drink ${glasses} glass${glasses === 1 ? '' : 'es'} now. Send "water 250" after each.`
+    })
+  }
+
+  /** A water nudge really went out: only then it counts against the 5 a day (K2). */
+  async function markWater(): Promise<void> {
+    await mirror.write((db) => {
+      const svc = services.services(db)
+      const st = load(db, svc.wallet.today())
+      save(db, { ...st, water: [...st.water, hmNow()] })
     })
   }
 
@@ -588,7 +597,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

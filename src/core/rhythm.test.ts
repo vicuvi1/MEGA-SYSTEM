@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanProposal, dayScore, DEFAULT_RHYTHM_PREFS, dueRhythm, localProposal, proposalText, readLines, rhythmFor, reviewText, suggestWeekFocus, waterBehind, weakest, type RhythmFacts } from './rhythm'
+import { cleanProposal, dayScore, DEFAULT_RHYTHM_PREFS, dueRhythm, localProposal, proposalText, readLines, rhythmFor, reviewText, suggestWeekFocus, waterBehind, weakest, type RhythmFacts, blocksKept, missedTwiceText } from './rhythm'
 
 const today = '2026-11-02' // a Monday
 const facts = (over: Partial<RhythmFacts> = {}): RhythmFacts => ({ today, time: '08:00', weekday: 1, wakeAt: null, wakeTarget: '07:00', waterMl: 0, waterTarget: 2700, workoutDone: false, paused: false, ...over })
@@ -63,11 +63,25 @@ describe('rhythm: the plan', () => {
 describe('rhythm: reviews', () => {
   const r = { mustdosDone: 2, mustdosTotal: 3, focusMin: 60, plannedFocusMin: 100, blocksDone: 1, blocksPlanned: 2, waterMl: 2700, waterTarget: 2700, workoutDone: true, trainingPlanned: true }
   it('scores the day and names the weakest part', () => {
-    expect(dayScore(r)).toBe(Math.round((2 / 3) * 40 + 0.6 * 30 + 15 + 15))
+    // Blocks kept are half of the focus part (K1).
+    expect(dayScore(r)).toBe(Math.round((2 / 3) * 40 + 0.6 * 15 + 0.5 * 15 + 15 + 15))
     expect(weakest(r)).toContain('Focus 60 of 100')
     expect(weakest({ ...r, focusMin: 100 })).toContain('1 must-do left open')
     expect(weakest({ ...r, mustdosDone: 3, focusMin: 100 })).toContain('Everything done')
     expect(reviewText(r, 75, 'Start earlier.', ['A', 'B'])).toContain("Tomorrow's top 3")
+  })
+  it('counts blocks kept, also when moved later, each minute once (K1)', () => {
+    const day = '2026-11-05'
+    const at = (hm: string) => new Date(`${day}T${hm}:00`).toISOString()
+    const blocks = [{ title: 'A', start: '09:00', minutes: 50 }, { title: 'B', start: '11:00', minutes: 50 }, { title: 'C', start: '14:00', minutes: 50 }]
+    // 30 min at 09:10 keeps A; 40 min at 15:00 keeps C (or a moved B), not both.
+    const sessions = [{ startedAt: at('09:10'), endedAt: at('09:40') }, { startedAt: at('15:00'), endedAt: at('15:40') }]
+    expect(blocksKept(blocks, sessions, day, new Date(`${day}T20:00:00`))).toBe(2)
+    expect(blocksKept(blocks, [], day)).toBe(0)
+  })
+  it('says an unapproved plan still counts (K8) and asks after a second miss (K3)', () => {
+    expect(reviewText({ ...r, planApproved: false }, 50, 'x', [])).toContain('never approved')
+    expect(missedTwiceText('Algebra')).toContain('slipped again')
   })
   it('picks the weakest metric for next week and reads typed lists', () => {
     expect(suggestWeekFocus([{ id: 'focus', now: 8, target: 10 }, { id: 'wake', now: 2, target: 7 }, { id: 'spend', now: 0, target: 1 }])).toBe('wake')

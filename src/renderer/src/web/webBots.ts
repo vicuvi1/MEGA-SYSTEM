@@ -716,7 +716,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|m[ln])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|m[ln])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -1018,6 +1018,23 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
       const text = ok ? '✕ Dropped for today. Your calendar is up to date.' : 'Could not find that block anymore; it may already be gone.'
       await answer(ok ? 'Dropped' : 'Not found')
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
+      return text
+    }
+    // A block missed twice → the same time tomorrow (K3).
+    if (data.startsWith('bt|')) {
+      if (!(await markSeen(key))) return null
+      const id = data.slice(3)
+      let ok = false
+      if (calendar?.move) {
+        const day = new Date()
+        const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString()
+        const ev = (await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [])).find((e) => e.id === id)
+        if (ev) ok = await calendar.move(ev.calendarId, ev.id, new Date(Date.parse(ev.start) + 86400000).toISOString(), new Date(Date.parse(ev.end) + 86400000).toISOString()).then(() => true).catch(() => false)
+      }
+      const text = ok ? '📅 Moved to tomorrow, same time.' : 'Could not find that block anymore; it may already be gone.'
+      await answer(ok ? 'Tomorrow' : 'Not found')
       await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
       await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
       return text

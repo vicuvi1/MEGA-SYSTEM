@@ -18,7 +18,7 @@ import { readDo } from '@core/coachButtons'
 import { BenDesk, type DeskTab } from '../BenDesk'
 import '../ben.css'
 
-type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[] }
+type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string }
 type Profile = { about: string; goals: string[]; rules: string[] }
 
 const BOT_LABEL: Record<string, string> = { mega: 'Ben', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
@@ -220,11 +220,16 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         pic ? { mime: 'image/jpeg', data: pic.data } : undefined
       )
       setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, fresh: true, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
+      // One face for Ben (K6): the header shows the mood of his latest reply.
+      if (r.mood && MOOD_FACE[r.mood as Mood]) setStatus((s) => (s ? { ...s, mood: r.mood as any, face: MOOD_FACE[r.mood as Mood] } : s))
       if (r.done.length) onWallet()
       void life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
       void life.coach.mind?.().then(setMind).catch(() => {})
     } catch (e) {
-      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: `I couldn't answer: ${(e as Error).message}`, at: new Date().toISOString() }])
+      // Not a fake Ben reply (K4): your message is marked "Not sent" with Retry, the draft comes back.
+      const why = (e as Error).message || 'no connection'
+      setLog((l) => (l ?? []).filter((x) => !x.pending).map((x) => (x.role === 'me' && x.at === now ? { ...x, failed: why } : x)))
+      if (t) setText((cur) => cur || t)
     }
     setBusy(false)
     loadStatus()
@@ -261,6 +266,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   }
   const moveLabel: Record<string, string> = { focus: '▶ Start', running: '⏹ Stop & log', approve: '✓ Approve', plan: 'Plan it', answer: '✅ Done', ask: 'Ask' }
   const face = status?.face ?? '✦'
+  // The newest real Ben reply: its live cards stay even if a later message failed.
+  const lastReply = (() => {
+    for (let k = (log?.length ?? 0) - 1; k >= 0; k--) if (log![k].role === 'coach' && !log![k].pending) return k
+    return -1
+  })()
 
   return (
     <div className={`cx ${info ? 'info-open' : ''}`}>
@@ -485,8 +495,24 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                           })}
                         </ul>
                       )}
-                      {!m.pending && (!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === (log?.length ?? 0) - 1} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
+                      {!m.pending && (!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
                       {!m.pending && m.role === 'coach' && life.coach?.feedback && <Feedback m={m} />}
+                      {m.failed && (
+                        <span className="cx-failed" title={m.failed}>
+                          Not sent ·{' '}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              setLog((l) => (l ?? []).filter((x) => x !== m))
+                              setText('')
+                              void send(m.text)
+                            }}
+                          >
+                            Retry
+                          </button>
+                        </span>
+                      )}
                       {!m.pending && (
                         <span className="cx-time">
                           {m.via === 'app' ? '' : 'Telegram · '}
@@ -906,11 +932,13 @@ function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: { m: En
                 )}
               </div>
             )
+          // A plan written in the reply and "Not made yet" under it contradict each other (K7).
+          if (w === 'plan' && status.plan.status === 'none' && /\b\d{1,2}:\d{2}\b/.test(m.text)) return null
           if (w === 'plan')
             return (
               <button key={w} className="cx-w cx-w-link" onClick={() => onOpen('plan')}>
                 <small>Today's plan</small>
-                <b>{status.plan.status === 'none' ? 'Not made yet' : status.plan.status === 'proposed' ? 'Waiting for your approval' : 'Approved'}</b>
+                <b>{status.plan.status === 'none' ? 'No plan yet · tap to make one' : status.plan.status === 'proposed' ? 'Waiting for your approval' : 'Approved'}</b>
                 <span>{status.plan.headline}</span>
               </button>
             )

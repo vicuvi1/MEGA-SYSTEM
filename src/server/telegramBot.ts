@@ -53,7 +53,7 @@ import { MOOD_FACES, moodDue } from '@core/benKnows'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
 import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
-import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState } from '@core/rhythm'
+import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState, missedTwiceText } from '@core/rhythm'
 import { missTwiceLine } from '@core/neverMissTwice'
 import { coachStatus } from '../renderer/src/web/coachStatus'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
@@ -888,13 +888,13 @@ async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: 
  * (blocks into the calendar), and a planned block you missed moves into
  * your next free time, once, with Start / Drop buttons.
  */
-async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unknown) => Promise<void>, state: RhythmState, on: boolean, time: string): Promise<void> {
+async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unknown) => Promise<unknown>, state: RhythmState, on: boolean, time: string): Promise<void> {
   if (!on) return
   const { bots, mirror, calendar, services } = await botsFor(env)
   const mark = (patch: Partial<RhythmState>) =>
     mirror.write((db) => {
       const cur = rhythmFor(JSON.parse(getSetting(db as any, RHYTHM) || 'null'), state.day)
-      setSetting(db as any, RHYTHM, JSON.stringify({ ...cur, ...patch, moved: [...new Set([...(cur.moved ?? []), ...(patch.moved ?? [])])] }))
+      setSetting(db as any, RHYTHM, JSON.stringify({ ...cur, ...patch, moved: [...new Set([...(cur.moved ?? []), ...(patch.moved ?? [])])], asked: [...new Set([...(cur.asked ?? []), ...(patch.asked ?? [])])] }))
     })
   // 10:00 and the plan is still waiting: one reminder (it's your plan: Ben doesn't approve it for you).
   if (autoApproveDue(state.briefing?.status, time, !!state.autoApproved)) {
@@ -908,18 +908,26 @@ async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unk
   const focus = await mirror.read((db) => services.services(db).focus.state(now))
   if (focus.running) return
   const sessions = focus.todaySessions
-  for (const m of missedBlocks(events, sessions, now, state.moved ?? []).slice(0, 1)) {
+  for (const m of missedBlocks(events, sessions, now, state.asked ?? []).slice(0, 1)) {
+    const subject = blockSubject(m.event.title).slice(0, 28)
+    // Missed again after the move (K3): ask, don't skip it silently.
+    if ((state.moved ?? []).includes(m.event.id)) {
+      await mark({ asked: [m.event.id] })
+      const tomorrow = `bt|${m.event.id}`.length <= 64 ? [{ text: '📅 Tomorrow', callback_data: `bt|${m.event.id}` }] : []
+      const drop = `bd|${m.event.id}`.length <= 64 ? [{ text: '✕ Drop', callback_data: `bd|${m.event.id}` }] : []
+      await send(missedTwiceText(m.event.title), { inline_keyboard: [[{ text: `▶ 25 min now`, callback_data: `fo|${subject}` }, ...tomorrow, ...drop]] })
+      continue
+    }
     await mark({ moved: [m.event.id] })
     const slot = nextSlot(events.filter((e) => e.id !== m.event.id), day, time, m.minutes)
     if (slot) await calendar.move(m.event.calendarId, m.event.id, new Date(`${day}T${slot.start}:00`).toISOString(), new Date(`${day}T${slot.end}:00`).toISOString()).catch(() => null)
-    const subject = blockSubject(m.event.title).slice(0, 28)
     // The button carries the event's own id (fits Telegram's 64 bytes), never a list position.
     const drop = `bd|${m.event.id}`.length <= 64 ? `bd|${m.event.id}` : `bd|${(state.moved ?? []).length}`
     await send(movedText(m.event.title, slot), { inline_keyboard: [[{ text: `▶ Start now: ${subject}`, callback_data: `fo|${subject}` }, { text: '✕ Drop it', callback_data: drop }]] })
   }
 }
 
-async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown) => Promise<void>): Promise<void> {
+async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown, opts?: { always?: boolean }) => Promise<unknown>): Promise<void> {
   const { bots, services, mirror } = await botsFor(env)
   const f = await mirror.read((db) => {
     const svc = services.services(db)
@@ -1006,8 +1014,12 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const { plan, version } = await bots.rhythm.propose()
       await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD)
     } else if (job === 'water') {
+      // Up to 5 a day when you're behind (K2): the cap and spacing live in waterBehind, so it's not "once a day".
       const line = await bots.rhythm.waterLine()
-      if (line) await send(line, { inline_keyboard: [[{ text: '😴 30 min', callback_data: 'ns|' }, { text: '⏸ Pause today', callback_data: 'np|' }]] })
+      if (line) {
+        await send(line, { inline_keyboard: [[{ text: '😴 30 min', callback_data: 'ns|' }, { text: '⏸ Pause today', callback_data: 'np|' }]] }, { always: true })
+        await bots.rhythm.markWater()
+      }
     } else if (job === 'training') {
       await send(await bots.rhythm.trainingLine(), { inline_keyboard: [[{ text: '🏋️ Start workout', callback_data: 'wk|show' }, { text: '😴 30 min', callback_data: 'ns|' }]] })
     } else if (job === 'weekly') {

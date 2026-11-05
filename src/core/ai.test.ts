@@ -1,21 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
-  selectModelForTask,
   buildRewardPrompt,
   parseRewardResponse,
   buildPerformancePrompt,
   parsePerformanceResponse,
-  buildSystemOraclePrompt,
   buildTaskDecomposePrompt,
   parseTaskDecomposition,
-  parseAgentToolCalls,
   heuristicInspectProduct,
   buildInspectProductPrompt,
   parseInspectProductResponse,
   type AIConfig,
   type AIRewardContext,
   type AIPerformanceContext,
-  type SystemCoachContext
 } from './ai'
 
 describe('AI Core Domain Engine', () => {
@@ -25,50 +21,6 @@ describe('AI Core Domain Engine', () => {
     selectedModel: 'auto',
     enabled: true
   }
-
-  describe('selectModelForTask', () => {
-    it('throws error when no keys are provided', () => {
-      expect(() => selectModelForTask({ ...baseConfig, openRouterKey: '', geminiKey: '' }, 'reward_ideas')).toThrow(
-        /No AI API key found/
-      )
-    })
-
-    it('routes reward_ideas to Gemini 3.5 Flash on auto when Gemini key is available', () => {
-      const choice = selectModelForTask(baseConfig, 'reward_ideas')
-      expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-3.5-flash')
-    })
-
-    it('routes decompose_task to Gemini 3.5 Flash on auto when Gemini key is available', () => {
-      const choice = selectModelForTask(baseConfig, 'decompose_task')
-      expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-3.5-flash')
-    })
-
-    it('routes reward_ideas to OpenRouter DeepSeek V3 when only OpenRouter key is available', () => {
-      const choice = selectModelForTask({ ...baseConfig, geminiKey: '' }, 'reward_ideas')
-      expect(choice.provider).toBe('openrouter')
-      expect(choice.model).toBe('deepseek/deepseek-chat')
-    })
-
-    it('routes performance_report to DeepSeek R1 on auto when OpenRouter key is available', () => {
-      const choice = selectModelForTask(baseConfig, 'performance_report')
-      expect(choice.provider).toBe('openrouter')
-      expect(choice.model).toBe('deepseek/deepseek-r1')
-    })
-
-    it('routes performance_report to Gemini 3.1 Pro when only Gemini key is available', () => {
-      const choice = selectModelForTask({ ...baseConfig, openRouterKey: '' }, 'performance_report')
-      expect(choice.provider).toBe('gemini')
-      expect(choice.model).toBe('gemini-3.1-pro-preview')
-    })
-
-    it('respects manual model selection when user chooses specific model', () => {
-      const manual = selectModelForTask({ ...baseConfig, selectedModel: 'deepseek/deepseek-chat' }, 'performance_report')
-      expect(manual.provider).toBe('openrouter')
-      expect(manual.model).toBe('deepseek/deepseek-chat')
-    })
-  })
 
   describe('Reward Prompts & Parsing', () => {
     const rewardCtx: AIRewardContext = {
@@ -152,34 +104,7 @@ describe('AI Core Domain Engine', () => {
     })
   })
 
-  describe('System Oracle Coach & Task Decomposition', () => {
-    const coachCtx: SystemCoachContext = {
-      level: 20,
-      hunterTitle: 'Shadow Sovereign',
-      hunterGrade: 'S-Rank',
-      attributes: {
-        str: 45,
-        agi: 40,
-        vit: 38,
-        int: 52,
-        sen: 50,
-        totalCombatPower: 675
-      },
-      coinsBalance: 2400,
-      cleanStreakDays: 30,
-      todayTasksSummary: '1. SI-266 Lab 7 (P1)\n2. Gym Push Day',
-      calendarAgenda: '10:00 - Distributed Systems Lecture'
-    }
-
-    it('builds system oracle prompt with telemetry and instructions', () => {
-      const prompt = buildSystemOraclePrompt(coachCtx, 'I feel lazy today, give me a directive.')
-      expect(prompt).toContain('Tough love')
-      expect(prompt).toContain('30 Days')
-      expect(prompt).toContain('SI-266 Lab 7')
-      expect(prompt).toContain('Distributed Systems Lecture')
-      expect(prompt).toContain('Victor: I feel lazy today')
-    })
-
+  describe('Task Decomposition', () => {
     it('builds task decomposition prompt with quest details', () => {
       const prompt = buildTaskDecomposePrompt('Finish SI-266 Lab 7', 'Write cryptography report', 'university', 'B-Rank')
       expect(prompt).toContain('breaking a big task into small steps')
@@ -211,35 +136,6 @@ describe('AI Core Domain Engine', () => {
       expect(res.subtasks.length).toBeGreaterThanOrEqual(3)
       expect(res.strategyTip).toBeTruthy()
       expect(res.modelUsed).toBe('DeepSeek V3')
-    })
-    it('parses agent tool calls and cleans message text', () => {
-      const modelOutput = `I have checked off task "ss" and logged 25 pushups for you, Victor.
-
-\`\`\`tool_call
-{
-  "tool": "complete_task",
-  "args": { "task": "ss" }
-}
-\`\`\`
-
-\`\`\`tool_call
-{
-  "tool": "log_workout",
-  "args": { "exercise": "Pushups", "amount": 25, "unit": "reps" }
-}
-\`\`\`
-
-Great work keeping up the momentum!`
-
-      const { cleanedText, toolCalls } = parseAgentToolCalls(modelOutput)
-      expect(toolCalls).toHaveLength(2)
-      expect(toolCalls[0].tool).toBe('complete_task')
-      expect(toolCalls[0].args.task).toBe('ss')
-      expect(toolCalls[1].tool).toBe('log_workout')
-      expect(toolCalls[1].args.amount).toBe(25)
-      expect(cleanedText).toContain('I have checked off task "ss"')
-      expect(cleanedText).toContain('Great work keeping up the momentum!')
-      expect(cleanedText).not.toContain('\`\`\`tool_call')
     })
   })
 describe('Product Link & Query Inspector', () => {

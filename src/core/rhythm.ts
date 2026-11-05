@@ -28,6 +28,8 @@ export interface RhythmState {
   autoApproved?: boolean
   /** Calendar blocks Ben already moved or asked about today (event ids). */
   moved?: string[]
+  /** Blocks missed again after the move: Ben asked what to do (K3). */
+  asked?: string[]
   briefing?: { status: 'proposed' | 'approved'; sentAt: string; plan: DayProposal; version: number }
   evening?: { sentAt: string; score: number; top3: string[]; lesson?: string }
   water: string[]
@@ -250,19 +252,56 @@ export interface DayResult {
   plannedFocusMin: number
   blocksDone: number
   blocksPlanned: number
+  /** true approved, false proposed but never approved (it still counts, K8), null no plan. */
+  planApproved?: boolean | null
   waterMl: number
   waterTarget: number
   workoutDone: boolean
   trainingPlanned: boolean
 }
 
-/** 0–100: must-dos 40, focus against the plan 30, water 15, training 15. */
+/** 0–100: must-dos 40, focus against the plan 30 (half of it the blocks kept, when there were blocks), water 15, training 15. */
 export function dayScore(r: DayResult): number {
   const md = r.mustdosTotal ? r.mustdosDone / r.mustdosTotal : r.focusMin >= 50 ? 1 : 0
   const fo = Math.min(1, r.focusMin / Math.max(50, r.plannedFocusMin))
+  const bl = r.blocksPlanned ? Math.min(1, r.blocksDone / r.blocksPlanned) : fo
   const wa = r.waterTarget ? Math.min(1, r.waterMl / r.waterTarget) : 0
   const tr = r.workoutDone ? 1 : r.trainingPlanned ? 0 : 0.5
-  return Math.round(md * 40 + fo * 30 + wa * 15 + tr * 15)
+  return Math.round(md * 40 + fo * 15 + bl * 15 + wa * 15 + tr * 15)
+}
+
+/**
+ * Plan blocks you actually kept (K1): at least half of the block's time was
+ * focused, at the planned time or later the same day (a moved block counts).
+ */
+export function blocksKept(blocks: PlanBlock[], sessions: { startedAt: string | null; endedAt: string | null; minutes?: number }[], day: string, now = new Date()): number {
+  const spans = sessions
+    .filter((x) => x.startedAt)
+    .map((x) => ({ s: Date.parse(x.startedAt!), e: x.endedAt ? Date.parse(x.endedAt) : now.getTime() }))
+    .sort((a, b) => a.s - b.s)
+  // Each focused minute counts for one block only, in time order.
+  const used = spans.map(() => 0)
+  let kept = 0
+  for (const b of [...blocks].sort((a, c) => a.start.localeCompare(c.start))) {
+    const from = Date.parse(`${day}T${b.start}:00`)
+    let need = b.minutes / 2
+    spans.forEach((sp, i) => {
+      if (need <= 0 || sp.e <= from) return
+      const free = (sp.e - Math.max(sp.s, from)) / 60000 - used[i]
+      if (free <= 0) return
+      const take = Math.min(free, need)
+      used[i] += take
+      need -= take
+    })
+    if (need <= 0) kept++
+  }
+  return kept
+}
+
+/** The second miss of a block Ben already moved (K3): a choice, not silence. */
+export function missedTwiceText(title: string): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return `🔁 <b>${esc(title)}</b> slipped again. What now: a shorter 25 minutes now, tomorrow at the same time, or drop it?`
 }
 
 /** The weakest part of the day, for the lesson when there's no model. */
@@ -283,6 +322,7 @@ export function reviewText(r: DayResult, score: number, lesson: string, top3: st
     `🌙 <b>Day review: ${score}/100</b> ${mark}`,
     '',
     `Must-dos ${r.mustdosDone}/${r.mustdosTotal} · Focus ${r.focusMin}${r.plannedFocusMin ? `/${r.plannedFocusMin}` : ''} min${r.blocksPlanned ? ` · Blocks ${r.blocksDone}/${r.blocksPlanned}` : ''}`,
+    ...(r.planApproved === false ? [`<i>You never approved today's plan, but it still counts: ${r.plannedFocusMin} min planned, ${r.focusMin} done.</i>`] : []),
     `Water ${(r.waterMl / 1000).toFixed(1)}/${(r.waterTarget / 1000).toFixed(1)} L · Training ${r.workoutDone ? '✅' : '—'}`,
     '',
     `<b>Lesson:</b> ${esc(lesson)}`,

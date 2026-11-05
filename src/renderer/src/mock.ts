@@ -719,10 +719,7 @@ export function createMockApi(): Bridge {
         ],
         modelUsed: 'gemini-3.5-flash'
       }),
-      askCoach: async (msg: string) => ({
-        reply: `[System Oracle]: Understood, Hunter. In response to "${msg}": stay locked onto your primary directives. Discipline compounds exponentially.`,
-        modelUsed: 'gemini-3.5-flash'
-      })
+
     },
     calendar: {
       config: async () => ({
