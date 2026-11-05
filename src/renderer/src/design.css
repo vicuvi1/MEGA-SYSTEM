@@ -1281,8 +1281,10 @@
 .hp-list li.bad i { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 25%, transparent); }
 .hp-list li span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .hp-list li.bad span { color: var(--text); }
-.hp-errors li { grid-template-columns: 120px 70px 1fr !important; }
+.hp-errors li { grid-template-columns: 120px minmax(70px, 180px) 1fr !important; }
 .hp-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hp-stack { grid-column: 1 / -1; font-size: 11px; color: var(--ink); opacity: .75; }
+.hp-stack pre { margin: 4px 0 0; padding: 8px; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: var(--surface-2); border-radius: var(--radius-sm); }
 @media (max-width: 620px) { .hp-list li { grid-template-columns: 10px 1fr; } .hp-list li span { grid-column: 2; } }
 
 /* 🎯 focused: Ben is helping you move (a slipping day below tone 5), calm, never red. */

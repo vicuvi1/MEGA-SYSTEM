@@ -18026,7 +18026,7 @@ var ENSURE = [{
 	sql: "CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)",
 	args: []
 }, {
-	sql: "CREATE TABLE IF NOT EXISTS sys_errors (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, source TEXT, msg TEXT)",
+	sql: "CREATE TABLE IF NOT EXISTS sys_error_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, source TEXT, msg TEXT, stack TEXT, version TEXT, place TEXT)",
 	args: []
 }];
 var put = (key, at, msg) => ({
@@ -18046,23 +18046,35 @@ async function beat(t, key, ok, msg, now = /* @__PURE__ */ new Date()) {
 	} else lastOk.delete(key);
 	await t.writeAtomic([...ENSURE, put(`${key}:${ok ? "ok" : "err"}`, now.toISOString(), ok ? null : String(msg ?? "failed").slice(0, 300))]).catch(() => {});
 }
-/** One line in the shared error log (last 500 kept). Never throws. */
-async function logError(t, source, msg, now = /* @__PURE__ */ new Date()) {
+/** Several errors in one write (the apps send them in batches). Last 500 kept. Never throws. */
+async function logErrors(t, list, now = /* @__PURE__ */ new Date()) {
+	const rows = list.filter((e) => e && e.msg).slice(0, 50);
+	if (!rows.length) return;
 	await t.writeAtomic([
 		...ENSURE,
-		{
-			sql: "INSERT INTO sys_errors (at, source, msg) VALUES (?, ?, ?)",
+		...rows.map((e) => ({
+			sql: "INSERT INTO sys_error_log (at, source, msg, stack, version, place) VALUES (?, ?, ?, ?, ?, ?)",
 			args: [
-				now.toISOString(),
-				source.slice(0, 20),
-				String(msg).slice(0, 400)
+				e.at || now.toISOString(),
+				String(e.source || "?").slice(0, 20),
+				String(e.msg).slice(0, 400),
+				e.stack ? String(e.stack).slice(0, 2e3) : null,
+				e.version ? String(e.version).slice(0, 40) : null,
+				e.place ? String(e.place).slice(0, 80) : null
 			]
-		},
+		})),
 		{
-			sql: "DELETE FROM sys_errors WHERE id <= (SELECT MAX(id) FROM sys_errors) - 500",
+			sql: "DELETE FROM sys_error_log WHERE id <= (SELECT MAX(id) FROM sys_error_log) - 500",
 			args: []
 		}
 	]).catch(() => {});
+}
+/** One line in the shared error log. Never throws. */
+async function logError(t, source, msg, now = /* @__PURE__ */ new Date()) {
+	await logErrors(t, [{
+		source,
+		msg
+	}], now);
 }
 /** Small JSON values (Ben's alert state, weekly report date…). */
 async function setNote(t, key, value) {
@@ -18075,7 +18087,7 @@ async function readHealth(t) {
 			args: []
 		},
 		{
-			sql: "SELECT at, source, msg FROM sys_errors ORDER BY id DESC LIMIT 200",
+			sql: "SELECT at, source, msg, stack, version, place FROM sys_error_log ORDER BY id DESC LIMIT 200",
 			args: []
 		},
 		{
@@ -18102,10 +18114,13 @@ async function readHealth(t) {
 	}
 	return {
 		beats,
-		errors: e instanceof Error ? [] : e.rows.map(([at, source, msg]) => ({
+		errors: e instanceof Error ? [] : e.rows.map(([at, source, msg, stack, version, place]) => ({
 			at: String(at),
 			source: String(source),
-			msg: String(msg)
+			msg: String(msg),
+			...stack ? { stack: String(stack) } : {},
+			...version ? { version: String(version) } : {},
+			...place ? { place: String(place) } : {}
 		})).reverse(),
 		notes,
 		latestSnapshot: s instanceof Error ? null : s.rows[0]?.[0] ?? null

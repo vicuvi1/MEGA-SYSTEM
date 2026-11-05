@@ -62,8 +62,18 @@ export function HealthPanel() {
           {[...h.errors].reverse().slice(0, 50).map((e, i) => (
             <li key={i}>
               <span>{new Date(e.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-              <small>{e.source}</small>
+              <small>
+                {e.source}
+                {e.version ? ` · ${e.version}` : ''}
+                {e.place ? ` · ${e.place}` : ''}
+              </small>
               <small className="hp-msg">{e.msg}</small>
+              {e.stack && (
+                <details className="hp-stack">
+                  <summary>Stack trace</summary>
+                  <pre>{e.stack}</pre>
+                </details>
+              )}
             </li>
           ))}
         </ul>

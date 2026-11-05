@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react'
 import { life } from './bridge'
+import { reportError } from './errorReport'
 import { Icon } from './Icon'
 
 interface Props {
@@ -27,6 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: { componentStack?: string | null }) {
     life.app.reportError(`${this.props.area}: ${error.message}`, `${error.stack ?? ''}\n${info.componentStack ?? ''}`).catch(() => {})
+    reportError(window.desktop ? 'desktop' : 'web', `${this.props.area}: ${error.message}`, `${error.stack ?? ''}\n${info.componentStack ?? ''}`)
   }
 
   private details(): string {

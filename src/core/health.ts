@@ -4,7 +4,7 @@
 
 export interface Beat { ok?: string; err?: { at: string; msg: string } }
 export type Beats = Record<string, Beat>
-export interface ErrorEntry { at: string; source: string; msg: string }
+export interface ErrorEntry { at: string; source: string; msg: string; stack?: string; version?: string; place?: string }
 
 export interface HealthInput {
   now: Date
