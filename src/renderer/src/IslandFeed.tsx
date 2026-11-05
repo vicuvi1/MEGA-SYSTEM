@@ -14,6 +14,7 @@ import { life } from './bridge'
 import { capture } from './capture'
 import { parseCapture } from '@core/capture'
 import { useLive } from './live'
+import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
 
 const SEEN = 'ls.coachSeen'
@@ -340,12 +341,9 @@ export function IslandFeed() {
         switch (a.kind) {
           case 'water': {
             put(LAST_WATER, Date.now())
-            // The shared log (Ben, Sporty, Telegram see it), and Sport Track's copy here.
-            await life.coach?.water?.(a.ml)
-            updateSport((d) => {
-              if (d.water) d.water.currentMl = (Number(d.water.currentMl) || 0) + a.ml
-            })
-            window.dispatchEvent(new CustomEvent('life-body-changed'))
+            // The one shared water path (water.ts, N9): the shared log, then this
+            // device's copy set to its answer (never added twice), and every screen told.
+            await addWater(a.ml)
             break
           }
           case 'reps': {
