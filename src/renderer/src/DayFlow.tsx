@@ -183,7 +183,25 @@ export function DayFlow(props: Props) {
   const habits = useHabits(props, st?.todayMin ?? 0)
   // What one Todoist task pays (the real rule, shown on every row).
   const taskPts = props.rules?.find((x) => x.id === 'tasks.todoist_done')?.coins ?? 5
-  const [skipped, setSkipped] = useState<string[]>([])
+  // Skipped "Do this now" steps, remembered for the day (F3: the top row can skip too).
+  const [skipped, setSkippedRaw] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('ls.skippedNow') || 'null')
+      return v && v.day === dayKey(new Date()) && Array.isArray(v.keys) ? v.keys : []
+    } catch {
+      return []
+    }
+  })
+  const setSkipped = (f: (x: string[]) => string[]) =>
+    setSkippedRaw((cur) => {
+      const next = f(cur)
+      try {
+        localStorage.setItem('ls.skippedNow', JSON.stringify({ day: dayKey(new Date()), keys: next.slice(-30) }))
+      } catch {
+        /* this session only */
+      }
+      return next
+    })
   const [adding, setAdding] = useState('')
   const [showAll, setShowAll] = useState(false)
   // A habit just ticked: the chip bursts and the ring pulses.
@@ -474,8 +492,13 @@ export function DayFlow(props: Props) {
   decisionRef.current = decision
   useEffect(() => {
     const on = () => decisionRef.current && void runDecision(decisionRef.current)
+    const skip = () => decisionRef.current && setSkipped((x) => [...x, decisionRef.current!.key])
     window.addEventListener('life-do-now', on)
-    return () => window.removeEventListener('life-do-now', on)
+    window.addEventListener('life-skip-now', skip)
+    return () => {
+      window.removeEventListener('life-do-now', on)
+      window.removeEventListener('life-skip-now', skip)
+    }
   })
 
   const todoList = useMemo(() => (todo ? sortToday(todo, today) : null), [todo, today])

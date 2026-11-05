@@ -26,3 +26,6 @@ export function useSharedNow(): DoNow | null {
 
 /** Ask the Now card to run its action. */
 export const runSharedNow = () => window.dispatchEvent(new CustomEvent('life-do-now'))
+
+/** Skip the current "Do this now" for today (F3): the next one comes up. */
+export const skipSharedNow = () => window.dispatchEvent(new CustomEvent('life-skip-now'))

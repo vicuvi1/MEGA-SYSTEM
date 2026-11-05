@@ -11,7 +11,7 @@ import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
 import { blockSubject, localDay } from '@core/dayTime'
 import { focusStreak, liveScore } from '@core/liveScore'
-import { runSharedNow, useSharedNow } from './nowStore'
+import { runSharedNow, skipSharedNow, useSharedNow } from './nowStore'
 
 /** A number that counts up to its value (calm, quick). */
 export function useCountUp(value: number, ms = 700): number {
@@ -173,6 +173,11 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
         <button className="btn small primary" disabled={busy} onClick={now.go}>
           {now.btn}
         </button>
+        {shared && shared.kind !== 'running' && shared.key !== 'action:done:All done for today 🎉' && (
+          <button className="btn small ghost" onClick={skipSharedNow} title="Not now: show the next thing (comes back tomorrow)">
+            Skip
+          </button>
+        )}
       </div>
       <button className={`thb-reward ${goal && balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title="Your rewards: add your own (1h manga, a film…) and redeem them">
         <span className="thb-pts">
