@@ -5316,7 +5316,12 @@ var Mirror = class Mirror {
 	refresh() {
 		if (this.refreshing) return this.refreshing;
 		this.refreshing = this.lock(async () => {
-			if (this.desktop && this.db) await this.flushDesktop();
+			if (this.desktop && this.db) try {
+				await this.flushDesktop();
+			} catch (e) {
+				this.lastError = `Couldn't send this PC's changes yet: ${e.message}`.slice(0, 240);
+				if (this.pending().length) return false;
+			}
 			if (!this.desktop) await this.flushOffline();
 			return this.catchUp();
 		}).then((changed) => {

@@ -239,7 +239,17 @@ export class Mirror {
   refresh(): Promise<boolean> {
     if (this.refreshing) return this.refreshing
     this.refreshing = this.lock(async () => {
-      if (this.desktop && this.db) await this.flushDesktop()
+      // A failed upload no longer breaks syncing with an error on every run (Y7):
+      // it is shown in the sync status and tried again next time. Downloading
+      // waits while this PC still has unsent changes (it would overwrite them).
+      if (this.desktop && this.db) {
+        try {
+          await this.flushDesktop()
+        } catch (e) {
+          this.lastError = `Couldn't send this PC's changes yet: ${(e as Error).message}`.slice(0, 240)
+          if (this.pending().length) return false
+        }
+      }
       // Changes made offline go first, so the fresh copy has them.
       if (!this.desktop) await this.flushOffline()
       return this.catchUp()
