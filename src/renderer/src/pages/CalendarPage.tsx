@@ -24,6 +24,7 @@ import { useAction, useToast } from '../ui'
 import { useLive } from '../live'
 import { soundSuccess } from '../sound'
 import { calendarDay } from '@core/dates'
+import { addLocalDays, dayDiff, dragSpan, hmOf, isoAt, isoFrom, isoWeek, lenLabel, snapMinute, toMin, tzAhead, weekStartOf, type DragShape } from '@core/calMath'
 
 type View = 'day' | '3day' | 'ndays' | 'workweek' | 'week' | 'month' | 'agenda'
 /** Hour height: 72 px by default (C1), any size from 32 to 160 (C2). */
@@ -33,35 +34,11 @@ const PX_DEFAULT = 72
 /** Your calendar's look (F1–F3): day hours (or fit to your events), work hours, days shown, week start. */
 interface CalPrefs { startH: number; endH: number; fit: boolean; workFrom: number; workTo: number; days: number; weekStart: 0 | 1 | 6; weekNumbers: boolean; tz2: string }
 const CAL_PREFS: CalPrefs = { startH: 6, endH: 24, fit: true, workFrom: 8, workTo: 20, days: 3, weekStart: 1, weekNumbers: true, tz2: '' }
-/** ISO week number (Monday weeks), for the title and the month view. */
-export const isoWeek = (day: string) => {
-  const d = new Date(`${day}T12:00:00Z`)
-  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7))
-  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1))
-  return Math.ceil(((t.getTime() - y0.getTime()) / 86400000 + 1) / 7)
-}
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => calendarDay(d)
-const addDays = (day: string, n: number) => {
-  const d = new Date(`${day}T12:00:00`)
-  d.setDate(d.getDate() + n)
-  return ymd(d)
-}
-/** The first day of `day`'s week (F3: Monday, Sunday or Saturday). */
-const weekStartOf = (day: string, ws: number = 1) => {
-  const d = new Date(`${day}T12:00:00`)
-  return addDays(day, -((d.getDay() - ws + 7) % 7))
-}
+const addDays = addLocalDays
 const monday = (day: string) => weekStartOf(day, 1)
 const agoShort = (ms: number) => (ms < 10_000 ? 'just now' : ms < 60_000 ? `${Math.round(ms / 1000)} s ago` : `${Math.round(ms / 60_000)} min ago`)
-const toMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
-const hmOf = (min: number) => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`
-const isoAt = (day: string, min: number) => (min >= 24 * 60 ? new Date(`${addDays(day, 1)}T00:00:00`).toISOString() : new Date(`${day}T${hmOf(min)}:00`).toISOString())
-/** Any minute count from a day's midnight, also past midnight (1500 = 01:00 the next day). */
-const isoFrom = (day: string, min: number) => isoAt(addDays(day, Math.floor(min / 1440)), min % 1440)
-const dayDiff = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00`).getTime() - new Date(`${a}T12:00:00`).getTime()) / 86400000)
-const lenLabel = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60}` : `${m / 60} h`)
 const LENGTHS = [15, 30, 45, 60, 90, 120]
 /** Reminder choices (D6), in minutes before. "default" = the calendar's own. */
 const REMINDERS: [string, string][] = [
@@ -76,18 +53,6 @@ const REMINDERS: [string, string][] = [
 const WD2 = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 type RepeatChoice = Repeat | 'custom'
 const CUSTOM0: CustomRepeat = { freq: 'weekly', interval: 1, days: [], until: null, count: 12 }
-/** Minutes a time zone is ahead of this device's clock right now (D7). */
-const tzAhead = (tz: string, at = new Date()) => {
-  try {
-    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(at)
-    const g = (t: string) => Number(p.find((x) => x.type === t)?.value)
-    const there = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'))
-    const here = Date.UTC(at.getFullYear(), at.getMonth(), at.getDate(), at.getHours(), at.getMinutes())
-    return Math.round((there - here) / 60000)
-  } catch {
-    return 0
-  }
-}
 const deviceTz = () => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
@@ -469,10 +434,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   }
 
   // ---- Pointer drag (move, resize, create) --------------------------------
-  const minuteAt = (clientY: number, col: HTMLElement) => {
-    const y = clientY - col.getBoundingClientRect().top
-    return Math.min(endH * 60, Math.max(startH * 60, startH * 60 + Math.round((y / hourPx) * 4) * 15))
-  }
+  const minuteAt = (clientY: number, col: HTMLElement) => snapMinute(clientY - col.getBoundingClientRect().top, hourPx, startH, endH)
   const colAt = (x: number, y: number) => (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>('[data-day]') ?? null
   const commitRef = useRef(commitMove)
   commitRef.current = commitMove
@@ -529,14 +491,10 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
       if (!col) return
       const day = col.dataset.day!
       const m = minuteAt(e.clientY, col)
-      if (d.kind === 'move') {
-        const start = Math.max(startH * 60, Math.min(endH * 60 - d.len, m - d.offset))
-        put({ day, start, end: start + d.len, title: d.item.title, color: d.item.color, key: d.item.key })
-      } else if (d.kind === 'resize') {
-        put({ day: d.item.day, start: d.item.start, end: Math.max(d.item.start + 15, m), title: d.item.title, color: d.item.color, key: d.item.key })
-      } else {
-        put({ day: d.day, start: Math.min(d.from, m), end: Math.max(d.from + 15, m), title: 'New event', color: 'var(--accent)' })
-      }
+      const shape: DragShape = d.kind === 'move' ? { kind: 'move', len: d.len, offset: d.offset } : d.kind === 'resize' ? { kind: 'resize', day: d.item.day, start: d.item.start } : { kind: 'create', day: d.day, from: d.from }
+      const span = dragSpan(shape, day, m, startH, endH)
+      if (d.kind === 'create') put({ ...span, title: 'New event', color: 'var(--accent)' })
+      else put({ ...span, title: d.item.title, color: d.item.color, key: d.item.key })
     }
     const up = (pe: PointerEvent) => {
       // A quick tap on touch (no hold): open it / start a new event there.

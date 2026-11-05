@@ -2,7 +2,7 @@
 // (one next step, a live timer while focusing), habit chips, and one list:
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
 import { askConfirm } from './confirmSheet'
-import { appHour, calendarDay } from '@core/dates'
+import { appHour } from '@core/dates'
 import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { capture } from './capture'
@@ -10,20 +10,17 @@ import { nowActions, type NowAction } from '@core/nextAction'
 import { decideNow, type DoNow } from '@core/doNow'
 import { publishNow } from './nowStore'
 import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, plainName, sortToday, whenText, type Area, type TodoTask } from '@core/todoist'
-import type { BodyState, ConnectionsState, DisciplineState, FocusTask, Rule, Summary } from '@shared/api'
+import type { FocusTask } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
-import type { PageId } from './modules'
 import { useFocus } from './pages/Focus'
 import { LABEL as WEEK_LABEL, useWeekPlan } from './WeekPlanner'
-import { useTicker } from './useTicker'
 import { Skeleton } from './blocks'
 import { useSwipeRows } from './swipe'
 import { TodayTaskRow, withToday } from './TodayTaskRow'
-import { calendarToday, localToday, reloadToday, useTodayEvents } from './todayEvents'
+import { calendarToday, reloadToday, useTodayEvents } from './todayEvents'
 import { nextSlot, planMustDos } from '@core/benActs'
-import { blockSubject, isFocusBlock, localDay } from '@core/dayTime'
-import { focusCoins } from '@core/focus'
+import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { activePlan } from '@core/weekPlan'
 import { soundCoin, soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
@@ -31,104 +28,14 @@ import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
 import { PLAN_ITEM_COINS, isPlanFor, type PlanItem } from '@core/focus'
 import { BIG3_POINTS } from '../../main/points'
-import { HabitEditor, MissTwiceNote, useMyHabits, useTapHabit } from './MyHabits'
+import { HabitEditor, MissTwiceNote, useMyHabits } from './MyHabits'
 import { useLifeMode } from './LifeMode'
 import { modeTarget } from '@core/lifeMode'
-import type { HabitsView } from './web/lifeExtras'
+import { type DayFlowProps, useTodoist, useHabits } from './dayflow/hooks'
+import { subjectOf, todoSubject, clock, tomorrowOf, storeGet, storeSet } from './dayflow/util'
+import { ShutDown } from './dayflow/ShutDown'
+import { AreaAdd, type TodoTab, TabList, RunningClock, useSlowTick } from './dayflow/parts'
 
-interface Props {
-  summary: Summary
-  discipline: DisciplineState | null
-  connections: ConnectionsState | null
-  body: BodyState | null
-  onChange: (s?: Summary) => void
-  onGo: (p: PageId) => void
-  onOpenApp: (p: PageId) => void
-  /** The point rules, so each habit shows what it really pays. */
-  rules?: Rule[]
-}
-
-interface Habit {
-  id: string
-  label: string
-  hint: string
-  done: boolean
-  run: () => void | Promise<void>
-}
-
-/** A short subject for the focus stats: the first words of a must-do. */
-const subjectOf = (text: string) => text.split(/\s+/).slice(0, 3).join(' ').slice(0, 40)
-/** A Todoist task's area (its section or project, without the emoji), else its first words. */
-const todoSubject = (t: TodoTask) => {
-  const area = (t.section || (t.project !== 'Inbox' ? t.project : '') || '').replace(/[^\p{L}\p{N}&\s-]/gu, '').trim()
-  return area || subjectOf(t.content)
-}
-
-function useTodoist() {
-  const [tasks, setTasks] = useState<TodoTask[] | null>(null)
-  const load = useCallback(async () => {
-    if (!life.todoist || !(await life.todoist.status()).connected) return setTasks(null)
-    setTasks(await life.todoist.today().catch(() => []))
-  }, [])
-  useEffect(() => {
-    void load()
-  }, [load])
-  // Live: tasks added or done on Telegram or in Todoist itself show up by themselves.
-  useLive(() => void load(), { external: true })
-  return [tasks, load, setTasks] as const
-}
-
-function useHabits({ summary, discipline, connections, body, onChange, onGo, rules }: Props, focusMin: number, onSpend: () => void, own: HabitsView | null, reloadOwn: () => void, focusTarget = 50): Habit[] {
-  const act = useAction()
-  const tapOwn = useTapHabit(() => {
-    reloadOwn()
-    onChange()
-  })
-  const r = summary.todayRules ?? []
-  const pts = (id: string, fallback: number) => `+${rules?.find((x) => x.id === id)?.coins ?? fallback}`
-  const done = async (p: Promise<unknown> | undefined) => {
-    if (await p) {
-      soundSuccess()
-      onChange()
-    }
-  }
-  return [
-    { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
-    { id: 'clean', label: 'Clean day check-in', hint: discipline?.setup ? `day ${discipline.day ?? discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
-    { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), done: !!(body?.workoutDoneToday || body?.restToday || r.includes('body.workout_done')), run: () => onGo('body') },
-    { id: 'focus', label: `${focusTarget} minutes of focus`, hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', done: focusMin >= focusTarget || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', Math.min(90, focusTarget)), `Focus started: ${Math.min(90, focusTarget)} minutes`)) },
-    { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
-    { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: onSpend },
-    // Your own habits (FT1): +2 only for the tap, once a day each.
-    ...(own?.rows ?? []).map((h) => ({ id: `own:${h.id}`, label: h.name, hint: `${own?.pays ? `+${own.pays}` : ''}${h.streak ? ` · 🔥${h.streak}` : ''}`.replace(/^ · /, '') || 'tap when done', done: h.done, run: () => void tapOwn(h.id, h.name) }))
-  ]
-}
-
-
-const pad = (n: number) => String(n).padStart(2, '0')
-const clock = (ms: number) => {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  return `${Math.floor(s / 60)}:${pad(s % 60)}`
-}
-const tomorrowOf = (day: string) => {
-  const d = new Date(`${day}T12:00:00`)
-  d.setDate(d.getDate() + 1)
-  return calendarDay(d)
-}
-const storeGet = (k: string) => {
-  try {
-    return localStorage.getItem(k)
-  } catch {
-    return null
-  }
-}
-const storeSet = (k: string, v: string) => {
-  try {
-    localStorage.setItem(k, v)
-  } catch {
-    // private window: the mode just shows again
-  }
-}
 
 type Mode = 'morning' | 'evening' | null
 /** Morning until noon while today has no must-dos; evening from 20:00 until the review is written. */
@@ -146,7 +53,7 @@ interface Group {
   items: TodoTask[]
 }
 
-export function DayFlow(props: Props) {
+export function DayFlow(props: DayFlowProps) {
   const { summary, connections, onChange, onGo } = props
   const act = useAction()
   const toast = useToast()
@@ -1136,179 +1043,7 @@ export function DayFlow(props: Props) {
   )
 }
 
-const REASONS = ['Phone', 'Tired', 'Unclear task', 'Too much planned', 'Interrupted', 'Good day']
 
-function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, openTodo, onTomorrow, onMustDoTomorrow, onClose, onSaved }: {
-  today: string
-  focusMin: number
-  doneToday: number
-  planLen: number
-  todoDone: number
-  openMustDos: string[]
-  openTodo: TodoTask[]
-  onTomorrow: (t: TodoTask) => Promise<void>
-  onMustDoTomorrow: (text: string) => Promise<void>
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const act = useAction()
-  const [text, setText] = useState('')
-  const [reasons, setReasons] = useState<string[]>([])
-  const [moved, setMoved] = useState<string[]>([])
-  // Step 3 (D3): bedtime tonight and tomorrow's wake-up target.
-  const tomorrow = tomorrowOf(today)
-  const tomorrowWeekend = [0, 6].includes(new Date(`${tomorrow}T12:00:00Z`).getUTCDay())
-  const [sleepT, setSleepT] = useState<{ weekday: string; weekend: string; bed: string } | null>(null)
-  const [bed, setBed] = useState('')
-  const [wake, setWake] = useState('')
-  useEffect(() => {
-    life.sleep
-      .state()
-      .then((st: any) => {
-        const t = { weekday: st.weekdayTarget ?? '07:00', weekend: st.weekendTarget ?? '08:30', bed: st.bedTarget ?? '23:00' }
-        setSleepT(t)
-        setBed(t.bed)
-        setWake(tomorrowWeekend ? t.weekend : t.weekday)
-      })
-      .catch(() => {})
-  }, [tomorrowWeekend])
-  const sleepHours = (() => {
-    const m = (x: string) => (/^\d{2}:\d{2}$/.test(x) ? Number(x.slice(0, 2)) * 60 + Number(x.slice(3)) : null)
-    const b = m(bed)
-    const w = m(wake)
-    if (b == null || w == null) return null
-    const d = (w - b + 1440) % 1440
-    return `${Math.floor(d / 60)}h${d % 60 ? ` ${d % 60}m` : ''}`
-  })()
-  const save = async () => {
-    if (sleepT && (bed !== sleepT.bed || wake !== (tomorrowWeekend ? sleepT.weekend : sleepT.weekday))) {
-      await life.sleep.setTargets(tomorrowWeekend ? sleepT.weekday : wake, tomorrowWeekend ? wake : sleepT.weekend, bed).catch(() => null)
-    }
-    if (await act(() => life.focus.review(text || null, reasons.length ? reasons : ['Reviewed']), `Day closed. Bed by ${bed || '23:00'}, up at ${wake || '07:00'}. Sleep well.`)) {
-      soundSuccess()
-      onSaved()
-    }
-  }
-  const left = [...openMustDos.map((m) => ({ id: `m:${m}`, title: m, todo: null as TodoTask | null })), ...openTodo.map((t) => ({ id: t.id, title: t.content, todo: t }))].filter((x) => !moved.includes(x.id))
-  // Ben's review of the day (score, lesson, tomorrow's top 3) sits in here, not in a card of its own.
-  const [review, setReview] = useState<{ score: number; lesson?: string; top3: string[] } | null>(null)
-  useEffect(() => {
-    life.coach?.rhythm?.('state').then((d: any) => setReview(d?.state?.evening ?? null)).catch(() => {})
-  }, [])
-  const moveAll = async () => {
-    const all = left
-    setMoved((m) => [...m, ...all.map((x) => x.id)])
-    for (const x of all) await (x.todo ? onTomorrow(x.todo) : onMustDoTomorrow(x.title)).catch(() => null)
-  }
-  return (
-    <section className="mode-card evening" aria-label="Shut down your day">
-      <header>
-        <span className="mode-label">
-          <Icon name="moon" size={14} /> Evening · shut down in 2 minutes
-        </span>
-        <button className="btn small ghost" onClick={onClose}>
-          Later
-        </button>
-      </header>
-      <p className="mode-sum">
-        <b>{doneToday}/{planLen || 0}</b> must-dos · <b>{focusMin >= 60 ? `${Math.floor(focusMin / 60)}h ${focusMin % 60}m` : `${focusMin}m`}</b> focus today
-      </p>
-      {review && (
-        <div className="mode-review">
-          <span className={`mode-score ${review.score >= 70 ? 'good' : ''}`}>{review.score}</span>
-          <div>
-            <b>Ben's review</b>
-            {review.lesson && <p>{review.lesson}</p>}
-            {review.top3.length > 0 && <small>Tomorrow: {review.top3.join(' · ')}</small>}
-          </div>
-        </div>
-      )}
-      <ol className="mode-steps">
-        <li className={left.length ? '' : 'done'}>
-          <b>
-            1. What's left{left.length > 1 && (
-              <button className="btn small mode-all" onClick={() => void moveAll()}>
-                Move all {left.length} to tomorrow
-              </button>
-            )}
-          </b>
-          {left.length ? (
-            <ul className="mode-left">
-              {left.map((x) => (
-                <li key={x.id}>
-                  <span>{x.title}</span>
-                  <button
-                    className="btn small ghost"
-                    onClick={async () => {
-                      setMoved((m) => [...m, x.id])
-                      await (x.todo ? onTomorrow(x.todo) : onMustDoTomorrow(x.title))
-                    }}
-                  >
-                    → Tomorrow
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <span className="hint">Nothing left for {today === localToday() ? 'today' : 'the day'}. Clean finish.</span>
-          )}
-        </li>
-        <li>
-          <b>2. How did it go?</b>
-          <div className="chips">
-            {REASONS.map((r) => (
-              <button key={r} type="button" className={`chip ${reasons.includes(r) ? 'on' : ''}`} onClick={() => setReasons((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]))}>
-                {r}
-              </button>
-            ))}
-          </div>
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="One line about today (optional)" maxLength={300} />
-        </li>
-        <li>
-          <b>3. Bed and tomorrow</b>
-          <div className="mode-sleep">
-            <label>
-              Bed by <input type="time" value={bed} onChange={(e) => setBed(e.target.value)} />
-            </label>
-            <label>
-              Up at <input type="time" value={wake} onChange={(e) => setWake(e.target.value)} />
-            </label>
-            {sleepHours && <span className="hint">{sleepHours} of sleep</span>}
-          </div>
-          <span className="hint small">Changes your {tomorrowWeekend ? 'weekend' : 'weekday'} wake-up target and your bedtime target (Waky and reminders use them).</span>
-        </li>
-      </ol>
-      <div className="row">
-        <button className="btn primary" onClick={() => void save()}>
-          <Icon name="check" size={13} /> Close my day
-        </button>
-      </div>
-    </section>
-  )
-}
-
-/** A quick "+ Add to University" under each area (due today unless you say when). */
-function AreaAdd({ name, onAdd }: { name: string; onAdd: (v: string) => Promise<boolean> }) {
-  const [v, setV] = useState('')
-  const [busy, setBusy] = useState(false)
-  return (
-    <form
-      className="dl-area-add"
-      onSubmit={async (e) => {
-        e.preventDefault()
-        if (!v.trim() || busy) return
-        setBusy(true)
-        if (await onAdd(v)) setV('')
-        setBusy(false)
-      }}
-    >
-      <input value={v} onChange={(e) => setV(e.target.value)} placeholder={`+ Add to ${name} (today, or "fri 18:00")`} maxLength={300} disabled={busy} />
-    </form>
-  )
-}
-
-
-type TodoTab = 'today' | 'tomorrow' | 'nodate' | 'week' | 'all'
 const TODO_TABS: [TodoTab, string][] = [
   ['today', 'Today'],
   ['tomorrow', 'Tomorrow'],
@@ -1316,53 +1051,3 @@ const TODO_TABS: [TodoTab, string][] = [
   ['week', 'Next 7 days'],
   ['all', 'All']
 ]
-
-/** Every task of a tab, numbered and grouped by area (with a count per area). */
-function TabList({ tasks, empty, groupOf, row, quick }: { tasks: TodoTask[]; empty: string; groupOf: (t: TodoTask) => { key: string; name: string; color: string }; row: (t: TodoTask, group: string, extra: React.ReactNode) => React.ReactNode; quick: (t: TodoTask) => React.ReactNode }) {
-  if (!tasks.length) return <p className="hint dl-empty">{empty}</p>
-  const groups: { key: string; name: string; color: string; items: TodoTask[] }[] = []
-  for (const t of tasks) {
-    const g = groupOf(t)
-    let x = groups.find((y) => y.key === g.key)
-    if (!x) groups.push((x = { ...g, items: [] }))
-    x.items.push(t)
-  }
-  return (
-    <div className="dl-tablist">
-      {groups.map((g) => (
-        <div key={g.key} className="dl-group" style={{ ['--c' as string]: g.color }}>
-          <h3 className="dl-head">
-            <i /> {g.name} <small>{g.items.length}</small>
-          </h3>
-          <ul className="dl">{g.items.map((t) => row(t, g.key, quick(t)))}</ul>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** The running timer's moving parts, each redrawing itself every second (the list around them doesn't). */
-function RunningClock({ run, part }: { run: { startedAt: string; planned: number }; part: 'left' | 'clock' | 'bar' }) {
-  const tick = useTicker(true)
-  const elapsed = tick - new Date(run.startedAt).getTime()
-  const leftMs = run.planned * 60000 - elapsed
-  if (part === 'clock') return <span className="now-clock">{clock(elapsed)}</span>
-  if (part === 'bar')
-    return (
-      <div className="now-bar">
-        <i style={{ width: `${Math.min(100, (elapsed / (run.planned * 60000)) * 100)}%` }} />
-      </div>
-    )
-  return <>{leftMs > 0 ? `${clock(leftMs)} left of ${run.planned} min` : `${run.planned} min done — stop to log it`}</>
-}
-
-/** A tick every 30 s while `on` (enough for "which block is on now"). */
-function useSlowTick(on: boolean): number {
-  const [t, setT] = useState(Date.now())
-  useEffect(() => {
-    if (!on) return
-    const id = setInterval(() => setT(Date.now()), 30_000)
-    return () => clearInterval(id)
-  }, [on])
-  return t
-}
