@@ -5,6 +5,7 @@ import { moneyDay } from '@core/moneyDays'
 import { moneyNumbers } from './benDesk'
 import { financeStateFrom } from './botBrain'
 import { queueFinanceExpense } from './financeInbox'
+import { rewardFinId, toLei } from '@core/funBudget'
 import type { Exercise } from '@core/body'
 import type { Rule } from '@core/rules'
 import type {
@@ -39,6 +40,26 @@ import { loadUnlocks, unlockFacts } from './lifeExtras'
 import { unlockBlocker } from '@core/unlocks'
 import type { BrowserDb } from './browserDb'
 import type { Mirror } from './mirror'
+
+/** Finance Helper's data on this device (else the synced copy). */
+const financeOf = (s: { db: any }) => financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
+
+/** RL1: the point value with Finance Helper's fun limit, spending, rates and your hour. */
+export function shopValue(s: Services, now = new Date()) {
+  const finance = financeOf(s)
+  const hourly = finance ? moneyNumbers(finance, s.wallet.today(now)).hourly : null
+  return s.shop.value({ finance, hourlyLei: hourly != null ? hourly / 100 : null }, now)
+}
+
+/**
+ * After a points entry is undone: a reward buy's expense (RL4) or a move to
+ * savings (RL7) comes back out of Finance Helper too.
+ */
+export function afterUndo(s: Services, id: number): void {
+  const e = s.wallet.entries().find((x) => x.id === id)
+  if (!e?.ref) return
+  if (e.ref.startsWith('reward:')) queueFinanceExpense(s.db as any, { id: rewardFinId(id), amount: 0, category: '', note: '', date: s.wallet.today(), at: Date.now(), remove: true })
+}
 
 /** All services, built for one copy of the database. */
 function servicesFor(db: BrowserDb) {
@@ -111,6 +132,7 @@ export function createWebServices(mirror: Mirror) {
       undo: (id: number, note: string) =>
         write((s) => {
           s.wallet.undo(id, note)
+          afterUndo(s, id)
           return s.wallet.summary()
         }, W),
       quests: () => read((s) => s.wallet.quests()),
@@ -183,25 +205,39 @@ export function createWebServices(mirror: Mirror) {
     },
     shop: {
       state: () => read((s) => s.shop.state()),
+      /** RL1: what a point is worth in lei, your fun budget (spent, left) and your hour of work. */
+      value: () => read((s) => shopValue(s)),
       save: (r: RewardInput) => write((s) => (s.shop.save(r), s.shop.state())),
       archive: (id: number) => write((s) => (s.shop.archive(id), s.shop.state())),
-      // A reward with a real cost (M1): checked against Safe to spend first, then logged in Finance Helper.
-      redeem: (id: number, opts: { force?: boolean } = {}) =>
+      /**
+       * Buying a reward. Order: a goal/streak lock first (FT21), then the fun
+       * budget (RL3) and Safe to spend (M1); `force` (the explicit "buy
+       * anyway") skips only those two. What you paid goes to Finance Helper as
+       * Fun under a stable id, so undoing the buy takes it back out (RL4).
+       */
+      redeem: (id: number, opts: { force?: boolean; paid?: number } = {}) =>
         write((s) => {
           const reward = s.shop.state().rewards.find((r) => r.id === id)
-          const lei = reward?.realCost ?? 0
-          if (lei > 0 && !opts.force) {
-            const finance = financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
-            const safe = finance ? moneyNumbers(finance, s.wallet.today()).safeToday : null
-            if (safe != null && lei * 100 > safe) throw new LedgerError(`OVER_SAFE: ${reward!.title} costs ${lei} lei and your Safe to spend today is ${Math.round(safe / 100)} lei.`)
-          }
-          // A reward locked to a goal or a streak (FT21) waits until that is met.
           const lock = loadUnlocks(s.db)[String(id)]
           const locked = lock ? unlockBlocker(lock, unlockFacts(s)) : null
           if (locked) throw new LedgerError(locked)
-          s.shop.redeem(id)
-          if (lei > 0 && reward) queueFinanceExpense(s.db as any, { id: `life-reward-${id}-${Date.now()}`, amount: Math.round(lei * 100), category: 'fun', note: `Reward: ${reward.title}`, date: s.wallet.today(), at: Date.now() })
-          return s.shop.state()
+          const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward?.realCost ?? 0
+          const cur = (reward?.currency || 'MDL').toUpperCase()
+          const finance = financeOf(s)
+          const lei = paid > 0 ? (toLei(paid, cur, finance?.rates) ?? paid) : 0
+          if (reward && paid > 0 && !opts.force) {
+            const fun = s.shop.funBlocker(id, paid, finance)
+            if (fun) throw new LedgerError(`FUN_EMPTY: ${fun}`)
+            const safe = finance ? moneyNumbers(finance, s.wallet.today()).safeToday : null
+            if (safe != null && lei * 100 > safe) throw new LedgerError(`OVER_SAFE: ${reward.title} costs ${Math.round(lei)} lei and your Safe to spend today is ${Math.round(safe / 100)} lei.`)
+          }
+          const ledgerId = s.shop.redeem(id, new Date(), { paid, force: true, finance })
+          if (paid > 0 && reward) {
+            const shown = cur === 'MDL' ? '' : ` (${paid} ${cur})`
+            queueFinanceExpense(s.db as any, { id: rewardFinId(ledgerId), amount: Math.round(lei * 100), category: 'fun', note: `Reward: ${reward.title}${shown}`, date: s.wallet.today(), at: Date.now() })
+          }
+          const money = paid > 0 ? ` · −${paid.toLocaleString('en-US')} ${cur === 'MDL' ? 'lei' : cur} added to Money as Fun` : ''
+          return { ...s.shop.state(), lastBuy: { ledgerId, title: reward?.title ?? 'Reward', points: reward?.price ?? 0, paid, currency: cur, toast: `−${(reward?.price ?? 0).toLocaleString('en-US')} points${money}` } }
         }, W),
       openChest: (level: number) => write((s) => ({ coins: s.shop.openChest(level), state: s.shop.state() }), W),
       setBudget: (amount: number) => write((s) => (s.shop.setBudget(amount), s.shop.state())),

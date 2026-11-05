@@ -2,7 +2,8 @@ import { dayKey } from '@core/dates'
 import { balance, effective, planUndo, totalXp, type LedgerEntry, type NewEntry } from '@core/ledger'
 import { levelInfo, type StatAllocation } from '@core/levels'
 import { DEFAULT_RULES, planAward, type Rule } from '@core/rules'
-import { chestRef, DEFAULT_REWARDS, planRedeem, rollChest, unopenedChests, validateReward, type Reward } from '@core/shop'
+import { pointValue } from '@core/pointValue'
+import { chestRef, DEFAULT_REWARDS, earnPerDay, planRedeem, rollChest, unopenedChests, validateReward, type Reward } from '@core/shop'
 import type { AuthStatus, BackupStatus, ShopState, Summary, EconomyConfig } from '@shared/api'
 import { ECONOMY_PRESETS } from '@shared/api'
 import type { Bridge } from './bridge'
@@ -190,6 +191,11 @@ export function createMockApi(): Bridge {
         const now = new Date()
         add({ ts: now.toISOString(), day: dayKey(now), module: 'shop', kind: 'earn', coins, xp: 0, ref: chestRef(level), note: `Level ${level} chest` })
         return { coins, state: shop() }
+      },
+      value: async () => {
+        const v = pointValue({ funBudgetLei: budget || null, earnPerDay: earnPerDay(entries as any, dayKey(new Date())) })
+        const spent = shop().monthSpent
+        return { value: v, funBudgetLei: budget || null, funSpentLei: spent, funLeftLei: budget ? budget - spent : null, hourlyLei: null, funSource: budget ? 'manual' : null }
       },
       setBudget: async (amount) => {
         budget = amount

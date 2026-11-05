@@ -2,7 +2,7 @@
 // save for (pin the one you're saving toward). Points come from focus,
 // finished tasks and must-dos, week goals, and a little from habits.
 import { priceInDays } from '@core/shop'
-import { redeemReward } from '../redeem'
+import { buyToast, redeemReward } from '../redeem'
 import { useEffect, useState } from 'react'
 import type { RewardInput, ShopState } from '@shared/api'
 import { redeemBlocker, type Reward } from '@core/shop'
@@ -130,7 +130,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   const redeem = async (r: Reward) => {
     if (sure !== r.id) return setSure(r.id)
     setSure(null)
-    const s = await act(() => redeemReward(r.id), `${r.title}: yours. You earned it.`)
+    const s = await act(() => redeemReward(r.id), (s) => buyToast(s, `${r.title}: yours. You earned it.`))
     if (s) {
       celebrate(null, 'reward')
       play('reward')

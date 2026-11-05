@@ -56,14 +56,39 @@ describe('shop service', () => {
     expect(s.recent[0].undone).toBe(true)
   })
 
-  it('enforces the monthly real-money budget', () => {
+  it('the old reward budget became the fun budget: it warns, "buy anyway" still works (RL3)', () => {
     grant(2000)
-    shop.setBudget(50)
+    db.prepare("INSERT INTO settings (key, value) VALUES ('reward_budget', '50') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run()
+    expect(shop.value({}, now).funBudgetLei).toBe(50)
     shop.redeem(cream().id, now)
-    expect(() => shop.redeem(cream().id, now)).toThrow(/budget \(20 left\)/)
+    // Moved once: the old key is cleared.
+    expect(db.prepare("SELECT value FROM settings WHERE key = 'fun_budget'").get()).toMatchObject({ value: '{"lei":50,"source":"manual"}' })
+    expect(shop.value({}, now)).toMatchObject({ funSpentLei: 30, funLeftLei: 20 })
+    expect(() => shop.redeem(cream().id, now)).toThrow(/FUN_EMPTY: Face cream costs 30 lei and only 20 lei is left/)
+    expect(() => shop.redeem(cream().id, now, { force: true })).not.toThrow()
     // A new month starts fresh
     expect(() => shop.redeem(cream().id, new Date('2026-11-02T12:00:00Z'))).not.toThrow()
     expect(() => shop.setBudget(-1)).toThrow()
+  })
+
+  it('records what you actually paid, in the reward currency (RL4)', () => {
+    grant(2000)
+    shop.setFunBudget({ lei: 1000, source: 'manual' })
+    shop.redeem(cream().id, now, { paid: 45 })
+    expect(shop.state(now).recent[0].realCost).toBe(45)
+    shop.save({ title: 'Game', price: 300, tier: 'bronze', realCost: 10, currency: 'USD', pinned: false, note: null })
+    const game = shop.state(now).rewards.find((r) => r.title === 'Game')!
+    shop.redeem(game.id, now, { finance: { rates: { usd: { USD: 1, MDL: 18 } } } })
+    expect(shop.value({ finance: { rates: { usd: { USD: 1, MDL: 18 } } } }, now).funSpentLei).toBe(45 + 180)
+  })
+
+  it('tells what a point is worth (RL1)', () => {
+    const v = shop.value({ hourlyLei: 62.5 }, now)
+    expect(v).toMatchObject({ funBudgetLei: null, funSpentLei: 0, funLeftLei: null, hourlyLei: 62.5 })
+    expect(v.value.source).toBe('default')
+    for (const day of ['2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23']) db.transaction(() => wallet.append({ ts: `${day}T10:00:00Z`, day, module: 'test', kind: 'earn', coins: 100, xp: 0 }))()
+    shop.setFunBudget({ lei: 600, source: 'manual' })
+    expect(shop.value({}, now).value).toMatchObject({ source: 'budget', leiPerPoint: 0.2 })
   })
 
   it('has no level locks: any reward you can afford is yours', () => {
@@ -105,14 +130,14 @@ describe('shop service', () => {
       realCost: 200,
       currency: 'USD',
       imageUrl: 'https://example.com/airpods.jpg',
-      productUrl: 'https://darwin.md/apple-airpods-pro-2',
+      productUrl: 'https://shop.example.com/earbuds',
       pinned: false,
       note: 'Spatial audio'
     })
     const s = shop.state(now)
     const airpods = s.rewards.find((r) => r.title === 'AirPods Pro')!
     expect(airpods.imageUrl).toBe('https://example.com/airpods.jpg')
-    expect(airpods.productUrl).toBe('https://darwin.md/apple-airpods-pro-2')
+    expect(airpods.productUrl).toBe('https://shop.example.com/earbuds')
     expect(airpods.currency).toBe('USD')
 
     shop.setCurrency('USD')

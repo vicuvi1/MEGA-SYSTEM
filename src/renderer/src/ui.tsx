@@ -56,10 +56,11 @@ export const useToast = () => useContext(ToastCtx)
 export function useAction() {
   const toast = useToast()
   return useCallback(
-    async <T,>(fn: () => Promise<T>, success?: string): Promise<T | undefined> => {
+    async <T,>(fn: () => Promise<T>, success?: string | ((out: T) => string)): Promise<T | undefined> => {
       try {
         const out = await fn()
-        if (success) toast(success, 'good')
+        const said = typeof success === 'function' ? success(out) : success
+        if (said) toast(said, 'good')
         return out
       } catch (e) {
         toast((e as Error).message, 'bad')

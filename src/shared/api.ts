@@ -125,7 +125,7 @@ export interface ShopState {
   rewards: Reward[]
   balance: number
   level: number
-  /** Monthly real-money cap for rewards, 0 = no cap. */
+  /** Old hard cap, always 0 now: the monthly fun budget lives in shop.value() (RL3). */
   budget: number
   monthSpent: number
   currency: string
@@ -135,9 +135,26 @@ export interface ShopState {
   economy?: EconomySummary
   /** Your usual points a day (last 30 days), for "about 3 days" next to a price. */
   earnPerDay?: number
+  /** Set right after a buy (RL4): what went, for the toast "−600 points · −150 lei added to Money as Fun". */
+  lastBuy?: { ledgerId: number; title: string; points: number; paid: number; currency: string; toast: string }
 }
 
 export type RewardInput = Omit<Reward, 'id' | 'archived'> & { id?: number }
+
+/** RL1: what a point is worth in real money, and this month's fun budget (life.shop.value()). */
+export interface ShopValue {
+  value: import('@core/pointValue').PointValue
+  /** Monthly fun budget in lei (null = not set). */
+  funBudgetLei: number | null
+  /** Lei spent on fun this month (rewards bought, plus Finance Helper's Fun category when the budget comes from there). */
+  funSpentLei: number
+  /** What is left (null without a budget; below 0 = over). */
+  funLeftLei: number | null
+  /** Your hour of work in lei (Finance Helper), null when unknown. */
+  hourlyLei: number | null
+  /** Where the budget comes from (extra, may be missing). */
+  funSource?: 'manual' | 'finance' | null
+}
 
 export interface Category {
   id: string
@@ -455,9 +472,15 @@ export interface LifeApi {
     state(): Promise<ShopState>
     save(reward: RewardInput): Promise<ShopState>
     archive(id: number): Promise<ShopState>
-    /** `force`: redeem even over Safe to spend (after you said yes). */
-    redeem(id: number, opts?: { force?: boolean }): Promise<ShopState>
+    /**
+     * `force`: buy even over Safe to spend or an empty fun budget (the explicit "buy anyway").
+     * `paid`: what you actually paid, in the reward's currency (default its real cost).
+     * Errors start with OVER_SAFE: or FUN_EMPTY: when "buy anyway" may be offered.
+     */
+    redeem(id: number, opts?: { force?: boolean; paid?: number }): Promise<ShopState>
     openChest(level: number): Promise<{ coins: number; state: ShopState }>
+    /** RL1: what a point is worth in lei, your fun budget, spent and left, your hour of work. */
+    value(): Promise<ShopValue>
     setBudget(amount: number): Promise<ShopState>
     setCurrency(cur: string): Promise<ShopState>
   }

@@ -1905,7 +1905,8 @@ var SETTINGS = {
 	"perk.shadow_monarch.p1_streak": num$1("perk: P1 task streak"),
 	"hunter.stat_allocation": json$4("points put into each stat", null),
 	streak_shields: num$1("streak shields you hold"),
-	reward_budget: num$1("monthly money for rewards"),
+	reward_budget: num$1("old monthly money for rewards (moved into fun_budget)"),
+	fun_budget: json$4("monthly fun budget in lei, typed or from Finance Helper", null),
 	reward_unlocks: json$4("rewards that unlock with a goal or streak", null),
 	currency: text("old name of the money currency"),
 	coin_exchange_rate: num$1("lei per point"),
@@ -12480,6 +12481,122 @@ function readDeskOp(line, desk) {
 		mood
 	} : null;
 }
+// src/core/pointValue.ts
+/**
+* Night 11 (RL1): what one point is worth in real money.
+*
+* leiPerPoint = your monthly fun budget ÷ the points you usually earn in a
+* month, so normal effort buys exactly your fun budget; earn more, spend more.
+* Without a fun budget (or too little history) it falls back to the old fixed
+* 10 points = 1 lei. Clamped so one strange week can't make points absurd.
+* Shared by Rewards, Money and Ben: always use this, never COINS_PER_MDL.
+*/
+var DEFAULT_LEI_PER_POINT = 1 / 10;
+var MIN_LEI_PER_POINT = .02;
+function pointValue(input) {
+	const usualMonthlyPoints = Math.max(0, Math.round((input.earnPerDay || 0) * 30));
+	const budget = input.funBudgetLei && input.funBudgetLei > 0 ? input.funBudgetLei : null;
+	let lei = DEFAULT_LEI_PER_POINT;
+	let source = "default";
+	if (budget && usualMonthlyPoints >= 30) {
+		lei = Math.min(2, Math.max(MIN_LEI_PER_POINT, budget / usualMonthlyPoints));
+		source = "budget";
+	}
+	lei = Math.round(lei * 1e3) / 1e3;
+	return {
+		leiPerPoint: lei,
+		pointsPerLei: 1 / lei,
+		funBudgetLei: budget,
+		usualMonthlyPoints,
+		source
+	};
+}
+// src/core/funBudget.ts
+function parseFunBudget(raw) {
+	if (!raw) return null;
+	try {
+		const v = JSON.parse(raw);
+		const lei = Number(v?.lei);
+		if (!Number.isFinite(lei) || lei < 0) return null;
+		return {
+			lei: Math.round(lei),
+			source: v?.source === "finance" ? "finance" : "manual"
+		};
+	} catch {
+		return null;
+	}
+}
+/**
+* The old `reward_budget` (whole lei, 0 = none) becomes the fun budget once.
+* Returns what to store (null = nothing to move).
+*/
+function migrateRewardBudget(funRaw, oldRaw) {
+	if (parseFunBudget(funRaw)) return null;
+	const old = Math.round(Number(oldRaw ?? 0));
+	return Number.isFinite(old) && old > 0 ? {
+		lei: old,
+		source: "manual"
+	} : null;
+}
+var FUN_NAME = /^(fun|entertainment|distrac|divertisment|развлеч)/i;
+/** Finance Helper's Fun / Entertainment category with a monthly limit (lei), if there is one. */
+function financeFunCategory(finance) {
+	const hit = (Array.isArray(finance?.settings?.categories) ? finance.settings.categories : []).find((c) => c && c.type === "expense" && !c.archived && Number(c.budget) > 0 && (FUN_NAME.test(String(c.name ?? "").trim()) || c.id === "fun"));
+	return hit ? {
+		id: String(hit.id),
+		name: String(hit.name ?? "Fun"),
+		lei: Math.round(Number(hit.budget) / 100)
+	} : null;
+}
+/** The monthly fun budget in lei now (null = none). */
+function funBudgetLei(setting, finance) {
+	if (!setting) return null;
+	if (setting.source === "finance") {
+		const cat = financeFunCategory(finance);
+		if (cat) return cat.lei;
+	}
+	return setting.lei > 0 ? setting.lei : null;
+}
+var FALLBACK_LEI = {
+	MDL: 1,
+	LEI: 1,
+	USD: 17.5,
+	EUR: 19.5,
+	RON: 3.9,
+	GBP: 23,
+	UAH: .42
+};
+/** An amount in some currency, in lei (Finance Helper's rates when it has them). null = unknown currency. */
+function toLei(amount, currency, rates) {
+	const cur = String(currency || "MDL").toUpperCase();
+	if (cur === "MDL" || cur === "LEI") return amount;
+	const usd = rates?.usd;
+	if (usd && Number(usd[cur]) > 0 && Number(usd.MDL) > 0) return Math.round(amount / Number(usd[cur]) * Number(usd.MDL) * 100) / 100;
+	const k = FALLBACK_LEI[cur];
+	return k ? Math.round(amount * k * 100) / 100 : null;
+}
+/** A Finance Helper record's value in lei (its own base value, else converted; never a foreign amount as lei). */
+function txLei(t, rates, baseCurrency = "MDL") {
+	if (Number.isFinite(Number(t?.amountMdl))) return Math.abs(Number(t.amountMdl)) / 100;
+	if (Number.isInteger(t?.base)) return Math.abs(t.base) / 100;
+	const cur = t?.currency || baseCurrency;
+	return toLei(Math.abs(Number(t?.amount) || 0) / 100, cur, rates) ?? 0;
+}
+var REWARD_FIN_PREFIX = "life-reward-";
+/** The stable id of a reward buy's record in Finance Helper (RL4). */
+var rewardFinId = (ledgerId) => `${REWARD_FIN_PREFIX}${ledgerId}`;
+/** Lei spent on fun this month. */
+function funSpentLei(i) {
+	let sum = i.rewardBuysLei.reduce((a, b) => a + (b > 0 ? b : 0), 0);
+	const cat = i.setting?.source === "finance" ? financeFunCategory(i.finance) : null;
+	if (cat && Array.isArray(i.finance?.tx)) for (const t of i.finance.tx) {
+		if (!t || t.deleted || t.type !== "expense" || t.loan || String(t.category) !== cat.id) continue;
+		if (typeof t.date !== "string" || !t.date.startsWith(i.month)) continue;
+		if (String(t.id ?? "").startsWith("life-reward-")) continue;
+		sum += txLei(t, i.finance?.rates, i.finance?.settings?.currency);
+	}
+	return Math.round(sum * 100) / 100;
+}
 // src/core/skills.ts
 var PATHS = [
 	{
@@ -14248,8 +14365,70 @@ var Shop = class {
 		if (!row) throw new LedgerError("Reward not found");
 		return toReward(row);
 	}
+	/** The old monthly reward cap: merged into the fun budget (RL3), so no longer a hard cap here. */
 	budget() {
-		return Number(getSetting(this.db, "reward_budget") ?? 0);
+		return 0;
+	}
+	/** RL3: the fun budget setting (the old `reward_budget` is read until the first save moves it). */
+	funSetting() {
+		const raw = getSetting(this.db, "fun_budget");
+		return parseFunBudget(raw) ?? migrateRewardBudget(raw, getSetting(this.db, "reward_budget"));
+	}
+	/** Moves the old `reward_budget` into `fun_budget` once (call inside a write). */
+	migrateFunBudget() {
+		const moved = migrateRewardBudget(getSetting(this.db, "fun_budget"), getSetting(this.db, "reward_budget"));
+		if (!moved) return;
+		setSetting(this.db, "fun_budget", JSON.stringify(moved));
+		setSetting(this.db, "reward_budget", "0");
+	}
+	/** Set the monthly fun budget by hand, or take it from Finance Helper (lei = its limit now, the fallback). */
+	setFunBudget(b) {
+		if (b == null) {
+			setSetting(this.db, "fun_budget", "null");
+			setSetting(this.db, "reward_budget", "0");
+			return;
+		}
+		const lei = Math.round(Number(b.lei));
+		if (!Number.isFinite(lei) || lei < 0) throw new LedgerError("The fun budget must be 0 or more lei");
+		setSetting(this.db, "fun_budget", JSON.stringify({
+			lei,
+			source: b.source === "finance" ? "finance" : "manual"
+		}));
+		setSetting(this.db, "reward_budget", "0");
+	}
+	/** Rewards bought this month (not undone): what you paid, in lei. */
+	monthBuysLei(day, rates) {
+		const undone = this.undoneIds();
+		return this.db.prepare("SELECT d.ledger_id AS ledger_id, d.real_cost AS real_cost, r.currency AS currency FROM redemptions d LEFT JOIN rewards r ON r.id = d.reward_id WHERE substr(d.day, 1, 7) = ?").all(monthKey$1(day)).filter((r) => !undone.has(r.ledger_id) && r.real_cost > 0).map((r) => toLei(r.real_cost, r.currency, rates) ?? 0);
+	}
+	/**
+	* RL1: what one point is worth, and your fun budget this month.
+	* `finance`: Finance Helper's data (for a Fun/Entertainment limit, its spending and rates);
+	* `hourlyLei`: your hour of work (Finance Helper), null when unknown.
+	*/
+	value(opts = {}, now = /* @__PURE__ */ new Date()) {
+		const day = dayKey(now, this.timeZone);
+		const setting = this.funSetting();
+		const budgetLei = funBudgetLei(setting, opts.finance);
+		const value = pointValue({
+			funBudgetLei: budgetLei,
+			earnPerDay: earnPerDay(this.wallet.entries(), day)
+		});
+		const spent = funSpentLei({
+			month: monthKey$1(day),
+			rewardBuysLei: this.monthBuysLei(day, opts.finance?.rates),
+			finance: opts.finance,
+			setting
+		});
+		const hourly = Number(opts.hourlyLei) > 0 ? Math.round(Number(opts.hourlyLei) * 100) / 100 : null;
+		return {
+			value,
+			funBudgetLei: budgetLei,
+			funSpentLei: spent,
+			funLeftLei: budgetLei == null ? null : Math.round((budgetLei - spent) * 100) / 100,
+			hourlyLei: hourly,
+			funSource: budgetLei == null ? null : setting?.source ?? "manual"
+		};
 	}
 	/** Real money spent on rewards this month, ignoring undone purchases. */
 	monthSpent(day, undoneIds) {
@@ -14322,8 +14501,28 @@ var Shop = class {
 		this.reward(id);
 		this.db.prepare("UPDATE rewards SET archived = 1, pinned = 0 WHERE id = ?").run(id);
 	}
-	redeem(id, now = /* @__PURE__ */ new Date()) {
+	/**
+	* RL3: why the fun budget stops this buy (null = fine). `paid` is what it
+	* really costs, in the reward's currency.
+	*/
+	funBlocker(id, paid, finance, now = /* @__PURE__ */ new Date()) {
+		const reward = this.reward(id);
+		if (!(paid > 0)) return null;
+		const v = this.value({ finance }, now);
+		if (v.funLeftLei == null) return null;
+		const lei = toLei(paid, reward.currency, finance?.rates) ?? paid;
+		if (lei <= v.funLeftLei) return null;
+		const left = Math.max(0, Math.floor(v.funLeftLei));
+		return left <= 0 ? `Your fun budget is empty this month (${v.funBudgetLei} lei, ${Math.round(v.funSpentLei)} lei spent).` : `${reward.title} costs ${Math.round(lei)} lei and only ${left} lei is left in your fun budget this month.`;
+	}
+	/**
+	* Buys a reward: the points go, and what you paid is recorded (RL4).
+	* `paid`: what you really paid (the reward's currency; default its real cost).
+	* `force`: buy even though the fun budget is empty (the explicit second tap).
+	*/
+	redeem(id, now = /* @__PURE__ */ new Date(), opts = {}) {
 		return this.db.transaction(() => {
+			this.migrateFunBudget();
 			const reward = this.reward(id);
 			const all = this.wallet.entries();
 			const day = dayKey(now, this.timeZone);
@@ -14334,6 +14533,11 @@ var Shop = class {
 				monthSpent: this.monthSpent(day, this.undoneIds()),
 				budget: this.budget()
 			});
+			const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward.realCost;
+			if (!opts.force) {
+				const why = this.funBlocker(id, paid, opts.finance, now);
+				if (why) throw new LedgerError(`FUN_EMPTY: ${why}`);
+			}
 			const ledgerId = this.wallet.append({
 				ts: now.toISOString(),
 				day,
@@ -14344,7 +14548,7 @@ var Shop = class {
 				ref: `reward:${id}`,
 				note: reward.title
 			});
-			this.db.prepare("INSERT INTO redemptions (ledger_id, reward_id, title, real_cost, day) VALUES (?, ?, ?, ?, ?)").run(ledgerId, id, reward.title, reward.realCost, day);
+			this.db.prepare("INSERT INTO redemptions (ledger_id, reward_id, title, real_cost, day) VALUES (?, ?, ?, ?, ?)").run(ledgerId, id, reward.title, paid, day);
 			return ledgerId;
 		}).immediate();
 	}
@@ -14365,9 +14569,13 @@ var Shop = class {
 			return coins;
 		}).immediate();
 	}
+	/** The old reward budget: now the monthly fun budget, typed by hand (RL3). 0 = none. */
 	setBudget(amount) {
 		if (!Number.isInteger(amount) || amount < 0) throw new LedgerError("Budget must be a whole number, 0 or more");
-		setSetting(this.db, "reward_budget", String(amount));
+		this.setFunBudget(amount > 0 ? {
+			lei: amount,
+			source: "manual"
+		} : null);
 	}
 	setCurrency(cur) {
 		const code = cur?.trim().toUpperCase() || "MDL";
@@ -17200,6 +17408,34 @@ function unlockFacts(s, now = /* @__PURE__ */ new Date()) {
 }
 var loadUnlocks = (db) => cleanUnlocks(json$2(db, REWARD_UNLOCKS));
 // src/renderer/src/web/webServices.ts
+/** Finance Helper's data on this device (else the synced copy). */
+var financeOf = (s) => financeStateFrom(s.db, typeof localStorage !== "undefined" ? localStorage : null);
+/** RL1: the point value with Finance Helper's fun limit, spending, rates and your hour. */
+function shopValue(s, now = /* @__PURE__ */ new Date()) {
+	const finance = financeOf(s);
+	const hourly = finance ? moneyNumbers(finance, s.wallet.today(now)).hourly : null;
+	return s.shop.value({
+		finance,
+		hourlyLei: hourly != null ? hourly / 100 : null
+	}, now);
+}
+/**
+* After a points entry is undone: a reward buy's expense (RL4) or a move to
+* savings (RL7) comes back out of Finance Helper too.
+*/
+function afterUndo(s, id) {
+	const e = s.wallet.entries().find((x) => x.id === id);
+	if (!e?.ref) return;
+	if (e.ref.startsWith("reward:")) queueFinanceExpense(s.db, {
+		id: rewardFinId(id),
+		amount: 0,
+		category: "",
+		note: "",
+		date: s.wallet.today(),
+		at: Date.now(),
+		remove: true
+	});
+}
 /** All services, built for one copy of the database. */
 function servicesFor(db) {
 	const d = db;
@@ -17257,6 +17493,7 @@ function createWebServices(mirror) {
 			}, W),
 			undo: (id, note) => write((s) => {
 				s.wallet.undo(id, note);
+				afterUndo(s, id);
 				return s.wallet.summary();
 			}, W),
 			quests: () => read((s) => s.wallet.quests()),
@@ -17345,29 +17582,59 @@ syncFinance: (recordDays) => write((s) => {
 		},
 		shop: {
 			state: () => read((s) => s.shop.state()),
+			/** RL1: what a point is worth in lei, your fun budget (spent, left) and your hour of work. */
+			value: () => read((s) => shopValue(s)),
 			save: (r) => write((s) => (s.shop.save(r), s.shop.state())),
 			archive: (id) => write((s) => (s.shop.archive(id), s.shop.state())),
+			/**
+			* Buying a reward. Order: a goal/streak lock first (FT21), then the fun
+			* budget (RL3) and Safe to spend (M1); `force` (the explicit "buy
+			* anyway") skips only those two. What you paid goes to Finance Helper as
+			* Fun under a stable id, so undoing the buy takes it back out (RL4).
+			*/
 			redeem: (id, opts = {}) => write((s) => {
 				const reward = s.shop.state().rewards.find((r) => r.id === id);
-				const lei = reward?.realCost ?? 0;
-				if (lei > 0 && !opts.force) {
-					const finance = financeStateFrom(s.db, typeof localStorage !== "undefined" ? localStorage : null);
-					const safe = finance ? moneyNumbers(finance, s.wallet.today()).safeToday : null;
-					if (safe != null && lei * 100 > safe) throw new LedgerError(`OVER_SAFE: ${reward.title} costs ${lei} lei and your Safe to spend today is ${Math.round(safe / 100)} lei.`);
-				}
 				const lock = loadUnlocks(s.db)[String(id)];
 				const locked = lock ? unlockBlocker(lock, unlockFacts(s)) : null;
 				if (locked) throw new LedgerError(locked);
-				s.shop.redeem(id);
-				if (lei > 0 && reward) queueFinanceExpense(s.db, {
-					id: `life-reward-${id}-${Date.now()}`,
-					amount: Math.round(lei * 100),
-					category: "fun",
-					note: `Reward: ${reward.title}`,
-					date: s.wallet.today(),
-					at: Date.now()
+				const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward?.realCost ?? 0;
+				const cur = (reward?.currency || "MDL").toUpperCase();
+				const finance = financeOf(s);
+				const lei = paid > 0 ? toLei(paid, cur, finance?.rates) ?? paid : 0;
+				if (reward && paid > 0 && !opts.force) {
+					const fun = s.shop.funBlocker(id, paid, finance);
+					if (fun) throw new LedgerError(`FUN_EMPTY: ${fun}`);
+					const safe = finance ? moneyNumbers(finance, s.wallet.today()).safeToday : null;
+					if (safe != null && lei * 100 > safe) throw new LedgerError(`OVER_SAFE: ${reward.title} costs ${Math.round(lei)} lei and your Safe to spend today is ${Math.round(safe / 100)} lei.`);
+				}
+				const ledgerId = s.shop.redeem(id, /* @__PURE__ */ new Date(), {
+					paid,
+					force: true,
+					finance
 				});
-				return s.shop.state();
+				if (paid > 0 && reward) {
+					const shown = cur === "MDL" ? "" : ` (${paid} ${cur})`;
+					queueFinanceExpense(s.db, {
+						id: rewardFinId(ledgerId),
+						amount: Math.round(lei * 100),
+						category: "fun",
+						note: `Reward: ${reward.title}${shown}`,
+						date: s.wallet.today(),
+						at: Date.now()
+					});
+				}
+				const money = paid > 0 ? ` · −${paid.toLocaleString("en-US")} ${cur === "MDL" ? "lei" : cur} added to Money as Fun` : "";
+				return {
+					...s.shop.state(),
+					lastBuy: {
+						ledgerId,
+						title: reward?.title ?? "Reward",
+						points: reward?.price ?? 0,
+						paid,
+						currency: cur,
+						toast: `−${(reward?.price ?? 0).toLocaleString("en-US")} points${money}`
+					}
+				};
 			}, W),
 			openChest: (level) => write((s) => ({
 				coins: s.shop.openChest(level),
@@ -18041,80 +18308,62 @@ function normalizeState(raw) {
 		updatedAt: p.updatedAt || 0
 	}));
 	const deleted = raw.deleted && typeof raw.deleted === "object" ? { ...raw.deleted } : {};
-	const recurring = (Array.isArray(raw.recurring) ? raw.recurring : []).filter((r) => r && typeof r.id === "string" && Number.isInteger(r.amount) && /^\d{4}-\d{2}-\d{2}$/.test(r.start || "")).map((r) => ({
-		every: "month",
-		currency: accCur[r.account] || baseCur,
-		note: "",
-		auto: false,
-		paused: false,
-		lastDone: null,
-		...r,
-		updatedAt: r.updatedAt || 0
-	}));
-	const invoices = (Array.isArray(raw.invoices) ? raw.invoices : []).filter((i) => i && typeof i.id === "string" && /^\d{4}-\d{2}-\d{2}$/.test(i.date || "")).map((i) => ({
-		items: [],
-		note: "",
-		sent: false,
-		paidDate: null,
-		paidTx: null,
-		currency: "USD",
-		...i,
-		updatedAt: i.updatedAt || 0
-	}));
-	const netWorth = (Array.isArray(raw.netWorth) ? raw.netWorth : []).filter((x) => x && /^\d{4}-\d{2}-\d{2}$/.test(x.date || "") && Number.isFinite(x.total));
-	const goals = Array.isArray(raw.goals) ? raw.goals.filter((g) => g && typeof g.id === "string" && g.name).map((g) => ({
-		emoji: "🎯",
-		account: "all",
-		saved: 0,
-		history: [],
-		deadline: null,
-		doneAt: null,
-		...g,
-		updatedAt: g.updatedAt || 0
-	})).map((g) => g.id === "g-main" && !g.updatedAt && g.account === "all" && g.name === "Safe goal" ? {
-		...g,
-		account: "savings"
-	} : g) : [{
-		id: "g-main",
-		name: settings.goal.name || "Safe goal",
-		emoji: "🏦",
-		target: settings.goal.target || 0,
-		account: settings.goal.account || "all",
-		saved: 0,
-		history: [],
-		deadline: null,
-		doneAt: null,
-		theme: "gold",
-		updatedAt: 0
-	}];
-	const goalAllocations = (Array.isArray(raw.goalAllocations) ? raw.goalAllocations : []).filter((a) => a && typeof a.id === "string" && typeof a.goalId === "string" && Number.isSafeInteger(a.amount) && a.amount > 0 && isValidISO(a.date || "")).map((a) => ({
-		...a,
-		currency: a.currency || baseCur,
-		updatedAt: a.updatedAt || 0
-	}));
-	const oliviu = people.find((p) => p.name?.trim().toLowerCase() === "oliviu");
-	const brother = people.find((p) => p.name?.trim().toLowerCase() === "brother");
-	if (oliviu && brother && oliviu.id !== brother.id) {
-		const now = Date.now();
-		for (const t of tx) if (t.person === oliviu.id) {
-			t.person = brother.id;
-			t.updatedAt = now;
-		}
-		const oIdx = people.findIndex((p) => p.id === oliviu.id);
-		if (oIdx !== -1) people.splice(oIdx, 1);
-		deleted[oliviu.id] = now;
-		brother.updatedAt = now;
-	}
 	return {
 		version: 3,
 		settings,
 		tx,
 		people,
-		recurring,
-		invoices,
-		netWorth,
-		goals,
-		goalAllocations,
+		recurring: (Array.isArray(raw.recurring) ? raw.recurring : []).filter((r) => r && typeof r.id === "string" && Number.isInteger(r.amount) && /^\d{4}-\d{2}-\d{2}$/.test(r.start || "")).map((r) => ({
+			every: "month",
+			currency: accCur[r.account] || baseCur,
+			note: "",
+			auto: false,
+			paused: false,
+			lastDone: null,
+			...r,
+			updatedAt: r.updatedAt || 0
+		})),
+		invoices: (Array.isArray(raw.invoices) ? raw.invoices : []).filter((i) => i && typeof i.id === "string" && /^\d{4}-\d{2}-\d{2}$/.test(i.date || "")).map((i) => ({
+			items: [],
+			note: "",
+			sent: false,
+			paidDate: null,
+			paidTx: null,
+			currency: "USD",
+			...i,
+			updatedAt: i.updatedAt || 0
+		})),
+		netWorth: (Array.isArray(raw.netWorth) ? raw.netWorth : []).filter((x) => x && /^\d{4}-\d{2}-\d{2}$/.test(x.date || "") && Number.isFinite(x.total)),
+		goals: Array.isArray(raw.goals) ? raw.goals.filter((g) => g && typeof g.id === "string" && g.name).map((g) => ({
+			emoji: "🎯",
+			account: "all",
+			saved: 0,
+			history: [],
+			deadline: null,
+			doneAt: null,
+			...g,
+			updatedAt: g.updatedAt || 0
+		})).map((g) => g.id === "g-main" && !g.updatedAt && g.account === "all" && g.name === "Safe goal" ? {
+			...g,
+			account: "savings"
+		} : g) : [{
+			id: "g-main",
+			name: settings.goal.name || "Safe goal",
+			emoji: "🏦",
+			target: settings.goal.target || 0,
+			account: settings.goal.account || "all",
+			saved: 0,
+			history: [],
+			deadline: null,
+			doneAt: null,
+			theme: "gold",
+			updatedAt: 0
+		}],
+		goalAllocations: (Array.isArray(raw.goalAllocations) ? raw.goalAllocations : []).filter((a) => a && typeof a.id === "string" && typeof a.goalId === "string" && Number.isSafeInteger(a.amount) && a.amount > 0 && isValidISO(a.date || "")).map((a) => ({
+			...a,
+			currency: a.currency || baseCur,
+			updatedAt: a.updatedAt || 0
+		})),
 		deleted,
 		rates: raw.rates || null,
 		meta: {

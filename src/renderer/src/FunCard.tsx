@@ -1,7 +1,7 @@
 // "Treat yourself" on Today: what your coins buy right now. Guilt-free fun
 // time (1 coin a minute) and your Shop rewards: the ones you can get now, and
 // how far the next one is in focus sessions.
-import { redeemReward } from './redeem'
+import { buyToast, redeemReward } from './redeem'
 import { useCallback, useEffect, useState } from 'react'
 import type { ShopState } from '@shared/api'
 import type { Reward } from '@core/shop'
@@ -55,7 +55,7 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
   const redeem = async (r: Reward) => {
     if (sure !== r.id) return setSure(r.id)
     setSure(null)
-    const ok = await act(() => redeemReward(r.id), `${r.title}: yours! 🎁`)
+    const ok = await act(() => redeemReward(r.id), (s) => buyToast(s, `${r.title}: yours! 🎁`))
     if (ok) {
       play('reward')
       onWallet()
