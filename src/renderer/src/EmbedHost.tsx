@@ -16,6 +16,7 @@ const MAN_FIT_CSS = `
   .audio-banner, .version-footer { display: none !important; }
 `
 import { addDays } from '@core/dates'
+import { embedThemeCss, readTokens } from '@core/embedTheme'
 import { Icon } from './Icon'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
@@ -185,6 +186,52 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     }
     window.addEventListener(event, onChange)
     return () => window.removeEventListener(event, onChange)
+  }, [appKey])
+
+  // The same look (C8): Life System's colours and font inside Sport Track,
+  // Waky and MAN, light or dark like the app, and a phone layout for MAN.
+  // Settings → "Match the apps to Life System's look" turns it off.
+  useEffect(() => {
+    if (appKey !== 'sport' && appKey !== 'waky' && appKey !== 'man') return
+    const el = ref.current as any
+    if (!el) return
+    let on = true
+    let lastKey: string | null = null
+    life.app.prefs().then((p) => (on = p.matchAppThemes !== false)).catch(() => {})
+    const apply = () => {
+      if (!on) return
+      const root = document.documentElement
+      const cs = getComputedStyle(root)
+      const light = root.dataset.theme === 'light' || (root.dataset.theme !== 'dark' && window.matchMedia?.('(prefers-color-scheme: light)').matches)
+      const css = embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light))
+      try {
+        if (typeof el.insertCSS === 'function') {
+          // Desktop webview: replace the previous sheet.
+          if (lastKey && typeof el.removeInsertedCSS === 'function') void el.removeInsertedCSS(lastKey).catch(() => {})
+          void el.insertCSS(css).then((k: string) => (lastKey = k)).catch(() => {})
+        } else {
+          const doc: Document | undefined = el.contentDocument
+          if (!doc?.head) return
+          let st = doc.getElementById('life-theme') as HTMLStyleElement | null
+          if (!st) {
+            st = doc.createElement('style')
+            st.id = 'life-theme'
+            doc.head.appendChild(st)
+          }
+          st.textContent = css
+        }
+      } catch {
+        /* another origin or not loaded yet */
+      }
+    }
+    const ev = typeof el.insertCSS === 'function' ? 'dom-ready' : 'load'
+    el.addEventListener(ev, apply)
+    const mo = new MutationObserver(apply)
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-design', 'class'] })
+    return () => {
+      el.removeEventListener(ev, apply)
+      mo.disconnect()
+    }
   }, [appKey])
 
   // Bi-directional synchronization for MAN Spartan Discipline app
