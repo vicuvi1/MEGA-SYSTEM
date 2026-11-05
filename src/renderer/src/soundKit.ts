@@ -124,7 +124,7 @@ function sleepSoon(c: Ctx, ringsFor: number) {
   busyUntil = Math.max(busyUntil, Date.now() + ringsFor * 1000)
   if (idleT) clearTimeout(idleT)
   idleT = setTimeout(() => {
-    if (!bed && Date.now() >= busyUntil && c.state === 'running') c.suspend().catch(() => {})
+    if (!bed && !voiceHold && Date.now() >= busyUntil && c.state === 'running') c.suspend().catch(() => {})
   }, Math.max(0, busyUntil - Date.now()) + 30_000)
 }
 if (typeof window !== 'undefined') {
@@ -349,5 +349,30 @@ export const soundNotify = () => play('notify', { ownSwitch: true })
 /** Quiet everything now (the context wakes again on the next sound). */
 export function stopAllSounds(): void {
   stopBed(0.1)
-  eng?.c.suspend().catch(() => {})
+  if (!voiceHold) eng?.c.suspend().catch(() => {})
+}
+
+// ---- voice: the mic and Ben's spoken voice use this same context ----
+let voiceHold = 0
+/**
+ * The context for voice (the mic's audio thread, Ben's voice into the
+ * master volume). `hold`: it stays awake until released (the mic is on).
+ * Returns a release function with it.
+ */
+export function voiceAudio(): { ctx: AudioContext; out: AudioNode; release: () => void } | null {
+  const e = engine()
+  if (!e) return null
+  voiceHold++
+  wake(e.c)
+  let done = false
+  return {
+    ctx: e.c,
+    out: e.master,
+    release: () => {
+      if (done) return
+      done = true
+      voiceHold = Math.max(0, voiceHold - 1)
+      if (!voiceHold) sleepSoon(e.c, 0)
+    }
+  }
 }

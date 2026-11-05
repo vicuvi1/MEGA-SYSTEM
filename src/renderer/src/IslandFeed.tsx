@@ -16,6 +16,7 @@ import { isDeclined, isInvite, isMarker, isRealMeeting, isTentative } from '@cor
 import type { TodoTask } from '@core/todoist'
 import { currentSession, sessionValid } from './web/session'
 import { life } from './bridge'
+import { startVoiceAskHost } from './voice/voiceAsk'
 import { capture } from './capture'
 import { parseCapture } from '@core/capture'
 import { useLive } from './live'
@@ -303,6 +304,8 @@ function bedAlert(dismissed: Record<string, number>, now: number, running: boole
 }
 
 export function IslandFeed() {
+  // JV2: what you say to the island's voice goes to Ben from here (the app window).
+  useEffect(() => startVoiceAskHost(), [])
   const desk = window.desktop
   const busy = useRef<{ on: boolean; steps: string[] }>({ on: false, steps: [] })
   const last = useRef<IslandSnapshot>(EMPTY_ISLAND)

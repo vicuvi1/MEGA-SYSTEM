@@ -2,6 +2,7 @@
 // bots, so the conversation continues wherever you are), what it remembers
 // about you (edit or delete), and the goals & rules it holds you to.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { CoachMic, ReadAloudToggle, readAloud } from '../voice/CoachMic'
 import { calendarDay, dayKey } from '@core/dates'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -86,7 +87,6 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     }
   }, [])
   const [listening, setListening] = useState(false)
-  const recog = useRef<any>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const undoLine = async (m: Entry, index?: number) => {
     if (!life.coach?.undo) return
@@ -98,26 +98,6 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     await act(async () => r, r.lines.join(' · '))
     onWallet()
     loadStatus()
-  }
-  // 🎤 Dictation (the browser's speech recognition): words go into the box.
-  const Speech = typeof window !== 'undefined' ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition) : null
-  const toggleMic = () => {
-    if (!Speech) return
-    if (listening) {
-      recog.current?.stop()
-      return
-    }
-    const r = new Speech()
-    r.lang = navigator.language || 'en-US'
-    r.interimResults = true
-    r.continuous = false
-    const base = text ? `${text.trim()} ` : ''
-    r.onresult = (e: any) => setText(base + Array.from(e.results as ArrayLike<any>).map((x: any) => x[0].transcript).join(''))
-    r.onend = () => setListening(false)
-    r.onerror = () => setListening(false)
-    recog.current = r
-    setListening(true)
-    r.start()
   }
   // 📷 A photo (receipt, meal, screen): shrunk to 1280 px JPEG before it goes.
   const pickPhoto = async (f: File | undefined) => {
@@ -298,6 +278,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     setBusy(true)
     const now = new Date().toISOString()
     setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: q && base ? base : t, at: now, photo: pic?.url, ...(q ? { quote: q.text.slice(0, 140) } : {}) }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
+    readAloud.start()
     try {
       const seen: string[] = []
       let streamed = false
@@ -312,9 +293,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         // U2: Ben's words as he writes them.
         (soFar) => {
           streamed = true
+          readAloud.feed(soFar)
           setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, text: soFar, streamed: true } : x)))
         }
       )
+      readAloud.end(r.reply)
       setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, fresh: !streamed, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       // One face for Ben (K6): the header shows the mood of his latest reply.
       if (r.mood && MOOD_FACE[r.mood as Mood]) setStatus((s) => (s ? { ...s, mood: r.mood as any, face: MOOD_FACE[r.mood as Mood] } : s))
@@ -816,11 +799,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                   }
                 }}
               />
-              {Speech && (
-                <button type="button" className={`cx-tool ${listening ? 'rec' : ''}`} onClick={toggleMic} aria-label={listening ? 'Stop dictation' : 'Dictate'} title={listening ? 'Listening… tap to stop' : 'Speak instead of typing'}>
-                  🎙
-                </button>
-              )}
+              {/* JV7: push-to-talk (sends when you stop) and 🔊 read-aloud. */}
+              <CoachMic base={text} disabled={busy} onListening={setListening} onText={(t, final) => (final ? void send(t) : setText(t))} />
+              <ReadAloudToggle />
               <button className="cf-send" disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter) · new line: Shift+Enter">
                 {busy ? '…' : '↑'}
               </button>

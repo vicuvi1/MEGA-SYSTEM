@@ -15,6 +15,7 @@ import { useSettingsState, type SettingsProps } from '../settings/useSettingsSta
 import { GeneralSection } from '../settings/general'
 import { LookSection } from '../settings/look'
 import { SoundSection } from '../settings/sound'
+import { VoiceSettings } from '../voice/VoiceSettings'
 import { BenSection } from '../settings/ben'
 import { ConnectionsSection } from '../settings/connections'
 import { BackupsSection } from '../settings/backups'
@@ -56,6 +57,14 @@ export function Settings(props: SettingsProps) {
       hint: 'Volume, kinds of sounds, theme, focus background, phone buzz',
       keywords: 'sound sounds volume mute audio theme arcade glass soft focus background brown noise rain tick gong haptics vibrate buzz',
       body: <SoundSection />
+    },
+    {
+      id: 'voice',
+      label: 'Voice',
+      icon: 'bot',
+      hint: 'Talk to Ben: "Hey Ben", speech to text, his voice',
+      keywords: 'voice mic microphone speak talk hey ben wake word dictation speech text tts read aloud kokoro whisper moonshine',
+      body: <VoiceSettings />
     },
     {
       id: 'ben',

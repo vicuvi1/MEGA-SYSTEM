@@ -94,6 +94,9 @@ const api: DesktopApi = {
   onIslandCapture: (cb) => void ipcRenderer.on('island:capture', () => cb()),
   onIslandVoice: (cb) => void ipcRenderer.on('island:voice', () => cb()),
   // Island eyes (EY1–EY6)
-  eyes: eyesPreload(ipcRenderer)
+  eyes: eyesPreload(ipcRenderer),
+  // Voice: the PC locked / idle (the mic closes), and the media keys.
+  onVoicePower: (cb) => void ipcRenderer.on('voice:power', (_e, s) => cb({ locked: !!s?.locked, idleSec: Number(s?.idleSec) || 0 })),
+  voiceMedia: (key) => ipcRenderer.invoke('voice:media', String(key))
 }
 contextBridge.exposeInMainWorld('desktop', api)

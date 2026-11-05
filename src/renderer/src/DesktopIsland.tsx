@@ -9,6 +9,7 @@
 // springs that can reverse halfway. States and timers live in islandStep
 // (core/islandModel.ts), so nothing closes or opens behind your back.
 import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { IslandVoice, islandVoiceOn } from './voice/IslandVoice'
 import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pill, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
@@ -1219,7 +1220,8 @@ export function DesktopIsland() {
   const recRef = useRef({ rec, startRec, stopRec })
   recRef.current = { rec, startRec, stopRec }
   useEffect(() => {
-    const on = () => (recRef.current.rec ? recRef.current.stopRec() : void recRef.current.startRec())
+    // JV1: with Voice on, the shortcut is push-to-talk on this PC (no voice note).
+    const on = () => (islandVoiceOn() && !recRef.current.rec ? void window.dispatchEvent(new Event('island-voice-ptt')) : recRef.current.rec ? recRef.current.stopRec() : void recRef.current.startRec())
     window.addEventListener('island-voice-toggle', on)
     return () => window.removeEventListener('island-voice-toggle', on)
   }, [])
@@ -1765,7 +1767,7 @@ export function DesktopIsland() {
           onFocus={() => dispatch({ type: 'typing', on: true })}
           onBlur={() => dispatch({ type: 'typing', on: !!text.trim() })}
         />
-        <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
+        <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), islandVoiceOn() ? void window.dispatchEvent(new Event('island-voice-ptt')) : void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
           {rec ? '●' : '🎤'}
         </button>
         <button type="button" className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send" {...tp('send', () => chat())}>↑</button>
@@ -2077,6 +2079,8 @@ export function DesktopIsland() {
                 </motion.div>
               )}
             </AnimatePresence>
+            {/* JV1–JV5: voice (off until turned on in Settings → Voice). */}
+            <IslandVoice snap={s} chips={prefs.chips} tap={tap} onWake={() => dispatch({ type: 'alert', ms: 9000 })} quiet={quiet} inCall={inCall} hidden={hidden} reduced={f.mode === 'off'} onLayout={() => pump(600)} />
             </motion.div>
           </div>
         </LayoutGroup>

@@ -77,6 +77,10 @@ export interface DesktopApi {
   onIslandVoice?(cb: () => void): void
   /** Island eyes (EY1–EY6): off until you turn them on; every look goes through one gate. */
   eyes?: import('./eyes').EyesApi
+  /** Voice: the PC is locked/asleep, and seconds without mouse or keys (every 20 s). */
+  onVoicePower?(cb: (s: { locked: boolean; idleSec: number }) => void): void
+  /** Voice: press a media key (play/pause, next, previous, mute, volume). */
+  voiceMedia?(key: string): Promise<boolean>
   /** A button on a Windows notification (N9). */
   onNotifAction?(cb: (a: { id: string; action: string }) => void): void
   /** You clicked one: the app is in front, run its action. */

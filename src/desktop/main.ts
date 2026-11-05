@@ -15,6 +15,7 @@ import { createVault } from './vault'
 import { createPc } from './pc'
 import { registerPcExtras } from './pc/index'
 import { createEyes } from './eyes'
+import { setupVoice } from './voice'
 import { installNow, memoryReloadDue } from '../core/nightCare'
 
 const origin = 'life-system://app'
@@ -43,6 +44,8 @@ if (firstCopy) void app.whenReady().then(async () => {
     done(own(url) && (media || permission === 'notifications' || permission === 'clipboard-sanitized-write'))
   })
   session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) => (permission === 'media' || permission === 'notifications' || permission === 'clipboard-sanitized-write') && origin.startsWith('life-system://app'))
+  // Voice (JV1, JV6): lock/idle for the island's mic, and the media keys.
+  setupVoice()
   // Ben on this PC (P1–P20): set up once the window exists.
   const pcRef: { current: Awaited<ReturnType<typeof createPc>> | null } = { current: null }
   const dir = app.getPath('userData')

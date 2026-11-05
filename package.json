@@ -42,11 +42,13 @@
     "vitest": "^5.0.5"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.2",
     "electron-updater": "^6.8.11",
     "framer-motion": "^14.6.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "scrypt-js": "^3.0.1",
+    "sherpa-onnx": "2.0.1",
     "sql.js": "^1.13.0"
   },
   "productName": "Life System",

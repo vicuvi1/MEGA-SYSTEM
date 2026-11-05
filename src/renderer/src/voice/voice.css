@@ -1,0 +1,44 @@
+/* Voice (JV5, JV7): the island's listening card and the Coach page's mic.
+   Only opacity/transform move (motion budget); the wave is a canvas. */
+.di-voice {
+  --voice-me: var(--lime, #d4ff3f);
+  --voice-ben: #c4b5fd;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 440px;
+  padding: 6px 14px 6px 8px;
+  border-radius: 999px;
+  background: var(--bg, #0f131b);
+  color: var(--fg, #f5f5f6);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45), 0 0 0 1px var(--line, rgb(255 255 255 / 0.1));
+  cursor: pointer;
+  animation: voice-in 0.22s ease-out;
+}
+.di.at-left .di-voice,
+.di.at-top-left .di-voice { left: 0; translate: none; }
+.di.at-right .di-voice,
+.di.at-top-right .di-voice { left: auto; right: 0; translate: none; }
+.di-voice.is-thinking .voice-wave { opacity: 0.45; }
+.di-voice-text { display: grid; min-width: 0; font-size: 12.5px; }
+.di-voice-text b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.di-voice-text small { color: var(--sub, #a0a6b0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.di-voice-text .di-voice-err { color: #ff9a9d; direction: ltr; }
+.voice-wave { flex: none; display: block; transition: opacity 0.2s; }
+@keyframes voice-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Coach page: hold-free push-to-talk and read-aloud. */
+.cx-tool.voice-on { opacity: 1; background: color-mix(in srgb, var(--accent, #7dd3fc) 18%, transparent); }
+.cx-voice-wave { --voice-me: var(--accent, #7dd3fc); --voice-ben: var(--accent, #7dd3fc); }
+
+/* Settings → Voice */
+.vs-bar { position: relative; height: 6px; border-radius: 999px; overflow: hidden; background: rgb(var(--ink, 255 255 255) / 0.08); margin-top: 6px; }
+.vs-bar > i { position: absolute; inset: 0; border-radius: inherit; background: var(--accent, #7dd3fc); transform-origin: left; transition: transform 0.25s; }
+.vs-list { margin: 6px 0 0; padding-left: 18px; font-size: var(--t-xs, 12px); color: var(--muted, #9aa); }
