@@ -6,6 +6,7 @@ import type { BodyMetricInput, BodyState, Exercise, WorkoutExerciseItem, Workout
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { soundCoin } from '../sound'
+import { useWater } from '../water'
 import { useAction } from '../ui'
 import '../body.css'
 
@@ -28,24 +29,11 @@ export function Body({
   const [shortOnTime, setShortOnTime] = useState(false)
 
   const todayKey = dayKey(new Date(), undefined, 0)
-  const [waterMl, setWaterMl] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('ls.hydration')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed.date === todayKey) return parsed.ml || 0
-      }
-    } catch {}
-    return 0
-  })
-
-  const saveWater = (newMl: number) => {
-    const val = Math.max(0, newMl)
-    setWaterMl(val)
-    try {
-      localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: val }))
-    } catch {}
-  }
+  // The one shared water log (water.ts): Ben, Sporty, Telegram and Today see the same number.
+  const water = useWater()
+  const waterMl = water.ml
+  const waterTarget = water.target || 2700
+  const saveWater = (newMl: number) => void water.set(Math.max(0, newMl))
 
   // Calculate today's completed reps per exercise
   const todayWorkouts = state.recentWorkouts.filter((w) => w.day === todayKey)
@@ -324,17 +312,17 @@ export function Body({
         <div className="hydration-top">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '18px' }}>💧</span>
-            <span className="hydration-amount">{waterMl.toLocaleString()} / 2,700 ml</span>
+            <span className="hydration-amount">{waterMl.toLocaleString()} / {waterTarget.toLocaleString()} ml</span>
           </div>
           <span className="hydration-glasses">
-            {(waterMl / 250).toFixed(1)} of 11 glasses ({Math.round((waterMl / 2700) * 100)}%)
+            {(waterMl / 250).toFixed(1)} of {Math.round(waterTarget / 250)} glasses ({Math.round((waterMl / waterTarget) * 100)}%)
           </span>
         </div>
 
         <div className="hydration-bar-bg">
           <div
             className="hydration-bar-fill"
-            style={{ width: `${Math.min(100, Math.round((waterMl / 2700) * 100))}%` }}
+            style={{ width: `${Math.min(100, Math.round((waterMl / waterTarget) * 100))}%` }}
           />
         </div>
 

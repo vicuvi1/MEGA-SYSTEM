@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import { useWater } from './water'
 import { dayKey } from '@core/dates'
 import { findExercise, readSport, updateSport } from './sportTrack'
 import type { BodyState, Summary } from '@shared/api'
@@ -15,17 +16,9 @@ interface Props {
 }
 
 export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) {
-  const [waterMl, setWaterMl] = useState<number>(() => {
-    try {
-      const today = dayKey(new Date(), undefined, 0)
-      const saved = localStorage.getItem('ls.hydration')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed.date === today) return parsed.ml || 0
-      }
-    } catch {}
-    return 0
-  })
+  // The one shared water log (water.ts), not a counter of its own.
+  const water = useWater()
+  const waterMl = water.ml
 
   const todayKey = dayKey(new Date(), undefined, 0)
 
@@ -146,15 +139,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
   const handleQuickLogWater = useCallback(
     (e: React.MouseEvent, addedMl: number) => {
       const rect = e.currentTarget.getBoundingClientRect()
-      const nextVal = waterMl + addedMl
-      setWaterMl(nextVal)
-      try {
-        localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: nextVal }))
-        const data = updateSport((d) => {
-          if (d.water) d.water.currentMl = nextVal
-        })
-        if (data) setSportState(data)
-      } catch {}
+      void water.add(addedMl)
 
       soundCoin()
       triggerRpgPopup({
@@ -167,7 +152,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       window.dispatchEvent(new CustomEvent('life-body-changed'))
       onRefresh()
     },
-    [waterMl, todayKey, onRefresh]
+    [water, onRefresh]
   )
 
   const handleCompleteAll = useCallback(async () => {
@@ -183,7 +168,6 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         d.exercises?.forEach((x: any) => {
           x.doneToday = Math.max(x.doneToday || 0, x.target || 0)
         })
-        if (d.water) d.water.currentMl = Math.max(d.water.currentMl || 0, d.water.targetMl || 2700)
       })
       if (data) setSportState(data)
     }
@@ -191,11 +175,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
     const itemsToLog = []
     for (const obj of objectives) {
       if (obj.id === 'water') {
-        const nextVal = Math.max(waterMl, obj.target)
-        setWaterMl(nextVal)
-        try {
-          localStorage.setItem('ls.hydration', JSON.stringify({ date: todayKey, ml: nextVal }))
-        } catch {}
+        if (obj.target > waterMl) void water.add(obj.target - waterMl)
       } else {
         const diff = Math.max(0, obj.target - obj.current)
         if (diff > 0) {
