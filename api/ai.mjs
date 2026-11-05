@@ -3,7 +3,7 @@
 // Google Gemini for the website, with the key kept on the server
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
 import { bearer, config, getSetting, readBody, send, sessionOk, setSetting, turso } from './_lib.mjs'
-import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, monthStart } from './_budget.mjs'
+import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, costOf, monthStart } from './_budget.mjs'
 
 const MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -120,6 +120,13 @@ export async function chosenModels(env = process.env, fetchImpl = fetch) {
 const USAGE_TABLE = `CREATE TABLE IF NOT EXISTS ai_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, model TEXT NOT NULL, kind TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, cost REAL)`
 const t = (v) => (v == null ? { type: 'null' } : typeof v === 'number' ? (Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v }) : { type: 'text', value: String(v) })
 export async function recordUsage(u, env = process.env, fetchImpl = fetch) {
+  // No reported cost (Gemini, some OpenRouter models): estimate it from the tokens (A7).
+  u = { ...u, cost: costOf(u.model, u.prompt, u.completion, u.cost) }
+  // The minute-long budget cache counts this call straight away.
+  if (budgetCache && u.cost) {
+    const spent = budgetCache.v.spent + u.cost
+    budgetCache.v = { ...budgetCache.v, spent, tier: budgetTier(spent, budgetCache.v.budget) }
+  }
   if (testing(env)) return
   const cfg = config(env)
   if (!cfg.ok) return
@@ -150,6 +157,13 @@ export async function budgetState(env = process.env, fetchImpl = fetch, now = ne
       ]
     }, fetchImpl).catch(() => ({ json: null }))
     const cell = (i) => json?.results?.[i]?.response?.result?.rows?.[0]?.[0]
+    // A failed read is not "$0 spent" (A7): keep the last known numbers (else play
+    // it safe with the cheaper tier) and try again in 10 seconds.
+    if (!cell(1)) {
+      const last = budgetCache?.v ?? { budget, spent: 0, tier: 'save' }
+      budgetCache = { at: Date.now() - 50_000, v: last }
+      return last
+    }
     spent = Number(cell(1)?.value ?? 0) || 0
     try {
       const b = JSON.parse(cell(2)?.value ?? 'null')
@@ -166,7 +180,11 @@ export async function budgetState(env = process.env, fetchImpl = fetch, now = ne
 /** Asks OpenRouter (text only). opts.json: answer as a JSON object; opts.strong: the strong model (flash if it fails). */
 export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, env = process.env) {
   // A test run (Settings → Test Ben) asks one exact model, with no fallback.
-  if (opts.model) return callOpenRouter(key, opts.model, prompt, fetchImpl, { ...opts, think: !!opts.strong }, 45_000, 'low')
+  // Even a test run respects a used-up budget (A7).
+  if (opts.model) {
+    if ((await budgetState(env, fetchImpl)).tier === 'minimal') throw Object.assign(new Error('AI budget used up this month: model tests are paused'), { budget: true })
+    return callOpenRouter(key, opts.model, prompt, fetchImpl, { ...opts, think: !!opts.strong }, 45_000, 'low')
+  }
   // The budget decides first: near the limit no strong model, past it only the cheap one.
   const plan = budgetPlan((await budgetState(env, fetchImpl)).tier, opts)
   opts = { ...opts, strong: plan.strong }
@@ -228,6 +246,8 @@ export async function askModel(prompt, opts = {}, env = process.env, fetchImpl =
     }
   }
   if (!gKey) throw new Error('Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use the AI coach')
+  // The Gemini path keeps to the same budget (A7): extras stop when it's used up.
+  budgetPlan((await budgetState(env, fetchImpl)).tier, opts)
   return askGemini(gKey, prompt, fetchImpl, opts)
 }
 

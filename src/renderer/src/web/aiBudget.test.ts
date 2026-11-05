@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error plain JS module without types
-import { budgetPlan, budgetTier } from '../../../../api/_budget.mjs'
+import { budgetPlan, budgetTier, costOf } from '../../../../api/_budget.mjs'
 import { brainPrompt, pickFacts } from './botBrain'
 
 describe('cheaper Ben', () => {
@@ -31,5 +31,15 @@ describe('cheaper Ben', () => {
     expect(p).not.toContain('message 27 ')
     expect(p).toContain('message 39 ')
     expect(p).not.toContain('filler fact number 10 ')
+  })
+})
+
+describe('cost when the provider reports none (A7)', () => {
+  it('uses the reported cost, else estimates from tokens', () => {
+    expect(costOf('x', 1000, 1000, 0.002)).toBe(0.002)
+    expect(costOf('google/gemini-3.5-flash', 1_000_000, 0, null)).toBeCloseTo(0.3)
+    expect(costOf('google/gemini-3.1-flash-lite', 0, 1_000_000, null)).toBeCloseTo(0.4)
+    expect(costOf('some/model', 1_000_000, 1_000_000, undefined)).toBeCloseTo(2.5)
+    expect(costOf('some/model', 0, 0, null)).toBeNull()
   })
 })

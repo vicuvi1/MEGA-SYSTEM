@@ -28,3 +28,20 @@ export function budgetPlan(tier, opts = {}) {
 
 /** Start of this month in UTC (ISO), for summing ai_usage. */
 export const monthStart = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+
+/** USD per million tokens [in, out], roughly; used when the provider reports no cost (A7). */
+const RATES = [
+  [/flash-lite/i, 0.1, 0.4],
+  [/gemini.*flash/i, 0.3, 2.5],
+  [/gemini.*pro/i, 1.25, 10],
+  [/deepseek/i, 0.3, 1.2]
+]
+/** The provider's cost, else an estimate from the tokens (never "free" when tokens were used). */
+export function costOf(model, prompt, completion, reported) {
+  if (typeof reported === 'number' && Number.isFinite(reported)) return reported
+  const p = Number(prompt) || 0
+  const c = Number(completion) || 0
+  if (!p && !c) return null
+  const [, inR, outR] = RATES.find(([re]) => re.test(String(model))) ?? [null, 0.5, 2]
+  return (p * inR + c * outR) / 1e6
+}
