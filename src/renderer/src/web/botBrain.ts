@@ -585,9 +585,28 @@ const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put
 - "focus <from> <to>", "workouts <from> <to>", "sleep <from> <to>", "tasks <from> <to>" (tasks done), "points <from> <to>".
 - "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
 
+const WORD = /[\p{L}\p{N}]{4,}/gu
+/**
+ * Prompt diet: the facts that matter for this message (sharing a word with it
+ * or the recent chat), then the newest, at most `max`. The rest stays in memory
+ * and Ben can still look things up.
+ */
+export function pickFacts(facts: Memory['facts'], about: string, max = 24): Memory['facts'] {
+  if (facts.length <= max) return facts
+  const words = new Set((about.toLowerCase().match(WORD) ?? []).map((w) => w.slice(0, 6)))
+  const hits = (f: { t: string }) => (f.t.toLowerCase().match(WORD) ?? []).some((w) => words.has(w.slice(0, 6)))
+  const relevant = facts.filter(hits).slice(-Math.ceil(max / 2))
+  const rest = facts.filter((f) => !relevant.includes(f)).slice(-(max - relevant.length))
+  const keep = new Set([...relevant, ...rest])
+  return facts.filter((f) => keep.has(f))
+}
+
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
 export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string } = {}): string {
-  const chat = memory.chat.slice(-18).map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 300)}`)
+  // Prompt diet: the last 12 turns (240 chars each) and only the facts that matter now.
+  const turns = memory.chat.slice(-12)
+  const chat = turns.map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 240)}`)
+  const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(' ')}`)
   return [
     PERSONA[persona],
     'Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks "why"/"how come" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.',
@@ -631,7 +650,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     extra.desk ? `== What you know about how he works (use it: plan with his energy map, name repeat excuses, respect a short night) ==\n${extra.desk}` : '',
     '',
     '== What you remember about him ==',
-    memory.facts.length ? memory.facts.map((f) => `- ${f.t} (noted ${f.at})`).join('\n') : '- nothing yet',
+    facts.length ? facts.map((f) => `- ${f.t} (noted ${f.at})`).join('\n') : '- nothing yet',
     '',
     '== Recent conversation ==',
     chat.length ? chat.join('\n') : '(none)',

@@ -32,6 +32,48 @@ interface Usage {
   byModel: { model: string; calls: number; cost: number; tokens: number }[]
   recent: { at: string; model: string; kind: string | null; prompt: number | null; completion: number | null; cost: number | null }[]
   credits: { total: number; used: number; left: number } | null
+  budget?: { budget: number; spent: number; tier: 'normal' | 'save' | 'minimal' }
+}
+
+const TIER_TEXT = {
+  normal: 'Normal: your models, the strong one for plans and reviews.',
+  save: 'Saving: close to the limit, so no strong model; plans use your chat model.',
+  minimal: 'Used up: only the cheap automatic model; nudges and letters use their fixed text.'
+} as const
+
+/** The monthly AI budget: spent so far, the limit, and what Ben does near it. */
+function BudgetRow({ b, onSave }: { b: NonNullable<Usage['budget']>; onSave: (usd: number) => void }) {
+  const [v, setV] = useState(String(b.budget))
+  useEffect(() => setV(String(b.budget)), [b.budget])
+  const pct = b.budget > 0 ? Math.min(100, (b.spent / b.budget) * 100) : 0
+  return (
+    <div className={`brain-budget tier-${b.tier}`}>
+      <div className="row">
+        <small className="brain-sub">Monthly budget</small>
+        <b>
+          {usd(b.spent)} of {b.budget > 0 ? usd(b.budget) : 'no limit'}
+        </b>
+      </div>
+      {b.budget > 0 && <i className="brain-budget-bar" style={{ ['--p' as string]: `${pct}%` }} />}
+      <p className="hint small">{TIER_TEXT[b.tier]}</p>
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSave(Number(v))
+        }}
+      >
+        <label className="sr-only" htmlFor="ai-budget">
+          Monthly AI budget in USD
+        </label>
+        <input id="ai-budget" className="input small" type="number" min={0} max={1000} step={1} value={v} onChange={(e) => setV(e.target.value)} style={{ width: 90 }} />
+        <span className="hint small">USD a month (0 = no limit)</span>
+        <button className="btn small" type="submit" disabled={Number(v) === b.budget}>
+          Save
+        </button>
+      </form>
+    </div>
+  )
 }
 
 const call = async <T,>(body: object): Promise<T> => {
@@ -276,6 +318,20 @@ export function BrainPanel() {
           <em>{monthPace != null ? `≈ ${usd(monthPace)} a month at this pace` : 'no calls yet'}</em>
         </div>
       </div>
+
+      {usage?.budget && (
+        <BudgetRow
+          b={usage.budget}
+          onSave={(n) =>
+            void call<{ budget: NonNullable<Usage['budget']> }>({ op: 'setBudget', usd: n })
+              .then((r) => {
+                setUsage((u) => (u ? { ...u, budget: r.budget } : u))
+                toast(n > 0 ? `Ben's AI budget: ${usd(n)} a month` : 'No AI budget limit', 'good')
+              })
+              .catch((e) => toast((e as Error).message, 'bad'))
+          }
+        />
+      )}
 
       {usage && usage.byModel.length > 0 && (
         <div className="brain-models">

@@ -3,6 +3,7 @@
 // Google Gemini for the website, with the key kept on the server
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
 import { bearer, config, getSetting, readBody, send, sessionOk, setSetting, turso } from './_lib.mjs'
+import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, monthStart } from './_budget.mjs'
 
 const MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -131,12 +132,46 @@ export async function recordUsage(u, env = process.env, fetchImpl = fetch) {
   }, fetchImpl).catch(() => null)
 }
 
+// ---- The monthly budget: steps down to cheaper models as it fills up ----
+let budgetCache = null
+/** This month's spend, the budget (USD) and the tier. Cached for a minute. */
+export async function budgetState(env = process.env, fetchImpl = fetch, now = new Date()) {
+  if (budgetCache && Date.now() - budgetCache.at < 60_000) return budgetCache.v
+  let budget = DEFAULT_BUDGET_USD
+  let spent = 0
+  const cfg = config(env)
+  if (!testing(env) && cfg.ok) {
+    const { json } = await turso(cfg, {
+      requests: [
+        { type: 'execute', stmt: { sql: USAGE_TABLE } },
+        { type: 'execute', stmt: { sql: 'SELECT COALESCE(SUM(cost),0) FROM ai_usage WHERE at >= ?', args: [{ type: 'text', value: monthStart(now) }] } },
+        { type: 'execute', stmt: { sql: 'SELECT value FROM settings WHERE key = ?', args: [{ type: 'text', value: BUDGET_KEY }] } },
+        { type: 'close' }
+      ]
+    }, fetchImpl).catch(() => ({ json: null }))
+    const cell = (i) => json?.results?.[i]?.response?.result?.rows?.[0]?.[0]
+    spent = Number(cell(1)?.value ?? 0) || 0
+    try {
+      const b = JSON.parse(cell(2)?.value ?? 'null')
+      if (b && typeof b.usd === 'number') budget = b.usd
+    } catch {
+      /* default */
+    }
+  }
+  const v = { budget, spent, tier: budgetTier(spent, budget, now) }
+  budgetCache = { at: Date.now(), v }
+  return v
+}
+
 /** Asks OpenRouter (text only). opts.json: answer as a JSON object; opts.strong: the strong model (flash if it fails). */
 export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, env = process.env) {
-  // Your pick wins: the chat model for everything, the deep one for plans and reviews.
   // A test run (Settings → Test Ben) asks one exact model, with no fallback.
   if (opts.model) return callOpenRouter(key, opts.model, prompt, fetchImpl, { ...opts, think: !!opts.strong }, 45_000, 'low')
-  const pick = opts.noPick ? { chat: null, deep: null } : await chosenModels(env, fetchImpl)
+  // The budget decides first: near the limit no strong model, past it only the cheap one.
+  const plan = budgetPlan((await budgetState(env, fetchImpl)).tier, opts)
+  opts = { ...opts, strong: plan.strong }
+  // Your pick wins: the chat model for everything, the deep one for plans and reviews.
+  const pick = opts.noPick || !plan.useChosen ? { chat: null, deep: null } : await chosenModels(env, fetchImpl)
   const mine = opts.strong ? pick.deep || pick.chat : pick.chat
   if (mine) {
     try {
@@ -189,7 +224,7 @@ export async function askModel(prompt, opts = {}, env = process.env, fetchImpl =
     try {
       return await askOpenRouter(orKey, prompt, fetchImpl, opts, env)
     } catch (e) {
-      if (!gKey) throw e
+      if (!gKey || e.budget) throw e
     }
   }
   if (!gKey) throw new Error('Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use the AI coach')
@@ -221,7 +256,14 @@ export default async function handler(req, res) {
     chosenAt = Date.now()
     return send(res, 200, { ok: true, chosen: v })
   }
-  if (body?.op === 'usage') return send(res, 200, await usageReport(orKey))
+  if (body?.op === 'usage') return send(res, 200, { ...(await usageReport(orKey)), budget: await budgetState() })
+  if (body?.op === 'setBudget') {
+    const usd = Number(body.usd)
+    if (!Number.isFinite(usd) || usd < 0 || usd > 1000) return send(res, 400, { error: 'Budget: 0–1000 USD a month (0 = no limit)' })
+    await setSetting(config(), BUDGET_KEY, JSON.stringify({ usd: Math.round(usd * 100) / 100 }))
+    budgetCache = null
+    return send(res, 200, { ok: true, budget: await budgetState() })
+  }
   // Ben's test: 20 typical messages on throwaway data, with the model you pick.
   if (body?.op === 'eval') {
     if (!orKey) return send(res, 503, { error: 'Add OPENROUTER_API_KEY in Vercel to test models' })

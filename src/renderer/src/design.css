@@ -1777,6 +1777,13 @@
 .brain-model { display: grid; grid-template-columns: minmax(120px, 220px) 1fr auto; align-items: center; gap: 10px; font-size: 12.5px; }
 .brain-model span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .brain-model i { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--accent) var(--p), rgb(var(--ink) / 0.08) var(--p)); }
+.brain-budget { margin: 12px 0; padding: 10px 12px; border-radius: var(--radius-sm); background: rgb(var(--ink) / 0.03); display: grid; gap: 6px; }
+.brain-budget .row { display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+.brain-budget form.row { justify-content: flex-start; }
+.brain-budget-bar { display: block; height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--accent) var(--p), rgb(var(--ink) / 0.08) var(--p)); }
+.brain-budget.tier-save .brain-budget-bar { background: linear-gradient(90deg, var(--orange) var(--p), rgb(var(--ink) / 0.08) var(--p)); }
+.brain-budget.tier-minimal .brain-budget-bar { background: linear-gradient(90deg, var(--red) var(--p), rgb(var(--ink) / 0.08) var(--p)); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .brain-model em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
 .brain-recent { margin-top: 12px; }
 .brain-recent summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
