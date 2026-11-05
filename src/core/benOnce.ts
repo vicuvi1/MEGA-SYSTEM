@@ -14,7 +14,12 @@ export function messageKind(html: string): string | null {
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 4)
-  return words.length ? words.join(' ').toLowerCase() : null
+  if (!words.length) return null
+  // News about one specific thing (a calendar event added, moved or cancelled,
+  // a block shifted, a health alert) is its own kind per thing: two different
+  // events the same day both get through (T4). The whole text, minus numbers.
+  if (/^(📅|❌|↪️|✂️|➡️|🔧|✅ Working again|⚠️)/u.test(plain)) return plain.replace(/[\d.,:%/+-]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 160)
+  return words.join(' ').toLowerCase()
 }
 
 export interface SentToday {

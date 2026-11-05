@@ -21,4 +21,9 @@ describe('Ben says each kind of thing once a day', () => {
     const a = sendOnce(null, '🔔 Call mom', '2026-11-04')
     expect(sendOnce(a.next, '🔔 Call mom', '2026-11-04').send).toBe(true)
   })
+  it('news about two different things both go the same day (T4)', () => {
+    const a = sendOnce(null, '📅 New in your calendar: <b>Lecture</b> today at 10:00.', '2026-11-04')
+    expect(sendOnce(a.next, '📅 New in your calendar: <b>Dentist</b> today at 15:00.', '2026-11-04').send).toBe(true)
+    expect(sendOnce(a.next, '📅 New in your calendar: <b>Lecture</b> today at 10:00.', '2026-11-04').send).toBe(false)
+  })
 })

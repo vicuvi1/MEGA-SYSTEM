@@ -19274,7 +19274,9 @@ function messageKind(html) {
 	const plain = html.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").trim();
 	if (!plain || /^(🔔|⏰)/u.test(plain)) return null;
 	const words = plain.replace(/[\d.,:%/+-]+/g, " ").split(/\s+/).filter(Boolean).slice(0, 4);
-	return words.length ? words.join(" ").toLowerCase() : null;
+	if (!words.length) return null;
+	if (/^(📅|❌|↪️|✂️|➡️|🔧|✅ Working again|⚠️)/u.test(plain)) return plain.replace(/[\d.,:%/+-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 160);
+	return words.join(" ").toLowerCase();
 }
 /** Whether to send it today, and what to remember if so. */
 function sendOnce(prev, html, day) {
