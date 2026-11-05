@@ -92,7 +92,7 @@ Small add-ons, each off until switched on in Settings → Plugins (`plugins_on`)
 - Tables: see `src/core/schema.ts` (**append-only**: never edit a shipped migration, add a new one and bump `SCHEMA_VERSION` in `api/_schema.mjs`; a test checks they match). Pages built for an older schema may read but `/api/db` refuses their writes ("A new version is out — please reload"). A migration that MOVES data must run once on the server, never in each browser.
 - Server-only tables (`/api/db` refuses them): `sys_auth` (PIN hash, sign-out counter), `sys_login_guard`, `sys_passkeys`, `sys_passkey_chal`, `sys_devices`, `sys_gate` (once-only job slots), `sys_push`, `sys_kv`, `sys_mcp_tokens`. `cloud_snapshots` is **read-only** from pages.
 - Other `sys_*` tables (never copied to devices): `sys_health` (beats and notes), `sys_error_log`, `sys_ben_log`, `sys_table_versions`, `sys_writes`, `sys_cas`.
-- `settings` keys (key → JSON), the main ones: `coach_memory`, `coach_profile`, `coach_log`, `coach_mind`, `coach_reminders`, `coach_nudges`, `coach_rhythm`, `coach_rhythm_prefs`, `coach_history`, `coach_letters`, `ben_desk`, `goal_booking`, `sport_tracker_json` (the one shared water + reps log; its day turns at 04:00), `ben_workouts`, `app_sync_finance`, `week_plan`, `focus_running`, `block_marks`, `cal_templates`, `today_order`, `notif_settings`, `ai_models` (your model picks), `ai_budget`, `plugins_on`, `plugin_*`, `pin_hash` (offline copy, written by the server only), `data_version`. Another agent is moving these names into one typed list; prefer that list when it exists.
+- `settings` keys (key → JSON), the main ones: `coach_memory`, `coach_profile`, `coach_log`, `coach_mind`, `coach_reminders`, `coach_nudges`, `coach_rhythm`, `coach_rhythm_prefs`, `coach_history`, `coach_letters`, `ben_desk`, `goal_booking`, `sport_tracker_json` (the one shared water + reps log; its day turns at 04:00), `ben_workouts`, `app_sync_finance`, `week_plan`, `focus_running`, `block_marks`, `cal_templates`, `today_order`, `notif_settings`, `ai_models` (your model picks), `ai_budget`, `plugins_on`, `plugin_*`, `pin_hash` (offline copy, written by the server only), `data_version`. The full list, with types and defaults, is `src/core/settingsKeys.ts` (a test fails when code uses a key that is not in it).
 
 ### Sign-in and security
 
@@ -126,7 +126,7 @@ Small add-ons, each off until switched on in Settings → Plugins (`plugins_on`)
 ```bash
 npm ci                              # Node 22 (.nvmrc, engines)
 npx tsc --noEmit -p tsconfig.json   # typecheck
-npx vitest run                      # all tests must pass (~860)
+npx vitest run                      # all tests must pass (~900)
 npm run build:web                   # web app
 npm run build:bot                   # server bundle api/_bot/bot.mjs (commit it!)
 npm run smoke                       # the real app on fake data (e2e/smoke.mjs + e2e/server.mjs)
