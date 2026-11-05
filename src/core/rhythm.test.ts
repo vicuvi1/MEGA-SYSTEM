@@ -73,3 +73,18 @@ describe('rhythm: reviews', () => {
     expect(readLines('1. Lab report\n2) Rust ch. 4\n- 3 runs\n4. extra')).toEqual(['Lab report', 'Rust ch. 4', '3 runs'])
   })
 })
+
+import { nameAndRank } from './rhythm'
+describe('morning plan: rules build, AI only names and ranks (N6)', () => {
+  const rules = { day: '2026-11-05', headline: '2 must-dos', mustdos: ['Lab report', 'Read ch. 4'], blocks: [{ title: 'Focus', start: '09:00', minutes: 50 }, { title: 'Focus', start: '10:00', minutes: 50 }], training: null, waterMl: 2500 } as any
+  it('keeps the times, takes names, ranking and headline', () => {
+    const p = nameAndRank(rules, { headline: '2 must-dos · 1h40 focus', mustdos: ['read ch. 4', 'Lab report'], names: ['Lab report draft (due Fri)', 'Etica ch. 4'] })
+    expect(p.blocks.map((b: any) => [b.start, b.title])).toEqual([['09:00', 'Lab report draft (due Fri)'], ['10:00', 'Etica ch. 4']])
+    expect(p.mustdos).toEqual(['Read ch. 4', 'Lab report'])
+    expect(p.headline).toBe('2 must-dos · 1h40 focus')
+  })
+  it('ignores made-up must-dos and junk', () => {
+    expect(nameAndRank(rules, { mustdos: ['Buy a boat'], names: [42] }).mustdos).toEqual(['Lab report', 'Read ch. 4'])
+    expect(nameAndRank(rules, null)).toBe(rules)
+  })
+})

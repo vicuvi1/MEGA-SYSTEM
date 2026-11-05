@@ -10013,6 +10013,32 @@ var WEEK_ASK = "Next week's 3 big tasks? One per line.";
 function readLines(text) {
 	return text.split(/\n|;/).map((l) => l.replace(/^\s*(?:\d+[.)]|[-•*])\s*/, "").trim()).filter(Boolean).slice(0, 3);
 }
+/**
+* The morning plan that never times out (N6): the rules build the slots
+* (times stay exactly as built), the AI only names the blocks, ranks the
+* must-dos and writes the headline. Anything odd from the AI is ignored.
+*/
+function nameAndRank(rules, raw) {
+	if (!raw || typeof raw !== "object") return rules;
+	const names = Array.isArray(raw.names) ? raw.names : [];
+	const blocks = rules.blocks.map((b, i) => {
+		const n = typeof names[i] === "string" ? String(names[i]).trim().slice(0, 60) : "";
+		return n ? {
+			...b,
+			title: n
+		} : b;
+	});
+	const pool = new Map(rules.mustdos.map((m) => [m.trim().toLowerCase(), m]));
+	const ranked = (Array.isArray(raw.mustdos) ? raw.mustdos : []).map((m) => pool.get(String(m).trim().toLowerCase())).filter((m) => !!m);
+	const mustdos = [.../* @__PURE__ */ new Set([...ranked, ...rules.mustdos])].slice(0, 3);
+	const headline = typeof raw.headline === "string" && raw.headline.trim() ? raw.headline.trim().slice(0, 120) : rules.headline;
+	return {
+		...rules,
+		blocks,
+		mustdos,
+		headline
+	};
+}
 // src/core/benActs.ts
 /** At 10:00–19:59 a proposed plan nobody approved gets approved. */
 function autoApproveDue(status, time, already) {
@@ -14128,7 +14154,30 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			workoutDone: base.workoutDone
 		});
 		let plan = fallback;
-		if (ai) try {
+		if (ai && !note) try {
+			const raw = await withTimeout(ai([
+				"You are BEN, Victor's coach. His day plan is built (times fixed). Only: name each block in a few words tied to his goal, rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
+				`Plan: ${JSON.stringify({
+					blocks: fallback.blocks.map((b) => ({
+						start: b.start,
+						minutes: b.minutes,
+						title: b.title
+					})),
+					mustdos: fallback.mustdos,
+					training: fallback.training
+				})}`,
+				plans.length ? `Goals: ${plans.map((p) => planLine(p)).join(" | ")}` : "",
+				"Answer ONLY with JSON: {\"headline\": string, \"mustdos\": string[], \"names\": string[]} (names: one per block, same order)."
+			].filter(Boolean).join("\n"), {
+				json: true,
+				kind: "plan-names"
+			}), 15e3);
+			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
+			plan = nameAndRank(fallback, json ? JSON.parse(json) : null);
+		} catch {
+			plan = fallback;
+		}
+		else if (ai) try {
 			const context = await contextFor(events, tasks, upcoming);
 			const prev = base.st.briefing?.plan;
 			const raw = await withTimeout(ai([

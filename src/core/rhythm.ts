@@ -328,3 +328,22 @@ export function readLines(text: string): string[] {
     .slice(0, 3)
 }
 
+
+/**
+ * The morning plan that never times out (N6): the rules build the slots
+ * (times stay exactly as built), the AI only names the blocks, ranks the
+ * must-dos and writes the headline. Anything odd from the AI is ignored.
+ */
+export function nameAndRank(rules: DayProposal, raw: any): DayProposal {
+  if (!raw || typeof raw !== 'object') return rules
+  const names: unknown[] = Array.isArray(raw.names) ? raw.names : []
+  const blocks = rules.blocks.map((b, i) => {
+    const n = typeof names[i] === 'string' ? String(names[i]).trim().slice(0, 60) : ''
+    return n ? { ...b, title: n } : b
+  })
+  const pool = new Map(rules.mustdos.map((m) => [m.trim().toLowerCase(), m]))
+  const ranked = (Array.isArray(raw.mustdos) ? raw.mustdos : []).map((m: unknown) => pool.get(String(m).trim().toLowerCase())).filter((m: string | undefined): m is string => !!m)
+  const mustdos = [...new Set([...ranked, ...rules.mustdos])].slice(0, 3)
+  const headline = typeof raw.headline === 'string' && raw.headline.trim() ? raw.headline.trim().slice(0, 120) : rules.headline
+  return { ...rules, blocks, mustdos, headline }
+}

@@ -12,6 +12,7 @@ import {
   RHYTHM_PREFS,
   cleanPrefs,
   cleanProposal,
+  nameAndRank,
   dayScore,
   focusName,
   localProposal,
@@ -194,7 +195,30 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       workoutDone: base.workoutDone
     })
     let plan = fallback
-    if (ai) {
+    // No change asked: the rules' plan, named and ranked by a quick AI call (N6:
+    // never times out; 15 s at most, else the rules' plan as it is).
+    if (ai && !note) {
+      try {
+        const raw = await withTimeout(
+          ai(
+            [
+              "You are BEN, Victor's coach. His day plan is built (times fixed). Only: name each block in a few words tied to his goal, rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
+              `Plan: ${JSON.stringify({ blocks: fallback.blocks.map((b) => ({ start: b.start, minutes: b.minutes, title: b.title })), mustdos: fallback.mustdos, training: fallback.training })}`,
+              plans.length ? `Goals: ${plans.map((p) => planLine(p)).join(' | ')}` : '',
+              'Answer ONLY with JSON: {"headline": string, "mustdos": string[], "names": string[]} (names: one per block, same order).'
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            { json: true, kind: 'plan-names' } as any
+          ),
+          15_000
+        )
+        const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
+        plan = nameAndRank(fallback, json ? JSON.parse(json) : null)
+      } catch {
+        plan = fallback
+      }
+    } else if (ai) {
       try {
         const context = await contextFor(events, tasks, upcoming)
         const prev = base.st.briefing?.plan
