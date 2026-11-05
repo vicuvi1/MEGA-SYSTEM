@@ -325,3 +325,80 @@
 .cx-failed { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--danger, #e5484d); background: var(--surface); border-radius: 8px; padding: 3px 8px; width: fit-content; margin-left: auto; }
 .cx-failed button { border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
 .bd-tabs::-webkit-scrollbar { display: none; }
+
+/* ---- Night 5: the coach screen (U1–U18) ---- */
+/* U1: once you're talking, "Do this now" is one slim bar; the rest folds behind ⋯ */
+.cx-pin.slim { padding: 6px 10px 6px 12px; margin-top: 8px; }
+.cx-pin.slim .cx-pin-text span { display: none; }
+.cx-pin.slim .btn { padding-block: 5px; }
+.cx-more-btn { min-width: 34px; font-weight: 800; letter-spacing: 1px; }
+.cx-more-btn.on { background: rgb(var(--ink) / 0.1); }
+/* U7: readable line width */
+.cx-stream > .cx-item, .cx-stream > .co-hero, .cx-stream > .cx-skel { width: 100%; max-width: 760px; margin-inline: auto; }
+/* U5: steps fold into a pill */
+.co-steps-pill { margin: 0 0 6px; font-size: 11.5px; color: var(--muted); }
+.co-steps-pill summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: rgb(var(--ink) / 0.06); }
+.co-steps-pill summary::-webkit-details-marker { display: none; }
+.co-steps-pill ul { margin: 6px 0 0; padding-left: 18px; }
+/* U6: rate on any device */
+.cx-fb-more { position: absolute; left: 8px; bottom: 2px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 5px; border-radius: 6px; opacity: 0; transition: opacity 0.15s; }
+.co-msg:hover .cx-fb-more, .cx-fb-more.latest, .cx-fb-more:focus-visible { opacity: 0.75; }
+.cx-fb-more:hover { background: rgb(var(--ink) / 0.1); opacity: 1; }
+.cx-fb.open { opacity: 1; }
+@media (hover: none) { .cx-fb-more { opacity: 0.6; } }
+/* U8: new replies while scrolled up */
+.cx-newbtn { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); z-index: 5; border: none; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; color: var(--accent-ink, #10140a); background: var(--accent); box-shadow: 0 8px 22px -8px rgb(0 0 0 / 0.6); animation: bd-rise 0.25s ease both; }
+/* U10: search hits */
+.cx-search { display: flex; align-items: center; gap: 6px; }
+.cx-hits { list-style: none; margin: 0 14px; padding: 4px; max-height: 34vh; overflow-y: auto; border-radius: 12px; background: rgb(var(--ink) / 0.04); }
+.cx-hits button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; gap: 1px; padding: 6px 10px; border-radius: 8px; }
+.cx-hits button:hover, .cx-hits button.on { background: rgb(var(--ink) / 0.08); }
+.cx-hits small { font-size: 10.5px; color: var(--muted); }
+.cx-hits span { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cx-item.flash .co-bubble { animation: cx-flash 1.4s ease; }
+@keyframes cx-flash { 0%, 40% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 70%, transparent); } 100% { box-shadow: none; } }
+/* U11: Ben's own messages */
+.cx-own-label { max-width: 760px; margin: 10px auto 0; padding-left: 40px; font-size: 10.5px; color: var(--muted); letter-spacing: 0.02em; }
+.cx-stream .co-row.own .co-msg.coach .co-bubble { background: rgb(var(--ink) / 0.045); border: 1px dashed rgb(var(--ink) / 0.12); }
+/* U12: one receipt */
+.cx-receipt { border-radius: 10px; background: rgb(var(--ink) / 0.04); padding: 4px 6px; }
+.cx-receipt-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 2px 4px 4px; border-bottom: 1px solid rgb(var(--ink) / 0.06); margin-bottom: 2px; }
+/* U13: 3 chips, a soft edge */
+.cx-quick { mask-image: linear-gradient(90deg, #000 85%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); }
+/* U17: loading outlines */
+.cx-skel { display: grid; gap: 10px; padding: 14px 0; }
+.cx-skel i { display: block; height: 46px; width: 62%; border-radius: 16px; background: linear-gradient(90deg, rgb(var(--ink) / 0.05), rgb(var(--ink) / 0.1), rgb(var(--ink) / 0.05)); background-size: 200% 100%; animation: cx-shimmer 1.3s linear infinite; }
+.cx-skel i.me { justify-self: end; width: 40%; height: 34px; }
+@keyframes cx-shimmer { to { background-position: -200% 0; } }
+/* U3: the plan card inside the chat, editable */
+.cx-w-plan { padding: 0; background: none; border: 0; }
+.cx-w-plan .cp { margin: 0; box-shadow: none; }
+.cp-blocks li.edit { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.cp-time-in { font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; padding: 3px 6px; border-radius: 8px; border: 1px solid rgb(var(--ink) / 0.14); background: rgb(var(--ink) / 0.04); color: var(--text); width: 86px; }
+.cp-drop { border: none; background: transparent; color: var(--muted); cursor: pointer; border-radius: 6px; padding: 2px 6px; }
+.cp-drop:hover { background: rgb(var(--ink) / 0.08); color: var(--danger, #e5484d); }
+/* U18: gentle motion */
+.cx-stream .cx-item { animation: cx-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes cx-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.cx-action:not(.undone) { animation: cx-pulse 0.9s ease 0.15s 1; }
+@keyframes cx-pulse { 40% { background: color-mix(in srgb, var(--accent) 22%, transparent); } }
+.cp.cp-cheer { position: relative; animation: cp-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.cp.cp-cheer::after { content: '✓ ✦ ✧ ✦'; position: absolute; right: 14px; top: 8px; font-size: 16px; color: var(--accent); letter-spacing: 6px; animation: cp-spark 1.4s ease forwards; pointer-events: none; }
+@keyframes cp-pop { 50% { transform: scale(1.02); } }
+@keyframes cp-spark { from { opacity: 0; transform: translateY(6px) scale(0.8); } 30% { opacity: 1; } to { opacity: 0; transform: translateY(-18px) scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .cx-stream .cx-item, .cx-action, .cp.cp-cheer, .cp.cp-cheer::after, .cx-skel i { animation: none !important; } }
+/* U4: the floating face shows done-lines and cards like the Coach page */
+.bb-done { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; font-size: 11.5px; color: var(--muted); }
+.bb-done li { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.bb-done li.undone { text-decoration: line-through; opacity: 0.6; }
+.bb-msg .cx-extras { margin-top: 6px; }
+.bb-bubble { touch-action: none; }
+/* U16 + U15: phone: the chat fills the visible screen, the composer stays above the keyboard, 44 px buttons, the face above the bottom bar */
+@media (max-width: 760px) {
+  .cx { height: calc(100dvh - var(--kb, 0px) - 132px); min-height: 0; }
+  .cx-composer .cx-tool, .cx-composer .co-send { min-width: 44px; min-height: 44px; }
+  .cx.typing .cx-head .cx-model { display: none; }
+  .cx.typing .cx-pin { display: none; }
+  .bb-bubble { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .cx-newbtn { bottom: 116px; }
+}

@@ -7,7 +7,11 @@ import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { life } from './bridge'
 import { useLive } from './live'
 
-type Msg = { role: 'me' | 'coach'; text: string; at: string; mood?: string; done?: string[]; chips?: string[]; pending?: boolean; steps?: string[] }
+import { ReplyExtras, Rich } from './BenThread'
+
+type Msg = { role: 'me' | 'coach'; text: string; at: string; mood?: string; done?: string[]; chips?: string[]; pending?: boolean; steps?: string[]; undo?: unknown[]; undone?: boolean[]; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; streamed?: boolean }
+// The face can be dragged (U15); where you put it is remembered.
+const POS_KEY = 'ls.benBubblePos'
 
 export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unread: number; onOpenChat: () => void }) {
   const [open, setOpen] = useState(false)
@@ -25,7 +29,7 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
     if (busyRef.current) return
     life.coach
       .log()
-      .then((l) => setLog(l.slice(-12).map((e) => ({ role: e.role, text: e.text, at: e.at, mood: e.mood, done: e.done, chips: e.chips }))))
+      .then((l) => setLog(l.slice(-12).map((e: any) => ({ role: e.role, text: e.text, at: e.at, mood: e.mood, done: e.done, chips: e.chips, undo: e.undo, undone: e.undone, buttons: e.buttons, show: e.show }))))
       .catch(() => {})
   }, [])
   useEffect(() => {
@@ -37,6 +41,44 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
   useEffect(() => {
     if (open) end.current?.scrollIntoView({ block: 'end' })
   }, [open, log.length, log[log.length - 1]?.steps?.length])
+
+  // U15: drag the face out of the way (a quick tap still opens it).
+  const [pos, setPos] = useState<{ right: number; bottom: number } | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(POS_KEY) || 'null')
+    } catch {
+      return null
+    }
+  })
+  const dragRef = useRef<{ x: number; y: number; r: number; b: number; moved: boolean } | null>(null)
+  const onDown = (e: React.PointerEvent) => {
+    const el = e.currentTarget as HTMLElement
+    const r = el.getBoundingClientRect()
+    dragRef.current = { x: e.clientX, y: e.clientY, r: window.innerWidth - r.right, b: window.innerHeight - r.bottom, moved: false }
+    el.setPointerCapture(e.pointerId)
+  }
+  const onMove = (e: React.PointerEvent) => {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.x
+    const dy = e.clientY - d.y
+    if (!d.moved && Math.abs(dx) + Math.abs(dy) < 8) return
+    d.moved = true
+    setPos({ right: Math.max(8, Math.min(window.innerWidth - 64, d.r - dx)), bottom: Math.max(8, Math.min(window.innerHeight - 64, d.b - dy)) })
+  }
+  const onUp = () => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (d?.moved) {
+      try {
+        localStorage.setItem(POS_KEY, JSON.stringify(pos))
+      } catch {
+        /* fine */
+      }
+      return
+    }
+    setOpen((o) => !o)
+  }
 
   if (!life.coach || hidden) return null
 
@@ -65,14 +107,22 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
     setLog((l) => [...l, { role: 'me', text: t, at: now }, { role: 'coach', text: '', at: now, pending: true, steps: [] }])
     try {
       const seen: string[] = []
-      const r = await life.coach!.chat(t, (st) => {
-        if (seen.includes(st)) return
-        seen.push(st)
-        setLog((l) => l.map((x) => (x.pending ? { ...x, steps: [...seen] } : x)))
-      })
-      setLog((l) => [...l.filter((x) => !x.pending), { role: 'coach', text: r.reply, at: r.at ?? new Date().toISOString(), mood: r.mood, done: r.done, chips: r.chips }])
+      const r = await life.coach!.chat(
+        t,
+        (st) => {
+          if (seen.includes(st)) return
+          seen.push(st)
+          setLog((l) => l.map((x) => (x.pending ? { ...x, steps: [...seen] } : x)))
+        },
+        undefined,
+        (soFar) => setLog((l) => l.map((x) => (x.pending ? { ...x, text: soFar, streamed: true } : x)))
+      )
+      setLog((l) => [...l.filter((x) => !x.pending), { role: 'coach', text: r.reply, at: r.at ?? new Date().toISOString(), mood: r.mood, done: r.done, chips: r.chips, undo: r.undo, buttons: r.buttons, show: r.show }])
+      if (r.done?.length) window.dispatchEvent(new CustomEvent('life-wallet-changed'))
     } catch (e) {
-      setLog((l) => [...l.filter((x) => !x.pending), { role: 'coach', text: `I couldn't answer: ${(e as Error).message}`, at: new Date().toISOString() }])
+      // Same as the Coach page (K4): your message says "Not sent", the text comes back.
+      setLog((l) => l.filter((x) => !x.pending).map((x) => (x.role === 'me' && x.at === now ? { ...x, failed: (e as Error).message || 'no connection' } : x)))
+      setText((cur) => cur || t)
     }
     setBusy(false)
     life.coach!.status?.().then(setStatus).catch(() => {})
@@ -107,7 +157,7 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
           <div className="bb-stream">
             {log.map((m, i) => (
               <div key={i} className={`bb-msg ${m.role}`}>
-                {m.pending ? (
+                {m.pending && !m.streamed ? (
                   <span className="bb-typing">
                     <i />
                     <i />
@@ -116,8 +166,47 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
                   </span>
                 ) : (
                   <>
-                    {m.text}
-                    {!!m.done?.length && <small className="bb-done">{m.done.join(' · ')}</small>}
+                    {m.role === 'coach' ? <Rich text={m.text} /> : m.text}
+                    {/* U4: the same done-lines with Undo, buttons and cards as the Coach page. */}
+                    {!!m.done?.length && (
+                      <ul className="bb-done">
+                        {m.done.map((d, k) => (
+                          <li key={k} className={m.undone?.[k] ? 'undone' : ''}>
+                            {d}
+                            {!!m.undo?.[k] && !m.undone?.[k] && life.coach?.undo && (
+                              <button
+                                className="cx-undo"
+                                onClick={async () => {
+                                  const r = await life.coach!.undo!(m.at, k).catch(() => null)
+                                  if (r?.ok) setLog((l) => l.map((x) => (x === m ? { ...x, undone: Object.assign([...(x.undone ?? [])], { [k]: true }) } : x)))
+                                }}
+                              >
+                                ↩ Undo
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {m.role === 'coach' && !m.pending && (!!m.buttons?.length || !!m.show?.length) && (
+                      <ReplyExtras
+                        m={{ ...m, bot: 'mega', via: 'app' } as any}
+                        status={status}
+                        latest={i === log.length - 1}
+                        busy={busy}
+                        onSay={(t) => void send(t)}
+                        onOpen={() => (setOpen(false), onOpenChat())}
+                        onDone={() => load()}
+                      />
+                    )}
+                    {m.failed && (
+                      <span className="cx-failed">
+                        Not sent ·{' '}
+                        <button type="button" disabled={busy} onClick={() => (setLog((l) => l.filter((x) => x !== m)), setText(''), void send(m.text))}>
+                          Retry
+                        </button>
+                      </span>
+                    )}
                   </>
                 )}
               </div>
@@ -145,7 +234,16 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
           </form>
         </div>
       )}
-      <button className={`bb-bubble mood-${status?.mood ?? 'chill'} ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-label={open ? 'Close Ben' : 'Talk to Ben'} title="Talk to Ben">
+      <button
+        className={`bb-bubble mood-${status?.mood ?? 'chill'} ${open ? 'open' : ''}`}
+        style={pos ? { right: pos.right, bottom: pos.bottom, left: 'auto', top: 'auto' } : undefined}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setOpen((o) => !o))}
+        aria-label={open ? 'Close Ben' : 'Talk to Ben'}
+        title="Talk to Ben (drag to move)"
+      >
         <span>{open ? '✕' : lastCoach?.mood && MOOD_FACE[lastCoach.mood as Mood] && !status ? MOOD_FACE[lastCoach.mood as Mood] : face}</span>
         {!open && unread > 0 && <i className="bb-badge">{unread}</i>}
       </button>

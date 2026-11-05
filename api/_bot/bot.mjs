@@ -18997,7 +18997,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				mime: media.mime,
 				data: media.data
 			}] : void 0,
-			kind
+			kind,
+			...onStep && (kind === "chat" || kind === "chat-deep" || kind === "lookup") ? { onDelta: (t) => step(`\u0001${t}`) } : {}
 		}), Math.max(4e3, deadline - Date.now()));
 		let out;
 		try {

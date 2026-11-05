@@ -554,7 +554,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       <div className="main">
         {/* The desktop app has its own island at the top of the screen: one is enough. */}
         {!window.desktop?.islandState && <FocusIsland />}
-        <BenBubble hidden={page === 'coach'} unread={coachUnread} onOpenChat={() => setPage('coach')} />
+        <BenBubble hidden={page === 'coach' || page === 'today'} unread={coachUnread} onOpenChat={() => setPage('coach')} />
         <DisciplineMoments onOpenChat={() => setPage('coach')} />
         <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">

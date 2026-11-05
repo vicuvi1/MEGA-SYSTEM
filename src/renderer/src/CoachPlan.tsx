@@ -16,6 +16,8 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState('')
   const [heroApproves, setHeroApproves] = useState(false)
+  // U18: a small tick-and-sparkle right after you approve.
+  const [justApproved, setJustApproved] = useState(false)
   const load = useCallback(() => {
     life.coach?.rhythm?.('state').then(setData).catch(() => {})
     if (oneApprove) life.coach?.status?.().then((st) => setHeroApproves(st.move.kind === 'approve')).catch(() => {})
@@ -36,6 +38,10 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
     if (r) {
       setData({ state: r.state, prefs: r.prefs })
       onChange?.()
+      if (action === 'approve') {
+        setJustApproved(true)
+        setTimeout(() => setJustApproved(false), 1600)
+      }
     }
   }
 
@@ -89,7 +95,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
   const timed = [...p.blocks.map((x) => ({ s: x.start, e: fromMin(toMin(x.start) + x.minutes), t: x.title, train: false })), ...(p.training ? [{ s: p.training.time, e: '', t: p.training.what, train: true }] : [])].sort((a, c) => a.s.localeCompare(c.s))
   const approved = b.status === 'approved'
   return (
-    <section className={`panel cp ${approved ? 'cp-ok' : ''}`}>
+    <section className={`panel cp ${approved ? 'cp-ok' : ''} ${justApproved ? 'cp-cheer' : ''}`}>
       <header className="cp-head">
         <h2>
           <Icon name="spark" /> {approved ? "Today's plan" : 'Your coach planned today'}
@@ -114,9 +120,26 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
             <h3 className="cp-sub">Blocks</h3>
             <ul className="cp-blocks">
               {timed.map((x) => (
-                <li key={x.s + x.t} className={x.train ? 'train' : ''}>
-                  <span className="cp-time">{x.e ? `${x.s}–${x.e}` : x.s}</span>
+                <li key={x.s + x.t} className={`${x.train ? 'train' : ''} ${!approved ? 'edit' : ''}`}>
+                  {approved ? (
+                    <span className="cp-time">{x.e ? `${x.s}–${x.e}` : x.s}</span>
+                  ) : (
+                    // U3: change a time or drop a block right here (done in code, no AI: B22).
+                    <input
+                      type="time"
+                      className="cp-time-in"
+                      defaultValue={x.s}
+                      step={900}
+                      aria-label={`Start of ${x.t}`}
+                      onBlur={(e) => e.target.value && e.target.value !== x.s && void run('propose', x.train ? `move training to ${e.target.value}` : `move ${x.t.replace(/[,;]/g, ' ')} to ${e.target.value}`, 'Moving…')}
+                    />
+                  )}
                   <span>{x.train ? `💪 ${x.t}` : x.t}</span>
+                  {!approved && (
+                    <button className="cp-drop" disabled={!!busy} title="Drop this block" aria-label={`Drop ${x.t}`} onClick={() => void run('propose', x.train ? 'no training' : `drop ${x.t.replace(/[,;]/g, ' ')}`, 'Dropping…')}>
+                      ✕
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -149,7 +172,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
             <div className="cp-actions">
               {!(oneApprove && heroApproves) && (
                 <button className="btn primary" disabled={!!busy} onClick={() => void run('approve', undefined, 'Approving…')}>
-                  {busy === 'Approving…' ? busy : '✓ Approve'}
+                  {busy === 'Approving…' ? busy : '✓ Approve all'}
                 </button>
               )}
               <button className="btn ghost" disabled={!!busy} onClick={() => setEditing(true)}>

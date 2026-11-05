@@ -48,7 +48,8 @@ export default async function handler(req, res) {
   res.setHeader('X-Accel-Buffering', 'no')
   const line = (o) => res.write(JSON.stringify(o) + '\n')
   try {
-    const r = await coachChat(env, text, (step) => line({ step }), media)
+    // A step that starts with \u0001 is the reply so far (U2: real streaming).
+    const r = await coachChat(env, text, (step) => (String(step).startsWith('\u0001') ? line({ delta: String(step).slice(1) }) : line({ step })), media)
     line(r)
   } catch (e) {
     console.error('coach:', e)

@@ -39,7 +39,7 @@ export type Bridge = LifeApi & {
   coach?: {
     /** Rules only (no AI): the island's command bar. */
     quick?(text: string): Promise<{ ok: boolean; reply: string } | { unknown: true }>
-    chat(text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }>
+    chat(text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }>
     undo?(at: string, index?: number): Promise<{ ok: boolean; lines: string[] }>
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>

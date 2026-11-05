@@ -87,3 +87,14 @@ describe('shorter prompts (B13–B15)', () => {
     expect(kept.some((f) => f.t.startsWith('Etica exam'))).toBe(true)
   })
 })
+
+describe('real streaming (U2)', () => {
+  it('reads the reply out of a half-written JSON answer', async () => {
+    // @ts-expect-error plain JS module without types
+    const { partialReply } = await import('../../../../api/ai.mjs')
+    expect(partialReply('{"mood":"chill","rep')).toBeNull()
+    expect(partialReply('{"reply":"Hey Vic')).toBe('Hey Vic')
+    expect(partialReply('{"reply":"Line one\\nLine \\"two\\"","mood":"x"}')).toBe('Line one\nLine "two"')
+    expect(partialReply('{"reply":"caf\\u00e9 time\\')).toBe('café time')
+  })
+})

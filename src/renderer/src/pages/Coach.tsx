@@ -16,9 +16,9 @@ import type { CoachStatus } from '../web/coachStatus'
 import type { DeskView } from '../web/benDesk'
 import { readDo } from '@core/coachButtons'
 import { BenDesk, type DeskTab } from '../BenDesk'
+import { Feedback, ReplyExtras, Rich, type Entry } from '../BenThread'
 import '../ben.css'
 
-type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string }
 type Profile = { about: string; goals: string[]; rules: string[] }
 
 const BOT_LABEL: Record<string, string> = { mega: 'Ben', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
@@ -61,6 +61,27 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [status, setStatus] = useState<CoachStatus | null>(null)
   const [photo, setPhoto] = useState<{ url: string; data: string } | null>(null)
   const [query, setQuery] = useState<string | null>(null)
+  // U1: the status cards and shortcuts fold away once you're talking; "⋯" brings them back.
+  const [extras, setExtras] = useState(false)
+  // U8: replies that came in while you were scrolled up.
+  const [unseen, setUnseen] = useState(0)
+  // U10: which search hit is shown (index into the hits).
+  const [hit, setHit] = useState(0)
+  // U16: on a phone the composer stays above the keyboard and the header shrinks while typing.
+  const [typing, setTyping] = useState(false)
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null
+    if (!vv) return
+    const on = () => document.documentElement.style.setProperty('--kb', `${Math.max(0, window.innerHeight - vv.height - vv.offsetTop)}px`)
+    vv.addEventListener('resize', on)
+    vv.addEventListener('scroll', on)
+    on()
+    return () => {
+      vv.removeEventListener('resize', on)
+      vv.removeEventListener('scroll', on)
+      document.documentElement.style.removeProperty('--kb')
+    }
+  }, [])
   const [listening, setListening] = useState(false)
   const recog = useRef<any>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -163,16 +184,32 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     window.addEventListener('life-brain-changed', onBrain)
     return () => window.removeEventListener('life-brain-changed', onBrain)
   }, [load])
+  const stuckRef = useRef(true)
+  const prevLen = useRef(0)
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    const n = log?.length ?? 0
+    const added = n - prevLen.current
+    prevLen.current = n
+    if (stuckRef.current || added <= 0) {
+      end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      setUnseen(0)
+    } else setUnseen((u) => u + added)
   }, [log?.length])
+  const toBottom = () => {
+    end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    setUnseen(0)
+  }
   // Stay at the bottom while a reply types itself out or widgets appear (unless you scrolled up).
   const streamRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = streamRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
     let stuck = true
-    const onScroll = () => (stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 140)
+    const onScroll = () => {
+      stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 140
+      stuckRef.current = stuck
+      if (stuck) setUnseen(0)
+    }
     const ro = new ResizeObserver(() => {
       if (stuck) el.scrollTop = el.scrollHeight
     })
@@ -210,6 +247,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: t, at: now, photo: pic?.url }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
     try {
       const seen: string[] = []
+      let streamed = false
       const r = await life.coach.chat(
         t,
         (st) => {
@@ -217,9 +255,14 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           seen.push(st)
           setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, steps: [...seen] } : x)))
         },
-        pic ? { mime: 'image/jpeg', data: pic.data } : undefined
+        pic ? { mime: 'image/jpeg', data: pic.data } : undefined,
+        // U2: Ben's words as he writes them.
+        (soFar) => {
+          streamed = true
+          setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, text: soFar, streamed: true } : x)))
+        }
       )
-      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, fresh: true, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
+      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, fresh: !streamed, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       // One face for Ben (K6): the header shows the mood of his latest reply.
       if (r.mood && MOOD_FACE[r.mood as Mood]) setStatus((s) => (s ? { ...s, mood: r.mood as any, face: MOOD_FACE[r.mood as Mood] } : s))
       if (r.done.length) onWallet()
@@ -266,6 +309,22 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   }
   const moveLabel: Record<string, string> = { focus: '▶ Start', running: '⏹ Stop & log', approve: '✓ Approve', plan: 'Plan it', answer: '✅ Done', ask: 'Ask' }
   const face = status?.face ?? '✦'
+  // U10: search hits (indexes in the log), newest first.
+  const hits = query?.trim() ? (log ?? []).map((m, k) => (m.text.toLowerCase().includes(query.trim().toLowerCase()) ? k : -1)).filter((k) => k >= 0).reverse() : []
+  const jump = (n: number) => {
+    if (!hits.length) return
+    const k = (n + hits.length) % hits.length
+    setHit(k)
+    document.getElementById(`cx-m${hits[k]}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  // U17: first-chat starters from your real day.
+  const starters: { title: string; sub: string; ask: string }[] = [
+    ...(status ? [{ title: status.move.title, sub: status.move.sub, ask: `${status.move.title}: help me start.` }] : []),
+    ...(status && status.plan.status === 'none' ? [{ title: 'Plan my day', sub: 'Blocks in my free time, from my calendar', ask: CARDS[1].ask }] : [CARDS[0]]),
+    CARDS[3]
+  ]
+    .filter((c, k, all) => all.findIndex((x) => x.title.toLowerCase() === c.title.toLowerCase()) === k)
+    .slice(0, 3)
   // The newest real Ben reply: its live cards stay even if a later message failed.
   const lastReply = (() => {
     for (let k = (log?.length ?? 0) - 1; k >= 0; k--) if (log![k].role === 'coach' && !log![k].pending) return k
@@ -273,7 +332,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   })()
 
   return (
-    <div className={`cx ${info ? 'info-open' : ''}`}>
+    <div className={`cx ${info ? 'info-open' : ''} ${typing ? 'typing' : ''}`}>
       <section className="cx-chat">
         <header className="cx-head">
           <button className={`cx-face mood-${status?.mood ?? 'chill'}`} onClick={() => setInfo((v) => !v)} title="Coach info" aria-label="Coach info">
@@ -322,13 +381,55 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
 
         {query != null && (
           <div className="cx-search">
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your chats with Ben…" onKeyDown={(e) => e.key === 'Escape' && setQuery(null)} />
-            <span>{query.trim() ? `${(log ?? []).filter((m) => m.text.toLowerCase().includes(query.trim().toLowerCase())).length} found` : ''}</span>
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => (setQuery(e.target.value), setHit(0))}
+              placeholder="Search your chats with Ben…"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setQuery(null)
+                if (e.key === 'Enter' || e.key === 'ArrowDown') (e.preventDefault(), jump(hit + 1))
+                if (e.key === 'ArrowUp') (e.preventDefault(), jump(hit - 1))
+              }}
+            />
+            <span>{query.trim() ? (hits.length ? `${Math.min(hit + 1, hits.length)} of ${hits.length}` : 'nothing found') : ''}</span>
+            {hits.length > 1 && (
+              <>
+                <button type="button" className="icon-btn" onClick={() => jump(hit - 1)} aria-label="Previous match">
+                  ↑
+                </button>
+                <button type="button" className="icon-btn" onClick={() => jump(hit + 1)} aria-label="Next match">
+                  ↓
+                </button>
+              </>
+            )}
           </div>
+        )}
+        {query != null && query.trim() && hits.length > 0 && (
+          <ul className="cx-hits">
+            {hits.slice(0, 30).map((k, n) => {
+              const m = log![k]
+              const t = m.text.replace(/\s+/g, ' ')
+              const at = t.toLowerCase().indexOf(query.trim().toLowerCase())
+              return (
+                <li key={k}>
+                  <button type="button" className={n === hit ? 'on' : ''} onClick={() => jump(n)}>
+                    <small>
+                      {m.role === 'me' ? 'You' : 'Ben'} · {timeOf(m.at)}
+                    </small>
+                    <span>
+                      {at > 30 ? '…' : ''}
+                      {t.slice(Math.max(0, at - 30), at + 70)}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         )}
 
         {status && query == null && (
-          <div className={`cx-pin move-${status.move.kind}`}>
+          <div className={`cx-pin move-${status.move.kind} ${log?.length ? 'slim' : ''}`}>
             <div className="cx-pin-text">
               <small>Do this now</small>
               <b>{status.move.title}</b>
@@ -343,11 +444,16 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               <button className="btn primary" disabled={busy} onClick={() => void doMove()}>
                 {moveLabel[status.move.kind]}
               </button>
+              {!!log?.length && (
+                <button className={`btn ghost small cx-more-btn ${extras ? 'on' : ''}`} onClick={() => setExtras((v) => !v)} aria-expanded={extras} title={extras ? 'Fold away' : 'Plan, promises, goals and shortcuts'}>
+                  ⋯
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        {status && query == null && (
+        {status && query == null && (!log?.length || extras) && (
           <div className="cx-strip" role="list">
             <button role="listitem" className="cx-card" onClick={() => (setTab('plan'), setInfo(true))}>
               <small>Plan</small>
@@ -395,7 +501,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           </div>
         )}
 
-        {query == null && (
+        {query == null && (!log?.length || extras) && (
           <div className="cx-deck" role="toolbar" aria-label="Ben's big moves">
             {(
               [
@@ -408,7 +514,29 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 ['month', '📖', 'My month', false]
               ] as const
             ).map(([t, icon, label, hot]) => (
-              <button key={label} className={hot ? 'hot' : ''} onClick={() => (setTab(t), setInfo(true))}>
+              <button
+                key={label}
+                className={hot ? 'hot' : ''}
+                disabled={busy}
+                onClick={() => {
+                  // U14: the big moves start a short talk in the chat; stakes and the call open the desk.
+                  const say: Record<string, string> = {
+                    'Rescue my day': 'Rescue my day: shrink the rest of today to fit what I can still do.',
+                    'Plan my week': 'Plan my week: my big 3 and blocks in my free time.',
+                    'My patterns': 'What patterns do you see in my data lately? The top 3, with numbers.',
+                    'My month': 'How was my month, honestly? Numbers first.'
+                  }
+                  if (say[label]) return void (setExtras(false), send(say[label]))
+                  if (label === 'Should I buy it?') {
+                    setExtras(false)
+                    setText('Should I buy ')
+                    setTimeout(() => (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus(), 30)
+                    return
+                  }
+                  setTab(t)
+                  setInfo(true)
+                }}
+              >
                 <span>{icon}</span>
                 {label}
                 {label === 'Stake a promise' && !!deck?.stakes.filter((x) => x.status === 'open').length && <i className="n">{deck.stakes.filter((x) => x.status === 'open').length}</i>}
@@ -418,15 +546,21 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         )}
 
         <div className="co-stream cx-stream" ref={streamRef}>
-          {log === null && <p className="hint">Loading your conversation…</p>}
+          {log === null && (
+            <div className="cx-skel" aria-label="Loading your conversation">
+              <i />
+              <i className="me" />
+              <i />
+            </div>
+          )}
           {log?.length === 0 && (
             <div className="co-hero">
               <span className="co-avatar">{face}</span>
               <h3>Talk to me like a friend.</h3>
               <p>I see your day, calendar, Todoist, sleep, training and money, and I can act: log things, plan blocks, book goals, hold you to promises.</p>
               {/* One starter, not four (V5): "Do this now" above already offers the plan. */}
-              <div className="co-cards one">
-                {CARDS.slice(0, 1).map((c) => (
+              <div className="co-cards">
+                {starters.map((c) => (
                   <button key={c.title} className="co-card" disabled={busy} onClick={() => void send(c.ask)}>
                     <b>{c.title}</b>
                     <small>{c.sub}</small>
@@ -436,15 +570,19 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             </div>
           )}
           {log?.map((m, i) => {
-            if (query?.trim() && !m.text.toLowerCase().includes(query.trim().toLowerCase())) return null
             const prev = log[i - 1]
             const day = new Date(m.at).toDateString()
             const newDay = !prev || new Date(prev.at).toDateString() !== day
             const grouped = !newDay && prev && prev.role === m.role && Date.parse(m.at) - Date.parse(prev.at) < 5 * 60000
             return (
-              <div key={i} className="cx-item">
+              <div key={i} id={`cx-m${i}`} className={`cx-item ${hits[hit] === i && query?.trim() ? 'flash' : ''}`}>
                 {newDay && <div className="cx-day">{dayLabel(m.at)}</div>}
-                <div className={`co-row ${m.role} ${grouped ? 'grouped' : ''}`}>
+                {m.role === 'coach' && m.proactive && (
+                  <div className="cx-own-label">
+                    {/^(🔔|⏰)/u.test(m.text) ? '⏰ Reminder' : /^(📅|🚶)/u.test(m.text) ? '📅 Calendar' : /^(💧|💪)/u.test(m.text) ? '💧 Check-in' : '🎯 Ben, on his own'} · {m.via === 'app' ? 'app' : 'Telegram'} {new Date(m.at).toTimeString().slice(0, 5)}
+                  </div>
+                )}
+                <div className={`co-row ${m.role} ${grouped ? 'grouped' : ''} ${m.proactive ? 'own' : ''}`}>
                   {m.role === 'coach' && (
                     <span className={`co-avatar ${m.mood && MOOD_FACE[m.mood as Mood] ? `mood mood-${m.mood}` : ''} ${grouped ? 'ghost' : ''}`} title={m.mood ? `Coach was ${m.mood}` : undefined}>
                       {(m.mood && MOOD_FACE[m.mood as Mood]) || '✦'}
@@ -459,7 +597,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                             <i />
                             <i />
                           </span>
-                          {!!m.steps?.length && (
+                          {m.streamed && m.text ? <Rich text={m.text} /> : null}
+                          {!!m.steps?.length && !m.streamed && (
                             <ul className="co-steps live">
                               {m.steps.map((st, k) => (
                                 <li key={k} className={k === m.steps!.length - 1 ? 'now' : 'ok'}>
@@ -472,13 +611,34 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                         </div>
                       ) : (
                         <>
-                          {!!m.steps?.length && <div className="co-steps-done">{m.steps.join(' · ')}</div>}
+                          {!!m.steps?.length && (
+                            <details className="co-steps-pill">
+                              <summary>
+                                ✓ {m.steps.length} step{m.steps.length === 1 ? '' : 's'}
+                              </summary>
+                              <ul>
+                                {m.steps.map((st, k) => (
+                                  <li key={k}>{st}</li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
                           {m.photo && <img className="cx-photo" src={m.photo} alt="Your photo" />}
                           {m.role === 'coach' ? <Rich text={m.text} reveal={!!m.fresh} highlight={query ?? ''} /> : <Rich text={m.text} highlight={query ?? ''} />}
                         </>
                       )}
                       {!!m.done?.length && (
-                        <ul className="cx-actions">
+                        <ul className="cx-actions cx-receipt">
+                          {m.done.length > 1 && (m.undo ?? []).filter((op, k) => op && !m.undone?.[k]).length > 1 && (
+                            <li className="cx-receipt-head">
+                              <span>
+                                {m.done.length} things done
+                              </span>
+                              <button className="cx-undo" onClick={() => void undoLine(m)} title="Take all of it back">
+                                ↩ Undo all
+                              </button>
+                            </li>
+                          )}
                           {m.done.map((d, k) => {
                             const can = !!m.undo?.[k] && !m.undone?.[k]
                             return (
@@ -496,7 +656,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                         </ul>
                       )}
                       {!m.pending && (!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
-                      {!m.pending && m.role === 'coach' && life.coach?.feedback && <Feedback m={m} />}
+                      {!m.pending && m.role === 'coach' && life.coach?.feedback && <Feedback m={m} latest={i === lastReply} />}
                       {m.failed && (
                         <span className="cx-failed" title={m.failed}>
                           Not sent ·{' '}
@@ -527,9 +687,14 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           })}
           <div ref={end} />
         </div>
-        {!!log?.length && (
+        {unseen > 0 && (
+          <button className="cx-newbtn" onClick={toBottom}>
+            ↓ {unseen} new
+          </button>
+        )}
+        {!!log?.length && !busy && (
           <div className="co-quick cx-quick">
-            {([...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)?.chips?.length ? [...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)!.chips! : QUICK).map((q) => (
+            {([...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)?.chips?.length ? [...(log ?? [])].reverse().find((x) => x.role === 'coach' && !x.pending)!.chips! : QUICK).slice(0, 3).map((q) => (
               <button key={q} className="wp-chip" disabled={busy} onClick={() => void send(q)}>
                 {q}
               </button>
@@ -564,6 +729,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             }}
             placeholder={listening ? 'Listening…' : 'Message Ben…'}
             rows={1}
+            onFocus={() => setTyping(true)}
+            onBlur={() => setTyping(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -801,193 +968,5 @@ function RhythmSettings() {
         </div>
       )}
     </section>
-  )
-}
-
-/** Coach text with numbers in bold (and search hits marked); a new reply types itself out. */
-function Rich({ text, reveal = false, highlight = '' }: { text: string; reveal?: boolean; highlight?: string }) {
-  const [n, setN] = useState(reveal ? 0 : text.length)
-  useEffect(() => {
-    if (!reveal || typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setN(text.length)
-    setN(0)
-    const step = Math.max(2, Math.ceil(text.length / 60))
-    const t = setInterval(() => setN((x) => (x + step >= text.length ? (clearInterval(t), text.length) : x + step)), 16)
-    return () => clearInterval(t)
-  }, [text, reveal])
-  const shown = text.slice(0, n)
-  const h = highlight.trim().toLowerCase()
-  // Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
-  const parts = shown.split(/(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu)
-  return (
-    <span className="cx-rich">
-      {parts.map((p, i) => {
-        const hit = h && p.toLowerCase().includes(h)
-        if (i % 2 === 1) return <b key={i} className={hit ? 'hit' : ''}>{p}</b>
-        if (!hit) return p
-        const k = p.toLowerCase().indexOf(h)
-        return (
-          <span key={i}>
-            {p.slice(0, k)}
-            <mark>{p.slice(k, k + h.length)}</mark>
-            {p.slice(k + h.length)}
-          </span>
-        )
-      })}
-      {n < text.length && <i className="cx-caret" />}
-    </span>
-  )
-}
-
-/** Buttons and live mini-widgets under a coach reply (interactive replies). */
-function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: { m: Entry; status: CoachStatus | null; latest: boolean; busy: boolean; onSay: (t: string) => void; onOpen: (tab: 'plan' | 'goals' | 'score' | 'about') => void; onDone: () => void }) {
-  const act = useAction()
-  const [used, setUsed] = useState<Record<number, boolean>>({})
-  const run = async (k: number, b: { label: string; do: string }) => {
-    const d = readDo(b.do)
-    if (!d) return
-    let ok: unknown = true
-    if (d.k === 'focus') ok = await act(() => life.focus.start(d.subject, d.minutes, null), `Focus started: ${d.subject} · ${d.minutes} min`)
-    else if (d.k === 'approve') ok = await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')
-    else if (d.k === 'plan') ok = await act(() => life.coach!.rhythm!('propose'), "Today's plan is ready (Plan tab)")
-    else if (d.k === 'book') {
-      const g = status?.goals.find((x) => x.title.toLowerCase().includes(d.goal.toLowerCase()) || d.goal.toLowerCase().includes(x.title.toLowerCase()))
-      const r = await act(() => life.coach!.rhythm!('book', g ? String(g.id) : undefined))
-      ok = r
-      if (r?.lines?.length) await act(async () => r, r.lines.join(' · '))
-    } else if (d.k === 'say') onSay(d.text)
-    else if (d.k === 'workout' || d.k === 'water') window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'body' }))
-    else onOpen(d.tab)
-    if (ok && d.k !== 'open' && d.k !== 'workout' && d.k !== 'water') setUsed((u) => ({ ...u, [k]: true }))
-    if (ok) onDone()
-  }
-  const tick = async (i: number) => {
-    if (await act(() => life.focus.togglePlan(i))) onDone()
-  }
-  return (
-    <div className="cx-extras">
-      {status &&
-        m.show?.map((w) => {
-          // Live widgets show today's numbers; on old messages they'd be misleading, so only the latest shows them.
-          if (!latest) return null
-          if (w === 'focus-week') {
-            const max = Math.max(30, ...status.week.map((d) => d.min))
-            return (
-              <div key={w} className="cx-w cx-w-week">
-                <small>Focus · last 7 days · {(status.week.reduce((t, d) => t + d.min, 0) / 60).toFixed(1)}h</small>
-                <div className="cx-bars">
-                  {status.week.map((d) => (
-                    <span key={d.day} title={`${d.day}: ${d.min} min`}>
-                      <i style={{ height: `${Math.max(3, (d.min / max) * 100)}%` }} className={d.min >= 50 ? 'ok' : ''} />
-                      <em>{new Date(`${d.day}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'narrow', timeZone: 'UTC' })}</em>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )
-          }
-          if (w === 'goals')
-            return (
-              <div key={w} className="cx-w">
-                <small>Goals</small>
-                {status.goals.length ? (
-                  status.goals.map((g) => (
-                    <div key={g.id} className="cx-w-goal">
-                      <span>{g.title}</span>
-                      <div className="gp-bar">
-                        <i style={{ width: `${g.pct}%` }} />
-                      </div>
-                      <em className={g.status === 'behind' ? 'bad' : ''}>
-                        {g.pct}% · {g.perDayMin} min/day
-                      </em>
-                    </div>
-                  ))
-                ) : (
-                  <span className="hint small">No goals yet.</span>
-                )}
-              </div>
-            )
-          if (w === 'water' && status.today.waterTarget)
-            return (
-              <div key={w} className="cx-w">
-                <small>
-                  💧 Water · {(status.today.waterMl / 1000).toFixed(1)} of {(status.today.waterTarget / 1000).toFixed(1)} L
-                </small>
-                <div className="gp-bar water">
-                  <i style={{ width: `${Math.min(100, (status.today.waterMl / status.today.waterTarget) * 100)}%` }} />
-                </div>
-              </div>
-            )
-          if (w === 'mustdos')
-            return (
-              <div key={w} className="cx-w">
-                <small>Must-dos</small>
-                {status.mustdos.length ? (
-                  status.mustdos.map((x) => (
-                    <label key={x.i} className={`cx-w-check ${x.done ? 'done' : ''}`}>
-                      <input type="checkbox" checked={x.done} onChange={() => void tick(x.i)} /> {x.text}
-                    </label>
-                  ))
-                ) : (
-                  <span className="hint small">No must-dos today.</span>
-                )}
-              </div>
-            )
-          // A plan written in the reply and "Not made yet" under it contradict each other (K7).
-          if (w === 'plan' && status.plan.status === 'none' && /\b\d{1,2}:\d{2}\b/.test(m.text)) return null
-          if (w === 'plan')
-            return (
-              <button key={w} className="cx-w cx-w-link" onClick={() => onOpen('plan')}>
-                <small>Today's plan</small>
-                <b>{status.plan.status === 'none' ? 'No plan yet · tap to make one' : status.plan.status === 'proposed' ? 'Waiting for your approval' : 'Approved'}</b>
-                <span>{status.plan.headline}</span>
-              </button>
-            )
-          if (w === 'promises')
-            return (
-              <div key={w} className="cx-w">
-                <small>Promises · 7 days</small>
-                <b>
-                  {status.promises.kept} kept · {status.promises.missed} missed
-                </b>
-              </div>
-            )
-          return null
-        })}
-      {!!m.buttons?.length && (
-        <div className="cx-btns">
-          {m.buttons.map((b, k) => (
-            <button key={k} className={`cx-btn ${used[k] ? 'used' : ''}`} disabled={busy || used[k]} onClick={() => void run(k, b)}>
-              {used[k] ? `✓ ${b.label}` : b.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** 👍 👎 📏 ❌ under Ben's replies: he learns what you like. */
-function Feedback({ m }: { m: Entry }) {
-  const [sent, setSent] = useState<string | null>(null)
-  const give = async (kind: 'up' | 'down' | 'long' | 'wrong') => {
-    setSent(kind)
-    await life.coach?.feedback?.(m.at, kind).catch(() => setSent(null))
-  }
-  if (sent) return <span className="cx-fb done">{sent === 'up' ? '👍 thanks' : sent === 'long' ? '📏 noted: shorter' : sent === 'wrong' ? '❌ noted: tell me what' : '👎 noted'}</span>
-  return (
-    <span className="cx-fb" aria-label="Rate this reply">
-      <button onClick={() => void give('up')} title="Good reply">
-        👍
-      </button>
-      <button onClick={() => void give('down')} title="Not helpful">
-        👎
-      </button>
-      <button onClick={() => void give('long')} title="Too long">
-        📏
-      </button>
-      <button onClick={() => void give('wrong')} title="Wrong">
-        ❌
-      </button>
-    </span>
   )
 }

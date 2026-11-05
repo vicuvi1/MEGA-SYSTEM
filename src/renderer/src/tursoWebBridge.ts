@@ -556,7 +556,7 @@ export function createTursoWebBridge(): Bridge {
     coach: {
       // The answer streams: live steps ("Reading your calendar…"), then the reply.
       quick: async (text: string) => (await botsP).quick(text),
-      chat: async (text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }) => {
+      chat: async (text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void) => {
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, ...(media ? { media } : {}) }) })
         if (!r.ok || !r.body) {
           const j = await r.json().catch(() => ({}))
@@ -577,6 +577,7 @@ export function createTursoWebBridge(): Bridge {
             try {
               const o = JSON.parse(raw)
               if (typeof o.step === 'string') onStep?.(o.step)
+              else if (typeof o.delta === 'string') onDelta?.(o.delta)
               else last = o
             } catch {
               /* a broken line: skip */

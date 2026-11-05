@@ -240,14 +240,97 @@ const messagesFor = (prompt) => {
   return system ? [{ role: 'system', content: system }, { role: 'user', content: user }] : [{ role: 'user', content: user }]
 }
 
+/**
+ * U2: the reply as it is being written. Ben answers in JSON, so this pulls the
+ * "reply" string out of the partial JSON and un-escapes it (null until it starts).
+ */
+export function partialReply(raw) {
+  const m = /"reply"\s*:\s*"/.exec(raw)
+  if (!m) return null
+  let out = ''
+  for (let i = m.index + m[0].length; i < raw.length; i++) {
+    const c = raw[i]
+    if (c === '\\') {
+      const n = raw[i + 1]
+      if (n === undefined) break
+      if (n === 'u') {
+        const hex = raw.slice(i + 2, i + 6)
+        if (hex.length < 4) break
+        out += String.fromCharCode(parseInt(hex, 16))
+        i += 5
+        continue
+      }
+      out += n === 'n' ? '\n' : n === 't' ? '\t' : n
+      i++
+      continue
+    }
+    if (c === '"') break
+    out += c
+  }
+  return out
+}
+
+async function streamOpenRouter(r, onDelta) {
+  const reader = r.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  let text = ''
+  let usage = {}
+  let model = null
+  let sent = ''
+  let at = 0
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (value) buf += dec.decode(value, { stream: true })
+    let nl
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim()
+      buf = buf.slice(nl + 1)
+      if (!line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (data === '[DONE]') continue
+      try {
+        const j = JSON.parse(data)
+        model = j.model || model
+        if (j.usage) usage = j.usage
+        const d = j.choices?.[0]?.delta?.content
+        if (d) text += d
+      } catch {
+        /* a keep-alive or a broken line */
+      }
+    }
+    // About 12 updates a second at most.
+    const part = partialReply(text)
+    if (part != null && part !== sent && Date.now() - at > 80) {
+      sent = part
+      at = Date.now()
+      try {
+        onDelta(part)
+      } catch {
+        /* the listener's problem */
+      }
+    }
+    if (done) break
+  }
+  return { text, usage, model }
+}
+
 async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effort = 'low') {
+  const streaming = typeof opts.onDelta === 'function'
   const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-system-ten.vercel.app', 'X-Title': 'Life System' },
     // opts.think: big asks (plans, reviews, reshuffles) get the model's reasoning.
-    body: JSON.stringify({ model, messages: messagesFor(prompt), ...(/^deepseek\//.test(model) ? { provider: { order: ['deepseek'], allow_fallbacks: true } } : {}), temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
+    body: JSON.stringify({ model, messages: messagesFor(prompt), ...(/^deepseek\//.test(model) ? { provider: { order: ['deepseek'], allow_fallbacks: true } } : {}), temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(streaming ? { stream: true } : {}), ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
     signal: AbortSignal.timeout(timeout)
   })
+  if (streaming && r.ok && r.body) {
+    const s = await streamOpenRouter(r, opts.onDelta)
+    const u = s.usage ?? {}
+    await recordUsage({ model: s.model || model, kind: opts.kind || (opts.think ? 'deep' : 'chat'), prompt: u.prompt_tokens, completion: u.completion_tokens, cost: typeof u.cost === 'number' ? u.cost : null }, process.env, fetchImpl)
+    if (!s.text) throw new Error('OpenRouter gave an empty answer')
+    return { text: s.text, model: s.model || model }
+  }
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(`OpenRouter ${r.status}: ${j?.error?.message || 'request failed'}`)
   const text = j?.choices?.[0]?.message?.content

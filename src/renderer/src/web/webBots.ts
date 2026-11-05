@@ -207,7 +207,7 @@ export interface CalendarLike {
 }
 
 /** `kind` labels the call for the usage page (B20): chat, lookup, retry, repair, plan, review, weekly, letter, story, nudge, area. */
-export type AskModel = (prompt: string, opts?: { json?: boolean; think?: boolean; strong?: boolean; media?: { mime: string; data: string }[]; kind?: string }) => Promise<string>
+export type AskModel = (prompt: string, opts?: { json?: boolean; think?: boolean; strong?: boolean; media?: { mime: string; data: string }[]; kind?: string; onDelta?: (replySoFar: string) => void }) => Promise<string>
 
 /** What the bot needs from Todoist (the server calls it directly, the page through /api/todoist). */
 export interface TodoistLike {
@@ -1607,7 +1607,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // gets what's left of a 38 s budget, so the reply is never cut off (T6).
     const deadline = Date.now() + 38_000
     const ask = (found?: string, extraNote = '', kind = media ? 'media' : big ? 'chat-deep' : 'chat') =>
-      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind }), Math.max(4_000, deadline - Date.now()))
+      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind, ...(onStep && (kind === 'chat' || kind === 'chat-deep' || kind === 'lookup') ? { onDelta: (t: string) => step(`\u0001${t}`) } : {}) }), Math.max(4_000, deadline - Date.now()))
     let out: BrainOut
     try {
       if (preset) out = { reply: preset.reply, actions: [], remember: [], chips: preset.chips, buttons: preset.buttons }
