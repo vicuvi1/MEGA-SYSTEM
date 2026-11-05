@@ -37,6 +37,7 @@ import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
 import { askedFor, confirmButton,
   loggedInText, riskOf } from '@core/benSafety'
+import { notMoney } from '@core/moneyGuess'
 import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
 import { moodFace } from '@core/benKnows'
@@ -515,7 +516,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const viaFocus = runFocus(s, text)
     if (viaFocus) return viaFocus
     const parsed = parseTelegramText(text)
-    if ((parsed.type === 'expense' || parsed.type === 'unknown') && !text.startsWith('/')) {
+    // "exam on 12 december", "woke up at 7 am": a number, but not money (X2).
+    if ((parsed.type === 'expense' || parsed.type === 'unknown') && !text.startsWith('/') && !notMoney(text)) {
       const money = runMoney(s, text, key)
       if (money) return money
     }
