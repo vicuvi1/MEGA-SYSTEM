@@ -222,9 +222,11 @@ export function DayFlow(props: Props) {
 
   const week = weekPlan ? activePlan(weekPlan, today) : null
   const reviewed = !!st && (!!st.plan.review || st.plan.reasons.length > 0)
-  // Tasks come first: the morning plan and the evening shut-down open only when
-  // you ask (Plan my day / Shut down here, Close my day in the top row).
-  const mode: Mode = forced !== undefined ? forced : null
+  // The morning plan opens by itself before noon while today has no must-dos
+  // and you haven't closed it today (F1); the evening shut-down opens when you
+  // ask (Shut down here, Close my day in the top row).
+  const auto = st ? autoMode(appHour(), st.plan.items.length > 0, reviewed, closed, today) : null
+  const mode: Mode = forced !== undefined ? forced : auto === 'morning' ? 'morning' : null
   const closeMode = () => {
     storeSet('ls.modeClosed', today)
     setClosed(today)
