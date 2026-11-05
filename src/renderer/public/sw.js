@@ -121,7 +121,12 @@ async function page(e) {
     }
   }
   try {
-    const res = await fetch(e.request)
+    // A weak connection: after 6 s the saved copy opens instead of a blank
+    // screen (Y11). The network answer still updates the copy if it comes.
+    const res = await Promise.race([
+      fetch(e.request),
+      new Promise((_, no) => setTimeout(() => no(new Error('slow')), 6000))
+    ])
     if (res.ok) {
       const before = await cache.match('/')
       const html = await res.clone().text()
@@ -136,7 +141,10 @@ async function page(e) {
     }
     return res
   } catch {
-    return (await cache.match('/')) || Response.error()
+    const saved = await cache.match('/')
+    if (saved) return saved
+    // Nothing saved yet: wait for the network after all.
+    return fetch(e.request).catch(() => Response.error())
   }
 }
 
