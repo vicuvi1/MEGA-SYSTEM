@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { dayKey } from '@core/dates'
 import { campaignMap, disciplineCharts, URGE_SECONDS } from '@core/discipline'
 import { TRIGGERS } from '@core/urgePatterns'
@@ -13,6 +13,7 @@ import { Coins, useAction } from '../ui'
 import { mmss } from './planUi'
 import { useTicker } from '../useTicker'
 import { pickUrgeAction } from '@core/urgeAction'
+import { barFill } from '../motionKit'
 
 interface Props {
   state: DisciplineState
@@ -107,8 +108,8 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
           <b>{state.rank}</b>
           {state.nextRank && (
             <>
-              <div className="bar">
-                <i style={{ width: `${nextPct * 100}%` }} />
+              <div className="bar pbar">
+                <i style={barFill(nextPct)} />
               </div>
               <span className="hint">
                 {state.nextRank.days - state.current} days to {state.nextRank.name}
@@ -289,13 +290,13 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
 
       <AnimatePresence>
         {celebrate && (
-          <motion.div className="celebrate" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setCelebrate(null)} onAnimationComplete={() => setTimeout(() => setCelebrate(null), 2200)}>
-            <motion.div className="celebrate-card" initial={{ scale: 0.7 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 16 }}>
+          <m.div className="celebrate" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setCelebrate(null)} onAnimationComplete={() => setTimeout(() => setCelebrate(null), 2200)}>
+            <m.div className="celebrate-card" initial={{ scale: 0.7 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 16 }}>
               <Icon name="trophy" size={34} />
               <h2>{celebrate}</h2>
               <p>Milestone unlocked</p>
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>
@@ -439,16 +440,16 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
     </div>
   )
   return (
-    <motion.div className="urge" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <m.div className="urge" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="urge-inner">
         <span className="label">Urge crusher</span>
-        <motion.div
+        <m.div
           className="breath"
           animate={{ scale: phase === 'Breathe in' ? 1.25 : phase === 'Breathe out' ? 0.8 : phase === 'Hold' && Math.floor(elapsed / 4000) % 4 === 1 ? 1.25 : 0.8 }}
           transition={{ duration: 4, ease: 'easeInOut' }}
         >
           <span>{phase}</span>
-        </motion.div>
+        </m.div>
         <div className="urge-time">{mmss(left)}</div>
         {before == null ? (
           <Scale value={before} onPick={setBefore} label="How strong is it? (1–10)" />
@@ -496,7 +497,7 @@ function UrgeCrusher({ startedAt, onStart, onCancel, onFinish }: { startedAt: st
           </button>
         </div>
       </div>
-    </motion.div>
+    </m.div>
   )
 }
 

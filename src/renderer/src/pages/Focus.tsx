@@ -7,6 +7,7 @@ import type { FocusState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
+import { barFill } from '../motionKit'
 
 export function useFocus(): [FocusState | null, () => void, (s: FocusState) => void] {
   const [st, setSt] = useState<FocusState | null>(null)
@@ -40,8 +41,8 @@ function GoalRow({ g, onArchive }: { g: GoalProgress; onArchive: () => void }) {
           ✕
         </button>
       </div>
-      <div className="bar">
-        <i style={{ width: `${pct}%` }} />
+      <div className="bar pbar">
+        <i style={barFill(pct / 100)} />
       </div>
       <span className="hint">
         {hm(g.doneMin)} of {g.hours}h · needs about <b>{g.perWeekH}h a week</b> from now

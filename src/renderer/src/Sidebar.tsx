@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { Icon, Logo } from './Icon'
 import { MODULES, SYSTEM_PAGES, type ModuleDef, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
@@ -95,7 +95,7 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, balance, na
                     onMouseEnter={(e) => showTip(`${m.label}${soon ? ' · soon' : ''}  Alt+${n}`, e.currentTarget)}
                     onMouseLeave={() => setTip(null)}
                   >
-                    {on && <motion.span layoutId="sb-active" className="sb-active" transition={{ type: 'spring', stiffness: 520, damping: 40 }} />}
+                    {on && <span className="sb-active" />}
                     <span className="sb-tile">
                       <Icon name={m.icon} size={17} duo={on} />
                       {b && <i className={`sb-dot ${b.dot ?? ''}`} />}
@@ -157,9 +157,9 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges, balance, na
 
       <AnimatePresence>
         {tip && !open && (
-          <motion.div className="sb-tip" style={{ top: tip.y }} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
+          <m.div className="sb-tip" style={{ top: tip.y }} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
             {tip.label}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

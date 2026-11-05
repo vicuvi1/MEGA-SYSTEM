@@ -12,6 +12,7 @@ import type { DeskView } from './web/benDesk'
 import { MOOD_FACES } from '@core/benKnows'
 import './coachFeed.css'
 import { tidyText, type FeedItem, type NudgeInfo, type NudgeKind } from '@core/chatFeed'
+import { barFill } from './motionKit'
 
 const hm = (iso: string | number) => new Date(iso).toTimeString().slice(0, 5)
 
@@ -172,8 +173,8 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
     return (
       <Card icon="💧" title="Water" note={remindedNote(repeats)}>
         <div className="cf-water">
-          <div className="cf-bar">
-            <i style={{ width: `${Math.min(100, (ml / target) * 100)}%` }} />
+          <div className="cf-bar pbar">
+            <i style={barFill(ml / target)} />
           </div>
           <span>
             <b>{(ml / 1000).toFixed(1)}</b> of {(target / 1000).toFixed(1)} L

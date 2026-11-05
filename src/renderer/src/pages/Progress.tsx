@@ -15,6 +15,7 @@ import { PageSkeleton } from '../blocks'
 import { useLive } from '../live'
 import { GrowthSections } from './Growth'
 import { MonthReview, MoodLinksCard, PlannedVsReal, YearRecapView, saveTab, savedTab, type InsightsTab } from './Reviews'
+import { barFill } from '../motionKit'
 export { YearOffer, openYear } from './Reviews'
 
 export function useProgress(): ProgressReport | null | undefined {
@@ -167,8 +168,8 @@ function MetricCard({ m, index, onGo }: { m: Metric; index: number; onGo?: (p: P
       <div className="pg-value">{m.fmt(Math.round(v))}</div>
       {pct !== null ? (
         <div className="pg-goal">
-          <div className="pg-goal-bar">
-            <i style={{ width: shown ? `${pct}%` : '0%' }} className={pct >= 100 ? 'full' : ''} />
+          <div className="pg-goal-bar pbar">
+            <i style={barFill(shown ? pct / 100 : 0)} className={pct >= 100 ? 'full' : ''} />
           </div>
           <span>
             {pct >= 100 ? 'Goal reached 🎉' : `${Math.round(pct)}% of a good week`} · goal {m.targetText}

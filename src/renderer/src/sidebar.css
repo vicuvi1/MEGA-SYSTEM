@@ -11,7 +11,8 @@
   border-radius: 20px; border: 1px solid rgb(var(--ink) / 0.06);
   background: linear-gradient(180deg, rgba(23, 27, 38, 0.96), rgba(13, 15, 21, 0.96));
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgb(var(--ink) / 0.05);
-  transition: width 0.22s cubic-bezier(0.3, 1.1, 0.5, 1), box-shadow 0.2s, padding 0.2s;
+  transition: box-shadow 0.2s;
+  animation: sb-open 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   scrollbar-width: none;
 }
 .sb::-webkit-scrollbar { display: none; }
@@ -127,7 +128,18 @@
 :root[data-theme='light'] .sb-tip { background: #ffffff; border-color: #d9dde5; box-shadow: 0 10px 30px rgba(20, 25, 34, 0.15); }
 :root[data-theme='light'] .side-cell { background: var(--bg); }
 
-@media (prefers-reduced-motion: reduce) { .sb, .sb-tile, .sb-toggle span { transition: none; } }
+/* Changing state swaps the animation name, so each change plays once: the
+   panel slides a few px and the labels fade in (transform + opacity only). */
+.sb.collapsed { animation-name: sb-rail; }
+.sb.peek { animation-name: sb-peek; }
+@keyframes sb-open { from { transform: translateX(-10px); opacity: 0.6; } }
+@keyframes sb-rail { from { transform: translateX(8px); opacity: 0.7; } }
+@keyframes sb-peek { from { transform: translateX(-14px); opacity: 0.4; } }
+.sb:not(.collapsed) .sb-label, .sb.peek .sb-label { animation: sb-label 0.2s ease 0.06s both; }
+@keyframes sb-label { from { opacity: 0; transform: translateX(-4px); } }
+.sb-active { animation: sb-active 0.18s ease both; }
+@keyframes sb-active { from { opacity: 0; transform: scale(0.96); } }
+@media (prefers-reduced-motion: reduce) { .sb, .sb-tile, .sb-toggle span { transition: none; } .sb, .sb-label, .sb-active { animation: none !important; } }
 
 /* Brand mark = the app icon: dark tile, lime ring and spark. */
 .sb-mark {

@@ -72,8 +72,9 @@ if (firstCopy) void app.whenReady().then(async () => {
   const win = new BrowserWindow({ width: 1440, height: 950, minWidth: 850, minHeight: 600, show: !hidden,
     title: 'Life System', backgroundColor: '#07090e', autoHideMenuBar: true,
     titleBarStyle: 'hidden', titleBarOverlay: { color: '#07090e', symbolColor: '#c9ced6', height: 36 },
-    // IS17: not slowed down while it sits in the tray, so the island keeps fresh data.
-    webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false }
+    // AF1: slowed down while it sits in the tray (saves battery). The island
+    // stays fresh anyway: the clock below asks this window for a snapshot.
+    webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: true }
   })
   // Only this bundled window can use the fixed, narrow IPC methods.
   const handle = (name: string, fn: (...args: any[]) => unknown) => ipcMain.handle(name, (event, ...args) => {
@@ -212,6 +213,14 @@ if (firstCopy) void app.whenReady().then(async () => {
     pc: () => ({ activeApp: !!pcRef.current?.prefs().activeApp, titles: !!pcRef.current?.prefs().titles }),
     onApp: (proc, title, seconds) => pcRef.current?.sample(proc, title, seconds)
   })
+  // AF1: a light clock for the island. While the app window is hidden its own
+  // timers are slowed down, but a message from here still runs at once, so
+  // every 15 s it sends the island a fresh snapshot (only if the island is on).
+  const islandClock = setInterval(() => {
+    if (win.isDestroyed() || !island.enabled()) return
+    win.webContents.send('island:tick')
+  }, 15_000)
+  win.on('closed', () => clearInterval(islandClock))
   const pc = await createPc({
     dir,
     win,

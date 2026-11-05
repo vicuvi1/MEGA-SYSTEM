@@ -7,6 +7,7 @@ import { life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
 import { soundCoin, soundSuccess } from './sound'
 import type { PageId } from './modules'
+import { barFill } from './motionKit'
 
 interface Props {
   body: BodyState | null
@@ -229,8 +230,8 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
                   {obj.current}/{obj.target} {obj.unit}
                 </span>
               </div>
-              <div className="reps-bar">
-                <i style={{ width: `${pct}%` }} />
+              <div className="reps-bar pbar">
+                <i style={barFill(pct / 100)} />
               </div>
               {!isDone && (
                 <div className="reps-btns">

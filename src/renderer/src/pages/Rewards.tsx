@@ -15,6 +15,7 @@ import { POINT_RULES } from '../../../main/points'
 import { STREAK_LABEL, type StreakId, type Unlock } from '@core/unlocks'
 import type { UnlocksView } from '../web/lifeExtras'
 import '../lifeExtras.css'
+import { barFill } from '../motionKit'
 
 /** Reward locks: unlock with a goal or a streak (FT21). */
 function useUnlocks(): [UnlocksView | null, () => void] {
@@ -198,8 +199,8 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
                   </p>
                 )}
                 {locking === r.id && <LockEditor rewardId={r.id} view={locks} onDone={() => { setLocking(null); reloadLocks() }} />}
-                <div className="rw-bar">
-                  <i style={{ width: `${pct}%` }} />
+                <div className="rw-bar pbar">
+                  <i style={barFill(pct / 100)} />
                 </div>
                 <div className="rw-foot">
                   <span className="hint">

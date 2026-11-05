@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { TodoTask } from '@core/todoist'
 import { useTicker } from '../useTicker'
 import { clock } from './util'
+import { barFill } from '../motionKit'
 
 /** A quick "+ Add to University" under each area (due today unless you say when). */
 export function AreaAdd({ name, onAdd }: { name: string; onAdd: (v: string) => Promise<boolean> }) {
@@ -58,8 +59,8 @@ export function RunningClock({ run, part }: { run: { startedAt: string; planned:
   if (part === 'clock') return <span className="now-clock">{clock(elapsed)}</span>
   if (part === 'bar')
     return (
-      <div className="now-bar">
-        <i style={{ width: `${Math.min(100, (elapsed / (run.planned * 60000)) * 100)}%` }} />
+      <div className="now-bar pbar">
+        <i style={barFill(elapsed / (run.planned * 60000))} />
       </div>
     )
   return <>{leftMs > 0 ? `${clock(leftMs)} left of ${run.planned} min` : `${run.planned} min done — stop to log it`}</>

@@ -29,7 +29,7 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 
 /* ---- the shape ---- */
 .di-shape {
-  position: relative; overflow: hidden; background: var(--bg); will-change: width, height;
+  position: relative; overflow: hidden; background: var(--bg);
   box-shadow: 0 10px 32px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 20px -6px var(--glow);
   transition: box-shadow 0.4s;
 }
@@ -41,7 +41,7 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di.dropping .di-shape { box-shadow: 0 0 0 2px var(--lime), 0 0 28px -4px var(--lime); }
 .di.look-glass { --bg: rgb(24 27 36 / calc(var(--di-alpha, 1) * 0.78)); --line: rgb(var(--ink) / 0.16); }
 /* Glass blur only while still (redrawing it on every animation frame is what stutters). */
-.di.look-glass:not(.moving) .di-shape { backdrop-filter: blur(18px) saturate(1.4); }
+.di.look-glass:not(.moving) .di-shape { backdrop-filter: blur(12px); }
 .di.look-mood .di-shape { box-shadow: 0 18px 60px rgb(0 0 0 / 0.55), 0 0 0 1.5px var(--glow), 0 0 46px -6px var(--glow); }
 .di.look-mood .di-face { box-shadow: 0 0 0 2px var(--glow), 0 0 22px -2px var(--glow); }
 .di.tod-morning .di-v-expanded { background-image: radial-gradient(circle at 15% 0%, rgb(255 190 90 / 0.13), transparent 55%); }
@@ -154,7 +154,8 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-block small { color: var(--sub); }
 .di-block.muted b { color: rgb(var(--ink) / 0.8); font-weight: 500; }
 .di-bar { height: 4px; border-radius: 4px; background: rgb(var(--ink) / 0.1); overflow: hidden; margin-top: 4px; }
-.di-bar i { display: block; height: 100%; border-radius: 4px; background: var(--lime); transition: width 0.6s; }
+.di-bar i { display: block; height: 100%; border-radius: 4px; background: var(--lime); }
+.di-bar.pbar i { width: 100%; transform: translateX(calc((var(--p, 0) - 1) * 100%)); transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
 .di-bar.water i { background: linear-gradient(90deg, #47b5ff, #7fd4ff); }
 
 .di-must { display: grid; gap: 2px; }
@@ -202,10 +203,11 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 @keyframes di-twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.15); } }
 .di-sun { font-size: 28px; animation: di-spin 14s linear infinite; }
 @keyframes di-spin { to { transform: rotate(360deg); } }
-.di-sleep.going { animation: di-night 2.4s ease forwards; }
 .di-sleep.going .di-moon { animation: di-moonrise 2.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
-@keyframes di-night { to { background: linear-gradient(135deg, rgb(10 10 40 / 0.95), rgb(0 0 10 / 1)); } }
-@keyframes di-moonrise { 0% { transform: none; } 40% { transform: translateY(-6px) scale(1.25); } 100% { transform: translateY(-3px) scale(1.1); filter: drop-shadow(0 0 10px #fff3a0); } }
+.di-sleep.going::after { content: ''; position: absolute; inset: 0; z-index: 0; background: linear-gradient(135deg, rgb(10 10 40 / 0.95), rgb(0 0 10 / 1)); opacity: 0; animation: di-night 2.4s ease forwards; pointer-events: none; }
+.di-sleep.going > * { position: relative; z-index: 1; }
+@keyframes di-night { to { opacity: 1; } }
+@keyframes di-moonrise { 0% { transform: none; } 40% { transform: translateY(-6px) scale(1.25); } 100% { transform: translateY(-3px) scale(1.1); } }
 .di-moon-sm { animation: di-float 3.6s ease-in-out infinite; display: inline-block; }
 
 /* Points: a gold bar to the reward you're working toward. */
@@ -252,8 +254,9 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-task span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .di-task small { color: var(--sub); }
 .di-mic { border: 0; width: 34px; height: 34px; border-radius: 50%; background: rgb(var(--ink) / 0.08); color: inherit; font-size: 14px; cursor: pointer; flex: none; }
-.di-mic.on { background: var(--red); color: #fff; animation: di-rec 1s ease-in-out infinite; }
-@keyframes di-rec { 50% { box-shadow: 0 0 0 6px rgb(255 90 95 / 0.25); } }
+.di-mic.on { position: relative; background: var(--red); color: #fff; }
+.di-mic.on::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: rgb(255 90 95 / 0.35); animation: di-rec 1s ease-out infinite; pointer-events: none; }
+@keyframes di-rec { from { transform: scale(1); opacity: 1; } to { transform: scale(1.35); opacity: 0; } }
 .di-alert.kind-clip { background: linear-gradient(135deg, rgb(var(--ink) / 0.08), rgb(0 0 0 / 0)); }
 /* A reward unlocking: confetti bursts out of the island. */
 .di-confetti { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 5; }
@@ -276,7 +279,7 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 
 /* Several activities (P6): dots under the pill text; the next one starting soon goes amber (P7). */
 .di-dots { position: absolute; left: 50%; bottom: 3px; translate: -50% 0; display: flex; gap: 3px; }
-.di-dots i { width: 4px; height: 4px; border-radius: 50%; background: rgb(var(--ink) / 0.25); cursor: pointer; transition: width 0.25s, background 0.25s; }
+.di-dots i { width: 4px; height: 4px; border-radius: 50%; background: rgb(var(--ink) / 0.25); cursor: pointer; transition: background-color 0.25s; }
 .di-dots i.on { width: 10px; border-radius: 3px; background: rgb(var(--ink) / 0.75); }
 .di-pill-time.soon { color: #ffb547 !important; animation: di-soon 1.6s ease-in-out infinite; }
 @keyframes di-soon { 50% { opacity: 0.65; } }
@@ -298,8 +301,9 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 @keyframes sc-blink { 0%, 44%, 52%, 100% { transform: translateY(-20px); } 48% { transform: translateY(0); } }
 .sc-pupil { animation: sc-look 6s ease-in-out infinite; }
 @keyframes sc-look { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
-.sc-bed { min-height: 70px; background: linear-gradient(180deg, #0b1030, #1d1650 70%, #3a2a6a); animation: sc-dusk 2.4s ease both; }
-@keyframes sc-dusk { from { filter: brightness(1.8) saturate(0.6); } to { filter: none; } }
+.sc-bed { min-height: 70px; background: linear-gradient(180deg, #0b1030, #1d1650 70%, #3a2a6a); position: relative; }
+.sc-bed::before { content: ''; position: absolute; inset: 0; background: rgb(255 255 255 / 0.45); animation: sc-dusk 2.4s ease both; pointer-events: none; }
+@keyframes sc-dusk { from { opacity: 1; } to { opacity: 0; } }
 .sc-bed i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff8c8; animation: di-twinkle 2.4s ease-in-out infinite; }
 .sc-moon { font-size: 30px; animation: sc-rise 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) both, di-float 3.6s ease-in-out 2.2s infinite; filter: drop-shadow(0 0 12px #fff3a0); }
 @keyframes sc-rise { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -307,10 +311,11 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .sc-burst { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--red); animation: sc-burst 1.2s ease-out infinite; }
 .sc-burst.b2 { animation-delay: 0.6s; }
 .sc-over.good .sc-burst { border-color: var(--lime); animation-iteration-count: 2; }
-.sc-over.good { background: linear-gradient(90deg, transparent, rgb(212 255 63 / 0.22), transparent); background-size: 200% 100%; animation: sc-sweep 1.4s ease 2; }
+.sc-over.good { position: relative; overflow: hidden; }
+.sc-over.good::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgb(212 255 63 / 0.22), transparent); transform: translateX(-100%); animation: sc-sweep 1.4s ease 2; pointer-events: none; }
 @keyframes sc-burst { from { transform: scale(0.6); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
 @keyframes sc-beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.18); } 30% { transform: scale(1); } 45% { transform: scale(1.12); } }
-@keyframes sc-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes sc-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 .sc-reward { min-height: 76px; flex-direction: column; gap: 2px; background: radial-gradient(circle at 50% 50%, rgb(255 212 81 / 0.22), transparent 70%); overflow: visible; }
 .sc-reward i { position: absolute; left: 50%; top: 40%; width: 6px; height: 9px; border-radius: 2px; }
 .sc-coin { font-size: 30px; filter: drop-shadow(0 0 10px rgb(255 212 81 / 0.7)); }

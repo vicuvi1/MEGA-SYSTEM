@@ -4,6 +4,11 @@ import { applyTheme } from './uiPrefs'
 
 applyTheme()
 
+// AF1: nothing animates while the window is hidden (tray, minimized, other tab).
+const markHidden = () => document.documentElement.classList.toggle('doc-hidden', document.hidden)
+markHidden()
+document.addEventListener('visibilitychange', markHidden)
+
 const search = typeof window !== 'undefined' ? window.location.search : ''
 const isHud = search.includes('hud=1')
 const isIsland = search.includes('island=1')

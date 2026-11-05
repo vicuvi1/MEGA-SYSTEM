@@ -10,6 +10,7 @@ import { life } from './bridge'
 import { Icon } from './Icon'
 import { soundSuccess } from './sound'
 import { useAction } from './ui'
+import { barFill } from './motionKit'
 
 /** A full 50-minute focus session pays this much (+3 per 10 min). */
 const COINS_PER_SESSION = 15
@@ -110,8 +111,8 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
           <span className="fun-label">Next goal</span>
           <div className="fun-next">
             <span className="fun-title">{next.title}</span>
-            <div className="bar" role="img" aria-label={`${bal} of ${next.price} points`}>
-              <i style={{ width: `${Math.min(100, (bal / next.price) * 100)}%` }} />
+            <div className="bar pbar" role="img" aria-label={`${bal} of ${next.price} points`}>
+              <i style={barFill(bal / next.price)} />
             </div>
             <span className="hint">
               {next.price - bal} points to go · about {Math.ceil((next.price - bal) / COINS_PER_SESSION)} focus sessions

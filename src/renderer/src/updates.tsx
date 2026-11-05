@@ -3,6 +3,7 @@ import type { UpdateStatus } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
 import { timeAgo, useAction } from './ui'
+import { barFill } from './motionKit'
 
 /** Current update status, kept live by events from the main process. */
 export function useUpdates(): [UpdateStatus | null, (s: UpdateStatus) => void] {
@@ -66,8 +67,8 @@ export function UpdatePanel({ status, onStatus }: { status: UpdateStatus | null;
         </div>
       </div>
       {status.state === 'downloading' && (
-        <div className="bar update-bar">
-          <i style={{ width: `${status.progress}%` }} />
+        <div className="bar update-bar pbar">
+          <i style={barFill(status.progress / 100)} />
         </div>
       )}
       <dl className="up-facts">

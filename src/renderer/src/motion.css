@@ -1,0 +1,68 @@
+/* Shared motion for the whole app (loaded last by appStyles.ts).
+   Rules (docs/AI_HANDOFF.md, "Motion & sound budget"; checked by
+   motionBudget.test.ts): animate transform and opacity only, UI motion takes
+   400 ms or less, nothing runs while the window is hidden, and "reduce
+   motion" is always respected. */
+
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* A light spring (settles with one small overshoot), for presses and toasts. */
+  --ease-spring: linear(0, 0.18 7%, 0.6 18%, 0.95 30%, 1.06 40%, 1.04 50%, 1 64%, 0.995 80%, 1);
+}
+
+/* ---------- Hidden window: nothing animates (AF1) ---------- */
+html.doc-hidden *, html.doc-hidden *::before, html.doc-hidden *::after { animation-play-state: paused !important; }
+
+/* ---------- Shared keyframes for glows, rings and flashes ----------
+   The glow is drawn once (a box-shadow or tint on ::after) and only its
+   opacity or scale moves, so the browser never repaints it per frame. */
+@keyframes fx-breathe { 50% { opacity: 1; } }
+@keyframes fx-flash { 0%, 40% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes fx-ping { from { transform: scale(1); opacity: 0.9; } to { transform: scale(2.6); opacity: 0; } }
+
+/* ---------- Skeletons: one shared sweep (translateX) ---------- */
+.sk i, .bd-skel i, .cx-skel i { position: relative; overflow: hidden; }
+.sk i::after, .bd-skel i::after, .cx-skel i::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(var(--ink) / 0.07), transparent);
+  transform: translateX(-100%); animation: skel-sweep 1.3s ease-in-out infinite;
+}
+@keyframes skel-sweep { to { transform: translateX(100%); } }
+
+/* ---------- Progress bars (AF9) ----------
+   The fill is a full-width pill moved by translateX inside a clipped track:
+   rounded ends stay round and nothing re-lays out. Set --p (0..1) with
+   barFill() from motionKit.tsx. */
+.pbar { overflow: hidden; position: relative; }
+.pbar > i { display: block; width: 100% !important; height: 100%; transform: translateX(calc((var(--p, 0) - 1) * 100%)); transition: transform 0.4s var(--ease-out); }
+
+/* ---------- Page switch (AF4) ---------- */
+html.vt-page .content { view-transition-name: page; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-old(page) { animation: vt-out 0.1s ease-in both; }
+::view-transition-new(page) { animation: vt-in 0.16s var(--ease-out) both; }
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* ---------- PIN screen: a wrong PIN shakes the card (plain CSS, AF2) ---------- */
+.lock-card.shake { animation: lock-shake 0.35s ease; }
+@keyframes lock-shake { 20% { transform: translateX(-10px); } 40% { transform: translateX(10px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
+
+/* ---------- Buttons squish when pressed (AF18) ----------
+   Uses the separate `scale` property, so it adds to any transform a button
+   already has (hover lifts, centering) instead of replacing it. Zero
+   specificity (:where), so a component's own transition still wins. */
+:where(.btn, .chip, .tb-icon, .icon-btn, .action, .chip-btn, .pressable, .sb-item, .sb-tool, .reward, .stat.clickable, button.card, .tb-me) {
+  transition: scale 0.3s var(--ease-spring), color 0.15s, background-color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
+}
+:where(.btn, .chip, .tb-icon, .icon-btn, .action, .chip-btn, .pressable, .sb-item, .sb-tool, .reward, .stat.clickable, button.card, .tb-me):where(:active:not(:disabled)) {
+  scale: 0.97;
+  transition-duration: 0.08s;
+}
+
+/* ---------- Reduce motion (AF3): the one place for it ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  :where(.btn, .chip, .tb-icon, .icon-btn, .action, .chip-btn, .pressable, .sb-item, .sb-tool, .reward, .stat.clickable, button.card, .tb-me):where(:active) { scale: none; }
+}

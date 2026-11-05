@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SleepSteady } from '../SleepSteady'
 import { usePoints } from '../usePoints'
-import { motion } from 'framer-motion'
 import type { ConnectionsState, SleepLog, SleepSummary } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -365,9 +364,9 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
                   </select>
                 </label>
               </div>
-              <motion.button className="btn primary block-btn" whileTap={{ scale: 0.96 }} onClick={handleLogWake}>
+              <button className="btn primary block-btn" onClick={handleLogWake}>
                 <Icon name="sun" size={15} /> I'm up
-              </motion.button>
+              </button>
             </div>
           )}
         </section>
@@ -395,9 +394,9 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
                   <input type="time" value={bedTime} onChange={(e) => setBedTime(e.target.value)} />
                 </label>
               </div>
-              <motion.button className="btn block-btn" whileTap={{ scale: 0.96 }} onClick={handleLogBed}>
+              <button className="btn block-btn" onClick={handleLogBed}>
                 <Icon name="moon" size={15} /> Going to bed
-              </motion.button>
+              </button>
             </div>
           )}
         </section>

@@ -1126,7 +1126,7 @@ export function DesktopIsland() {
                   <span className="di-pts"><Roll text={String(pts.balance)} up /> pts</span>
                   {pts.goal ? (
                     <div className="di-pts-mid">
-                      <div className="di-bar gold"><i style={{ width: `${Math.min(100, (pts.balance / pts.goal.price) * 100)}%` }} /></div>
+                      <div className="di-bar gold pbar"><i style={{ '--p': Math.min(1, pts.balance / pts.goal.price) } as React.CSSProperties} /></div>
                       <small>{pts.balance >= pts.goal.price ? `Ready: ${pts.goal.title} 🎉` : `${pts.goal.price - pts.balance} to ${pts.goal.title}`}</small>
                     </div>
                   ) : (
@@ -1155,7 +1155,7 @@ export function DesktopIsland() {
                       <small>
                         {hhmm(s.now.start)}–{hhmm(s.now.end)} · {minsText(s.now.end - now)} left
                       </small>
-                      <div className="di-bar"><i style={{ width: `${Math.min(100, ((now - s.now.start) / (s.now.end - s.now.start)) * 100)}%` }} /></div>
+                      <div className="di-bar pbar"><i style={{ '--p': Math.max(0, Math.min(1, (now - s.now.start) / (s.now.end - s.now.start))) } as React.CSSProperties} /></div>
                     </div>
                   ) : (
                     <div className="di-block muted">

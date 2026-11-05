@@ -6,7 +6,7 @@
 //   the timer and the block's checklist, until you stop or press Esc.
 // - WeekStrip: the last 7 days of focus as bars, against the week before.
 import { useEffect, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { blockTasks, setBlockTaskDone } from '@core/blockTasks'
 import { localDay, type CalEvent } from '@core/dayTime'
 import type { CoachStatus } from './web/coachStatus'
@@ -96,7 +96,7 @@ export function DeepWork() {
   return (
     <AnimatePresence>
       {open && run && (
-        <motion.div className="dw" role="dialog" aria-label="Deep work" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <m.div className="dw" role="dialog" aria-label="Deep work" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="dw-inner">
             <small className="dw-label">Deep work</small>
             <h1>{run.subject}</h1>
@@ -146,7 +146,7 @@ export function DeepWork() {
             </div>
             <p className="dw-hint">Esc to leave · the timer keeps running</p>
           </div>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   )

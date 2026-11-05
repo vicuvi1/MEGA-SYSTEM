@@ -19,6 +19,7 @@ import { addDays } from '@core/dates'
 import { PROFILE_NOTE } from '@core/benKnows'
 import { BenLog } from './BenLog'
 import { LifeModeCard } from './LifeMode'
+import { barFill } from './motionKit'
 
 export type DeskTab = 'today' | 'sunday' | 'plan' | 'you' | 'money' | 'month' | 'log'
 export const DESK_TABS: { id: DeskTab; label: string; icon: string }[] = [
@@ -367,8 +368,8 @@ function StakesCard({ v, now, change }: { v: DeskView; now: number; change: Chan
               <small>
                 by {hm(Date.parse(s.due))} · {left(s.due, now)} left · <em>−{s.points} pts</em>
               </small>
-              <div className="bd-meter">
-                <i style={{ width: `${pct}%` }} />
+              <div className="bd-meter pbar">
+                <i style={barFill(pct / 100)} />
               </div>
             </div>
             <button className="bd-btn strong" onClick={() => void change({ op: 'keepStake', id: s.id })}>

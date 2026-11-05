@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { groupNotifs, type Notif } from '@core/notify'
 import { useLive } from './live'
 import { runNotif } from './NotifToasts'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import type { LedgerEntry, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon, type IconName } from './Icon'
@@ -137,7 +137,7 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div className="notif-panel nc" role="dialog" aria-label="Notifications" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ duration: 0.18 }}>
+          <m.div className="notif-panel nc" role="dialog" aria-label="Notifications" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ duration: 0.18 }}>
             <header className="nc-head">
               <h3>Notifications</h3>
               {tab === 'inbox' && unreadInbox > 0 && (
@@ -250,7 +250,7 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
                 </>
               )}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

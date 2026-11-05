@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
+import { MotionRoot, viewSwitch } from './motionKit'
 import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { features, isDemo, life } from './bridge'
 import { Icon } from './Icon'
@@ -69,14 +70,16 @@ const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
 
 export function App() {
   return (
-    <ToastProvider>
-      <ErrorBoundary area="Life System">
-        <WindowErrors />
-        <ConfirmHost />
-        <NewVersionBar />
-        <Gate />
-      </ErrorBoundary>
-    </ToastProvider>
+    <MotionRoot>
+      <ToastProvider>
+        <ErrorBoundary area="Life System">
+          <WindowErrors />
+          <ConfirmHost />
+          <NewVersionBar />
+          <Gate />
+        </ErrorBoundary>
+      </ToastProvider>
+    </MotionRoot>
   )
 }
 
@@ -136,7 +139,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // A home-screen shortcut (/?page=tasks) opens that page; else where you left off.
   const asked = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('page') : null
   const known = [...MODULES, ...SYSTEM_PAGES].find((m) => m.id === (asked ?? last?.page) && m.phase === 0)
-  const [page, setPage] = useState<PageId>(known ? known.id : 'today')
+  const [page, setPageNow] = useState<PageId>(known ? known.id : 'today')
+  // Page changes cross-fade with a short view transition (AF4); same page: nothing to do.
+  const pageRef = useRef(page)
+  pageRef.current = page
+  const setPage = useCallback((p: PageId) => {
+    if (p === pageRef.current) return
+    viewSwitch(() => setPageNow(p))
+  }, [])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rules, setRules] = useState<Rule[]>([])
   const [quickCommandOpen, setQuickCommandOpen] = useState(false)
@@ -665,7 +675,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <span className="wallet-pops" aria-live="polite">
                 <AnimatePresence>
                   {pops.map((p) => (
-                    <motion.span
+                    <m.span
                       key={p.id}
                       className={`wallet-pop ${p.coins < 0 ? 'neg' : ''}`}
                       initial={{ opacity: 0, y: 14, scale: 0.8 }}
@@ -678,7 +688,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
                         {p.coins}
                       </b>
                       {p.label && <small>{p.label}</small>}
-                    </motion.span>
+                    </m.span>
                   ))}
                 </AnimatePresence>
               </span>
@@ -690,8 +700,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
         <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
 
-        <AnimatePresence initial={false}>
-          {!activeEmbed && <motion.main key={page} className="content" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
+        {!activeEmbed && (
+          <main className="content">
             <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
             <Suspense fallback={<PageSkeleton />}>
             {page === 'today' && !summary && <PageSkeleton />}
@@ -718,8 +728,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {current.phase > 0 && <Soon module={current} />}
             </Suspense>
             </ErrorBoundary>
-          </motion.main>}
-        </AnimatePresence>
+          </main>
+        )}
         <Suspense fallback={null}>
           {quickCommandOpen && <QuickCommandBar open onClose={() => setQuickCommandOpen(false)} onRefreshWallet={onWallet} />}
         </Suspense>

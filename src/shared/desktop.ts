@@ -120,6 +120,8 @@ export interface DesktopApi {
   onAway?(cb: (a: { from: string; to: string }) => void): void
   /** Every 15 s: seconds since the last mouse/keyboard input on the PC. */
   onIdle?(cb: (idleSec: number) => void): void
+  /** Every 15 s from the desktop while the island is on: send it a fresh snapshot (the app window may be slowed down in the tray). */
+  onIslandTick?(cb: () => void): void
   /** Text you just copied (≤ 200 chars), for the island's "save this?". */
   onClip?(cb: (text: string) => void): void
   /** Island window: new snapshots. */

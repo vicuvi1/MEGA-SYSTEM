@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { usePoints } from '../usePoints'
-import { motion } from 'framer-motion'
 import type { ConnectionsState, Expense, NativeMoneySummary } from '@shared/api'
 import { life } from '../bridge'
+import { barFill } from '../motionKit'
 import { Icon } from '../Icon'
 import { soundCoin, soundSpend } from '../sound'
 import { Coins, useAction } from '../ui'
@@ -303,9 +303,9 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
                 />
               </label>
             </div>
-            <motion.button className="btn primary block-btn" whileTap={{ scale: 0.96 }} onClick={handleAddExpense}>
+            <button className="btn primary block-btn" onClick={handleAddExpense}>
               <Icon name="coin" size={15} /> Log Expense
-            </motion.button>
+            </button>
           </div>
         </section>
 
@@ -323,8 +323,8 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
               {Object.entries(today.byCategory).map(([cat, amt]) => (
                 <div key={cat} className="cat-row">
                   <span className="cat-label">{cat}</span>
-                  <div className="bar">
-                    <motion.i initial={false} animate={{ width: `${Math.min(100, (amt / Math.max(1, today.totalSpent)) * 100)}%` }} />
+                  <div className="bar pbar">
+                    <i style={barFill(amt / Math.max(1, today.totalSpent))} />
                   </div>
                   <b>{money(amt)} {cur}</b>
                 </div>

@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { bookMinutes, bookTask } from '../booking'
-import { motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
 import type { BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { life } from '../bridge'
@@ -142,10 +141,10 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
                   <h3>{MODULE_LABEL[mod] ?? mod}</h3>
                   <div className="actions">
                     {list.map((r) => (
-                      <motion.button key={r.id} className={`action ${r.coins < 0 ? 'penalty' : ''}`} whileTap={{ scale: 0.96 }} onClick={() => award(r)}>
+                      <button key={r.id} className={`action ${r.coins < 0 ? 'penalty' : ''}`} onClick={() => award(r)}>
                         <span>{r.title}</span>
                         <Coins n={r.coins} sign />
-                      </motion.button>
+                      </button>
                     ))}
                   </div>
                 </div>

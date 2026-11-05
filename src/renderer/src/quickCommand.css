@@ -56,7 +56,7 @@
   border: 1px solid rgba(0, 210, 255, 0.3);
   border-radius: 12px;
   padding: 10px 16px;
-  transition: all 0.2s ease;
+  transition: 0.2s ease; transition-property: color, background-color, border-color, opacity, transform;
 }
 
 .quick-command-input-row:focus-within {
@@ -114,7 +114,7 @@
   padding: 5px 12px;
   border-radius: 20px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: 0.15s ease; transition-property: color, background-color, border-color, opacity, transform;
 }
 
 .quick-command-chip:hover {

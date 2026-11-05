@@ -4,7 +4,7 @@
 // right, and the bell rings. Quiet hours and focus hold all of that back;
 // everything still lands in the inbox. Each device pops a notification once.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import type { Notif } from '@core/notify'
 import { freshNotifs, interrupt } from '@core/notifyRules'
 import { DEFAULT_NOTIF_SETTINGS, bedtimeAlert, eventAlerts, quietNow, waterAlert, type NotifSettings } from '@core/eventAlerts'
@@ -253,7 +253,7 @@ function Toast({ n, onClose, onRun }: { n: Notif; onClose: () => void; onRun: ()
     return () => clearTimeout(t)
   }, [paused, onClose])
   return (
-    <motion.div
+    <m.div
       layout
       className={`nt-card k-${n.kind}`}
       role="status"
@@ -289,6 +289,6 @@ function Toast({ n, onClose, onRun }: { n: Notif; onClose: () => void; onRun: ()
         ✕
       </button>
       {!paused && <i className="nt-timer" />}
-    </motion.div>
+    </m.div>
   )
 }

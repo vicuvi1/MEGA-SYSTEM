@@ -175,7 +175,7 @@ html.calm [class*='loading'] {
 .pg-value { font-size: 30px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .pg-goal { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); margin-top: 2px; }
 .pg-goal-bar { height: 8px; border-radius: 6px; background: rgb(var(--ink) / 0.07); overflow: hidden; }
-.pg-goal-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--lime) 55%, transparent), var(--lime)); transition: width 1s cubic-bezier(0.22, 1, 0.36, 1) 0.15s; }
+.pg-goal-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--lime) 55%, transparent), var(--lime)); }
 .pg-goal-bar i.full { background: linear-gradient(90deg, var(--lime), var(--green)); }
 .pg-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 12px; }
 .pg-day { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -292,7 +292,7 @@ html.calm [class*='loading'] {
 .rw-pin { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 2px; }
 .rw-pin.on { color: var(--gold); }
 .rw-bar { height: 7px; border-radius: 5px; background: rgb(var(--ink) / 0.07); overflow: hidden; }
-.rw-bar i { display: block; height: 100%; border-radius: 5px; background: var(--gold); transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+.rw-bar i { display: block; height: 100%; border-radius: 5px; background: var(--gold); }
 .rw-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rw-foot .row { gap: 6px; }
 .rw-add { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }

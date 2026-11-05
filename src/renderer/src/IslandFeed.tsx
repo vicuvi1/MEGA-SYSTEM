@@ -853,6 +853,11 @@ export function IslandFeed() {
           for (const t of list) await actRef.current({ kind: 'chat', text: t })
         })()
       })
+      // AF1: the app window is slowed down in the tray; the desktop's 15 s
+      // clock keeps the island fresh (when visible, our own timer does it).
+      desk.onIslandTick?.(() => {
+        if (document.hidden) void sendRef.current()
+      })
       // Every 15 s from the desktop: how long since your last mouse/keys.
       desk.onIdle?.((sec) => {
         const before = idleSec

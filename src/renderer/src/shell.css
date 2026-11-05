@@ -1,12 +1,12 @@
 /* Collapsible sidebar, slim app header and the app/coins switch. */
 
-.shell { --side: 228px; --rail: 62px; grid-template-columns: var(--side) 1fr; transition: grid-template-columns 0.22s ease; }
+.shell { --side: 228px; --rail: 62px; grid-template-columns: var(--side) 1fr; }
 .shell.rail { --side: var(--rail); }
 
 .side-cell { position: relative; min-width: 0; z-index: 30; }
 .sidebar {
   position: absolute; inset: 0 auto 0 0; width: 228px; height: 100%;
-  overflow-x: hidden; transition: width 0.2s ease, box-shadow 0.2s ease;
+  overflow-x: hidden; transition: box-shadow 0.2s ease;
 }
 .sidebar.collapsed { width: var(--rail); padding: 18px 9px; }
 .sidebar.collapsed.peek { width: 228px; padding: 18px 12px; box-shadow: 12px 0 40px rgba(0, 0, 0, 0.55); border-right-color: #2c3446; }
@@ -94,7 +94,7 @@
 /* Daily Rituals */
 .rituals-panel { margin-top: 14px; }
 .ritual-progress-bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
-.ritual-progress-bar i { display: block; height: 100%; background: var(--lime); border-radius: 2px; transition: width 0.3s ease; }
+.ritual-progress-bar i { display: block; height: 100%; background: var(--lime); border-radius: 2px; }
 .rituals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 
 .ritual-card {
@@ -163,8 +163,8 @@
     right: 0;
     height: 62px;
     background: rgba(13, 15, 21, 0.96);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid rgb(var(--ink) / 0.08);
     display: flex;
     /* a generic nav rule elsewhere turned this into a column: only "Today" showed */
@@ -330,7 +330,7 @@
   border-radius: 10px;
   padding: 10px 12px;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: 0.18s ease; transition-property: color, background-color, border-color, opacity, transform;
   user-select: none;
 }
 .grand-slam-pillar:hover {
@@ -505,7 +505,7 @@
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     position: fixed; top: 0; left: 0; right: 0; z-index: 101; height: 40px;
     padding: env(safe-area-inset-top) 8px 0; box-sizing: content-box;
-    background: rgba(13, 15, 21, 0.96); backdrop-filter: blur(16px); border-bottom: 1px solid rgb(var(--ink) / 0.08);
+    background: rgba(13, 15, 21, 0.96); backdrop-filter: blur(12px); border-bottom: 1px solid rgb(var(--ink) / 0.08);
   }
   body:has(.embed-host.on) .mobile-embed-strip b { font-size: 13px; font-weight: 600; opacity: 0.85; }
   body:has(.embed-host.on) .mobile-embed-strip button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: rgb(var(--ink) / 0.07); color: inherit; font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 11px; }

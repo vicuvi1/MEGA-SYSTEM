@@ -1,6 +1,6 @@
 import { moduleLabel } from './modules'
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import type { LedgerEntry } from '@shared/api'
 
 /** A toast may carry one action (e.g. Undo); it then stays a little longer. */
@@ -21,7 +21,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="toasts" role="status" aria-live="polite">
         <AnimatePresence>
           {toasts.map((t) => (
-            <motion.div key={t.id} className={`toast ${t.tone} ${t.action ? 'has-action' : ''}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}>
+            <m.div key={t.id} className={`toast ${t.tone} ${t.action ? 'has-action' : ''}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}>
               {t.text}
               {t.action && (
                 <button
@@ -34,7 +34,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   {t.action.label}
                 </button>
               )}
-            </motion.div>
+            </m.div>
           ))}
         </AnimatePresence>
       </div>

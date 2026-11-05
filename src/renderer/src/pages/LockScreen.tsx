@@ -4,7 +4,6 @@
 // failed tries. The first time on a new device, press Enter once.
 import { hasPasskeyHere } from '../web/passkey'
 import { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
 import type { AuthStatus } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -56,15 +55,13 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
 
   return (
     <div className="lock">
-      <motion.form
+      <form
         key={shake}
-        className="lock-card"
+        className={`lock-card${shake ? ' shake' : ''}`}
         onSubmit={(e) => {
           e.preventDefault()
           void tryPin(pin)
         }}
-        animate={shake ? { x: [0, -10, 10, -6, 6, 0] } : {}}
-        transition={{ duration: 0.35 }}
       >
         <div className="lock-icon">
           <Icon name="lock" size={26} />
@@ -111,7 +108,7 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
             🔐 Unlock with fingerprint / face
           </button>
         )}
-      </motion.form>
+      </form>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
 import type { Rule, ShopState } from '@shared/api'
 import type { TodoTask } from '@core/todoist'
@@ -102,8 +102,8 @@ export function Palette({ open, onClose, commands, onFreeText }: { open: boolean
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="palette-back" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }} onMouseDown={onClose}>
-          <motion.div
+        <m.div className="palette-back" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }} onMouseDown={onClose}>
+          <m.div
             className="palette"
             role="dialog"
             aria-label="Command palette"
@@ -178,8 +178,8 @@ export function Palette({ open, onClose, commands, onFreeText }: { open: boolean
                 <kbd>Ctrl</kbd> <kbd>K</kbd> open anywhere
               </span>
             </div>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       )}
     </AnimatePresence>
   )
