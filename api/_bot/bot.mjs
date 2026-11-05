@@ -2304,6 +2304,7 @@ function riskOf(a) {
 	if (a.kind === "reward") return "reward";
 	if (a.kind === "habit" && (a.habit === "oath" || a.habit === "clean")) return "habit";
 	if (a.kind === "reps" || a.kind === "water") return "log";
+	if (a.kind === "log") return "log";
 	return null;
 }
 var ASKED = {
@@ -2319,6 +2320,13 @@ var INJECTION = /(^|\n)\s*(system|assistant|developer)\s*:|ignore (all |any )?(y
 /** A log action matches your words: water needs water/ml/glass/drank; reps need the exercise (or reps/sets). */
 function loggedInText(text, a) {
 	const t = String(text ?? "").toLowerCase();
+	if (a.kind === "log") {
+		const what = String(a.text ?? "").toLowerCase().replace(/^\/\w+\s*/, "");
+		const nums = what.match(/\d+(?:[.,]\d+)?/g) ?? [];
+		const mine = t.match(/\d+(?:[.,]\d+)?/g) ?? [];
+		if (nums.length) return nums.every((n) => mine.some((m) => m.replace(",", ".") === n.replace(",", ".")));
+		return (what.match(/\p{L}{4,}/gu) ?? []).map((w) => w.slice(0, 4)).some((w) => t.includes(w));
+	}
 	if (a.kind === "water") return /water|apa|apă|вод|\bml\b|\d\s*l\b|glass|pahar|drank|drunk|drink|выпил|am băut|am baut/.test(t);
 	if (a.kind === "reps") {
 		const ex = String(a.exercise ?? "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 4);
@@ -17021,7 +17029,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		acts = acts.filter((a) => {
 			const risk = riskOf(a);
 			if (!risk || askedFor(text, risk) && (risk !== "log" || loggedInText(text, a))) return true;
-			const what = a.kind === "delevent" ? made.refs.events.get(a.ref)?.title ?? "that event" : a.kind === "deltask" ? made.refs.tasks.get(a.ref)?.content ?? "that task" : a.kind === "delmoney" ? "that money record" : a.kind === "shift" ? `${a.refs.length} blocks` : a.kind === "reward" ? a.title : a.kind === "habit" ? a.habit : a.kind === "reps" ? `${a.amount} ${a.exercise}` : a.kind === "water" ? `${a.ml} ml water` : "";
+			const what = a.kind === "delevent" ? made.refs.events.get(a.ref)?.title ?? "that event" : a.kind === "deltask" ? made.refs.tasks.get(a.ref)?.content ?? "that task" : a.kind === "delmoney" ? "that money record" : a.kind === "shift" ? `${a.refs.length} blocks` : a.kind === "reward" ? a.title : a.kind === "habit" ? a.habit : a.kind === "reps" ? `${a.amount} ${a.exercise}` : a.kind === "water" ? `${a.ml} ml water` : a.kind === "log" ? a.text.replace(/^\/\w+\s*/, "") : "";
 			out.buttons = [...out.buttons ?? [], confirmButton(risk, what)].slice(0, 3);
 			return false;
 		});

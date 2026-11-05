@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { askedFor, confirmButton, riskOf } from './benSafety'
+import { askedFor, confirmButton, loggedInText, riskOf } from './benSafety'
 
 describe('Ben cannot be hijacked', () => {
   it('knows which actions are risky', () => {
@@ -7,7 +7,6 @@ describe('Ben cannot be hijacked', () => {
     expect(riskOf({ kind: 'shift', refs: ['E1', 'E2'] })).toBeNull()
     expect(riskOf({ kind: 'shift', refs: ['E1', 'E2', 'E3', 'E4'] })).toBe('shift')
     expect(riskOf({ kind: 'habit', habit: 'skincare' })).toBeNull()
-    expect(riskOf({ kind: 'log' })).toBeNull()
   })
   it('only his own words unlock them (EN/RO/RU)', () => {
     expect(askedFor('delete the gym block, not going', 'delete')).toBe(true)
@@ -60,5 +59,17 @@ describe('typos and logs that must match your words', () => {
     expect(loggedInText('eawster 250', { kind: 'reps', exercise: 'Push-ups' })).toBe(false)
     expect(loggedInText('did 30 pushups', { kind: 'reps', exercise: 'Push-ups' })).toBe(true)
     expect(loggedInText('I am awake', { kind: 'water' })).toBe(false)
+  })
+})
+
+describe('free-text log actions (X1)', () => {
+  it('need your own numbers or words', () => {
+    expect(riskOf({ kind: 'log' })).toBe('log')
+    expect(loggedInText('did 30 pushups', { kind: 'log', text: '30 pushups' })).toBe(true)
+    expect(loggedInText('I am awake', { kind: 'log', text: '30 pushups' })).toBe(false)
+    expect(loggedInText('lunch 50', { kind: 'log', text: '/expense 50 lunch' })).toBe(true)
+    expect(loggedInText('lunch 50', { kind: 'log', text: '/expense 80 lunch' })).toBe(false)
+    expect(loggedInText('meditated today', { kind: 'log', text: 'meditation' })).toBe(true)
+    expect(loggedInText('hello', { kind: 'log', text: 'meditation' })).toBe(false)
   })
 })

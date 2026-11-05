@@ -23,6 +23,8 @@ export function riskOf(a: RiskInput): RiskKind | null {
   if (a.kind === 'habit' && (a.habit === 'oath' || a.habit === 'clean')) return 'habit'
   // Reps and water count only when you said you did them (Ben suggesting 3×10 isn't doing them).
   if (a.kind === 'reps' || a.kind === 'water') return 'log'
+  // A free-text log ("log: 30 pushups", "/expense 50 lunch") too (X1).
+  if (a.kind === 'log') return 'log'
   return null
 }
 
@@ -40,8 +42,17 @@ const ASKED: Record<RiskKind, RegExp> = {
 export const INJECTION = /(^|\n)\s*(system|assistant|developer)\s*:|ignore (all |any )?(your |the |previous )?(rules|instructions)|\bjailbreak\b|[“"«][^”"»]*\b(delete|remove|cancel)\b[^”"»]*[”"»]/i
 
 /** A log action matches your words: water needs water/ml/glass/drank; reps need the exercise (or reps/sets). */
-export function loggedInText(text: string, a: { kind: string; exercise?: string }): boolean {
+export function loggedInText(text: string, a: { kind: string; exercise?: string; text?: string }): boolean {
   const t = String(text ?? '').toLowerCase()
+  if (a.kind === 'log') {
+    // Every number Ben logs must be one you wrote; with no number, one of its words must be yours (X1).
+    const what = String(a.text ?? '').toLowerCase().replace(/^\/\w+\s*/, '')
+    const nums = what.match(/\d+(?:[.,]\d+)?/g) ?? []
+    const mine = t.match(/\d+(?:[.,]\d+)?/g) ?? []
+    if (nums.length) return nums.every((n) => mine.some((m) => m.replace(',', '.') === n.replace(',', '.')))
+    const words = (what.match(/\p{L}{4,}/gu) ?? []).map((w) => w.slice(0, 4))
+    return words.some((w) => t.includes(w))
+  }
   if (a.kind === 'water') return /water|apa|apă|вод|\bml\b|\d\s*l\b|glass|pahar|drank|drunk|drink|выпил|am băut|am baut/.test(t)
   if (a.kind === 'reps') {
     const ex = String(a.exercise ?? '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 4)
