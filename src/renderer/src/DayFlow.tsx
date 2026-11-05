@@ -1,6 +1,7 @@
 // Today's core: the morning plan / evening shut-down cards, the "Now" card
 // (one next step, a live timer while focusing), habit chips, and one list:
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
+import { askConfirm } from './confirmSheet'
 import { appHour } from '@core/dates'
 import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -749,7 +750,13 @@ export function DayFlow(props: Props) {
                 className="btn small"
                 disabled={!plan.length}
                 onClick={async () => {
-                  // Book the open must-dos into today's free time (50 min each).
+                  // One "Plan my day" (Z4): Ben's plan, which you approve (blocks + must-dos).
+                  if (life.coach?.rhythm) {
+                    const ok = await act(() => life.coach!.rhythm!('propose'), "Ben planned your day: check it and tap ✓ Approve")
+                    if (ok) window.dispatchEvent(new CustomEvent('life-external-changed'))
+                    return
+                  }
+                  // No Ben here (desktop without the coach): book the open must-dos into free time, after you see them.
                   if (!life.google) return props.onGo('settings')
                   const day = calendarToday()
                   const nowHm = new Date().toTimeString().slice(0, 5)
@@ -757,6 +764,7 @@ export function DayFlow(props: Props) {
                   const slots = planMustDos(calEvents, day, nowHm, todo)
                   if (!todo.length) return void act(async () => true, 'Your must-dos are already in the calendar')
                   if (!slots.length) return void act(async () => true, 'No free time left today: move something or plan tomorrow')
+                  if (!(await askConfirm(`Put these in your calendar?\n${slots.map((b) => `${b.start}–${b.end} ${b.title}`).join('\n')}`, { ok: 'Book them', danger: false }))) return
                   const at = (hm: string) => new Date(`${day}T${hm}:00`).toISOString()
                   const ok = await act(async () => {
                     for (const b of slots) await life.google!.create({ title: b.title, start: at(b.start), end: at(b.end), description: 'Must-do · planned in Life System' })
