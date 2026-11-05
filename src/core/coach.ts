@@ -93,6 +93,34 @@ export function windDownText(o: { bedTarget: string; wakeTarget: string; late: n
   ].join('\n')
 }
 
+/**
+ * WK16: the bedtime message with your real numbers: the week's sleep debt and
+ * tomorrow's first fixed thing ("Exam at 09:00 tomorrow and you're 2 h short:
+ * in bed by 23:10"). null when there's nothing worth saying (no debt, nothing
+ * early, wake-ups fine).
+ */
+export function bedtimeNudge(o: { bedTarget: string; wakeTarget: string; debtMin: number; nights: number; firstEvent: { title: string; time: string } | null; slipping: { late: number; of: number } | null; first: string | null }): string | null {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const toM = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+  const fm = (m: number) => `${String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, '0')}:${String((((m % 1440) + 1440) % 1440) % 60).padStart(2, '0')}`
+  const short = o.nights >= 3 && o.debtMin >= 60
+  const early = o.firstEvent && toM(o.firstEvent.time) - toM(o.wakeTarget) <= 120 ? o.firstEvent : null
+  if (!short && !early && !o.slipping) return null
+  // Short this week: in bed a bit earlier (a quarter of the debt, 15–45 min).
+  const earlier = short ? Math.min(45, Math.max(15, Math.round(o.debtMin / 4 / 15) * 15)) : 0
+  const bed = fm(toM(o.bedTarget) - earlier)
+  const h = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`)
+  const why = [early ? `${esc(early.title)} at ${early.time} tomorrow` : '', short ? `you're ${h(o.debtMin)} short of sleep this week` : '', o.slipping ? `${o.slipping.late} of your last ${o.slipping.of} wake-ups were late` : ''].filter(Boolean)
+  return [
+    `🌙 <b>Wind-down</b> · in bed by <b>${bed}</b>`,
+    '',
+    `${why.join(', and ').replace(/^./, (c) => c.toUpperCase())}.`,
+    '📵 Phone away now (charge it outside the bed).',
+    `💡 Lights out at <b>${bed}</b>, up at <b>${o.wakeTarget}</b>.`,
+    o.first ? `🎯 First thing tomorrow: <b>${esc(o.first)}</b>` : '🎯 Decide your first thing for tomorrow, then sleep on it.'
+  ].join('\n')
+}
+
 /** This week's chosen focus, when it's behind a good week: the coach's first point. */
 export function weekFocusFact(plan: { focus: string; note: string; big3: { text: string; done: boolean }[] } | null, r: ProgressReport): CoachFact | null {
   if (!plan) return null

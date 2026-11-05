@@ -108,6 +108,7 @@ function renderToday() {
         ${stillUpLine(t.stillUp, t.record, t.ontime)}
         ${s.sleep.last ? `<div class="su-line sleep-line">😴 Slept ${fmtDur(s.sleep.last)}</div>` : ""}
         <div class="mood-ask inline">${moodButtons(t.record.mood)}</div>
+        <div class="nap-row"><span class="su-line" id="nap-line"></span><button class="btn ghost small" id="log-nap">💤 Log a nap</button></div>
       </div>
       <svg class="hero-check ${t.ontime ? "" : "late"}" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg>`;
   } else {
@@ -116,7 +117,9 @@ function renderToday() {
     const deadline = target + state.settings.grace;
     const missed = nowMin > deadline + 180; // Same cut-off as the nag bot.
     let status;
-    if (nowMin < target) status = `<span class="status">Target in ${formatGap(target - nowMin)}</span>`;
+    // WK26: a first-run screen: one clear step.
+    if (!Object.keys(state.days || {}).length) status = `<span class="status ok">Your first wake-up starts everything: tap "I'm up" when you get out of bed.</span>`;
+    else if (nowMin < target) status = `<span class="status">Target in ${formatGap(target - nowMin)}</span>`;
     else if (nowMin <= deadline) status = `<span class="status ok">Check in by ${fromMin(deadline)} to be on time</span>`;
     else if (!missed) status = `<span class="status late">Past your on-time window. Check in anyway.</span>`;
     else status = `<span class="status">No check-in this morning. Tomorrow is a fresh one.</span>`;
@@ -148,12 +151,12 @@ function renderToday() {
         <div class="prize"><div class="prize-label">${missed ? "Tomorrow's prize" : "Waiting for you"}</div><div class="chips-row">${chips}</div></div>
       </div>
       <div class="cta wake-cta">
-        ${missed ? `<button class="btn ghost" id="start">Check in for today anyway</button>
-          <span class="muted small">Set your phone alarm before bed</span>` : `
+        ${missed ? `<button class="btn primary big-cta" id="start">☀️ I'm up</button>
+          <span class="muted small">Late today: logged, no points. Set your alarm before bed.</span>` : `
         <button class="wake-btn" id="start" aria-label="I'm up">
           <span class="rays"></span>
           ${ring(frac, 104, "wake-ring")}
-          <span class="sun"><b>I'M UP</b><small>+${prizeCoins} 🪙</small></span>
+          <span class="sun"><b>I'M UP</b><small>${prizeCoins ? `+${prizeCoins} ⭐` : ""}</small></span>
         </button>
         <button class="btn ghost small" id="start-cam">Or check in with ${state.settings.reps} push-ups</button>`}
       </div>`;
@@ -161,6 +164,20 @@ function renderToday() {
     if ($("start-cam")) $("start-cam").onclick = () => startSession("checkin");
     $("edit-time").onclick = () => openTimeDialog(shownWeekend);
   }
+
+  // WK7: sleep debt, the last 7 nights against your goal.
+  const sl = s.sleep;
+  $("debt-card").hidden = !sl.nights;
+  if (sl.nights) {
+    const short = sl.debt >= 30;
+    const tonight = Math.min(60, Math.max(15, Math.round(sl.debt / 4 / 15) * 15));
+    $("debt-card").className = `card debt-card reveal ${short ? "short" : "fine"}`;
+    $("debt-card").innerHTML = `<div class="label">Sleep debt · ${plural(sl.nights, "night")}</div>
+      <div class="big">${short ? fmtDur(sl.debt) : "None"}</div>
+      <div class="muted small">${short ? `You're short of your ${fmtDur(sl.goal)} goal. In bed ${tonight} min earlier tonight.` : `On average ${fmtDur(sl.avg)} a night. Keep it there.`}</div>`;
+  }
+  // WK12: naps today, under the check-in.
+  if (t.record && $("nap-line")) $("nap-line").textContent = sl.naps.length ? `💤 Nap${sl.naps.length > 1 ? "s" : ""}: ${sl.naps.map((n) => `${n.minutes} min at ${n.at}`).join(", ")}` : "";
 
   countTo($("streak"), s.streak);
   $("streak-unit").textContent = s.streak === 1 ? "day" : "days";
@@ -253,7 +270,10 @@ function renderJourney() {
     </div>`).join("");
 
   let lastLevel = 0;
-  $("timeline").innerHTML = j.stages.map((st, i) => {
+  // WK22: only where you are and what's next; the stages you passed fold into one line.
+  const showAll = document.documentElement.classList.contains("journey-all");
+  const passed = j.stages.filter((st) => st.reached && !(j.current && st.days === j.current.days)).length;
+  $("timeline").innerHTML = (passed && !showAll ? `<li class="tl-fold"><button class="btn ghost small" id="journey-more">✓ ${plural(passed, "stage")} behind you · show</button></li>` : "") + j.stages.filter((st) => showAll || !st.reached || (j.current && st.days === j.current.days)).slice(0, showAll ? 99 : 3).map((st, i) => {
     const isCur = j.current && st.days === j.current.days;
     const isNext = j.next && st.days === j.next.days;
     let head = "";
@@ -666,6 +686,8 @@ async function finishSession() {
 
 function showDone(prevStreak) {
   const s = state.stats;
+  // WK27: a short buzz on phones.
+  try { navigator.vibrate && navigator.vibrate([30, 60, 30]); } catch {}
   const t = s.today;
   $("done-title").textContent = t.ontime ? "You're up." : "You're up. Late, but up.";
   $("done-sub").textContent = `Checked in at ${t.record.time}` + (t.record.reps ? ` · ${plural(t.record.reps, "push-up")}` : "");
@@ -726,6 +748,7 @@ function sound(kind) {
 }
 
 function confetti(canvas, count) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const ctx = canvas.getContext("2d");
   canvas.width = innerWidth * devicePixelRatio;
   canvas.height = innerHeight * devicePixelRatio;
@@ -1064,13 +1087,21 @@ function renderSleep() {
     <div><b>${sl.last ? fmtDur(sl.last) : "–"}</b><span>last night</span></div>
     <div><b>${sl.avg ? fmtDur(sl.avg) : "–"}</b><span>average</span></div>
     <div><b>${fmtDur(sl.goal)}</b><span>goal</span></div>
-    <div><b>${sl.nights ? `${sl.nightsOnGoal}/${sl.nights}` : "–"}</b><span>nights near the goal</span></div>`;
-  const max = Math.max(sl.goal + 60, ...sl.chart.map((c) => c.minutes || 0));
-  $("sleep-bars").innerHTML = `<div class="goal-line" style="bottom:${(100 * sl.goal) / max}%"></div>` + sl.chart.map((c) => {
-    const h = c.minutes ? (100 * c.minutes) / max : 0;
-    const cls = !c.minutes ? "none" : c.minutes >= sl.goal - 15 ? "good" : c.minutes >= sl.goal - 75 ? "ok" : "short";
-    return `<div class="sb ${cls}" title="${c.date.slice(5)}${c.minutes ? " · " + fmtDur(c.minutes) : ""}"><i style="height:${h}%"></i><span>${Number(c.date.slice(8))}</span></div>`;
-  }).join("") + (sl.nights ? "" : `<div class="sleep-empty">Press "Going to bed" at night and check in in the morning: your sleep shows up here.</div>`);
+    <div><b>${sl.nights ? `${sl.nightsOnGoal}/${sl.nights}` : "–"}</b><span>nights near the goal</span></div>
+    <div title="How much your wake-up and bedtime wander: 100 is the same time every day"><b>${sl.steady == null ? "–" : sl.steady}</b><span>steady score${sl.steady == null ? " (after 5 mornings)" : sl.steady >= 80 ? " · steady" : sl.steady >= 60 ? " · okay" : " · all over"}</span></div>`;
+  // WK23: each night a bar from bedtime to wake-up (20:00 → 12:00), your target window as a band.
+  const FROM = 20 * 60, SPAN = 16 * 60;
+  const pos = (hm) => { let m = toMin(hm); if (m < 12 * 60) m += 1440; return Math.max(0, Math.min(100, (100 * (m - FROM)) / SPAN)); };
+  const bedT = state.settings.bedtime || "23:00";
+  const wakeT = state.settings.weekday || "07:00";
+  $("sleep-bars").className = "sleep-bars nights";
+  $("sleep-bars").innerHTML = `<div class="night-band" style="left:${pos(bedT)}%;width:${Math.max(2, pos(wakeT) - pos(bedT))}%" title="Your target: ${bedT}–${wakeT}"></div>`
+    + `<div class="night-axis">${["20:00", "00:00", "04:00", "08:00", "12:00"].map((t) => `<span style="left:${pos(t)}%">${t}</span>`).join("")}</div>`
+    + sl.chart.map((c) => {
+      const cls = !c.minutes ? "none" : c.minutes >= sl.goal - 15 ? "good" : c.minutes >= sl.goal - 75 ? "ok" : "short";
+      const bar = c.bed && c.wake ? `<i style="left:${pos(c.bed)}%;width:${Math.max(1, pos(c.wake) - pos(c.bed))}%"></i>` : c.wake ? `<b class="wake-dot" style="left:${pos(c.wake)}%"></b>` : "";
+      return `<div class="nb ${cls}" title="${c.date.slice(5)}${c.bed ? ` · bed ${c.bed}` : ""}${c.wake ? ` · up ${c.wake}` : ""}${c.minutes ? " · " + fmtDur(c.minutes) : ""}"><span>${Number(c.date.slice(8))}</span><div class="nb-track">${bar}</div></div>`;
+    }).join("") + (sl.nights ? "" : `<div class="sleep-empty">Press "Going to bed" at night and check in in the morning: your sleep shows up here.</div>`);
 }
 
 // ---------- Spartan avatar ----------
@@ -1221,4 +1252,17 @@ tick();
 setInterval(() => refresh().catch(() => {}), 60000); // Also tells the server the window is still open.
 setInterval(() => { if (!$("offline").hidden) refresh().catch(() => {}); }, 5000);
 addEventListener("focus", () => refresh().catch(() => {}));
+// WK12 + WK22: log a nap; show every journey stage.
+document.addEventListener("click", async (e) => {
+  if (e.target.closest("#log-nap")) {
+    const v = prompt("How long was the nap? (minutes)", "20");
+    if (!v) return;
+    const r = await fetch("/api/nap", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ minutes: Number(v) }) }).then((x) => x.json()).catch(() => null);
+    if (r) { state = r; render(); toast(r.note || "Nap logged"); }
+  }
+  if (e.target.closest("#journey-more")) {
+    document.documentElement.classList.add("journey-all");
+    renderJourney();
+  }
+});
 refresh().then(maybeAutoRecap).catch((e) => toast(e.message, true));

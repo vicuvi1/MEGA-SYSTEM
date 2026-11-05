@@ -22,7 +22,8 @@ import { GOOGLE_SETTING as GSET, createCalendarApi as makeCal, type GoogleEnv, t
 import { createTodoistApi } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
-import { coachFacts, coachPrompt, coachText, deadlineFacts, wakeSlipping, weekFocusFact, windDownText, worthSaying } from '@core/coach'
+import { nightMinutes } from '@core/readiness'
+import { bedtimeNudge, coachFacts, coachPrompt, coachText, deadlineFacts, wakeSlipping, weekFocusFact, windDownText, worthSaying } from '@core/coach'
 import { deadlineRadar } from '@core/todoist'
 import { shouldPlan } from '@core/weekPlan'
 import { targetForDay } from '@core/sleep'
@@ -362,13 +363,24 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       await send(guard.text, undefined, env.sleepBotToken || env.botToken).catch(() => null)
       sent.push('exam-sleep')
     }
-    // Only when wake-ups are slipping: one message 45 minutes before bedtime.
+    // WK16: one message before bedtime when it matters: wake-ups slipping, a sleep debt this week,
+    // or something early tomorrow, with the real numbers.
     const slip = wakeSlipping(input.wakes, input.today)
-    if (slip) {
-      const { bed, wake } = await mirror.read((db) => {
-        const sl = services.services(db).sleep
-        return { bed: sl.bedtimeTarget(), wake: targetForDay(addDays(input.today, 1), sl.weekdayTarget(), sl.weekendTarget()) }
-      })
+    const night = await mirror.read((db) => {
+      const sl = services.services(db).sleep
+      const bed = sl.bedtimeTarget()
+      const wake = targetForDay(addDays(input.today, 1), sl.weekdayTarget(), sl.weekendTarget())
+      const toM = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+      const goal = ((toM(wake) - toM(bed) + 1440) % 1440) || 480
+      const mins = sl.state().recentLogs.slice(0, 7).map((l: any) => nightMinutes(l)).filter((m: number | null): m is number => m != null)
+      return { bed, wake, nights: mins.length, debt: Math.max(0, mins.reduce((t: number, m: number) => t + (goal - m), 0)) }
+    })
+    const cal = calendarFor(env, mirror)
+    const tomorrowStart = new Date(`${addDays(input.today, 1)}T00:00:00`)
+    const firstEv = cal ? (await cal.events(tomorrowStart.toISOString(), new Date(tomorrowStart.getTime() + 13 * 3600_000).toISOString()).catch(() => [])).filter((e) => !e.allDay && !e.ours && !e.declined).sort((a, b) => a.start.localeCompare(b.start))[0] : null
+    const firstEvent = firstEv ? { title: firstEv.title, time: new Date(firstEv.start).toTimeString().slice(0, 5) } : null
+    if (slip || night.debt >= 60 || firstEvent) {
+      const { bed, wake } = night
       let first: string | null = null
       if (env.todoistToken) {
         const tom = await createTodoistApi(env.todoistToken, todoistFetch(env)).tomorrow().catch(() => [])
@@ -376,8 +388,11 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       }
       first ??= st.plan.items.find((x) => !x.done)?.text ?? null
       // From Waky, the sleep coach, when it's on the server.
-      await send(windDownText({ bedTarget: bed, wakeTarget: wake, late: slip.late, of: slip.of, first }), undefined, env.sleepBotToken || env.botToken)
-      sent.push('night')
+      const text = bedtimeNudge({ bedTarget: bed, wakeTarget: wake, debtMin: night.debt, nights: night.nights, firstEvent, slipping: slip ? { late: slip.late, of: slip.of } : null, first })
+      if (text) {
+        await send(text, undefined, env.sleepBotToken || env.botToken)
+        sent.push('night')
+      }
     }
   } else {
     // Reaching the week's chosen focus pays a bonus once.

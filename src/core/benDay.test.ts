@@ -99,3 +99,14 @@ describe('the week and stakes (W13–W18)', () => {
     expect(proofMet(st, later(30, 'Reading'))).toBe(false)
   })
 })
+
+describe("Ben's bedtime message with your numbers (WK16)", () => {
+  it('names the debt and the early event, and stays quiet when all is fine', async () => {
+    const { bedtimeNudge } = await import('./coach')
+    const t = bedtimeNudge({ bedTarget: '23:00', wakeTarget: '07:00', debtMin: 130, nights: 6, firstEvent: { title: 'Exam', time: '09:00' }, slipping: null, first: null })!
+    expect(t).toContain('in bed by <b>22:30</b>')
+    expect(t).toContain('Exam at 09:00 tomorrow')
+    expect(t).toContain('2 h 10 min short')
+    expect(bedtimeNudge({ bedTarget: '23:00', wakeTarget: '07:00', debtMin: 20, nights: 6, firstEvent: { title: 'Gym', time: '18:00' }, slipping: null, first: null })).toBeNull()
+  })
+})

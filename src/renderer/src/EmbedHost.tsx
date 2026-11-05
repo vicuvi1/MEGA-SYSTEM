@@ -67,8 +67,21 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
       if (data.type === 'WAKY_CHECKIN_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'WAKY_CHECKIN_LOGGED')) {
         try {
           const time = typeof data.payload?.time === 'string' && /^\d{2}:\d{2}$/.test(data.payload.time) ? data.payload.time : undefined
-          await life.sleep.logWake(time)
+          const r = await life.sleep.logWake(time)
           window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+          window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+          // WK17: Ben's morning recap in one line: sleep, streak, the first thing in today's plan.
+          void (async () => {
+            const st = r.state
+            const log = r.log
+            const toM = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+            const slept = log.bedTime ? ((toM(log.wakeTime) - toM(log.bedTime) + 1440) % 1440) : 0
+            const h = (m: number) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`
+            const status = await life.coach?.status?.().catch(() => null)
+            const first = status?.move && status.move.kind !== 'ask' ? status.move.title : null
+            const body = [`Up at ${log.wakeTime}${log.onTime ? ' · on time' : ''}`, slept >= 120 && slept <= 960 ? `slept ${h(slept)}` : '', st.streak ? `streak ${st.streak} day${st.streak === 1 ? '' : 's'}` : '', first ? `first: ${first}` : ''].filter(Boolean).join(' · ')
+            await life.notifications?.add?.({ id: `waky-recap:${log.day}`, at: new Date().toISOString(), kind: 'ben', title: '☀️ Good morning', body, action: { kind: 'page', page: 'coach' } as any }).catch(() => null)
+          })()
         } catch (err) {
           console.error('[EmbedHost Waky] wake-up error:', err)
         }

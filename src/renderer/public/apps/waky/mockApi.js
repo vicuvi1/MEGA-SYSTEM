@@ -337,7 +337,7 @@
       const rec = days[k] || null;
       calendar.push({
         date: k,
-        status: rec ? (toMin(rec.time) <= toMin(rec.target) + grace ? 'ontime' : 'late') : 'empty',
+        status: rec ? (toMin(rec.time) <= toMin(rec.target) + grace ? 'ontime' : 'late') : dayKeys.length && k >= dayKeys[0] && k < todayDateStr ? 'missed' : 'empty',
         time: rec ? rec.time : null
       });
     }
@@ -440,7 +440,18 @@
           nightsOnGoal: week.filter((c) => c.minutes >= goal).length,
           nights: week.length,
           // WK7: what the last 7 nights are short of the goal (nights not logged don't count).
-          debt: week.length ? Math.max(0, week.reduce((t, c) => t + (goal - c.minutes), 0)) : 0
+          debt: week.length ? Math.max(0, week.reduce((t, c) => t + (goal - c.minutes), 0)) : 0,
+          // WK8: how steady your sleep is, 0–100: how far wake-ups (and bedtimes) wander from their usual time.
+          steady: (() => {
+            const w = dayKeys.slice(-14).map((k) => toMin(days[k].time));
+            if (w.length < 5) return null;
+            const b = Object.keys(nights).sort().slice(-14).map((k) => { const m = toMin(nights[k].time); return m < 720 ? m + 1440 : m; });
+            const dev = (xs) => { const mean = xs.reduce((a, c) => a + c, 0) / xs.length; return xs.reduce((a, c) => a + Math.abs(c - mean), 0) / xs.length; };
+            const d = dev(w) + (b.length >= 5 ? dev(b) * 0.5 : 0);
+            return Math.max(0, Math.min(100, Math.round(100 - d * 1.2)));
+          })(),
+          // WK12: naps today.
+          naps: (data.naps || {})[todayDateStr] || []
         };
       })(),
       game: {
@@ -634,6 +645,17 @@
       // Life System's sleep log gets the bedtime too (on the morning it ends in).
       tell('WAKY_BED_LOGGED', { time: timeStr });
       return reply({ ok: true });
+    }
+
+    // WK12: a nap (minutes), with a word on how late is too late. No points.
+    if (u.includes('/api/nap')) {
+      const b = readBody();
+      const min = Math.max(5, Math.min(240, Math.round(Number(b.minutes) || 20)));
+      data.naps = data.naps || {};
+      data.naps[today] = [...(data.naps[today] || []), { at: timeStr, minutes: min }].slice(-4);
+      save(data);
+      const late = toMin(timeStr) >= 15 * 60;
+      return reply({ ok: true, note: late ? 'Naps after 15:00 push your bedtime back. Keep the next one earlier.' : min > 30 ? 'Over 30 minutes can leave you groggy: 20 is the sweet spot.' : 'Nice: a short nap before 15:00 is the good kind.' });
     }
 
     if (u.includes('/api/stillup')) {

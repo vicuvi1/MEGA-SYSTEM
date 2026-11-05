@@ -20883,15 +20883,33 @@ function wakeSlipping(wakes, today) {
 		of: last.length
 	} : null;
 }
-/** The bedtime message: when to put the phone away, when you get up, the first thing tomorrow. */
-function windDownText(o) {
+/**
+* WK16: the bedtime message with your real numbers: the week's sleep debt and
+* tomorrow's first fixed thing ("Exam at 09:00 tomorrow and you're 2 h short:
+* in bed by 23:10"). null when there's nothing worth saying (no debt, nothing
+* early, wake-ups fine).
+*/
+function bedtimeNudge(o) {
 	const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	const toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+	const fm = (m) => `${String(Math.floor((m % 1440 + 1440) % 1440 / 60)).padStart(2, "0")}:${String((m % 1440 + 1440) % 1440 % 60).padStart(2, "0")}`;
+	const short = o.nights >= 3 && o.debtMin >= 60;
+	const early = o.firstEvent && toM(o.firstEvent.time) - toM(o.wakeTarget) <= 120 ? o.firstEvent : null;
+	if (!short && !early && !o.slipping) return null;
+	const earlier = short ? Math.min(45, Math.max(15, Math.round(o.debtMin / 4 / 15) * 15)) : 0;
+	const bed = fm(toM(o.bedTarget) - earlier);
+	const h = (m) => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`;
+	const why = [
+		early ? `${esc(early.title)} at ${early.time} tomorrow` : "",
+		short ? `you're ${h(o.debtMin)} short of sleep this week` : "",
+		o.slipping ? `${o.slipping.late} of your last ${o.slipping.of} wake-ups were late` : ""
+	].filter(Boolean);
 	return [
-		`🌙 <b>Wind-down</b> · bedtime ${o.bedTarget}`,
+		`🌙 <b>Wind-down</b> · in bed by <b>${bed}</b>`,
 		"",
-		`You woke up late ${o.late} of the last ${o.of} mornings. Tomorrow starts tonight:`,
+		`${why.join(", and ").replace(/^./, (c) => c.toUpperCase())}.`,
 		"📵 Phone away now (charge it outside the bed).",
-		`💡 Lights out at <b>${o.bedTarget}</b>, up at <b>${o.wakeTarget}</b>.`,
+		`💡 Lights out at <b>${bed}</b>, up at <b>${o.wakeTarget}</b>.`,
 		o.first ? `🎯 First thing tomorrow: <b>${esc(o.first)}</b>` : "🎯 Decide your first thing for tomorrow, then sleep on it."
 	].join("\n");
 }
@@ -22522,25 +22540,48 @@ async function runDaily(env, job) {
 			sent.push("exam-sleep");
 		}
 		const slip = wakeSlipping(input.wakes, input.today);
-		if (slip) {
-			const { bed, wake } = await mirror.read((db) => {
-				const sl = services.services(db).sleep;
-				return {
-					bed: sl.bedtimeTarget(),
-					wake: targetForDay(addDays$3(input.today, 1), sl.weekdayTarget(), sl.weekendTarget())
-				};
-			});
+		const night = await mirror.read((db) => {
+			const sl = services.services(db).sleep;
+			const bed = sl.bedtimeTarget();
+			const wake = targetForDay(addDays$3(input.today, 1), sl.weekdayTarget(), sl.weekendTarget());
+			const toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+			const goal = (toM(wake) - toM(bed) + 1440) % 1440 || 480;
+			const mins = sl.state().recentLogs.slice(0, 7).map((l) => nightMinutes(l)).filter((m) => m != null);
+			return {
+				bed,
+				wake,
+				nights: mins.length,
+				debt: Math.max(0, mins.reduce((t, m) => t + (goal - m), 0))
+			};
+		});
+		const cal = calendarFor(env, mirror);
+		const tomorrowStart = /* @__PURE__ */ new Date(`${addDays$3(input.today, 1)}T00:00:00`);
+		const firstEv = cal ? (await cal.events(tomorrowStart.toISOString(), new Date(tomorrowStart.getTime() + 468e5).toISOString()).catch(() => [])).filter((e) => !e.allDay && !e.ours && !e.declined).sort((a, b) => a.start.localeCompare(b.start))[0] : null;
+		const firstEvent = firstEv ? {
+			title: firstEv.title,
+			time: new Date(firstEv.start).toTimeString().slice(0, 5)
+		} : null;
+		if (slip || night.debt >= 60 || firstEvent) {
+			const { bed, wake } = night;
 			let first = null;
 			if (env.todoistToken) first = (await createTodoistApi(env.todoistToken, todoistFetch(env)).tomorrow().catch(() => [])).sort((a, b) => b.priority - a.priority || String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99")))[0]?.content ?? null;
 			first ??= st.plan.items.find((x) => !x.done)?.text ?? null;
-			await send(windDownText({
+			const text = bedtimeNudge({
 				bedTarget: bed,
 				wakeTarget: wake,
-				late: slip.late,
-				of: slip.of,
+				debtMin: night.debt,
+				nights: night.nights,
+				firstEvent,
+				slipping: slip ? {
+					late: slip.late,
+					of: slip.of
+				} : null,
 				first
-			}), void 0, env.sleepBotToken || env.botToken);
-			sent.push("night");
+			});
+			if (text) {
+				await send(text, void 0, env.sleepBotToken || env.botToken);
+				sent.push("night");
+			}
 		}
 	} else {
 		let weekLine = "";

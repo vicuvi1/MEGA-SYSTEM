@@ -897,3 +897,43 @@ body[data-theme="legend"] { --sun: #c084fc; --sun-2: #f5c44a; --gold: #f5c44a;
 .st-moods b { display: block; font-size: 48px; }
 .story-nav { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 2fr; }
 .story-nav span { cursor: pointer; }
+
+/* ---- Night 6 (WK19–WK27) ---- */
+/* WK21: a missed morning after you started */
+.calendar .c.missed { background: transparent; border: 2px solid color-mix(in srgb, #f87171 70%, transparent); color: #f87171; }
+/* WK7: sleep debt */
+.debt-card .big { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 2px 0 4px; }
+.debt-card.short { border-color: color-mix(in srgb, #fbbf24 45%, var(--line)); }
+.debt-card.short .big { color: #fbbf24; }
+.debt-card.fine .big { color: var(--ontime); }
+.nap-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+/* WK20: the late "I'm up" is a real button */
+.big-cta { font-size: 18px; padding: 16px 28px; border-radius: 16px; }
+/* WK22 */
+.tl-fold { list-style: none; margin: 0 0 10px; }
+/* WK23: nights from bedtime to wake-up */
+.sleep-bars.nights { display: grid; grid-template-columns: 1fr; gap: 6px; height: auto; padding: 20px 0 0 34px; position: relative; align-items: stretch; }
+.sleep-bars.nights .night-band { position: absolute; top: 20px; bottom: 0; margin-left: 34px; background: color-mix(in srgb, #6366f1 10%, transparent); border-left: 1px dashed #6366f1; border-right: 1px dashed #6366f1; pointer-events: none; }
+.sleep-bars.nights .night-axis { position: absolute; top: 0; left: 34px; right: 0; height: 16px; }
+.sleep-bars.nights .night-axis span { position: absolute; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); }
+.sleep-bars.nights .nb { position: relative; display: block; height: 12px; }
+.sleep-bars.nights .nb span { position: absolute; left: -30px; top: -1px; width: 24px; text-align: right; font-size: 10.5px; color: var(--muted); }
+.sleep-bars.nights .nb-track { position: relative; height: 100%; border-radius: 6px; background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.sleep-bars.nights .nb-track i { position: absolute; top: 0; bottom: 0; border-radius: 6px; background: linear-gradient(90deg, #a5b4fc, #6366f1); }
+.sleep-bars.nights .nb.ok .nb-track i { background: linear-gradient(90deg, #c4b5fd, #7c3aed); opacity: .8; }
+.sleep-bars.nights .nb.short .nb-track i { background: linear-gradient(90deg, #fbbf24, #b45309); }
+.sleep-bars.nights .wake-dot { position: absolute; top: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--ontime); transform: translateX(-50%); }
+.sleep-bars.nights .sleep-empty { position: static; margin-top: 8px; }
+/* WK24: Life System's look inside Life System: its font, no second clock, no gold serif */
+.in-life body, .in-life .tab, .in-life .btn { font-family: inherit; }
+.in-life .clock { display: none; }
+.in-life .av-rank, .in-life .rank, .in-life .rank-up, .in-life .lb-rank, .in-life .tr-rank-name, .in-life .rc-rank { font-family: inherit !important; letter-spacing: 0; }
+/* WK19: on a phone the tabs are a bar at the bottom, all five visible */
+@media (max-width: 600px) {
+  .topbar .tabs { position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 50; margin: 0; display: grid; grid-template-columns: repeat(5, 1fr); box-shadow: 0 10px 30px rgb(0 0 0 / .45); }
+  .topbar .tab { padding: 10px 2px; font-size: 12px; text-align: center; }
+  main { padding-bottom: 96px; }
+  .big-cta { width: 100%; }
+}
+/* WK27: calm motion when asked */
+@media (prefers-reduced-motion: reduce) { .view.active, .reveal, .wake-btn .rays { animation: none !important; } }
