@@ -21336,7 +21336,7 @@ async function deskTick(mirror, services, now, send, esc) {
 		text: f,
 		callback_data: `md|${i + 1}`
 	}))] }).catch(() => null);
-	if (callDue(d.calls, now) && now.getDay() === 0 && h >= 20 && h < 22) await send("🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.").catch(() => null);
+	if (callDue(d.calls, now) && now.getDay() === 0 && h >= 20 && h < 22) await send("🔁 Sunday review: look back, one change, next week's big 3, book the blocks. 5 minutes. Open Coach → <b>Sunday review</b>.").catch(() => null);
 	if (h >= 10 && h < 20) {
 		const line = await mirror.write((db) => {
 			if (getSetting(db, "ben_misstwice_day") === today) return null;

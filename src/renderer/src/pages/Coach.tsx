@@ -115,6 +115,12 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [info, setInfo] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1200)
   const [tab, setTabRaw] = useState<DeskTab>(() => {
     try {
+      // Sunday: the weekly review first (D6), once per Sunday.
+      const today = new Date().toLocaleDateString('sv-SE')
+      if (new Date().getDay() === 0 && localStorage.getItem('ls.sundayOpened') !== today) {
+        localStorage.setItem('ls.sundayOpened', today)
+        return 'sunday'
+      }
       return (localStorage.getItem('ls.deskTab') as DeskTab) || 'today'
     } catch {
       return 'today'

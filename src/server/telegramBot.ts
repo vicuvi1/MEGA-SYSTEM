@@ -773,7 +773,7 @@ async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: s
   // 4) The Sunday coach call (in the app, 5 minutes).
   // Two hours after the Sunday review, not on top of it (T7).
   if (callDue(d.calls, now) && now.getDay() === 0 && h >= 20 && h < 22) {
-    await send('🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.').catch(() => null)
+    await send("🔁 Sunday review: look back, one change, next week's big 3, book the blocks. 5 minutes. Open Coach → <b>Sunday review</b>.").catch(() => null)
   }
   // 5) Never miss twice (D4): yesterday slipped → one message, once a day, from 10:00.
   if (h >= 10 && h < 20) {

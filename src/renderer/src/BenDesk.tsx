@@ -19,9 +19,10 @@ import { addDays } from '@core/dates'
 import { PROFILE_NOTE } from '@core/benKnows'
 import { BenLog } from './BenLog'
 
-export type DeskTab = 'today' | 'plan' | 'you' | 'money' | 'month' | 'log'
+export type DeskTab = 'today' | 'sunday' | 'plan' | 'you' | 'money' | 'month' | 'log'
 export const DESK_TABS: { id: DeskTab; label: string; icon: string }[] = [
   { id: 'today', label: 'Today', icon: '☀️' },
+  { id: 'sunday', label: 'Sunday review', icon: '🔁' },
   { id: 'plan', label: 'Plan', icon: '🗓' },
   { id: 'you', label: 'You', icon: '🧠' },
   { id: 'money', label: 'Money', icon: '💸' },
@@ -98,6 +99,8 @@ export function BenDesk({ tab, setTab, status, slots, onChange, onSay }: { tab: 
           </div>
         ) : tab === 'today' ? (
           <TodayTab v={v} now={now} status={status} change={change} onSay={onSay} />
+        ) : tab === 'sunday' ? (
+          <SundayTab v={v} change={change} />
         ) : tab === 'plan' ? (
           <PlanTab v={v} change={change} slots={slots} onSay={onSay} reload={load} />
         ) : tab === 'you' ? (
@@ -115,6 +118,68 @@ export function BenDesk({ tab, setTab, status, slots, onChange, onSay }: { tab: 
 }
 
 type Change = (op: any, quiet?: boolean) => Promise<string | undefined | null>
+
+// ----------------------------------------------------------- Sunday review
+
+/**
+ * One weekly ritual (D6), in order: look back (your week in one look, the
+ * full house), the coach call (wins, misses, one change, next week's big 3),
+ * one experiment to try, then book the week's blocks.
+ */
+function SundayTab({ v, change }: { v: DeskView; change: Change }) {
+  return (
+    <>
+      <p className="bd-step">1 · Look back</p>
+      <WeekLookBack v={v} change={change} />
+      <p className="bd-step">2 · Wins, misses, one change, next week's big 3</p>
+      <CallCard v={v} change={change} />
+      <p className="bd-step">3 · One thing to try</p>
+      <ExperimentCard v={v} change={change} />
+      <p className="bd-step">4 · Book the week</p>
+      <WeekCard v={v} />
+    </>
+  )
+}
+
+/** The week at a glance: the full house and your week in one look. */
+function WeekLookBack({ v, change }: { v: DeskView; change: Change }) {
+  return (
+    <>
+      {v.fullHouse && (
+        <Card
+          title={v.fullHouse.hit ? 'Full house this week 🏆' : 'Weekly full house'}
+          icon="🃏"
+          tone={v.fullHouse.hit ? 'accent' : undefined}
+          sub="steady sleep · 3+ workouts · clean · under budget"
+          action={v.fullHouse.hit && !v.fullHouse.claimed ? <button className="bd-btn strong" onClick={() => void change({ op: 'fullHouse' })}>Claim +40</button> : undefined}
+        >
+          <p className="bd-line">
+            {v.fullHouse.got.length > 0 && <>✅ {v.fullHouse.got.join(' · ')}</>}
+            {v.fullHouse.missing.length > 0 && (
+              <>
+                <br />⏳ Still to go: {v.fullHouse.missing.join(', ')}
+              </>
+            )}
+            {v.fullHouse.claimed && <><br />Claimed this week.</>}
+          </p>
+        </Card>
+      )}
+      {v.review && v.review.findings.length > 0 ? (
+        <Card title="Your week in one look" icon="🔎" sub="training · sleep · money · focus · urges">
+          <ul className="bd-review">
+            {v.review.findings.map((f) => (
+              <li key={f.area} className={f.good ? 'good' : 'bad'}>
+                <b>{f.good ? '▲' : '▼'} {f.area}</b> {f.text}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : (
+        <Card title="Your week in one look" icon="🔎" sub="Shows up after a week of focus, sleep and workouts." />
+      )}
+    </>
+  )
+}
 
 // ------------------------------------------------------------------- Today
 
@@ -361,9 +426,6 @@ function StakesCard({ v, now, change }: { v: DeskView; now: number; change: Chan
 function PlanTab({ v, change, slots, onSay, reload }: { v: DeskView; change: Change; slots: { plan: ReactNode; goals: ReactNode }; onSay: (t: string) => void; reload: () => void }) {
   return (
     <>
-      <CallCard v={v} change={change} />
-      <ExperimentCard v={v} change={change} />
-      <WeekCard v={v} />
       <DeadlinesCard v={v} reload={reload} />
       <StudyCard v={v} change={change} />
       <StacksCard v={v} change={change} onSay={onSay} />
@@ -877,39 +939,6 @@ function MonthTab({ v, reload, change }: { v: DeskView; reload: () => void; chan
   }
   return (
     <>
-      {v.fullHouse && (
-        <Card
-          title={v.fullHouse.hit ? 'Full house this week 🏆' : 'Weekly full house'}
-          icon="🃏"
-          tone={v.fullHouse.hit ? 'accent' : undefined}
-          sub="steady sleep · 3+ workouts · clean · under budget"
-          action={v.fullHouse.hit && !v.fullHouse.claimed ? <button className="bd-btn strong" onClick={() => void change({ op: 'fullHouse' })}>Claim +40</button> : undefined}
-        >
-          <p className="bd-line">
-            {v.fullHouse.got.length > 0 && <>✅ {v.fullHouse.got.join(' · ')}</>}
-            {v.fullHouse.missing.length > 0 && (
-              <>
-                <br />⏳ Still to go: {v.fullHouse.missing.join(', ')}
-              </>
-            )}
-            {v.fullHouse.claimed && <><br />Claimed this week.</>}
-          </p>
-        </Card>
-      )}
-      {v.review && v.review.findings.length > 0 && (
-        <Card title="Your week in one look" icon="🔎" sub="training · sleep · money · focus · urges">
-          <ul className="bd-review">
-            {v.review.findings.map((f) => (
-              <li key={f.area} className={f.good ? 'good' : 'bad'}>
-                <b>{f.good ? '▲' : '▼'} {f.area}</b> {f.text}
-              </li>
-            ))}
-          </ul>
-          <p className="bd-line">
-            🧪 Try next: <b>{v.review.experiment.title}</b>
-          </p>
-        </Card>
-      )}
       <section className="bd-story">
         <header>
           <small>Your month</small>
