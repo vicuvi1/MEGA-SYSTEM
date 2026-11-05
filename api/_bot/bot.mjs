@@ -18272,6 +18272,8 @@ function impactVerdict(rows) {
 	};
 }
 // src/renderer/src/web/rhythmBot.ts
+/** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
+var localHm = (iso) => new Date(iso).toTimeString().slice(0, 5);
 var pad = (n) => String(n).padStart(2, "0");
 var hmNow = (d = /* @__PURE__ */ new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 var quarterNow = (d = /* @__PURE__ */ new Date()) => {
@@ -18418,8 +18420,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					return story ? `== Your story so far about him ==\n${story.text}` : "";
 				}),
 				safe(() => {
-					const chat = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-14);
-					return chat.length ? `== What you two said today ==\n${chat.map((e) => `${e.at.slice(11, 16)} ${e.role === "me" ? "Victor" : "Ben"}: ${e.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n")}` : "";
+					const chat = loadLog(db).filter((e) => dayKey(e.at) === today).slice(-14);
+					return chat.length ? `== What you two said today ==\n${chat.map((e) => `${localHm(e.at)} ${e.role === "me" ? "Victor" : "Ben"}: ${e.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n")}` : "";
 				}),
 				safe(() => promiseLine(promiseStats(readSetting(db, REMINDERS)))),
 				safe(() => {
@@ -18460,12 +18462,12 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 	async function todayTalk(since) {
 		return mirror.read((db) => {
 			const today = services.services(db).wallet.today();
-			const log = loadLog(db).filter((e) => e.at.slice(0, 10) === today && (!since || e.at > since)).slice(-40);
-			const fb = loadFeedback(db).filter((f) => f.at.slice(0, 10) === today && (!since || f.at > since));
+			const log = loadLog(db).filter((e) => dayKey(e.at) === today && (!since || e.at > since)).slice(-40);
+			const fb = loadFeedback(db).filter((f) => dayKey(f.at) === today && (!since || f.at > since));
 			return {
 				today,
 				n: log.length,
-				chat: log.map((e) => `${e.at.slice(11, 16)} ${e.role === "me" ? "Victor" : "Ben"}${e.proactive ? " (on his own)" : ""}: ${e.text.replace(/\s+/g, " ").slice(0, 220)}`).join("\n"),
+				chat: log.map((e) => `${localHm(e.at)} ${e.role === "me" ? "Victor" : "Ben"}${e.proactive ? " (on his own)" : ""}: ${e.text.replace(/\s+/g, " ").slice(0, 220)}`).join("\n"),
 				feedback: fb.map((f) => `${f.kind}: "${f.text.slice(0, 100)}"`).join("\n")
 			};
 		});

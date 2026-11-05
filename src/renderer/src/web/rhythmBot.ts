@@ -4,7 +4,7 @@
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
 import { waterToday } from './coachStatus'
 import { withTimeout } from '@core/ai'
-import { addDays } from '@core/dates'
+import { addDays, dayKey } from '@core/dates'
 import { progressReport, financeSpending } from '@core/progress'
 import { sharedView, sportToday } from '@core/sportShared'
 import { isStarred, type TodoTask } from '@core/todoist'
@@ -45,6 +45,9 @@ import type { WebServices } from './webServices'
 import { benNote, writeJournal } from './notes'
 import { nightMinutes } from '@core/readiness'
 import { dayLog, dayLogLine } from './dayLog'
+
+/** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
+const localHm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
 
 export interface RhythmDeps {
   mirror: Mirror
@@ -188,8 +191,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           return story ? `== Your story so far about him ==\n${story.text}` : ''
         }),
         safe(() => {
-          const chat = loadLog(db).filter((e) => e.at.slice(0, 10) === today).slice(-14)
-          return chat.length ? `== What you two said today ==\n${chat.map((e) => `${e.at.slice(11, 16)} ${e.role === 'me' ? 'Victor' : 'Ben'}: ${e.text.replace(/\s+/g, ' ').slice(0, 160)}`).join('\n')}` : ''
+          const chat = loadLog(db).filter((e) => dayKey(e.at) === today).slice(-14)
+          return chat.length ? `== What you two said today ==\n${chat.map((e) => `${localHm(e.at)} ${e.role === 'me' ? 'Victor' : 'Ben'}: ${e.text.replace(/\s+/g, ' ').slice(0, 160)}`).join('\n')}` : ''
         }),
         safe(() => promiseLine(promiseStats(readSetting(db as any, REMINDERS)))),
         safe(() => {
@@ -225,12 +228,12 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
   async function todayTalk(since?: string) {
     return mirror.read((db) => {
       const today = services.services(db).wallet.today()
-      const log = loadLog(db).filter((e) => e.at.slice(0, 10) === today && (!since || e.at > since)).slice(-40)
-      const fb = loadFeedback(db).filter((f) => f.at.slice(0, 10) === today && (!since || f.at > since))
+      const log = loadLog(db).filter((e) => dayKey(e.at) === today && (!since || e.at > since)).slice(-40)
+      const fb = loadFeedback(db).filter((f) => dayKey(f.at) === today && (!since || f.at > since))
       return {
         today,
         n: log.length,
-        chat: log.map((e) => `${e.at.slice(11, 16)} ${e.role === 'me' ? 'Victor' : 'Ben'}${e.proactive ? ' (on his own)' : ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'),
+        chat: log.map((e) => `${localHm(e.at)} ${e.role === 'me' ? 'Victor' : 'Ben'}${e.proactive ? ' (on his own)' : ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 220)}`).join('\n'),
         feedback: fb.map((f) => `${f.kind}: "${f.text.slice(0, 100)}"`).join('\n')
       }
     })
