@@ -11,6 +11,7 @@ import {
   sessionMinutes,
   weekReport,
   type DayPlan,
+  type PlanInput,
   type FocusGoal,
   type FocusSession,
   type GoalProgress,
@@ -212,14 +213,20 @@ export class FocusService {
   }
 
   /** Today's 1–3 (up to 5) must-dos. Keeps what was already ticked. */
-  setPlan(items: string[], now = new Date(), day?: string): DayPlan {
+  setPlan(items: PlanInput[], now = new Date(), day?: string): DayPlan {
     const d = day ?? this.wallet.today(now)
     const cur = this.plan(d)
     const next = items
-      .map((t) => String(t).trim().slice(0, 140))
-      .filter(Boolean)
+      .map((x) => (typeof x === 'string' ? { text: x, todoistId: null } : x))
+      .map((x) => ({ text: String(x.text ?? '').trim().slice(0, 140), todoistId: x.todoistId ? String(x.todoistId) : null }))
+      .filter((x) => x.text)
       .slice(0, 5)
-      .map((text) => ({ text, done: cur.items.find((i) => i.text === text)?.done ?? false }))
+      .map(({ text, todoistId }) => {
+        // Same must-do as before: by its Todoist id, else by its words (keeps done and the link).
+        const was = cur.items.find((i) => (todoistId && i.todoistId === todoistId) || i.text === text)
+        const id = todoistId ?? was?.todoistId ?? null
+        return { text, done: was?.done ?? false, ...(id ? { todoistId: id } : {}) }
+      })
     if (!next.length) throw new LedgerError('Write at least one must-do')
     this.savePlan({ ...cur, items: next }, now)
     return this.plan(d)

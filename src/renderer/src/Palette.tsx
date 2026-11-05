@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isFlowRule } from '@core/rules'
-import type { Rule, ScheduleState, ShopState, TasksState } from '@shared/api'
+import type { Rule, ShopState } from '@shared/api'
+import type { TodoTask } from '@core/todoist'
 import { Icon, type IconName } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 
@@ -17,13 +18,12 @@ export interface Command {
 
 interface Sources {
   rules: Rule[]
-  tasks: TasksState | null
-  schedule: ScheduleState | null
+  /** Today's Todoist (the one task system). */
+  todo: TodoTask[] | null
   shop: ShopState | null
   go: (page: PageId, view?: 'app' | 'system') => void
   award: (rule: Rule) => Promise<unknown>
-  completeTask: (id: number) => Promise<unknown>
-  startBlock: (id: number) => Promise<unknown>
+  completeTodo: (t: TodoTask) => Promise<unknown>
   actions: Command[]
 }
 
@@ -42,11 +42,8 @@ export function buildCommands(s: Sources): Command[] {
   for (const r of s.rules.filter((r) => r.enabled && !isFlowRule(r.id))) {
     out.push({ id: `log:${r.id}`, label: r.title, hint: `${r.coins > 0 ? '+' : ''}${r.coins} coins`, group: 'Log', icon: 'plus', run: () => s.award(r) })
   }
-  for (const t of s.tasks?.tasks.filter((t) => !t.done) ?? []) {
-    out.push({ id: `task:${t.id}`, label: t.title, hint: `Complete · +${t.coins}`, group: 'Tasks', icon: 'check', run: () => s.completeTask(t.id) })
-  }
-  for (const b of s.schedule?.day === s.schedule?.today ? s.schedule?.blocks.filter((b) => b.status === 'pending') ?? [] : []) {
-    out.push({ id: `block:${b.id}`, label: b.title, hint: `Start the timer · ${b.start}`, group: 'Schedule', icon: 'calendar', run: () => s.startBlock(b.id) })
+  for (const t of s.todo ?? []) {
+    out.push({ id: `todo:${t.id}`, label: t.content, hint: `Done in Todoist${t.dueTime ? ` · ${t.dueTime}` : ''}`, group: 'Tasks', icon: 'check', run: () => s.completeTodo(t) })
   }
   for (const r of s.shop?.rewards ?? []) {
     out.push({ id: `reward:${r.id}`, label: r.title, hint: `${r.price} coins`, group: 'Shop', icon: 'gift', run: () => s.go('shop') })

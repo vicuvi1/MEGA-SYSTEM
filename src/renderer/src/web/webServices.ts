@@ -205,7 +205,7 @@ export function createWebServices(mirror: Mirror) {
       cancel: () => write((s) => s.focus.cancel()),
       extend: (minutes: number) => write((s) => s.focus.extend(minutes)),
       add: (subject: string, minutes: number, day?: string) => write((s) => s.focus.add(subject, minutes, day), W),
-      setPlan: (items: string[]) => write((s) => s.focus.setPlan(items)),
+      setPlan: (items: import('@core/focus').PlanInput[]) => write((s) => s.focus.setPlan(items)),
       togglePlan: (index: number) => write((s) => s.focus.togglePlan(index), W),
       review: (text: string | null, reasons: string[]) => write((s) => s.focus.review(text, reasons)),
       saveGoal: (g: { id?: number; title: string; subject: string; deadline: string; hours: number }) => write((s) => s.focus.saveGoal(g)),

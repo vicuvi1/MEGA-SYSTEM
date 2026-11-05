@@ -111,20 +111,11 @@ export function HudBar() {
       const taskMatch = raw.match(/^(?:task|todo|quest)\s*(.+)/i)
       if (taskMatch) {
         const title = taskMatch[1].trim()
-        const today = new Date().toISOString().slice(0, 10)
-        await life.tasks.save({
-          title,
-          category: 'university',
-          priority: 2,
-          due: today,
-          repeat: 'none',
-          weekdays: 0,
-          coins: 10,
-          xp: 20,
-          notes: 'Created via Desktop HUD'
-        })
+        // The one task system: Todoist (the old local tasks are retired).
+        if (!life.todoist) throw new Error('Connect Todoist to add tasks')
+        await life.todoist.quickAdd(title)
         soundSuccess()
-        flash(`Quest added: ${title}`)
+        flash(`Added to Todoist: ${title}`)
         return
       }
 

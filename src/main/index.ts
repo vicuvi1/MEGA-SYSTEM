@@ -351,7 +351,7 @@ handle('focus:start', (subject: string, planned?: number, task?: FocusTask | nul
 handle('focus:stop', () => focusChanged(focusService.stop()))
 handle('focus:cancel', () => focusService.cancel())
 handle('focus:add', (subject: string, minutes: number, day?: string) => focusChanged(focusService.add(subject, minutes, day)))
-handle('focus:setPlan', (items: string[]) => focusService.setPlan(items))
+handle('focus:setPlan', (items: any[]) => focusService.setPlan(items))
 handle('focus:togglePlan', (index: number) => focusChanged(focusService.togglePlan(index)))
 handle('focus:review', (text: string | null, reasons: string[]) => focusService.review(text, reasons))
 handle('focus:saveGoal', (g: { id?: number; title: string; subject: string; deadline: string; hours: number }) => focusService.saveGoal(g))

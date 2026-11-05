@@ -26,7 +26,15 @@ export const PLAN_ITEM_COINS = 10
 export interface PlanItem {
   text: string
   done: boolean
+  /** The Todoist task this must-do is (linked by id, so a rename keeps the link). */
+  todoistId?: string
 }
+/** A must-do as you set it: its words, and the Todoist task when it is one. */
+export type PlanInput = string | { text: string; todoistId?: string | null }
+
+/** Is this must-do that Todoist task? By id when linked, else by its words. */
+export const isPlanFor = (p: Pick<PlanItem, 'text' | 'todoistId'>, t: { id: string; content: string }) =>
+  p.todoistId ? p.todoistId === t.id : p.text.trim().toLowerCase() === t.content.trim().toLowerCase()
 export interface DayPlan {
   day: string
   items: PlanItem[]

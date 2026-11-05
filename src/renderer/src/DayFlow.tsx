@@ -26,7 +26,7 @@ import { soundCoin, soundSuccess } from './sound'
 import { useAction, useToast } from './ui'
 import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
-import { PLAN_ITEM_COINS } from '@core/focus'
+import { PLAN_ITEM_COINS, isPlanFor, type PlanItem } from '@core/focus'
 import { BIG3_POINTS } from '../../main/points'
 
 interface Props {
@@ -339,9 +339,17 @@ export function DayFlow(props: Props) {
   }
   const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
   /** A must-do in the day plan (points, bots, Insights read it). */
-  const addPlanItem = async (t: string) => {
-    if (!st || st.plan.items.some((p) => same(p.text, t))) return true
-    return !!(await act(() => life.focus.setPlan([...st.plan.items.map((i) => i.text), t])))
+  const keepPlan = (items: PlanItem[]) => items.map((i) => ({ text: i.text, todoistId: i.todoistId ?? null }))
+  /** `task`: the Todoist task it is (linked by id: a rename in Todoist keeps the link). */
+  const addPlanItem = async (t: string, task?: TodoTask) => {
+    if (!st) return true
+    const at = st.plan.items.findIndex((p) => (task ? isPlanFor(p, task) : same(p.text, t)))
+    if (at >= 0) {
+      // Already there by its words: link it to the task now.
+      if (task && !st.plan.items[at].todoistId) await act(() => life.focus.setPlan(keepPlan(st.plan.items).map((x, k) => (k === at ? { ...x, todoistId: task.id } : x))))
+      return true
+    }
+    return !!(await act(() => life.focus.setPlan([...keepPlan(st.plan.items), { text: t, todoistId: task?.id ?? null }])))
   }
   /** A typed must-do: in the plan and, with Todoist, a task due today starred ⭐. */
   const addMustDo = async (text = adding) => {
@@ -357,7 +365,7 @@ export function DayFlow(props: Props) {
     const labels = [...new Set([...(t.labels ?? []), TODAY_LABEL])]
     setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, labels } : x)))
     const ok = await act(() => life.todoist!.update!(t.id, { labels, ...(t.due && t.due <= today ? {} : { due: 'today' }) }).then(() => true), `⭐ Must-do: ${t.content}`)
-    if (ok) await addPlanItem(t.content)
+    if (ok) await addPlanItem(t.content, t)
     refresh()
   }
   const unstar = async (t: TodoTask) => {
@@ -365,14 +373,14 @@ export function DayFlow(props: Props) {
     setTodo((cur) => (cur ?? []).map((x) => (x.id === t.id ? { ...x, labels } : x)))
     await act(() => life.todoist!.update!(t.id, { labels }).then(() => true))
     if (st) {
-      const keep = st.plan.items.filter((p) => p.done || !same(p.text, t.content)).map((p) => p.text)
+      const keep = keepPlan(st.plan.items.filter((p) => p.done || !isPlanFor(p, t)))
       if (keep.length !== st.plan.items.length) await act(() => life.focus.setPlan(keep))
     }
     refresh()
   }
   /** Done on a starred task: Todoist and the must-do (+10) together. */
   const doneStarred = async (t: TodoTask) => {
-    const i = st ? st.plan.items.findIndex((p) => !p.done && same(p.text, t.content)) : -1
+    const i = st ? st.plan.items.findIndex((p) => !p.done && isPlanFor(p, t)) : -1
     await doneTodo(t)
     if (i >= 0) await tickMustDo(i)
   }
@@ -644,7 +652,7 @@ export function DayFlow(props: Props) {
   const bigOpen = week?.big3.map((b, i) => ({ ...b, i })).filter((b) => b.text) ?? []
   const doneCount = plan.filter((p) => p.done).length + bigOpen.filter((b) => b.done).length
   // Plan items shown on their own: those without a starred Todoist task.
-  const planOnly = plan.map((p, i) => ({ p, i })).filter((x) => !starred.some((t) => same(t.content, x.p.text)))
+  const planOnly = plan.map((p, i) => ({ p, i })).filter((x) => !starred.some((t) => isPlanFor(x.p, t)))
   // One number that matters: must-dos (starred tasks + plan items not starred).
   const mustTotal = starred.length + planOnly.length
   const mustDone = planOnly.filter((x) => x.p.done).length

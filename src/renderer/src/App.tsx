@@ -29,6 +29,7 @@ import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { reloadToday } from './todayEvents'
 import { capture } from './capture'
+import type { TodoTask } from '@core/todoist'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at once).
@@ -145,6 +146,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // Which tab each app section shows: the app itself, or Life System's view.
   const [view, setView] = useState<Partial<Record<PageId, 'app' | 'system'>>>(last?.view ?? {})
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // Ctrl+K lists today's Todoist (the one task system), loaded when it opens.
+  const [paletteTodo, setPaletteTodo] = useState<TodoTask[] | null>(null)
+  useEffect(() => {
+    if (paletteOpen && life.todoist) life.todoist.today().then(setPaletteTodo).catch(() => setPaletteTodo(null))
+  }, [paletteOpen])
   const [fullScreen, setFullScreen] = useState(false)
   const [pops, setPops] = useState<{ id: number; coins: number; label: string }[]>([])
   const act = useAction()
@@ -443,15 +449,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   }, [])
   const commands: Command[] = buildCommands({
     rules,
-    tasks,
-    schedule,
+    todo: paletteTodo,
     shop,
     go,
     award: (r) => act(() => life.wallet.award(r.id), `${r.title} logged`).then((x) => x && onWallet()),
-    completeTask: (id) => act(() => life.tasks.complete(id), 'Task done').then((x) => x && onWallet()),
-    startBlock: (id) => act(() => life.schedule.start(id), 'Timer started').then((x) => {
-      if (x) setSchedule(x)
-      go('schedule')
+    completeTodo: (t) => act(() => life.todoist!.complete(t), `Done: ${t.content}`).then((x) => {
+      if (x) onWallet()
+      setPaletteTodo((cur) => (cur ?? []).filter((y) => y.id !== t.id))
+      window.dispatchEvent(new CustomEvent('life-external-changed'))
     }),
     actions: [
       ...(features.ai ? [{ id: 'a:oracle', label: 'Ask the coach', hint: 'Ctrl+J', group: 'Actions', icon: 'bolt', color: '#00d2ff', run: () => setPage('coach') } as const] : []),

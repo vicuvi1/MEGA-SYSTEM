@@ -4739,10 +4739,21 @@ var FocusService = class {
 	setPlan(items, now = /* @__PURE__ */ new Date(), day) {
 		const d = day ?? this.wallet.today(now);
 		const cur = this.plan(d);
-		const next = items.map((t) => String(t).trim().slice(0, 140)).filter(Boolean).slice(0, 5).map((text) => ({
-			text,
-			done: cur.items.find((i) => i.text === text)?.done ?? false
-		}));
+		const next = items.map((x) => typeof x === "string" ? {
+			text: x,
+			todoistId: null
+		} : x).map((x) => ({
+			text: String(x.text ?? "").trim().slice(0, 140),
+			todoistId: x.todoistId ? String(x.todoistId) : null
+		})).filter((x) => x.text).slice(0, 5).map(({ text, todoistId }) => {
+			const was = cur.items.find((i) => todoistId && i.todoistId === todoistId || i.text === text);
+			const id = todoistId ?? was?.todoistId ?? null;
+			return {
+				text,
+				done: was?.done ?? false,
+				...id ? { todoistId: id } : {}
+			};
+		});
 		if (!next.length) throw new LedgerError("Write at least one must-do");
 		this.savePlan({
 			...cur,
