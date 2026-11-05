@@ -316,8 +316,22 @@ button.cf-side-card:hover { border-color: var(--border-strong); transform: trans
 .cf-side-btn { justify-self: start; min-height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border-strong); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; transition: background-color 0.15s; margin-top: 4px; }
 .cf-side-btn:hover { background: rgb(var(--ink) / 0.09); }
 
-/* Toasts never cover the chat's header */
-html:has(.cx.cf) .nt-stack { top: calc(var(--desk-bar, 0px) + 66px + var(--cf-head-h, 84px) + 30px); }
+/* Pop-up notices never cover the chat (coachToastDock.ts measures where they go):
+   at the top of Ben's view of today, pushing its cards down, or as a compact
+   strip under the header with the messages moved down to make room. */
+html.nt-dock .nt-stack { top: var(--nt-top); left: var(--nt-left); right: auto; width: var(--nt-w); }
+html.nt-dock-side .cx.cf.side-on .cx-chat > .cf-side { padding-top: calc(16px + var(--nt-pad, 0px)); }
+html.nt-dock-strip .cx.cf .cf-stream { margin-top: var(--nt-pad, 0px); }
+html.nt-dock-side .nt-card { padding: 12px 12px 14px; border-radius: 16px; }
+html.nt-dock-strip .nt-card { align-items: center; gap: 10px; padding: 9px 10px 11px 12px; border-radius: 16px; }
+html.nt-dock-strip .nt-icon { width: 28px; height: 28px; border-radius: 9px; }
+html.nt-dock-strip .nt-body { flex-direction: row; align-items: center; gap: 10px; }
+html.nt-dock-strip .nt-body > b { flex: none; white-space: nowrap; }
+html.nt-dock-strip .nt-body small { display: none; }
+html.nt-dock-strip .nt-acts { margin-top: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+html.nt-dock-strip .nt-acts::-webkit-scrollbar { display: none; }
+html.nt-dock-strip .nt-act { flex: none; }
+html.nt-dock-strip .nt-x { align-self: center; }
 
 /* ---------- Motion: rows spring in (CF2) ---------- */
 @keyframes cf-pop { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
@@ -360,7 +374,8 @@ html:has(.cx.cf) .nt-stack { top: calc(var(--desk-bar, 0px) + 66px + var(--cf-he
   .cf-chip { height: 36px; font-size: 13px; }
   .cf-moods button { width: 46px; height: 46px; }
   .cx.cf .cx-newbtn { bottom: 140px; }
-  html:has(.cx.cf) .nt-stack { top: calc(var(--desk-bar, 0px) + 176px); }
+  html.nt-dock-strip .nt-body { flex-direction: column; align-items: stretch; gap: 6px; }
+  html.nt-dock-strip .nt-body > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
 }
 @media (max-width: 380px) {
   .cf-status { max-width: 20ch; }

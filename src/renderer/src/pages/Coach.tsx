@@ -23,6 +23,7 @@ import { BenMark, FoldLine, Meta, NowCard, NudgeCard, Receipts } from '../CoachF
 import { Bubble, CoachAmbient, GlyphIcon, Ring, StreamText, SuggestChip, TypingBubble } from '../CoachFeed'
 import { BenAvatar, MeAvatar, avatarFromFile, useCoachLooks, type Presence } from '../BenAvatar'
 import { CoachSide } from '../CoachSide'
+import { useToastDock } from '../coachToastDock'
 import { benStatus } from '@core/coachLooks'
 import { buildFeed, momentChips, readSlash, SLASH, type Filter } from '@core/chatFeed'
 import '../ben.css'
@@ -162,6 +163,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   // Your photo: tap your face in the chat to change it.
   const [, saveLooks] = useCoachLooks(true)
   const meFile = useRef<HTMLInputElement>(null)
+  // Pop-up notices dock beside or above the chat instead of covering it.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useToastDock(rootRef)
   const pickMe = async (f: File | undefined) => {
     if (!f) return
     await act(async () => {
@@ -435,7 +439,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const focusLabel = (n: number) => (n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n} min`)
 
   return (
-    <div className={`cx cf cf2 ${info ? 'info-open' : ''} ${typing ? 'typing' : ''} ${side && status ? 'side-on' : ''} ${busy ? 'busy' : ''}`}>
+    <div ref={rootRef} className={`cx cf cf2 ${info ? 'info-open' : ''} ${typing ? 'typing' : ''} ${side && status ? 'side-on' : ''} ${busy ? 'busy' : ''}`}>
       <section className="cx-chat">
         <CoachAmbient />
         {/* CL6: a rich header (Ben's face, what he is doing); CL7: today's numbers as small pills. */}
