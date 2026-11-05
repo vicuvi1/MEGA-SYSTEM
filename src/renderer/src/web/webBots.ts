@@ -1843,6 +1843,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               // A money record can be undone (its id is on its Undo button).
               const txId = ((r.keyboard?.inline_keyboard ?? []) as any[][]).flat().map((b: any) => String(b.callback_data ?? '')).find((d) => d.startsWith('fu|'))?.split('|')[1]
               if (txId) opNow = { k: 'money', id: txId }
+              // The rules said no ("⚠️ already logged", "❌ not enough points"): show that, never "✅ Logged" (X9).
+              const said = String(r.reply ?? '').replace(/<[^>]+>/g, '').trim().split('\n')[0]
+              if (/^(⚠️|❌|🚫|⛔)/u.test(said) || /\b(not enough|already|can'?t|cannot|couldn'?t|failed|unknown|not found)\b/i.test(said)) {
+                opNow = null
+                return said.slice(0, 200)
+              }
               return `✅ Logged: ${a.text}`
             }
             if (a.kind === 'mustdo') {

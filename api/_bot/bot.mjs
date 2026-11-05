@@ -17617,6 +17617,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								k: "money",
 								id: txId
 							};
+							const said = String(r.reply ?? "").replace(/<[^>]+>/g, "").trim().split("\n")[0];
+							if (/^(⚠️|❌|🚫|⛔)/u.test(said) || /\b(not enough|already|can'?t|cannot|couldn'?t|failed|unknown|not found)\b/i.test(said)) {
+								opNow = null;
+								return said.slice(0, 200);
+							}
 							return `✅ Logged: ${a.text}`;
 						}
 						if (a.kind === "mustdo") {
