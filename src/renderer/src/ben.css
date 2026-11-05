@@ -315,3 +315,6 @@
   /* While the "Install the app" banner shows, the chat is that much shorter. */
   .main:has(.pwa-install-banner) .cx { height: calc(100dvh - 56px - 96px - 24px - 150px); min-height: 300px; }
 }
+
+/* One starter card (V5), centred. */
+.co-cards.one { grid-template-columns: minmax(0, 360px); justify-content: center; }

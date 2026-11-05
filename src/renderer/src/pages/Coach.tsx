@@ -407,8 +407,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               <span className="co-avatar">{face}</span>
               <h3>Talk to me like a friend.</h3>
               <p>I see your day, calendar, Todoist, sleep, training and money, and I can act: log things, plan blocks, book goals, hold you to promises.</p>
-              <div className="co-cards">
-                {CARDS.map((c) => (
+              {/* One starter, not four (V5): "Do this now" above already offers the plan. */}
+              <div className="co-cards one">
+                {CARDS.slice(0, 1).map((c) => (
                   <button key={c.title} className="co-card" disabled={busy} onClick={() => void send(c.ask)}>
                     <b>{c.title}</b>
                     <small>{c.sub}</small>
