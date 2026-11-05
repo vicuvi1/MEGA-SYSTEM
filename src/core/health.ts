@@ -24,6 +24,8 @@ export interface HealthInput {
 const big = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n)))
 /** Turso's free plan reads 500M rows a month; warn well before (LT7). */
 export const COLD_READS_WARN = 300e6
+/** Vercel's free plan answers about a million function calls a month; warn well before (CL2). */
+export const API_CALLS_WARN = 700e3
 
 export interface Check {
   id: string
@@ -106,8 +108,32 @@ export function healthChecks(i: HealthInput): Check[] {
   // LT7: each cold server start downloads the whole database; this month's total.
   const cold = i.notes?.[`coldreads:${now.toISOString().slice(0, 7)}`]
   if (cold && Number.isFinite(Number(cold.rows))) {
-    const rows = Number(cold.rows)
-    out.push({ id: 'coldReads', label: 'Database reads at server start', ok: rows < COLD_READS_WARN, detail: `This month: ${big(rows)} rows in ${Number(cold.starts) || 0} cold starts${rows >= COLD_READS_WARN ? " (near Turso's monthly free reads)" : ''}` })
+    // CL6: the server's later reloads count too, not only its cold starts.
+    const reload = Number(cold.reload) || 0
+    const rows = Number(cold.rows) + reload
+    out.push({ id: 'coldReads', label: "Database reads by Ben's server", ok: rows < COLD_READS_WARN, detail: `This month: ${big(rows)} rows (${big(Number(cold.rows))} in ${Number(cold.starts) || 0} cold starts${reload ? `, ${big(reload)} in reloads` : ''})${rows >= COLD_READS_WARN ? " (near Turso's monthly free reads)" : ''}` })
+  }
+  // CL2: every call the server answered this month (counted by the server itself), and the rows it read.
+  const month = now.toISOString().slice(0, 7)
+  const calls = i.notes?.[`calls:${month}`]
+  if (calls && Number(calls.total) > 0) {
+    const total = Number(calls.total)
+    const hours = Math.max(1, (now.getTime() - Date.parse(`${month}-01T00:00:00Z`)) / 3600_000)
+    const top = Object.entries(calls)
+      .filter(([k, v]) => !['total', 'rows'].includes(k) && Number(v) > 0)
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+      .slice(0, 4)
+      .map(([k, v]) => `${k} ${big(Number(v))}`)
+    const rows = Number(calls.rows) || 0
+    out.push({ id: 'apiCalls', label: 'Server calls', ok: total < API_CALLS_WARN, detail: `This month: ${big(total)} (about ${Math.round(total / hours)} an hour${top.length ? `: ${top.join(', ')}` : ''})${rows ? `, ${big(rows)} database rows read` : ''}${total >= API_CALLS_WARN ? " (near Vercel's free monthly limit)" : ''}` })
+  }
+  // CL3: the daily self-check: when it last ran, and what it found (problems, and parts Ben warned about).
+  const sc = i.notes?.selfcheck
+  if (sc && typeof sc.at === 'string') {
+    const stale = now.getTime() - Date.parse(sc.at) > 26 * 3600_000
+    out.push({ id: 'selfcheck', label: 'Daily self-check', ok: !stale, detail: stale ? `Has not run since ${ago(now, sc.at)}` : String(sc.line ?? `Ran ${ago(now, sc.at)}`), ...(stale ? { since: new Date(Date.parse(sc.at) + 26 * 3600_000).toISOString() } : {}) })
+    const alerted = i.notes?.alerted ?? {}
+    for (const c of Array.isArray(sc.checks) ? (sc.checks as Check[]) : []) if (c && typeof c.id === 'string' && (!c.ok || alerted[c.id])) out.push(c)
   }
   const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 86400000)
 

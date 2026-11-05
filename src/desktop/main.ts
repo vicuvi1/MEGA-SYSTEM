@@ -12,6 +12,7 @@ import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
 import { createBackups } from './backups'
 import { createVault } from './vault'
 import { createPc } from './pc'
+import { installNow, memoryReloadDue } from '../core/nightCare'
 
 const origin = 'life-system://app'
 const server = 'https://mega-system-ten.vercel.app'
@@ -115,6 +116,15 @@ if (firstCopy) void app.whenReady().then(async () => {
   handle('desktop:checkUpdates', () => updater.check())
   handle('desktop:installUpdate', async () => { await saves; return updater.update() })
   handle('desktop:rollback', async () => { await saves; return updater.rollback() })
+  // CL5: the website refused this app's changes (too old for the database): update now, with a notice.
+  let schemaOldAt = 0
+  handle('desktop:schemaOld', async () => {
+    if (Date.now() - schemaOldAt < 10 * 60_000) return updater.get()
+    schemaOldAt = Date.now()
+    if (Notification.isSupported()) new Notification({ title: 'Life System is updating', body: 'This version is too old for your data, so the new one installs now. It opens again by itself.', silent: true }).show()
+    await saves
+    return updater.update()
+  })
   handle('desktop:loginGithub', () => new Promise<void>((resolveLogin, reject) => {
     const command = join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'mingw64', 'bin', 'git-credential-manager.exe')
     execFile(command, ['github', 'login', '--browser', '--force'], { windowsHide: true, timeout: 180_000 }, (error) => error ? reject(new Error('GitHub sign-in did not finish. Install Git for Windows and try again.')) : resolveLogin())
@@ -319,6 +329,18 @@ if (firstCopy) void app.whenReady().then(async () => {
     } else win.reload()
   }
   win.webContents.on('render-process-gone', (_e, d) => remember(`The window stopped (${d.reason}).`))
+  // CL8: a window frozen for 30 s (stuck script) is reloaded; your data is saved on disk and in the cloud.
+  let frozen: NodeJS.Timeout | null = null
+  win.webContents.on('unresponsive', () => {
+    frozen ??= setTimeout(() => {
+      frozen = null
+      if (!win.isDestroyed()) win.webContents.forcefullyCrashRenderer()
+    }, 30_000)
+  })
+  win.webContents.on('responsive', () => {
+    if (frozen) clearTimeout(frozen)
+    frozen = null
+  })
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => { if (isMain && code !== -3) remember(`It could not load (${desc}).`) })
   win.webContents.on('did-finish-load', async () => {
     if (smoke) {
@@ -403,7 +425,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   // A new version downloads quietly, then the top bar shows "Restart to update".
   let retry: NodeJS.Timeout | null = null
   const look = async () => {
-    if (['checking', 'downloading', 'ready', 'installing'].includes(updater.get().state)) return
+    // CL5: a ready update keeps looking for an even newer one (it used to stop here).
+    if (['checking', 'downloading', 'installing'].includes(updater.get().state)) return
     const s = await updater.check().catch(() => updater.get())
     if (retry) clearTimeout(retry)
     retry = s.state === 'error' ? setTimeout(() => void look(), 3 * 60_000) : null
@@ -414,6 +437,34 @@ if (firstCopy) void app.whenReady().then(async () => {
     const at = updater.get().checkedAt
     if (!at || Date.now() - Date.parse(at) > 10 * 60_000) void look()
   })
+  // The quiet hour (04:00), every 5 minutes: nobody at the PC → a ready update
+  // installs (CL5; it used to wait until you quit), and windows that grew big
+  // start fresh (CL9). Once a night each.
+  let nightDone = ''
+  let memDone = ''
+  if (!smoke)
+    setInterval(async () => {
+      const now = new Date()
+      const night = now.toDateString()
+      const idleSec = powerMonitor.getSystemIdleTime()
+      const focusRunning = !!pcRef.current?.focus().running
+      if (nightDone !== night && installNow({ state: updater.get().state, hour: now.getHours(), idleSec, focusRunning })) {
+        nightDone = night
+        await saves
+        updater.install()
+        return
+      }
+      if (memDone === night || win.isDestroyed()) return
+      const metrics = app.getAppMetrics()
+      const memOf = (pid: number) => (metrics.find((m) => m.pid === pid)?.memory.workingSetSize ?? 0) * 1024
+      const mem = Math.max(memOf(win.webContents.getOSProcessId()), island.memory())
+      if (memoryReloadDue({ hour: now.getHours(), idleSec, memBytes: mem })) {
+        memDone = night
+        await saves
+        win.webContents.reload()
+        island.reload()
+      }
+    }, 5 * 60_000)
 })
 // The tray keeps the app alive with no windows open.
 app.on('window-all-closed', () => {})

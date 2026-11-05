@@ -13,7 +13,8 @@ import { createRequire } from 'node:module'
 import initSqlJs from 'sql.js'
 import type { SqlJsStatic } from 'sql.js'
 import type { BotBridgeConfig } from '@shared/api'
-import { Mirror } from '../renderer/src/web/mirror'
+import { Mirror, WRITES_TABLE } from '../renderer/src/web/mirror'
+import { runSelfCheck, tgSend, timed, type SelfCheckDeps } from './selfCheck'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
 import { createWebBots, focusKeyboard, type AskModel, type CalendarLike } from '../renderer/src/web/webBots'
@@ -167,6 +168,8 @@ async function botsFor(env: BotEnv) {
   const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, undefined, countingFetch), null)
   await mirror.ready
   cold.on = false
+  // The start's download is counted above; from here on the copy counts its own reloads (CL6).
+  mirror.takeReadRows()
   void recordColdStart(new TursoHttp(env.tursoUrl, env.tursoToken), cold.rows)
   const services = createWebServices(mirror)
   const defaults = { enabled: true, pollingEnabled: true, morningBriefing: true, eveningNudge: true, ...env.defaults } as BotBridgeConfig
@@ -222,7 +225,7 @@ export async function recordColdStart(t: TursoHttp, rows: number, now = new Date
     .writeAtomic([
       { sql: 'CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)', args: [] },
       {
-        sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', ?, 'starts', 1)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_object('rows', COALESCE(json_extract(sys_health.msg, '$.rows'), 0) + ?3, 'starts', COALESCE(json_extract(sys_health.msg, '$.starts'), 0) + 1)",
+        sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', ?, 'starts', 1)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_set(COALESCE(sys_health.msg, '{}'), '$.rows', COALESCE(json_extract(sys_health.msg, '$.rows'), 0) + ?3, '$.starts', COALESCE(json_extract(sys_health.msg, '$.starts'), 0) + 1)",
         args: [key, now.toISOString(), rows]
       },
       // LT22: the database version the server runs (only ever goes up; api/_schema.mjs checks pages against it).
@@ -232,6 +235,30 @@ export async function recordColdStart(t: TursoHttp, rows: number, now = new Date
       }
     ] as any)
     .catch(() => {})
+}
+
+/** CL6: rows the warm server copy read in reloads after its start (note:coldreads:YYYY-MM, "reload"). Never throws. */
+export async function recordReloadRows(t: TursoHttp, rows: number, now = new Date()): Promise<void> {
+  if (!(rows > 0)) return
+  const key = `note:coldreads:${now.toISOString().slice(0, 7)}`
+  await t
+    .writeAtomic([
+      { sql: 'CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)', args: [] },
+      {
+        sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', 0, 'starts', 0, 'reload', ?)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_set(COALESCE(sys_health.msg, '{}'), '$.reload', COALESCE(json_extract(sys_health.msg, '$.reload'), 0) + ?3)",
+        args: [key, now.toISOString(), rows]
+      }
+    ] as any)
+    .catch(() => {})
+}
+let reloadRows = { n: 0, at: Date.now() }
+/** Adds the warm copy's reload rows, written at most every 30 minutes (or past 5000 rows). */
+async function countReloads(t: TursoHttp, mirror: Mirror, now: Date): Promise<void> {
+  reloadRows.n += mirror.takeReadRows()
+  if (!reloadRows.n || (reloadRows.n < 5000 && now.getTime() - reloadRows.at < 30 * 60_000)) return
+  const n = reloadRows.n
+  reloadRows = { n: 0, at: now.getTime() }
+  await recordReloadRows(t, n, now)
 }
 
 let todoistCheckedAt = 0
@@ -765,7 +792,12 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
 
   // LT8: Telegram's "already handled" marks: the server prunes them too (14 days kept), once a day.
   try {
-    if (await sysClaim(healthDb, 'ben_prune_at', now.getTime(), 24 * 3600_000)) await mirror.write((db) => db.prepare('DELETE FROM bot_seen_updates WHERE ts < ?').run(seenCutoff(now)))
+    if (await sysClaim(healthDb, 'ben_prune_at', now.getTime(), 24 * 3600_000)) {
+      await mirror.write((db) => db.prepare('DELETE FROM bot_seen_updates WHERE ts < ?').run(seenCutoff(now)))
+      // CL6: the devices' "already saved" ids older than a week, once a day (with the index, a quick delete).
+      await healthDb.writeAtomic([...WRITES_TABLE, { sql: 'DELETE FROM sys_writes WHERE at < ?', args: [now.getTime() - 7 * 86400_000] }] as any).catch(() => null)
+    }
+    await countReloads(healthDb, mirror, now)
   } catch (e) {
     console.error('prune:', e)
   }
@@ -1071,7 +1103,11 @@ async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: D
   await beat(t, 'restoreDrill', r.ok, r.ok ? undefined : `${snap.rows[0][0]}: ${r.msg}`, now)
 }
 
-async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: string) => Promise<void>): Promise<void> {
+/** CL4: what the last health check found (the tick answers health:false, so the GitHub timer fails and GitHub emails you). */
+let lastHealth: { ok: boolean; broken: string[] } | null = null
+export const tickHealth = () => lastHealth
+
+async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: string) => Promise<unknown>, opts: { weekly?: boolean } = {}): Promise<void> {
   const h = await readHealth(t)
   const local = await mirror.read((db) => ({
     sporty: (() => {
@@ -1085,10 +1121,14 @@ async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: 
   }))
   const checks = healthChecks({ now, beats: h.beats, sportySeen: local.sporty, latestSnapshot: h.latestSnapshot, today: local.today, errors: h.errors, notes: h.notes })
   const d = alertDecisions(checks, h.notes.alerted ?? {}, now)
+  // Broken for 30+ minutes (the same rule as the warnings).
+  const broken = checks.filter((c) => !c.ok && c.since && now.getTime() - Date.parse(c.since) >= 30 * 60000).map((c) => c.id)
+  lastHealth = { ok: broken.length === 0, broken }
   if (d.warn.length || d.fixed.length) {
     await setNote(t, 'alerted', d.next)
     await send(alertText(d.warn, d.fixed)).catch(() => null)
   }
+  if (opts.weekly === false) return
   // Sunday 21:00–21:59, once a week (after the review and the call: T7).
   const week = `${local.today}`
   if (now.getDay() === 0 && now.getHours() === 21 && h.notes.weekly !== week) {
@@ -1429,6 +1469,51 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   return { ok: false, error: 'op must be state | water | reps | workout | poll | updated' }
 }
 export { runBenEval } from './benEval'
+export { webhookVerdict } from '@core/selfCheck'
+
+/**
+ * CL4: the second alarm. The 30-minute warnings run inside Ben's tick; if the
+ * tick itself stops nobody would hear. The daily Vercel crons (api/cron.mjs)
+ * call this too: the same checks, the same "warned once" list.
+ */
+export async function healthAlarm(env: BotEnv & { botToken: string; chatId: string }, now = new Date()): Promise<{ ok: boolean; broken: string[] } | null> {
+  lifeTz(env)
+  const { mirror } = await botsFor(env)
+  await healthTick(new TursoHttp(env.tursoUrl, env.tursoToken), mirror, now, (text) => tgSend(env.botToken, env.chatId, text), { weekly: false })
+  return lastHealth
+}
+
+/**
+ * CL3: the daily self-check with the probes only this side has (Google's
+ * sign-in, the Todoist key, the AI); api/cron.mjs adds the Telegram links
+ * and the AI ping. Results go to Settings → System health; problems to
+ * Telegram once.
+ */
+export async function selfCheck(env: BotEnv & { botToken: string; chatId: string }, extra: Pick<SelfCheckDeps, 'webhooks' | 'ai' | 'budget'> = {}, now = new Date()) {
+  lifeTz(env)
+  const { calendar, mirror } = await botsFor(env)
+  const connected = calendar ? await mirror.read((db) => !!getSetting(db as any, GSET)).catch(() => false) : false
+  return runSelfCheck({
+    tursoUrl: env.tursoUrl,
+    tursoToken: env.tursoToken,
+    now,
+    ...extra,
+    // Renewing Google's sign-in is what breaks (revoked, expired): one small read does it.
+    google: connected && calendar
+      ? async () => {
+          const r = await timed(() => calendar.events(now.toISOString(), new Date(now.getTime() + 3600_000).toISOString()))
+          return { ok: true, ms: r.ms }
+        }
+      : undefined,
+    todoist: env.todoistToken
+      ? async () => {
+          const r = await fetch('https://api.todoist.com/api/v1/projects?limit=1', { headers: { Authorization: `Bearer ${env.todoistToken}` }, signal: AbortSignal.timeout(10_000) })
+          return r.ok ? { ok: true } : { ok: false, error: `HTTP ${r.status}` }
+        }
+      : undefined,
+    send: (text) => tgSend(env.botToken, env.chatId, text)
+  })
+}
 
 // ---- Plugins (src/plugins) ---------------------------------------------------
 

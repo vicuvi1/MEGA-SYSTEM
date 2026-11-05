@@ -254,6 +254,31 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     w.on('closed', () => {
       if (win === w) { win = null; ready = false }
     })
+    // CL8: the island's page died (crash, out of memory) → a fresh island window, at most
+    // a few times in a row; frozen for 30 s → reloaded.
+    w.webContents.on('render-process-gone', (_e, d) => {
+      diag('gone', `Island page stopped (${d.reason}): starting a new one`, true)
+      if (win !== w) return
+      const now = Date.now()
+      revived = revived.filter((t) => now - t < 10 * 60_000)
+      if (revived.length >= 3) return
+      revived.push(now)
+      win = null
+      ready = false
+      try { w.destroy() } catch { /* already gone */ }
+      setTimeout(() => { if (enabled && !win) open() }, 2000)
+    })
+    let frozen: ReturnType<typeof setTimeout> | null = null
+    w.webContents.on('unresponsive', () => {
+      frozen ??= setTimeout(() => {
+        frozen = null
+        if (!w.isDestroyed()) w.webContents.reload()
+      }, 30_000)
+    })
+    w.webContents.on('responsive', () => {
+      if (frozen) clearTimeout(frozen)
+      frozen = null
+    })
     // You clicked into another app: the panel may close (the island decides).
     w.on('blur', () => { if (!w.isDestroyed()) w.webContents.send('island:blur') })
     w.on('always-on-top-changed', (_e, on) => { if (!on) onTop() })
@@ -264,6 +289,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     void w.loadURL(o.origin + '/?island=1').then(() => applyVisibility(), () => applyVisibility())
   }
   const close = () => { if (win && !win.isDestroyed()) win.destroy() }
+  let revived: number[] = []
 
   const fromIsland = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => !!win && !win.isDestroyed() && e.sender === win.webContents
   const fromApp = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => e.sender === o.appWindow.webContents
@@ -835,6 +861,14 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
 
   if (enabled) open()
   return {
+    /** CL9: memory the island's page uses (bytes; 0 when it isn't open). */
+    memory: () => {
+      if (!win || win.isDestroyed()) return 0
+      const pid = win.webContents.getOSProcessId()
+      return (app.getAppMetrics().find((m) => m.pid === pid)?.memory.workingSetSize ?? 0) * 1024
+    },
+    /** CL9: a fresh page (the window stays where it is). */
+    reload: () => { if (win && !win.isDestroyed()) win.webContents.reload() },
     capture: () => openFor('capture'),
     voice: () => openFor('voice'),
     restartWatcher,

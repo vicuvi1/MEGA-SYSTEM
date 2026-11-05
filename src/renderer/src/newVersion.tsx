@@ -3,9 +3,11 @@
 // keep running old code. Hidden tab → reloads by itself; visible → a bar.
 import { useEffect, useState } from 'react'
 import { BACK_KEY, backToNewest } from './goBack'
+import { quietReloadDue } from '@core/nightCare'
 
 declare const __BUILD_ID__: string
 const MINE = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : ''
+const LOADED_AT = Date.now()
 
 async function latest(): Promise<string | null> {
   try {
@@ -31,9 +33,23 @@ export function NewVersionBar() {
   // LT22: the server has a newer database: this page may not save until it reloads.
   const [mustReload, setMustReload] = useState(false)
   useEffect(() => {
-    const on = () => setMustReload(true)
+    const on = () => {
+      setMustReload(true)
+      // CL5: the desktop app installs its waiting update now (or fetches it), with a notice.
+      void (window as any).desktop?.schemaOld?.()
+    }
     window.addEventListener('life-schema-old', on)
     return () => window.removeEventListener('life-schema-old', on)
+  }, [])
+  // CL9: a tab left open for days (or grown heavy) starts fresh while hidden at 04:00.
+  // Waiting changes are kept on this device, so nothing is lost. The desktop app does this itself.
+  useEffect(() => {
+    if ((window as any).desktop) return
+    const t = setInterval(() => {
+      const heap = (performance as any).memory?.usedJSHeapSize as number | undefined
+      if (quietReloadDue({ hidden: document.visibilityState === 'hidden', hour: new Date().getHours(), ageMs: Date.now() - LOADED_AT, heapBytes: heap })) window.location.reload()
+    }, 5 * 60_000)
+    return () => clearInterval(t)
   }, [])
   useEffect(() => {
     if (!MINE || (typeof window !== 'undefined' && (window as any).life)) return

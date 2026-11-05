@@ -102,7 +102,10 @@ describe('reads at server start (LT7)', () => {
     const now = new Date('2026-11-05T10:00:00Z')
     const base = { now, beats: { tick: { ok: now.toISOString() } }, sportySeen: null, latestSnapshot: null, today: '2026-11-05', errors: [] }
     const c = healthChecks({ ...base, notes: { 'coldreads:2026-11': { rows: 1_234_567, starts: 12 } } }).find((x) => x.id === 'coldReads')!
-    expect(c).toMatchObject({ ok: true, detail: 'This month: 1.2M rows in 12 cold starts' })
+    expect(c).toMatchObject({ ok: true, detail: 'This month: 1.2M rows (1.2M in 12 cold starts)' })
+    // CL6: reloads after the start count too.
+    const r = healthChecks({ ...base, notes: { 'coldreads:2026-11': { rows: 1_000_000, starts: 2, reload: 500_000 } } }).find((x) => x.id === 'coldReads')!
+    expect(r.detail).toBe('This month: 1.5M rows (1.0M in 2 cold starts, 500.0k in reloads)')
     expect(healthChecks({ ...base, notes: { 'coldreads:2026-11': { rows: COLD_READS_WARN, starts: 1 } } }).find((x) => x.id === 'coldReads')!.ok).toBe(false)
   })
   it("warns when Ben's outside timer stops, even while the app keeps him going (LT2)", () => {

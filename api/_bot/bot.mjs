@@ -7615,6 +7615,84 @@ async function sendPending(turso, write, info) {
 	}
 	throw new Error(`Sync conflict: could not merge a change made offline (${String(last?.message ?? last).slice(0, 160)}). Your local changes are kept. Save a backup before resolving this.`);
 }
+// src/core/retry.ts
+/** How long to wait before try number `attempt` (0 = the first retry). */
+function retryDelay(attempt, o = {}) {
+	const base = o.base ?? 5e3;
+	const max = o.max ?? 6e5;
+	const jitter = o.jitter ?? .2;
+	const random = o.random ?? Math.random;
+	const plain = Math.min(max, base * 2 ** Math.max(0, Math.min(30, Math.floor(attempt))));
+	const spread = plain * jitter * (random() * 2 - 1);
+	return Math.max(0, Math.min(max, Math.round(plain + spread)));
+}
+// src/core/backupPlan.ts
+/** Tables that are only plumbing (or backups themselves): never in a backup, never restored. */
+var NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/;
+/** Append-only history: a restore only adds rows that are missing. */
+var APPEND_ONLY = /* @__PURE__ */ new Set(["ledger", "discipline_events"]);
+/** Settings a restore never overwrites (your current PIN and bot setup). */
+var KEEP_SETTINGS = /* @__PURE__ */ new Set([
+	"pin_hash",
+	"bot_bridge_config",
+	"data_version"
+]);
+/**
+* Settings that never go into a backup (or a data export): the PIN hash, the
+* sign-out counter, the login guard, the sealed Google sign-in, the bot setup
+* and anything that looks like a key or token. A restore keeps the current ones.
+*/
+var SECRET_SETTING = /^(pin_hash|session_epoch|web_login_guard|bot_bridge_config|google_oauth)$|token|secret|password|api_?key|oauth/i;
+/** A table's rows, minus secret settings. */
+function redactRows(table, rows) {
+	return table === "settings" ? rows.filter((r) => !SECRET_SETTING.test(String(r.key ?? ""))) : rows;
+}
+function backupTables(all) {
+	return all.filter((t) => !NOT_BACKED_UP.test(t)).sort();
+}
+/**
+* The statements that put a snapshot back, in one transaction: each table is
+* replaced (append-only history only gets its missing rows back), settings
+* are upserted except the kept ones, and the data marker moves so every
+* device reloads. `columns` = the current columns of each existing table.
+*/
+function restoreStatements(snap, columns, version) {
+	if (!snap || typeof snap !== "object" || !snap.tables || typeof snap.tables !== "object") throw new Error("This file is not a Life System backup");
+	const out = [];
+	for (const t of Object.keys(snap.tables).sort()) {
+		const rows = snap.tables[t];
+		const cols = columns[t];
+		if (!Array.isArray(rows) || !cols || NOT_BACKED_UP.test(t)) continue;
+		const have = new Set(cols);
+		if (t === "settings") {
+			for (const r of rows) {
+				if (!r || typeof r.key !== "string" || KEEP_SETTINGS.has(r.key) || typeof r.value !== "string") continue;
+				out.push({
+					sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+					args: [r.key, r.value]
+				});
+			}
+			continue;
+		}
+		if (!APPEND_ONLY.has(t)) out.push({
+			sql: `DELETE FROM "${t}"`,
+			args: []
+		});
+		for (const r of rows) {
+			const keys = Object.keys(r ?? {}).filter((k) => have.has(k));
+			if (!keys.length) continue;
+			out.push({
+				sql: `INSERT ${APPEND_ONLY.has(t) ? "OR IGNORE " : ""}INTO "${t}" (${keys.map((k) => `"${k}"`).join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
+				args: keys.map((k) => r[k] === void 0 ? null : r[k])
+			});
+		}
+	}
+	out.push({
+		sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+		args: [version]
+	});
+	return out;
+}
 // src/renderer/src/web/mirror.ts
 var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/;
 var MirrorError = class extends Error {};
@@ -7640,13 +7718,31 @@ var Mirror = class Mirror {
 	syncedAt = null;
 	lastError = null;
 	ready;
+	/** Rows read from Turso by full downloads and table reloads (CL6: counted honestly, not only cold starts). */
+	rowsRead = 0;
+	/** This copy has made sure sys_writes (and its index) exist in Turso (CL6). */
+	writesReady = false;
+	/** CL7: offline changes wait this long after a failed send (5 s, 10 s … 10 min). */
+	flushFails = 0;
+	nextFlushAt = 0;
+	/** CL7: the session ended (401): the waiting changes stay here until you enter your PIN. */
+	locked = false;
 	constructor(SQL, turso, store = null, desktop = false) {
 		this.SQL = SQL;
 		this.turso = turso;
 		this.store = store;
 		this.desktop = desktop;
 		this.ready = this.start();
-		if (typeof window !== "undefined" && !this.desktop) window.addEventListener("online", () => void this.refresh().catch(() => {}));
+		if (typeof window !== "undefined" && !this.desktop) window.addEventListener("online", () => {
+			this.nextFlushAt = 0;
+			this.refresh().catch(() => {});
+		});
+		if (typeof window !== "undefined" && typeof window.addEventListener === "function" && this.store) {
+			const now = () => this.flushPersist();
+			window.addEventListener("pagehide", now);
+			window.addEventListener("beforeunload", now);
+			if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && now());
+		}
 		if (desktop && typeof window !== "undefined") {
 			window.addEventListener("life-desktop-retry", () => {
 				this.refresh().catch(() => {});
@@ -7733,26 +7829,31 @@ var Mirror = class Mirror {
 				};
 				const touched = touchedTables(changes);
 				const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)];
+				const queued = () => [
+					...writeOnce(version, { create: true }),
+					...checks,
+					...changes,
+					...trackStatements(touched, version),
+					mark,
+					...checks.length ? [{
+						sql: "DELETE FROM sys_cas",
+						args: []
+					}] : []
+				];
 				if (behind) {
-					this.queueOffline([
-						...writeOnce(version),
-						...checks,
-						...changes,
-						...trackStatements(touched, version),
-						mark,
-						...checks.length ? [{
-							sql: "DELETE FROM sys_cas",
-							args: []
-						}] : []
-					]);
+					this.queueOffline(queued());
 					this.persist();
 					this.emit();
 					return result;
 				}
+				const once = writeOnce(version, {
+					create: !this.writesReady,
+					prune: this.pruneDue()
+				});
 				try {
 					const before = versionsBefore(touched);
 					const batch = [
-						...writeOnce(version),
+						...once,
 						...before,
 						...checks,
 						...changes,
@@ -7773,33 +7874,30 @@ var Mirror = class Mirror {
 							throw e2;
 						});
 					}
+					this.writesReady = true;
+					if (once.some((c) => c.sql.startsWith("DELETE FROM sys_writes"))) this.pruned();
+					const shift = once.length;
 					if (this.tv) {
-						const remote = new Map((out[4] ?? []).map((r) => [String(r[0]), String(r[1])]));
+						const remote = new Map((out[shift + 1] ?? []).map((r) => [String(r[0]), String(r[1])]));
 						for (const t of touched) if ((remote.get(t) ?? "") === (this.tv[t] ?? "")) this.tv[t] = version;
 						this.saveTv();
 					}
 					this.lastError = null;
 				} catch (e) {
 					if (isOffline(e) || typeof window !== "undefined" && isRetryable(e)) {
-						this.queueOffline([
-							...writeOnce(version),
-							...checks,
-							...changes,
-							...trackStatements(touched, version),
-							mark,
-							...checks.length ? [{
-								sql: "DELETE FROM sys_cas",
-								args: []
-							}] : []
-						]);
+						if (e instanceof UnauthorizedError) this.locked = true;
+						this.nextFlushAt = Date.now() + retryDelay(this.flushFails++, { base: Mirror.RETRY_BASE });
+						this.queueOffline(queued());
 						this.persist();
 						this.emit();
 						return result;
 					}
+					const noIds = /no such table: sys_writes/i.test(String(e?.message ?? ""));
+					if (noIds) this.writesReady = false;
 					this.lastError = e.message;
 					await this.rebuild().catch(() => {});
 					this.emit();
-					if ((isCasConflict(e) || isUniqueClash(e)) && attempt < 3) continue;
+					if ((isCasConflict(e) || isUniqueClash(e) || noIds) && attempt < 3) continue;
 					throw new MirrorError(navigator.onLine === false ? "You are offline, so this was not saved. Try again when you are back online." : `Not saved: ${e.message}`);
 				}
 				this.persist();
@@ -7822,7 +7920,7 @@ var Mirror = class Mirror {
 				this.lastError = `Couldn't send this PC's changes yet: ${e.message}`.slice(0, 240);
 				if (this.pending().length) return false;
 			}
-			if (!this.desktop) await this.flushOffline();
+			if (!this.desktop) await this.flushOffline(true);
 			if (!this.desktop && this.outbox().length) return false;
 			return this.catchUp();
 		}).then((changed) => {
@@ -7833,6 +7931,21 @@ var Mirror = class Mirror {
 			if (this.desktop) this.desktopStatus();
 		});
 		return this.refreshing;
+	}
+	/** CL6: old write ids are cleared at most once a day from this device. */
+	prunedAt = 0;
+	pruneDue() {
+		let at = this.prunedAt;
+		try {
+			if (typeof localStorage !== "undefined") at = Math.max(at, Number(localStorage.getItem("life_writes_pruned")) || 0);
+		} catch {}
+		return Date.now() - at > 864e5;
+	}
+	pruned() {
+		this.prunedAt = Date.now();
+		try {
+			if (typeof localStorage !== "undefined") localStorage.setItem("life_writes_pruned", String(this.prunedAt));
+		} catch {}
 	}
 	static OUTBOX = "life_offline_writes";
 	offline = null;
@@ -7847,12 +7960,31 @@ var Mirror = class Mirror {
 		}
 		return this.offline;
 	}
+	static SINCE = "life_offline_since";
+	sinceMem = null;
+	/** When the oldest waiting change was made (ms), or null (CL7). */
+	get offlineSince() {
+		if (!this.outbox().length) return null;
+		try {
+			const v = typeof localStorage !== "undefined" ? Number(localStorage.getItem(Mirror.SINCE)) : 0;
+			return v > 0 ? v : this.sinceMem ??= Date.now();
+		} catch {
+			return this.sinceMem ??= Date.now();
+		}
+	}
 	saveOutbox(list) {
 		this.offline = list;
+		if (!list.length) this.sinceMem = null;
+		else this.sinceMem ??= Date.now();
 		try {
 			if (typeof localStorage === "undefined") return;
-			if (list.length) localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list));
-			else localStorage.removeItem(Mirror.OUTBOX);
+			if (list.length) {
+				localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list));
+				if (!localStorage.getItem(Mirror.SINCE)) localStorage.setItem(Mirror.SINCE, String(this.sinceMem));
+			} else {
+				localStorage.removeItem(Mirror.OUTBOX);
+				localStorage.removeItem(Mirror.SINCE);
+			}
 			this.outboxUnsaved = false;
 		} catch {
 			this.outboxUnsaved = list.length > 0;
@@ -7861,17 +7993,42 @@ var Mirror = class Mirror {
 	queueOffline(batch) {
 		const list = [...this.outbox(), batch];
 		this.saveOutbox(list);
-		this.lastError = this.outboxUnsaved ? `⚠ ${list.length} change${list.length === 1 ? "" : "s"} not synced yet and this browser can't store them: keep this tab open until you're back online` : `Offline: ${list.length} change${list.length === 1 ? "" : "s"} waiting to sync`;
+		this.lastError = this.waitingNote(list.length);
+	}
+	/** What the sync status says about changes still waiting (CL7). */
+	waitingNote(n) {
+		const s = n === 1 ? "" : "s";
+		if (this.outboxUnsaved) return `⚠ ${n} change${s} not synced yet and this browser can't store them: keep this tab open until you're back online`;
+		if (this.locked) return `🔒 Your session ended: enter your PIN to send ${n} waiting change${s} (they are kept on this device).`;
+		const since = this.offlineSince;
+		if (since && Date.now() - since > 36e5) return `⚠ ${n} change${s} waited over an hour to sync. They are kept on this device; check your connection.`;
+		return `Offline: ${n} change${s} waiting to sync`;
+	}
+	/** You entered your PIN again (or came back online): send what waited now (CL7). */
+	resume() {
+		this.locked = false;
+		this.nextFlushAt = 0;
+		this.flushFails = 0;
+		this.refresh().catch(() => {});
 	}
 	/** Changes made offline and not yet in Turso. */
 	get pendingOffline() {
 		return this.outbox().length;
 	}
-	/** Sends the offline changes, oldest first; stops at the first that fails. */
-	async flushOffline() {
+	/**
+	* Sends the offline changes, oldest first; stops at the first that fails.
+	* After a failure it waits longer each time (CL7: 5 s … 10 min) instead of
+	* trying again on every change and every refresh.
+	*/
+	async flushOffline(force = false) {
 		const list = this.outbox();
 		if (!list.length) return;
+		if (this.locked || !force && Date.now() < this.nextFlushAt) {
+			this.lastError = this.waitingNote(list.length);
+			return;
+		}
 		let sent = 0;
+		let failed = false;
 		for (const batch of list) try {
 			await this.turso.writeAtomic(batch);
 			sent++;
@@ -7880,7 +8037,16 @@ var Mirror = class Mirror {
 				sent++;
 				continue;
 			}
-			if (isOffline(e) || isRetryable(e)) break;
+			if (e instanceof UnauthorizedError) {
+				this.locked = true;
+				failed = true;
+				if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") window.dispatchEvent(new CustomEvent("life-session-ended", { detail: { waiting: list.length - sent } }));
+				break;
+			}
+			if (isOffline(e) || isRetryable(e)) {
+				failed = true;
+				break;
+			}
 			this.saveFailed([...this.failedSync, {
 				at: (/* @__PURE__ */ new Date()).toISOString(),
 				error: String(e?.message ?? e).slice(0, 200),
@@ -7889,7 +8055,14 @@ var Mirror = class Mirror {
 			sent++;
 		}
 		this.saveOutbox(list.slice(sent));
-		if (sent) this.lastError = list.length - sent ? `Offline: ${list.length - sent} changes waiting to sync` : null;
+		if (failed) this.nextFlushAt = Date.now() + retryDelay(this.flushFails++, { base: Mirror.RETRY_BASE });
+		else {
+			this.flushFails = 0;
+			this.nextFlushAt = 0;
+		}
+		const left = list.length - sent;
+		if (left) this.lastError = this.waitingNote(left);
+		else if (sent) this.lastError = null;
 	}
 	static FAILED = "life_sync_failed";
 	/** Offline changes the database refused (newest last, up to 50), for the sync panel. */
@@ -7938,27 +8111,51 @@ var Mirror = class Mirror {
 	localTables() {
 		return (this.current.raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP.test(t));
 	}
-	/** Replaces just these tables with Turso's rows, in one local transaction. */
+	/**
+	* Replaces just these tables with Turso's rows, in one local transaction.
+	* CL1: read in pages (an answer stays far below the server's 4.5 MB however
+	* long the history grows), and the append-only history (ledger, discipline
+	* events) only fetches rows newer than this copy's newest.
+	*/
 	async reloadTables(tables, version, remote) {
-		const data = tables.length ? await this.turso.readMany(tables.map((t) => ({
-			sql: `SELECT * FROM "${t}"`,
-			args: []
-		}))) : [];
 		const raw = this.current.raw;
+		const tail = /* @__PURE__ */ new Map();
+		const appendOnly = tables.filter((t) => APPEND_ONLY.has(t));
+		if (appendOnly.length) {
+			const local = appendOnly.map((t) => {
+				const [n, max] = raw.exec(`SELECT COUNT(*), COALESCE(MAX(id), 0) FROM "${t}"`)[0]?.values[0] ?? [0, 0];
+				return {
+					t,
+					n: Number(n),
+					max: Number(max)
+				};
+			});
+			const counts = await this.turso.readMany(local.map((l) => ({
+				sql: `SELECT COUNT(*) FROM "${l.t}" WHERE id <= ?`,
+				args: [l.max]
+			})));
+			local.forEach((l, i) => {
+				const r = counts[i];
+				if (l.max > 0 && !(r instanceof Error) && Number(r.rows[0]?.[0]) === l.n) tail.set(l.t, l.max);
+			});
+		}
+		const data = await this.readTables(tables, (t) => tail.has(t) ? {
+			where: "id > ?",
+			args: [tail.get(t)]
+		} : null);
 		raw.run("BEGIN");
 		try {
-			tables.forEach((t, i) => {
-				const res = data[i];
-				if (res instanceof Error) throw res;
-				raw.run(`DELETE FROM "${t}"`);
-				if (!res.rows.length) return;
+			for (const t of tables) {
+				const res = data.get(t);
+				if (!tail.has(t)) raw.run(`DELETE FROM "${t}"`);
+				if (!res.rows.length) continue;
 				const stmt = raw.prepare(`INSERT INTO "${t}" (${res.cols.map((c) => `"${c}"`).join(", ")}) VALUES (${res.cols.map(() => "?").join(", ")})`);
 				try {
 					for (const row of res.rows) stmt.run(row);
 				} finally {
 					stmt.free();
 				}
-			});
+			}
 			raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version]);
 			raw.run("COMMIT");
 		} catch (e) {
@@ -7970,6 +8167,53 @@ var Mirror = class Mirror {
 		this.saveTv();
 		this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
 		this.persist();
+	}
+	/** Rows read by downloads and reloads since the last call (CL6), for the monthly count. */
+	takeReadRows() {
+		const n = this.rowsRead;
+		this.rowsRead = 0;
+		return n;
+	}
+	/** Rows per request: 1500 ledger rows are about 0.6 MB, far below the 4.5 MB a server answer may be. */
+	static PAGE = 1500;
+	/**
+	* Whole tables (or the part `filter` picks), in pages: groups of 8 tables
+	* side by side (S2), then the next page of each table that had more. Throws
+	* if any page can't be read (all or nothing).
+	*/
+	async readTables(tables, filter = () => null) {
+		const PAGE = Mirror.PAGE;
+		const page = (t, offset) => {
+			const f = filter(t);
+			return {
+				sql: `SELECT * FROM "${t}"${f ? ` WHERE ${f.where}` : ""} ORDER BY rowid LIMIT ${PAGE} OFFSET ${offset}`,
+				args: f ? f.args : []
+			};
+		};
+		const loaded = /* @__PURE__ */ new Map();
+		const groups = [];
+		for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8));
+		await Promise.all(groups.map(async (group) => {
+			const first = await this.turso.readMany(group.map((t) => page(t, 0)));
+			for (let k = 0; k < group.length; k++) {
+				const t = group[k];
+				let res = first[k];
+				if (res instanceof Error) throw new MirrorError(`Could not read ${t}: ${res.message}`);
+				const all = {
+					cols: res.cols,
+					rows: [...res.rows]
+				};
+				while (res.rows.length === PAGE) {
+					const [next] = await this.turso.readMany([page(t, all.rows.length)]);
+					if (next instanceof Error) throw new MirrorError(`Could not read ${t}: ${next.message}`);
+					res = next;
+					all.rows.push(...res.rows);
+				}
+				this.rowsRead += all.rows.length;
+				loaded.set(t, all);
+			}
+		}));
+		return loaded;
 	}
 	loadTv() {
 		try {
@@ -7986,8 +8230,34 @@ var Mirror = class Mirror {
 			raw.run("INSERT OR REPLACE INTO desktop_table_versions (k, v) VALUES (1, ?)", [JSON.stringify(this.tv)]);
 		} catch {}
 	}
+	/**
+	* CS4: saving the copy (an export of the whole database) is slow with a long
+	* history, so it runs once things are quiet: 2 s after the last change, when
+	* the browser is idle. Leaving or hiding the page saves at once.
+	*/
+	persistTimer = null;
+	persistWaiting = false;
+	static PERSIST_MS = 2e3;
+	/** First wait after a failed send of offline changes (CL7; tests set 0). */
+	static RETRY_BASE = 5e3;
 	persist() {
 		if (!this.store || !this.db) return;
+		this.persistWaiting = true;
+		if (this.persistTimer) return;
+		this.persistTimer = setTimeout(() => {
+			const run = () => {
+				this.persistTimer = null;
+				this.flushPersist();
+			};
+			const idle = globalThis.requestIdleCallback;
+			if (typeof idle === "function") idle(run, { timeout: 2e3 });
+			else run();
+		}, Mirror.PERSIST_MS);
+	}
+	/** Saves the copy now, if a save is waiting. */
+	flushPersist() {
+		if (!this.persistWaiting || !this.store || !this.db) return;
+		this.persistWaiting = false;
 		try {
 			this.store.save(this.db.raw.export()).catch(() => {});
 		} catch {}
@@ -7998,9 +8268,12 @@ var Mirror = class Mirror {
 	}
 	/** The sync panel's numbers (Y9). */
 	health() {
+		const since = this.offlineSince;
 		return {
 			syncedAt: this.syncedAt,
 			waiting: this.pendingOffline,
+			waitingSince: since ? new Date(since).toISOString() : null,
+			locked: this.locked,
 			desktopPending: this.desktop && this.db ? this.pending().length : 0,
 			error: this.lastError,
 			failed: this.failedSync.map((f) => ({
@@ -8167,33 +8440,7 @@ var Mirror = class Mirror {
 		ref.close();
 		if (ddl.length) await this.turso.writeAtomic(ddl);
 		const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]));
-		const PAGE = 1500;
-		const page = (t, offset) => ({
-			sql: `SELECT * FROM "${t}" ORDER BY rowid LIMIT ${PAGE} OFFSET ${offset}`,
-			args: []
-		});
-		const loaded = /* @__PURE__ */ new Map();
-		const groups = [];
-		for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8));
-		await Promise.all(groups.map(async (group) => {
-			const first = await this.turso.readMany(group.map((t) => page(t, 0)));
-			for (let k = 0; k < group.length; k++) {
-				const t = group[k];
-				let res = first[k];
-				if (res instanceof Error) throw new MirrorError(`Could not read ${t}: ${res.message}`);
-				const all = {
-					cols: res.cols,
-					rows: [...res.rows]
-				};
-				while (res.rows.length === PAGE) {
-					const [next] = await this.turso.readMany([page(t, all.rows.length)]);
-					if (next instanceof Error) throw new MirrorError(`Could not read ${t}: ${next.message}`);
-					res = next;
-					all.rows.push(...res.rows);
-				}
-				loaded.set(t, all);
-			}
-		}));
+		const loaded = await this.readTables(tables);
 		raw.run("BEGIN");
 		for (const t of tables) {
 			const res = loaded.get(t);
@@ -8303,19 +8550,26 @@ function rowCasStatements(rows, haveTable) {
 * Each write carries its own id (Y5): sent twice (a timeout, then a retry),
 * the second copy fails on that id instead of saving everything again.
 */
-var writeOnce = (id) => [
-	{
-		sql: "CREATE TABLE IF NOT EXISTS sys_writes (id TEXT PRIMARY KEY, at INTEGER NOT NULL)",
-		args: []
-	},
+var WRITES_TABLE = [{
+	sql: "CREATE TABLE IF NOT EXISTS sys_writes (id TEXT PRIMARY KEY, at INTEGER NOT NULL)",
+	args: []
+}, {
+	sql: "CREATE INDEX IF NOT EXISTS sys_writes_at ON sys_writes (at)",
+	args: []
+}];
+var writeOnce = (id, o = {
+	create: true,
+	prune: true
+}) => [
+	...o.create ? WRITES_TABLE : [],
 	{
 		sql: "INSERT INTO sys_writes (id, at) VALUES (?, ?)",
 		args: [id, Date.now()]
 	},
-	{
+	...o.prune ? [{
 		sql: "DELETE FROM sys_writes WHERE at < ?",
 		args: [Date.now() - 6048e5]
-	}
+	}] : []
 ];
 var isAlreadySaved = (e) => /UNIQUE constraint failed: sys_writes\.id/i.test(String(e?.message ?? e));
 var isUniqueClash = (e) => /UNIQUE constraint failed/i.test(String(e?.message ?? e)) && !isAlreadySaved(e);
@@ -8323,6 +8577,594 @@ var isUniqueClash = (e) => /UNIQUE constraint failed/i.test(String(e?.message ??
 var isRetryable = (e) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String(e?.message ?? "")) || e?.name === "TimeoutError" || e?.name === "AbortError";
 /** A failure because there's no connection (not a refusal by the database). */
 var isOffline = (e) => typeof window !== "undefined" && (navigator.onLine === false || e instanceof TypeError || /failed to fetch|network|load failed/i.test(String(e?.message ?? "")));
+// src/core/health.ts
+/** 1234567 → "1.2M" */
+var big = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n));
+/** Turso's free plan reads 500M rows a month; warn well before (LT7). */
+var COLD_READS_WARN = 3e8;
+/** Vercel's free plan answers about a million function calls a month; warn well before (CL2). */
+var API_CALLS_WARN = 7e5;
+var ago = (now, iso) => {
+	const m = Math.round((now.getTime() - Date.parse(iso)) / 6e4);
+	return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+};
+var addDaysISO = (day, n) => {
+	const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+};
+/** Where to fix a key that was refused (revoked, expired, wrong). */
+var KEY_FIX = {
+	telegram: "Ben's bot token was refused: make a new one in @BotFather (/revoke), then update TELEGRAM_BOT_TOKEN in Vercel",
+	ai: "The AI key was refused or ran out: check OPENROUTER_API_KEY / GEMINI_API_KEY in Vercel",
+	calendar: "Google access was revoked or expired: Settings → Google Calendar → connect again",
+	todoist: "The Todoist key was refused: Todoist → Settings → Integrations → Developer, copy the token into TODOIST_TOKEN in Vercel"
+};
+var REFUSED = /\b(401|403)\b|unauthori[sz]ed|forbidden|invalid_grant|invalid api key|api key not valid|revoked|expired/i;
+/** The fix for a refused key, or null when the error is something else. */
+function keyHint(id, msg) {
+	return KEY_FIX[id] && REFUSED.test(msg) ? KEY_FIX[id] : null;
+}
+/** A part that reports OK/errors: broken when its last error is newer than its last OK. */
+function okErr(id, label, b, now, never) {
+	if (!b || !b.ok && !b.err) return {
+		id,
+		label,
+		ok: true,
+		detail: never
+	};
+	const errNewer = !!b.err && (!b.ok || b.err.at > b.ok);
+	const hint = errNewer ? keyHint(id, b.err.msg) : null;
+	if (errNewer) return {
+		id,
+		label,
+		ok: false,
+		detail: hint ? `${hint}. Since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 80)}` : `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
+		since: b.err.at
+	};
+	return {
+		id,
+		label,
+		ok: true,
+		detail: `OK, last ${ago(now, b.ok)}`
+	};
+}
+function healthChecks(i) {
+	const { now, beats } = i;
+	const out = [];
+	const tick = beats.tick?.ok;
+	if (!tick) out.push({
+		id: "tick",
+		label: "Ben's server",
+		ok: false,
+		detail: "Has not run yet",
+		since: now.toISOString()
+	});
+	else {
+		const late = now.getTime() - Date.parse(tick) > 18e5;
+		out.push({
+			id: "tick",
+			label: "Ben's server",
+			ok: !late,
+			detail: late ? `Last ran ${ago(now, tick)} (should be every 10 min)` : `Ran ${ago(now, tick)}`,
+			...late ? { since: new Date(Date.parse(tick) + 6e5).toISOString() } : {}
+		});
+	}
+	const timer = beats.timer?.ok;
+	if (timer) {
+		const late = now.getTime() - Date.parse(timer) > 18e5;
+		out.push({
+			id: "timer",
+			label: "Ben's timer",
+			ok: !late,
+			detail: late ? `Last ran ${ago(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago(now, timer)}`,
+			...late ? { since: new Date(Date.parse(timer) + 18e5).toISOString() } : {}
+		});
+	}
+	out.push(okErr("telegram", "Telegram", beats.telegram, now, "No messages sent yet"));
+	out.push(okErr("ai", "Ben's AI", beats.ai, now, "Not used yet"));
+	out.push(okErr("calendar", "Google Calendar", beats.calendar, now, "Not used yet"));
+	if (beats.todoist) out.push(okErr("todoist", "Todoist", beats.todoist, now, ""));
+	if (i.sportySeen) {
+		const off = now.getTime() - Date.parse(i.sportySeen) > 936e5;
+		out.push({
+			id: "sporty",
+			label: "Sporty",
+			ok: !off,
+			detail: off ? `Not heard from since ${ago(now, i.sportySeen)}` : `Seen ${ago(now, i.sportySeen)}`,
+			...off ? { since: new Date(Date.parse(i.sportySeen) + 936e5).toISOString() } : {}
+		});
+	}
+	if (i.latestSnapshot) {
+		const old = i.latestSnapshot < addDaysISO(i.today, -1);
+		out.push({
+			id: "snapshot",
+			label: "Cloud backup",
+			ok: !old,
+			detail: old ? `Newest daily snapshot is from ${i.latestSnapshot}` : `Snapshot ${i.latestSnapshot}`,
+			...old ? { since: `${addDaysISO(i.latestSnapshot, 2)}T00:00:00.000Z` } : {}
+		});
+	}
+	const pc = beats.desktopBackup?.ok;
+	if (pc) {
+		const old = now.getTime() - Date.parse(pc) > 2592e5;
+		out.push({
+			id: "desktopBackup",
+			label: "PC / Drive backup",
+			ok: !old,
+			detail: old ? `Last backup file ${ago(now, pc)}` : `Backup file ${ago(now, pc)}`,
+			...old ? { since: new Date(Date.parse(pc) + 2592e5).toISOString() } : {}
+		});
+	}
+	const drill = beats.restoreDrill;
+	if (drill?.ok || drill?.err) out.push(okErr("restoreDrill", "Restore drill", drill, now, ""));
+	const cold = i.notes?.[`coldreads:${now.toISOString().slice(0, 7)}`];
+	if (cold && Number.isFinite(Number(cold.rows))) {
+		const reload = Number(cold.reload) || 0;
+		const rows = Number(cold.rows) + reload;
+		out.push({
+			id: "coldReads",
+			label: "Database reads by Ben's server",
+			ok: rows < COLD_READS_WARN,
+			detail: `This month: ${big(rows)} rows (${big(Number(cold.rows))} in ${Number(cold.starts) || 0} cold starts${reload ? `, ${big(reload)} in reloads` : ""})${rows >= 3e8 ? " (near Turso's monthly free reads)" : ""}`
+		});
+	}
+	const month = now.toISOString().slice(0, 7);
+	const calls = i.notes?.[`calls:${month}`];
+	if (calls && Number(calls.total) > 0) {
+		const total = Number(calls.total);
+		const hours = Math.max(1, (now.getTime() - Date.parse(`${month}-01T00:00:00Z`)) / 36e5);
+		const top = Object.entries(calls).filter(([k, v]) => !["total", "rows"].includes(k) && Number(v) > 0).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 4).map(([k, v]) => `${k} ${big(Number(v))}`);
+		const rows = Number(calls.rows) || 0;
+		out.push({
+			id: "apiCalls",
+			label: "Server calls",
+			ok: total < API_CALLS_WARN,
+			detail: `This month: ${big(total)} (about ${Math.round(total / hours)} an hour${top.length ? `: ${top.join(", ")}` : ""})${rows ? `, ${big(rows)} database rows read` : ""}${total >= 7e5 ? " (near Vercel's free monthly limit)" : ""}`
+		});
+	}
+	const sc = i.notes?.selfcheck;
+	if (sc && typeof sc.at === "string") {
+		const stale = now.getTime() - Date.parse(sc.at) > 936e5;
+		out.push({
+			id: "selfcheck",
+			label: "Daily self-check",
+			ok: !stale,
+			detail: stale ? `Has not run since ${ago(now, sc.at)}` : String(sc.line ?? `Ran ${ago(now, sc.at)}`),
+			...stale ? { since: new Date(Date.parse(sc.at) + 936e5).toISOString() } : {}
+		});
+		const alerted = i.notes?.alerted ?? {};
+		for (const c of Array.isArray(sc.checks) ? sc.checks : []) if (c && typeof c.id === "string" && (!c.ok || alerted[c.id])) out.push(c);
+	}
+	const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 864e5);
+	out.push({
+		id: "errors",
+		label: "Errors (24 h)",
+		ok: day.length < 20,
+		detail: day.length ? `${day.length} in the last 24 h, last: ${day[day.length - 1].msg.slice(0, 100)}` : "None",
+		...day.length >= 20 ? { since: day[day.length - 20].at } : {}
+	});
+	return out;
+}
+/**
+* What Ben says now: parts broken for 30+ minutes he hasn't warned about yet,
+* and parts he warned about that work again. `alerted` = id → when he warned.
+*/
+function alertDecisions(checks, alerted, now) {
+	const next = { ...alerted };
+	const warn = [];
+	const fixed = [];
+	for (const c of checks) if (!c.ok && c.since && now.getTime() - Date.parse(c.since) >= 18e5 && !alerted[c.id]) {
+		warn.push(c);
+		next[c.id] = now.toISOString();
+	} else if (c.ok && alerted[c.id]) {
+		fixed.push(c);
+		delete next[c.id];
+	}
+	return {
+		warn,
+		fixed,
+		next
+	};
+}
+function alertText(warn, fixed) {
+	const lines = [];
+	if (warn.length) lines.push(`🔧 <b>Something needs a look</b>\n${warn.map((c) => `• ${c.label}: ${c.detail}`).join("\n")}\nSettings → System health has the details.`);
+	if (fixed.length) lines.push(`✅ Working again: ${fixed.map((c) => c.label).join(", ")}.`);
+	return lines.join("\n\n");
+}
+function weeklyReport(checks, errors, now) {
+	const week = errors.filter((e) => now.getTime() - Date.parse(e.at) < 6048e5);
+	const bad = checks.filter((c) => !c.ok);
+	const bySource = /* @__PURE__ */ new Map();
+	for (const e of week) bySource.set(e.source, (bySource.get(e.source) ?? 0) + 1);
+	return [
+		`🩺 <b>Weekly system check</b>`,
+		bad.length ? `Needs a look: ${bad.map((c) => `${c.label} (${c.detail})`).join("; ")}.` : "Everything is working.",
+		week.length ? `Errors this week: ${week.length} (${[...bySource].map(([s, n]) => `${s} ${n}`).join(", ")}).` : "No errors this week.",
+		checks.filter((c) => [
+			"snapshot",
+			"desktopBackup",
+			"restoreDrill"
+		].includes(c.id)).map((c) => `${c.label}: ${c.detail}`).join(" · ")
+	].filter(Boolean).join("\n");
+}
+// src/core/selfCheck.ts
+var SELF_CHECK = {
+	/** Telegram: messages waiting for the bot before it counts as stuck. */
+	pending: 50,
+	/** Telegram: a delivery error newer than this means the link is broken. */
+	errorHours: 24,
+	/** A plain SELECT slower than this is a slow database. */
+	dbSlowMs: 2e3,
+	/** Today's backup: warn above this size (a server answer may be at most 4.5 MB). */
+	snapshotWarnBytes: 3e6,
+	snapshotMaxBytes: 45e5,
+	/** The restore drill runs weekly; older than this is a missed drill. */
+	drillDays: 8,
+	/** Ben's tick and the outside timer should run every 10 minutes. */
+	beatMinutes: 30,
+	/** Share of the monthly AI budget that earns a warning (CL11). */
+	budgetWarn: .8
+};
+var mins = (now, iso) => Math.round((now.getTime() - Date.parse(iso)) / 6e4);
+var agoText = (m) => m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+var mb = (b) => `${(b / 1e6).toFixed(1)} MB`;
+/**
+* What a bot's Telegram link says (getWebhookInfo): `fix` when it must be set
+* again (pointed elsewhere, missing button presses, or deliveries failing in
+* the last 24 h); `problem` is the plain-English reason.
+*/
+function webhookVerdict(info, wantUrl, now = /* @__PURE__ */ new Date()) {
+	if (!info) return {
+		ok: false,
+		fix: false,
+		problem: "Telegram did not answer"
+	};
+	if (info.url !== wantUrl) return {
+		ok: false,
+		fix: true,
+		problem: info.url ? "points somewhere else" : "has no link to the server"
+	};
+	if (!(info.allowed_updates ?? []).includes("callback_query")) return {
+		ok: false,
+		fix: true,
+		problem: "does not get button presses"
+	};
+	const errAt = info.last_error_date ? info.last_error_date * 1e3 : 0;
+	if (errAt && now.getTime() - errAt < SELF_CHECK.errorHours * 36e5) return {
+		ok: false,
+		fix: true,
+		problem: `deliveries failed: ${String(info.last_error_message ?? "error").slice(0, 80)}`
+	};
+	if ((info.pending_update_count ?? 0) >= SELF_CHECK.pending) return {
+		ok: false,
+		fix: false,
+		problem: `${info.pending_update_count} messages are waiting`
+	};
+	return {
+		ok: true,
+		fix: false,
+		problem: null
+	};
+}
+/** The day's checks, in the same shape as Settings → System health (ids start with "sc:"). */
+function selfCheckChecks(i) {
+	const { now } = i;
+	const at = now.toISOString();
+	const out = [];
+	const add = (id, label, ok, detail) => out.push({
+		id: `sc:${id}`,
+		label,
+		ok,
+		detail,
+		...ok ? {} : { since: at }
+	});
+	for (const b of i.bots ?? []) {
+		const bits = [
+			b.fixed ? "its link was wrong and has been set again" : null,
+			b.error,
+			(b.pending ?? 0) >= SELF_CHECK.pending ? `${b.pending} messages waiting` : null
+		].filter(Boolean);
+		add(`bot:${b.name}`, `Telegram link (${b.name.replace(/_TOKEN$/, "").toLowerCase()})`, b.ok && !(b.pending && b.pending >= SELF_CHECK.pending), bits.length ? String(bits.join("; ")) : `OK${b.pending ? `, ${b.pending} waiting` : ""}`);
+	}
+	if (i.google) add("google", "Google sign-in", i.google.ok, i.google.ok ? `Renews fine${i.google.ms != null ? ` (${i.google.ms} ms)` : ""}` : `Could not renew: ${String(i.google.error ?? "no answer").slice(0, 120)}`);
+	if (i.todoist) add("todoist", "Todoist key", i.todoist.ok, i.todoist.ok ? "Works" : `Refused: ${String(i.todoist.error ?? "no answer").slice(0, 120)}`);
+	if (i.ai) add("ai", "Ben's AI", i.ai.ok, i.ai.ok ? `Answers${i.ai.ms != null ? ` in ${(i.ai.ms / 1e3).toFixed(1)} s` : ""}${i.ai.model ? ` (${i.ai.model.split("/").pop()})` : ""}` : `No answer: ${String(i.ai.error ?? "failed").slice(0, 120)}`);
+	if (i.budget && i.budget.budget > 0) {
+		const share = i.budget.spent / i.budget.budget;
+		add("budget", "AI budget", share < SELF_CHECK.budgetWarn, `${Math.round(share * 100)}% of $${i.budget.budget} used this month${share >= SELF_CHECK.budgetWarn ? ": Ben switches to cheaper answers soon. Raise it in Settings → Ben → Brain if you want" : ""}`);
+	}
+	add("db", "Database", i.db.ok && (i.db.ms ?? 0) < SELF_CHECK.dbSlowMs, !i.db.ok ? `Not reachable: ${String(i.db.error ?? "").slice(0, 120)}` : `Answers in ${i.db.ms} ms${(i.db.ms ?? 0) >= SELF_CHECK.dbSlowMs ? " (slow)" : ""}`);
+	if (!i.snapshot) add("snapshot", "Today's backup", false, "Not made yet today");
+	else if (i.snapshot.bytes >= SELF_CHECK.snapshotWarnBytes) add("snapshot", "Today's backup", false, `${mb(i.snapshot.bytes)}: close to the ${mb(SELF_CHECK.snapshotMaxBytes)} a backup may be. Download a backup in Settings → Data and tell your helper to make backups smaller`);
+	else add("snapshot", "Today's backup", true, `Saved (${mb(i.snapshot.bytes)})`);
+	if (!i.drillAt) add("drill", "Restore drill", false, "Has not run yet");
+	else {
+		const m = mins(now, i.drillAt);
+		add("drill", "Restore drill", m < SELF_CHECK.drillDays * 1440, `Last ${agoText(m)}`);
+	}
+	for (const [id, label] of [["tick", "Ben's server"], ["timer", "Ben's timer"]]) {
+		const ok = i.beats[id]?.ok;
+		if (!ok) {
+			if (id === "tick") add(id, label, false, "Has not run");
+			continue;
+		}
+		const m = mins(now, ok);
+		add(id, label, m < SELF_CHECK.beatMinutes, `Last ran ${agoText(m)}`);
+	}
+	return out;
+}
+/**
+* The problems to tell you about now, in the shape alertDecisions expects:
+* the self-check already confirmed them, so they count as broken for 30 minutes.
+*/
+function confirmed(checks, now) {
+	const since = (/* @__PURE__ */ new Date(now.getTime() - 186e4)).toISOString();
+	return checks.map((c) => c.ok ? c : {
+		...c,
+		since
+	});
+}
+/** One line for Settings → System health. */
+function selfCheckLine(checks, at, fixed) {
+	const bad = checks.filter((c) => !c.ok);
+	return `${bad.length ? `${bad.length} need${bad.length === 1 ? "s" : ""} a look` : "All good"}${fixed ? `, ${fixed} fixed by itself` : ""} · ${at.slice(0, 16).replace("T", " ")} UTC`;
+}
+// src/renderer/src/web/systemHealth.ts
+var ENSURE = [{
+	sql: "CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)",
+	args: []
+}, {
+	sql: "CREATE TABLE IF NOT EXISTS sys_error_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, source TEXT, msg TEXT, stack TEXT, version TEXT, place TEXT)",
+	args: []
+}];
+var put = (key, at, msg) => ({
+	sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = excluded.msg",
+	args: [
+		key,
+		at,
+		msg
+	]
+});
+var lastOk = /* @__PURE__ */ new Map();
+/** A part worked (ok) or failed (with why). Never throws. OKs are written at most every 5 minutes. */
+async function beat(t, key, ok, msg, now = /* @__PURE__ */ new Date()) {
+	if (ok) {
+		if (now.getTime() - (lastOk.get(key) ?? 0) < 3e5) return;
+		lastOk.set(key, now.getTime());
+	} else lastOk.delete(key);
+	await t.writeAtomic([...ENSURE, put(`${key}:${ok ? "ok" : "err"}`, now.toISOString(), ok ? null : String(msg ?? "failed").slice(0, 300))]).catch(() => {});
+}
+/** Several errors in one write (the apps send them in batches). Last 500 kept. Never throws. */
+async function logErrors(t, list, now = /* @__PURE__ */ new Date()) {
+	const rows = list.filter((e) => e && e.msg).slice(0, 50);
+	if (!rows.length) return;
+	await t.writeAtomic([
+		...ENSURE,
+		...rows.map((e) => ({
+			sql: "INSERT INTO sys_error_log (at, source, msg, stack, version, place) VALUES (?, ?, ?, ?, ?, ?)",
+			args: [
+				e.at || now.toISOString(),
+				String(e.source || "?").slice(0, 20),
+				String(e.msg).slice(0, 400),
+				e.stack ? String(e.stack).slice(0, 2e3) : null,
+				e.version ? String(e.version).slice(0, 40) : null,
+				e.place ? String(e.place).slice(0, 80) : null
+			]
+		})),
+		{
+			sql: "DELETE FROM sys_error_log WHERE id <= (SELECT MAX(id) FROM sys_error_log) - 500",
+			args: []
+		}
+	]).catch(() => {});
+}
+/** One line in the shared error log. Never throws. */
+async function logError(t, source, msg, now = /* @__PURE__ */ new Date()) {
+	await logErrors(t, [{
+		source,
+		msg
+	}], now);
+}
+/** Small JSON values (Ben's alert state, weekly report date…). */
+async function setNote(t, key, value) {
+	await t.writeAtomic([...ENSURE, put(`note:${key}`, (/* @__PURE__ */ new Date()).toISOString(), JSON.stringify(value))]).catch(() => {});
+}
+async function readHealth(t) {
+	const [h, e, s] = await t.readMany([
+		{
+			sql: "SELECT key, at, msg FROM sys_health",
+			args: []
+		},
+		{
+			sql: "SELECT at, source, msg, stack, version, place FROM sys_error_log ORDER BY id DESC LIMIT 200",
+			args: []
+		},
+		{
+			sql: "SELECT MAX(day) FROM cloud_snapshots",
+			args: []
+		}
+	]);
+	const beats = {};
+	const notes = {};
+	if (!(h instanceof Error)) for (const [k, at, msg] of h.rows) {
+		if (String(k).startsWith("note:")) {
+			try {
+				notes[String(k).slice(5)] = JSON.parse(String(msg));
+			} catch {}
+			continue;
+		}
+		const [part, kind] = String(k).split(":");
+		const b = beats[part] ??= {};
+		if (kind === "ok") b.ok = String(at);
+		else b.err = {
+			at: String(at),
+			msg: String(msg ?? "")
+		};
+	}
+	return {
+		beats,
+		errors: e instanceof Error ? [] : e.rows.map(([at, source, msg, stack, version, place]) => ({
+			at: String(at),
+			source: String(source),
+			msg: String(msg),
+			...stack ? { stack: String(stack) } : {},
+			...version ? { version: String(version) } : {},
+			...place ? { place: String(place) } : {}
+		})).reverse(),
+		notes,
+		latestSnapshot: s instanceof Error ? null : s.rows[0]?.[0] ?? null
+	};
+}
+var BEN_TABLE = {
+	sql: "CREATE TABLE IF NOT EXISTS sys_ben_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, kind TEXT, reason TEXT, text TEXT)",
+	args: []
+};
+/** Write Ben's decisions (one write). A held-back message of the same kind is noted once a day. Last 400 kept. Never throws. */
+async function logBen(t, list, now = /* @__PURE__ */ new Date()) {
+	if (!list.length) return;
+	const at = (e) => e.at || now.toISOString();
+	await t.writeAtomic([
+		BEN_TABLE,
+		...list.slice(0, 40).map((e) => {
+			const day = calendarDay(now);
+			const args = [
+				at(e),
+				day,
+				e.status,
+				String(e.kind || "message").slice(0, 40),
+				e.reason ? String(e.reason).slice(0, 200) : null,
+				e.text ? String(e.text).replace(/<[^>]+>/g, "").slice(0, 500) : null
+			];
+			return e.status === "skipped" ? {
+				sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM sys_ben_log WHERE day = ?2 AND status = 'skipped' AND kind = ?4 AND reason IS ?5)",
+				args
+			} : {
+				sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) VALUES (?, ?, ?, ?, ?, ?)",
+				args
+			};
+		}),
+		{
+			sql: "DELETE FROM sys_ben_log WHERE id <= (SELECT MAX(id) FROM sys_ben_log) - 400",
+			args: []
+		}
+	]).catch(() => {});
+}
+// src/server/selfCheck.ts
+/** Runs a probe; a probe that throws counts as a failed check (never stops the rest). */
+async function probe(fn, fail) {
+	if (!fn) return null;
+	try {
+		return await fn();
+	} catch (e) {
+		return fail(e);
+	}
+}
+/** Times one call (ms). */
+async function timed(fn) {
+	const t0 = Date.now();
+	return {
+		value: await fn(),
+		ms: Date.now() - t0
+	};
+}
+async function runSelfCheck(d) {
+	const now = d.now ?? /* @__PURE__ */ new Date();
+	const t = new TursoHttp(d.tursoUrl, d.tursoToken);
+	const fail = (e) => ({
+		ok: false,
+		error: e.message
+	});
+	const [bots, google, todoist, ai, budget] = await Promise.all([
+		probe(d.webhooks, (e) => [{
+			name: "BOTS",
+			ok: false,
+			error: e.message
+		}]),
+		probe(d.google, fail),
+		probe(d.todoist, fail),
+		probe(d.ai, fail),
+		probe(d.budget, () => null)
+	]);
+	let db;
+	try {
+		const { value, ms } = await timed(() => t.readMany([{
+			sql: "SELECT 1",
+			args: []
+		}]));
+		db = value[0] instanceof Error ? {
+			ok: false,
+			error: value[0].message,
+			ms
+		} : {
+			ok: true,
+			ms
+		};
+	} catch (e) {
+		db = {
+			ok: false,
+			error: e.message
+		};
+	}
+	const day = calendarDay(now);
+	const [snap] = await t.readMany([{
+		sql: "SELECT day, COALESCE(size_bytes, LENGTH(data)) FROM cloud_snapshots WHERE day = ?",
+		args: [day]
+	}]).catch(() => [/* @__PURE__ */ new Error("no answer")]);
+	const snapshot = snap instanceof Error || !snap.rows.length ? null : {
+		day: String(snap.rows[0][0]),
+		bytes: Number(snap.rows[0][1]) || 0
+	};
+	const h = await readHealth(t).catch(() => ({
+		beats: {},
+		notes: {},
+		errors: [],
+		latestSnapshot: null
+	}));
+	const drillAt = typeof h.notes.drill === "string" ? h.notes.drill : h.beats.restoreDrill?.ok ?? null;
+	const checks = selfCheckChecks({
+		now,
+		bots,
+		google,
+		todoist,
+		ai,
+		budget,
+		db,
+		snapshot,
+		drillAt,
+		beats: h.beats
+	});
+	const fixed = (bots ?? []).filter((b) => b.fixed).length;
+	await setNote(t, "selfcheck", {
+		at: now.toISOString(),
+		line: selfCheckLine(checks, now.toISOString(), fixed),
+		checks,
+		fixed
+	});
+	const dec = alertDecisions(confirmed(checks, now), h.notes.alerted ?? {}, now);
+	if ((dec.warn.length || dec.fixed.length) && d.send) {
+		await setNote(t, "alerted", dec.next);
+		await d.send(alertText(dec.warn, dec.fixed)).catch(() => null);
+	}
+	return {
+		checks,
+		warned: dec.warn.map((c) => c.id)
+	};
+}
+/** One plain message from the server's bot (HTML, like Ben's). */
+async function tgSend(token, chatId, text, fetchImpl = fetch) {
+	return !!(await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			chat_id: chatId,
+			text,
+			parse_mode: "HTML",
+			disable_web_page_preview: true
+		}),
+		signal: AbortSignal.timeout(1e4)
+	}).catch(() => null))?.ok;
+}
 // src/core/moneyDays.ts
 var BILL = /bill|rent|chirie|utilit|subscript|abonament|internet|phone|telefon|insurance|asigur|loan|credit|\btax(es)?\b|impozit/i;
 var EAT_OUT = /restaurant|cafe|café|coffee|cafea|bar\b|delivery|glovo|wolt|fast ?food|takeaway|mcdonald|kfc|pizza|burger|eat(ing)? out|lunch out|dinner out/i;
@@ -10776,73 +11618,6 @@ function mergedTitle(a, b) {
 	if (!b || a.split(" · ").includes(b)) return a;
 	const t = `${a} · ${b}`;
 	return t.length > 80 ? `${t.slice(0, 77)}…` : t;
-}
-// src/core/backupPlan.ts
-/** Tables that are only plumbing (or backups themselves): never in a backup, never restored. */
-var NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/;
-/** Append-only history: a restore only adds rows that are missing. */
-var APPEND_ONLY = /* @__PURE__ */ new Set(["ledger", "discipline_events"]);
-/** Settings a restore never overwrites (your current PIN and bot setup). */
-var KEEP_SETTINGS = /* @__PURE__ */ new Set([
-	"pin_hash",
-	"bot_bridge_config",
-	"data_version"
-]);
-/**
-* Settings that never go into a backup (or a data export): the PIN hash, the
-* sign-out counter, the login guard, the sealed Google sign-in, the bot setup
-* and anything that looks like a key or token. A restore keeps the current ones.
-*/
-var SECRET_SETTING = /^(pin_hash|session_epoch|web_login_guard|bot_bridge_config|google_oauth)$|token|secret|password|api_?key|oauth/i;
-/** A table's rows, minus secret settings. */
-function redactRows(table, rows) {
-	return table === "settings" ? rows.filter((r) => !SECRET_SETTING.test(String(r.key ?? ""))) : rows;
-}
-function backupTables(all) {
-	return all.filter((t) => !NOT_BACKED_UP.test(t)).sort();
-}
-/**
-* The statements that put a snapshot back, in one transaction: each table is
-* replaced (append-only history only gets its missing rows back), settings
-* are upserted except the kept ones, and the data marker moves so every
-* device reloads. `columns` = the current columns of each existing table.
-*/
-function restoreStatements(snap, columns, version) {
-	if (!snap || typeof snap !== "object" || !snap.tables || typeof snap.tables !== "object") throw new Error("This file is not a Life System backup");
-	const out = [];
-	for (const t of Object.keys(snap.tables).sort()) {
-		const rows = snap.tables[t];
-		const cols = columns[t];
-		if (!Array.isArray(rows) || !cols || NOT_BACKED_UP.test(t)) continue;
-		const have = new Set(cols);
-		if (t === "settings") {
-			for (const r of rows) {
-				if (!r || typeof r.key !== "string" || KEEP_SETTINGS.has(r.key) || typeof r.value !== "string") continue;
-				out.push({
-					sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-					args: [r.key, r.value]
-				});
-			}
-			continue;
-		}
-		if (!APPEND_ONLY.has(t)) out.push({
-			sql: `DELETE FROM "${t}"`,
-			args: []
-		});
-		for (const r of rows) {
-			const keys = Object.keys(r ?? {}).filter((k) => have.has(k));
-			if (!keys.length) continue;
-			out.push({
-				sql: `INSERT ${APPEND_ONLY.has(t) ? "OR IGNORE " : ""}INTO "${t}" (${keys.map((k) => `"${k}"`).join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
-				args: keys.map((k) => r[k] === void 0 ? null : r[k])
-			});
-		}
-	}
-	out.push({
-		sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		args: [version]
-	});
-	return out;
 }
 // src/core/dataExport.ts
 function toWorkoutsCsv(workouts) {
@@ -23618,327 +24393,6 @@ function cleanVoice(out, template) {
 	if (nums(template).some((n) => !have.has(n))) return null;
 	return t;
 }
-// src/core/health.ts
-/** 1234567 → "1.2M" */
-var big = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n));
-/** Turso's free plan reads 500M rows a month; warn well before (LT7). */
-var COLD_READS_WARN = 3e8;
-var ago = (now, iso) => {
-	const m = Math.round((now.getTime() - Date.parse(iso)) / 6e4);
-	return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
-};
-var addDaysISO = (day, n) => {
-	const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
-	d.setUTCDate(d.getUTCDate() + n);
-	return d.toISOString().slice(0, 10);
-};
-/** Where to fix a key that was refused (revoked, expired, wrong). */
-var KEY_FIX = {
-	telegram: "Ben's bot token was refused: make a new one in @BotFather (/revoke), then update TELEGRAM_BOT_TOKEN in Vercel",
-	ai: "The AI key was refused or ran out: check OPENROUTER_API_KEY / GEMINI_API_KEY in Vercel",
-	calendar: "Google access was revoked or expired: Settings → Google Calendar → connect again",
-	todoist: "The Todoist key was refused: Todoist → Settings → Integrations → Developer, copy the token into TODOIST_TOKEN in Vercel"
-};
-var REFUSED = /\b(401|403)\b|unauthori[sz]ed|forbidden|invalid_grant|invalid api key|api key not valid|revoked|expired/i;
-/** The fix for a refused key, or null when the error is something else. */
-function keyHint(id, msg) {
-	return KEY_FIX[id] && REFUSED.test(msg) ? KEY_FIX[id] : null;
-}
-/** A part that reports OK/errors: broken when its last error is newer than its last OK. */
-function okErr(id, label, b, now, never) {
-	if (!b || !b.ok && !b.err) return {
-		id,
-		label,
-		ok: true,
-		detail: never
-	};
-	const errNewer = !!b.err && (!b.ok || b.err.at > b.ok);
-	const hint = errNewer ? keyHint(id, b.err.msg) : null;
-	if (errNewer) return {
-		id,
-		label,
-		ok: false,
-		detail: hint ? `${hint}. Since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 80)}` : `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
-		since: b.err.at
-	};
-	return {
-		id,
-		label,
-		ok: true,
-		detail: `OK, last ${ago(now, b.ok)}`
-	};
-}
-function healthChecks(i) {
-	const { now, beats } = i;
-	const out = [];
-	const tick = beats.tick?.ok;
-	if (!tick) out.push({
-		id: "tick",
-		label: "Ben's server",
-		ok: false,
-		detail: "Has not run yet",
-		since: now.toISOString()
-	});
-	else {
-		const late = now.getTime() - Date.parse(tick) > 18e5;
-		out.push({
-			id: "tick",
-			label: "Ben's server",
-			ok: !late,
-			detail: late ? `Last ran ${ago(now, tick)} (should be every 10 min)` : `Ran ${ago(now, tick)}`,
-			...late ? { since: new Date(Date.parse(tick) + 6e5).toISOString() } : {}
-		});
-	}
-	const timer = beats.timer?.ok;
-	if (timer) {
-		const late = now.getTime() - Date.parse(timer) > 18e5;
-		out.push({
-			id: "timer",
-			label: "Ben's timer",
-			ok: !late,
-			detail: late ? `Last ran ${ago(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago(now, timer)}`,
-			...late ? { since: new Date(Date.parse(timer) + 18e5).toISOString() } : {}
-		});
-	}
-	out.push(okErr("telegram", "Telegram", beats.telegram, now, "No messages sent yet"));
-	out.push(okErr("ai", "Ben's AI", beats.ai, now, "Not used yet"));
-	out.push(okErr("calendar", "Google Calendar", beats.calendar, now, "Not used yet"));
-	if (beats.todoist) out.push(okErr("todoist", "Todoist", beats.todoist, now, ""));
-	if (i.sportySeen) {
-		const off = now.getTime() - Date.parse(i.sportySeen) > 936e5;
-		out.push({
-			id: "sporty",
-			label: "Sporty",
-			ok: !off,
-			detail: off ? `Not heard from since ${ago(now, i.sportySeen)}` : `Seen ${ago(now, i.sportySeen)}`,
-			...off ? { since: new Date(Date.parse(i.sportySeen) + 936e5).toISOString() } : {}
-		});
-	}
-	if (i.latestSnapshot) {
-		const old = i.latestSnapshot < addDaysISO(i.today, -1);
-		out.push({
-			id: "snapshot",
-			label: "Cloud backup",
-			ok: !old,
-			detail: old ? `Newest daily snapshot is from ${i.latestSnapshot}` : `Snapshot ${i.latestSnapshot}`,
-			...old ? { since: `${addDaysISO(i.latestSnapshot, 2)}T00:00:00.000Z` } : {}
-		});
-	}
-	const pc = beats.desktopBackup?.ok;
-	if (pc) {
-		const old = now.getTime() - Date.parse(pc) > 2592e5;
-		out.push({
-			id: "desktopBackup",
-			label: "PC / Drive backup",
-			ok: !old,
-			detail: old ? `Last backup file ${ago(now, pc)}` : `Backup file ${ago(now, pc)}`,
-			...old ? { since: new Date(Date.parse(pc) + 2592e5).toISOString() } : {}
-		});
-	}
-	const drill = beats.restoreDrill;
-	if (drill?.ok || drill?.err) out.push(okErr("restoreDrill", "Restore drill", drill, now, ""));
-	const cold = i.notes?.[`coldreads:${now.toISOString().slice(0, 7)}`];
-	if (cold && Number.isFinite(Number(cold.rows))) {
-		const rows = Number(cold.rows);
-		out.push({
-			id: "coldReads",
-			label: "Database reads at server start",
-			ok: rows < COLD_READS_WARN,
-			detail: `This month: ${big(rows)} rows in ${Number(cold.starts) || 0} cold starts${rows >= 3e8 ? " (near Turso's monthly free reads)" : ""}`
-		});
-	}
-	const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 864e5);
-	out.push({
-		id: "errors",
-		label: "Errors (24 h)",
-		ok: day.length < 20,
-		detail: day.length ? `${day.length} in the last 24 h, last: ${day[day.length - 1].msg.slice(0, 100)}` : "None",
-		...day.length >= 20 ? { since: day[day.length - 20].at } : {}
-	});
-	return out;
-}
-/**
-* What Ben says now: parts broken for 30+ minutes he hasn't warned about yet,
-* and parts he warned about that work again. `alerted` = id → when he warned.
-*/
-function alertDecisions(checks, alerted, now) {
-	const next = { ...alerted };
-	const warn = [];
-	const fixed = [];
-	for (const c of checks) if (!c.ok && c.since && now.getTime() - Date.parse(c.since) >= 18e5 && !alerted[c.id]) {
-		warn.push(c);
-		next[c.id] = now.toISOString();
-	} else if (c.ok && alerted[c.id]) {
-		fixed.push(c);
-		delete next[c.id];
-	}
-	return {
-		warn,
-		fixed,
-		next
-	};
-}
-function alertText(warn, fixed) {
-	const lines = [];
-	if (warn.length) lines.push(`🔧 <b>Something needs a look</b>\n${warn.map((c) => `• ${c.label}: ${c.detail}`).join("\n")}\nSettings → System health has the details.`);
-	if (fixed.length) lines.push(`✅ Working again: ${fixed.map((c) => c.label).join(", ")}.`);
-	return lines.join("\n\n");
-}
-function weeklyReport(checks, errors, now) {
-	const week = errors.filter((e) => now.getTime() - Date.parse(e.at) < 6048e5);
-	const bad = checks.filter((c) => !c.ok);
-	const bySource = /* @__PURE__ */ new Map();
-	for (const e of week) bySource.set(e.source, (bySource.get(e.source) ?? 0) + 1);
-	return [
-		`🩺 <b>Weekly system check</b>`,
-		bad.length ? `Needs a look: ${bad.map((c) => `${c.label} (${c.detail})`).join("; ")}.` : "Everything is working.",
-		week.length ? `Errors this week: ${week.length} (${[...bySource].map(([s, n]) => `${s} ${n}`).join(", ")}).` : "No errors this week.",
-		checks.filter((c) => [
-			"snapshot",
-			"desktopBackup",
-			"restoreDrill"
-		].includes(c.id)).map((c) => `${c.label}: ${c.detail}`).join(" · ")
-	].filter(Boolean).join("\n");
-}
-// src/renderer/src/web/systemHealth.ts
-var ENSURE = [{
-	sql: "CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)",
-	args: []
-}, {
-	sql: "CREATE TABLE IF NOT EXISTS sys_error_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, source TEXT, msg TEXT, stack TEXT, version TEXT, place TEXT)",
-	args: []
-}];
-var put = (key, at, msg) => ({
-	sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = excluded.msg",
-	args: [
-		key,
-		at,
-		msg
-	]
-});
-var lastOk = /* @__PURE__ */ new Map();
-/** A part worked (ok) or failed (with why). Never throws. OKs are written at most every 5 minutes. */
-async function beat(t, key, ok, msg, now = /* @__PURE__ */ new Date()) {
-	if (ok) {
-		if (now.getTime() - (lastOk.get(key) ?? 0) < 3e5) return;
-		lastOk.set(key, now.getTime());
-	} else lastOk.delete(key);
-	await t.writeAtomic([...ENSURE, put(`${key}:${ok ? "ok" : "err"}`, now.toISOString(), ok ? null : String(msg ?? "failed").slice(0, 300))]).catch(() => {});
-}
-/** Several errors in one write (the apps send them in batches). Last 500 kept. Never throws. */
-async function logErrors(t, list, now = /* @__PURE__ */ new Date()) {
-	const rows = list.filter((e) => e && e.msg).slice(0, 50);
-	if (!rows.length) return;
-	await t.writeAtomic([
-		...ENSURE,
-		...rows.map((e) => ({
-			sql: "INSERT INTO sys_error_log (at, source, msg, stack, version, place) VALUES (?, ?, ?, ?, ?, ?)",
-			args: [
-				e.at || now.toISOString(),
-				String(e.source || "?").slice(0, 20),
-				String(e.msg).slice(0, 400),
-				e.stack ? String(e.stack).slice(0, 2e3) : null,
-				e.version ? String(e.version).slice(0, 40) : null,
-				e.place ? String(e.place).slice(0, 80) : null
-			]
-		})),
-		{
-			sql: "DELETE FROM sys_error_log WHERE id <= (SELECT MAX(id) FROM sys_error_log) - 500",
-			args: []
-		}
-	]).catch(() => {});
-}
-/** One line in the shared error log. Never throws. */
-async function logError(t, source, msg, now = /* @__PURE__ */ new Date()) {
-	await logErrors(t, [{
-		source,
-		msg
-	}], now);
-}
-/** Small JSON values (Ben's alert state, weekly report date…). */
-async function setNote(t, key, value) {
-	await t.writeAtomic([...ENSURE, put(`note:${key}`, (/* @__PURE__ */ new Date()).toISOString(), JSON.stringify(value))]).catch(() => {});
-}
-async function readHealth(t) {
-	const [h, e, s] = await t.readMany([
-		{
-			sql: "SELECT key, at, msg FROM sys_health",
-			args: []
-		},
-		{
-			sql: "SELECT at, source, msg, stack, version, place FROM sys_error_log ORDER BY id DESC LIMIT 200",
-			args: []
-		},
-		{
-			sql: "SELECT MAX(day) FROM cloud_snapshots",
-			args: []
-		}
-	]);
-	const beats = {};
-	const notes = {};
-	if (!(h instanceof Error)) for (const [k, at, msg] of h.rows) {
-		if (String(k).startsWith("note:")) {
-			try {
-				notes[String(k).slice(5)] = JSON.parse(String(msg));
-			} catch {}
-			continue;
-		}
-		const [part, kind] = String(k).split(":");
-		const b = beats[part] ??= {};
-		if (kind === "ok") b.ok = String(at);
-		else b.err = {
-			at: String(at),
-			msg: String(msg ?? "")
-		};
-	}
-	return {
-		beats,
-		errors: e instanceof Error ? [] : e.rows.map(([at, source, msg, stack, version, place]) => ({
-			at: String(at),
-			source: String(source),
-			msg: String(msg),
-			...stack ? { stack: String(stack) } : {},
-			...version ? { version: String(version) } : {},
-			...place ? { place: String(place) } : {}
-		})).reverse(),
-		notes,
-		latestSnapshot: s instanceof Error ? null : s.rows[0]?.[0] ?? null
-	};
-}
-var BEN_TABLE = {
-	sql: "CREATE TABLE IF NOT EXISTS sys_ben_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, kind TEXT, reason TEXT, text TEXT)",
-	args: []
-};
-/** Write Ben's decisions (one write). A held-back message of the same kind is noted once a day. Last 400 kept. Never throws. */
-async function logBen(t, list, now = /* @__PURE__ */ new Date()) {
-	if (!list.length) return;
-	const at = (e) => e.at || now.toISOString();
-	await t.writeAtomic([
-		BEN_TABLE,
-		...list.slice(0, 40).map((e) => {
-			const day = calendarDay(now);
-			const args = [
-				at(e),
-				day,
-				e.status,
-				String(e.kind || "message").slice(0, 40),
-				e.reason ? String(e.reason).slice(0, 200) : null,
-				e.text ? String(e.text).replace(/<[^>]+>/g, "").slice(0, 500) : null
-			];
-			return e.status === "skipped" ? {
-				sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM sys_ben_log WHERE day = ?2 AND status = 'skipped' AND kind = ?4 AND reason IS ?5)",
-				args
-			} : {
-				sql: "INSERT INTO sys_ben_log (at, day, status, kind, reason, text) VALUES (?, ?, ?, ?, ?, ?)",
-				args
-			};
-		}),
-		{
-			sql: "DELETE FROM sys_ben_log WHERE id <= (SELECT MAX(id) FROM sys_ben_log) - 400",
-			args: []
-		}
-	]).catch(() => {});
-}
 // src/renderer/src/web/restoreDrill.ts
 /** Every data table of a database, as a backup (same shape as the apps' export). */
 function snapshotOf(db, source, now = /* @__PURE__ */ new Date()) {
@@ -26095,6 +26549,7 @@ async function botsFor(env) {
 	const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, void 0, countingFetch), null);
 	await mirror.ready;
 	cold.on = false;
+	mirror.takeReadRows();
 	recordColdStart(new TursoHttp(env.tursoUrl, env.tursoToken), cold.rows);
 	const services = createWebServices(mirror);
 	const defaults = {
@@ -26163,7 +26618,7 @@ async function recordColdStart(t, rows, now = /* @__PURE__ */ new Date()) {
 			args: []
 		},
 		{
-			sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', ?, 'starts', 1)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_object('rows', COALESCE(json_extract(sys_health.msg, '$.rows'), 0) + ?3, 'starts', COALESCE(json_extract(sys_health.msg, '$.starts'), 0) + 1)",
+			sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', ?, 'starts', 1)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_set(COALESCE(sys_health.msg, '{}'), '$.rows', COALESCE(json_extract(sys_health.msg, '$.rows'), 0) + ?3, '$.starts', COALESCE(json_extract(sys_health.msg, '$.starts'), 0) + 1)",
 			args: [
 				key,
 				now.toISOString(),
@@ -26175,6 +26630,37 @@ async function recordColdStart(t, rows, now = /* @__PURE__ */ new Date()) {
 			args: [now.toISOString(), String(MIGRATIONS.length)]
 		}
 	]).catch(() => {});
+}
+/** CL6: rows the warm server copy read in reloads after its start (note:coldreads:YYYY-MM, "reload"). Never throws. */
+async function recordReloadRows(t, rows, now = /* @__PURE__ */ new Date()) {
+	if (!(rows > 0)) return;
+	const key = `note:coldreads:${now.toISOString().slice(0, 7)}`;
+	await t.writeAtomic([{
+		sql: "CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)",
+		args: []
+	}, {
+		sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, json_object('rows', 0, 'starts', 0, 'reload', ?)) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = json_set(COALESCE(sys_health.msg, '{}'), '$.reload', COALESCE(json_extract(sys_health.msg, '$.reload'), 0) + ?3)",
+		args: [
+			key,
+			now.toISOString(),
+			rows
+		]
+	}]).catch(() => {});
+}
+var reloadRows = {
+	n: 0,
+	at: Date.now()
+};
+/** Adds the warm copy's reload rows, written at most every 30 minutes (or past 5000 rows). */
+async function countReloads(t, mirror, now) {
+	reloadRows.n += mirror.takeReadRows();
+	if (!reloadRows.n || reloadRows.n < 5e3 && now.getTime() - reloadRows.at < 18e5) return;
+	const n = reloadRows.n;
+	reloadRows = {
+		n: 0,
+		at: now.getTime()
+	};
+	await recordReloadRows(t, n, now);
 }
 var todoistCheckedAt = 0;
 var TODOIST_COINS = DEFAULT_RULES.find((r) => r.id === "tasks.todoist_done")?.coins ?? 8;
@@ -26760,7 +27246,14 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			console.error("health:", e);
 		}
 		try {
-			if (await sysClaim(healthDb, "ben_prune_at", now.getTime(), 864e5)) await mirror.write((db) => db.prepare("DELETE FROM bot_seen_updates WHERE ts < ?").run(seenCutoff(now)));
+			if (await sysClaim(healthDb, "ben_prune_at", now.getTime(), 864e5)) {
+				await mirror.write((db) => db.prepare("DELETE FROM bot_seen_updates WHERE ts < ?").run(seenCutoff(now)));
+				await healthDb.writeAtomic([...WRITES_TABLE, {
+					sql: "DELETE FROM sys_writes WHERE at < ?",
+					args: [now.getTime() - 6048e5]
+				}]).catch(() => null);
+			}
+			await countReloads(healthDb, mirror, now);
 		} catch (e) {
 			console.error("prune:", e);
 		}
@@ -27111,7 +27604,10 @@ async function backupTick(t, SQL, mirror, now) {
 	const r = restoreDrill(SQL, raw.startsWith("gz:") ? gunzipSync(Buffer.from(raw.slice(3), "base64")).toString("utf8") : raw);
 	await beat(t, "restoreDrill", r.ok, r.ok ? void 0 : `${snap.rows[0][0]}: ${r.msg}`, now);
 }
-async function healthTick(t, mirror, now, send) {
+/** CL4: what the last health check found (the tick answers health:false, so the GitHub timer fails and GitHub emails you). */
+var lastHealth = null;
+var tickHealth = () => lastHealth;
+async function healthTick(t, mirror, now, send, opts = {}) {
 	const h = await readHealth(t);
 	const local = await mirror.read((db) => ({
 		sporty: (() => {
@@ -27133,10 +27629,16 @@ async function healthTick(t, mirror, now, send) {
 		notes: h.notes
 	});
 	const d = alertDecisions(checks, h.notes.alerted ?? {}, now);
+	const broken = checks.filter((c) => !c.ok && c.since && now.getTime() - Date.parse(c.since) >= 18e5).map((c) => c.id);
+	lastHealth = {
+		ok: broken.length === 0,
+		broken
+	};
 	if (d.warn.length || d.fixed.length) {
 		await setNote(t, "alerted", d.next);
 		await send(alertText(d.warn, d.fixed)).catch(() => null);
 	}
+	if (opts.weekly === false) return;
 	const week = `${local.today}`;
 	if (now.getDay() === 0 && now.getHours() === 21 && h.notes.weekly !== week) {
 		await setNote(t, "weekly", week);
@@ -27579,6 +28081,51 @@ async function sportShared(env, body) {
 		error: "op must be state | water | reps | workout | poll | updated"
 	};
 }
+/**
+* CL4: the second alarm. The 30-minute warnings run inside Ben's tick; if the
+* tick itself stops nobody would hear. The daily Vercel crons (api/cron.mjs)
+* call this too: the same checks, the same "warned once" list.
+*/
+async function healthAlarm(env, now = /* @__PURE__ */ new Date()) {
+	lifeTz(env);
+	const { mirror } = await botsFor(env);
+	await healthTick(new TursoHttp(env.tursoUrl, env.tursoToken), mirror, now, (text) => tgSend(env.botToken, env.chatId, text), { weekly: false });
+	return lastHealth;
+}
+/**
+* CL3: the daily self-check with the probes only this side has (Google's
+* sign-in, the Todoist key, the AI); api/cron.mjs adds the Telegram links
+* and the AI ping. Results go to Settings → System health; problems to
+* Telegram once.
+*/
+async function selfCheck(env, extra = {}, now = /* @__PURE__ */ new Date()) {
+	lifeTz(env);
+	const { calendar, mirror } = await botsFor(env);
+	const connected = calendar ? await mirror.read((db) => !!getSetting(db, GOOGLE_SETTING)).catch(() => false) : false;
+	return runSelfCheck({
+		tursoUrl: env.tursoUrl,
+		tursoToken: env.tursoToken,
+		now,
+		...extra,
+		google: connected && calendar ? async () => {
+			return {
+				ok: true,
+				ms: (await timed(() => calendar.events(now.toISOString(), new Date(now.getTime() + 36e5).toISOString()))).ms
+			};
+		} : void 0,
+		todoist: env.todoistToken ? async () => {
+			const r = await fetch("https://api.todoist.com/api/v1/projects?limit=1", {
+				headers: { Authorization: `Bearer ${env.todoistToken}` },
+				signal: AbortSignal.timeout(1e4)
+			});
+			return r.ok ? { ok: true } : {
+				ok: false,
+				error: `HTTP ${r.status}`
+			};
+		} : void 0,
+		send: (text) => tgSend(env.botToken, env.chatId, text)
+	});
+}
 /** The plugins' jobs with the server's helpers (database, env, AI, Google). */
 async function pluginJobs(env, mirror, healthDb, now, send, opts = {}) {
 	const on = await mirror.read((db) => pluginsOn(db));
@@ -27693,4 +28240,4 @@ async function mcpCall(env, body, ctx) {
 	};
 	return handleMcp(life, body, ctx);
 }
-export { DAILY_GAP_MS, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, exchangeCode, handleMcp, handleTelegramUpdate, healthPush, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, sportShared };
+export { DAILY_GAP_MS, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, authUrl, cleanupPrompt, coachChat, coachRhythm, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, exchangeCode, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, webhookVerdict };

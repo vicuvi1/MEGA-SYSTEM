@@ -372,8 +372,9 @@ export function IslandFeed() {
     const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusMin: status.today.focusMin, focusGoal: Math.max(50, status.goals.reduce((t, g) => t + g.perDayMin, 0)), waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone })
     const highlight = dayHighlight({ focusMin: status.today.focusMin, focusBefore: status.week.filter((d) => d.day < todayKey).map((d) => d.min), mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone, sportStreak: body?.streak ?? 0 })
     const celebrated = get<Record<string, number>>(CELEBRATED, {})
-    // IS19: fresh every minute; a failed fetch keeps the old list marked stale and tries again in 15 s.
-    if (now - todoCache.at > (todoCache.failed ? 15_000 : 60_000) && life.todoist?.today) {
+    // IS19: a failed fetch keeps the old list marked stale and tries again soon.
+    // CL2: fresh every 5 minutes (it was every minute); ticking a task off refreshes it at once.
+    if (now - todoCache.at > (todoCache.failed ? 60_000 : 5 * 60_000) && life.todoist?.today) {
       todoCache.at = now
       const list = await life.todoist.today().catch(() => null)
       if (list) {
@@ -868,7 +869,11 @@ export function IslandFeed() {
       })
     }
     void send()
-    const t = setInterval(() => void send(), 15_000)
+    // CL11: nobody at the PC (idle 10+ minutes or locked): the island rests; your return wakes it at once.
+    const t = setInterval(() => {
+      if (lockedAt || (idleSec ?? 0) > 600) return
+      void send()
+    }, 15_000)
     const on = () => void send()
     window.addEventListener('life-focus-changed', on)
     window.addEventListener('life-sport-changed', on)

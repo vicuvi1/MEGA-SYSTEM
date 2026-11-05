@@ -3,7 +3,7 @@
 // meeting a newer edit from another device, and a backup put back through the
 // restore path. (Telegram taps that change points: bots/callbacks.test.ts.)
 import { createRequire } from 'node:module'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type SqlJsStatic, type Database as SqlJsDatabase } from 'sql.js'
 import { MIGRATIONS } from '@core/schema'
 import { restoreStatements } from '@core/backupPlan'
@@ -68,6 +68,13 @@ describe('two devices at the same moment (LT14)', () => {
 })
 
 describe('offline, then back (LT14)', () => {
+  // Back online at once (the wait between tries is tested on its own: CL7).
+  beforeEach(() => {
+    Mirror.RETRY_BASE = 0
+  })
+  afterEach(() => {
+    Mirror.RETRY_BASE = 5000
+  })
   it('an offline change to a setting another device changed meanwhile is never silently lost', async () => {
     const remote = fakeTurso()
     const realFetch = globalThis.fetch

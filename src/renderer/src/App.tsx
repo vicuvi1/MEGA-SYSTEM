@@ -37,6 +37,7 @@ import { play, soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning }
 import { countdown, nextUp } from '@core/dayGlance'
 import { useTodayEvents } from './todayEvents'
 import { storageWakesApp } from './islandLog'
+import { watchDayTurn } from './dayTurn'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at once).
 function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) {
@@ -284,6 +285,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // Pick up a new day, missed blocks and backup state while the app stays open.
   useEffect(() => {
     const t = setInterval(() => {
+      // CL2: nothing to redraw while the tab is hidden (coming back refreshes everything).
+      if (document.visibilityState === 'hidden') return
       life.schedule.state().then((sc) => setSchedule((cur) => (cur && cur.day !== cur.today ? cur : sc)))
       life.backup.status().then(setBackup)
     }, 60_000)
@@ -342,6 +345,13 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   useEffect(() => {
     life.onWalletChanged(() => onWallet())
   }, [onWallet])
+
+  // CL10: at 04:00 the app's day turns: Today shows the new day without waiting for a change.
+  useEffect(() => watchDayTurn(() => refresh()), [refresh])
+  // Which day Today shows (the soak test checks it after 04:00).
+  useEffect(() => {
+    if (summary?.today) document.documentElement.dataset.lifeToday = summary.today
+  }, [summary?.today])
 
   // Listen to discipline changes from the main process / background bots
   useEffect(() => {

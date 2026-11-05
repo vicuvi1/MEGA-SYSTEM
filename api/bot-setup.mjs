@@ -6,17 +6,7 @@
 // settings at /api/telegram, so they answer 24/7. Safe to call often: a bot
 // already pointed here is left as it is. Production only (a preview must not
 // take the bots away from the live site).
-import { bearer, config, cronSecretOk, leftBots, readBody, send, serverBots, sessionOk, requireSession, webhookSecret } from './_lib.mjs'
-
-async function tg(token, method, body) {
-  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: body ? 'POST' : 'GET',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(8000)
-  })
-  return res.json()
-}
+import { bearer, config, cronSecretOk, ensureWebhook, leftBots, readBody, send, serverBots, sessionOk, requireSession, tg } from './_lib.mjs'
 
 const BOTS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN', 'WAKY_BOT_TOKEN']
 
@@ -92,16 +82,9 @@ export default async function handler(req, res) {
   if (!host || !bots.length) return send(res, 200, { ok: false, reason: 'no bots' })
   const results = []
   for (const b of bots) {
-    const url = `https://${host}/api/telegram?bot=${b.id}`
     try {
-      const info = await tg(b.token, 'getWebhookInfo')
-      const kinds = info?.result?.allowed_updates ?? []
-      if (info?.result?.url === url && kinds.includes('callback_query')) {
-        results.push({ bot: b.name, ok: true, already: true })
-        continue
-      }
-      const set = await tg(b.token, 'setWebhook', { url, secret_token: webhookSecret(cfg, b.id), allowed_updates: ['message', 'callback_query'], drop_pending_updates: false })
-      results.push({ bot: b.name, ok: !!set?.ok, error: set?.ok ? undefined : set?.description })
+      // The same helper the daily self-check uses to put a wrong link right (CL3).
+      results.push(await ensureWebhook(cfg, b, host))
     } catch (e) {
       results.push({ bot: b.name, ok: false, error: e.message })
     }

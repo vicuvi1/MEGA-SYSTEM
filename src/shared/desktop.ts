@@ -37,6 +37,8 @@ export interface DesktopApi {
   updateStatus(): Promise<UpdateStatus>
   checkUpdates(): Promise<UpdateStatus>
   installUpdate(): Promise<UpdateStatus>
+  /** CL5: the website said this app is too old for the database: install the update now (with a notice). */
+  schemaOld?(): Promise<UpdateStatus>
   /** Go back one version (installs the previous release and restarts). */
   rollback?(): Promise<{ ok: boolean; version?: string; error?: string }>
   /** A Windows notification (silent: the page plays its own chime). */

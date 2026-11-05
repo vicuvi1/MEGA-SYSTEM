@@ -354,6 +354,109 @@ export function serverBots(env = process.env) {
 /** The secret Telegram sends with each message to a bot, so nobody else can post as it. */
 export const webhookSecret = (cfg, botId) => sign(cfg.secret, 'telegram:' + botId)
 
+/** One Telegram Bot API call (8 s at most). */
+export async function tg(token, method, body, fetchImpl = fetch) {
+  const res = await fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
+    method: body ? 'POST' : 'GET',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(8000)
+  })
+  return res.json()
+}
+
+/** Where a bot's messages should go: this server's /api/telegram. */
+export const webhookUrl = (host, bot) => `https://${host}/api/telegram?bot=${bot.id}`
+
+/**
+ * Points a bot at this server (POST /api/bot-setup and the daily self-check,
+ * CL3). With `info` (getWebhookInfo already read) and `force`, set it again
+ * even when the link looks right (deliveries were failing).
+ */
+export async function ensureWebhook(cfg, bot, host, { info = null, force = false, fetchImpl = fetch } = {}) {
+  const url = webhookUrl(host, bot)
+  const now = info ?? (await tg(bot.token, 'getWebhookInfo', undefined, fetchImpl))
+  const kinds = now?.result?.allowed_updates ?? []
+  if (!force && now?.result?.url === url && kinds.includes('callback_query')) return { bot: bot.name, ok: true, already: true }
+  const set = await tg(bot.token, 'setWebhook', { url, secret_token: webhookSecret(cfg, bot.id), allowed_updates: ['message', 'callback_query'], drop_pending_updates: false }, fetchImpl)
+  return { bot: bot.name, ok: !!set?.ok, error: set?.ok ? undefined : set?.description }
+}
+
+/**
+ * CL3: each server bot's link checked (right address, no delivery errors in
+ * 24 h, under 50 messages waiting) and set again when wrong. `fix` is off
+ * outside production (a preview must not take the bots from the live site).
+ * `verdict` is webhookVerdict from src/core/selfCheck.ts (passed in, so this
+ * file stays small for every function).
+ */
+export async function checkWebhooks(cfg, host, verdict, { fix = true, bots = serverBots(), fetchImpl = fetch, now = new Date() } = {}) {
+  const out = []
+  for (const b of bots) {
+    try {
+      const info = await tg(b.token, 'getWebhookInfo', undefined, fetchImpl)
+      if (!info?.ok) {
+        out.push({ name: b.name, ok: false, error: info?.description || 'Telegram refused the bot token' })
+        continue
+      }
+      const h = info.result ?? {}
+      const v = verdict(h, webhookUrl(host, b), now)
+      const base = { name: b.name, pending: h.pending_update_count ?? null, lastErrorAt: h.last_error_date ? new Date(h.last_error_date * 1000).toISOString() : null, lastError: h.last_error_message ?? null }
+      if (v.ok || !v.fix || !fix) {
+        out.push({ ...base, ok: v.ok, error: v.ok ? null : `The link ${v.problem}` })
+        continue
+      }
+      const r = await ensureWebhook(cfg, b, host, { info, force: true, fetchImpl })
+      out.push({ ...base, ok: r.ok, fixed: r.ok, error: r.ok ? null : `The link ${v.problem}, and setting it again failed: ${r.error || 'no answer'}` })
+    } catch (e) {
+      out.push({ name: b.name, ok: false, error: e.message })
+    }
+  }
+  return out
+}
+
+// ---- CL2: how many calls the server answers (Settings → System health) ----
+// Counted in memory and written now and then (every 25 calls or 2 minutes), so
+// counting never doubles the database work. A count can be lost when Vercel
+// stops an instance, so the number is "about".
+const counts = { n: {}, rows: 0, pending: 0, at: Date.now() }
+export async function countCall(cfg, name, rows = 0, fetchImpl = fetch, now = Date.now()) {
+  if (!cfg?.ok) return
+  const key = String(name).replace(/[^a-z]/gi, '').slice(0, 20) || 'other'
+  counts.n[key] = (counts.n[key] ?? 0) + 1
+  counts.rows += Number(rows) || 0
+  counts.pending++
+  if (counts.pending < 25 && now - counts.at < 120_000) return
+  const n = counts.n
+  const total = counts.pending
+  const read = counts.rows
+  counts.n = {}
+  counts.rows = 0
+  counts.pending = 0
+  counts.at = now
+  const month = new Date(now).toISOString().slice(0, 7)
+  const add = { ...n, total, rows: read }
+  let expr = "COALESCE(sys_health.msg, '{}')"
+  const args = [`note:calls:${month}`, new Date(now).toISOString(), JSON.stringify(add)]
+  for (const [k, v] of Object.entries(add)) {
+    expr = `json_set(${expr}, '$.${k}', COALESCE(json_extract(sys_health.msg, '$.${k}'), 0) + ?)`
+    args.push(v)
+  }
+  await run(cfg, [
+    ['CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)'],
+    [`INSERT INTO sys_health (key, at, msg) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = ${expr}`, args]
+  ], fetchImpl).catch(() => {})
+}
+/** Rows in a Turso pipeline answer (for countCall). */
+export function rowsOf(json) {
+  let n = 0
+  for (const r of json?.results ?? []) {
+    const res = r?.response?.result
+    n += res?.rows?.length ?? 0
+    for (const st of res?.step_results ?? []) n += st?.rows?.length ?? 0
+  }
+  return n
+}
+
 /** "Authorization: Bearer <CRON_SECRET>", compared in constant time. */
 export function cronSecretOk(req, env = process.env) {
   return bearerIs(req, env.CRON_SECRET)

@@ -4,7 +4,7 @@
 // backups are read-only for pages, so this only ADDS today's (never replaces one).
 import { pipelineProblem, pipelineWrites } from './_sqlguard.mjs'
 import { SCHEMA_VERSION, schemaTooOld } from './_schema.mjs'
-import { bearer, config, readBody, send, requireSession, turso } from './_lib.mjs'
+import { bearer, config, countCall, readBody, rowsOf, send, requireSession, turso } from './_lib.mjs'
 import { saveSnapshot } from './_snapshots.mjs'
 
 export default async function handler(req, res) {
@@ -29,6 +29,8 @@ export default async function handler(req, res) {
     // BG5: only our own session check may answer 401. Turso refusing the
     // server's key (expired, rotated) is a server problem: 503, never a sign-out.
     if (r.status === 401 || r.status === 403) return send(res, 503, { error: 'The database refused the server key: check TURSO_TOKEN in Vercel' })
+    // CL2/CL6: counted (calls and rows read), for Settings → System health.
+    await countCall(cfg, 'db', rowsOf(r.json))
     send(res, r.status, r.json)
   } catch (e) {
     send(res, 502, { error: e.message || 'Database request failed' })

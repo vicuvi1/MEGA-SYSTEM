@@ -184,6 +184,42 @@ const fakeAi = (q, r) => {
   return send({ error: 'No AI in the e2e server' })
 }
 
+// Like Vercel (CL1): an answer from a function may be at most 4.5 MB; bigger ones fail.
+const MAX_ANSWER = 4.5 * 1024 * 1024
+function capAnswer(r) {
+  const end = r.end.bind(r)
+  r.end = (body, ...rest) => {
+    if (body != null && Buffer.byteLength(body) > MAX_ANSWER) {
+      stats.tooBig++
+      r.statusCode = 500
+      r.setHeader('Content-Type', 'text/plain')
+      return end('FUNCTION_RESPONSE_PAYLOAD_TOO_LARGE')
+    }
+    return end(body, ...rest)
+  }
+}
+
+// For the soak test (e2e/soak.mjs): calls counted by path, and "the server is down" on demand.
+const stats = { calls: {}, tooBig: 0 }
+let down = false
+function e2eControl(q, r) {
+  const b = q.body || {}
+  if (b.op === 'down') down = !!b.on
+  if (b.op === 'reset') stats.calls = {}
+  if (b.op === 'sql') {
+    try {
+      const out = db.exec(String(b.sql))
+      r.setHeader('Content-Type', 'application/json')
+      return r.end(JSON.stringify({ rows: out[0]?.values ?? [] }))
+    } catch (e) {
+      r.statusCode = 400
+      return r.end(JSON.stringify({ error: e.message }))
+    }
+  }
+  r.setHeader('Content-Type', 'application/json')
+  r.end(JSON.stringify({ ...stats, down }))
+}
+
 // The same response headers as production (vercel.json), so the smoke test
 // runs under the real Content-Security-Policy (LT3).
 const vercelHeaders = JSON.parse(readFileSync(join(repo, 'vercel.json'), 'utf8')).headers.map((h) => ({ re: new RegExp(`^${h.source}$`), headers: h.headers }))
@@ -202,9 +238,16 @@ http
       if (url.pathname.startsWith('/api/')) {
         const n = url.pathname.slice(5)
         q.body = body ? JSON.parse(body) : {}
+        if (n === '_e2e') return e2eControl(q, r)
+        const key = n + (q.body?.op ? `:${q.body.op}` : url.searchParams.get('job') ? `:${url.searchParams.get('job')}` : '')
+        stats.calls[key] = (stats.calls[key] ?? 0) + 1
+        if (down) return ((r.statusCode = 503), r.end('{"error":"down for the soak test"}'))
+        // A stand-in for Ben's server tick (the app wakes it every few minutes).
+        if (n === 'cron') return (r.setHeader('Content-Type', 'application/json'), r.end('{"ok":true,"skipped":true}'))
         if (n === 'google') return gcal(q, r)
         if (n === 'todoist') return todo(q, r)
         if (n === 'ai') return fakeAi(q, r)
+        if (api[n]) capAnswer(r)
         return api[n] ? api[n](q, r) : ((r.statusCode = 404), r.end('{}'))
       }
       if (url.pathname === '/v2/pipeline') {

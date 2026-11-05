@@ -11,7 +11,7 @@
 //   move {calendarId, id, start, end} · remove {calendarId, id}
 //   setCalendars {on, target} · disconnect
 import { randomBytes } from "node:crypto"
-import { bearer, config, getSetting, readBody, send, requireSession, setSetting, sign } from './_lib.mjs'
+import { bearer, config, getSetting, readBody, send, requireSession, setSetting, sign, countCall } from './_lib.mjs'
 import { GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, keepGooglePrefs } from './_bot/bot.mjs'
 
 export function googleEnv(cfg, env = process.env) {
@@ -75,6 +75,7 @@ export const isCallback = (req) => {
 }
 
 export default async function handler(req, res) {
+  await countCall(config(), 'google') // CL2: counted for Settings → System health
   if (isCallback(req)) return googleCallback(req, res)
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()

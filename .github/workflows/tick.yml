@@ -30,9 +30,18 @@ jobs:
       - name: Wake the coach
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        # CL4: the answer says health:false when a part has been broken for 30+ minutes:
+        # the run fails then, so GitHub emails you even if Telegram is what broke.
         run: |
           for i in 1 2 3; do
-            curl -fsS -m 60 -H "Authorization: Bearer ${CRON_SECRET}" -H "X-Life-Timer: github" "https://mega-system-ten.vercel.app/api/cron?job=tick" && exit 0
+            if out=$(curl -fsS -m 60 -H "Authorization: Bearer ${CRON_SECRET}" -H "X-Life-Timer: github" "https://mega-system-ten.vercel.app/api/cron?job=tick"); then
+              echo "$out"
+              if echo "$out" | jq -e '.health == false' > /dev/null 2>&1; then
+                echo "::error::Something has been broken for 30+ minutes: $(echo "$out" | jq -c '.broken'). Open Settings → System health."
+                exit 1
+              fi
+              exit 0
+            fi
             sleep 20
           done
           echo "::error::Ben's server did not answer 3 times in a row"

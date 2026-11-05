@@ -108,18 +108,31 @@ export class Updater {
    */
   async check(download = true): Promise<UpdateStatus> {
     if (!app.isPackaged) return this.set({ state: 'dev', error: 'Updates work in the installed app' })
-    if (this.status.state === 'downloading' || this.status.state === 'ready' || this.status.state === 'installing') return this.status
-    this.set({ state: 'checking', error: null })
+    if (this.status.state === 'downloading' || this.status.state === 'installing') return this.status
+    // CL5: an update already downloaded doesn't stop the search: a newer release
+    // published since is downloaded instead (it used to wait forever for a restart).
+    const wasReady = this.status.state === 'ready'
+    if (!wasReady) this.set({ state: 'checking', error: null })
     try {
       await this.feed()
       const r = await autoUpdater.checkForUpdates()
       const latest = r?.updateInfo.version ?? null
       // After "Go back one version" the broken version isn't offered again (only a newer one).
       const newer = !!r?.isUpdateAvailable && !isSkipped(latest, this.skipped())
+      if (wasReady) {
+        if (newer && latest && latest !== this.status.latest) {
+          this.set({ latest, notes: notesOf(r?.updateInfo.releaseNotes), checkedAt: new Date().toISOString() })
+          if (download) void this.download()
+          return this.status
+        }
+        return this.set({ checkedAt: new Date().toISOString() })
+      }
       const s = this.set({ state: newer ? 'available' : 'up-to-date', latest, notes: newer ? notesOf(r?.updateInfo.releaseNotes) : null, checkedAt: new Date().toISOString() })
       if (newer && download) void this.download()
       return s
     } catch (e) {
+      // A ready update stays ready (it installs at the quiet hour or when you quit).
+      if (wasReady) return this.set({ checkedAt: new Date().toISOString() })
       return this.set({ state: 'error', error: (e as Error).message.split('\n')[0], checkedAt: new Date().toISOString() })
     }
   }

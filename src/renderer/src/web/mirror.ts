@@ -14,6 +14,8 @@ import { BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
 import { decodePending, diffRows, encodePending, schemaInfo, sendPending, touchedTables, type Remap } from './desktopSync'
 import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackStatements, versionsBefore, type TableVersions } from './tableVersions'
+import { retryDelay } from '@core/retry'
+import { APPEND_ONLY } from '@core/backupPlan'
 
 // cloud_snapshots: 30 full backups, read straight from Turso when needed, never copied to every device.
 const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/
@@ -81,10 +83,30 @@ export class Mirror {
   syncedAt: string | null = null
   lastError: string | null = null
   readonly ready: Promise<void>
+  /** Rows read from Turso by full downloads and table reloads (CL6: counted honestly, not only cold starts). */
+  private rowsRead = 0
+  /** This copy has made sure sys_writes (and its index) exist in Turso (CL6). */
+  private writesReady = false
+  /** CL7: offline changes wait this long after a failed send (5 s, 10 s … 10 min). */
+  private flushFails = 0
+  private nextFlushAt = 0
+  /** CL7: the session ended (401): the waiting changes stay here until you enter your PIN. */
+  private locked = false
 
   constructor(private SQL: SqlJsStatic, private turso: TursoHttp, private store: MirrorStore | null = null, private desktop = false) {
     this.ready = this.start()
-    if (typeof window !== 'undefined' && !this.desktop) window.addEventListener('online', () => void this.refresh().catch(() => {}))
+    if (typeof window !== 'undefined' && !this.desktop)
+      window.addEventListener('online', () => {
+        this.nextFlushAt = 0
+        void this.refresh().catch(() => {})
+      })
+    // CS4: the copy is saved a moment after changes (not after every one); leaving the page saves it now.
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && this.store) {
+      const now = () => this.flushPersist()
+      window.addEventListener('pagehide', now)
+      window.addEventListener('beforeunload', now)
+      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && now())
+    }
     if (desktop && typeof window !== 'undefined') {
       window.addEventListener('life-desktop-retry', () => { void this.refresh().catch(() => {}) })
       window.addEventListener('life-desktop-use-server', () => {
@@ -185,15 +207,19 @@ export class Mirror {
       const mark = { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [version] }
       const touched = touchedTables(changes)
       const checks = [...casStatements(expected), ...rowCasStatements(rowChecks, expected.size > 0)]
+      // Queued changes always carry the table they need (they may be sent to a fresh database).
+      const queued = () => [...writeOnce(version, { create: true }), ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])]
       if (behind) {
-        this.queueOffline([...writeOnce(version), ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
+        this.queueOffline(queued())
         this.persist()
         this.emit()
         return result
       }
+      // CL6: the table is made once per copy, old ids are cleared once a day (not on every change).
+      const once = writeOnce(version, { create: !this.writesReady, prune: this.pruneDue() })
       try {
         const before = versionsBefore(touched)
-        const batch = [...writeOnce(version), ...before, ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])]
+        const batch = [...once, ...before, ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])]
         let out: Param[][][]
         try {
           out = await this.turso.writeAtomic(batch)
@@ -206,7 +232,9 @@ export class Mirror {
             throw e2
           })
         }
-        const shift = 3 // writeOnce's three statements come first
+        this.writesReady = true
+        if (once.some((c) => c.sql.startsWith('DELETE FROM sys_writes'))) this.pruned()
+        const shift = once.length // writeOnce's statements come first
         // A table we wrote is marked current only if nobody else changed it since
         // we last read it (Y2); otherwise the next refresh re-reads it and gets both.
         if (this.tv) {
@@ -220,20 +248,26 @@ export class Mirror {
         // session: keep the change here and send it later (S3). Re-downloading
         // everything on a hiccup threw the change away.
         if (isOffline(e) || (typeof window !== 'undefined' && isRetryable(e))) {
+          // CL7: the next try waits a little (longer each time); a 401 waits for your PIN.
+          if (e instanceof UnauthorizedError) this.locked = true
+          this.nextFlushAt = Date.now() + retryDelay(this.flushFails++, { base: Mirror.RETRY_BASE })
           // With its checks (Y3): sent later, it must still find the rows as they were read
           // here; if another device changed them meanwhile, it goes to "couldn't sync" (Y1)
           // instead of overwriting their newer edit.
-          this.queueOffline([...writeOnce(version), ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])])
+          this.queueOffline(queued())
           this.persist()
           this.emit()
           return result
         }
+        // The id table went missing (a restore, a new database): make it again and send once more.
+        const noIds = /no such table: sys_writes/i.test(String((e as Error)?.message ?? ''))
+        if (noIds) this.writesReady = false
         this.lastError = (e as Error).message
         // Put the copy back the way Turso has it.
         await this.rebuild().catch(() => {})
         this.emit()
         // Changed elsewhere, or the same new id taken on another device: fresh copy, run again (Y5).
-        if ((isCasConflict(e) || isUniqueClash(e)) && attempt < 3) continue
+        if ((isCasConflict(e) || isUniqueClash(e) || noIds) && attempt < 3) continue
         throw new MirrorError(
           navigator.onLine === false
             ? 'You are offline, so this was not saved. Try again when you are back online.'
@@ -266,8 +300,9 @@ export class Mirror {
           if (this.pending().length) return false
         }
       }
-      // Changes made offline go first, so the fresh copy has them.
-      if (!this.desktop) await this.flushOffline()
+      // Changes made offline go first, so the fresh copy has them. The refresh
+      // loop already waits longer after failures (CL7), so it always tries.
+      if (!this.desktop) await this.flushOffline(true)
       // BG8: while changes still wait, a fresh copy from Turso would hide them
       // on screen (and you'd type them again). Wait until they're sent.
       if (!this.desktop && this.outbox().length) return false
@@ -282,6 +317,26 @@ export class Mirror {
         if (this.desktop) this.desktopStatus()
       })
     return this.refreshing
+  }
+
+  /** CL6: old write ids are cleared at most once a day from this device. */
+  private prunedAt = 0
+  private pruneDue(): boolean {
+    let at = this.prunedAt
+    try {
+      if (typeof localStorage !== 'undefined') at = Math.max(at, Number(localStorage.getItem('life_writes_pruned')) || 0)
+    } catch {
+      /* memory only */
+    }
+    return Date.now() - at > 86400_000
+  }
+  private pruned(): void {
+    this.prunedAt = Date.now()
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('life_writes_pruned', String(this.prunedAt))
+    } catch {
+      /* memory only */
+    }
   }
 
   // ---- Offline queue (web): changes made without a connection --------------
@@ -301,12 +356,31 @@ export class Mirror {
     }
     return this.offline
   }
+  private static SINCE = 'life_offline_since'
+  private sinceMem: number | null = null
+  /** When the oldest waiting change was made (ms), or null (CL7). */
+  get offlineSince(): number | null {
+    if (!this.outbox().length) return null
+    try {
+      const v = typeof localStorage !== 'undefined' ? Number(localStorage.getItem(Mirror.SINCE)) : 0
+      return v > 0 ? v : (this.sinceMem ??= Date.now())
+    } catch {
+      return (this.sinceMem ??= Date.now())
+    }
+  }
   private saveOutbox(list: Change[][]): void {
     this.offline = list
+    if (!list.length) this.sinceMem = null
+    else this.sinceMem ??= Date.now()
     try {
       if (typeof localStorage === 'undefined') return
-      if (list.length) localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list))
-      else localStorage.removeItem(Mirror.OUTBOX)
+      if (list.length) {
+        localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list))
+        if (!localStorage.getItem(Mirror.SINCE)) localStorage.setItem(Mirror.SINCE, String(this.sinceMem))
+      } else {
+        localStorage.removeItem(Mirror.OUTBOX)
+        localStorage.removeItem(Mirror.SINCE)
+      }
       this.outboxUnsaved = false
     } catch {
       this.outboxUnsaved = list.length > 0
@@ -316,19 +390,42 @@ export class Mirror {
     // Never trimmed: an old change is never dropped to make room (S3).
     const list = [...this.outbox(), batch]
     this.saveOutbox(list)
-    this.lastError = this.outboxUnsaved
-      ? `⚠ ${list.length} change${list.length === 1 ? '' : 's'} not synced yet and this browser can't store them: keep this tab open until you're back online`
-      : `Offline: ${list.length} change${list.length === 1 ? '' : 's'} waiting to sync`
+    this.lastError = this.waitingNote(list.length)
+  }
+  /** What the sync status says about changes still waiting (CL7). */
+  private waitingNote(n: number): string {
+    const s = n === 1 ? '' : 's'
+    if (this.outboxUnsaved) return `⚠ ${n} change${s} not synced yet and this browser can't store them: keep this tab open until you're back online`
+    if (this.locked) return `🔒 Your session ended: enter your PIN to send ${n} waiting change${s} (they are kept on this device).`
+    const since = this.offlineSince
+    if (since && Date.now() - since > 3600_000) return `⚠ ${n} change${s} waited over an hour to sync. They are kept on this device; check your connection.`
+    return `Offline: ${n} change${s} waiting to sync`
+  }
+  /** You entered your PIN again (or came back online): send what waited now (CL7). */
+  resume(): void {
+    this.locked = false
+    this.nextFlushAt = 0
+    this.flushFails = 0
+    void this.refresh().catch(() => {})
   }
   /** Changes made offline and not yet in Turso. */
   get pendingOffline(): number {
     return this.outbox().length
   }
-  /** Sends the offline changes, oldest first; stops at the first that fails. */
-  private async flushOffline(): Promise<void> {
+  /**
+   * Sends the offline changes, oldest first; stops at the first that fails.
+   * After a failure it waits longer each time (CL7: 5 s … 10 min) instead of
+   * trying again on every change and every refresh.
+   */
+  private async flushOffline(force = false): Promise<void> {
     const list = this.outbox()
     if (!list.length) return
+    if (this.locked || (!force && Date.now() < this.nextFlushAt)) {
+      this.lastError = this.waitingNote(list.length)
+      return
+    }
     let sent = 0
+    let failed = false
     for (const batch of list) {
       try {
         await this.turso.writeAtomic(batch)
@@ -341,7 +438,17 @@ export class Mirror {
           sent++
           continue
         }
-        if (isOffline(e) || isRetryable(e)) break
+        if (e instanceof UnauthorizedError) {
+          // CL7: never dropped, never retried blindly: the lock screen asks for the PIN, then resume() sends them.
+          this.locked = true
+          failed = true
+          if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('life-session-ended', { detail: { waiting: list.length - sent } }))
+          break
+        }
+        if (isOffline(e) || isRetryable(e)) {
+          failed = true
+          break
+        }
         // Refused by the database for good (e.g. a row deleted elsewhere): kept
         // in "couldn't sync" (Settings shows it) instead of vanishing.
         this.saveFailed([...this.failedSync, { at: new Date().toISOString(), error: String((e as Error)?.message ?? e).slice(0, 200), batch }])
@@ -349,7 +456,14 @@ export class Mirror {
       }
     }
     this.saveOutbox(list.slice(sent))
-    if (sent) this.lastError = list.length - sent ? `Offline: ${list.length - sent} changes waiting to sync` : null
+    if (failed) this.nextFlushAt = Date.now() + retryDelay(this.flushFails++, { base: Mirror.RETRY_BASE })
+    else {
+      this.flushFails = 0
+      this.nextFlushAt = 0
+    }
+    const left = list.length - sent
+    if (left) this.lastError = this.waitingNote(left)
+    else if (sent) this.lastError = null
   }
 
   private static FAILED = 'life_sync_failed'
@@ -408,24 +522,42 @@ export class Mirror {
     return (this.current.raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP.test(t))
   }
 
-  /** Replaces just these tables with Turso's rows, in one local transaction. */
+  /**
+   * Replaces just these tables with Turso's rows, in one local transaction.
+   * CL1: read in pages (an answer stays far below the server's 4.5 MB however
+   * long the history grows), and the append-only history (ledger, discipline
+   * events) only fetches rows newer than this copy's newest.
+   */
   private async reloadTables(tables: string[], version: string, remote: TableVersions): Promise<void> {
-    const data = tables.length ? await this.turso.readMany(tables.map((t) => ({ sql: `SELECT * FROM "${t}"`, args: [] }))) : []
     const raw = this.current.raw
+    // Append-only: only when this copy's rows are still exactly Turso's first rows (same count up to our newest id).
+    const tail = new Map<string, number>()
+    const appendOnly = tables.filter((t) => APPEND_ONLY.has(t))
+    if (appendOnly.length) {
+      const local = appendOnly.map((t) => {
+        const [n, max] = (raw.exec(`SELECT COUNT(*), COALESCE(MAX(id), 0) FROM "${t}"`)[0]?.values[0] ?? [0, 0]) as number[]
+        return { t, n: Number(n), max: Number(max) }
+      })
+      const counts = await this.turso.readMany(local.map((l) => ({ sql: `SELECT COUNT(*) FROM "${l.t}" WHERE id <= ?`, args: [l.max] })))
+      local.forEach((l, i) => {
+        const r = counts[i]
+        if (l.max > 0 && !(r instanceof Error) && Number(r.rows[0]?.[0]) === l.n) tail.set(l.t, l.max)
+      })
+    }
+    const data = await this.readTables(tables, (t) => (tail.has(t) ? { where: 'id > ?', args: [tail.get(t)!] } : null))
     raw.run('BEGIN')
     try {
-      tables.forEach((t, i) => {
-        const res = data[i]
-        if (res instanceof Error) throw res
-        raw.run(`DELETE FROM "${t}"`)
-        if (!res.rows.length) return
+      for (const t of tables) {
+        const res = data.get(t)!
+        if (!tail.has(t)) raw.run(`DELETE FROM "${t}"`)
+        if (!res.rows.length) continue
         const stmt = raw.prepare(`INSERT INTO "${t}" (${res.cols.map((c) => `"${c}"`).join(', ')}) VALUES (${res.cols.map(() => '?').join(', ')})`)
         try {
           for (const row of res.rows) stmt.run(row as Param[] as any)
         } finally {
           stmt.free()
         }
-      })
+      }
       raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version])
       raw.run('COMMIT')
     } catch (e) {
@@ -437,6 +569,49 @@ export class Mirror {
     this.saveTv()
     this.syncedAt = new Date().toISOString()
     this.persist()
+  }
+
+  /** Rows read by downloads and reloads since the last call (CL6), for the monthly count. */
+  takeReadRows(): number {
+    const n = this.rowsRead
+    this.rowsRead = 0
+    return n
+  }
+
+  /** Rows per request: 1500 ledger rows are about 0.6 MB, far below the 4.5 MB a server answer may be. */
+  static PAGE = 1500
+  /**
+   * Whole tables (or the part `filter` picks), in pages: groups of 8 tables
+   * side by side (S2), then the next page of each table that had more. Throws
+   * if any page can't be read (all or nothing).
+   */
+  private async readTables(tables: string[], filter: (t: string) => { where: string; args: Param[] } | null = () => null): Promise<Map<string, { cols: string[]; rows: unknown[][] }>> {
+    const PAGE = Mirror.PAGE
+    const page = (t: string, offset: number) => {
+      const f = filter(t)
+      return { sql: `SELECT * FROM "${t}"${f ? ` WHERE ${f.where}` : ''} ORDER BY rowid LIMIT ${PAGE} OFFSET ${offset}`, args: f ? f.args : [] }
+    }
+    const loaded = new Map<string, { cols: string[]; rows: unknown[][] }>()
+    const groups: string[][] = []
+    for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8))
+    await Promise.all(groups.map(async (group) => {
+      const first = await this.turso.readMany(group.map((t) => page(t, 0)))
+      for (let k = 0; k < group.length; k++) {
+        const t = group[k]
+        let res = first[k]
+        if (res instanceof Error) throw new MirrorError(`Could not read ${t}: ${res.message}`)
+        const all = { cols: res.cols, rows: [...res.rows] }
+        while (res.rows.length === PAGE) {
+          const [next] = await this.turso.readMany([page(t, all.rows.length)])
+          if (next instanceof Error) throw new MirrorError(`Could not read ${t}: ${next.message}`)
+          res = next
+          all.rows.push(...res.rows)
+        }
+        this.rowsRead += all.rows.length
+        loaded.set(t, all)
+      }
+    }))
+    return loaded
   }
 
   private loadTv(): TableVersions | null {
@@ -458,8 +633,34 @@ export class Mirror {
     }
   }
 
+  /**
+   * CS4: saving the copy (an export of the whole database) is slow with a long
+   * history, so it runs once things are quiet: 2 s after the last change, when
+   * the browser is idle. Leaving or hiding the page saves at once.
+   */
+  private persistTimer: ReturnType<typeof setTimeout> | null = null
+  private persistWaiting = false
+  static PERSIST_MS = 2000
+  /** First wait after a failed send of offline changes (CL7; tests set 0). */
+  static RETRY_BASE = 5000
   private persist(): void {
     if (!this.store || !this.db) return
+    this.persistWaiting = true
+    if (this.persistTimer) return
+    this.persistTimer = setTimeout(() => {
+      const run = () => {
+        this.persistTimer = null
+        this.flushPersist()
+      }
+      const idle = (globalThis as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
+      if (typeof idle === 'function') idle(run, { timeout: 2000 })
+      else run()
+    }, Mirror.PERSIST_MS)
+  }
+  /** Saves the copy now, if a save is waiting. */
+  flushPersist(): void {
+    if (!this.persistWaiting || !this.store || !this.db) return
+    this.persistWaiting = false
     try {
       this.store.save(this.db.raw.export()).catch(() => {})
     } catch {
@@ -473,10 +674,13 @@ export class Mirror {
   }
 
   /** The sync panel's numbers (Y9). */
-  health(): { syncedAt: string | null; waiting: number; desktopPending: number; error: string | null; failed: { at: string; error: string }[] } {
+  health(): { syncedAt: string | null; waiting: number; waitingSince: string | null; locked: boolean; desktopPending: number; error: string | null; failed: { at: string; error: string }[] } {
+    const since = this.offlineSince
     return {
       syncedAt: this.syncedAt,
       waiting: this.pendingOffline,
+      waitingSince: since ? new Date(since).toISOString() : null,
+      locked: this.locked,
       desktopPending: this.desktop && this.db ? this.pending().length : 0,
       error: this.lastError,
       failed: this.failedSync.map((f) => ({ at: f.at, error: f.error }))
@@ -638,29 +842,7 @@ export class Mirror {
     // however big the history grows), and all or nothing: if any part can't be
     // read, this copy is thrown away and the old one stays (never a half-empty copy).
     const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]))
-    const PAGE = 1500
-    const page = (t: string, offset: number) => ({ sql: `SELECT * FROM "${t}" ORDER BY rowid LIMIT ${PAGE} OFFSET ${offset}`, args: [] })
-    const loaded = new Map<string, { cols: string[]; rows: unknown[][] }>()
-    // Groups of 8 tables, fetched side by side (S2): the same request sizes as
-    // before, without waiting for one group before asking for the next.
-    const groups: string[][] = []
-    for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8))
-    await Promise.all(groups.map(async (group) => {
-      const first = await this.turso.readMany(group.map((t) => page(t, 0)))
-      for (let k = 0; k < group.length; k++) {
-        const t = group[k]
-        let res = first[k]
-        if (res instanceof Error) throw new MirrorError(`Could not read ${t}: ${res.message}`)
-        const all = { cols: res.cols, rows: [...res.rows] }
-        while (res.rows.length === PAGE) {
-          const [next] = await this.turso.readMany([page(t, all.rows.length)])
-          if (next instanceof Error) throw new MirrorError(`Could not read ${t}: ${next.message}`)
-          res = next
-          all.rows.push(...res.rows)
-        }
-        loaded.set(t, all)
-      }
-    }))
+    const loaded = await this.readTables(tables)
     raw.run('BEGIN')
     for (const t of tables) {
       const res = loaded.get(t)
@@ -776,11 +958,16 @@ export function rowCasStatements(rows: { table: string; id: unknown; cols: strin
  * Each write carries its own id (Y5): sent twice (a timeout, then a retry),
  * the second copy fails on that id instead of saving everything again.
  */
-const writeOnce = (id: string): Change[] => [
+export const WRITES_TABLE: Change[] = [
   { sql: 'CREATE TABLE IF NOT EXISTS sys_writes (id TEXT PRIMARY KEY, at INTEGER NOT NULL)', args: [] },
+  // CL6: clearing old ids looks them up by time; without this every change scanned the whole table.
+  { sql: 'CREATE INDEX IF NOT EXISTS sys_writes_at ON sys_writes (at)', args: [] }
+]
+export const writeOnce = (id: string, o: { create?: boolean; prune?: boolean } = { create: true, prune: true }): Change[] => [
+  ...(o.create ? WRITES_TABLE : []),
   { sql: 'INSERT INTO sys_writes (id, at) VALUES (?, ?)', args: [id, Date.now()] },
-  // Ids older than a week can't come back; keep the table tiny.
-  { sql: 'DELETE FROM sys_writes WHERE at < ?', args: [Date.now() - 7 * 86400_000] }
+  // Ids older than a week can't come back; keep the table tiny (once a day, not on every change).
+  ...(o.prune ? [{ sql: 'DELETE FROM sys_writes WHERE at < ?', args: [Date.now() - 7 * 86400_000] as Param[] }] : [])
 ]
 const isAlreadySaved = (e: unknown) => /UNIQUE constraint failed: sys_writes\.id/i.test(String((e as Error)?.message ?? e))
 const isUniqueClash = (e: unknown) => /UNIQUE constraint failed/i.test(String((e as Error)?.message ?? e)) && !isAlreadySaved(e)

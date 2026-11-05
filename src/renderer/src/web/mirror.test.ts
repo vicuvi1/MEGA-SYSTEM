@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type SqlJsStatic, type Database as SqlJsDatabase } from 'sql.js'
 import { MIGRATIONS } from '@core/schema'
 import { Wallet } from '../../../main/wallet'
@@ -201,6 +201,13 @@ describe('records edited on two devices', () => {
 })
 
 describe('offline on the phone', () => {
+  // Back online at once (the wait between tries is tested on its own: CL7).
+  beforeEach(() => {
+    Mirror.RETRY_BASE = 0
+  })
+  afterEach(() => {
+    Mirror.RETRY_BASE = 5000
+  })
   it('a change made offline stays and reaches Turso when back online', async () => {
     const remote = fakeTurso()
     const realFetch = globalThis.fetch
@@ -308,5 +315,145 @@ describe('offline on the phone', () => {
     vi.stubGlobal('fetch', realFetch)
     await m.refresh()
     expect(m.pendingOffline).toBe(0)
+  })
+})
+
+describe('a long history and a quiet device (castle)', () => {
+  /** A fake Turso that refuses answers over `maxRows` rows (like Vercel's 4.5 MB), and records every SQL. */
+  function limitedTurso(maxRows: number) {
+    const remote = new SQL.Database()
+    for (const m of MIGRATIONS) remote.exec(m)
+    const sqls: string[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body)
+      for (const r of body.requests) {
+        if (r.stmt) sqls.push(r.stmt.sql)
+        for (const st of r.batch?.steps ?? []) sqls.push(st.stmt.sql)
+      }
+      const json = handlePipeline(remote, body)
+      const rows = (json.results as any[]).reduce((n, r) => n + (r?.response?.result?.rows?.length ?? 0), 0)
+      if (rows > maxRows) return { ok: false, status: 500, statusText: 'FUNCTION_RESPONSE_PAYLOAD_TOO_LARGE', json: async () => ({}), text: async () => 'too large' }
+      return { ok: true, status: 200, json: async () => json, text: async () => JSON.stringify(json) }
+    })
+    return { remote, sqls }
+  }
+  const PAGE = Mirror.PAGE
+  afterEach(() => {
+    Mirror.PAGE = PAGE
+  })
+
+  it('CL1: a reload of a big table is read in pages, and the ledger only fetches its new rows', async () => {
+    Mirror.PAGE = 50
+    // A full table in one answer (the old reload) is far over the limit; pages of 8 tables fit.
+    const { remote, sqls } = limitedTurso(450)
+    for (let i = 0; i < 400; i++) remote.run(`INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES ('2026-10-01T08:00:00Z', '2026-10-01', 'quests', 'adjust', 1, 0, 'old ${i}')`)
+    for (let i = 0; i < 300; i++) remote.run(`INSERT INTO settings (key, value) VALUES ('k${i}', 'v')`)
+    const a = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await a.ready
+    const b = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await b.ready
+    // Another device adds points and changes a setting.
+    await b.write((db) => {
+      new Wallet(db as any).award('body.workout_done')
+      db.prepare("INSERT INTO settings (key, value) VALUES ('k1', 'new') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run()
+    })
+    sqls.length = 0
+    expect(await a.refresh()).toBe(true)
+    // No full download: only the changed tables, the ledger from our newest id on.
+    expect(sqls.some((q) => /FROM "ledger" WHERE id > \?/.test(q))).toBe(true)
+    expect(sqls.some((q) => /FROM "focus_sessions"/.test(q))).toBe(false)
+    expect(await a.read((db) => new Wallet(db as any).summary().balance)).toBe(count(remote, 'SELECT SUM(coins) FROM ledger'))
+    expect(await a.read((db) => (db.prepare("SELECT value FROM settings WHERE key = 'k1'").get() as any).value)).toBe('new')
+    expect(await a.read((db) => (db.prepare('SELECT COUNT(*) AS n FROM ledger').get() as any).n)).toBe(count(remote, 'SELECT COUNT(*) FROM ledger'))
+  })
+
+  it('CL1: an old ledger row put back on the server (a restore) makes the ledger reload in full, never a wrong copy', async () => {
+    Mirror.PAGE = 50
+    const { remote } = limitedTurso(450)
+    for (let i = 1; i <= 200; i++) if (i !== 3) remote.run(`INSERT INTO ledger (id, ts, day, module, kind, coins, xp, note) VALUES (${i}, '2026-10-01T08:00:00Z', '2026-10-01', 'quests', 'adjust', 1, 0, 'old')`)
+    const a = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await a.ready
+    const b = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await b.ready
+    await b.write((db) => {
+      db.prepare("INSERT INTO ledger (id, ts, day, module, kind, coins, xp, note) VALUES (3, '2026-10-01T08:00:00Z', '2026-10-01', 'quests', 'adjust', 5, 0, 'restored')").run()
+    })
+    await a.refresh()
+    expect(await a.read((db) => (db.prepare('SELECT COUNT(*) AS n FROM ledger').get() as any).n)).toBe(200)
+    expect(await a.read((db) => (db.prepare('SELECT note FROM ledger WHERE id = 3').get() as any)?.note)).toBe('restored')
+  })
+
+  it('CS4: the copy is saved once, a moment after a burst of changes, and at once when the page is left', async () => {
+    fakeTurso()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const saves: number[] = []
+      const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'), { load: async () => null, save: async (b) => void saves.push(b.length) })
+      await m.ready
+      vi.advanceTimersByTime(5000)
+      saves.length = 0
+      for (let i = 0; i < 5; i++) await m.write((db) => db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(`cs4-${i}`, 'x'))
+      expect(saves).toHaveLength(0)
+      vi.advanceTimersByTime(2100)
+      expect(saves).toHaveLength(1)
+      await m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('cs4-last', 'x')").run())
+      m.flushPersist()
+      expect(saves).toHaveLength(2)
+      vi.advanceTimersByTime(5000)
+      expect(saves).toHaveLength(2) // nothing left to save
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('CL6: the id table is made once and old ids are cleared once a day, not with every change', async () => {
+    const { remote, sqls } = limitedTurso(1e9)
+    const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await m.ready
+    sqls.length = 0
+    for (let i = 0; i < 3; i++) await m.write((db) => db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(`cl6-${i}`, 'x'))
+    expect(sqls.filter((q) => /CREATE TABLE IF NOT EXISTS sys_writes/.test(q))).toHaveLength(1)
+    expect(sqls.filter((q) => /DELETE FROM sys_writes/.test(q))).toHaveLength(1)
+    expect(count(remote, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'sys_writes_at'")).toBe(1)
+    expect(count(remote, 'SELECT COUNT(*) FROM sys_writes')).toBe(3)
+    // Gone (a restore into a new database): made again, the change still saved.
+    remote.run('DROP TABLE sys_writes')
+    await m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('cl6-after', 'x')").run())
+    expect(count(remote, "SELECT COUNT(*) FROM settings WHERE key = 'cl6-after'")).toBe(1)
+  })
+
+  it('CL7: offline changes are retried with growing waits, a 401 waits for the PIN, nothing is dropped', async () => {
+    const remote = fakeTurso()
+    const realFetch = globalThis.fetch
+    vi.stubGlobal('window', { addEventListener: () => {}, dispatchEvent: () => true })
+    vi.stubGlobal('navigator', { onLine: true })
+    const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't', () => {}))
+    await m.ready
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return { ok: false, status: 503, statusText: 'Unavailable', text: async () => 'busy' }
+    })
+    await m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('cl7', '1')").run())
+    expect(m.pendingOffline).toBe(1)
+    calls = 0
+    // More changes during the wait: they queue behind, none of them knocks again.
+    for (let i = 0; i < 5; i++) await m.write((db) => db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(`cl7-${i}`, 'x'))
+    expect(calls).toBe(0)
+    expect(m.pendingOffline).toBe(6)
+    // The session ended: kept, and said plainly.
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 401, statusText: 'Unauthorized', text: async () => '' }))
+    m.resume()
+    await new Promise((r) => setTimeout(r, 30))
+    expect(m.pendingOffline).toBe(6)
+    expect(m.lastError).toMatch(/enter your PIN/)
+    expect(m.health().locked).toBe(true)
+    // PIN again: it goes out.
+    vi.stubGlobal('fetch', realFetch)
+    m.resume()
+    await new Promise((r) => setTimeout(r, 50))
+    await m.refresh()
+    expect(m.pendingOffline).toBe(0)
+    expect(count(remote, "SELECT COUNT(*) FROM settings WHERE key LIKE 'cl7%'")).toBe(6)
   })
 })

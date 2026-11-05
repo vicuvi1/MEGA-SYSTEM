@@ -36,6 +36,7 @@ import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus } from './web/coachStatus'
 import { backupTables, redactRows, restoreStatements } from '@core/backupPlan'
+import { breaker, retryDelay } from '@core/retry'
 import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
 import { healthChecks } from '@core/health'
 import { beat, logError, logErrors, readBenLog, readHealth, type ErrorReport } from './web/systemHealth'
@@ -292,54 +293,117 @@ export function createTursoWebBridge(): Bridge {
           return { ...DEFAULT_WEB_BOT_CONFIG, ...(j?.bots ?? {}), serverBots: !!setup?.ok }
         })
         .catch(() => DEFAULT_WEB_BOT_CONFIG)
+  // CL7: reading Todoist or Google over and over while they fail helps nobody:
+  // after 3 failures in a row the background reads pause (1 min, then longer);
+  // what you press yourself always goes through.
+  const POLLING = new Set(['changes', 'today', 'upcoming', 'everything', 'events', 'status'])
+  const todoistBreak = breaker()
+  const googleBreak = breaker()
+  const paused = (who: string, b: ReturnType<typeof breaker>) => new Error(`${who} is not answering: trying again at ${new Date(b.pausedUntil).toTimeString().slice(0, 5)}`)
   // Todoist through the server (the token stays there).
   const todoistCall = async (op: string, extra: Record<string, unknown> = {}): Promise<any> => {
     if (direct) return { connected: false }
-    const r = await fetch('/api/todoist', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op, ...extra })
-    })
-    const j = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(j.error || httpProblem('Todoist', r.status))
-    return j
+    const poll = POLLING.has(op)
+    if (poll && !todoistBreak.allow()) throw paused('Todoist', todoistBreak)
+    try {
+      const r = await fetch('/api/todoist', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op, ...extra })
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || httpProblem('Todoist', r.status))
+      todoistBreak.ok()
+      return j
+    } catch (e) {
+      if (poll) todoistBreak.fail()
+      throw e
+    }
   }
   // Google Calendar through the server (the sign-in stays sealed there).
   const googleCall = async (op: string, extra: Record<string, unknown> = {}): Promise<any> => {
     if (direct) return { connected: false, configured: false, events: [] }
-    // 25 s at most: a stuck request must never leave "Loading your day…" up forever.
-    const r = await fetch('/api/google', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op, ...extra }), signal: AbortSignal.timeout(25_000) })
-    const j = await r.json().catch(() => ({}))
-    if (!r.ok || j.error) throw new Error(j.error || httpProblem('Google Calendar', r.status))
-    return j
+    const poll = POLLING.has(op)
+    if (poll && !googleBreak.allow()) throw paused('Google Calendar', googleBreak)
+    try {
+      // 25 s at most: a stuck request must never leave "Loading your day…" up forever.
+      const r = await fetch('/api/google', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op, ...extra }), signal: AbortSignal.timeout(25_000) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || j.error) throw new Error(j.error || httpProblem('Google Calendar', r.status))
+      googleBreak.ok()
+      return j
+    } catch (e) {
+      if (poll) googleBreak.fail()
+      throw e
+    }
   }
   let googleOn: Promise<boolean> | null = null
-  const googleConnected = () => (googleOn ??= sessionReady.then(() => googleCall('status')).then((j) => !!j.connected).catch(() => false))
+  const googleConnected = () => (googleOn ??= sessionReady.then(() => google.status()).then((j: any) => !!j.connected).catch(() => false))
+  // CL2: one shared copy of your calendar for Today, the Now card, the day
+  // strip, the alerts and the island. Fresh for a minute while you look; while
+  // the page is hidden nothing is asked (the desktop app, in the tray, every 5
+  // minutes for the island). Changing an event clears it.
+  let gStatus: { at: number; j: any } | null = null
+  let gWins: { from: number; to: number; at: number; events: any[] }[] = []
+  const calendarTtl = () => (document.visibilityState === 'visible' ? 60_000 : window.desktop ? 5 * 60_000 : Infinity)
+  const forgetCalendar = () => {
+    gWins = []
+  }
   const google = {
     status: async () => {
+      if (gStatus && Date.now() - gStatus.at < 10 * 60_000) return gStatus.j
       const j = await googleCall('status').catch((e) => ({ configured: true, connected: false, error: (e as Error).message }))
       googleOn = Promise.resolve(!!j.connected)
+      gStatus = j.error ? null : { at: Date.now(), j }
       return j
     },
     connect: async () => {
+      gStatus = null
       const j = await googleCall('connect')
       if (j.url) window.location.href = j.url
     },
-    events: async (from: string, to: string) => ((await googleConnected()) ? ((await googleCall('events', { from, to })).events ?? []) : []),
-    create: async (e: Record<string, unknown>) => (await googleCall('create', e)).event,
+    events: async (from: string, to: string) => {
+      if (!(await googleConnected())) return []
+      const f = Date.parse(from)
+      const t = Date.parse(to)
+      const pick = (w: { events: any[] }) => w.events.filter((e) => Date.parse(e.end) > f && Date.parse(e.start) < t)
+      const hit = gWins.find((w) => w.from <= f && w.to >= t)
+      if (hit && (Date.now() - hit.at < calendarTtl() || document.visibilityState !== 'visible' && !window.desktop)) return pick(hit)
+      // Around today, ask for a little more (today and the next two days), so the next asks are answered from here.
+      const day0 = new Date()
+      day0.setHours(0, 0, 0, 0)
+      const near = f >= day0.getTime() - 86400_000 && t <= day0.getTime() + 3 * 86400_000
+      const wf = near ? Math.min(f, day0.getTime()) : f
+      const wt = near ? Math.max(t, day0.getTime() + 2 * 86400_000 + 4 * 3600_000) : t
+      const events = ((await googleCall('events', { from: new Date(wf).toISOString(), to: new Date(wt).toISOString() })).events ?? []) as any[]
+      const win = { from: wf, to: wt, at: Date.now(), events }
+      gWins = [win, ...gWins.filter((w) => !(w.from >= wf && w.to <= wt))].slice(0, 6)
+      return pick(win)
+    },
+    create: async (e: Record<string, unknown>) => {
+      forgetCalendar()
+      return (await googleCall('create', e)).event
+    },
     move: async (calendarId: string, id: string, start: string, end: string) => {
+      forgetCalendar()
       await googleCall('move', { calendarId, id, start, end })
     },
     update: async (calendarId: string, id: string, patch: Record<string, unknown>) => {
+      forgetCalendar()
       await googleCall('update', { calendarId, id, ...patch })
     },
     remove: async (calendarId: string, id: string) => {
+      forgetCalendar()
       await googleCall('remove', { calendarId, id })
     },
     setCalendars: async (on: string[], target: string | null) => {
+      forgetCalendar()
+      gStatus = null
       await googleCall('setCalendars', { on, target })
     },
     disconnect: async () => {
+      forgetCalendar()
+      gStatus = null
       await googleCall('disconnect')
       googleOn = Promise.resolve(false)
     }
@@ -388,18 +452,22 @@ export function createTursoWebBridge(): Bridge {
     }
     const tab = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('life-live') : null
     let checking = false
-    const check = async (force = false) => {
-      if (checking) return
+    /** True when the server answered (the copy is current or was reloaded). */
+    const check = async (force = false): Promise<boolean> => {
+      if (checking) return true
       checking = true
       try {
-        const changed = await (await mirrorP).refresh()
+        const m = await mirrorP
+        const changed = await m.refresh()
         if (changed || force) {
           await applyFinance().catch(() => {})
           await syncAll().catch(() => {})
           announce()
         }
+        return !!m.syncedAt && Date.now() - Date.parse(m.syncedAt) < 60_000
       } catch {
         /* offline: the next check retries */
+        return false
       } finally {
         checking = false
       }
@@ -426,20 +494,27 @@ export function createTursoWebBridge(): Bridge {
     // How lively to be: you're using it (every 3 s), it's open but you're away
     // (every 20 s), away for long (every 60 s), in the background (5 min). Fewer
     // server calls, and changes still show within seconds when you look.
-    const pace = (): { db: number; todo: number; ext: number } => {
+    // CL2: a tab left open and untouched asks far less (about 70 calls an hour
+    // instead of 450): the data every 90 s, Ben's timer and the outside apps
+    // every 10 minutes. Touch it and it is lively again at once.
+    const pace = (): { db: number; todo: number; ext: number; tick: number } => {
       const idle = Date.now() - lastUse
       // In the background: every 5 minutes (coming back checks at once anyway: Y10).
-      if (document.visibilityState !== 'visible') return { db: 300_000, todo: Infinity, ext: Infinity }
-      if (idle < 3 * 60_000 && document.hasFocus()) return { db: 3000, todo: 5000, ext: 30_000 }
-      if (idle < 15 * 60_000) return { db: 20_000, todo: 60_000, ext: 120_000 }
-      return { db: 60_000, todo: 300_000, ext: 300_000 }
+      if (document.visibilityState !== 'visible') return { db: 300_000, todo: Infinity, ext: Infinity, tick: Infinity }
+      if (idle < 3 * 60_000 && document.hasFocus()) return { db: 3000, todo: 5000, ext: 30_000, tick: 120_000 }
+      if (idle < 15 * 60_000) return { db: 20_000, todo: 60_000, ext: 120_000, tick: 120_000 }
+      return { db: 90_000, todo: 600_000, ext: 600_000, tick: 600_000 }
     }
+    // CL7: the server not answering: wait longer each time (5 s … 4 min), not every few seconds.
+    // (Saving a change in between waits too: see Mirror.flushOffline.)
+    let fails = 0
     const loop = async () => {
       const p = pace()
       if (document.visibilityState === 'visible') {
-        await check()
+        const ok = await check()
+        fails = ok ? 0 : fails + 1
         // Wake the coach (reminders, check-ins, follow-ups) more often than the server timer.
-        if (!direct && Date.now() - tickAt > 120_000) {
+        if (!direct && ok && Date.now() - tickAt > p.tick) {
           tickAt = Date.now()
           void fetch('/api/cron?job=tick', { headers: { Authorization: `Bearer ${currentSession()}` } }).catch(() => null)
         }
@@ -454,19 +529,20 @@ export function createTursoWebBridge(): Bridge {
           })
         }
         // Google Calendar changes made in its own app (and a safety net for Todoist): every 30 s.
-        if (Date.now() - todoAt > p.ext) {
+        if (ok && Date.now() - todoAt > p.ext) {
           todoAt = Date.now()
           window.dispatchEvent(new CustomEvent('life-external-changed'))
           bridge.todoist?.sync().catch(() => 0)
         }
       }
-      setTimeout(loop, pace().db)
+      setTimeout(loop, fails ? Math.max(pace().db, retryDelay(fails - 1, { max: 4 * 60_000 })) : pace().db)
     }
     setTimeout(loop, 3000)
     wake = () => void check()
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         todoAt = 0
+        fails = 0
         void check(true)
       }
     })
@@ -541,8 +617,11 @@ export function createTursoWebBridge(): Bridge {
   const prefs = () => ({ openAtLogin: false, canAutoStart: false, keepInTray: false, matchAppThemes: store?.getItem('life_match_themes') !== '0' })
   const upToDate = () => ({ current: 'web', state: 'up-to-date' as const, latest: null, progress: 0, error: null, checkedAt: new Date().toISOString() })
   const snapshotDays = async (): Promise<string[]> => ((await bridge.data.cloudSnapshots?.()) ?? []).map((x: any) => x.day)
+  // CL2: the list of cloud backups changes once a day: asked at most once an hour (it was every minute).
+  let backupDays: { at: number; days: string[] } | null = null
   const backupStatus = async () => {
-    const days = await snapshotDays()
+    if (!backupDays || Date.now() - backupDays.at > 3600_000) backupDays = { at: Date.now(), days: await snapshotDays() }
+    const days = backupDays.days
     return { dir: 'Turso cloud (daily snapshot, 30 kept)', driveAvailable: false, passphraseSet: true, last: days[0] ? { name: days[0], at: days[0] } : null, pending: 0, count: days.length, lastError: store?.getItem('life_snapshot_error') ?? null }
   }
   const aiOnP: Promise<boolean> = direct
@@ -1020,6 +1099,8 @@ export function createTursoWebBridge(): Bridge {
         const s = await (await authP).unlock(pin, checked)
         unlocked = !s.locked
         if (unlocked) lockedOnPurpose = false
+        // CL7: changes that waited for the PIN go out now.
+        if (checked) void mirrorP.then((m) => m.resume())
         return s
       },
       // Fingerprint / face (M7): the server checks the passkey and gives a session like the PIN.
@@ -1027,6 +1108,7 @@ export function createTursoWebBridge(): Bridge {
         if (direct) throw new Error('Passkeys work on the website and the installed app')
         await unlockWithPasskey()
         haveSession()
+        void mirrorP.then((m) => m.resume())
         unlocked = true
         lockedOnPurpose = false
         return { pinSet: true, locked: false }
@@ -1362,6 +1444,7 @@ export function createTursoWebBridge(): Bridge {
             if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || `HTTP ${res.status}`)
           }
           store?.removeItem('life_snapshot_error')
+          backupDays = null
           return true
         } catch (e) {
           // Never silent (Y8): the sync panel shows why today's backup is missing.

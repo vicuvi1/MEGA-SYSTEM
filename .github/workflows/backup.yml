@@ -15,6 +15,22 @@ on:
   workflow_dispatch:
 permissions: {}
 jobs:
+  # CL4: each timer switches the other on again (GitHub turns scheduled runs off
+  # after 60 days without a commit), so one forgotten workflow can't stop both.
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Keep the timers switched on
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for wf in tick.yml backup.yml; do
+            gh api -X PUT "repos/${REPO}/actions/workflows/${wf}/enable" && echo "${wf}: on"
+          done
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 10

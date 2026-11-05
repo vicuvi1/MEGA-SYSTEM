@@ -7,11 +7,11 @@
 // these UTC crons are the backup. Both claim the same `daily:<job>` slot.
 // GET /api/cron?job=backup (CRON_SECRET): the newest daily backup as gzip, for
 // the weekly encrypted off-site copy (.github/workflows/backup.yml, LT1).
-import { bearer, bearerIs, botDefaults, config, cronSecretOk, gate, send, serverBots, sessionOk } from './_lib.mjs'
-import { DAILY_GAP_MS, dailyDue, dailyGate, healthPush, localMinute, runDaily, runPlugins, runTick, sportShared } from './_bot/bot.mjs'
+import { bearer, bearerIs, botDefaults, checkWebhooks, config, countCall, cronSecretOk, gate, send, serverBots, sessionOk } from './_lib.mjs'
+import { DAILY_GAP_MS, dailyDue, dailyGate, healthAlarm, healthPush, localMinute, runDaily, runPlugins, runTick, selfCheck, sportShared, tickHealth, webhookVerdict } from './_bot/bot.mjs'
 import { dropHealthKey, healthKeyOk, listHealthKeys, newHealthKey } from './_health.mjs'
 import { readBody } from './_lib.mjs'
-import { askModel, rollupUsage } from './ai.mjs'
+import { askModel, pingModel, rollupUsage } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 import { pushNew } from './_push.mjs'
 import { newestSnapshot } from './_snapshots.mjs'
@@ -25,7 +25,32 @@ function dailyEnv(cfg, bot, chatId) {
   return { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, google: googleEnv(cfg), botToken: bot.token, chatId, ai, sleepBotToken: sleepBotOf()?.token, appUrl: appUrl() }
 }
 
+/**
+ * CL3: the daily self-check, once a day (the "selfcheck" slot), from Ben's tick
+ * or, if the tick has stopped, from a daily Vercel cron. Never throws.
+ */
+async function dailySelfCheck(req, cfg, bot, chatId) {
+  try {
+    if (!(await gate(cfg, 'selfcheck', 23 * 3600_000))) return null
+    const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || req.headers?.['x-forwarded-host'] || req.headers?.host
+    const live = !process.env.VERCEL_ENV || process.env.VERCEL_ENV === 'production'
+    let ping = null
+    const aiPing = async () => (ping ??= await pingModel()).ai
+    const r = await selfCheck(dailyEnv(cfg, bot, chatId), {
+      webhooks: host ? () => checkWebhooks(cfg, host, webhookVerdict, { fix: live }) : undefined,
+      ai: aiPing,
+      budget: async () => (ping ??= await pingModel()).budget
+    })
+    return r
+  } catch (e) {
+    console.error('self-check:', e)
+    return null
+  }
+}
+
 export default async function handler(req, res) {
+  // CL2: every call is counted (Settings → System health shows the month's total).
+  await countCall(config(), `cron${new URL(req.url, 'http://x').searchParams.get('job') || ''}`)
   // job=tick: the coach writes first (reminders, check-ins, block starts,
   // follow-ups). Woken every ~10 min by a GitHub Actions timer and every 2 min
   // by the open app. No secret needed: it runs at most once a minute and only
@@ -46,6 +71,10 @@ export default async function handler(req, res) {
   const bot = serverBots().find((b) => b.name === 'MEGA_BOT_TOKEN') ?? serverBots()[0]
   const chatId = process.env.TELEGRAM_CHAT_ID || ''
   if (!cfg.ok || !bot || !chatId) return send(res, 200, { ok: false, reason: 'No bot or chat set up' })
+  // CL4: the second alarm: if Ben's tick has gone quiet, these daily crons still warn you,
+  // and run the self-check if the tick couldn't (CL3).
+  await healthAlarm(dailyEnv(cfg, bot, chatId)).catch((e) => console.error('health alarm:', e))
+  await dailySelfCheck(req, cfg, bot, chatId)
   // BG16: each daily job runs once a day, even if Vercel calls it twice (or the tick sent it already).
   try {
     if (!(await gate(cfg, dailyGate(job), DAILY_GAP_MS))) return send(res, 200, { ok: true, skipped: true })
@@ -92,7 +121,11 @@ async function tick(req, res) {
     }
     // LT8: AI usage older than 90 days becomes one row per month (once a day).
     if (await gate(cfg, 'ai-usage-rollup', 24 * 3600_000).catch(() => false)) await rollupUsage().catch((e) => console.error('usage rollup:', e))
-    send(res, 200, { ok: true, sent: sent.length + daily.length })
+    // CL3: once a day, check every part and fix what can be fixed.
+    await dailySelfCheck(req, cfg, bot, chatId)
+    // CL4: health:false (something broken 30+ minutes) makes the GitHub timer's run fail, so GitHub emails you.
+    const h = tickHealth()
+    send(res, 200, { ok: true, sent: sent.length + daily.length, ...(h ? { health: h.ok, broken: h.broken } : {}) })
   } catch (e) {
     console.error('tick:', e)
     send(res, 500, { error: e.message || 'failed' })

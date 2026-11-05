@@ -39,7 +39,8 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   }, [])
   useEffect(() => {
     load()
-    const t = setInterval(load, 60_000)
+    // CL2: only while you can see it (coming back to the window reloads it).
+    const t = setInterval(() => document.visibilityState !== 'hidden' && load(), 60_000)
     const on = () => load()
     // Anything that changes today's numbers refreshes the card at once (N5), not only focus.
     const EVENTS = ['life-focus-changed', 'life-focus-ended', 'life-water-changed', 'life-body-changed', 'life-sport-changed', 'life-wallet-changed', 'life-tasks-changed', 'life-sleep-changed', 'life-external-changed', 'life-day-closed']

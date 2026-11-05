@@ -34,8 +34,14 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
   }, [])
   useEffect(() => {
     load()
-    const t = setInterval(load, 60_000)
-    return () => clearInterval(t)
+    // CL2: only while you can see it; new messages arrive with live data anyway.
+    const t = setInterval(() => document.visibilityState !== 'hidden' && load(), 60_000)
+    const vis = () => document.visibilityState === 'visible' && load()
+    document.addEventListener('visibilitychange', vis)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', vis)
+    }
   }, [load])
   useLive(load)
   useEffect(() => {

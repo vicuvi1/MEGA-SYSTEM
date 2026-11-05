@@ -3,12 +3,13 @@
 //   {"ok":true,"reply":"…","done":[…]} at the end.
 // The app's Coach page talks to the same coach as the Telegram bots: same
 // brain (OpenRouter DeepSeek, Gemini as backup), memory, goals & rules.
-import { bearer, botDefaults, config, readBody, send, requireSession } from './_lib.mjs'
+import { bearer, botDefaults, config, readBody, send, requireSession, countCall } from './_lib.mjs'
 import { coachChat, coachRhythm, coachUndo } from './_bot/bot.mjs'
 import { askModel } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
 export default async function handler(req, res) {
+  await countCall(config(), 'coach') // CL2: counted for Settings → System health
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
   if (!(await requireSession(res, cfg, bearer(req)))) return

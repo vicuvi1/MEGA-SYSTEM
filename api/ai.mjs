@@ -2,7 +2,7 @@
 //      {op:'status'}                     → {configured}
 // Google Gemini for the website, with the key kept on the server
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
-import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso } from './_lib.mjs'
+import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso, countCall } from './_lib.mjs'
 import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, costOf, monthStart } from './_budget.mjs'
 
 const MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']
@@ -245,6 +245,31 @@ export async function budgetState(env = process.env, fetchImpl = fetch, now = ne
   return v
 }
 
+/**
+ * CL3: the daily self-check's ping: one token from the pinned flash model
+ * (10 s at most), and how much of the month's budget is used.
+ */
+export async function pingModel(env = process.env, fetchImpl = fetch) {
+  const key = (env.OPENROUTER_API_KEY || '').trim()
+  const b = await budgetState(env, fetchImpl).catch(() => null)
+  const budget = b ? { spent: b.spent, budget: b.budget } : null
+  if (!key) return { ai: (env.GEMINI_API_KEY || '').trim() ? null : { ok: false, error: 'No AI key on the server' }, budget }
+  const model = await openRouterModel(env, fetchImpl)
+  const t0 = Date.now()
+  try {
+    const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Life System' },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Say OK.' }], max_tokens: 1, temperature: 0 }),
+      signal: AbortSignal.timeout(10_000)
+    })
+    if (!r.ok) return { ai: { ok: false, model, error: `OpenRouter ${r.status}: ${(await r.text().catch(() => '')).slice(0, 120)}` }, budget }
+    return { ai: { ok: true, model, ms: Date.now() - t0 }, budget }
+  } catch (e) {
+    return { ai: { ok: false, model, error: e.message }, budget }
+  }
+}
+
 /** Asks OpenRouter (text only). opts.json: answer as a JSON object; opts.strong: the strong model (flash if it fails). */
 export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, env = process.env) {
   // A test run (Settings → Test Ben) asks one exact model, with no fallback.
@@ -427,6 +452,7 @@ export async function askModel(prompt, opts = {}, env = process.env, fetchImpl =
 }
 
 export default async function handler(req, res) {
+  await countCall(config(), 'ai') // CL2: counted for Settings → System health
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   if (!(await requireSession(res, config(), bearer(req)))) return
   const key = (process.env.GEMINI_API_KEY || '').trim()

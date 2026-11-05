@@ -2,7 +2,7 @@
 // (webhook set by /api/bot-setup), so the bots answer 24/7 with no device
 // open. Handled like the app does, on the Turso data.
 import { timingSafeEqual } from 'node:crypto'
-import { botDefaults, config, readBody, send, serverBots, webhookSecret } from './_lib.mjs'
+import { botDefaults, config, readBody, send, serverBots, webhookSecret, countCall } from './_lib.mjs'
 import { handleTelegramUpdate } from './_bot/bot.mjs'
 import { askModel } from './ai.mjs'
 import { googleEnv } from './google.mjs'
@@ -14,6 +14,7 @@ const same = (a, b) => {
 }
 
 export default async function handler(req, res) {
+  await countCall(config(), 'telegram') // CL2: counted for Settings → System health
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
   const id = String(new URL(req.url, 'http://x').searchParams.get('bot') || '')

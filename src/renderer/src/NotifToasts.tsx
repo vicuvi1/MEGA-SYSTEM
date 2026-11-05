@@ -167,8 +167,14 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
         void deliver(l)
       })
       .catch(() => {})
-    const t = setInterval(check, 20_000)
-    return () => clearInterval(t)
+    // CL2: a hidden browser tab waits (it checks again when you come back); the desktop app keeps going from the tray.
+    const t = setInterval(() => (document.visibilityState !== 'hidden' || window.desktop) && check(), 20_000)
+    const vis = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', vis)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', vis)
+    }
   }, [check, deliver])
   useLive(check)
 
@@ -199,7 +205,7 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
       if (list.length) check()
     }
     void make()
-    const t = setInterval(() => void make(), 60_000)
+    const t = setInterval(() => (document.visibilityState !== 'hidden' || window.desktop) && void make(), 60_000)
     return () => {
       stop = true
       clearInterval(t)

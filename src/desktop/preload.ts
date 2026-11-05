@@ -8,6 +8,7 @@ const api: DesktopApi = {
   updateStatus: () => ipcRenderer.invoke('desktop:updateStatus'),
   checkUpdates: () => ipcRenderer.invoke('desktop:checkUpdates'),
   installUpdate: () => ipcRenderer.invoke('desktop:installUpdate'),
+  schemaOld: () => ipcRenderer.invoke('desktop:schemaOld'),
   rollback: () => ipcRenderer.invoke('desktop:rollback'),
   notify: (n: { id: string; title: string; body?: string | null; urgent?: boolean }) => ipcRenderer.invoke('desktop:notify', n),
   onNotifClick: (cb: (id: string) => void) => void ipcRenderer.on('desktop:notif-click', (_e, id) => cb(String(id))),
