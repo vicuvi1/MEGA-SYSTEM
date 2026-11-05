@@ -38,3 +38,13 @@ describe('parseWater', () => {
     expect(parseWater('milk 1 l')).toBeNull()
   })
 })
+
+import { waterTargetFor } from './sportShared'
+describe('water target from your weight', () => {
+  it('35 ml per kg, +500 on a training day, kept sensible', () => {
+    expect(waterTargetFor(70)).toBe(2450)
+    expect(waterTargetFor(70, true)).toBe(2950)
+    expect(waterTargetFor(150, true)).toBe(4500)
+    expect(waterTargetFor(null)).toBeNull()
+  })
+})

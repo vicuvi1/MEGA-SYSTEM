@@ -86,3 +86,10 @@ export function parseWater(text: string, glass = 250): number | null {
   const n = Number(bare?.[1] ?? bare?.[2])
   return bare && n >= 100 && n <= 3000 ? n : null
 }
+
+/** Your water target: about 35 ml per kg of body weight, +500 ml on a training day (1.5–4.5 L, in 50 ml steps). */
+export function waterTargetFor(weightKg: number | null | undefined, trained = false): number | null {
+  if (!weightKg || weightKg < 30 || weightKg > 250) return null
+  const ml = weightKg * 35 + (trained ? 500 : 0)
+  return Math.round(Math.max(1500, Math.min(4500, ml)) / 50) * 50
+}

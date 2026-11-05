@@ -11903,6 +11903,12 @@ function parseWater(text, glass = 250) {
 	const n = Number(bare?.[1] ?? bare?.[2]);
 	return bare && n >= 100 && n <= 3e3 ? n : null;
 }
+/** Your water target: about 35 ml per kg of body weight, +500 ml on a training day (1.5–4.5 L, in 50 ml steps). */
+function waterTargetFor(weightKg, trained = false) {
+	if (!weightKg || weightKg < 30 || weightKg > 250) return null;
+	const ml = weightKg * 35 + (trained ? 500 : 0);
+	return Math.round(Math.max(1500, Math.min(4500, ml)) / 50) * 50;
+}
 // src/core/urgePatterns.ts
 var DAYS = [
 	"Sun",
@@ -13567,10 +13573,19 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 	const rh = rhythmFor(json(db, RHYTHM), today);
 	const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)));
 	const sport = json(db, "sport_tracker_json")?.data;
-	const water = sport ? sharedView(sport, sportToday(now)).water : {
+	const water0 = sport ? sharedView(sport, sportToday(now)).water : {
 		ml: 0,
 		target: 0
 	};
+	let water = water0;
+	try {
+		const b = s.body.state(now);
+		const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday);
+		if (t) water = {
+			...water0,
+			target: t
+		};
+	} catch {}
 	const lastLedger = s.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
 	const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
 	const last = Math.max(0, ...lastLedger, ...lastFocus);

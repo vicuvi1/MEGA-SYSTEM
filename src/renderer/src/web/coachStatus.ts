@@ -4,7 +4,7 @@ import { MOOD_FACE, REMINDERS, coachMood, promiseStats, type Mood, type Reminder
 import { nextMove, type Move } from '@core/coachNext'
 import { planGoal } from '@core/goalPlan'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
-import { sharedView, sportToday } from '@core/sportShared'
+import { waterTargetFor, sharedView, sportToday } from '@core/sportShared'
 import { getSetting } from '../../../main/settings'
 import { helpLine, shownMood } from '@core/benActs'
 import { loadStyle } from './botBrain'
@@ -45,7 +45,16 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
   const rh = rhythmFor(json(db, RHYTHM), today)
   const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))
   const sport = json(db, 'sport_tracker_json')?.data
-  const water = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: 0 }
+  const water0 = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: 0 }
+  // Your target from your weight (35 ml/kg, +500 ml when you train today), else Sport Track's.
+  let water = water0
+  try {
+    const b = s.body.state(now)
+    const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday)
+    if (t) water = { ...water0, target: t }
+  } catch {
+    /* no body data yet */
+  }
   const lastLedger = s.wallet.entries().filter((e: any) => e.day === today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
   const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
   const last = Math.max(0, ...lastLedger, ...lastFocus)
