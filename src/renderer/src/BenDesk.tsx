@@ -868,6 +868,20 @@ function MonthTab({ v, reload }: { v: DeskView; reload: () => void }) {
   }
   return (
     <>
+      {v.review && v.review.findings.length > 0 && (
+        <Card title="Your week in one look" icon="🔎" sub="training · sleep · money · focus · urges">
+          <ul className="bd-review">
+            {v.review.findings.map((f) => (
+              <li key={f.area} className={f.good ? 'good' : 'bad'}>
+                <b>{f.good ? '▲' : '▼'} {f.area}</b> {f.text}
+              </li>
+            ))}
+          </ul>
+          <p className="bd-line">
+            🧪 Try next: <b>{v.review.experiment.title}</b>
+          </p>
+        </Card>
+      )}
       <section className="bd-story">
         <header>
           <small>Your month</small>

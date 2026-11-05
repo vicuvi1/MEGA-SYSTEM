@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 // src/core/calWatch.ts
-var hm$2 = (iso) => new Date(iso).toTimeString().slice(0, 5);
+var hm$3 = (iso) => new Date(iso).toTimeString().slice(0, 5);
 var day = (iso, now) => {
 	const d = new Date(iso);
 	const t = new Date(now);
@@ -15,7 +15,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 	for (const [id, e] of Object.entries(now)) if (!prev[id] && live(e)) out.push({
 		kind: "added",
 		ev: e,
-		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$2(e.start)}. I'll plan around it.`
+		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$3(e.start)}. I'll plan around it.`
 	});
 	for (const [id, e] of Object.entries(prev)) if (!now[id] && live(e) && Date.parse(e.start) > at.getTime()) {
 		const freeMin = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4);
@@ -23,7 +23,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 			kind: "cancelled",
 			ev: e,
 			freeMin,
-			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$2(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
+			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$3(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
 		});
 	}
 	return out.slice(0, 3);
@@ -618,7 +618,7 @@ var MONTHS$2 = {
 	nov: 11,
 	dec: 12
 };
-var addDays$3 = (d, n) => {
+var addDays$4 = (d, n) => {
 	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
@@ -631,7 +631,7 @@ function dateIn(text, today) {
 	const pick = (m, d) => {
 		if (m < 1 || m > 12 || d < 1 || d > 31) return null;
 		const cand = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-		return cand < addDays$3(today, -60) ? `${y + 1}${cand.slice(4)}` : cand;
+		return cand < addDays$4(today, -60) ? `${y + 1}${cand.slice(4)}` : cand;
 	};
 	const dm = /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.exec(text) ?? null;
 	if (dm) return pick(MONTHS$2[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
@@ -660,13 +660,13 @@ function toRecord(text, today, prev) {
 		at: today,
 		type,
 		conf: Math.min(1, .6 + .15 * (seen - 1)),
-		until: d ? addDays$3(d, 7) : prev?.until ?? null,
+		until: d ? addDays$4(d, 7) : prev?.until ?? null,
 		seen
 	};
 }
 /** The weekly clean-up: expired facts go, and guesses never confirmed after 90 days. */
 function cleanFacts(facts, today) {
-	return facts.filter((f) => !(f.until && f.until < today) && !((f.conf ?? .7) < .65 && f.at < addDays$3(today, -90)));
+	return facts.filter((f) => !(f.until && f.until < today) && !((f.conf ?? .7) < .65 && f.at < addDays$4(today, -90)));
 }
 /** For the prompt: "[exam until 2026-12-19] Etica exam on 12 Dec". */
 var factLine = (f) => `${f.type && f.type !== "other" ? `[${f.type}${f.until ? ` until ${f.until}` : ""}] ` : ""}${f.t} (noted ${f.at}${f.seen && f.seen > 1 ? `, said ${f.seen}×` : ""})`;
@@ -721,7 +721,7 @@ function toUtc(day) {
 function daysBetween$1(a, b) {
 	return Math.round((toUtc(b) - toUtc(a)) / 864e5);
 }
-function addDays$2(day, n) {
+function addDays$3(day, n) {
 	return new Date(toUtc(day) + n * 864e5).toISOString().slice(0, 10);
 }
 function monthKey$1(day) {
@@ -768,13 +768,13 @@ function goalProgress$1(g, doneMin, today) {
 }
 /** The last 7 days (today included), for the weekly review. */
 function weekReport(sessions, plans, funMin, today) {
-	const from = addDays$2(today, -6);
+	const from = addDays$3(today, -6);
 	const inWeek = (d) => d >= from && d <= today;
 	const s = sessions.filter((x) => inWeek(x.day));
 	const bySub = /* @__PURE__ */ new Map();
 	for (const x of s) bySub.set(x.subject, (bySub.get(x.subject) ?? 0) + x.minutes);
 	const byDay = Array.from({ length: 7 }, (_, i) => {
-		const day = addDays$2(from, i);
+		const day = addDays$3(from, i);
 		return {
 			day,
 			minutes: s.filter((x) => x.day === day).reduce((t, x) => t + x.minutes, 0)
@@ -802,11 +802,11 @@ function weekReport(sessions, plans, funMin, today) {
 	};
 }
 /** "2h 05m", "45m". */
-var hm$1 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
+var hm$2 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
 // src/core/progress.ts
 var WEEKS = 6;
 /** Sum of `value` for days in [from, to]. */
-function sum(rows, from, to, value) {
+function sum$1(rows, from, to, value) {
 	let t = 0;
 	for (const r of rows) if (r.day >= from && r.day <= to) t += value(r);
 	return t;
@@ -818,14 +818,14 @@ function cleanDays(ev, from, to, today) {
 	const start = starts[starts.length - 1];
 	const resets = new Set(ev.filter((e) => e.kind === "reset" && e.day > start).map((e) => e.day));
 	let n = 0;
-	for (let d = from; d <= to && d <= today; d = addDays$2(d, 1)) if (d > start && !resets.has(d)) n++;
+	for (let d = from; d <= to && d <= today; d = addDays$3(d, 1)) if (d > start && !resets.has(d)) n++;
 	return n;
 }
 function progressReport(i) {
 	const to = i.today;
 	const win = (w) => ({
-		from: addDays$2(to, -6 - 7 * w),
-		to: addDays$2(to, -7 * w)
+		from: addDays$3(to, -6 - 7 * w),
+		to: addDays$3(to, -7 * w)
 	});
 	const series = (f) => Array.from({ length: WEEKS }, (_, k) => {
 		const w = win(5 - k);
@@ -838,9 +838,9 @@ function progressReport(i) {
 			id: "focus",
 			label: "Focus time",
 			higherBetter: true,
-			f: (a, b) => sum(i.focus, a, b, (r) => r.minutes),
-			text: hm$1,
-			day: (v) => v ? hm$1(v) : "·",
+			f: (a, b) => sum$1(i.focus, a, b, (r) => r.minutes),
+			text: hm$2,
+			day: (v) => v ? hm$2(v) : "·",
 			target: 600,
 			unit: 30
 		},
@@ -848,7 +848,7 @@ function progressReport(i) {
 			id: "wake",
 			label: "On-time wake-ups",
 			higherBetter: true,
-			f: (a, b) => sum(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
+			f: (a, b) => sum$1(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
 			text: (v) => `${v}/7`,
 			day: tick,
 			target: 7,
@@ -878,7 +878,7 @@ function progressReport(i) {
 			id: "todoist",
 			label: "Todoist tasks done",
 			higherBetter: true,
-			f: (a, b) => sum(i.todoist, a, b, () => 1),
+			f: (a, b) => sum$1(i.todoist, a, b, () => 1),
 			text: (v) => String(v),
 			day: (v) => v ? String(v) : "·",
 			target: 15,
@@ -888,7 +888,7 @@ function progressReport(i) {
 			id: "mustdo",
 			label: "Must-dos done",
 			higherBetter: true,
-			f: (a, b) => sum(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
+			f: (a, b) => sum$1(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
 			text: (v) => String(v),
 			day: (v) => v ? String(v) : "·",
 			target: 10,
@@ -899,7 +899,7 @@ function progressReport(i) {
 			id: "spend",
 			label: "Spent",
 			higherBetter: false,
-			f: (a, b) => sum(i.spending ?? [], a, b, (r) => r.bani),
+			f: (a, b) => sum$1(i.spending ?? [], a, b, (r) => r.bani),
 			text: lei,
 			day: (v) => v ? String(Math.round(v / 100)) : "·",
 			target: null,
@@ -918,7 +918,7 @@ function progressReport(i) {
 		const down = diff < -margin;
 		const trend = !up && !down ? "same" : up === d.higherBetter ? "better" : "worse";
 		const days = Array.from({ length: 7 }, (_, k) => {
-			const day = addDays$2(to, k - 6);
+			const day = addDays$3(to, k - 6);
 			return {
 				day,
 				value: d.f(day, day)
@@ -1211,11 +1211,11 @@ function planGoal(g, today, todayMin = 0) {
 	const milestones = [];
 	if (leftMin > 0 && daysLeft > 0) {
 		const doneH = g.doneMin / 60;
-		const last = addDays$2(g.deadline, -1);
+		const last = addDays$3(g.deadline, -1);
 		let d = today;
 		while (d <= last && milestones.length < 12) {
 			const wd = (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay();
-			const sunday = addDays$2(d, (7 - wd) % 7);
+			const sunday = addDays$3(d, (7 - wd) % 7);
 			const by = sunday < last ? sunday : last;
 			const daysTo = daysBetween$1(today, by) + 1;
 			const target = Math.min(g.hours, doneH + (leftMin + todayMin) / 60 * (daysTo / daysLeft) - todayMin / 60);
@@ -1224,7 +1224,7 @@ function planGoal(g, today, todayMin = 0) {
 				targetH: Math.round(target * 10) / 10,
 				state: milestones.length === 0 ? "now" : "next"
 			});
-			d = addDays$2(by, 1);
+			d = addDays$3(by, 1);
 		}
 	}
 	return {
@@ -1259,7 +1259,7 @@ function bookBlocks(plans, events, today, now, days = 7) {
 	const out = [];
 	const urgent = plans.filter((p) => p.leftMin > 0 && p.daysLeft > 0).sort((a, b) => a.daysLeft - b.daysLeft || a.aheadH - b.aheadH);
 	for (let i = 0; i < days; i++) {
-		const day = addDays$2(today, i);
+		const day = addDays$3(today, i);
 		const items = [];
 		for (const p of urgent) {
 			if (day >= p.deadline) continue;
@@ -1562,9 +1562,9 @@ var avg$1 = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 * seen enough (≥3 days each side) count.
 */
 function findPatterns(p, weeks = 8) {
-	const from = addDays$2(p.today, -weeks * 7);
+	const from = addDays$3(p.today, -weeks * 7);
 	const days = [];
-	for (let d = from; d < p.today; d = addDays$2(d, 1)) days.push(d);
+	for (let d = from; d < p.today; d = addDays$3(d, 1)) days.push(d);
 	const focusBy = /* @__PURE__ */ new Map();
 	for (const f of p.focus) if (f.day >= from && f.day < p.today) focusBy.set(f.day, (focusBy.get(f.day) ?? 0) + f.minutes);
 	const firstFocus = [...focusBy.keys()].sort()[0];
@@ -1609,7 +1609,7 @@ function findPatterns(p, weeks = 8) {
 }
 /** The last nights in one line each: "10-30 bed 00:40 (late) → up 07:20 (late) · 3/5". */
 function sleepDiary(logs, today, nights = 7) {
-	const from = addDays$2(today, -nights);
+	const from = addDays$3(today, -nights);
 	const rows = logs.filter((l) => l.day > from && l.day <= today).sort((a, b) => a.day < b.day ? -1 : 1);
 	if (!rows.length) return "Sleep diary: nothing logged in the last week.";
 	return `Sleep diary (bedtime is the night before): ${rows.map((l) => `${l.day.slice(5)} ${l.bedTime ? `bed ${l.bedTime}${l.bedOnTime === false ? " (late)" : ""} → ` : ""}up ${l.wakeTime}${l.onTime ? "" : " (late)"}${l.quality ? ` · ${l.quality}/5` : ""}`).join("; ")}.`;
@@ -1622,7 +1622,7 @@ function weekAhead(events, today, days = 7) {
 	};
 	const parts = [];
 	for (let i = 1; i <= days; i++) {
-		const day = addDays$2(today, i);
+		const day = addDays$3(today, i);
 		const list = events.filter((e) => !e.allDay && local(e.start) === day);
 		const allDay = events.filter((e) => e.allDay && String(e.start).slice(0, 10) === day);
 		const min = list.reduce((t, e) => t + Math.max(0, (Date.parse(e.end) - Date.parse(e.start)) / 6e4), 0);
@@ -1642,7 +1642,7 @@ function focusBySubject(sessions, from) {
 /** Monday-to-today numbers from the history lists. */
 function weekSoFar(today, focus, workouts, tasks) {
 	const wdN = (/* @__PURE__ */ new Date(`${today}T12:00:00Z`)).getUTCDay();
-	const monday = addDays$2(today, -((wdN + 6) % 7));
+	const monday = addDays$3(today, -((wdN + 6) % 7));
 	const inWeek = (d) => d >= monday && d <= today;
 	return {
 		focusMin: focus.filter((f) => inWeek(f.day)).reduce((t, f) => t + f.minutes, 0),
@@ -1953,7 +1953,7 @@ function minutesUntil(hmText, now) {
 }
 /** The Monday a week starts on. */
 function weekOf(day) {
-	return addDays$2(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+	return addDays$3(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
 }
 /** The call is due Saturday 18:00 → Monday 12:00 when this week has none. */
 function callDue(calls, now) {
@@ -1961,7 +1961,7 @@ function callDue(calls, now) {
 	const dow = now.getDay();
 	const h = now.getHours();
 	if (!(dow === 6 && h >= 18 || dow === 0 || dow === 1 && h < 12)) return false;
-	const wk = dow === 1 ? addDays$2(weekOf(day), -7) : weekOf(day);
+	const wk = dow === 1 ? addDays$3(weekOf(day), -7) : weekOf(day);
 	return !calls.some((c) => c.week === wk);
 }
 function big3Of(answer) {
@@ -2114,7 +2114,7 @@ var expenses = (tx) => tx.filter((t) => t && t.type === "expense" && !t.deleted 
 */
 function spendPace(tx, catName, today) {
 	const dow = ((/* @__PURE__ */ new Date(`${today}T12:00:00Z`)).getUTCDay() + 6) % 7;
-	const monday = addDays$2(today, -dow);
+	const monday = addDays$3(today, -dow);
 	const exp = expenses(tx);
 	const byCat = (from, to) => {
 		const m = /* @__PURE__ */ new Map();
@@ -2127,7 +2127,7 @@ function spendPace(tx, catName, today) {
 		2,
 		3,
 		4
-	].map((w) => byCat(addDays$2(monday, -7 * w), addDays$2(today, -7 * w)));
+	].map((w) => byCat(addDays$3(monday, -7 * w), addDays$3(today, -7 * w)));
 	const list = [.../* @__PURE__ */ new Set([...now.keys(), ...past.flatMap((m) => [...m.keys()])])].map((c) => {
 		const week = now.get(c) ?? 0;
 		const usual = Math.round(past.reduce((s, m) => s + (m.get(c) ?? 0), 0) / 4);
@@ -2157,7 +2157,7 @@ function spendPace(tx, catName, today) {
 * left out: these are the ones you may have forgotten.
 */
 function recurringCharges(tx, catName, today) {
-	const from = addDays$2(today, -125);
+	const from = addDays$3(today, -125);
 	const groups = /* @__PURE__ */ new Map();
 	for (const t of expenses(tx)) {
 		if (t.date < from || t.repeat || t.recurringId) continue;
@@ -2450,7 +2450,7 @@ function moneyContext(state, today) {
 	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
 	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
 	const month = today.slice(0, 7);
-	const weekFrom = addDays$2(today, -6);
+	const weekFrom = addDays$3(today, -6);
 	const inMonth = exp.filter((t) => t.date.startsWith(month));
 	const byCat = /* @__PURE__ */ new Map();
 	for (const t of inMonth) byCat.set(cats.get(String(t.category)) ?? String(t.category ?? "Other"), (byCat.get(cats.get(String(t.category)) ?? String(t.category ?? "Other")) ?? 0) + amt(t));
@@ -2480,7 +2480,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 	const input = s.progress.input(financeSpending(extra.finance), now);
 	const report = progressReport(input);
 	const wp = s.weekPlan.active();
-	const wakes = input.wakes.filter((w) => w.day > addDays$2(today, -7)).sort((a, b) => a.day < b.day ? -1 : 1);
+	const wakes = input.wakes.filter((w) => w.day > addDays$3(today, -7)).sort((a, b) => a.day < b.day ? -1 : 1);
 	const lines = [
 		`Now: ${now.toLocaleDateString("en-GB", {
 			weekday: "long",
@@ -2488,7 +2488,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 			month: "long"
 		})}, ${now.toTimeString().slice(0, 5)}.`,
 		`Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
-		`Focus today: ${hm$1(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$1(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
+		`Focus today: ${hm$2(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$2(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
 		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
 		f.goals.length ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals.map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`).join("\n")}` : "No goals with deadlines (offer to set one when he mentions an exam, project or deadline).",
 		`Week score ${report.score}/100 (last week ${report.prevScore}). ${report.verdict}`,
@@ -2497,7 +2497,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		`Sleep: bedtime target ${sl.bedtimeTarget()}, wake target weekday ${sl.weekdayTarget()} / weekend ${sl.weekendTarget()}. Last wake-ups: ${wakes.map((w) => `${w.day.slice(5)} ${w.onTime ? "on time" : "late"}`).join(", ") || "none logged"}.`,
 		wakePattern(input.wakes) ?? "",
 		(() => {
-			const r = focusRatings(db).filter((x) => x.day > addDays$2(today, -7));
+			const r = focusRatings(db).filter((x) => x.day > addDays$3(today, -7));
 			if (!r.length) return "";
 			const avg = r.reduce((t, x) => t + x.rating, 0) / r.length;
 			const reasons = f.week.topReasons.map((x) => x.reason).join(", ");
@@ -2516,7 +2516,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 			minMinutes: 30
 		});
 		lines.push(`Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(", ") || "none"}.`);
-		const tomorrow = addDays$2(today, 1);
+		const tomorrow = addDays$3(today, 1);
 		if (extra.events.some((e) => localDay(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`);
 		if (extra.events.some((e) => localDay(e.start) > tomorrow)) lines.push(weekAhead(extra.events, today));
 	}
@@ -2732,7 +2732,7 @@ function moreContext(s, db, finance, today, input, todayRules, disc) {
 	out.push(sleepDiary(logs, today));
 	let sessions = [];
 	try {
-		sessions = db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?").all(addDays$2(today, -60)).map((r) => ({
+		sessions = db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?").all(addDays$3(today, -60)).map((r) => ({
 			day: String(r.day),
 			subject: String(r.subject),
 			minutes: Number(r.minutes)
@@ -2740,7 +2740,7 @@ function moreContext(s, db, finance, today, input, todayRules, disc) {
 	} catch {
 		sessions = [];
 	}
-	const bySub = focusBySubject(sessions, addDays$2(today, -6));
+	const bySub = focusBySubject(sessions, addDays$3(today, -6));
 	if (bySub) out.push(`Focus by subject, last 7 days: ${bySub}.`);
 	const pats = findPatterns({
 		today,
@@ -2755,7 +2755,7 @@ function moreContext(s, db, finance, today, input, todayRules, disc) {
 		spending: financeSpending(finance)
 	});
 	if (pats.length) out.push(`What his own data shows (last 8 weeks):\n${pats.map((p) => `- ${p}`).join("\n")}`);
-	const since = addDays$2(today, -4);
+	const since = addDays$3(today, -4);
 	const advice = loadLog(db).filter((e) => e.role === "coach" && e.at.slice(0, 10) >= since).slice(-12, -4).map((e) => `${e.at.slice(5, 10)}: ${e.text.replace(/\s+/g, " ").slice(0, 140)}`);
 	if (advice.length) out.push(`Your earlier advice (check if he did it):\n${advice.map((a) => `- ${a}`).join("\n")}`);
 	return out;
@@ -3209,7 +3209,7 @@ function moneyInsight(state, tx, today) {
 	const cats = new Map((state.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
 	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
-	const weekFrom = addDays$2(today, -6);
+	const weekFrom = addDays$3(today, -6);
 	const same = exp.filter((t) => t.date >= weekFrom && t.date <= today && String(t.category) === String(tx.category));
 	const name = cats.get(String(tx.category)) ?? "this";
 	const parts = [];
@@ -3289,7 +3289,7 @@ function answerLocal(need, d) {
 		const by = /* @__PURE__ */ new Map();
 		for (const s of list) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
 		const days = new Set(list.map((s) => s.day)).size;
-		return `Focus ${span}: ${hm$1(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$1(m)}`).join(", ")}.` : ""}`;
+		return `Focus ${span}: ${hm$2(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$2(m)}`).join(", ")}.` : ""}`;
 	}
 	if (k === "workouts") {
 		const days = [...new Set(d.input.workouts.filter((w) => inRange(w.day)).map((w) => w.day))].sort();
@@ -3994,11 +3994,11 @@ function planAward(rule, entries, now, day, note) {
 function dayStreak(doneDays, today, restDays = []) {
 	const set = new Set(doneDays);
 	const rest = new Set([...restDays].filter((d) => !set.has(d)));
-	let cursor = set.has(today) || rest.has(today) ? today : addDays$2(today, -1);
+	let cursor = set.has(today) || rest.has(today) ? today : addDays$3(today, -1);
 	let n = 0;
 	while (set.has(cursor) || rest.has(cursor)) {
 		if (set.has(cursor)) n++;
-		cursor = addDays$2(cursor, -1);
+		cursor = addDays$3(cursor, -1);
 	}
 	return n;
 }
@@ -4119,7 +4119,7 @@ function validateWorkout(input) {
 function weekMonday(day) {
 	const [y, m, d] = day.split("-").map(Number);
 	const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-	return addDays$2(day, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+	return addDays$3(day, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
 }
 function computeWorkoutStats(workouts, today, restDays = []) {
 	const workoutDays = Array.from(new Set(workouts.filter((w) => w.day <= today).map((w) => w.day))).sort();
@@ -4130,7 +4130,7 @@ function computeWorkoutStats(workouts, today, restDays = []) {
 	const totalWorkouts = workouts.length;
 	const workoutDoneToday = workoutDays.includes(today);
 	const thisMonday = weekMonday(today);
-	const nextMonday = addDays$2(thisMonday, 7);
+	const nextMonday = addDays$3(thisMonday, 7);
 	return {
 		streak,
 		bestStreak,
@@ -6216,7 +6216,7 @@ function milestonesOf(events, today, claimedRefs, setupDay) {
 			status: "locked",
 			reachedOn: null
 		};
-		const reachedOn = addDays$2(stats.since, m.days);
+		const reachedOn = addDays$3(stats.since, m.days);
 		if (claimedRefs.has(milestoneRef(stats.since, m.days))) return {
 			...m,
 			status: "claimed",
@@ -6279,7 +6279,7 @@ var Discipline = class {
 		const events = this.events();
 		const stats = statsOf(events, today);
 		const rank = rankFor(stats.current);
-		const weekAgo = addDays$2(today, -6);
+		const weekAgo = addDays$3(today, -6);
 		const has = (kind) => events.some((e) => e.kind === kind && e.day === today);
 		return {
 			setup: !!startOf(events),
@@ -6651,7 +6651,7 @@ function planSkip(status) {
 function blocksToMiss(blocks, closed, today, lookbackDays = 7) {
 	const out = [];
 	for (let i = lookbackDays; i >= 1; i--) {
-		const day = addDays$2(today, -i);
+		const day = addDays$3(today, -i);
 		for (const b of blocks) {
 			if (b.kind !== "study" || day < b.createdDay || !blockOn(b, day)) continue;
 			if (!closed.has(`${b.id}:${day}`)) out.push({
@@ -8103,7 +8103,7 @@ var FocusService = class {
 	}
 	state(now = /* @__PURE__ */ new Date()) {
 		const today = this.wallet.today(now);
-		const all = this.sessions(addDays$2(today, -400));
+		const all = this.sessions(addDays$3(today, -400));
 		const todays = all.filter((s) => s.day === today);
 		const by = /* @__PURE__ */ new Map();
 		for (const s of todays) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
@@ -8118,7 +8118,7 @@ var FocusService = class {
 			};
 			return goalProgress$1(goal, all.filter((s) => s.day >= goal.createdDay && s.subject.toLowerCase() === goal.subject.toLowerCase()).reduce((t, s) => t + s.minutes, 0), today);
 		});
-		const plans = Array.from({ length: 7 }, (_, i) => this.plan(addDays$2(today, -i)));
+		const plans = Array.from({ length: 7 }, (_, i) => this.plan(addDays$3(today, -i)));
 		const subjects = [.../* @__PURE__ */ new Set([...goals.map((g) => g.subject), ...all.map((s) => s.subject)])].slice(0, 8);
 		return {
 			today,
@@ -8132,7 +8132,7 @@ var FocusService = class {
 			recent: all.slice(0, 10),
 			goals,
 			plan: this.plan(today),
-			week: weekReport(all, plans, this.funMin(addDays$2(today, -6), today), today),
+			week: weekReport(all, plans, this.funMin(addDays$3(today, -6), today), today),
 			funToday: this.funMin(today, today),
 			focusCoinsToday: todays.reduce((t, s) => t + s.coins, 0),
 			todaySessions: this.timed(today)
@@ -8198,7 +8198,7 @@ var FocusService = class {
 	}
 	log(subject, minutes, now, startedAt, day) {
 		const today = this.wallet.today(now);
-		const d = day && day <= today && day >= addDays$2(today, -14) ? day : today;
+		const d = day && day <= today && day >= addDays$3(today, -14) ? day : today;
 		const earned = this.sessions(today).filter((s) => s.day === today).reduce((t, s) => t + s.coins, 0);
 		const coins = d === today ? Math.max(0, Math.min(focusCoins(minutes), 80 - earned)) : 0;
 		const end = now.toISOString();
@@ -8372,16 +8372,16 @@ function cleanSet(ev, from, to) {
 	if (!starts.length) return out;
 	const start = starts[starts.length - 1];
 	const resets = new Set(ev.filter((e) => e.kind === "reset" && e.day > start).map((e) => e.day));
-	for (let d = addDays$2(start > from ? start : addDays$2(from, -1), 1); d <= to; d = addDays$2(d, 1)) if (!resets.has(d)) out.add(d);
+	for (let d = addDays$3(start > from ? start : addDays$3(from, -1), 1); d <= to; d = addDays$3(d, 1)) if (!resets.has(d)) out.add(d);
 	return out;
 }
 /** Days in a row ending today (or yesterday, when today isn't done yet). */
 function currentStreak(done, today) {
-	let d = done.has(today) ? today : addDays$2(today, -1);
+	let d = done.has(today) ? today : addDays$3(today, -1);
 	let n = 0;
 	while (done.has(d)) {
 		n++;
-		d = addDays$2(d, -1);
+		d = addDays$3(d, -1);
 	}
 	return n;
 }
@@ -8392,7 +8392,7 @@ function bestStreak(done) {
 	let run = 0;
 	let prev = "";
 	for (const d of days) {
-		run = prev && addDays$2(prev, 1) === d ? run + 1 : 1;
+		run = prev && addDays$3(prev, 1) === d ? run + 1 : 1;
 		best = Math.max(best, run);
 		prev = d;
 	}
@@ -8400,7 +8400,7 @@ function bestStreak(done) {
 }
 function insights(i, length = 364) {
 	const to = i.today;
-	const from = addDays$2(to, -(length - 1));
+	const from = addDays$3(to, -(length - 1));
 	const focus = /* @__PURE__ */ new Map();
 	for (const r of i.focus) if (r.day >= from && r.day <= to) focus.set(r.day, (focus.get(r.day) ?? 0) + r.minutes);
 	const sets = {
@@ -8418,7 +8418,7 @@ function insights(i, length = 364) {
 		tasks: "Task done"
 	};
 	const days = [];
-	for (let d = from; d <= to; d = addDays$2(d, 1)) {
+	for (let d = from; d <= to; d = addDays$3(d, 1)) {
 		const parts = Object.keys(sets).filter((k) => sets[k].has(d)).map((k) => LABEL[k]);
 		const count = parts.length;
 		days.push({
@@ -8559,8 +8559,8 @@ function growth(i, weeks = 26) {
 		return t;
 	};
 	const win = (k) => ({
-		from: addDays$2(today, -6 - 7 * k),
-		to: addDays$2(today, -7 * k)
+		from: addDays$3(today, -6 - 7 * k),
+		to: addDays$3(today, -7 * k)
 	});
 	const monthsBack = Array.from({ length: 12 }, (_, k) => {
 		const [y, m] = today.split("-").map(Number);
@@ -8715,7 +8715,7 @@ var ProgressService = class {
 	}
 	input(spending, now = /* @__PURE__ */ new Date(), days = 60) {
 		const today = this.wallet.today(now);
-		const since = addDays$2(today, -days);
+		const since = addDays$3(today, -days);
 		const all = (sql, ...args) => {
 			try {
 				return this.db.prepare(sql).all(...args);
@@ -8767,12 +8767,12 @@ var weekday$1 = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDa
 */
 function planWeek(today) {
 	const wd = weekday$1(today);
-	return wd === 0 ? addDays$2(today, 1) : addDays$2(today, 1 - wd);
+	return wd === 0 ? addDays$3(today, 1) : addDays$3(today, 1 - wd);
 }
 /** The Monday of the week today is in (Sunday counts with the week before). */
 function currentWeek(today) {
 	const wd = weekday$1(today);
-	return addDays$2(today, wd === 0 ? -6 : 1 - wd);
+	return addDays$3(today, wd === 0 ? -6 : 1 - wd);
 }
 /** Sunday, or no plan for this week yet: time to plan. */
 function shouldPlan(plan, today) {
@@ -10291,7 +10291,7 @@ syncFinance: (recordDays) => write((s) => {
 			const today = s.wallet.today();
 			let since = getSetting(db, "conn_finance_since");
 			if (!since) setSetting(db, "conn_finance_since", since = today);
-			const from = since < addDays$2(today, -31) ? addDays$2(today, -31) : since;
+			const from = since < addDays$3(today, -31) ? addDays$3(today, -31) : since;
 			const handled = new Set(s.wallet.entries().map((e) => e.ref ?? "").filter(Boolean));
 			let paid = 0;
 			for (const d of new Set(recordDays)) {
@@ -10596,7 +10596,7 @@ function utc(iso) {
 	const [y, m, d] = iso.split("-").map(Number);
 	return new Date(Date.UTC(y, m - 1, d));
 }
-function addDays$1(iso, n) {
+function addDays$2(iso, n) {
 	const d = utc(iso);
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
@@ -10642,8 +10642,8 @@ var MONTHS = {
 var pad$2 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
-	if (rule.every === "week") return addDays$1(rule.start, 7 * n);
-	if (rule.every === "2weeks") return addDays$1(rule.start, 14 * n);
+	if (rule.every === "week") return addDays$2(rule.start, 7 * n);
+	if (rule.every === "2weeks") return addDays$2(rule.start, 14 * n);
 	const key = addMonths(monthKey(rule.start), (MONTHS[rule.every] || 1) * n);
 	return `${key}-${pad$2(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
 }
@@ -10662,7 +10662,7 @@ var sortItems = (a, b) => a.date.localeCompare(b.date) || (a.rule.note || "").lo
 function dueItems(state, today) {
 	const out = [];
 	for (const rule of active(state)) {
-		const from = rule.lastDone ? addDays$1(rule.lastDone, 1) : rule.start;
+		const from = rule.lastDone ? addDays$2(rule.lastDone, 1) : rule.start;
 		for (const date of occurrences(rule, from, today, 60)) out.push({
 			rule,
 			date
@@ -10672,9 +10672,9 @@ function dueItems(state, today) {
 }
 function upcomingItems(state, today, days = 30) {
 	const out = [];
-	const to = addDays$1(today, days);
+	const to = addDays$2(today, days);
 	for (const rule of active(state)) {
-		const from = addDays$1(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
+		const from = addDays$2(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
 		for (const date of occurrences(rule, from, to, 60)) out.push({
 			rule,
 			date
@@ -11409,7 +11409,7 @@ function payStatus(state, today) {
 // src/renderer/public/apps/finance/js/forecast.js
 var isLiquid = (a) => !a.archived && !a.savings && a.kind !== "savings" && a.kind !== "crypto";
 function spentFrom(state, today, window = 60) {
-	const since = addDays$1(today, -window + 1);
+	const since = addDays$2(today, -window + 1);
 	const by = /* @__PURE__ */ new Map();
 	let total = 0;
 	for (const t of state.tx) {
@@ -11445,7 +11445,7 @@ function limitStatus(state, today) {
 	const amount = state.settings.limit.amount;
 	const key = monthKey(today);
 	const daysLeft = daysInMonth(key) - Number(today.slice(8)) + 1;
-	const before = everydaySpent(state, `${key}-01`, addDays$1(today, -1));
+	const before = everydaySpent(state, `${key}-01`, addDays$2(today, -1));
 	const spentToday = everydaySpent(state, today, today);
 	const leftBefore = amount - before;
 	const perDay = leftBefore > 0 ? lei(leftBefore / daysLeft) : 0;
@@ -11613,7 +11613,7 @@ function parseQuick(text, state) {
 		...daysAgo ? { daysAgo } : {}
 	};
 }
-var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays$1(sentDay, -f.daysAgo) : sentDay;
+var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays$2(sentDay, -f.daysAgo) : sentDay;
 function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = Date.now() }) {
 	return {
 		id: `tg-${updateId}`,
@@ -11928,7 +11928,7 @@ var esc$2 = (s) => s.replace(/[<>&]/g, (c) => ({
 var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
-	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$1(o.focusYesterdayMin)}</b> of focus.`);
+	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$2(o.focusYesterdayMin)}</b> of focus.`);
 	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$2(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
@@ -11957,7 +11957,7 @@ function planKeyboard(plan, withReasons) {
 	return { inline_keyboard: rows };
 }
 function eveningText(plan, focusMin) {
-	const head = `🌙 <b>Evening review</b> · ${hm$1(focusMin)} of focus today`;
+	const head = `🌙 <b>Evening review</b> · ${hm$2(focusMin)} of focus today`;
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
@@ -11967,19 +11967,19 @@ function weekText(w, goals) {
 	const lines = [
 		`📊 <b>Your week</b> (${w.from.slice(5)} → ${w.to.slice(5)})`,
 		"",
-		`⏱ Focus: <b>${hm$1(w.totalMin)}</b>`
+		`⏱ Focus: <b>${hm$2(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$2(s.subject)}: ${hm$1(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$2(s.subject)}: ${hm$2(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
 	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$2(r.reason)} ×${r.count}`).join(", ")}`);
-	if (w.funMin) lines.push(`🎮 Fun: ${hm$1(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$2(g.title)}: ${hm$1(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	if (w.funMin) lines.push(`🎮 Fun: ${hm$2(w.funMin)}`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$2(g.title)}: ${hm$2(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$2(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$1(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$2(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$2(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/rhythm.ts
 var RHYTHM = "coach_rhythm";
@@ -12387,7 +12387,7 @@ function nudgeText(n, idle, first, focusMin, tone) {
 	return n === 1 ? `🎯 ${idle === "all day" ? "Nothing logged yet today." : `${idle} since your last thing.`} ${step}` : n <= 3 ? `🎯 Smallest next step: ${step} If something's in the way, tell me and I'll move it.` : `🎯 Still here when you're ready. ${step} Or pause me for today.`;
 }
 // src/core/coachKit.ts
-var hm = (iso) => {
+var hm$1 = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
@@ -12403,7 +12403,7 @@ function makeRefs(events, tasks) {
 	};
 	const evLines = events.filter((e) => !e.allDay).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 40).map((e, i) => {
 		refs.events.set(`E${i + 1}`, e);
-		return `E${i + 1} ${dayOf(e.start).slice(5)} ${hm(e.start)}–${hm(e.end)} ${e.title}`;
+		return `E${i + 1} ${dayOf(e.start).slice(5)} ${hm$1(e.start)}–${hm$1(e.end)} ${e.title}`;
 	});
 	const tLines = tasks.slice(0, 60).map((t, i) => {
 		refs.tasks.set(`T${i + 1}`, t);
@@ -12766,14 +12766,14 @@ var EXPERIMENTS = [
 		unit: "lei spent"
 	}
 ];
-var addDays = (d, n) => {
+var addDays$1 = (d, n) => {
 	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
 };
 var avg = (s, from, to, countEmpty) => {
 	const days = [];
-	for (let d = from; d <= to; d = addDays(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
+	for (let d = from; d <= to; d = addDays$1(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
 	return days.length ? days.reduce((a, b) => a + b, 0) / days.length : null;
 };
 /** The experiment for your weakest area: how far each area is below its usual level (0 = fine, 1 = far off). */
@@ -12787,11 +12787,11 @@ function measureExperiment(state, series, today) {
 	if (!exp) return null;
 	const day = Math.min(7, Math.max(1, Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${state.start}T12:00:00Z`)) / 864e5) + 1));
 	const counted = exp.metric === "workouts" || exp.metric === "spend" || exp.metric === "focus";
-	const before = avg(series, addDays(state.start, -14), addDays(state.start, -1), counted);
-	const end = addDays(state.start, 6) < today ? addDays(state.start, 6) : today;
+	const before = avg(series, addDays$1(state.start, -14), addDays$1(state.start, -1), counted);
+	const end = addDays$1(state.start, 6) < today ? addDays$1(state.start, 6) : today;
 	const during = avg(series, state.start, end, counted);
 	const changePct = before && during != null ? Math.round((during - before) / before * 100) : null;
-	const done = addDays(state.start, 6) < today;
+	const done = addDays$1(state.start, 6) < today;
 	const good = changePct != null && (exp.better === "up" ? changePct >= 5 : changePct <= -5);
 	const bad = changePct != null && (exp.better === "up" ? changePct <= -5 : changePct >= 5);
 	const verdict = changePct == null ? "Not enough data yet to compare." : good ? `It works: ${Math.abs(changePct)}% ${exp.better === "up" ? "more" : "less"} ${exp.unit} than before. Keep it.` : bad ? `It didn't help (${changePct > 0 ? "+" : ""}${changePct}%). Drop it and try another.` : `About the same (${changePct > 0 ? "+" : ""}${changePct}%). Keep it if it felt good.`;
@@ -12803,6 +12803,67 @@ function measureExperiment(state, series, today) {
 		during,
 		changePct,
 		verdict: done ? verdict : `Day ${day} of 7 · so far: ${verdict}`
+	};
+}
+// src/core/lifeReview.ts
+var addDays = (d, n) => {
+	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
+	x.setUTCDate(x.getUTCDate() + n);
+	return x.toISOString().slice(0, 10);
+};
+var sum = (s, today, from, to, counted) => {
+	const vals = [];
+	for (let k = from; k <= to; k++) {
+		const v = s[addDays(today, -k)];
+		if (v != null || counted) vals.push(v ?? 0);
+	}
+	return {
+		total: vals.reduce((a, b) => a + b, 0),
+		n: vals.length
+	};
+};
+var hm = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
+function lifeReview(series, urges, today) {
+	const out = [];
+	const gaps = {};
+	const area = (m, label, fmt, perDay, better) => {
+		const counted = m !== "sleep";
+		const w = sum(series[m], today, 0, 6, counted);
+		const u = sum(series[m], today, 7, 34, counted);
+		if (!w.n || !u.n) return;
+		const week = perDay ? w.total / w.n : w.total;
+		const usual = perDay ? u.total / u.n : u.total / u.n * 7;
+		if (!usual && !week) return;
+		const ch = usual ? (week - usual) / usual : 1;
+		const good = better === "up" ? ch >= 0 : ch <= 0;
+		gaps[m] = good ? 0 : Math.abs(ch);
+		out.push({
+			area: label,
+			good,
+			size: Math.abs(ch),
+			text: fmt(week, usual)
+		});
+	};
+	area("sleep", "Sleep", (w, u) => `${hm(w)} a night, ${Math.abs(Math.round(w - u))} min ${w >= u ? "more" : "less"} than usual`, true, "up");
+	area("workouts", "Training", (w, u) => `${Math.round(w)} workout${Math.round(w) === 1 ? "" : "s"} (usual ${u.toFixed(1)})`, false, "up");
+	area("focus", "Focus", (w, u) => `${hm(w)} of focus (usual ${hm(u)})`, false, "up");
+	area("spend", "Money", (w, u) => `${Math.round(w).toLocaleString("en-US")} lei spent, ${Math.abs(Math.round((w - u) / Math.max(1, u) * 100))}% ${w <= u ? "under" : "over"} usual`, false, "down");
+	if (urges.crushed || urges.slips || urges.prevCrushed) {
+		const good = urges.slips === 0;
+		out.push({
+			area: "Urges",
+			good,
+			size: urges.slips ? 1 : Math.min(1, urges.crushed / 5),
+			text: `${urges.crushed} crushed${urges.slips ? `, ${urges.slips} slip${urges.slips === 1 ? "" : "s"}` : ", no slips"}`
+		});
+	}
+	const sorted = [...out].sort((a, b) => b.size - a.size);
+	let top = sorted.slice(0, 3);
+	const bestGood = sorted.find((f) => f.good);
+	if (bestGood && !top.some((f) => f.good)) top = [...top.slice(0, 2), bestGood];
+	return {
+		findings: top,
+		experiment: pickExperiment(gaps)
 	};
 }
 // src/core/benKnows.ts
@@ -12902,7 +12963,7 @@ var sleepMin = (bed, wake) => (wake - bed + 1440) % 1440;
 /** What your own data shows, each with one change to try. Strongest first, at most 5. */
 function weeklyPatterns(i) {
 	const out = [];
-	const from = addDays$2(i.today, -55);
+	const from = addDays$3(i.today, -55);
 	const ses = i.sessions.filter((s) => s.day >= from && s.day <= i.today && s.startedAt);
 	let am = 0;
 	let pm = 0;
@@ -12962,7 +13023,7 @@ function weeklyPatterns(i) {
 	}).filter((x) => !!x && x.min >= 180 && x.min <= 720);
 	if (nights.length >= 6) {
 		const avgSleep = nights.reduce((t, n) => t + n.min, 0) / nights.length;
-		const examDays = new Set((i.exams ?? []).flatMap((d) => [d, addDays$2(d, -1)]));
+		const examDays = new Set((i.exams ?? []).flatMap((d) => [d, addDays$3(d, -1)]));
 		const before = nights.filter((n) => examDays.has(n.day));
 		if (before.length >= 1) {
 			const b = before.reduce((t, n) => t + n.min, 0) / before.length;
@@ -13051,7 +13112,7 @@ function addExcuse(list, text, at) {
 }
 /** Excuses in the last `days`, most repeated first. */
 function excuseCounts(list, today, days = 30) {
-	const from = addDays$2(today, -(days - 1));
+	const from = addDays$3(today, -(days - 1));
 	const m = /* @__PURE__ */ new Map();
 	for (const e of list) {
 		if (e.at.slice(0, 10) < from) continue;
@@ -13162,7 +13223,7 @@ function moodLinks(moods, i) {
 	return out.sort((a, b) => b.diff - a.diff);
 }
 function moodLine(list, today) {
-	const recent = list.filter((m) => m.day >= addDays$2(today, -6));
+	const recent = list.filter((m) => m.day >= addDays$3(today, -6));
 	if (!recent.length) return "";
 	const avg = recent.reduce((t, m) => t + m.mood, 0) / recent.length;
 	const todayM = list.filter((m) => m.day === today).map((m) => `${m.slot} ${moodFace(m.mood)} ${m.mood}/5`);
@@ -13231,8 +13292,8 @@ function nextReview(t) {
 	const n = t.reviews.length;
 	if (n >= SRS_STEPS.length) return null;
 	const base = n ? t.reviews[n - 1] : t.learned;
-	let due = addDays$2(base, SRS_STEPS[n]);
-	if (t.examDay && due >= t.examDay) due = addDays$2(t.examDay, -1) >= base ? addDays$2(t.examDay, -1) : t.examDay;
+	let due = addDays$3(base, SRS_STEPS[n]);
+	if (t.examDay && due >= t.examDay) due = addDays$3(t.examDay, -1) >= base ? addDays$3(t.examDay, -1) : t.examDay;
 	return due;
 }
 function dueTopics(list, today) {
@@ -13286,20 +13347,20 @@ function tickStack(s, day, step) {
 /** Days in a row (ending today or yesterday) with every step done. */
 function stackStreak(s, today) {
 	const full = (d) => (s.log[d] ?? []).length >= s.steps.length;
-	let d = full(today) ? today : addDays$2(today, -1);
+	let d = full(today) ? today : addDays$3(today, -1);
 	let n = 0;
 	while (full(d) && n < 400) {
 		n++;
-		d = addDays$2(d, -1);
+		d = addDays$3(d, -1);
 	}
 	return n;
 }
 /** Share of the last 14 days with the whole chain done. */
 function stackRate(s, today) {
-	const since = s.createdAt > addDays$2(today, -13) ? s.createdAt : addDays$2(today, -13);
+	const since = s.createdAt > addDays$3(today, -13) ? s.createdAt : addDays$3(today, -13);
 	let days = 0;
 	let full = 0;
-	for (let d = since; d <= today; d = addDays$2(d, 1)) {
+	for (let d = since; d <= today; d = addDays$3(d, 1)) {
 		days++;
 		if ((s.log[d] ?? []).length >= s.steps.length) full++;
 	}
@@ -13439,7 +13500,7 @@ function moneyNumbers(finance, today) {
 	const tx = Array.isArray(finance?.tx) ? finance.tx : [];
 	const B = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
 	const exp = tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
-	const from30 = addDays$2(today, -29);
+	const from30 = addDays$3(today, -29);
 	const perDay = Math.round(exp.filter((t) => t.date >= from30 && t.date <= today).reduce((s, t) => s + B(t), 0) / 30);
 	const wh = finance?.settings?.workHour;
 	let hourly = wh?.mode === "manual" && Number(wh.rate) > 0 ? Number(wh.rate) : null;
@@ -13486,7 +13547,7 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 	const db = s.db;
 	const today = s.wallet.today(now);
 	const d = loadDesk(db);
-	const sessions = sessionsOf(db, addDays$2(today, -62));
+	const sessions = sessionsOf(db, addDays$3(today, -62));
 	const dayLog = json$1(db, "island_day_log") ?? {};
 	const quality = Object.values(dayLog).flatMap((x) => x.focus ?? []).map((q) => ({
 		at: q.at,
@@ -13528,7 +13589,7 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 		exams: exams.map((e) => e.deadline),
 		spending
 	});
-	const recentMoods = d.moods.filter((m) => m.day >= addDays$2(today, -6));
+	const recentMoods = d.moods.filter((m) => m.day >= addDays$3(today, -6));
 	const cats = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 	const catName = (id) => cats.get(id) ?? id;
 	const ps = promiseStats(json$1(db, "coach_reminders") ?? [], now);
@@ -13573,7 +13634,7 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 	const mean = (m, from, to, counted = m !== "sleep") => {
 		const vals = [];
 		for (let k = from; k <= to; k++) {
-			const v = series[m][addDays$2(today, -k)];
+			const v = series[m][addDays$3(today, -k)];
 			if (v != null || counted) vals.push(v ?? 0);
 		}
 		return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
@@ -13595,6 +13656,16 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 			spend: gap("spend")
 		}, current ? [current.exp.id] : [])
 	};
+	const ue = urgeEvents(db);
+	const inWeek = (ts, from, to) => {
+		const d = String(ts).slice(0, 10);
+		return d >= addDays$3(today, -to) && d <= addDays$3(today, -from);
+	};
+	const review = lifeReview(series, {
+		crushed: ue.filter((e) => e.kind === "urge" && inWeek(e.ts, 0, 6)).length,
+		slips: ue.filter((e) => e.kind === "reset" && inWeek(e.ts, 0, 6)).length,
+		prevCrushed: ue.filter((e) => e.kind === "urge" && inWeek(e.ts, 7, 13)).length
+	}, today);
 	const lastNight = logs.find((l) => l.day === today) ?? null;
 	const tx = Array.isArray(finance?.tx) ? finance.tx : null;
 	return {
@@ -13602,10 +13673,10 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 		energy,
 		patterns,
 		excuses: excuseCounts(d.excuses, today),
-		moods: d.moods.filter((m) => m.day >= addDays$2(today, -13)),
+		moods: d.moods.filter((m) => m.day >= addDays$3(today, -13)),
 		moodDue: moodDue(d.moods, now),
 		moodAvg: recentMoods.length ? recentMoods.reduce((t, m) => t + m.mood, 0) / recentMoods.length : null,
-		study: d.study.filter((t) => !t.examDay || t.examDay >= addDays$2(today, -1)).map((t) => ({
+		study: d.study.filter((t) => !t.examDay || t.examDay >= addDays$3(today, -1)).map((t) => ({
 			...t,
 			next: nextReview(t),
 			due: dueTopics([t], today).length > 0
@@ -13636,7 +13707,8 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 		})),
 		exams,
 		restDays,
-		experiment
+		experiment,
+		review
 	};
 }
 /** What the desk adds to Ben's prompt (short lines; only what's there). */
@@ -13826,7 +13898,7 @@ function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
 	}
 	if (o.op === "call") {
 		const dow = now.getDay();
-		const week = addDays$2(today, -((dow + 6) % 7) - (dow === 1 && now.getHours() < 12 ? 7 : 0));
+		const week = addDays$3(today, -((dow + 6) % 7) - (dow === 1 && now.getHours() < 12 ? 7 : 0));
 		const call = {
 			week,
 			at: now.toISOString(),
@@ -14059,14 +14131,14 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 		},
 		prevWeekMin: (() => {
 			const focus = s.progress.input(null, now, 8).focus;
-			const from = addDays$2(today, -13);
-			const to = addDays$2(today, -7);
+			const from = addDays$3(today, -13);
+			const to = addDays$3(today, -7);
 			return focus.filter((x) => x.day >= from && x.day <= to).reduce((t, x) => t + x.minutes, 0);
 		})(),
 		week: (() => {
 			const focus = s.progress.input(null, now, 8).focus;
 			return Array.from({ length: 7 }, (_, k) => {
-				const day = addDays$2(today, k - 6);
+				const day = addDays$3(today, k - 6);
 				return {
 					day,
 					min: focus.filter((x) => x.day === day).reduce((t, x) => t + x.minutes, 0)
@@ -14095,7 +14167,7 @@ function recordDay(h, day, patch) {
 		...patch,
 		...plan ? { plan } : {}
 	};
-	const cutoff = addDays$2(day, -180);
+	const cutoff = addDays$3(day, -180);
 	for (const d of Object.keys(days)) if (d < cutoff) delete days[d];
 	return { days };
 }
@@ -14104,7 +14176,7 @@ function bump(h, day, key, by = 1) {
 	return recordDay(h, day, { [key]: (cur[key] ?? 0) + by });
 }
 var mondayOf = (day) => {
-	return addDays$2(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+	return addDays$3(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
 };
 /** The last `weeks` weeks (oldest first), this week included. */
 function scorecard(h, focus, today, weeks = 8) {
@@ -14112,8 +14184,8 @@ function scorecard(h, focus, today, weeks = 8) {
 	const thisMonday = mondayOf(today);
 	const rows = [];
 	for (let i = weeks - 1; i >= 0; i--) {
-		const week = addDays$2(thisMonday, -7 * i);
-		const end = addDays$2(week, 6);
+		const week = addDays$3(thisMonday, -7 * i);
+		const end = addDays$3(week, 6);
 		const ds = Object.entries(days).filter(([d]) => d >= week && d <= end && d <= today).map(([, v]) => v);
 		const kept = ds.reduce((t, d) => t + (d.kept ?? 0), 0);
 		const broken = ds.reduce((t, d) => t + (d.broken ?? 0), 0);
@@ -14549,7 +14621,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			return svc.focus.plan(svc.wallet.today()).items.filter((x) => !x.done).map((x) => x.text);
 		}), todoist?.upcoming ? todoist.upcoming(2).catch(() => []) : Promise.resolve([])]);
 		const today = await mirror.read((db) => services.services(db).wallet.today());
-		const tomorrow = addDays$2(today, 1);
+		const tomorrow = addDays$3(today, 1);
 		const nextUp = tomorrowTasks.filter((t) => t.due && t.due <= tomorrow).sort((a, b) => b.priority - a.priority).map((t) => t.content);
 		const islandLine = await mirror.read((db) => dayLogLine(dayLog(db, today))).catch(() => "");
 		let lesson = weakest(result);
@@ -14621,7 +14693,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			save(db, {
 				...st,
 				tomorrow: {
-					day: addDays$2(today, 1),
+					day: addDays$3(today, 1),
 					top3
 				}
 			});
@@ -15343,7 +15415,7 @@ function focusKeyboard(subjects) {
 }
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r, plan) {
-	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$1(r.state.todayMin)}`;
+	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$2(r.state.todayMin)}`;
 	const rate = [
 		1,
 		2,
@@ -15600,7 +15672,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
 					return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
 				}
-				return { reply: `⏱ Today: <b>${hm$1(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
+				return { reply: `⏱ Today: <b>${hm$2(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
 			}
 			const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
 			const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
@@ -15824,7 +15896,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				const back = parsed.args.some((a) => /^(yesterday|ieri|вчера)$/i.test(a)) ? 1 : 0;
 				if (time || back) {
 					if (!time) return { reply: "⏰ What time? e.g. <code>/wake yesterday 06:30</code>" };
-					const day = addDays$2(s.wallet.today(), -back);
+					const day = addDays$3(s.wallet.today(), -back);
 					const res = s.sleep.setWake(day, time);
 					return { reply: `🌅 <b>Wake-up ${back ? "for yesterday " : ""}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, "sleep.up_on_time", 10)} points</b>` : res.log.onTime ? back ? "On time · no points for past days." : "On time." : "Saved to your sleep history."}` };
 				}
@@ -15836,7 +15908,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			}
 			case "spent": {
 				const today = s.wallet.today();
-				const from = parsed.period === "week" ? addDays$2(today, -6) : parsed.period === "month" ? `${today.slice(0, 8)}01` : parsed.period === "yesterday" ? addDays$2(today, -1) : today;
+				const from = parsed.period === "week" ? addDays$3(today, -6) : parsed.period === "month" ? `${today.slice(0, 8)}01` : parsed.period === "yesterday" ? addDays$3(today, -1) : today;
 				const line = answerLocal(`spending ${from} ${parsed.period === "yesterday" ? from : today}`, {
 					finance: financeStateFrom(currentDb, store),
 					input: null,
@@ -16534,7 +16606,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			const finance = financeStateFrom(db, store);
 			let sessions = [];
 			try {
-				sessions = db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?").all(addDays$2(svc.wallet.today(), -400)).map((r) => ({
+				sessions = db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?").all(addDays$3(svc.wallet.today(), -400)).map((r) => ({
 					day: String(r.day),
 					subject: String(r.subject),
 					minutes: Number(r.minutes)
@@ -16562,7 +16634,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						style: styleText(loadStyle(db)),
 						tone: loadStyle(db).tone,
 						feedback: feedbackText(loadFeedback(db)),
-						selfReview: sr && sr.day >= addDays$2(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join("\n") : "",
+						selfReview: sr && sr.day >= addDays$3(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join("\n") : "",
 						stealth: getSetting(db, "discipline_stealth") === "1"
 					};
 				})(),
@@ -16956,7 +17028,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						const line = await mirror.write((db) => {
 							const svc = services.services(db);
 							const today = svc.wallet.today();
-							if (a.day > today || a.day < addDays$2(today, -60)) return `⚠️ ${a.day} is out of range (last 60 days only)`;
+							if (a.day > today || a.day < addDays$3(today, -60)) return `⚠️ ${a.day} is out of range (last 60 days only)`;
 							if (db.prepare("SELECT 1 FROM workouts WHERE day = ?").get(a.day)) return `✅ ${a.day} already has a workout`;
 							svc.body.logWorkout({
 								title: a.title,
@@ -17411,7 +17483,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	async function lessonOfDay(token, chat, botId, cfg, note) {
 		const ctx = await mirror.read((db) => {
 			const f = services.services(db).focus.state();
-			return `Focus today ${hm$1(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
+			return `Focus today ${hm$2(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
 		});
 		const out = parseBrain(await ai(`You are Victor's coach. Here is his day and his evening note. Write ONE short lesson for tomorrow (max 25 words, concrete, kind, in the language of his note) as "reply", and the same lesson as one item in "remember" starting with "Lesson ${(/* @__PURE__ */ new Date()).toISOString().slice(5, 10)}:". Answer only JSON {"reply": string, "actions": [], "remember": string[]}.
 
@@ -17614,7 +17686,7 @@ His note: ${note}`, { json: true }));
 			}
 			if (!pruned && tokens.length) {
 				pruned = true;
-				const cutoff = addDays$2((/* @__PURE__ */ new Date()).toISOString().slice(0, 10), -14);
+				const cutoff = addDays$3((/* @__PURE__ */ new Date()).toISOString().slice(0, 10), -14);
 				mirror.write((db) => db.prepare("DELETE FROM bot_seen_updates WHERE ts < ?").run(cutoff)).catch(() => {});
 			}
 			return {
@@ -18355,7 +18427,7 @@ var daysSince = (rows, today) => {
 	const last = rows.map((r) => r.day).filter((d) => d <= today).sort().pop();
 	if (!last) return null;
 	let n = 0;
-	for (let d = last; d < today; d = addDays$2(d, 1)) n++;
+	for (let d = last; d < today; d = addDays$3(d, 1)) n++;
 	return n;
 };
 /** What's worth a word today, most important first (empty: say nothing). */
@@ -18369,7 +18441,7 @@ function coachFacts(i, r) {
 		text: `No focus session for ${focusDays} days.`,
 		step: "Do one 25-minute focus block before lunch on your main subject."
 	});
-	const last5 = i.wakes.filter((w) => w.day > addDays$2(t, -5) && w.day <= t);
+	const last5 = i.wakes.filter((w) => w.day > addDays$3(t, -5) && w.day <= t);
 	const late = last5.filter((w) => !w.onTime).length;
 	if (late >= 3) out.push({
 		id: "late-wake",
@@ -18385,7 +18457,7 @@ function coachFacts(i, r) {
 		step: "Just 15 minutes today: push-ups, squats, plank. Small counts."
 	});
 	const lastReset = i.discipline.filter((e) => e.kind === "reset").map((e) => e.day).sort().pop();
-	if (lastReset && lastReset >= addDays$2(t, -2)) out.push({
+	if (lastReset && lastReset >= addDays$3(t, -2)) out.push({
 		id: "reset",
 		weight: 8,
 		text: "Your clean streak reset recently.",
@@ -18403,7 +18475,7 @@ function coachFacts(i, r) {
 		1,
 		2,
 		3
-	].filter((k) => !planned.has(addDays$2(t, -k))).length;
+	].filter((k) => !planned.has(addDays$3(t, -k))).length;
 	if (i.mustdos && unplanned === 3) out.push({
 		id: "no-plan",
 		weight: 4,
@@ -19171,7 +19243,7 @@ function localCleanup(tasks, today) {
 		});
 		else first.set(k, t);
 	}
-	const old = addDays$2(today, -30);
+	const old = addDays$3(today, -30);
 	for (const t of tasks) {
 		if (t.recurring || !t.due || t.due >= old || out.some((c) => c.id === t.id)) continue;
 		out.push({
@@ -19942,7 +20014,7 @@ async function runDaily(env, job) {
 				const sl = services.services(db).sleep;
 				return {
 					bed: sl.bedtimeTarget(),
-					wake: targetForDay(addDays$2(input.today, 1), sl.weekdayTarget(), sl.weekendTarget())
+					wake: targetForDay(addDays$3(input.today, 1), sl.weekdayTarget(), sl.weekendTarget())
 				};
 			});
 			let first = null;
@@ -20737,7 +20809,7 @@ async function sportShared(env, body) {
 			unit: "sets"
 		}];
 		const localToday = await mirror.read((db) => services.services(db).wallet.today());
-		const day = /^\d{4}-\d{2}-\d{2}$/.test(String(body.day ?? "")) && body.day <= localToday && body.day >= addDays$2(localToday, -60) ? String(body.day) : localToday;
+		const day = /^\d{4}-\d{2}-\d{2}$/.test(String(body.day ?? "")) && body.day <= localToday && body.day >= addDays$3(localToday, -60) ? String(body.day) : localToday;
 		const fromSporty = body.source === "sporty";
 		try {
 			return {

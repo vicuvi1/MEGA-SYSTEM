@@ -4,6 +4,8 @@
 // call, the month's story, the spending coach and the sleep link. The same
 // code runs in the app (instant, read from the local mirror) and on the
 // server (Ben's prompt, the tick that enforces stakes).
+import { lifeReview, type LifeReview } from '@core/lifeReview'
+import { urgeEvents } from './disciplinePatterns'
 import { EXPERIMENTS, measureExperiment, pickExperiment, type ExpMetric, type ExpResult, type ExpState, type Experiment, type Series } from '@core/experiment'
 import { nightMinutes } from '@core/readiness'
 import { getSetting, setSetting } from '../../../main/settings'
@@ -88,6 +90,8 @@ export interface DeskView {
   restDays: string[]
   /** The weekly experiment: the running one (measured) or the one Ben suggests (N8). */
   experiment: { current: ExpResult | null; suggest: Experiment }
+  /** The week in one look: 3 findings across training, sleep, money, focus, urges + 1 experiment (N13). */
+  review: LifeReview
 }
 
 function sessionsOf(db: any, from: string) {
@@ -207,6 +211,13 @@ export function deskView(s: Services, finance: any, now = new Date()): DeskView 
   const expState = (json(db, EXP_KEY) as ExpState | null)
   const current = expState ? measureExperiment(expState, series[EXPERIMENTS.find((e) => e.id === expState.id)?.metric ?? 'focus'], today) : null
   const experiment = { current, suggest: pickExperiment({ focus: gap('focus'), sleep: gap('sleep'), workouts: gap('workouts'), spend: gap('spend') }, current ? [current.exp.id] : []) }
+  // The weekly life review (N13): urges this week vs last from the discipline events.
+  const ue = urgeEvents(db)
+  const inWeek = (ts: string, from: number, to: number) => {
+    const d = String(ts).slice(0, 10)
+    return d >= addDays(today, -to) && d <= addDays(today, -from)
+  }
+  const review = lifeReview(series, { crushed: ue.filter((e) => e.kind === 'urge' && inWeek(e.ts, 0, 6)).length, slips: ue.filter((e) => e.kind === 'reset' && inWeek(e.ts, 0, 6)).length, prevCrushed: ue.filter((e) => e.kind === 'urge' && inWeek(e.ts, 7, 13)).length }, today)
   const lastNight = logs.find((l) => l.day === today) ?? null
   const tx = Array.isArray(finance?.tx) ? finance.tx : null
   return {
@@ -235,7 +246,8 @@ export function deskView(s: Services, finance: any, now = new Date()): DeskView 
     goals: f.goals.map((g) => ({ id: g.id, title: g.title, deadline: g.deadline, hoursLeft: Math.max(0, Math.round((g.hours - g.doneMin / 60) * 10) / 10), daysLeft: g.daysLeft, behind: g.aheadH <= -1 })),
     exams,
     restDays,
-    experiment
+    experiment,
+    review
   }
 }
 
