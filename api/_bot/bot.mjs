@@ -9795,6 +9795,7 @@ var SleepService = class {
 			state: this.state(now),
 			awarded: false
 		};
+		if (existing && existing.on_time && !onTime) this.unpay("sleep.up_on_time", today, now);
 		if (existing) this.db.prepare("UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?").run(wakeTime, target, onTime ? 1 : 0, quality ?? existing.quality, today);
 		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)").run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString());
 		let awarded = false;
@@ -9833,6 +9834,15 @@ var SleepService = class {
 			awarded: false
 		};
 	}
+	/** Takes back a sleep reward paid that day (a correction made it wrong). */
+	unpay(ruleId, day, now) {
+		const all = this.wallet.entries();
+		const undone = new Set(all.map((e) => e.undoOf).filter((x) => x != null));
+		const paid = all.filter((e) => e.ruleId === ruleId && e.day === day && e.coins > 0 && !undone.has(e.id)).pop();
+		if (paid) try {
+			this.wallet.undo(paid.id, "Sleep time corrected", now);
+		} catch {}
+	}
 	logBed(time, now = /* @__PURE__ */ new Date()) {
 		const hh = String(now.getHours()).padStart(2, "0");
 		const mm = String(now.getMinutes()).padStart(2, "0");
@@ -9840,7 +9850,9 @@ var SleepService = class {
 		const target = this.bedtimeTarget();
 		const onTime = isBedOnTime(bedTime, target);
 		const today = bedNightDay(this.wallet.today(now), now.getHours());
-		if (this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)) this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(bedTime, target, onTime ? 1 : 0, today);
+		const existing = this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today);
+		if (existing && existing.bed_on_time && !onTime) this.unpay("sleep.bed_on_time", this.wallet.today(now), now);
+		if (existing) this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(bedTime, target, onTime ? 1 : 0, today);
 		else {
 			const wakeTarget = targetForDay(today, this.weekdayTarget(), this.weekendTarget());
 			this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)").run(today, "", wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString());

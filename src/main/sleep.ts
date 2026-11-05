@@ -95,6 +95,8 @@ export class SleepService {
     // the first wake-up of the day; only a time you type changes it (X8).
     if (existing && existing.wake_time && !time) return { log: toLog(existing), state: this.state(now), awarded: false }
 
+    // Corrected to a late time: the "up on time" points go back (P3).
+    if (existing && existing.on_time && !onTime) this.unpay('sleep.up_on_time', today, now)
     if (existing) {
       this.db
         .prepare('UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?')
@@ -155,6 +157,20 @@ export class SleepService {
     return { log: toLog(updated), state: this.state(now), awarded: false }
   }
 
+  /** Takes back a sleep reward paid that day (a correction made it wrong). */
+  private unpay(ruleId: string, day: string, now: Date): void {
+    const all = this.wallet.entries()
+    const undone = new Set(all.map((e) => e.undoOf).filter((x): x is number => x != null))
+    const paid = all.filter((e) => e.ruleId === ruleId && e.day === day && e.coins > 0 && !undone.has(e.id)).pop()
+    if (paid) {
+      try {
+        this.wallet.undo(paid.id, 'Sleep time corrected', now)
+      } catch {
+        /* already taken back */
+      }
+    }
+  }
+
   logBed(
     time?: string,
     now = new Date()
@@ -170,6 +186,8 @@ export class SleepService {
 
     const existing = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(today) as SleepLogRow | undefined
 
+    // Corrected to a late bedtime: the "in bed on time" points go back (P3).
+    if (existing && existing.bed_on_time && !onTime) this.unpay('sleep.bed_on_time', this.wallet.today(now), now)
     if (existing) {
       this.db
         .prepare('UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?')

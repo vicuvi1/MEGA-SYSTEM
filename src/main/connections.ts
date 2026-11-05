@@ -176,7 +176,9 @@ export class Connections {
       }
       // Waky files a bedtime under the morning it leads to; it is booked on that day.
       for (const n of waky.nights) {
-        if (n.day >= start && n.day <= today && n.onTime) paid += this.pay('sleep.bed_on_time', n.day, `waky:bed:${n.day}`, handled, now, `In bed at ${n.time} (Waky)`)
+        // Booked on the evening it started, like a bedtime you log yourself, so the
+        // same night is never paid twice (once here, once from the app: P3).
+        if (n.day >= start && n.day <= today && n.onTime) paid += this.pay('sleep.bed_on_time', addDays(n.day, -1), `waky:bed:${n.day}`, handled, now, `In bed at ${n.time} (Waky)`)
       }
     }
 

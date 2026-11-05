@@ -73,3 +73,14 @@ describe('the first wake-up of the day stays (X8)', () => {
     expect(fixed.log.wakeTime).toBe('07:20')
   })
 })
+
+describe('a corrected sleep time takes its points back (P3)', () => {
+  it('on time, then corrected to late: the points go back', () => {
+    const at = new Date(2026, 9, 26, 6, 50)
+    const first = sleep.logWake('06:50', undefined, at)
+    expect(first.awarded).toBe(true)
+    const before = wallet.summary(at).balance
+    sleep.logWake('09:30', undefined, new Date(2026, 9, 26, 10, 0))
+    expect(wallet.summary(at).balance).toBeLessThan(before)
+  })
+})
