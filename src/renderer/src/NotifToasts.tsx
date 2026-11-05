@@ -75,6 +75,12 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
     for (const n of fresh) {
       if (window.desktop?.notify) void window.desktop.notify({ id: n.id, title: n.title, body: n.body })
       else if (!visible && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        // Phones (Android, installed app) only allow notifications through the offline helper (M6).
+        const reg = await navigator.serviceWorker?.getRegistration?.().catch(() => undefined)
+        if (reg?.showNotification) {
+          await reg.showNotification(n.title, { body: n.body ?? '', icon: '/icon.png', tag: n.id, silent: true, data: { id: n.id } }).catch(() => null)
+          continue
+        }
         const w = new Notification(n.title, { body: n.body ?? '', icon: '/icon.png', tag: n.id, silent: true })
         w.onclick = () => {
           window.focus()
@@ -85,6 +91,17 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
     }
     // The card in the app: always when you're looking at it, so nothing is missed.
     setCards((c) => [...c.filter((x) => !fresh.some((f) => f.id === x.id)), ...fresh].slice(-3))
+  }, [])
+
+  // A tap on a phone notification (from the offline helper) opens its action here.
+  useEffect(() => {
+    const on = (e: MessageEvent) => {
+      if (e.data?.type !== 'notif-click') return
+      const n = known.current.get(String(e.data.id))
+      if (n) void runNotif(n, goRef.current)
+    }
+    navigator.serviceWorker?.addEventListener?.('message', on)
+    return () => navigator.serviceWorker?.removeEventListener?.('message', on)
   }, [])
 
   const check = useCallback(() => {

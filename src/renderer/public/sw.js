@@ -66,6 +66,22 @@ self.addEventListener('activate', (e) => {
   )
 })
 
+// A tap on a notification: bring the app forward and run that notification's action (M6).
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const id = e.notification.data && e.notification.data.id
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const c = list[0]
+      if (c) {
+        c.postMessage({ type: 'notif-click', id })
+        return c.focus()
+      }
+      return self.clients.openWindow('/')
+    })
+  )
+})
+
 self.addEventListener('message', (e) => {
   const d = e.data || {}
   if (d.type === 'rollback' && d.bad) {
