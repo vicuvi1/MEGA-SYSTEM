@@ -68,8 +68,19 @@ export function fuzzyScore(label: string, q: string): number {
   return Math.max(1, 50 - gaps)
 }
 
-export function Palette({ open, onClose, commands, onFreeText }: { open: boolean; onClose: () => void; commands: Command[]; onFreeText?: (text: string) => void }) {
+export function Palette({ open, onClose, commands, onFreeText, live }: { open: boolean; onClose: () => void; commands: Command[]; onFreeText?: (text: string) => void; live?: (q: string) => Promise<Command | null> }) {
   const [q, setQ] = useState('')
+  // A line that is money ("45 food", "+500 salary") gets its own top row (MF1).
+  const [extra, setExtra] = useState<Command | null>(null)
+  useEffect(() => {
+    if (!live || !/\d/.test(q)) return setExtra(null)
+    let on = true
+    const id = setTimeout(() => void live(q.trim()).then((c) => on && setExtra(c)).catch(() => on && setExtra(null)), 120)
+    return () => {
+      on = false
+      clearTimeout(id)
+    }
+  }, [q, live])
   const [sel, setSel] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
@@ -85,8 +96,9 @@ export function Palette({ open, onClose, commands, onFreeText }: { open: boolean
   const results = useMemo(() => {
     const scored = commands.map((c) => ({ c, s: Math.max(fuzzyScore(c.label, q), fuzzyScore(`${c.group} ${c.label}`, q) * 0.8) })).filter((x) => x.s > 0)
     if (q) scored.sort((a, b) => b.s - a.s)
-    return scored.slice(0, 40).map((x) => x.c)
-  }, [commands, q])
+    const list = scored.slice(0, 40).map((x) => x.c)
+    return extra && q ? [extra, ...list] : list
+  }, [commands, q, extra])
 
   useEffect(() => setSel(0), [q])
   useEffect(() => {

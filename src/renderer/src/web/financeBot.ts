@@ -12,6 +12,7 @@ import { normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } f
 // @ts-ignore
 import { toCloud } from '../../public/apps/finance/js/sync.js'
 import { detectExpenseCategory } from '@core/botCommands'
+import { mainAccountId } from '@core/moneyHub'
 import { getSetting, setSetting } from '../../../main/settings'
 
 const SETTING = 'app_sync_finance'
@@ -42,6 +43,18 @@ function betterCategory(state: any, f: any): string {
   const guess = detectExpenseCategory(fold(String(f.note || '')))
   const hit = state.settings.categories.find((c: any) => c.id === guess && c.type === f.type && !c.archived)
   return hit ? hit.id : f.category || fallback
+}
+
+/**
+ * Quick add in the app (MF1): no account named in the text → the main lei
+ * wallet (not "the account you used last", which the Telegram bot keeps).
+ */
+function toMainAccount(state: any, text: string, f: any): void {
+  const NONE = '__none__'
+  const probe = parseQuick(text, { ...state, tx: [], settings: { ...state.settings, accounts: [{ id: NONE, name: '', archived: true }, ...state.settings.accounts] } })
+  if (probe && probe.account !== NONE) return // an account was named ("45 food maib")
+  const main = mainAccountId(state.settings.accounts, state.settings.currency)
+  if (main) f.account = main
 }
 
 export interface LoggedMoney {
@@ -78,15 +91,17 @@ function categoryKeyboard(state: any, t: any): any {
 }
 
 /** What a money message would log, without logging it (X5): "45 lei · Food", or null. */
-export function previewMoney(db: Db, text: string): { amount: number; label: string } | null {
+export function previewMoney(db: Db, text: string, opts: { mainAccount?: boolean } = {}): { amount: number; label: string; type: string; category: string; account: string; daysAgo: number } | null {
   const state = financeState(db)
   if (!state) return null
   const f = parseQuick(text, state)
   if (!f || !(f.amount > 0)) return null
   f.category = betterCategory(state, f)
+  if (opts.mainAccount) toMainAccount(state, text, f)
   const c = catOf(state, f.category)
   const cur = accOf(state, f.account)?.currency || state.settings.currency
-  return { amount: f.amount, label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ''}${f.type === 'income' ? ' (income)' : ''}` }
+  const a = accOf(state, f.account)
+  return { amount: f.amount, label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ''}${f.type === 'income' ? ' (income)' : ''}`, type: f.type, category: `${c?.emoji ? c.emoji + ' ' : ''}${c?.name ?? 'Other'}`, account: `${a?.emoji ? a.emoji + ' ' : ''}${a?.name ?? ''}`, daysAgo: Number(f.daysAgo) || 0 }
 }
 
 const ASK_KEY = 'money_ask'
@@ -122,12 +137,13 @@ export function takeMoneyAsk(db: Db, id: string): string | null {
  * Logs a money message into Finance Helper's data, or returns null when it
  * isn't one (no amount) or Finance Helper was never synced yet.
  */
-export function logMoney(db: Db, text: string, key: string, today: string, now = Date.now()): LoggedMoney | null {
+export function logMoney(db: Db, text: string, key: string, today: string, now = Date.now(), opts: { mainAccount?: boolean } = {}): LoggedMoney | null {
   const state = financeState(db)
   if (!state) return null
   const f = parseQuick(text, state)
   if (!f || !(f.amount > 0)) return null
   f.category = betterCategory(state, f)
+  if (opts.mainAccount) toMainAccount(state, text, f)
   const acc = accOf(state, f.account)
   const currency = acc?.currency || state.settings.currency
   const rate = currency === state.settings.currency ? 1 : Number(state.rates?.[currency]) || 1

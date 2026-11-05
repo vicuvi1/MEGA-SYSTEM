@@ -6,6 +6,7 @@
 import { parseCapture } from './capture'
 import { parseTelegramText, tryParseNaturalExpense } from './botCommands'
 import { parseWater } from './sportShared'
+import { quickMoneyShape } from './moneyHub'
 import type { Activity, IslandAction, IslandPrefs, IslandSnapshot } from './islandModel'
 
 const MIN = 60_000
@@ -269,7 +270,10 @@ export function commandPreview(raw: string, c: PreviewCtx): Suggestion[] {
   // Money: "spent 40 taxi", "coffee 35".
   if (!ml) {
     const m = p.type === 'expense' ? p : tryParseNaturalExpense(text)
-    if (m?.expenseAmount && m.expenseNote && !/^(focus|f|water)\b/.test(t)) add({ id: `money:${m.expenseAmount}`, icon: m.expenseCategory === 'income' ? '💰' : '💸', label: `${m.expenseCategory === 'income' ? 'Income' : 'Spent'} ${m.expenseAmount} · ${m.expenseNote}`, action: send })
+    // MF1: "120+45 groceries yesterday" too; it lands in Finance Helper (the main lei wallet unless you name one).
+    const q = m?.expenseAmount && m.expenseNote ? null : quickMoneyShape(text)
+    if (m?.expenseAmount && m.expenseNote && !/^(focus|f|water)\b/.test(t)) add({ id: `money:${m.expenseAmount}`, icon: m.expenseCategory === 'income' ? '💰' : '💸', label: `${m.expenseCategory === 'income' ? 'Income' : 'Spent'} ${m.expenseAmount} · ${m.expenseNote}`, action: send, hint: 'Finance Helper' })
+    else if (q && !/^(focus|f|water)\b/.test(t)) add({ id: `money:${q.amount}`, icon: q.income ? '💰' : '💸', label: `${q.income ? 'Income' : 'Spent'} ${q.amount} · ${q.note}${q.yesterday ? ' (yesterday)' : ''}`, action: send, hint: 'Finance Helper' })
   }
   // A task for Todoist: "task call mom friday".
   if (cap?.kind === 'task') add({ id: 'task', icon: '➕', label: `Todoist: ${cap.text}`, action: send })

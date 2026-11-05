@@ -52,6 +52,8 @@ import { autoApproveDue, planWaitingText, missedBlocks, movedText, nextSlot, nud
 import { loadStyle } from '../renderer/src/web/botBrain'
 import { deskChange, deskView, loadDesk, saveDesk } from '../renderer/src/web/benDesk'
 import { financeStateFrom, loadProfile } from '../renderer/src/web/botBrain'
+import { nudgeFacts, weekMoneyLine } from '../renderer/src/web/moneyHub'
+import { MONEY_ASK_ROW, eveningMoneyAsk, morningMoneyLine, warnLine } from '@core/moneyHub'
 import { monthTakePrompt, callDue, loseStakes, overdueStakes, stakeLostText, stakeRemindText, type Stake, proofMet, keepStake } from '@core/benStakes'
 import { dueTopics } from '@core/benPlans'
 import { MOOD_FACES, moodDue } from '@core/benKnows'
@@ -1318,6 +1320,8 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     }
   }
   await benActs(env, now, send, f.state, f.prefs.on, f.facts.time).catch((e) => console.error('ben acts:', e))
+  // MF10: the money facts Ben's lines use (Finance Helper's synced copy).
+  const moneyFacts = () => mirror.read((db) => nudgeFacts(financeStateFrom(db, null), services.services(db).wallet.today()))
   const due0 = dueRhythm(f.state, f.prefs, f.facts)
   // W21: water and training due together go out as one message.
   const mergeWater = due0.includes('water') && due0.includes('training')
@@ -1326,7 +1330,9 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     if (job === 'briefing') {
       // Mark it first: a slow model must not make two plans.
       const { plan, version } = await bots.rhythm.propose()
-      await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD)
+      // MF10: safe to spend today rides inside the morning plan (no extra message).
+      const money = await moneyFacts().then((m) => (m ? morningMoneyLine(m) : null)).catch(() => null)
+      await send(proposalText(plan, { version }) + (money ? `\n\n${escapeHtml(money)}` : ''), PROPOSAL_KEYBOARD)
     } else if (job === 'midweek') {
       const text = await bots.rhythm.midweek()
       await send(text, text.includes('Want them booked') ? { inline_keyboard: [[{ text: '📅 Book them', callback_data: 'rw|b' }]] } : undefined)
@@ -1350,7 +1356,9 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       if (due) await bots.rhythm.markWater()
     } else if (job === 'weekly') {
       const w = await bots.rhythm.weekly()
-      await send(weeklyText(w), WEEKLY_KEYBOARD)
+      // MF10: Sunday, this week's spending against last week's (same days).
+      const week = await mirror.read((db) => weekMoneyLine(financeStateFrom(db, null), services.services(db).wallet.today())).catch(() => null)
+      await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : ''), WEEKLY_KEYBOARD)
       // Ben's story so far about you, rewritten once a week (B5).
       await bots.rhythm.writeStory().catch(() => null)
       const letter = await bots.rhythm.letter().catch(() => null)
@@ -1372,7 +1380,14 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       })
       const goalText = r.goals.length ? `\n\n🎯 <b>Goals</b>\n${r.goals.map((g) => escapeHtml(g)).join('\n')}${r.rebooked.length ? `\n${r.rebooked.map((x) => escapeHtml(x)).join('\n')}` : ''}` : ''
       const moneyText = r.money ? `\n\n💸 ${escapeHtml(r.money)}` : ''
-      await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
+      // MF10: the 80 % warning, and "anything spent?" when nothing was logged today (with its buttons).
+      const m = await moneyFacts().catch(() => null)
+      const warn = m ? warnLine({ ...m, bill: null }) : null
+      const ask = m ? eveningMoneyAsk(m) : null
+      const askText = [warn, ask].filter(Boolean).map((x) => escapeHtml(x!)).join('\n')
+      const keyboard = r.top3.length ? REVIEW_KEYBOARD : undefined
+      const withAsk = ask ? { inline_keyboard: [...(keyboard?.inline_keyboard ?? []), MONEY_ASK_ROW] } : keyboard
+      await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + (askText ? `\n\n${askText}` : '') + bonus, withAsk)
     }
   }
 }

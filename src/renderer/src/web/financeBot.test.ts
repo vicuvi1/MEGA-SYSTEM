@@ -109,3 +109,22 @@ describe('unclear money asks first (X5)', () => {
     expect(takeMoneyAsk(d, id)).toBeNull()
   })
 })
+
+describe('quick add in the app (MF1): the main lei wallet unless you name one', () => {
+  const main = { mainAccount: true }
+  it('"45 food maib" goes to the maib card', () => {
+    expect(logMoney(db(), '45 food maib', 'q:1', TODAY, Date.now(), main)!.tx).toMatchObject({ type: 'expense', amount: 4500, account: 'maib', date: TODAY })
+  })
+  it('"120+45 groceries yesterday" adds up, books yesterday, from the wallet', () => {
+    expect(logMoney(db(), '120+45 groceries yesterday', 'q:2', TODAY, Date.now(), main)!.tx).toMatchObject({ amount: 16500, account: 'wallet', date: '2026-10-30' })
+  })
+  it('"taxi 45" uses the wallet, not the card you used last for taxi (the bot keeps that)', () => {
+    expect(logMoney(db(), 'taxi 45', 'q:3', TODAY, Date.now(), main)!.tx).toMatchObject({ account: 'wallet', category: 'transport' })
+    expect(logMoney(db(), 'taxi 45', 'q:4', TODAY)!.tx.account).toBe('maib')
+  })
+  it('"+500 salary" is income into the wallet; the preview says the same', () => {
+    expect(logMoney(db(), '+500 salary', 'q:5', TODAY, Date.now(), main)!.tx).toMatchObject({ type: 'income', amount: 50000, account: 'wallet' })
+    expect(previewMoney(db(), '45 food maib', main)).toMatchObject({ amount: 4500, type: 'expense', account: 'Maib card' })
+    expect(previewMoney(db(), 'hello there', main)).toBeNull()
+  })
+})

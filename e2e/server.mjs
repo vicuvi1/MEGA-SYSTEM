@@ -61,6 +61,58 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
   ]
   db.run("INSERT INTO settings (key, value) VALUES ('coach_log', ?)", [JSON.stringify(log)])
 }
+// Made-up Finance Helper data (Night 11 Money hub): two months of everyday
+// spending, a salary, rent, a monthly limit and two savings goals. Nothing real.
+{
+  const iso = (d) => d.toISOString().slice(0, 10)
+  const today = new Date()
+  const month0 = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
+  const monthStart = (k) => iso(new Date(Date.UTC(month0.getUTCFullYear(), month0.getUTCMonth() + k, 1)))
+  let seed = 7
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280)
+  const tx = []
+  let n = 0
+  const add = (date, type, lei, category, note, account = 'wallet') => tx.push({ id: `demo-${n++}`, createdAt: 1, updatedAt: 1, type, amount: Math.round(lei * 100), currency: 'MDL', rate: 1, base: Math.round(lei * 100), date, category, account, note })
+  for (let back = 62; back >= 0; back--) {
+    const date = day(back)
+    add(date, 'expense', 35 + Math.round(rnd() * 55), 'food', ['Lunch', 'Coffee and a bun', 'Groceries', 'Dinner'][back % 4])
+    if (back % 3 === 0) add(date, 'expense', 12 + Math.round(rnd() * 30), 'transport', back % 2 ? 'Bus' : 'Taxi', 'card')
+    if (back % 6 === 2) add(date, 'expense', 90 + Math.round(rnd() * 120), 'fun', back % 4 ? 'Cinema' : 'Board game night', 'card')
+    if (back % 9 === 4) add(date, 'expense', 60 + Math.round(rnd() * 90), 'clothes', 'Socks and a T-shirt', 'card')
+    if (back % 11 === 5) add(date, 'expense', 45 + Math.round(rnd() * 40), 'health', 'Pharmacy')
+  }
+  for (const k of [-2, -1, 0]) {
+    const d = monthStart(k)
+    if (d <= day(0)) add(d, 'income', 9000, 'work', 'Salary', 'card')
+    const rent = d.slice(0, 8) + '03'
+    if (rent <= day(0)) add(rent, 'expense', 2500, 'home', 'Rent', 'card')
+  }
+  const data = {
+    settings: {
+      currency: 'MDL',
+      updatedAt: 1,
+      limit: { on: true, amount: 450000 },
+      accounts: [
+        { id: 'wallet', name: 'Wallet', kind: 'cash', emoji: '💵', currency: 'MDL', start: 300000, updatedAt: 1 },
+        { id: 'card', name: 'Bank card', bank: 'maib', kind: 'card', emoji: '💳', currency: 'MDL', start: 800000, updatedAt: 1 },
+        { id: 'safe', name: 'Safe', kind: 'savings', savings: true, emoji: '🏦', currency: 'MDL', start: 500000, updatedAt: 1 }
+      ]
+    },
+    tx,
+    recurring: [
+      { id: 'r-rent', type: 'expense', amount: 250000, note: 'Rent', category: 'home', account: 'card', every: 'month', start: `${monthStart(-2).slice(0, 8)}03`, lastDone: day(0) >= `${day(0).slice(0, 8)}03` ? `${day(0).slice(0, 8)}03` : null, updatedAt: 1 },
+      { id: 'r-net', type: 'expense', amount: 15000, note: 'Internet', category: 'subscriptions', account: 'card', every: 'month', start: day(-2), updatedAt: 1 },
+      { id: 'r-pay', type: 'income', amount: 900000, note: 'Salary', category: 'work', account: 'card', every: 'month', start: monthStart(-2), lastDone: monthStart(0), updatedAt: 1 }
+    ],
+    goals: [
+      { id: 'g-laptop', name: 'New laptop', emoji: '💻', target: 1500000, account: 'manual', saved: 420000, deadline: day(-120), history: [{ date: day(70), amount: 150000 }, { date: day(40), amount: 140000 }, { date: day(10), amount: 130000 }], updatedAt: 1 },
+      { id: 'g-trip', name: 'Mountain trip', emoji: '🏔️', target: 600000, account: 'manual', saved: 380000, deadline: null, history: [{ date: day(50), amount: 200000 }, { date: day(20), amount: 180000 }], updatedAt: 1 }
+    ],
+    people: [],
+    deleted: {}
+  }
+  db.run("INSERT INTO settings (key, value) VALUES ('app_sync_finance', ?)", [JSON.stringify({ savedAt: Date.now(), data })])
+}
 
 Object.assign(process.env, { TURSO_URL: `http://127.0.0.1:${port}`, TURSO_TOKEN: 'fake-turso-key', SESSION_SECRET: 'e2e-secret' })
 const api = {}

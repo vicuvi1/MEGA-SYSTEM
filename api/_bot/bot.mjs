@@ -647,7 +647,7 @@ function formatUrgeResponse() {
 	].join("\n");
 }
 // src/core/factTypes.ts
-var MONTHS$5 = {
+var MONTHS$6 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -677,9 +677,9 @@ function dateIn(text, today) {
 		return cand < addDays$6(today, -60) ? `${y + 1}${cand.slice(4)}` : cand;
 	};
 	const dm = /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.exec(text) ?? null;
-	if (dm) return pick(MONTHS$5[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
+	if (dm) return pick(MONTHS$6[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
 	const md = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i.exec(text);
-	if (md) return pick(MONTHS$5[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
+	if (md) return pick(MONTHS$6[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
 	const num = /\b(\d{1,2})[./](\d{1,2})\b/.exec(text);
 	if (num) return pick(Number(num[2]), Number(num[1]));
 	return null;
@@ -3833,7 +3833,7 @@ var DESK_ACTIONS = `His coaching desk (these stay and show on his Coach page):
 - "mood: <1-5>" when he tells you how he feels today (1 awful … 5 great).
 - "checkin: <HH:MM> | <question>" also works with a clock time ("I'll start at 15:00" → "checkin: 15:00 | Started the lab?").`;
 // src/core/benMoney.ts
-var B$1 = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
+var B$2 = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
 var lei$3 = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
 var expenses = (tx) => tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
 /**
@@ -3847,7 +3847,7 @@ function spendPace(tx, catName, today) {
 	const exp = expenses(tx);
 	const byCat = (from, to) => {
 		const m = /* @__PURE__ */ new Map();
-		for (const t of exp) if (t.date >= from && t.date <= to) m.set(catName(String(t.category ?? "Other")), (m.get(catName(String(t.category ?? "Other"))) ?? 0) + B$1(t));
+		for (const t of exp) if (t.date >= from && t.date <= to) m.set(catName(String(t.category ?? "Other")), (m.get(catName(String(t.category ?? "Other"))) ?? 0) + B$2(t));
 		return m;
 	};
 	const now = byCat(monday, today);
@@ -3892,7 +3892,7 @@ function recurringCharges(tx, catName, today) {
 		if (t.date < from || t.repeat || t.recurringId) continue;
 		const name = String(t.note || "").trim() || catName(String(t.category ?? ""));
 		if (!name) continue;
-		const key = `${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()}|${Math.round(B$1(t) / 500)}`;
+		const key = `${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()}|${Math.round(B$2(t) / 500)}`;
 		groups.set(key, [...groups.get(key) ?? [], t]);
 	}
 	const out = [];
@@ -3907,7 +3907,7 @@ function recurringCharges(tx, catName, today) {
 		out.push({
 			key,
 			name: String(list[0].note || "").trim() || catName(String(list[0].category ?? "")),
-			amount: Math.round(list.reduce((s, t) => s + B$1(t), 0) / list.length),
+			amount: Math.round(list.reduce((s, t) => s + B$2(t), 0) / list.length),
 			months: months.size,
 			last,
 			next: d.toISOString().slice(0, 10)
@@ -4453,7 +4453,7 @@ function readMessage(m) {
 		snippet: String(m?.snippet ?? "").replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").slice(0, 240)
 	};
 }
-var MONTHS$4 = {
+var MONTHS$5 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -4486,7 +4486,7 @@ function findDate(text, today) {
 	};
 	if (dmy) return fix(Number(dmy[1]), Number(dmy[2]), dmy[3] ? dmy[3].length === 2 ? 2e3 + Number(dmy[3]) : Number(dmy[3]) : void 0);
 	const word = /\b(\d{1,2})\s+([a-z]{3})[a-z]*\b/i.exec(text);
-	if (word && MONTHS$4[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$4[word[2].toLowerCase()]);
+	if (word && MONTHS$5[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$5[word[2].toLowerCase()]);
 	return null;
 }
 var KIND = [
@@ -18351,7 +18351,7 @@ function group(n) {
 	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
 }
 // src/renderer/public/apps/finance/js/dates.js
-var MONTHS$3 = [
+var MONTHS$4 = [
 	"January",
 	"February",
 	"March",
@@ -18372,7 +18372,7 @@ function toISO(d) {
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
 	const [y, m] = key.split("-").map(Number);
-	const name = MONTHS$3[m - 1];
+	const name = MONTHS$4[m - 1];
 	return `${short ? name.slice(0, 3) : name} ${y}`;
 }
 function addMonths(key, n) {
@@ -18380,7 +18380,7 @@ function addMonths(key, n) {
 	const idx = y * 12 + (m - 1) + n;
 	return `${Math.floor(idx / 12)}-${pad$4(idx % 12 + 1)}`;
 }
-function daysInMonth(key) {
+function daysInMonth$1(key) {
 	const [y, m] = key.split("-").map(Number);
 	return new Date(Date.UTC(y, m, 0)).getUTCDate();
 }
@@ -18413,6 +18413,12 @@ function isValidISO(iso) {
 	return toISO(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) === iso;
 }
 // src/renderer/public/apps/finance/js/fx.js
+var STABLE = {
+	USDT: 1,
+	USDC: 1,
+	FDUSD: 1,
+	BUSD: 1
+};
 function perUsd(rates, code) {
 	if (code === "USD") return 1;
 	const v = rates?.usd?.[code];
@@ -18425,8 +18431,18 @@ function convert(cents, from, to, rates) {
 	if (!a || !b) return null;
 	return Math.round(cents / a * b);
 }
+function coinUsd(rates, asset) {
+	if (STABLE[asset]) return STABLE[asset];
+	const p = rates?.crypto?.[asset];
+	return p > 0 ? p : null;
+}
+function coinValue(qty, asset, to, rates) {
+	const usd = coinUsd(rates, asset);
+	if (usd == null || !Number.isFinite(qty)) return null;
+	return convert(Math.round(qty * usd * 100), "USD", to, rates);
+}
 // src/renderer/public/apps/finance/js/recurring.js
-var MONTHS$2 = {
+var MONTHS$3 = {
 	month: 1,
 	"3months": 3,
 	year: 12
@@ -18436,8 +18452,8 @@ function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays(rule.start, 14 * n);
-	const key = addMonths(monthKey(rule.start), (MONTHS$2[rule.every] || 1) * n);
-	return `${key}-${pad$3(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
+	const key = addMonths(monthKey(rule.start), (MONTHS$3[rule.every] || 1) * n);
+	return `${key}-${pad$3(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
 	const out = [];
@@ -18846,7 +18862,7 @@ function validTx(t) {
 		"transfer"
 	].includes(t.type) && Number.isInteger(t.amount) && t.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(t.date);
 }
-var B = (t) => Number.isInteger(t.base) ? t.base : t.amount;
+var B$1 = (t) => Number.isInteger(t.base) ? t.base : t.amount;
 var counts = (t) => !t.loan;
 function sortTx(list) {
 	return [...list].sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1);
@@ -18867,10 +18883,38 @@ function accountBalances(state, upTo = null) {
 	}
 	return bal;
 }
+function accountValues(state, upTo = null) {
+	const baseCur = state.settings.currency;
+	const bal = accountBalances(state, upTo);
+	return state.settings.accounts.map((a) => {
+		const own = bal[a.id] || 0;
+		let inBase = convert(own, a.currency, baseCur, state.rates);
+		let coins = 0;
+		let coinsKnown = true;
+		for (const h of a.holdings || []) {
+			const v = coinValue(Number(h.qty), h.asset, baseCur, state.rates);
+			if (v == null) coinsKnown = false;
+			else coins += v;
+		}
+		if (inBase != null) inBase += coins;
+		return {
+			account: a,
+			own,
+			coins,
+			coinsKnown,
+			inBase
+		};
+	});
+}
+var monthsBetweenKeys = (a, b) => {
+	const [ya, ma] = a.split("-").map(Number);
+	const [yb, mb] = b.split("-").map(Number);
+	return Math.max(0, (yb - ya) * 12 + (mb - ma));
+};
 var txInMonth = (state, key) => state.tx.filter((t) => monthKey(t.date) === key);
 function sumBy(list, keyFn) {
 	const out = /* @__PURE__ */ new Map();
-	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + B(t));
+	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + B$1(t));
 	return [...out.entries()].map(([id, amount]) => ({
 		id,
 		amount
@@ -18880,8 +18924,8 @@ function monthSummary(state, key) {
 	const list = txInMonth(state, key);
 	const incomes = list.filter((t) => t.type === "income" && counts(t));
 	const expenses = list.filter((t) => t.type === "expense" && counts(t));
-	const income = incomes.reduce((a, t) => a + B(t), 0);
-	const expense = expenses.reduce((a, t) => a + B(t), 0);
+	const income = incomes.reduce((a, t) => a + B$1(t), 0);
+	const expense = expenses.reduce((a, t) => a + B$1(t), 0);
 	const net = income - expense;
 	return {
 		key,
@@ -18913,11 +18957,11 @@ var payOn = (state) => {
 };
 function personalMonth(state, key) {
 	const s = monthSummary(state, key);
-	const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B(t), 0);
-	const workCosts = s.expenses.filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + B(t), 0);
+	const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B$1(t), 0);
+	const workCosts = s.expenses.filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + B$1(t), 0);
 	const otherIncome = s.income - workIncome;
 	const pay = payOn(state);
-	const salary = pay ? txInMonth(state, key).filter((t) => t.type === "transfer" && t.salary).reduce((a, t) => a + B(t), 0) : 0;
+	const salary = pay ? txInMonth(state, key).filter((t) => t.type === "transfer" && t.salary).reduce((a, t) => a + B$1(t), 0) : 0;
 	const personalIncome = pay ? salary + otherIncome : s.income - workCosts;
 	const personalSpent = s.expense - workCosts;
 	const kept = personalIncome - personalSpent;
@@ -18941,12 +18985,108 @@ var isBillCategory = (state, catId) => {
 	if (!c) return false;
 	return typeof c.bill === "boolean" ? c.bill : c.id === "home" || c.id === "subscriptions" || BILLISH.test(c.name || "");
 };
-var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => t.type === "expense" && counts(t) && t.category === catId).reduce((a, t) => a + B(t), 0);
+var mainGoal = (state) => (state.goals || []).find((g) => !g.doneAt && !g.archived) || (state.goals || [])[0] || {
+	...state.settings.goal,
+	id: "g-main"
+};
+function goalAllocationSummary(state, asOf = null) {
+	const base = state.settings.currency;
+	const cash = Math.max(0, accountValues(state, asOf).filter((v) => !v.account.archived && v.account.kind !== "crypto").reduce((sum, v) => sum + (v.inBase || 0), 0));
+	const rows = (state.goalAllocations || []).filter((a) => !asOf || a.date <= asOf).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.id.localeCompare(b.id));
+	const byGoal = {}, byIncome = {}, effectiveById = {}, unpriced = [];
+	let reserved = 0, requested = 0;
+	for (const a of rows) {
+		const amount = a.currency && a.currency !== base ? convert(a.amount, a.currency, base, state.rates) : a.amount;
+		if (amount == null) unpriced.push(a.id);
+		const validAmount = Number.isSafeInteger(amount) && amount > 0 ? amount : 0;
+		const goal = (state.goals || []).find((g) => g.id === a.goalId);
+		const income = a.incomeId ? state.tx.find((t) => t.id === a.incomeId && t.type === "income" && !t.loan && (!asOf || t.date <= asOf)) : null;
+		const incomeLeft = a.incomeId ? Math.max(0, (income ? B$1(income) : 0) - (byIncome[a.incomeId] || 0)) : Infinity;
+		const funded = goal?.account === "allocated" ? Math.min(validAmount, Math.max(0, cash - reserved), incomeLeft) : 0;
+		requested += validAmount;
+		effectiveById[a.id] = funded;
+		byGoal[a.goalId] = (byGoal[a.goalId] || 0) + funded;
+		if (a.incomeId) byIncome[a.incomeId] = (byIncome[a.incomeId] || 0) + validAmount;
+		reserved += funded;
+	}
+	return {
+		cash,
+		reserved,
+		requested,
+		unallocated: Math.max(0, cash - reserved),
+		unfunded: requested - reserved,
+		byGoal,
+		byIncome,
+		effectiveById,
+		unpriced
+	};
+}
+function goalValueAt(state, iso, goal = mainGoal(state)) {
+	if (goal.account === "allocated") return goalAllocationSummary(state, iso).byGoal[goal.id] || 0;
+	if (goal.account === "manual") return goal.saved || 0;
+	const vals = accountValues(state, iso);
+	const isSaving = (a) => a.savings || a.kind === "savings";
+	return (goal.account === "savings" ? vals.filter((v) => !v.account.archived && isSaving(v.account)) : goal.account && goal.account !== "all" ? vals.filter((v) => v.account.id === goal.account) : vals.filter((v) => !v.account.archived)).reduce((a, v) => a + (v.inBase ?? 0), 0);
+}
+function goalStatus(state, today, goal = mainGoal(state)) {
+	const current = goalValueAt(state, null, goal);
+	const target = goal.target || 0;
+	const thisMonth = monthKey(today);
+	const end = (k) => `${k}-${String(daysInMonth$1(k)).padStart(2, "0")}`;
+	const active = new Set((goal.account === "allocated" ? (state.goalAllocations || []).filter((a) => a.goalId === goal.id) : state.tx).map((t) => monthKey(t.date)));
+	const months = [...active].filter((k) => k < thisMonth).sort().slice(-3);
+	let pace = null;
+	if (goal.account !== "manual") {
+		if (months.length) {
+			const growth = months.map((k) => goalValueAt(state, end(k), goal) - goalValueAt(state, end(addMonths(k, -1)), goal));
+			pace = Math.round(growth.reduce((a, b) => a + b, 0) / months.length);
+		} else if (active.has(thisMonth)) pace = goalValueAt(state, today, goal) - goalValueAt(state, end(addMonths(thisMonth, -1)), goal);
+	} else if (goal.history?.length) {
+		const since = addDays(today, -90);
+		const added = goal.history.filter((h) => h.date >= since).reduce((a, h) => a + h.amount, 0);
+		pace = added ? Math.round(added / 3) : null;
+	}
+	const remaining = Math.max(0, target - current);
+	let monthsLeft = null;
+	let eta = null;
+	if (remaining === 0 && target > 0) monthsLeft = 0;
+	else if (pace && pace > 0) {
+		monthsLeft = Math.ceil(remaining / pace);
+		eta = addMonths(thisMonth, monthsLeft);
+	}
+	let perMonth = null;
+	let deadlineMonths = null;
+	if (goal.deadline && remaining > 0) {
+		deadlineMonths = Math.max(1, monthsBetweenKeys(thisMonth, monthKey(goal.deadline)) + (goal.deadline.slice(8) >= "15" ? 1 : 0));
+		perMonth = Math.ceil(remaining / deadlineMonths / 100) * 100;
+	}
+	const ratio = target ? Math.min(1, Math.max(0, current / target)) : 0;
+	const milestone = [
+		100,
+		75,
+		50,
+		25
+	].find((m) => ratio * 100 >= m) || 0;
+	return {
+		target,
+		current,
+		remaining,
+		ratio,
+		pace,
+		monthsLeft,
+		eta,
+		perMonth,
+		deadlineMonths,
+		milestone,
+		onTrack: perMonth == null ? null : pace != null && pace >= perMonth
+	};
+}
+var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => t.type === "expense" && counts(t) && t.category === catId).reduce((a, t) => a + B$1(t), 0);
 function budgetAlert(state, t) {
 	const c = category(state, t.category);
 	if (t.type !== "expense" || !counts(t) || !(c?.budget > 0)) return null;
 	const after = spentIn(state, monthKey(t.date), c.id);
-	const before = after - B(t);
+	const before = after - B$1(t);
 	const fmt = (x) => formatMoney(x, state.settings.currency);
 	if (before <= c.budget && after > c.budget) return {
 		level: "over",
@@ -19088,7 +19228,7 @@ function hourlyRate(state, today) {
 		const t = h > 0 && state.tx.find((x) => x.id === inv.paidTx);
 		if (t) {
 			hours += h;
-			paid += B(t);
+			paid += B$1(t);
 		}
 	}
 	if (hours >= 10) return {
@@ -19102,7 +19242,7 @@ function hourlyRate(state, today) {
 		2,
 		3
 	].map((i) => addMonths(cur, -i));
-	const income = state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).reduce((a, t) => a + B(t), 0);
+	const income = state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).reduce((a, t) => a + B$1(t), 0);
 	const active = new Set(state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).map((t) => t.date.slice(0, 7))).size;
 	if (!income || !active) return null;
 	return {
@@ -19150,7 +19290,7 @@ function suggestSalary(state, today) {
 		months: months.length
 	};
 }
-var salaryDate = (key, day = 1) => `${key}-${pad$2(Math.min(Math.max(1, day), daysInMonth(key)))}`;
+var salaryDate = (key, day = 1) => `${key}-${pad$2(Math.min(Math.max(1, day), daysInMonth$1(key)))}`;
 var salaryOf = (state, key) => state.tx.find((t) => t.type === "transfer" && t.salary === key) || null;
 function payStatus(state, today) {
 	if (!payOn(state)) return {
@@ -19189,8 +19329,8 @@ function spentFrom(state, today, window = 60) {
 	for (const t of state.tx) {
 		if (t.type !== "expense" || t.loan || t.recurring || t.date < since || t.date > today) continue;
 		if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
-		by.set(t.account, (by.get(t.account) || 0) + B(t));
-		total += B(t);
+		by.set(t.account, (by.get(t.account) || 0) + B$1(t));
+		total += B$1(t);
 	}
 	return [...by.entries()].map(([id, amount]) => ({
 		id,
@@ -19212,13 +19352,13 @@ function spendingIds(state, today = null) {
 // src/renderer/public/apps/finance/js/safespend.js
 var lei$1 = (c) => Math.floor(c / 100) * 100;
 var isEveryday = (state, t) => t.type === "expense" && !t.loan && !t.recurring && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
-var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B(t), 0);
+var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B$1(t), 0);
 var limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);
 function limitStatus(state, today) {
 	if (!limitOn(state)) return null;
 	const amount = state.settings.limit.amount;
 	const key = monthKey(today);
-	const daysLeft = daysInMonth(key) - Number(today.slice(8)) + 1;
+	const daysLeft = daysInMonth$1(key) - Number(today.slice(8)) + 1;
 	const before = everydaySpent(state, `${key}-01`, addDays(today, -1));
 	const spentToday = everydaySpent(state, today, today);
 	const leftBefore = amount - before;
@@ -19231,7 +19371,7 @@ function limitStatus(state, today) {
 		perDay,
 		daysLeft,
 		ratio: spent / amount,
-		projected: Number(today.slice(8)) >= 3 ? Math.round(spent / Number(today.slice(8)) * daysInMonth(key) / 100) * 100 : null
+		projected: Number(today.slice(8)) >= 3 ? Math.round(spent / Number(today.slice(8)) * daysInMonth$1(key) / 100) * 100 : null
 	};
 }
 function safeToSpend(state, today) {
@@ -19261,7 +19401,7 @@ function safeToSpend(state, today) {
 	let moved = 0;
 	for (const t of state.tx) {
 		if (t.type !== "transfer" || monthKey(t.date) !== key) continue;
-		const v = B(t);
+		const v = B$1(t);
 		if (liquidIds.has(t.from) && !liquidIds.has(t.to)) moved += v;
 		else if (!liquidIds.has(t.from) && liquidIds.has(t.to)) moved -= v;
 	}
@@ -19411,18 +19551,18 @@ var esc$2 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	">": "&gt;"
 })[c]);
 var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
-var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
+var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B$1(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
 	const a = account(state, t.account)?.name || "";
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
-	const work = t.type === "expense" ? workText(state, B(t), t.date) : "";
+	const work = t.type === "expense" ? workText(state, B$1(t), t.date) : "";
 	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
 	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
-		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
+		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B$1(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
 		lines.push(`${esc$2(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
@@ -19458,6 +19598,284 @@ function toCloud(state, deviceId, now = Date.now()) {
 		}
 	};
 }
+// src/core/moneyHub.ts
+/**
+* Night 11 (MO1–MF11): the Money hub's numbers, pure. Built on Finance
+* Helper's synced records (the adapter in web/moneyHub.ts turns its state
+* into these plain shapes). Amounts are in bani (1/100 lei).
+*
+* - sameDayCompare: this month against last month over the SAME days
+*   (1–5 Nov against 1–5 Oct), never a fresh month against a whole one.
+* - monthForecast: where the month ends at this pace, a dotted line to month
+*   end, and what you can spend a day and still end it even.
+* - budgetLevel / budgetEffect: the ring's colour at 80 % and over 100 %.
+* - goalPlan: a savings ring with an ETA and "put X lei a week".
+* - mainAccountId: quick add's default account (the main lei wallet).
+*/
+var daysInMonth = (key) => new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
+var prevMonth = (key) => {
+	return new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
+};
+var MONTHS$2 = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December"
+];
+var monthName = (key) => MONTHS$2[Number(key.slice(5, 7)) - 1] ?? key;
+/** "1,240 lei" (whole lei, rounded). */
+var leiText = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
+var signed = (bani) => `${bani >= 0 ? "+" : "−"}${leiText(Math.abs(bani))}`;
+var isExpense = (t) => t.type === "expense";
+function spent(tx, from, to, everydayOnly = false) {
+	let s = 0;
+	for (const t of tx) if (isExpense(t) && t.date >= from && t.date <= to && (!everydayOnly || t.everyday)) s += Math.abs(t.amount);
+	return s;
+}
+function earned(tx, from, to) {
+	let s = 0;
+	for (const t of tx) if (t.type === "income" && t.date >= from && t.date <= to) s += Math.abs(t.amount);
+	return s;
+}
+/** A change in percent, or null when it would mislead (nothing on one side). */
+function changePct(now, before) {
+	if (now <= 0 || before <= 0) return null;
+	return Math.round((now - before) / before * 100);
+}
+/** This month so far against the same days of last month. */
+function sameDayCompare(tx, today, cats) {
+	const month = today.slice(0, 7);
+	const lastMonth = prevMonth(month);
+	const day = Number(today.slice(8));
+	const lastDay = Math.min(day, daysInMonth(lastMonth));
+	const from = `${month}-01`;
+	const lastFrom = `${lastMonth}-01`;
+	const lastTo = `${lastMonth}-${String(lastDay).padStart(2, "0")}`;
+	const catOf = new Map(cats.map((c) => [c.id, c]));
+	const rows = /* @__PURE__ */ new Map();
+	const row = (id) => {
+		let r = rows.get(id);
+		if (!r) {
+			const c = catOf.get(id);
+			r = {
+				id,
+				name: c?.name ?? (id || "Other"),
+				emoji: c?.emoji,
+				now: 0,
+				last: 0,
+				diff: 0
+			};
+			rows.set(id, r);
+		}
+		return r;
+	};
+	for (const t of tx) {
+		if (!isExpense(t)) continue;
+		if (t.date >= from && t.date <= today) row(t.category).now += Math.abs(t.amount);
+		else if (t.date >= lastFrom && t.date <= lastTo) row(t.category).last += Math.abs(t.amount);
+	}
+	const all = [...rows.values()].map((r) => ({
+		...r,
+		diff: r.now - r.last
+	}));
+	const thisTotal = all.reduce((s, r) => s + r.now, 0);
+	const lastTotal = all.reduce((s, r) => s + r.last, 0);
+	const changes = all.filter((r) => Math.abs(r.diff) >= 1e3).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 3).map((r) => changeLine(r, lastMonth));
+	return {
+		month,
+		lastMonth,
+		days: lastDay,
+		thisTotal,
+		lastTotal,
+		pct: changePct(thisTotal, lastTotal),
+		byCat: all.filter((r) => r.now > 0).sort((a, b) => b.now - a.now),
+		changes
+	};
+}
+function changeLine(r, lastMonth) {
+	const by = `by this day in ${monthName(lastMonth)}`;
+	if (r.last === 0) return `${r.name}: ${leiText(r.now)}, nothing ${by}`;
+	if (r.now === 0) return `${r.name}: nothing yet, ${leiText(r.last)} ${by}`;
+	return `${r.name}: ${leiText(Math.abs(r.diff))} ${r.diff > 0 ? "more" : "less"} than ${by}`;
+}
+/** This week (Monday to today) against the same days of last week, everyday spending. */
+function weekCompare(tx, today) {
+	const monday = addDays$5(today, -(((/* @__PURE__ */ new Date(`${today}T12:00:00Z`)).getUTCDay() + 6) % 7));
+	const thisWeek = spent(tx, monday, today, true);
+	const lastWeek = spent(tx, addDays$5(monday, -7), addDays$5(today, -7), true);
+	return {
+		thisWeek,
+		lastWeek,
+		pct: changePct(thisWeek, lastWeek),
+		line: lastWeek === 0 ? `This week: ${leiText(thisWeek)} on everyday things.` : Math.abs(thisWeek - lastWeek) < 100 ? `This week: ${leiText(thisWeek)}, the same as the same days last week.` : thisWeek < lastWeek ? `This week: ${leiText(thisWeek)}, ${leiText(lastWeek - thisWeek)} less than the same days last week.` : `This week: ${leiText(thisWeek)}, ${leiText(thisWeek - lastWeek)} more than the same days last week.`
+	};
+}
+/** The last `n` days of everyday spending, oldest first (the hero's mini chart). */
+function lastDays(tx, today, n = 7) {
+	return Array.from({ length: n }, (_, i) => {
+		const day = addDays$5(today, i - n + 1);
+		return {
+			day,
+			spent: spent(tx, day, day, true)
+		};
+	});
+}
+/**
+* Where the month ends: income in so far plus income still due, minus what
+* you spent, the bills still due and your everyday pace for the days left.
+* The pace is this month's (from the 3rd on), else the last 30 days'.
+*/
+function monthForecast(tx, today, upcoming = []) {
+	const month = today.slice(0, 7);
+	const dim = daysInMonth(month);
+	const day = Number(today.slice(8));
+	const end = `${month}-${String(dim).padStart(2, "0")}`;
+	const from = `${month}-01`;
+	const incomeSoFar = earned(tx, from, today);
+	const spentSoFar = spent(tx, from, today);
+	const everydaySoFar = spent(tx, from, today, true);
+	const pace = day >= 3 ? Math.round(everydaySoFar / day) : Math.round(spent(tx, addDays$5(today, -30), addDays$5(today, -1), true) / 30);
+	const ahead = upcoming.filter((u) => u.date > today && u.date <= end);
+	const incomeDue = ahead.filter((u) => u.type === "income").reduce((s, u) => s + u.amount, 0);
+	const billsDue = ahead.filter((u) => u.type === "expense").reduce((s, u) => s + u.amount, 0);
+	const after = dim - day;
+	const endNet = incomeSoFar + incomeDue - spentSoFar - billsDue - pace * after;
+	const todaySpent = spent(tx, today, today, true);
+	const left = incomeSoFar + incomeDue - spentSoFar - billsDue + todaySpent;
+	const safeDaily = Math.max(0, Math.floor(left / (after + 1) / 100) * 100);
+	const actual = [];
+	let net = 0;
+	for (let d = 1; d <= day; d++) {
+		const iso = `${month}-${String(d).padStart(2, "0")}`;
+		net += earned(tx, iso, iso) - spent(tx, iso, iso);
+		actual.push({
+			day: iso,
+			net
+		});
+	}
+	const projected = [{
+		day: today,
+		net
+	}];
+	let p = net;
+	for (let d = day + 1; d <= dim; d++) {
+		const iso = `${month}-${String(d).padStart(2, "0")}`;
+		p -= pace;
+		for (const u of ahead) if (u.date === iso) p += u.type === "income" ? u.amount : -u.amount;
+		projected.push({
+			day: iso,
+			net: p
+		});
+	}
+	const line = `At this pace you end ${monthName(month)} at ${signed(endNet)}`;
+	return {
+		month,
+		incomeSoFar,
+		spentSoFar,
+		pace,
+		endNet,
+		safeDaily,
+		daysLeft: after + 1,
+		line,
+		actual,
+		projected
+	};
+}
+/** 80 % of the budget turns the ring amber; past 100 % it is over. */
+function budgetLevel(spentBani, budgetBani) {
+	if (!budgetBani || budgetBani <= 0) return "none";
+	if (spentBani > budgetBani) return "over";
+	if (spentBani >= budgetBani * .8) return "warn";
+	return "ok";
+}
+var SHORT = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec"
+];
+var shortDate = (iso) => `${Number(iso.slice(8))} ${SHORT[Number(iso.slice(5, 7)) - 1]}`;
+var monthYear = (iso) => `${SHORT[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+/** A savings goal as a ring: how far, when at this pace, and what a week takes. */
+function goalPlan(g, today) {
+	const left = Math.max(0, g.target - g.current);
+	const ratio = g.target > 0 ? Math.min(1, Math.max(0, g.current / g.target)) : 0;
+	let eta = left === 0 && g.target > 0 ? "done" : null;
+	if (!eta && g.pacePerMonth && g.pacePerMonth > 0) {
+		const months = Math.ceil(left / g.pacePerMonth);
+		eta = monthYear(addDays$5(today, Math.round(months * 30.4)));
+	}
+	const by = (g.deadline && g.deadline > today ? g.deadline : null) ?? addDays$5(today, 84);
+	const weeks = Math.max(1, Math.ceil(daysBetween$2(today, by) / 7));
+	const perWeek = left > 0 ? Math.ceil(left / weeks / 1e3) * 1e3 : 0;
+	const line = left === 0 ? "Reached" : `Put ${leiText(perWeek)} a week to get there by ${shortDate(by)}`;
+	return {
+		...g,
+		ratio,
+		left,
+		eta,
+		perWeek,
+		by,
+		line
+	};
+}
+/**
+* Quick add's default account: the main wallet in your main currency (lei).
+* A cash account called Wallet first, then any cash, then any card, never a
+* savings, crypto or business one.
+*/
+function mainAccountId(accounts, base = "MDL") {
+	const ok = accounts.filter((a) => !a.archived && (a.currency || base) === base && a.kind !== "savings" && a.kind !== "crypto" && a.kind !== "business");
+	return (ok.find((a) => /wallet|portofel|кошел/i.test(`${a.id} ${a.name}`) && (a.kind === "cash" || !a.kind)) ?? ok.find((a) => a.kind === "cash") ?? ok.find((a) => !a.savings) ?? ok[0])?.id ?? null;
+}
+/** Morning (inside the plan): "💸 Safe to spend today: 180 lei". */
+function morningMoneyLine(f) {
+	if (f.perDay == null) return null;
+	const parts = [`💸 Safe to spend today: ${leiText(f.perDay)}`];
+	if (f.limit) parts.push(`${leiText(Math.max(0, f.limit.amount - f.limit.spent))} left for ${f.limit.daysLeft} days`);
+	const warn = warnLine(f);
+	return parts.join(" · ") + (warn ? `\n${warn}` : "");
+}
+/** The 80 % warning and the big bill heads-up (null when neither). */
+function warnLine(f, today) {
+	const out = [];
+	if (f.limit && f.limit.amount > 0) {
+		const ratio = f.limit.spent / f.limit.amount;
+		if (ratio > 1) out.push(`⚠️ Over your monthly limit by ${leiText(f.limit.spent - f.limit.amount)}.`);
+		else if (ratio >= .8) out.push(`⚠️ ${Math.round(ratio * 100)}% of this month's limit is used, ${f.limit.daysLeft} days to go.`);
+	}
+	if (f.bill) out.push(`📅 ${f.bill.name} (${leiText(f.bill.amount)}) is due ${today && f.bill.date === today ? "today" : today && f.bill.date === addDays$5(today, 1) ? "tomorrow" : shortDate(f.bill.date)}.`);
+	return out.length ? out.join(" ") : null;
+}
+/** Evening: asked only when nothing was logged today. */
+var EVENING_ASK = "Nothing logged today — anything spent?";
+/** Its buttons: "Nothing spent" closes it; "Log it" asks for the line (Telegram's quick add). */
+var MONEY_ASK_ROW = [{
+	text: "🙅 Nothing spent",
+	callback_data: "mz|0"
+}, {
+	text: "✍️ Log it",
+	callback_data: "mz|add"
+}];
+function eveningMoneyAsk(f) {
+	return f.loggedToday ? null : EVENING_ASK;
+}
 // src/renderer/src/web/financeBot.ts
 var SETTING = "app_sync_finance";
 /** Finance Helper's data as every device last synced it (null: never synced). */
@@ -19488,6 +19906,28 @@ function betterCategory(state, f) {
 	const guess = detectExpenseCategory(fold(String(f.note || "")));
 	const hit = state.settings.categories.find((c) => c.id === guess && c.type === f.type && !c.archived);
 	return hit ? hit.id : f.category || fallback;
+}
+/**
+* Quick add in the app (MF1): no account named in the text → the main lei
+* wallet (not "the account you used last", which the Telegram bot keeps).
+*/
+function toMainAccount(state, text, f) {
+	const NONE = "__none__";
+	const probe = parseQuick(text, {
+		...state,
+		tx: [],
+		settings: {
+			...state.settings,
+			accounts: [{
+				id: NONE,
+				name: "",
+				archived: true
+			}, ...state.settings.accounts]
+		}
+	});
+	if (probe && probe.account !== NONE) return;
+	const main = mainAccountId(state.settings.accounts, state.settings.currency);
+	if (main) f.account = main;
 }
 var baseAccounts = (state) => state.settings.accounts.filter((a) => !a.archived && (a.currency || state.settings.currency) === state.settings.currency);
 /** The buttons under a logged record: its account, category, undo. */
@@ -19521,17 +19961,23 @@ function categoryKeyboard(state, t) {
 	return { inline_keyboard: rows };
 }
 /** What a money message would log, without logging it (X5): "45 lei · Food", or null. */
-function previewMoney(db, text) {
+function previewMoney(db, text, opts = {}) {
 	const state = financeState(db);
 	if (!state) return null;
 	const f = parseQuick(text, state);
 	if (!f || !(f.amount > 0)) return null;
 	f.category = betterCategory(state, f);
+	if (opts.mainAccount) toMainAccount(state, text, f);
 	const c = category(state, f.category);
 	const cur = account(state, f.account)?.currency || state.settings.currency;
+	const a = account(state, f.account);
 	return {
 		amount: f.amount,
-		label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ""}${f.type === "income" ? " (income)" : ""}`
+		label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ""}${f.type === "income" ? " (income)" : ""}`,
+		type: f.type,
+		category: `${c?.emoji ? c.emoji + " " : ""}${c?.name ?? "Other"}`,
+		account: `${a?.emoji ? a.emoji + " " : ""}${a?.name ?? ""}`,
+		daysAgo: Number(f.daysAgo) || 0
 	};
 }
 var ASK_KEY = "money_ask";
@@ -19569,12 +20015,13 @@ function takeMoneyAsk(db, id) {
 * Logs a money message into Finance Helper's data, or returns null when it
 * isn't one (no amount) or Finance Helper was never synced yet.
 */
-function logMoney(db, text, key, today, now = Date.now()) {
+function logMoney(db, text, key, today, now = Date.now(), opts = {}) {
 	const state = financeState(db);
 	if (!state) return null;
 	const f = parseQuick(text, state);
 	if (!f || !(f.amount > 0)) return null;
 	f.category = betterCategory(state, f);
+	if (opts.mainAccount) toMainAccount(state, text, f);
 	const currency = account(state, f.account)?.currency || state.settings.currency;
 	const rate = currency === state.settings.currency ? 1 : Number(state.rates?.[currency]) || 1;
 	const tx = recordFromMessage(f, {
@@ -22585,7 +23032,7 @@ var ruleCoins = (svc, id, fallback) => {
 };
 // src/renderer/src/web/bots/callbacks.ts
 /** Every callback data the bots answer (anything else isn't a bot button). */
-var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[ln])\|/;
+var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/;
 var CALLBACKS = [
 	{
 		prefixes: ["wa", "wk"],
@@ -22704,6 +23151,32 @@ var CALLBACKS = [
 					text: said
 				}
 			}, cfg, said, `${key}:say`);
+		}
+	},
+	{
+		prefixes: ["mz"],
+		match: (data) => data.startsWith("mz|"),
+		run: async (c, t) => {
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await c.markSeen(key)) return null;
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message?.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			let text = "✍️ Send it in one line: <code>45 food</code>, <code>120+45 groceries</code>, <code>+500 salary</code>. Add \"yesterday\" for another day.";
+			if (data === "mz|0") text = await c.mirror.write((db) => {
+				const svc = c.services.services(db);
+				svc.money.nothingSpent(financeDayTx(svc));
+				return "👍 Noted: nothing spent today. It counts as a no-spend day if it stays that way.";
+			}).catch((e) => `⚠️ ${esc(e.message)}`);
+			await answer(data === "mz|0" ? "Nothing spent" : "Send what you spent");
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text,
+				parse_mode: "HTML"
+			}).catch(() => null);
+			return text;
 		}
 	},
 	{
@@ -24090,7 +24563,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	*/
 	function runMoney(s, text, key) {
 		if (!currentDb) return null;
-		const money = logMoney(currentDb, text, key, s.wallet.today());
+		const money = logMoney(currentDb, text, key, s.wallet.today(), Date.now(), { mainAccount: key.startsWith("quick:") });
 		if (!money) return null;
 		const t = money.tx;
 		if (t.type !== "expense") return {
@@ -26998,6 +27471,167 @@ function addNotif(db, n) {
 	db.prepare("INSERT OR IGNORE INTO notifications (id, at, kind, title, body, action) VALUES (?, ?, ?, ?, ?, ?)").run(n.id, n.at, n.kind, n.title, n.body, n.action ? JSON.stringify(n.action) : null);
 	const cut = (/* @__PURE__ */ new Date(Date.parse(n.at) - 2592e6)).toISOString();
 	db.prepare("DELETE FROM notifications WHERE at < ? OR id IN (SELECT id FROM notifications ORDER BY at DESC LIMIT -1 OFFSET 200)").run(cut);
+}
+// src/renderer/src/web/moneyHub.ts
+var B = (t) => Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0;
+/** Finance Helper's state in its current shape (null without data). */
+function cleanFinance(raw) {
+	if (!raw || !Array.isArray(raw.tx)) return null;
+	try {
+		return normalizeState({
+			...raw,
+			version: raw.version ?? 3
+		});
+	} catch {
+		return null;
+	}
+}
+function hubTx(state) {
+	return state.tx.filter((t) => t && !t.deleted && typeof t.date === "string" && t.type !== "transfer" && !t.loan).map((t) => ({
+		id: String(t.id),
+		date: t.date.slice(0, 10),
+		type: t.type,
+		amount: Math.abs(B(t)),
+		category: String(t.category ?? "other"),
+		note: t.note ? String(t.note) : void 0,
+		everyday: t.type === "expense" && isEveryday(state, t)
+	}));
+}
+function upcoming(state, today) {
+	try {
+		return upcomingItems(state, today, 31).map((x) => ({
+			date: x.date,
+			amount: Math.abs(Number(x.rule.base ?? x.rule.amount) || 0),
+			type: x.rule.type === "income" ? "income" : "expense",
+			label: x.rule.note || "Bill"
+		}));
+	} catch {
+		return [];
+	}
+}
+/** Everything the Money hub shows (pure read of Finance Helper's data). */
+function hubView(raw, today) {
+	const state = cleanFinance(raw);
+	if (!state) return null;
+	const tx = hubTx(state);
+	const cats = state.settings.categories.map((c) => ({
+		id: String(c.id),
+		name: String(c.name),
+		emoji: c.emoji ? String(c.emoji) : void 0
+	}));
+	let safe = null;
+	try {
+		safe = safeToSpend(state, today);
+	} catch {
+		safe = null;
+	}
+	const limit = (() => {
+		try {
+			return limitStatus(state, today);
+		} catch {
+			return null;
+		}
+	})();
+	const perDay = Math.max(0, Number(safe?.perDay) || 0);
+	const spentToday = Number(safe?.spentToday) || 0;
+	const month = today.slice(0, 7);
+	const leftFor = limit ? "limit" : "payday";
+	const hero = {
+		perDay,
+		spentToday,
+		leftToday: perDay - spentToday,
+		tomorrow: Math.max(0, Number(safe?.tomorrow) || 0),
+		left: limit ? limit.left : Math.max(0, (Number(safe?.pool) || 0) - spentToday),
+		leftDays: limit ? limit.daysLeft : Math.max(1, Number(safe?.days) || 1),
+		leftFor,
+		dayLevel: budgetLevel(spentToday, perDay),
+		monthLevel: limit ? budgetLevel(limit.spent, limit.amount) : "none",
+		limit: limit ? {
+			amount: limit.amount,
+			spent: limit.spent
+		} : null,
+		short: Number(safe?.short) || 0
+	};
+	const ups = upcoming(state, today);
+	const goals = (state.goals ?? []).filter((g) => g && !g.archived && !g.deleted && Number(g.target) > 0).slice(0, 6).map((g) => {
+		let st = null;
+		try {
+			st = goalStatus(state, today, g);
+		} catch {
+			st = null;
+		}
+		return goalPlan({
+			id: String(g.id),
+			name: String(g.name || "Goal"),
+			emoji: g.emoji || "🎯",
+			target: Number(g.target),
+			current: Math.max(0, Number(st?.current ?? g.saved ?? 0)),
+			deadline: g.deadline ?? null,
+			pacePerMonth: st?.pace ?? null,
+			source: "finance"
+		}, today);
+	});
+	const accounts = state.settings.accounts.filter((a) => !a.archived).map((a) => ({
+		id: String(a.id),
+		name: String(a.name),
+		emoji: String(a.emoji ?? "")
+	}));
+	const recent = [...state.tx].filter((t) => t && !t.deleted && typeof t.date === "string" && t.type !== "transfer").sort((a, b) => b.date === a.date ? (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0) : b.date.localeCompare(a.date)).slice(0, 6).map((t) => {
+		const c = category(state, t.category);
+		return {
+			id: String(t.id),
+			date: t.date,
+			type: t.type,
+			amount: Math.abs(B(t)),
+			category: c?.name ?? "Other",
+			emoji: c?.emoji ?? (t.type === "income" ? "💰" : "💸"),
+			note: String(t.note ?? ""),
+			account: account(state, t.account)?.name ?? ""
+		};
+	});
+	const bills = ups.filter((u) => u.type === "expense" && u.date <= addDays$5(today, 7)).map((u) => ({
+		name: u.label ?? "Bill",
+		amount: u.amount,
+		date: u.date
+	}));
+	return {
+		ok: true,
+		today,
+		currency: state.settings.currency || "MDL",
+		hero,
+		week: lastDays(tx, today, 7),
+		weekCompare: weekCompare(tx, today),
+		compare: sameDayCompare(tx, today, cats),
+		forecast: monthForecast(tx, today, ups),
+		goals,
+		accounts,
+		mainAccount: mainAccountId(state.settings.accounts, state.settings.currency),
+		recent,
+		bills,
+		loggedToday: tx.some((t) => t.date === today && month === today.slice(0, 7))
+	};
+}
+/** Sunday: this week against the same days last week (null without data). */
+function weekMoneyLine(raw, today) {
+	const v = hubView(raw, today);
+	return v && (v.weekCompare.thisWeek > 0 || v.weekCompare.lastWeek > 0) ? v.weekCompare.line : null;
+}
+/** What Ben's money lines need (null without Finance Helper data). */
+function nudgeFacts(raw, today) {
+	const v = hubView(raw, today);
+	if (!v) return null;
+	const big = v.bills.find((b) => b.date <= addDays$5(today, 2) && b.amount >= 1e4) ?? null;
+	return {
+		perDay: v.hero.perDay > 0 ? v.hero.perDay : null,
+		leftToday: v.hero.perDay > 0 ? v.hero.leftToday : null,
+		limit: v.hero.limit ? {
+			amount: v.hero.limit.amount,
+			spent: v.hero.limit.spent,
+			daysLeft: v.hero.leftDays
+		} : null,
+		loggedToday: v.loggedToday,
+		bill: big
+	};
 }
 // src/server/mcp.ts
 var SERVER_INFO = {
@@ -31338,12 +31972,14 @@ async function rhythmTick(env, now, send) {
 		}
 	}
 	await benActs(env, now, send, f.state, f.prefs.on, f.facts.time).catch((e) => console.error("ben acts:", e));
+	const moneyFacts = () => mirror.read((db) => nudgeFacts(financeStateFrom(db, null), services.services(db).wallet.today()));
 	const due0 = dueRhythm(f.state, f.prefs, f.facts);
 	const mergeWater = due0.includes("water") && due0.includes("training");
 	const jobs = mergeWater ? due0.filter((x) => x !== "water") : due0;
 	for (const job of jobs) if (job === "briefing") {
 		const { plan, version } = await bots.rhythm.propose();
-		await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD);
+		const money = await moneyFacts().then((m) => m ? morningMoneyLine(m) : null).catch(() => null);
+		await send(proposalText(plan, { version }) + (money ? `\n\n${escapeHtml(money)}` : ""), PROPOSAL_KEYBOARD);
 	} else if (job === "midweek") {
 		const text = await bots.rhythm.midweek();
 		await send(text, text.includes("Want them booked") ? { inline_keyboard: [[{
@@ -31390,7 +32026,9 @@ async function rhythmTick(env, now, send) {
 		]] });
 		if (due) await bots.rhythm.markWater();
 	} else if (job === "weekly") {
-		await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);
+		const w = await bots.rhythm.weekly();
+		const week = await mirror.read((db) => weekMoneyLine(financeStateFrom(db, null), services.services(db).wallet.today())).catch(() => null);
+		await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : ""), WEEKLY_KEYBOARD);
 		await bots.rhythm.writeStory().catch(() => null);
 		const letter = await bots.rhythm.letter().catch(() => null);
 		if (letter) await send(`💌 <b>A letter from Ben</b>\n\n${escapeHtml(letter)}`);
@@ -31412,7 +32050,16 @@ async function rhythmTick(env, now, send) {
 		});
 		const goalText = r.goals.length ? `\n\n🎯 <b>Goals</b>\n${r.goals.map((g) => escapeHtml(g)).join("\n")}${r.rebooked.length ? `\n${r.rebooked.map((x) => escapeHtml(x)).join("\n")}` : ""}` : "";
 		const moneyText = r.money ? `\n\n💸 ${escapeHtml(r.money)}` : "";
-		await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + bonus, r.top3.length ? REVIEW_KEYBOARD : void 0);
+		const m = await moneyFacts().catch(() => null);
+		const warn = m ? warnLine({
+			...m,
+			bill: null
+		}) : null;
+		const ask = m ? eveningMoneyAsk(m) : null;
+		const askText = [warn, ask].filter(Boolean).map((x) => escapeHtml(x)).join("\n");
+		const keyboard = r.top3.length ? REVIEW_KEYBOARD : void 0;
+		const withAsk = ask ? { inline_keyboard: [...keyboard?.inline_keyboard ?? [], MONEY_ASK_ROW] } : keyboard;
+		await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + (askText ? `\n\n${askText}` : "") + bonus, withAsk);
 	}
 }
 /** The app: today's rhythm (state), or an action on it. */

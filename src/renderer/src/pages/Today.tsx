@@ -21,6 +21,7 @@ import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
 import { DeepWork, MissTwiceCard, NextUpBar, WeekStrip } from '../TodayExtras'
 import { PluginCards } from '../../../plugins/cards'
+import { MoneyPill } from '../MoneyQuick'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -196,6 +197,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   return (
     <div className="today td2">
       <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
+      <MoneyPill />
       <NextUpBar />
       <DeepWork />
       <div className="cmd">

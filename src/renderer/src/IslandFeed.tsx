@@ -58,6 +58,9 @@ const CLIP = 'ls.islandClip'
 const CELEBRATED = 'ls.rewardCelebrated'
 /** IS19: the list, when it was last fetched fine, whether the last try failed, and the real tasks (completing passes those). */
 let todoCache: { at: number; okAt: number; failed: boolean; list: { id: string; content: string; time: string | null }[]; full: Record<string, TodoTask> } = { at: 0, okAt: 0, failed: false, list: [], full: {} }
+/** MF11: today's money left (Finance Helper), read at most once a minute or when money changes. */
+let moneyCache: { at: number; v: { left: number; level: string } | null } = { at: 0, v: null }
+if (typeof window !== 'undefined') window.addEventListener('life-money-changed', () => (moneyCache.at = 0))
 function bodyTick(sec: number) {
   const now = Date.now()
   if (sec >= 300) activeSince = null
@@ -429,6 +432,11 @@ export function IslandFeed() {
         todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), full: Object.fromEntries(top.map((t) => [t.id, t])) }
       } else todoCache.failed = true
     }
+    if (now - moneyCache.at > 60_000 && life.finance) {
+      moneyCache.at = now
+      const h = await life.finance.hub().catch(() => null)
+      moneyCache.v = h && h.hero.perDay > 0 ? { left: h.hero.leftToday, level: h.hero.dayLevel } : null
+    }
     return {
       at: now,
       locked: false,
@@ -539,6 +547,7 @@ export function IslandFeed() {
         const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
         return { bed: showBedButton(d, target, bedLoggedTonight(logs, d)), wake: showWakeButton(d, wakeLogged), target }
       })(),
+      money: moneyCache.v,
       points: (() => {
         if (!shop) return undefined
         const rewards = shop.rewards.filter((r) => !r.archived && r.price > 0)

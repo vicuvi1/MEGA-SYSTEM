@@ -6,6 +6,7 @@
 import { calendarDay } from '@core/dates'
 import { getSetting, setSetting, writeSetting } from '../../../../main/settings'
 import { moneyButton, takeMoneyAsk } from '../financeBot'
+import { financeDayTx } from '../webServices'
 import { payTodoist } from '../todoistCoins'
 import { REASONS } from '@core/focus'
 import type { CalEvent } from '@core/dayTime'
@@ -34,7 +35,7 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[ln])\|/
+export const CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // Water and workout cards: a tap updates the shared log and the card.
@@ -120,6 +121,32 @@ export const CALLBACKS: CallbackHandler[] = [
       const said = data.slice(3)
       await tg(update.__token, 'sendMessage', { chat_id: chat, text: `💬 <i>${esc(readConfirm(said)?.rest ?? said)}</i>`, parse_mode: 'HTML' }).catch(() => null)
       return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:say`)
+    }
+  },
+  // MF10: the evening "anything spent?" ask. [Nothing spent] marks today as you
+  // said (the money service's rule: it pays nothing now, and counts as a
+  // no-spend day only if it stays true once the day is over); [Log it] asks
+  // for the line, which the money rules then log.
+  {
+    prefixes: ['mz'],
+    match: (data) => data.startsWith('mz|'),
+    run: async (c, t) => {
+      const { data, chat, key, update, cq, answer } = t
+      if (!(await c.markSeen(key))) return null
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message?.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      let text = '✍️ Send it in one line: <code>45 food</code>, <code>120+45 groceries</code>, <code>+500 salary</code>. Add "yesterday" for another day.'
+      if (data === 'mz|0') {
+        text = await c.mirror
+          .write((db) => {
+            const svc = c.services.services(db)
+            svc.money.nothingSpent(financeDayTx(svc))
+            return '👍 Noted: nothing spent today. It counts as a no-spend day if it stays that way.'
+          })
+          .catch((e) => `⚠️ ${esc((e as Error).message)}`)
+      }
+      await answer(data === 'mz|0' ? 'Nothing spent' : 'Send what you spent')
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML' }).catch(() => null)
+      return text
     }
   },
   // An unclear money message (X5): [Log it] logs it, [Not money] gives it to Ben.

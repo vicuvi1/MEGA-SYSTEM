@@ -62,9 +62,21 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+  // Night 11: Money opens on its own hub (Finance Helper's synced numbers), with quick add.
+  await step('Money hub: safe to spend, quick add into Finance Helper, insights', async () => {
+    await open('money')
+    await pg.waitForSelector('.mh-hero .mh-big', { timeout: 15000 })
+    for (const sel of ['.mh-quick input', '.mh-donut', '.mh-forecast-line', '.mh-goal', '.mh-open']) if (!(await pg.$(sel))) throw new Error(`no ${sel}`)
+    if (!/At this pace you end/.test(await pg.locator('.mh-forecast-line').innerText())) throw new Error('no forecast line')
+    await pg.fill('.mh-quick input', '45 smoke lunch')
+    await pg.waitForSelector('.mq-preview b', { timeout: 5000 })
+    await pg.keyboard.press('Enter')
+    await pg.waitForFunction(() => /smoke lunch/.test(document.querySelector('.mh-recent')?.textContent ?? ''), null, { timeout: 8000 })
+  })
   for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky']]) {
     await step(`${name} loads with its own content`, async () => {
       await open(page)
+      if (page === 'money') await pg.click('.mh-open')
       await pg.waitForTimeout(3500)
       const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
       if (!src) throw new Error('no visible app frame')

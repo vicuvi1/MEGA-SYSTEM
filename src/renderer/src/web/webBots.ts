@@ -308,7 +308,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    */
   function runMoney(s: Services, text: string, key: string): RunOut | null {
     if (!currentDb) return null
-    const money = logMoney(currentDb, text, key, s.wallet.today())
+    // The app's command bars (island, Ctrl+K): the main lei wallet unless you name an account (MF1).
+    const money = logMoney(currentDb, text, key, s.wallet.today(), Date.now(), { mainAccount: key.startsWith('quick:') })
     if (!money) return null
     const t = money.tx
     if (t.type !== 'expense') return { reply: money.reply, keyboard: money.keyboard }

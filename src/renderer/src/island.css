@@ -499,3 +499,5 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .dbg-tests { position: fixed; display: flex; justify-content: space-between; pointer-events: none; }
 .dbg-target { pointer-events: auto; min-width: 46px; padding: 6px 4px; background: rgb(61 255 110 / 0.25); color: #e8ffe0; box-shadow: inset 0 0 0 1.5px #3dff6e; }
 .dbg-target.hit { background: #3dff6e; color: #041; }
+.di-points .di-money.lv-warn { color: #fbbf24; }
+.di-points .di-money.lv-over { color: #fb7185; }

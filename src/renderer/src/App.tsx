@@ -32,6 +32,7 @@ import { describeEntry, useAction } from './ui'
 import { loadLastPlace, saveLastPlace } from './uiPrefs'
 import { reloadToday } from './todayEvents'
 import { capture } from './capture'
+import { useAddMoney } from './MoneyQuick'
 import type { TodoTask } from '@core/todoist'
 import { play, soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './soundKit'
 import { countdown, nextUp } from '@core/dayGlance'
@@ -100,7 +101,7 @@ function whenIdle(fn: () => void, ms = 2000): () => void {
 
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
-  money: { kind: 'finance', system: 'Points & budget' },
+  money: { kind: 'finance', system: 'Money hub' },
   sleep: { kind: 'waky', system: 'Points & stats' },
   // MN24: Discipline is one page (the built-in one); the MAN app isn't a second copy.
   body: { kind: 'sport', system: 'Metrics & Workouts' }
@@ -463,7 +464,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const embed = EMBED_OF[page]
   // Stealth hides MAN too until the section is revealed.
   const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
-  const tab = embed ? (hiddenByStealth ? 'system' : view[page] ?? 'app') : 'system'
+  // Money opens on its own hub (Night 11); the full Finance Helper is one tap away.
+  const tab = embed ? (hiddenByStealth ? 'system' : view[page] ?? (page === 'money' ? 'system' : 'app')) : 'system'
   const activeEmbed = embed && tab === 'app' ? embed.kind : null
   const { events: todayEvents } = useTodayEvents()
 
@@ -610,6 +612,18 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   }
   // No "chests to open" alert: the Rewards page can't open chests yet (FX7). Bring it back with a chest UI.
 
+  // Ctrl+K: a money line ("45 food", "+500 salary") goes straight to Finance Helper (MF1).
+  const addMoney = useAddMoney()
+  const paletteLive = useCallback(
+    async (q: string): Promise<Command | null> => {
+      const p = await life.finance?.preview(q).catch(() => null)
+      if (!p) return null
+      const amt = (p.amount / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })
+      return { id: 'money:quick', label: `${p.type === 'income' ? 'Income' : 'Spent'} ${amt} lei · ${p.category}`, hint: `${p.account}${p.daysAgo ? ' · yesterday' : ''} · Finance Helper`, group: 'Log', icon: 'coin', color: '#F5C84B', run: () => void addMoney(q).then((r) => r && onWallet()) }
+    },
+    [addMoney, onWallet]
+  )
+
   // Sidebar: full, or a slim icon rail. "auto" turns it into a rail while an
   // app is open, so the app gets the room; hovering the rail slides it out.
   const collapsed = sidebarMode === 'closed' || (sidebarMode === 'auto' && !!activeEmbed)
@@ -622,6 +636,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         commands={commands}
+        live={paletteLive}
         onFreeText={(t) =>
           void capture(t)
             .then((r) => {
@@ -781,7 +796,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <Discipline state={discipline} man={connections?.man.suggestion ?? null} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
             )}
             {page === 'sleep' && connections && <Sleep state={connections} onState={setConnections} onWallet={onWallet} openEditor={wakeEdit} />}
-            {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} />}
+            {page === 'money' && connections && <Money state={connections} onState={setConnections} onWallet={onWallet} onOpenApp={() => setView((v) => ({ ...v, money: 'app' }))} />}
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'bots' && <BotCenter />}
             {page === 'notebook' && <Notebook />}

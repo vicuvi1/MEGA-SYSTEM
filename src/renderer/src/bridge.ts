@@ -124,6 +124,8 @@ export type Bridge = LifeApi & {
   }
   /** Your own habits, goals list, life modes, learning path, month and year reviews, reward locks (web). */
   extras?: import('./web/lifeExtras').ExtrasApi
+  /** The Money hub (Finance Helper's numbers) and one-line quick add. */
+  finance?: import('./web/moneyApi').MoneyApi
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
   todoist?: {

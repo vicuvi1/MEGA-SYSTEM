@@ -147,6 +147,8 @@ export interface IslandSnapshot {
   focusGuard?: { pct: number; idleMin: number } | null
   /** Your points and the reward you're working toward. */
   points?: { balance: number; goal: { title: string; price: number } | null }
+  /** MF11: what's left of today's safe-to-spend (bani; negative = over), from Finance Helper. */
+  money?: { left: number; level: string } | null
   /** SI1: what you're doing on the PC now (Smart island on): a kind, never a window title. Tap to fix. */
   doing?: { ctx: ContextKind; label: string; icon: string; detail?: string; app: string; conf: number } | null
 }

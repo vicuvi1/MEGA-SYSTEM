@@ -102,6 +102,15 @@ const CASES: Case[] = [
     }
   },
   {
+    name: 'mz| "Nothing spent" closes the evening money ask and pays nothing',
+    data: () => 'mz|0',
+    check: (w, b) => {
+      expect(w.points()).toBe(b.points)
+      expect(w.sent.some((s) => String(s.body?.text ?? '').includes('nothing spent today'))).toBe(true)
+      expect(w.setting('money_nothing_spent')).toEqual([w.day])
+    }
+  },
+  {
     name: 'np| pauses nudges for today',
     data: () => 'np|',
     check: (w) => expect(w.setting('coach_nudges')).toMatchObject({ pausedDay: w.day })

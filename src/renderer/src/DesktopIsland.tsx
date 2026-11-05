@@ -1326,6 +1326,11 @@ export function DesktopIsland() {
                     <small className="di-pts-mid">Add a reward to work toward</small>
                   )}
                   <button {...tp('rewards', () => tap({ kind: 'open', page: 'shop' }))}>Rewards</button>
+                  {s.money && (
+                    <button className={`di-money lv-${s.money.level}`} {...tp('money', () => tap({ kind: 'open', page: 'money' }))} title="Safe to spend today (Finance Helper)">
+                      💸 {Math.round(Math.abs(s.money.left) / 100)} lei {s.money.left >= 0 ? 'left' : 'over'}
+                    </button>
+                  )}
                 </section>) : null,
 
     timer: run ? (<section className="di-timer">

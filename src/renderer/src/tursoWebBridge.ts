@@ -63,6 +63,7 @@ import { cleanRecipes, type Recipe } from '@core/recipes'
 import { cleanPcState, setAskStatus, type PcAsk } from '@core/pcActions'
 import type { LastHour } from '@core/pcLastHour'
 import { createExtras } from './web/lifeExtras'
+import { createMoneyApi } from './web/moneyApi'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
 
@@ -904,6 +905,8 @@ export function createTursoWebBridge(): Bridge {
     },
     weekPlan: S('weekPlan'),
     extras: createExtras(svcP),
+    // The Money hub and one-line quick add (Finance Helper's data).
+    finance: createMoneyApi(svcP, () => syncsP.then((list) => list.find((x) => x.spec === FINANCE)?.sync())),
     system: {
       health: async () => {
         const h = await readHealth(turso)
