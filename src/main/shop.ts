@@ -96,6 +96,33 @@ export class Shop {
     return rows.filter((r) => !undone.has(r.ledger_id) && r.real_cost > 0).map((r) => toLei(r.real_cost, r.currency, rates) ?? 0)
   }
 
+  /** RL7: this month's move of leftover money to savings, if it stands (not undone). */
+  savedMove(month: string): { lei: number; ledgerId: number; kind: 'fun' | 'month'; goal: string } | null {
+    let all: Record<string, any> = {}
+    try {
+      all = JSON.parse(getSetting(this.db, 'fun_moves') || '{}') ?? {}
+    } catch {
+      all = {}
+    }
+    const m = all[month]
+    if (!m || !Number(m.ledgerId)) return null
+    if (!this.wallet.effective().some((e) => e.id === Number(m.ledgerId))) return null
+    return { lei: Number(m.lei) || 0, ledgerId: Number(m.ledgerId), kind: m.kind === 'month' ? 'month' : 'fun', goal: String(m.goal ?? '') }
+  }
+
+  /** RL7: remembers a move to savings (the ledger entry is its log and its undo). */
+  recordMove(month: string, move: { lei: number; ledgerId: number; kind: 'fun' | 'month'; goal: string }): void {
+    let all: Record<string, any> = {}
+    try {
+      all = JSON.parse(getSetting(this.db, 'fun_moves') || '{}') ?? {}
+    } catch {
+      all = {}
+    }
+    all[month] = move
+    const keep = Object.fromEntries(Object.entries(all).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-24))
+    setSetting(this.db, 'fun_moves', JSON.stringify(keep))
+  }
+
   /**
    * RL1: what one point is worth, and your fun budget this month.
    * `finance`: Finance Helper's data (for a Fun/Entertainment limit, its spending and rates);
@@ -106,13 +133,16 @@ export class Shop {
     const setting = this.funSetting()
     const budgetLei = funBudgetLei(setting, opts.finance)
     const value = pointValue({ funBudgetLei: budgetLei, earnPerDay: earnPerDay(this.wallet.entries() as any, day) })
+    // Fun money you already moved to savings this month is not there to spend any more (RL7).
+    const move = this.savedMove(monthKey(day))
+    const moved = move?.kind === 'fun' ? move.lei : 0
     const spent = funSpentLei({ month: monthKey(day), rewardBuysLei: this.monthBuysLei(day, opts.finance?.rates), finance: opts.finance, setting })
     const hourly = Number(opts.hourlyLei) > 0 ? Math.round(Number(opts.hourlyLei) * 100) / 100 : null
     return {
       value,
       funBudgetLei: budgetLei,
       funSpentLei: spent,
-      funLeftLei: budgetLei == null ? null : Math.round((budgetLei - spent) * 100) / 100,
+      funLeftLei: budgetLei == null ? null : Math.round((budgetLei - spent - moved) * 100) / 100,
       hourlyLei: hourly,
       funSource: budgetLei == null ? null : setting?.source ?? 'manual'
     }

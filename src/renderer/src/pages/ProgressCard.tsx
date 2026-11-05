@@ -101,6 +101,11 @@ export function ProgressCard({ onOpen }: { onOpen: () => void }) {
               {m.trend === 'better' ? '▲' : m.trend === 'worse' ? '▼' : '•'} {m.label} <b>{m.text}</b>
             </span>
           ))}
+          {r.savingStreak && r.savingStreak.days > 0 && (
+            <span className="pg-chip better" title={r.savingStreak.next ? `${r.savingStreak.next.days} days in a row pays +${r.savingStreak.next.points}` : 'Days in a row under your daily budget'}>
+              Under budget <b>{r.savingStreak.days} day{r.savingStreak.days === 1 ? '' : 's'} in a row</b>
+            </span>
+          )}
         </div>
       </div>
     </section>

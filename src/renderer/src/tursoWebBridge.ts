@@ -12,7 +12,8 @@ import { addDays, calendarDay, dayKey } from '@core/dates'
 import type { BodyState, BotBridgeConfig, ConnectionsState, DisciplineState, Summary } from '@shared/api'
 import { Mirror, indexedDbStore } from './web/mirror'
 import { TursoHttp } from './web/tursoHttp'
-import { createWebServices, type WebServices } from './web/webServices'
+import { createWebServices, financeDayTx, type WebServices } from './web/webServices'
+import { financeSummary } from '@core/moneyDays'
 import { createWebAuth } from './web/webAuth'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
@@ -1377,12 +1378,18 @@ export function createTursoWebBridge(): Bridge {
     body: S('body', { state: async () => withSportTrack(await (await svcP).body.state()) }) as Bridge['body'],
     connections: {
       ...base.connections,
+      // The real daily budget (money_daily_budget, bani), the one points are judged on.
+      setDailyBudget: async (amount: number) => {
+        await (await svcP).write((s) => s.money.setBudget(Math.max(0, Math.round(Number(amount) || 0)) * 100))
+        return bridge.connections.state()
+      },
       // Pays the days Finance Helper on this device has records for (Waky pays
       // through the Sleep section when it checks you in).
       sync: async () => {
         const finance = readJson<any>('finance-helper.state')
         const days = Array.isArray(finance?.tx) ? finance.tx.map((t: any) => String(t?.date ?? '')).filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d)) : []
-        const awarded = days.length ? await (await svcP).connections.syncFinance(days) : 0
+        // Always: finished days logged in Life System are judged too (FX3).
+        const awarded = await (await svcP).connections.syncFinance(days)
         return { awarded, state: await bridge.connections.state() }
       },
       state: async (): Promise<ConnectionsState> => {
@@ -1403,9 +1410,9 @@ export function createTursoWebBridge(): Bridge {
           days: []
         }
         if (finance && Array.isArray(finance.tx)) {
-          const month = today.slice(0, 7)
-          const sum = (f: (t: any) => boolean) => finance.tx.filter(f).reduce((s: number, t: any) => s + (Number(t.base ?? t.amount) || 0), 0)
-          const monthExp = finance.tx.filter((t: any) => t.type === 'expense' && String(t.date || '').startsWith(month))
+          // FX7: in lei (never dollars added as lei), bills apart, the last 14 days judged.
+          const sum = await svc.read((s) => financeSummary(financeDayTx(s, finance, true), today))
+          const budgetBani = await svc.read((s) => s.money.dailyBudgetSet())
           financeConn = {
             ...baseConns.finance,
             path: 'Finance Helper (this device)',
@@ -1414,9 +1421,10 @@ export function createTursoWebBridge(): Bridge {
             currency: finance.settings?.currency || 'MDL',
             savedAt: null,
             staleDays: null,
-            today: { logged: finance.tx.some((t: any) => t.date === today), everydaySpent: sum((t) => t.type === 'expense' && t.date === today) },
-            month: { spent: sum((t) => t.type === 'expense' && String(t.date || '').startsWith(month)), everyday: sum((t) => t.type === 'expense' && String(t.date || '').startsWith(month)), income: sum((t) => t.type === 'income' && String(t.date || '').startsWith(month)), days: new Set(monthExp.map((t: any) => t.date)).size },
-            days: []
+            dailyBudget: Math.round(budgetBani / 100),
+            today: sum.today,
+            month: sum.month,
+            days: sum.days
           }
         }
         return {

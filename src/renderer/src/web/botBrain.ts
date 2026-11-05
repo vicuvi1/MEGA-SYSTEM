@@ -625,6 +625,7 @@ const ACT_GROUPS: Record<'body' | 'money' | 'calendar' | 'todoist', string> = {
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+- "habit: nospend" ONLY when he says he spent nothing today (it counts once the day is over). "habit: cooked" ONLY when he says he cooked at home today. Never guess either.
 - His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
 - "workout: <YYYY-MM-DD> | <what he did>" log a workout he did on a past day that is missing (counts for his streak); today's checklist uses reps/log instead.
 - "style: short|normal|detailed; tone=1-5" when he tells you how to talk ("be shorter", "go harder on me", "more detail"). 1 = gentle, 5 = drill sergeant.
@@ -633,7 +634,7 @@ const ACT_GROUPS: Record<'body' | 'money' | 'calendar' | 'todoist', string> = {
 - "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
 - Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
 Points and the week:
-- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
+- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop. With a real cost the app prices it from what a point is really worth (your points are only used when it costs nothing).
 - "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.`,
   calendar: `Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
@@ -874,7 +875,7 @@ export type BrainAction =
   | { kind: 'water'; ml: number }
   | { kind: 'reps'; exercise: string; amount: number }
   | { kind: 'sleep'; day: string; wake?: string; bed?: string; quality?: number }
-  | { kind: 'habit'; habit: 'oath' | 'clean' | 'skincare' }
+  | { kind: 'habit'; habit: 'oath' | 'clean' | 'skincare' | 'nospend' | 'cooked' }
   | { kind: 'reward'; title: string; points: number; cost: number }
   | { kind: 'week'; focus?: string; note?: string; big3?: string[] }
   | { kind: 'bigdone'; index: number }
@@ -1028,7 +1029,7 @@ export function readAction(line: string): BrainAction | null {
   }
   if (kind === 'habit') {
     const h = arg.toLowerCase()
-    const habit = /oath/.test(h) ? 'oath' : /clean|check/.test(h) ? 'clean' : /skin|face/.test(h) ? 'skincare' : null
+    const habit = /oath/.test(h) ? 'oath' : /no.?spend|nothing.?spent/.test(h) ? 'nospend' : /cook/.test(h) ? 'cooked' : /clean|check/.test(h) ? 'clean' : /skin|face/.test(h) ? 'skincare' : null
     return habit ? { kind: 'habit', habit } : null
   }
   if (kind === 'reward') {

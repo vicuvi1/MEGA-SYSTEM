@@ -1,11 +1,11 @@
 // The desktop services (src/main/*.ts) running on the web app's copy of the
 // Turso database. Same rules as the desktop: daily caps, cooldowns, undo,
 // quests, the shop, streaks. Each change is saved to Turso before it shows.
-import { moneyDay } from '@core/moneyDays'
+import { isImported, liveLog, moneyDay, type DayTx } from '@core/moneyDays'
 import { moneyNumbers } from './benDesk'
 import { financeStateFrom } from './botBrain'
-import { queueFinanceExpense } from './financeInbox'
-import { rewardFinId, toLei } from '@core/funBudget'
+import { queueFinanceExpense, savingTarget } from './financeInbox'
+import { financeFunCategory, leftoverLei, repriceSuggestions, rewardFinId, toLei, txLei } from '@core/funBudget'
 import type { Exercise } from '@core/body'
 import type { Rule } from '@core/rules'
 import type {
@@ -59,6 +59,79 @@ export function afterUndo(s: Services, id: number): void {
   const e = s.wallet.entries().find((x) => x.id === id)
   if (!e?.ref) return
   if (e.ref.startsWith('reward:')) queueFinanceExpense(s.db as any, { id: rewardFinId(id), amount: 0, category: '', note: '', date: s.wallet.today(), at: Date.now(), remove: true })
+  if (e.ref.startsWith('saved:')) queueFinanceExpense(s.db as any, { id: savedFinId(e.ref.slice(6), id), amount: 0, category: '', note: '', date: s.wallet.today(), at: Date.now(), remove: true })
+}
+
+/**
+ * Finance Helper's records as money days (FX3): in lei (never a foreign amount
+ * as lei), live only when made on their own day and not imported. Expenses
+ * logged in Life System (life-exp-…) are counted from Life System's own list.
+ */
+export function financeDayTx(s: Services, finance: any = financeOf(s), withLife = false): DayTx[] {
+  const txs: any[] = Array.isArray(finance?.tx) ? finance.tx : []
+  if (!txs.length) return []
+  const names = new Map<string, string>((finance?.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
+  const dayOf = (ms: number) => s.wallet.today(new Date(ms))
+  return txs
+    .filter((t) => t && !t.deleted && typeof t.date === 'string' && t.type !== 'transfer' && (withLife || !String(t.id ?? '').startsWith('life-exp-')))
+    .map((t) => ({
+      date: t.date.slice(0, 10),
+      type: String(t.type),
+      category: names.get(String(t.category)) ?? String(t.category ?? ''),
+      note: String(t.note ?? ''),
+      amount: Math.round(txLei(t, finance?.rates, finance?.settings?.currency) * 100),
+      live: liveLog(t.date.slice(0, 10), Number(t.createdAt), dayOf, isImported(t))
+    }))
+}
+
+/** Today's money day, the last 14 judged days and the saving streak (FX3, RL6). */
+export function moneyDays(s: Services, now = new Date()) {
+  const other = financeDayTx(s)
+  const today = s.wallet.today(now)
+  const marks = s.money.marks()
+  const t = moneyDay([...s.money.nativeDayTx(), ...other], today, { nothingSpent: marks.nothingSpent.includes(today), cookedConfirmed: marks.cooked.includes(today) })
+  return {
+    today: { day: today, ...t, nothingSpentTapped: marks.nothingSpent.includes(today) },
+    dailyBudget: s.money.dailyBudgetSet(),
+    days: s.money.judged(other, addDays(today, -14), now).reverse(),
+    streak: s.money.savingStreak(other, now)
+  }
+}
+
+const SAVED_BONUS = 10
+const savedFinId = (month: string, ledgerId: number) => `life-save-${month}-${ledgerId}`
+
+/** RL7: what's left of this month's fun budget (else Finance Helper's month limit), and where it can go. */
+export function leftover(s: Services, now = new Date()) {
+  const finance = financeOf(s)
+  const today = s.wallet.today(now)
+  const month = today.slice(0, 7)
+  const v = shopValue(s, now)
+  const moved = s.shop.savedMove(month)
+  let kind: 'fun' | 'month' = 'fun'
+  let budgetLei = v.funBudgetLei
+  let leftLei = v.funLeftLei == null ? 0 : leftoverLei(v.funLeftLei + (moved?.kind === 'fun' ? moved.lei : 0), 0)
+  if (budgetLei == null && finance) {
+    const n = moneyNumbers(finance, today)
+    if (n.limitLeft != null) {
+      kind = 'month'
+      budgetLei = Math.round(Number(finance?.settings?.limit?.amount) / 100)
+      leftLei = leftoverLei(n.limitLeft / 100, 0)
+    }
+  }
+  const target = finance ? savingTarget(finance) : null
+  const dim = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()
+  return {
+    month,
+    kind,
+    budgetLei,
+    leftLei: moved ? 0 : leftLei,
+    goal: target?.goal ?? null,
+    moved,
+    /** The last 3 days of the month: time to move it. */
+    monthEnd: Number(today.slice(8, 10)) > dim - 3,
+    toast: undefined as string | undefined
+  }
 }
 
 /** All services, built for one copy of the database. */
@@ -169,29 +242,9 @@ export function createWebServices(mirror: Mirror) {
               if (!(e instanceof LedgerError)) throw e
             }
           }
-          // No-spend and cooked-at-home days (M2), paid once the day is over, from Finance Helper's records.
-          const fin = financeStateFrom(db, typeof localStorage !== 'undefined' ? localStorage : null)
-          const txs: any[] = Array.isArray(fin?.tx) ? fin.tx : []
-          if (txs.length) {
-            const names = new Map<string, string>((fin?.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
-            const list = txs.filter((t) => t && !t.deleted && typeof t.date === 'string').map((t) => ({ date: t.date, type: t.type, category: names.get(String(t.category)) ?? String(t.category ?? ''), note: String(t.note ?? ''), amount: Number(t.amount) || 0 }))
-            const start = from > addDays(today, -7) ? from : addDays(today, -7)
-            for (let d = start; d < today; d = addDays(d, 1)) {
-              const m = moneyDay(list, d)
-              for (const [ok, rule, tag, note] of [
-                [m.noSpend, 'money.no_spend', 'nospend', 'No-spend day (Finance Helper)'],
-                [m.cooked, 'money.cooked_home', 'cooked', 'Cooked at home (Finance Helper)']
-              ] as const) {
-                if (!ok || handled.has(`fin:${tag}:${d}`)) continue
-                try {
-                  s.wallet.awardRule(rule, { day: d, ref: `fin:${tag}:${d}`, note })
-                  paid++
-                } catch (e) {
-                  if (!(e instanceof LedgerError)) throw e
-                }
-              }
-            }
-          }
+          // Finished days (FX3): no-spend and under budget from live logs only, the saving streak (RL6).
+          // Cooking at home is never guessed into points: you confirm it (money.confirmCooked).
+          paid += s.money.payDays(financeDayTx(s), since)
           return paid
         }, W)
     },
@@ -239,6 +292,34 @@ export function createWebServices(mirror: Mirror) {
           const money = paid > 0 ? ` · −${paid.toLocaleString('en-US')} ${cur === 'MDL' ? 'lei' : cur} added to Money as Fun` : ''
           return { ...s.shop.state(), lastBuy: { ledgerId, title: reward?.title ?? 'Reward', points: reward?.price ?? 0, paid, currency: cur, toast: `−${(reward?.price ?? 0).toLocaleString('en-US')} points${money}` } }
         }, W),
+      /** RL7: what's left this month (fun budget, else Finance Helper's month limit) and the goal it can go to. */
+      leftover: () => read((s) => leftover(s)),
+      /** RL7: moves the leftover to the savings goal in Finance Helper (once a month), with a small "Saved" bonus. Undo takes both back. */
+      moveLeftover: () =>
+        write((s) => {
+          const l = leftover(s)
+          if (l.moved) throw new LedgerError(`Already moved ${l.moved.lei} lei to ${l.moved.goal} this month`)
+          if (!(l.leftLei > 0)) throw new LedgerError('Nothing left over to move this month')
+          if (!l.goal) throw new LedgerError('Add a savings goal in Finance Helper first (one you fill by hand, or one on a savings account)')
+          const now = new Date()
+          const today = s.wallet.today(now)
+          const ledgerId = s.wallet.append({ ts: now.toISOString(), day: today, module: 'money', kind: 'earn', coins: SAVED_BONUS, xp: 0, ref: `saved:${l.month}`, note: `Saved: ${l.leftLei} lei to ${l.goal.name}` })
+          queueFinanceExpense(s.db as any, { id: savedFinId(l.month, ledgerId), type: 'saving', goalId: l.goal.id, amount: l.leftLei * 100, category: '', note: `Left over from your ${l.kind === 'fun' ? 'fun' : 'month'} budget`, date: today, at: now.getTime() })
+          s.shop.recordMove(l.month, { lei: l.leftLei, ledgerId, kind: l.kind, goal: l.goal.name })
+          return { ...leftover(s), toast: `+${SAVED_BONUS} points · ${l.leftLei} lei moved to ${l.goal.name}` }
+        }, W),
+      /** RL2: new prices from real cost for old rewards (only suggests; apply each with save). */
+      reprice: () => read((s) => repriceSuggestions(s.shop.state().rewards, shopValue(s).value, financeOf(s)?.rates)),
+      /** RL3: the monthly fun budget, by hand or from Finance Helper's Fun / Entertainment limit. */
+      setFunBudget: (b: { lei: number; source: 'manual' | 'finance' } | null) =>
+        write((s) => {
+          if (b?.source === 'finance') {
+            const cat = financeFunCategory(financeOf(s))
+            if (!cat) throw new LedgerError('Finance Helper has no Fun or Entertainment category with a monthly limit')
+            s.shop.setFunBudget({ lei: cat.lei, source: 'finance' })
+          } else s.shop.setFunBudget(b)
+          return shopValue(s)
+        }),
       openChest: (level: number) => write((s) => ({ coins: s.shop.openChest(level), state: s.shop.state() }), W),
       setBudget: (amount: number) => write((s) => (s.shop.setBudget(amount), s.shop.state())),
       setCurrency: (cur: string) => write((s) => (s.shop.setCurrency(cur), s.shop.state()))
@@ -299,7 +380,7 @@ export function createWebServices(mirror: Mirror) {
       fun: (minutes: number, what?: string) => write((s) => s.focus.fun(minutes, what), W)
     },
     progress: {
-      report: (spending: { day: string; bani: number }[] | null) => read((s) => s.progress.report(spending)),
+      report: (spending: { day: string; bani: number }[] | null) => read((s) => ({ ...s.progress.report(spending), savingStreak: s.money.savingStreak(financeDayTx(s)) })),
       insights: () => read((s) => s.progress.insights()),
       growth: (spending: { day: string; bani: number }[] | null) => read((s) => s.progress.growth(spending))
     },
@@ -326,7 +407,13 @@ export function createWebServices(mirror: Mirror) {
       addExpense: (amountBani: number, category: string, note?: string) => write((s) => s.money.addExpense(amountBani, category as any, note), W),
       deleteExpense: (id: number) => write((s) => s.money.deleteExpense(id)),
       setBudget: (budgetBani: number) => write((s) => s.money.setBudget(budgetBani)),
-      setCurrency: (cur: string) => write((s) => s.money.setCurrency(cur))
+      setCurrency: (cur: string) => write((s) => s.money.setCurrency(cur)),
+      /** FX3: today, the last 14 judged days and the saving streak. */
+      days: () => read((s) => moneyDays(s)),
+      /** FX3: "Nothing spent today" (counts once the day is over, if it stays true). */
+      nothingSpent: () => write((s) => (s.money.nothingSpent(financeDayTx(s)), moneyDays(s)), W),
+      /** FX3: "I cooked at home today" (you confirm it, it pays). */
+      confirmCooked: () => write((s) => (s.money.confirmCooked(), moneyDays(s)), W)
     },
     shields: {
       count: () => read((s) => s.shields.count()),
@@ -354,6 +441,34 @@ export function createWebServices(mirror: Mirror) {
       creditVault: (amount: number, note: string) => write((s) => s.economy.creditVault('manual_deposit', amount, note)),
       setExchangeRate: (rate: number) => write((s) => (s.economy.setExchangeRate(rate), s.economy.getExchangeRate())),
       setCurrency: (cur: string) => write((s) => (s.economy.setCurrency(cur), s.economy.getEconomySummary())),
+      /** RL7: what's left this month (fun budget, else Finance Helper's month limit) and the goal it can go to. */
+      leftover: () => read((s) => leftover(s)),
+      /** RL7: moves the leftover to the savings goal in Finance Helper (once a month), with a small "Saved" bonus. Undo takes both back. */
+      moveLeftover: () =>
+        write((s) => {
+          const l = leftover(s)
+          if (l.moved) throw new LedgerError(`Already moved ${l.moved.lei} lei to ${l.moved.goal} this month`)
+          if (!(l.leftLei > 0)) throw new LedgerError('Nothing left over to move this month')
+          if (!l.goal) throw new LedgerError('Add a savings goal in Finance Helper first (one you fill by hand, or one on a savings account)')
+          const now = new Date()
+          const today = s.wallet.today(now)
+          const ledgerId = s.wallet.append({ ts: now.toISOString(), day: today, module: 'money', kind: 'earn', coins: SAVED_BONUS, xp: 0, ref: `saved:${l.month}`, note: `Saved: ${l.leftLei} lei to ${l.goal.name}` })
+          queueFinanceExpense(s.db as any, { id: savedFinId(l.month, ledgerId), type: 'saving', goalId: l.goal.id, amount: l.leftLei * 100, category: '', note: `Left over from your ${l.kind === 'fun' ? 'fun' : 'month'} budget`, date: today, at: now.getTime() })
+          s.shop.recordMove(l.month, { lei: l.leftLei, ledgerId, kind: l.kind, goal: l.goal.name })
+          return { ...leftover(s), toast: `+${SAVED_BONUS} points · ${l.leftLei} lei moved to ${l.goal.name}` }
+        }, W),
+      /** RL2: new prices from real cost for old rewards (only suggests; apply each with save). */
+      reprice: () => read((s) => repriceSuggestions(s.shop.state().rewards, shopValue(s).value, financeOf(s)?.rates)),
+      /** RL3: the monthly fun budget, by hand or from Finance Helper's Fun / Entertainment limit. */
+      setFunBudget: (b: { lei: number; source: 'manual' | 'finance' } | null) =>
+        write((s) => {
+          if (b?.source === 'finance') {
+            const cat = financeFunCategory(financeOf(s))
+            if (!cat) throw new LedgerError('Finance Helper has no Fun or Entertainment category with a monthly limit')
+            s.shop.setFunBudget({ lei: cat.lei, source: 'finance' })
+          } else s.shop.setFunBudget(b)
+          return shopValue(s)
+        }),
       openChest: (level: number) => write((s) => s.economy.openEnhancedChest(level), W),
       bankState: () => read((s) => s.economy.getBankState()),
       stakeCoins: (amount: number) => write((s) => s.economy.stakeCoins(amount), W),

@@ -93,3 +93,20 @@ describe('one daily budget, in bani (P1)', () => {
     expect(budgetBani(null)).toBe(10000)
   })
 })
+
+describe('saving streak (RL6)', () => {
+  it('pays 3 days in a row under budget once, from live logs only', () => {
+    money.setBudget(10000)
+    for (const day of ['2026-11-01', '2026-11-02', '2026-11-03']) money.addExpense(3000, 'food', 'Lunch', new Date(`${day}T12:00:00Z`))
+    // A back-dated record does not count as a log on its day.
+    db.prepare('INSERT INTO expenses (day, amount, category, note, created_at) VALUES (?, ?, ?, ?, ?)').run('2026-10-31', 1000, 'food', null, '2026-11-03T13:00:00Z')
+    const now = new Date('2026-11-04T09:00:00Z')
+    expect(money.savingStreak([], now)).toEqual({ days: 3, next: { days: 7, points: 25 } })
+    const paid = money.payDays([], '2026-10-25', now)
+    expect(paid).toBe(3 + 1) // three days under budget + the 3-day bonus
+    const bonus = wallet.entries().filter((e) => e.ref?.startsWith('money:streak3:'))
+    expect(bonus.map((e) => e.coins)).toEqual([10])
+    expect(wallet.entries().some((e) => e.ref === 'money:under:2026-10-31')).toBe(false)
+    expect(money.payDays([], '2026-10-25', new Date('2026-11-04T20:00:00Z'))).toBe(0)
+  })
+})

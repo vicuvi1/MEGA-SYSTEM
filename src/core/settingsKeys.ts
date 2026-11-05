@@ -122,6 +122,8 @@ export const SETTINGS = {
   money_ask: json<Record<string, unknown> | null>('a money question Ben is waiting on', null),
   money_currency: text('currency for money (MDL)'),
   money_daily_budget: num('daily spending budget'),
+  money_nothing_spent: json<string[]>('days you tapped "Nothing spent today"', []),
+  money_cooked_days: json<string[]>('days you confirmed you cooked at home', []),
   // ---- Ben ----
   coach_log: json<unknown[]>("Ben's chat (newest 200 entries)", []),
   coach_memory: json<Record<string, unknown> | null>("Ben's memory: facts and recent chat", null),
@@ -187,6 +189,7 @@ export const SETTINGS = {
   'hunter.stat_allocation': json<Record<string, number> | null>('points put into each stat', null),
   streak_shields: num('streak shields you hold'),
   reward_budget: num('old monthly money for rewards (moved into fun_budget)'),
+  fun_moves: json<Record<string, unknown>>('leftover money moved to a Finance Helper savings goal, by month', {}),
   fun_budget: json<{ lei: number; source: 'manual' | 'finance' } | null>('monthly fun budget in lei, typed or from Finance Helper', null),
   reward_unlocks: json<Record<string, unknown> | null>('rewards that unlock with a goal or streak', null),
   currency: text('old name of the money currency'),

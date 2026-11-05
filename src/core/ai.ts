@@ -188,7 +188,7 @@ export function heuristicInspectProduct(input: string, currency = 'MDL'): Inspec
     category = 'wellness'
     imageUrl = 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=600&auto=format&fit=crop&q=80'
     estimatedPrice = 1200
-  } else if (lower.includes('travel') || lower.includes('trip') || lower.includes('flight') || lower.includes('hotel') || lower.includes('kaaba') || lower.includes('umrah')) {
+  } else if (lower.includes('travel') || lower.includes('trip') || lower.includes('flight') || lower.includes('hotel')) {
     category = 'trip'
     imageUrl = 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80'
     estimatedPrice = 15000

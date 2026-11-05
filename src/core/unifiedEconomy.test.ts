@@ -44,17 +44,17 @@ describe('Unified Economy Core Domain Logic', () => {
       expect(res.totalRate).toBe(1.5)
     })
 
-    it('calculates ascendant 2.0x for 30+ day clean streak', () => {
+    it('a 30+ day clean streak is capped at 1.5x (FX7)', () => {
       const res = computeActiveMultiplier(35, 0)
-      expect(res.rate).toBe(2.0)
-      expect(res.totalRate).toBe(2.0)
+      expect(res.rate).toBe(1.5)
+      expect(res.totalRate).toBe(1.5)
     })
 
     it('adds +15% budget shield bonus when under budget 3+ days in a row', () => {
       const res = computeActiveMultiplier(14, 3)
       expect(res.rate).toBe(1.5)
       expect(res.budgetBonus).toBe(0.15)
-      expect(res.totalRate).toBe(1.65)
+      expect(res.totalRate).toBe(1.5) // capped (FX7)
       expect(res.label).toContain('Budget Shield')
     })
   })
@@ -91,7 +91,7 @@ describe('Unified Economy Core Domain Logic', () => {
   describe('Mega Wishlist Goal Progression & ETA', () => {
     const sampleGoal: WishlistGoal = {
       id: 1,
-      title: 'Kaaba Trip Fund',
+      title: 'Weekend Trip Fund',
       targetCoins: 20000,
       targetRealCost: 15000,
       allocatedCoins: 5000,

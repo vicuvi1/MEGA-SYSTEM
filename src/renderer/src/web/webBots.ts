@@ -21,6 +21,8 @@ import { shownMood } from '@core/benActs'
 import { REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseReliability, promiseRefs, promiseStats, setOutcome, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
+import { financeDayTx, shopValue } from './webServices'
+import { suggestPoints } from '@core/funBudget'
 import { notesForBen, readNoteOp } from '@core/notebook'
 import { askedFor, confirmButton, loggedInText, readConfirm, riskOf } from '@core/benSafety'
 import { startsNow } from '@core/startNow'
@@ -1240,6 +1242,19 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           if (a.kind === 'habit' || a.kind === 'reward' || a.kind === 'week' || a.kind === 'bigdone') {
             const line = await mirror.write((db) => {
               const svc = services.services(db)
+              if (a.kind === 'habit' && (a.habit === 'nospend' || a.habit === 'cooked')) {
+                // FX3: only what he said; through the money service (same rules as the app).
+                try {
+                  if (a.habit === 'nospend') {
+                    const r = svc.money.nothingSpent(financeDayTx(svc))
+                    return r.already ? null : '✅ Nothing spent today: it counts as a no-spend day once the day is over'
+                  }
+                  svc.money.confirmCooked()
+                  return '✅ Cooked at home today'
+                } catch (e) {
+                  return `⚠️ ${(e as Error).message}`
+                }
+              }
               if (a.kind === 'habit') {
                 const already = (svc.wallet.summary().todayRules ?? []).includes(a.habit === 'oath' ? 'discipline.oath' : a.habit === 'clean' ? 'discipline.clean_day' : 'face.routine_done')
                 if (already) return null
@@ -1249,8 +1264,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
                 return `✅ Habit: ${a.habit === 'oath' ? 'morning oath' : a.habit === 'clean' ? 'clean-day check-in' : 'skincare'}`
               }
               if (a.kind === 'reward') {
-                svc.shop.save({ title: a.title, price: a.points, tier: 'bronze', realCost: a.cost, pinned: false, note: 'Added by your coach', currency: 'MDL' })
-                return `🎁 New reward: ${a.title} · ${a.points} points`
+                // RL2: priced from the real cost at today's point value (never a fixed 10 per lei).
+                const price = a.cost > 0 ? suggestPoints(a.cost, shopValue(svc).value) : a.points
+                svc.shop.save({ title: a.title, price, tier: 'bronze', realCost: a.cost, pinned: false, note: 'Added by your coach', currency: 'MDL' })
+                return `🎁 New reward: ${a.title} · ${price} points`
               }
               if (a.kind === 'bigdone') {
                 const plan = svc.weekPlan.active()

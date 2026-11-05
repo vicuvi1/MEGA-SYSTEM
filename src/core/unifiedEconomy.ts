@@ -17,6 +17,9 @@ export const DISCIPLINE_MULTIPLIERS: MultiplierTier[] = [
   { minStreak: 0, multiplier: 1.0, label: 'Standard (1.0x)' }
 ]
 
+/** FX7: no boost ever pays more than 1.5× (streak tiers, budget bonus, bought boosts). */
+export const MAX_BOOST = 1.5
+
 export interface MultiplierInfo {
   rate: number
   cleanStreak: number
@@ -39,7 +42,7 @@ export function computeActiveMultiplier(cleanStreak: number, budgetStreak: numbe
 
   // If under budget 3+ days in a row, grant a +15% financial multiplier bonus
   const budgetBonus = safeBudget >= 3 ? 0.15 : 0
-  const totalRate = Math.round((tier.multiplier + budgetBonus) * 100) / 100
+  const totalRate = Math.round(Math.min(MAX_BOOST, tier.multiplier + budgetBonus) * 100) / 100
 
   let label = tier.label
   if (budgetBonus > 0) {
@@ -47,7 +50,7 @@ export function computeActiveMultiplier(cleanStreak: number, budgetStreak: numbe
   }
 
   return {
-    rate: tier.multiplier,
+    rate: Math.min(MAX_BOOST, tier.multiplier),
     cleanStreak: safeClean,
     budgetStreak: safeBudget,
     budgetBonus,

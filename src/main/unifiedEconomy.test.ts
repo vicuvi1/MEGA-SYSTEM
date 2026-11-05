@@ -30,7 +30,7 @@ describe('UnifiedEconomyService Backend', () => {
   it('initializes default seeded wishlist goals', () => {
     const goals = economy.goals()
     expect(goals.length).toBeGreaterThanOrEqual(3)
-    const kaaba = goals.find((g) => g.title.includes('Kaaba'))
+    const kaaba = goals.find((g) => g.title.includes('trip'))
     expect(kaaba).toBeDefined()
     expect(kaaba?.pinned).toBe(true)
   })
@@ -134,11 +134,11 @@ describe('UnifiedEconomyService Backend', () => {
       targetCoins: 15000,
       targetRealCost: 1200,
       category: 'tech',
-      imageUrl: 'https://images.unsplash.com/photo-sony-camera.jpg',
+      imageUrl: 'https://img.example.com/camera.jpg',
       currency: 'USD',
       note: 'Cinematic video creator rig'
     })
-    expect(goal.imageUrl).toBe('https://images.unsplash.com/photo-sony-camera.jpg')
+    expect(goal.imageUrl).toBe('https://img.example.com/camera.jpg')
     expect(goal.currency).toBe('USD')
 
     economy.setCurrency('USD')
@@ -167,22 +167,17 @@ describe('UnifiedEconomyService Backend', () => {
     expect(bank1.stakedCoins).toBe(200);
     expect(wallet.summary(day1).balance).toBe(200); // 400 - 200 = 200
 
-    // Fast-forward 5 days to 2026-10-25
+    // Five days later: no interest, points come only from what you do (FX7).
     const day5 = new Date('2026-10-25T12:00:00Z');
     const bank5 = economy.getBankState(day5);
-    expect(bank5.pendingInterest).toBeGreaterThan(0);
-
-    // Claim interest
-    const claimed = economy.claimInterest(day5);
-    expect(claimed.claimedCoins).toBe(bank5.pendingInterest);
-    expect(claimed.bank.pendingInterest).toBe(0);
-    expect(claimed.bank.totalInterestEarned).toBe(claimed.claimedCoins);
-    expect(wallet.summary(day5).balance).toBe(200 + claimed.claimedCoins);
+    expect(bank5.pendingInterest).toBe(0);
+    expect(() => economy.claimInterest(day5)).toThrow(/no interest/);
+    expect(wallet.summary(day5).balance).toBe(200);
 
     // Withdraw 100 coins
     const bankWithdrawn = economy.withdrawCoins(100, day5);
     expect(bankWithdrawn.stakedCoins).toBe(100);
-    expect(wallet.summary(day5).balance).toBe(200 + claimed.claimedCoins + 100);
+    expect(wallet.summary(day5).balance).toBe(300);
   });
 
   it('purchases and activates tactical consumables and buffs', () => {
@@ -207,7 +202,7 @@ describe('UnifiedEconomyService Backend', () => {
     expect(res.buff?.effectKind).toBe('multiplier_boost');
     expect(res.balance).toBe(180);
     expect(economy.isBuffActive('multiplier_boost', now)).toBe(true);
-    expect(economy.getBuffMultiplier('multiplier_boost', now)).toBe(2.0);
+    expect(economy.getBuffMultiplier('multiplier_boost', now)).toBe(1.5); // capped (FX7)
 
     // Buy Streak Shield (50 coins)
     const shieldBefore = shields.count();

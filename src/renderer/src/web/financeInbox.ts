@@ -17,7 +17,9 @@ export interface InboxEntry {
   note: string
   date: string // YYYY-MM-DD
   at: number
-  type?: 'expense' | 'income' // expense when missing
+  type?: 'expense' | 'income' | 'saving' // expense when missing
+  /** RL7 ('saving'): the Finance Helper goal the money goes to. */
+  goalId?: string
   /** Take this record back out of Finance Helper (you deleted it in Life System). */
   remove?: boolean
 }
@@ -101,9 +103,85 @@ function financeAccount(state: any): { id: string; currency: string } | null {
   return acc ? { id: acc.id, currency: base } : null
 }
 
+/**
+ * RL7: where money for a savings goal goes. A goal you fill by hand
+ * ('manual') gets the amount added; a goal that counts a savings account gets
+ * a transfer into that account (from the account you usually pay from).
+ * null = this goal can't take a move (it counts all your money).
+ */
+export function savingTarget(state: any, goalId?: string): { goal: { id: string; name: string }; mode: 'manual' | 'transfer'; from?: string; to?: string } | null {
+  const goals: any[] = (Array.isArray(state?.goals) ? state.goals : []).filter((g: any) => g && !g.deleted && !g.doneAt && !g.archived)
+  const goal = goalId ? goals.find((g) => g.id === goalId) : goals.find((g) => g.account === 'manual' || g.account === 'savings' || isAccount(state, g.account)) ?? goals[0]
+  if (!goal) return null
+  const out = { id: String(goal.id), name: String(goal.name ?? 'Goal') }
+  if (goal.account === 'manual') return { goal: out, mode: 'manual' }
+  const accounts: any[] = (state.settings?.accounts ?? []).filter((a: any) => !a.archived)
+  const saving = (a: any) => a && (a.savings || a.kind === 'savings')
+  const to = isAccount(state, goal.account) ? goal.account : goal.account === 'savings' ? (accounts.find((a) => a.id === state.settings?.savingsAccount && saving(a)) ?? accounts.find(saving))?.id : null
+  const from = financeAccount(state)?.id
+  if (!to || !from || to === from) return null
+  return { goal: out, mode: 'transfer', from, to }
+}
+const isAccount = (state: any, id: unknown) => typeof id === 'string' && (state?.settings?.accounts ?? []).some((a: any) => a.id === id && !a.archived)
+
+/** A move to savings (RL7) into Finance Helper, or null when it can't go anywhere. */
+function applySaving(state: any, e: InboxEntry, now: number): any | null {
+  const t = savingTarget(state, e.goalId)
+  if (!t) return null
+  if (t.mode === 'manual') {
+    const goals = state.goals.map((g: any) => {
+      if (g.id !== t.goal.id) return g
+      const history = Array.isArray(g.history) ? g.history : []
+      if (history.some((h: any) => h && h.id === e.id)) return g
+      return { ...g, saved: (Number(g.saved) || 0) + e.amount, history: [...history, { id: e.id, date: e.date, amount: e.amount, note: e.note }], updatedAt: now }
+    })
+    return { ...state, goals }
+  }
+  const tx = { id: e.id, createdAt: e.at, updatedAt: now, type: 'transfer', amount: e.amount, currency: state.settings?.currency || 'MDL', rate: 1, base: e.amount, date: e.date, from: t.from, to: t.to, note: e.note, source: 'telegram' }
+  return { ...state, tx: [...state.tx, tx] }
+}
+
+/** Takes a move to savings back out of a goal you fill by hand. */
+function removeSaving(state: any, ids: Set<string>, now: number): { state: any; n: number } {
+  let n = 0
+  const goals = (Array.isArray(state.goals) ? state.goals : []).map((g: any) => {
+    const history: any[] = Array.isArray(g?.history) ? g.history : []
+    const gone = history.filter((h) => h && ids.has(h.id))
+    if (!gone.length) return g
+    n += gone.length
+    return { ...g, saved: Math.max(0, (Number(g.saved) || 0) - gone.reduce((a, h) => a + (Number(h.amount) || 0), 0)), history: history.filter((h) => !(h && ids.has(h.id))), updatedAt: now }
+  })
+  return { state: n ? { ...state, goals } : state, n }
+}
+
 /** Finance Helper's data with the inbox expenses it doesn't have yet. */
 export function applyInbox(state: any, inbox: InboxEntry[], now = Date.now()): { state: any; added: number } {
   if (!state || !Array.isArray(state.tx) || !inbox.length) return { state, added: 0 }
+  let moved = 0
+  // Moves to savings that were undone: out of the goal's own list too.
+  {
+    const r = removeSaving(state, new Set(inbox.filter((e) => e.remove).map((e) => e.id)), now)
+    state = r.state
+    moved += r.n
+  }
+  // Moves to savings not there yet (once each: a transfer by id, a goal's list by id).
+  const goneIds = new Set(inbox.filter((e) => e.remove).map((e) => e.id))
+  for (const e of inbox.filter((x) => x.type === 'saving' && !x.remove && !goneIds.has(x.id))) {
+    const inGoals = (state.goals ?? []).some((g: any) => (g?.history ?? []).some((h: any) => h && h.id === e.id))
+    if (inGoals || state.tx.some((t: any) => t.id === e.id) || state.deleted?.[e.id]) continue
+    const next = applySaving(state, e, now)
+    if (next) {
+      state = next
+      moved++
+    }
+  }
+  inbox = inbox.filter((e) => e.type !== 'saving')
+  const r = applyEntries(state, inbox, now)
+  return { state: r.state, added: r.added + moved }
+}
+
+function applyEntries(state: any, inbox: InboxEntry[], now: number): { state: any; added: number } {
+  if (!inbox.length) return { state, added: 0 }
   // Deleted in Life System: removed here too (with Finance Helper's own deletion marker).
   const gone = new Set(inbox.filter((e) => e.remove).map((e) => e.id))
   const removing = state.tx.filter((t: any) => gone.has(t.id))

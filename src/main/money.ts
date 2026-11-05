@@ -1,4 +1,8 @@
 import { computeDailyExpenseSummary, validateExpense, type DailyExpenseSummary, type Expense } from '@core/money'
+import { judgeMoneyDays, liveLog, moneyDay, type DayTx, type JudgedMoneyDay } from '@core/moneyDays'
+import { savingStreak, SAVING_STREAK_BONUS } from '@core/funBudget'
+import { addDays } from '@core/dates'
+import { LedgerError } from '@core/ledger'
 import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
@@ -158,6 +162,116 @@ export class MoneyService {
     // …and out of Finance Helper too.
     this.toFinance?.({ id: `life-exp-${id}`, amount: 0, category: '', note: '', date: this.wallet.today(), at: Date.now(), remove: true })
     return this.state()
+  }
+
+  // ---- Honest money days (FX3, RL6) ----
+
+  private days(key: 'money_nothing_spent' | 'money_cooked_days'): string[] {
+    try {
+      const v = JSON.parse(getSetting(this.db, key) || '[]')
+      return Array.isArray(v) ? v.filter((d) => typeof d === 'string') : []
+    } catch {
+      return []
+    }
+  }
+  private addDay(key: 'money_nothing_spent' | 'money_cooked_days', day: string): void {
+    const list = [...new Set([...this.days(key), day])].sort().slice(-90)
+    setSetting(this.db, key, JSON.stringify(list))
+  }
+
+  /** Expenses logged here, as money days (a record made on its own day is live). */
+  nativeDayTx(): DayTx[] {
+    const dayOf = (ms: number) => this.wallet.today(new Date(ms))
+    return this.expenses(300).map((e) => ({ date: e.day, type: 'expense', category: e.category, note: e.note ?? '', amount: e.amount, live: liveLog(e.day, Date.parse(e.createdAt), dayOf) }))
+  }
+
+  /** Days you tapped "Nothing spent today" / confirmed cooking at home. */
+  marks(): { nothingSpent: string[]; cooked: string[] } {
+    return { nothingSpent: this.days('money_nothing_spent'), cooked: this.days('money_cooked_days') }
+  }
+
+  /**
+   * "Nothing spent today": counts today as a no-spend day once it is over
+   * (if no spending shows up for it by then). Pays nothing now.
+   * `other`: records from Finance Helper, to check you didn't log spending already.
+   */
+  nothingSpent(other: DayTx[] = [], now = new Date()): { day: string; already: boolean } {
+    const day = this.wallet.today(now)
+    const m = moneyDay([...this.nativeDayTx(), ...other], day)
+    if (m.everydayBani > 0) throw new LedgerError('You already logged spending today, so it is not a no-spend day')
+    const already = this.days('money_nothing_spent').includes(day)
+    if (!already) this.addDay('money_nothing_spent', day)
+    return { day, already }
+  }
+
+  /** "I cooked at home today": you confirm it, then it pays (once a day). */
+  confirmCooked(now = new Date()): number {
+    const day = this.wallet.today(now)
+    const ref = `money:cooked:${day}`
+    if (this.wallet.entries().some((e) => e.ref === ref || e.ref === `fin:cooked:${day}`)) throw new LedgerError('Cooking at home is already counted today')
+    const id = this.wallet.awardRule('money.cooked_home', { now, day, ref, note: 'Cooked at home (you confirmed)' })
+    this.addDay('money_cooked_days', day)
+    return id
+  }
+
+  /** The finished days from `from` to yesterday, judged from live logs only. */
+  judged(other: DayTx[] = [], from?: string, now = new Date()): JudgedMoneyDay[] {
+    const today = this.wallet.today(now)
+    const m = this.marks()
+    return judgeMoneyDays({ tx: [...this.nativeDayTx(), ...other], from: from ?? addDays(today, -30), today, budgetBani: this.dailyBudgetSet(), nothingSpent: m.nothingSpent })
+  }
+
+  /** The daily budget days are judged on: the one the Money page shows (bani, 0 = off). */
+  dailyBudgetSet(): number {
+    return this.dailyBudget()
+  }
+
+  /** RL6: days in a row under budget (finished days with a live log), and the next bonus. */
+  savingStreak(other: DayTx[] = [], now = new Date()): { days: number; next: { days: number; points: number } | null } {
+    const days = savingStreak(this.judged(other, undefined, now))
+    return { days, next: SAVING_STREAK_BONUS.find((b) => b.days > days) ?? null }
+  }
+
+  /**
+   * Pays the finished days once each (FX3): a no-spend day (a live log or
+   * your "Nothing spent today", no everyday spending), under budget (a live
+   * log, at or under your daily budget; never back-dated or imported days),
+   * and the saving-streak bonuses at 3, 7 and 14 days (RL6). Days from
+   * `since` (when money was first connected), the last 7 at most.
+   */
+  payDays(other: DayTx[] = [], since?: string, now = new Date()): number {
+    const today = this.wallet.today(now)
+    const week = addDays(today, -7)
+    const from = since && since > week ? since : week
+    const refs = new Set(this.wallet.entries().map((e) => e.ref ?? '').filter(Boolean))
+    let paid = 0
+    const pay = (rule: string, day: string, ref: string, note: string, also: string[] = []) => {
+      if (refs.has(ref) || also.some((r) => refs.has(r))) return
+      try {
+        this.wallet.awardRule(rule, { day, ref, note, now })
+        refs.add(ref)
+        paid++
+      } catch (e) {
+        if (!(e instanceof LedgerError)) throw e
+      }
+    }
+    for (const d of this.judged(other, from, now)) {
+      if (d.noSpend) pay('money.no_spend', d.day, `fin:nospend:${d.day}`, d.logged ? 'No-spend day' : 'No-spend day (you said nothing was spent)')
+      if (d.under) pay('money.under_budget', d.day, `money:under:${d.day}`, 'Stayed under your daily budget')
+    }
+    const streak = savingStreak(this.judged(other, addDays(today, -120), now))
+    const start = addDays(today, -streak)
+    for (const b of SAVING_STREAK_BONUS) {
+      if (streak < b.days) continue
+      // One bonus per streak: the ref names the day the streak started.
+      const ref = `money:streak${b.days}:${start}`
+      const pre = `money:streak${b.days}:`
+      if ([...refs].some((r) => r.startsWith(pre) && r.slice(pre.length) >= start)) continue
+      this.wallet.append({ ts: now.toISOString(), day: today, module: 'money', kind: 'earn', coins: b.points, xp: 0, ref, note: `${b.days} days in a row under budget` })
+      refs.add(ref)
+      paid++
+    }
+    return paid
   }
 
   /** Where expenses go when Finance Helper isn't on this machine (the web app's inbox). */

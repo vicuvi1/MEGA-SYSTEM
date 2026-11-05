@@ -3,6 +3,7 @@ import { balance, LedgerError } from '@core/ledger'
 import {
   coinsToMoneyValue,
   computeActiveMultiplier,
+  MAX_BOOST,
   rollEnhancedChest,
   type ChestLootDrop,
   type MultiplierInfo,
@@ -24,6 +25,7 @@ import { levelInfo } from '@core/levels'
 import { totalXp } from '@core/ledger'
 import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
+import { migrateRewardBudget, parseFunBudget } from '@core/funBudget'
 import type { Discipline } from './discipline'
 import type { MoneyService } from './money'
 import type { ShieldService } from './shields'
@@ -126,9 +128,9 @@ export class UnifiedEconomyService {
            VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, ?, ?, ?)`
         )
         this.db.transaction(() => {
-          insert.run('Kaaba Pilgrimage Fund', 20000, 15000, 'trip', 1, 'The supreme spiritual milestone. Keep stacking.', now, 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80', 'https://www.visitsaudi.com/en/umrah', 'MDL')
-          insert.run('MacBook / Pro Warrior Setup', 12000, 8000, 'tech', 0, 'High-performance battle workstation.', now, 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=80', 'https://darwin.md/apple-macbook-pro', 'MDL')
-          insert.run('Luxury Recovery & Spa Retreat', 3500, 1500, 'luxury', 0, 'Deep restorative rest and rejuvenation.', now, 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&auto=format&fit=crop&q=80', 'https://aquaterra.md/spa', 'MDL')
+          insert.run('Weekend trip fund', 20000, 15000, 'trip', 1, 'The big one. Keep stacking.', now, null, null, 'MDL')
+          insert.run('New laptop', 12000, 8000, 'tech', 0, 'For study and side projects.', now, null, 'https://shop.example.com/laptops', 'MDL')
+          insert.run('Spa afternoon', 3500, 1500, 'luxury', 0, 'Rest after a hard month.', now, null, null, 'MDL')
         })()
       }
     } catch {
@@ -483,18 +485,25 @@ export class UnifiedEconomyService {
     const vaultBalance = this.getVaultBalance()
     const currency = this.getCurrency()
 
-    const monthlyBudget = Number(getSetting(this.db, 'reward_budget') ?? 0)
+    // The monthly fun budget (RL3; the old reward_budget until it moves).
+    const funRaw = getSetting(this.db, 'fun_budget')
+    const monthlyBudget = parseFunBudget(funRaw)?.lei ?? migrateRewardBudget(funRaw, getSetting(this.db, 'reward_budget'))?.lei ?? 0
     const day = dayKey(now, this.timeZone)
     const month = day.slice(0, 7)
 
-    const spentRow = this.db
-      .prepare('SELECT COALESCE(SUM(real_cost), 0) as total FROM redemptions WHERE substr(day, 1, 7) = ?')
-      .get(month) as { total: number }
-    const monthSpent = spentRow?.total ?? 0
+    // Reward buys this month, without the ones you undid (FX7).
+    const live = new Set(this.wallet.effective().map((e) => e.id))
+    const rows = this.db.prepare('SELECT ledger_id, real_cost FROM redemptions WHERE substr(day, 1, 7) = ?').all(month) as { ledger_id: number; real_cost: number }[]
+    const monthSpent = rows.filter((r) => live.has(r.ledger_id)).reduce((a, r) => a + (r.real_cost || 0), 0)
 
     const cleanStreak = this.discipline?.state().current ?? 0
-    // Check if money service has budget streak
-    const budgetStreak = this.money?.state().today.underBudget ? 3 : 0
+    // The real saving streak: finished days in a row under budget, from live logs (RL6).
+    let budgetStreak = 0
+    try {
+      budgetStreak = this.money?.savingStreak([], now).days ?? 0
+    } catch {
+      budgetStreak = 0
+    }
     const multiplier = computeActiveMultiplier(cleanStreak, budgetStreak)
 
     const goals = this.goals()
@@ -536,12 +545,10 @@ export class UnifiedEconomyService {
     const rateInfo = computeDailyInterestRate(cleanStreak);
     const currentDay = dayKey(now, this.timeZone);
 
-    const { pendingInterest } = calculateAccruedInterest(
-      stakedCoins,
-      lastClaimDay,
-      currentDay,
-      cleanStreak
-    );
+    // FX7: the bank pays no interest. Points come only from things you did, never from waiting.
+    void calculateAccruedInterest
+    void currentDay
+    const pendingInterest = 0;
 
     return {
       stakedCoins,
@@ -651,7 +658,7 @@ export class UnifiedEconomyService {
   claimInterest(now = new Date()): { bank: BankState; claimedCoins: number } {
     const state = this.getBankState(now);
     if (state.pendingInterest <= 0) {
-      throw new LedgerError('No dividend yield available to claim yet today');
+      throw new LedgerError('The bank pays no interest: points come only from what you do');
     }
 
     const currentDay = dayKey(now, this.timeZone);
@@ -722,7 +729,7 @@ export class UnifiedEconomyService {
       const row = this.db
         .prepare('SELECT MAX(effect_val) as val FROM active_buffs WHERE effect_kind = ? AND expires_at > ?')
         .get(effectKind, nowIso) as { val: number | null } | undefined;
-      return row?.val ?? 1.0;
+      return Math.min(MAX_BOOST, Math.max(1, row?.val ?? 1.0));
     } catch {
       return 1.0;
     }

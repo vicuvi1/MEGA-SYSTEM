@@ -140,10 +140,10 @@ describe('AI Core Domain Engine', () => {
   })
 describe('Product Link & Query Inspector', () => {
     it('heuristically inspects a store URL extracting clean title and 10:1 coin pricing', () => {
-      const res = heuristicInspectProduct('https://darwin.md/casti-apple-airpods-pro-2-white.html', 'MDL')
+      const res = heuristicInspectProduct('https://shop.example.com/casti-apple-airpods-pro-2-white.html', 'MDL')
       expect(res.title).toContain('Airpods Pro 2')
       expect(res.category).toBe('tech')
-      expect(res.productUrl).toBe('https://darwin.md/casti-apple-airpods-pro-2-white.html')
+      expect(res.productUrl).toBe('https://shop.example.com/casti-apple-airpods-pro-2-white.html')
       expect(res.coins).toBe(res.price * 10)
       expect(res.imageUrl).toContain('images.unsplash.com')
     })
@@ -172,19 +172,19 @@ describe('Product Link & Query Inspector', () => {
         category: 'tech',
         note: 'Flagship noise cancelling headphones.',
         imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e',
-        productUrl: 'https://darwin.md/sony-wh-1000xm5'
+        productUrl: 'https://shop.example.com/sony-wh-1000xm5'
       })
-      const res = parseInspectProductResponse(json, 'https://darwin.md/sony-wh-1000xm5', 'MDL')
+      const res = parseInspectProductResponse(json, 'https://shop.example.com/sony-wh-1000xm5', 'MDL')
       expect(res.title).toBe('Sony WH-1000XM5 ANC Headphones')
       expect(res.price).toBe(6500)
       expect(res.coins).toBe(65000)
       expect(res.tier).toBe('gold')
       expect(res.category).toBe('tech')
-      expect(res.productUrl).toBe('https://darwin.md/sony-wh-1000xm5')
+      expect(res.productUrl).toBe('https://shop.example.com/sony-wh-1000xm5')
     })
 
     it('falls back to heuristic inspection if AI output is malformed', () => {
-      const res = parseInspectProductResponse('not valid json', 'https://darwin.md/husa-silicon-iphone-15-pro-black.html', 'MDL')
+      const res = parseInspectProductResponse('not valid json', 'https://shop.example.com/husa-silicon-iphone-15-pro-black.html', 'MDL')
       expect(res.title).toContain('Husa Silicon Iphone 15 Pro')
       expect(res.coins).toBe(res.price * 10)
     })

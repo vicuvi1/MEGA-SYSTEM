@@ -27,4 +27,11 @@ describe('daily quests', () => {
     expect(questState(day, [...rows, e({ ref: questRef(day) })]).claimed).toBe(true)
     expect(questState(day, []).allDone).toBe(false)
   })
+
+  it('counts focus sessions as study blocks (FX7)', () => {
+    const study = (day: string, rows: LedgerEntry[]) => questState(day, rows)
+    const day = ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'].find((d) => questsFor(d).some((q) => q.id === 'study2'))!
+    const rows = [e({ day, ruleId: 'focus.session' }), e({ day, ruleId: 'focus.session' })]
+    expect(study(day, rows).quests.find((q) => q.id === 'study2')).toMatchObject({ progress: 2, done: true })
+  })
 })

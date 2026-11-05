@@ -18,6 +18,7 @@ import { SoundSection } from '../settings/sound'
 import { VoiceSettings } from '../voice/VoiceSettings'
 import { BenSection } from '../settings/ben'
 import { ConnectionsSection } from '../settings/connections'
+import { RewardsSection } from '../settings/rewards'
 import { BackupsSection } from '../settings/backups'
 import { DiagnosticsSection } from '../settings/diagnostics'
 
@@ -73,6 +74,14 @@ export function Settings(props: SettingsProps) {
       hint: 'Your coach: his brain (model & cost), tone, rhythm',
       keywords: 'coach ai tone style length nudges rhythm model angry brain openrouter price cost usage claude gpt',
       body: <BenSection s={s} />
+    },
+    {
+      id: 'rewards',
+      label: 'Rewards',
+      icon: 'gift',
+      hint: 'Your monthly fun budget, what a point is worth, leftover to savings',
+      keywords: 'rewards fun budget money points value lei shop treat savings leftover goal finance entertainment',
+      body: <RewardsSection />
     },
     {
       id: 'connections',

@@ -57,7 +57,8 @@ export function computeDailyExpenseSummary(
   }
 
   const remaining = dailyBudgetBani - everydaySpent
-  const underBudget = dailyBudgetBani > 0 && everydaySpent <= dailyBudgetBani
+  // Only with something logged that day: an empty day is not "under" (FX3).
+  const underBudget = dailyBudgetBani > 0 && dayExpenses.length > 0 && everydaySpent <= dailyBudgetBani
 
   return {
     day,

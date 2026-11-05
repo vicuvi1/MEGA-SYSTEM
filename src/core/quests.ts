@@ -12,7 +12,8 @@ export interface QuestDef {
 const rule = (id: string) => (day: LedgerEntry[]) => day.filter((e) => e.ruleId === id).length
 
 export const QUEST_POOL: QuestDef[] = [
-  { id: 'study2', title: 'Finish 2 study blocks', goal: 2, count: rule('study.block_done') },
+  // A focus session pays focus.session; a planned block pays study.block_done: both are study (FX7).
+  { id: 'study2', title: 'Finish 2 study blocks', goal: 2, count: (d) => d.filter((e) => e.ruleId === 'study.block_done' || e.ruleId === 'focus.session').length },
   { id: 'wake', title: 'Wake up on time', goal: 1, count: rule('sleep.up_on_time') },
   { id: 'bed', title: 'Be in bed on time', goal: 1, count: rule('sleep.bed_on_time') },
   { id: 'money', title: 'Log your spending', goal: 1, count: rule('money.logged') },

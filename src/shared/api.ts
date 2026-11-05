@@ -141,6 +141,31 @@ export interface ShopState {
 
 export type RewardInput = Omit<Reward, 'id' | 'archived'> & { id?: number }
 
+/** RL7: leftover money this month, ready to move to savings. */
+export interface LeftoverState {
+  month: string
+  /** 'fun' = your fun budget; 'month' = Finance Helper's month limit (no fun budget set). */
+  kind: 'fun' | 'month'
+  budgetLei: number | null
+  /** Whole lei you can move now (0 = nothing, or already moved). */
+  leftLei: number
+  goal: { id: string; name: string } | null
+  moved: { lei: number; ledgerId: number; kind: 'fun' | 'month'; goal: string } | null
+  /** The last days of the month. */
+  monthEnd: boolean
+  /** After a move: "+10 points · 120 lei moved to Trip". */
+  toast?: string
+}
+
+/** FX3/RL6: honest money days. Amounts in bani. */
+export interface MoneyDaysState {
+  today: import('@core/moneyDays').MoneyDay & { day: string; nothingSpentTapped: boolean }
+  /** The daily budget you set, bani (0 = none). */
+  dailyBudget: number
+  days: import('@core/moneyDays').JudgedMoneyDay[]
+  streak: { days: number; next: { days: number; points: number } | null }
+}
+
 /** RL1: what a point is worth in real money, and this month's fun budget (life.shop.value()). */
 export interface ShopValue {
   value: import('@core/pointValue').PointValue
@@ -481,6 +506,14 @@ export interface LifeApi {
     openChest(level: number): Promise<{ coins: number; state: ShopState }>
     /** RL1: what a point is worth in lei, your fun budget, spent and left, your hour of work. */
     value(): Promise<ShopValue>
+    /** RL3: set the monthly fun budget by hand, from Finance Helper's Fun/Entertainment limit, or off (null). */
+    setFunBudget(b: { lei: number; source: 'manual' | 'finance' } | null): Promise<ShopValue>
+    /** RL2: suggested new prices from real cost (only suggestions; apply one with save). */
+    reprice(): Promise<import('@core/funBudget').RepriceRow[]>
+    /** RL7: what is left this month and the Finance Helper goal it can go to. */
+    leftover(): Promise<LeftoverState>
+    /** RL7: move the leftover to that goal in one tap (once a month, small "Saved" bonus; undo from History). */
+    moveLeftover(): Promise<LeftoverState>
     setBudget(amount: number): Promise<ShopState>
     setCurrency(cur: string): Promise<ShopState>
   }
@@ -608,6 +641,12 @@ export interface LifeApi {
     deleteExpense(id: number): Promise<NativeMoneySummary>
     setBudget(budgetBani: number): Promise<NativeMoneySummary>
     setCurrency(cur: string): Promise<NativeMoneySummary>
+    /** FX3/RL6: today, the last 14 judged days (newest first) and the saving streak. */
+    days(): Promise<MoneyDaysState>
+    /** "Nothing spent today": counts as a no-spend day once the day is over (if no spending shows up). */
+    nothingSpent(): Promise<MoneyDaysState>
+    /** "I cooked at home today": you confirm it, it pays once a day. */
+    confirmCooked(): Promise<MoneyDaysState>
   }
   shields: {
     count(): Promise<number>

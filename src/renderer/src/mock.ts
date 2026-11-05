@@ -4,7 +4,7 @@ import { levelInfo, type StatAllocation } from '@core/levels'
 import { DEFAULT_RULES, planAward, type Rule } from '@core/rules'
 import { pointValue } from '@core/pointValue'
 import { chestRef, DEFAULT_REWARDS, earnPerDay, planRedeem, rollChest, unopenedChests, validateReward, type Reward } from '@core/shop'
-import type { AuthStatus, BackupStatus, ShopState, Summary, EconomyConfig } from '@shared/api'
+import type { AuthStatus, BackupStatus, MoneyDaysState, ShopState, Summary, EconomyConfig } from '@shared/api'
 import { ECONOMY_PRESETS } from '@shared/api'
 import type { Bridge } from './bridge'
 import { createMockPlan } from './mockPlan'
@@ -63,6 +63,13 @@ export function createMockApi(): Bridge {
     lastError: pass ? null : 'Set a backup passphrase in Settings to turn on backups'
   })
   const ok = <T>(v: T) => Promise.resolve(v)
+  let nothingTapped = false
+  const mockDays = (): MoneyDaysState => ({
+    today: { day: dayKey(new Date()), logged: true, everydayBani: 3500, noSpend: false, cooked: false, cookedGuess: true, nothingSpentTapped: nothingTapped },
+    dailyBudget: 10000,
+    days: [],
+    streak: { days: 2, next: { days: 3, points: 10 } }
+  })
 
   const shop = (): ShopState => {
     const live = new Set(effective(entries).map((e) => e.id))
@@ -197,6 +204,16 @@ export function createMockApi(): Bridge {
         const spent = shop().monthSpent
         return { value: v, funBudgetLei: budget || null, funSpentLei: spent, funLeftLei: budget ? budget - spent : null, hourlyLei: null, funSource: budget ? 'manual' : null }
       },
+      setFunBudget: async (b) => {
+        budget = b?.lei ?? 0
+        const v = pointValue({ funBudgetLei: budget || null, earnPerDay: earnPerDay(entries as any, dayKey(new Date())) })
+        return { value: v, funBudgetLei: budget || null, funSpentLei: shop().monthSpent, funLeftLei: budget ? budget - shop().monthSpent : null, hourlyLei: null, funSource: budget ? 'manual' : null }
+      },
+      reprice: async () => [],
+      leftover: async () => ({ month: dayKey(new Date()).slice(0, 7), kind: 'fun', budgetLei: budget || null, leftLei: 0, goal: null, moved: null, monthEnd: false }),
+      moveLeftover: async () => {
+        throw new Error('Add a savings goal in Finance Helper first')
+      },
       setBudget: async (amount) => {
         budget = amount
         return shop()
@@ -265,21 +282,24 @@ export function createMockApi(): Bridge {
       deleteExpense: async () => ({
         currency: 'MDL',
         dailyBudget: 10000,
-        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: 10000, underBudget: true, remaining: 10000, byCategory: {} },
+        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: 10000, underBudget: false, remaining: 10000, byCategory: {} },
         monthSpent: 0,
         recentExpenses: []
       }),
       setBudget: async (b) => ({
         currency: 'MDL',
         dailyBudget: b,
-        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: b, underBudget: true, remaining: b, byCategory: {} },
+        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: b, underBudget: false, remaining: b, byCategory: {} },
         monthSpent: 0,
         recentExpenses: []
       }),
+      days: async () => mockDays(),
+      nothingSpent: async () => ((nothingTapped = true), mockDays()),
+      confirmCooked: async () => mockDays(),
       setCurrency: async (cur) => ({
         currency: cur,
         dailyBudget: 10000,
-        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: 10000, underBudget: true, remaining: 10000, byCategory: {} },
+        today: { day: dayKey(new Date()), totalSpent: 0, everydaySpent: 0, budget: 10000, underBudget: false, remaining: 10000, byCategory: {} },
         monthSpent: 0,
         recentExpenses: []
       })
@@ -314,7 +334,7 @@ export function createMockApi(): Bridge {
         },
         pinnedGoal: {
           id: 1,
-          title: 'Kaaba Pilgrimage Fund',
+          title: 'Weekend trip fund',
           targetCoins: 20000,
           targetRealCost: 15000,
           allocatedCoins: 4500,
@@ -323,13 +343,13 @@ export function createMockApi(): Bridge {
           pinned: true,
           completed: false,
           completedAt: null,
-          note: 'The supreme spiritual milestone. Keep stacking.',
+          note: 'The big one. Keep stacking.',
           createdAt: new Date().toISOString()
         },
         goals: [
           {
             id: 1,
-            title: 'Kaaba Pilgrimage Fund',
+            title: 'Weekend trip fund',
             targetCoins: 20000,
             targetRealCost: 15000,
             allocatedCoins: 4500,
@@ -338,12 +358,12 @@ export function createMockApi(): Bridge {
             pinned: true,
             completed: false,
             completedAt: null,
-            note: 'The supreme spiritual milestone. Keep stacking.',
+            note: 'The big one. Keep stacking.',
             createdAt: new Date().toISOString()
           },
           {
             id: 2,
-            title: 'MacBook / Pro Warrior Setup',
+            title: 'New laptop',
             targetCoins: 12000,
             targetRealCost: 8000,
             allocatedCoins: 2000,
@@ -380,7 +400,7 @@ export function createMockApi(): Bridge {
       depositCoins: async (goalId, amount) => ({
         goal: {
           id: goalId,
-          title: 'Kaaba Pilgrimage Fund',
+          title: 'Weekend trip fund',
           targetCoins: 20000,
           targetRealCost: 15000,
           allocatedCoins: 5000,
@@ -397,7 +417,7 @@ export function createMockApi(): Bridge {
       depositVault: async (goalId, amount) => ({
         goal: {
           id: goalId,
-          title: 'Kaaba Pilgrimage Fund',
+          title: 'Weekend trip fund',
           targetCoins: 20000,
           targetRealCost: 15000,
           allocatedCoins: 4500,
@@ -662,7 +682,7 @@ export function createMockApi(): Bridge {
             tier: 'bronze',
             category: 'wellness',
             note: 'High yield restoration for cognitive focus and dopamine reset.',
-            imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=600&q=80'
+            imageUrl: ''
           },
           {
             title: 'Deep Tissue Recovery & Spa Session',
@@ -671,7 +691,7 @@ export function createMockApi(): Bridge {
             tier: 'silver',
             category: 'wellness',
             note: 'Physical recovery following intense training protocols.',
-            imageUrl: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80'
+            imageUrl: ''
           },
           {
             title: 'Mechanical Ergonomic Keyboard',
@@ -680,7 +700,7 @@ export function createMockApi(): Bridge {
             tier: 'gold',
             category: 'tech',
             note: 'Top tier hunter hardware for maximum code execution velocity.',
-            imageUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80'
+            imageUrl: ''
           }
         ]
       }),
@@ -713,8 +733,8 @@ export function createMockApi(): Bridge {
         tier: 'silver',
         category: 'tech',
         note: 'Inspected warrior item calibrated to standard 10:1 coin economy.',
-        imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80',
-        productUrl: queryOrUrl.startsWith('http') ? queryOrUrl : 'https://darwin.md'
+        imageUrl: '',
+        productUrl: queryOrUrl.startsWith('http') ? queryOrUrl : 'https://shop.example.com'
       }),
       decomposeTask: async (title: string) => ({
         strategyTip: `Conquer the foundation of "${title}" in the first 10 minutes to generate momentum.`,

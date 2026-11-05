@@ -65,6 +65,8 @@ export interface ProgressReport {
   /** 0–100: how close the last 7 days came to a good week in every area with a target. */
   score: number
   prevScore: number
+  /** RL6: finished days in a row under your daily budget (live logs only), and the next bonus. */
+  savingStreak?: { days: number; next: { days: number; points: number } | null }
 }
 
 const WEEKS = 6

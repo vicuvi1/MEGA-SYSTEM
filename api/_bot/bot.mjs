@@ -1846,6 +1846,8 @@ var SETTINGS = {
 	money_ask: json$4("a money question Ben is waiting on", null),
 	money_currency: text("currency for money (MDL)"),
 	money_daily_budget: num$1("daily spending budget"),
+	money_nothing_spent: json$4("days you tapped \"Nothing spent today\"", []),
+	money_cooked_days: json$4("days you confirmed you cooked at home", []),
 	coach_log: json$4("Ben's chat (newest 200 entries)", []),
 	coach_memory: json$4("Ben's memory: facts and recent chat", null),
 	coach_profile: json$4("about you, as Ben knows it", null),
@@ -1906,6 +1908,7 @@ var SETTINGS = {
 	"hunter.stat_allocation": json$4("points put into each stat", null),
 	streak_shields: num$1("streak shields you hold"),
 	reward_budget: num$1("old monthly money for rewards (moved into fun_budget)"),
+	fun_moves: json$4("leftover money moved to a Finance Helper savings goal, by month", {}),
 	fun_budget: json$4("monthly fun budget in lei, typed or from Finance Helper", null),
 	reward_unlocks: json$4("rewards that unlock with a goal or streak", null),
 	currency: text("old name of the money currency"),
@@ -4660,6 +4663,48 @@ function queueFinanceEntries(db, entries, now = Date.now()) {
 function inboxIds(db) {
 	return new Set(parse$1(getSetting(db, SETTING$1), []).map((e) => e.id));
 }
+/** The account you last paid from in your main currency (else the first one in it). */
+function financeAccount(state) {
+	const base = state.settings?.currency || "MDL";
+	const accounts = (state.settings?.accounts ?? []).filter((a) => !a.archived);
+	const inBase = (a) => (a?.currency || base) === base;
+	const acc = [...state.tx ?? []].filter((t) => t.type === "expense").sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1).map((t) => accounts.find((a) => a.id === t.account)).find((a) => a && inBase(a)) ?? accounts.find((a) => inBase(a) && !a.savings) ?? accounts.find(inBase);
+	return acc ? {
+		id: acc.id,
+		currency: base
+	} : null;
+}
+/**
+* RL7: where money for a savings goal goes. A goal you fill by hand
+* ('manual') gets the amount added; a goal that counts a savings account gets
+* a transfer into that account (from the account you usually pay from).
+* null = this goal can't take a move (it counts all your money).
+*/
+function savingTarget(state, goalId) {
+	const goals = (Array.isArray(state?.goals) ? state.goals : []).filter((g) => g && !g.deleted && !g.doneAt && !g.archived);
+	const goal = goalId ? goals.find((g) => g.id === goalId) : goals.find((g) => g.account === "manual" || g.account === "savings" || isAccount(state, g.account)) ?? goals[0];
+	if (!goal) return null;
+	const out = {
+		id: String(goal.id),
+		name: String(goal.name ?? "Goal")
+	};
+	if (goal.account === "manual") return {
+		goal: out,
+		mode: "manual"
+	};
+	const accounts = (state.settings?.accounts ?? []).filter((a) => !a.archived);
+	const saving = (a) => a && (a.savings || a.kind === "savings");
+	const to = isAccount(state, goal.account) ? goal.account : goal.account === "savings" ? (accounts.find((a) => a.id === state.settings?.savingsAccount && saving(a)) ?? accounts.find(saving))?.id : null;
+	const from = financeAccount(state)?.id;
+	if (!to || !from || to === from) return null;
+	return {
+		goal: out,
+		mode: "transfer",
+		from,
+		to
+	};
+}
+var isAccount = (state, id) => typeof id === "string" && (state?.settings?.accounts ?? []).some((a) => a.id === id && !a.archived);
 // src/plugins/bank/csv.ts
 /** Splits one CSV line (quotes may hold the delimiter and "" is a quote). */
 function splitLine(line, delim) {
@@ -6576,6 +6621,7 @@ var ACT_GROUPS = {
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
+- "habit: nospend" ONLY when he says he spent nothing today (it counts once the day is over). "habit: cooked" ONLY when he says he cooked at home today. Never guess either.
 - His daily home workout plan (the checklist): "target: <exercise> | <reps>" change a daily target, "exercise: <name> | <reps> | <unit>" add an exercise, "noexercise: <name>" take one off. He is building muscle: raise targets when he keeps completing them, add variety (pull-ups, dips, lunges, plank in sec) when it fits.
 - "workout: <YYYY-MM-DD> | <what he did>" log a workout he did on a past day that is missing (counts for his streak); today's checklist uses reps/log instead.
 - "style: short|normal|detailed; tone=1-5" when he tells you how to talk ("be shorter", "go harder on me", "more detail"). 1 = gentle, 5 = drill sergeant.
@@ -6584,7 +6630,7 @@ var ACT_GROUPS = {
 - "delmoney: M2" delete a record. "editmoney: M2 | amount=45; category=Food; account=Maib; note=<text>; date=YYYY-MM-DD" change it.
 - Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
 Points and the week:
-- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop (points ≈ 10 per lei of real cost is fair).
+- "reward: <title> | <points> | <real cost in lei>" a new reward in the shop. With a real cost the app prices it from what a point is really worth (your points are only used when it costs nothing).
 - "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.`,
 	calendar: `Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
@@ -7006,7 +7052,7 @@ function readAction(line) {
 	}
 	if (kind === "habit") {
 		const h = arg.toLowerCase();
-		const habit = /oath/.test(h) ? "oath" : /clean|check/.test(h) ? "clean" : /skin|face/.test(h) ? "skincare" : null;
+		const habit = /oath/.test(h) ? "oath" : /no.?spend|nothing.?spent/.test(h) ? "nospend" : /cook/.test(h) ? "cooked" : /clean|check/.test(h) ? "clean" : /skin|face/.test(h) ? "skincare" : null;
 		return habit ? {
 			kind: "habit",
 			habit
@@ -10436,17 +10482,60 @@ async function tgSend(token, chatId, text, fetchImpl = fetch) {
 var BILL = /bill|rent|chirie|utilit|subscript|abonament|internet|phone|telefon|insurance|asigur|loan|credit|\btax(es)?\b|impozit/i;
 var EAT_OUT = /restaurant|cafe|café|coffee|cafea|bar\b|delivery|glovo|wolt|fast ?food|takeaway|mcdonald|kfc|pizza|burger|eat(ing)? out|lunch out|dinner out/i;
 var GROCERY = /grocer|supermarket|market|alimente|linella|kaufland|metro|fourchette|nr ?1|food shop|produse/i;
-function moneyDay(tx, day) {
-	const everyday = tx.filter((t) => t.type === "expense" && t.date.slice(0, 10) === day).filter((t) => !BILL.test(`${t.category} ${t.note ?? ""}`));
+var isBill = (t) => BILL.test(`${t.category} ${t.note ?? ""}`);
+/**
+* Was a record for `date` made on that day (or before 04:00 the next
+* morning)? `dayOf` turns a time (ms) into your local day. Imported records
+* (bank statements, sheets) never are.
+*/
+function liveLog(date, createdAt, dayOf, imported = false) {
+	if (imported || !Number.isFinite(Number(createdAt)) || !createdAt) return false;
+	const ms = Number(createdAt);
+	return dayOf(ms) === date || dayOf(ms - 144e5) === date;
+}
+/** Imported from a bank statement or a sheet (not logged by hand). */
+var isImported = (t) => /^tg-life-bank-|^imp-|^bank-/.test(String(t.id ?? "")) || /^(bank|import|csv|sheet|xlsx)$/i.test(String(t.source ?? ""));
+function moneyDay(tx, day, marks = {}) {
+	const ofDay = tx.filter((t) => t.date.slice(0, 10) === day);
+	const everyday = ofDay.filter((t) => t.type === "expense").filter((t) => !isBill(t));
 	const eatOut = everyday.some((t) => EAT_OUT.test(`${t.category} ${t.note ?? ""}`));
 	const from = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
 	from.setUTCDate(from.getUTCDate() - 3);
 	const start = from.toISOString().slice(0, 10);
 	const groceries = tx.some((t) => t.type === "expense" && t.date.slice(0, 10) >= start && t.date.slice(0, 10) <= day && GROCERY.test(`${t.category} ${t.note ?? ""}`));
+	const logged = ofDay.some((t) => t.live === true);
 	return {
-		noSpend: everyday.length === 0,
-		cooked: !eatOut && groceries
+		logged,
+		everydayBani: everyday.reduce((s, t) => s + Math.abs(t.amount || 0), 0),
+		noSpend: everyday.length === 0 && (logged || !!marks.nothingSpent),
+		cooked: !!marks.cookedConfirmed,
+		cookedGuess: !eatOut && groceries
 	};
+}
+/** Under the daily budget on a finished day with a live log (budget 0 = off). */
+function underBudget(d, budgetBani) {
+	return budgetBani > 0 && d.logged && d.everydayBani <= budgetBani;
+}
+/** The finished days from `from` to yesterday, each judged. */
+function judgeMoneyDays(i) {
+	const out = [];
+	const nothing = new Set(i.nothingSpent ?? []);
+	const cooked = new Set(i.cooked ?? []);
+	const d = /* @__PURE__ */ new Date(`${i.from}T12:00:00Z`);
+	for (let day = i.from; day < i.today;) {
+		const m = moneyDay(i.tx, day, {
+			nothingSpent: nothing.has(day),
+			cookedConfirmed: cooked.has(day)
+		});
+		out.push({
+			...m,
+			day,
+			under: underBudget(m, i.budgetBani)
+		});
+		d.setUTCDate(d.getUTCDate() + 1);
+		day = d.toISOString().slice(0, 10);
+	}
+	return out;
 }
 // src/core/fullHouse.ts
 function fullHouse(i) {
@@ -12511,7 +12600,23 @@ function pointValue(input) {
 		source
 	};
 }
+/** Points for a real price in lei (rounded to 5). */
+function pointsForLei(lei, v) {
+	return Math.max(5, Math.round(lei * v.pointsPerLei / 5) * 5);
+}
 // src/core/funBudget.ts
+/**
+* Night 11 (RL1–RL7): the monthly fun budget and what rewards really cost.
+*
+* - `fun_budget` (settings): {lei, source}. 'manual' = you typed it;
+*   'finance' = taken from a Finance Helper category limit named Fun or
+*   Entertainment (read live, the stored lei is the fallback).
+* - What you spent on fun this month: the rewards you bought (what you
+*   really paid, in lei) plus, with a Finance Helper budget, that category's
+*   other spending (reward records it already holds are not counted twice).
+* - Prices from real cost (suggestPoints), hours of work, the saving streak.
+* Pure: no database here.
+*/
 function parseFunBudget(raw) {
 	if (!raw) return null;
 	try {
@@ -12596,6 +12701,65 @@ function funSpentLei(i) {
 		sum += txLei(t, i.finance?.rates, i.finance?.settings?.currency);
 	}
 	return Math.round(sum * 100) / 100;
+}
+/** RL2: a fair price in points for a real cost in lei. */
+function suggestPoints(lei, v) {
+	return pointsForLei(Math.max(0, lei), v);
+}
+/**
+* RL2: rewards whose price is far from their real cost in today's point
+* value. Only suggests (you choose to apply each one). Rewards with no real
+* cost are left alone; the old forced points = 10 × lei price is always listed.
+*/
+function repriceSuggestions(rewards, v, rates) {
+	const out = [];
+	for (const r of rewards) {
+		if (r.archived || !(r.realCost > 0)) continue;
+		const lei = toLei(r.realCost, r.currency, rates);
+		if (lei == null) continue;
+		const suggested = suggestPoints(lei, v);
+		const oldFixed = r.price === r.realCost * 10;
+		const off = Math.abs(suggested - r.price) / Math.max(1, r.price) > .15;
+		if (suggested === r.price) continue;
+		if (oldFixed || off) out.push({
+			id: r.id,
+			title: r.title,
+			price: r.price,
+			suggested,
+			lei,
+			why: oldFixed ? "old-fixed" : "off"
+		});
+	}
+	return out;
+}
+/** RL6: consecutive judged days under budget, newest first; a day without a live log breaks it. */
+function savingStreak(days) {
+	const sorted = [...days].sort((a, b) => a.day < b.day ? 1 : -1);
+	let n = 0;
+	for (const d of sorted) {
+		if (!d.logged || !d.under) break;
+		n++;
+	}
+	return n;
+}
+var SAVING_STREAK_BONUS = [
+	{
+		days: 3,
+		points: 10
+	},
+	{
+		days: 7,
+		points: 25
+	},
+	{
+		days: 14,
+		points: 50
+	}
+];
+/** RL7: what is left of a month's budget to move to savings (whole lei, 0 = nothing). */
+function leftoverLei(budgetLei, spentLei) {
+	if (!(Number(budgetLei) > 0)) return 0;
+	return Math.max(0, Math.floor(Number(budgetLei) - Math.max(0, spentLei)));
 }
 // src/core/skills.ts
 var PATHS = [
@@ -13034,12 +13198,13 @@ function computeDailyExpenseSummary(expenses, day, dailyBudgetBani) {
 		byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amount;
 	}
 	const remaining = dailyBudgetBani - everydaySpent;
+	const underBudget = dailyBudgetBani > 0 && dayExpenses.length > 0 && everydaySpent <= dailyBudgetBani;
 	return {
 		day,
 		totalSpent,
 		everydaySpent,
 		budget: dailyBudgetBani,
-		underBudget: dailyBudgetBani > 0 && everydaySpent <= dailyBudgetBani,
+		underBudget,
 		remaining,
 		byCategory
 	};
@@ -13169,6 +13334,144 @@ var MoneyService = class {
 			remove: true
 		});
 		return this.state();
+	}
+	days(key) {
+		try {
+			const v = JSON.parse(getSetting(this.db, key) || "[]");
+			return Array.isArray(v) ? v.filter((d) => typeof d === "string") : [];
+		} catch {
+			return [];
+		}
+	}
+	addDay(key, day) {
+		const list = [.../* @__PURE__ */ new Set([...this.days(key), day])].sort().slice(-90);
+		setSetting(this.db, key, JSON.stringify(list));
+	}
+	/** Expenses logged here, as money days (a record made on its own day is live). */
+	nativeDayTx() {
+		const dayOf = (ms) => this.wallet.today(new Date(ms));
+		return this.expenses(300).map((e) => ({
+			date: e.day,
+			type: "expense",
+			category: e.category,
+			note: e.note ?? "",
+			amount: e.amount,
+			live: liveLog(e.day, Date.parse(e.createdAt), dayOf)
+		}));
+	}
+	/** Days you tapped "Nothing spent today" / confirmed cooking at home. */
+	marks() {
+		return {
+			nothingSpent: this.days("money_nothing_spent"),
+			cooked: this.days("money_cooked_days")
+		};
+	}
+	/**
+	* "Nothing spent today": counts today as a no-spend day once it is over
+	* (if no spending shows up for it by then). Pays nothing now.
+	* `other`: records from Finance Helper, to check you didn't log spending already.
+	*/
+	nothingSpent(other = [], now = /* @__PURE__ */ new Date()) {
+		const day = this.wallet.today(now);
+		if (moneyDay([...this.nativeDayTx(), ...other], day).everydayBani > 0) throw new LedgerError("You already logged spending today, so it is not a no-spend day");
+		const already = this.days("money_nothing_spent").includes(day);
+		if (!already) this.addDay("money_nothing_spent", day);
+		return {
+			day,
+			already
+		};
+	}
+	/** "I cooked at home today": you confirm it, then it pays (once a day). */
+	confirmCooked(now = /* @__PURE__ */ new Date()) {
+		const day = this.wallet.today(now);
+		const ref = `money:cooked:${day}`;
+		if (this.wallet.entries().some((e) => e.ref === ref || e.ref === `fin:cooked:${day}`)) throw new LedgerError("Cooking at home is already counted today");
+		const id = this.wallet.awardRule("money.cooked_home", {
+			now,
+			day,
+			ref,
+			note: "Cooked at home (you confirmed)"
+		});
+		this.addDay("money_cooked_days", day);
+		return id;
+	}
+	/** The finished days from `from` to yesterday, judged from live logs only. */
+	judged(other = [], from, now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const m = this.marks();
+		return judgeMoneyDays({
+			tx: [...this.nativeDayTx(), ...other],
+			from: from ?? addDays$5(today, -30),
+			today,
+			budgetBani: this.dailyBudgetSet(),
+			nothingSpent: m.nothingSpent
+		});
+	}
+	/** The daily budget days are judged on: the one the Money page shows (bani, 0 = off). */
+	dailyBudgetSet() {
+		return this.dailyBudget();
+	}
+	/** RL6: days in a row under budget (finished days with a live log), and the next bonus. */
+	savingStreak(other = [], now = /* @__PURE__ */ new Date()) {
+		const days = savingStreak(this.judged(other, void 0, now));
+		return {
+			days,
+			next: SAVING_STREAK_BONUS.find((b) => b.days > days) ?? null
+		};
+	}
+	/**
+	* Pays the finished days once each (FX3): a no-spend day (a live log or
+	* your "Nothing spent today", no everyday spending), under budget (a live
+	* log, at or under your daily budget; never back-dated or imported days),
+	* and the saving-streak bonuses at 3, 7 and 14 days (RL6). Days from
+	* `since` (when money was first connected), the last 7 at most.
+	*/
+	payDays(other = [], since, now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const week = addDays$5(today, -7);
+		const from = since && since > week ? since : week;
+		const refs = new Set(this.wallet.entries().map((e) => e.ref ?? "").filter(Boolean));
+		let paid = 0;
+		const pay = (rule, day, ref, note, also = []) => {
+			if (refs.has(ref) || also.some((r) => refs.has(r))) return;
+			try {
+				this.wallet.awardRule(rule, {
+					day,
+					ref,
+					note,
+					now
+				});
+				refs.add(ref);
+				paid++;
+			} catch (e) {
+				if (!(e instanceof LedgerError)) throw e;
+			}
+		};
+		for (const d of this.judged(other, from, now)) {
+			if (d.noSpend) pay("money.no_spend", d.day, `fin:nospend:${d.day}`, d.logged ? "No-spend day" : "No-spend day (you said nothing was spent)");
+			if (d.under) pay("money.under_budget", d.day, `money:under:${d.day}`, "Stayed under your daily budget");
+		}
+		const streak = savingStreak(this.judged(other, addDays$5(today, -120), now));
+		const start = addDays$5(today, -streak);
+		for (const b of SAVING_STREAK_BONUS) {
+			if (streak < b.days) continue;
+			const ref = `money:streak${b.days}:${start}`;
+			const pre = `money:streak${b.days}:`;
+			if ([...refs].some((r) => r.startsWith(pre) && r.slice(pre.length) >= start)) continue;
+			this.wallet.append({
+				ts: now.toISOString(),
+				day: today,
+				module: "money",
+				kind: "earn",
+				coins: b.points,
+				xp: 0,
+				ref,
+				note: `${b.days} days in a row under budget`
+			});
+			refs.add(ref);
+			paid++;
+		}
+		return paid;
 	}
 	/** Where expenses go when Finance Helper isn't on this machine (the web app's inbox). */
 	toFinance;
@@ -14401,6 +14704,36 @@ var Shop = class {
 		const undone = this.undoneIds();
 		return this.db.prepare("SELECT d.ledger_id AS ledger_id, d.real_cost AS real_cost, r.currency AS currency FROM redemptions d LEFT JOIN rewards r ON r.id = d.reward_id WHERE substr(d.day, 1, 7) = ?").all(monthKey$1(day)).filter((r) => !undone.has(r.ledger_id) && r.real_cost > 0).map((r) => toLei(r.real_cost, r.currency, rates) ?? 0);
 	}
+	/** RL7: this month's move of leftover money to savings, if it stands (not undone). */
+	savedMove(month) {
+		let all = {};
+		try {
+			all = JSON.parse(getSetting(this.db, "fun_moves") || "{}") ?? {};
+		} catch {
+			all = {};
+		}
+		const m = all[month];
+		if (!m || !Number(m.ledgerId)) return null;
+		if (!this.wallet.effective().some((e) => e.id === Number(m.ledgerId))) return null;
+		return {
+			lei: Number(m.lei) || 0,
+			ledgerId: Number(m.ledgerId),
+			kind: m.kind === "month" ? "month" : "fun",
+			goal: String(m.goal ?? "")
+		};
+	}
+	/** RL7: remembers a move to savings (the ledger entry is its log and its undo). */
+	recordMove(month, move) {
+		let all = {};
+		try {
+			all = JSON.parse(getSetting(this.db, "fun_moves") || "{}") ?? {};
+		} catch {
+			all = {};
+		}
+		all[month] = move;
+		const keep = Object.fromEntries(Object.entries(all).sort(([a], [b]) => a < b ? -1 : 1).slice(-24));
+		setSetting(this.db, "fun_moves", JSON.stringify(keep));
+	}
 	/**
 	* RL1: what one point is worth, and your fun budget this month.
 	* `finance`: Finance Helper's data (for a Fun/Entertainment limit, its spending and rates);
@@ -14414,6 +14747,8 @@ var Shop = class {
 			funBudgetLei: budgetLei,
 			earnPerDay: earnPerDay(this.wallet.entries(), day)
 		});
+		const move = this.savedMove(monthKey$1(day));
+		const moved = move?.kind === "fun" ? move.lei : 0;
 		const spent = funSpentLei({
 			month: monthKey$1(day),
 			rewardBuysLei: this.monthBuysLei(day, opts.finance?.rates),
@@ -14425,7 +14760,7 @@ var Shop = class {
 			value,
 			funBudgetLei: budgetLei,
 			funSpentLei: spent,
-			funLeftLei: budgetLei == null ? null : Math.round((budgetLei - spent) * 100) / 100,
+			funLeftLei: budgetLei == null ? null : Math.round((budgetLei - spent - moved) * 100) / 100,
 			hourlyLei: hourly,
 			funSource: budgetLei == null ? null : setting?.source ?? "manual"
 		};
@@ -15873,6 +16208,8 @@ var DISCIPLINE_MULTIPLIERS = [
 		label: "Standard (1.0x)"
 	}
 ];
+/** FX7: no boost ever pays more than 1.5× (streak tiers, budget bonus, bought boosts). */
+var MAX_BOOST = 1.5;
 /**
 * Computes active multiplier based on clean discipline streak and budget consistency.
 */
@@ -15881,11 +16218,11 @@ function computeActiveMultiplier(cleanStreak, budgetStreak) {
 	const safeBudget = Math.max(0, budgetStreak || 0);
 	const tier = DISCIPLINE_MULTIPLIERS.find((t) => safeClean >= t.minStreak) || DISCIPLINE_MULTIPLIERS[DISCIPLINE_MULTIPLIERS.length - 1];
 	const budgetBonus = safeBudget >= 3 ? .15 : 0;
-	const totalRate = Math.round((tier.multiplier + budgetBonus) * 100) / 100;
+	const totalRate = Math.round(Math.min(MAX_BOOST, tier.multiplier + budgetBonus) * 100) / 100;
 	let label = tier.label;
 	if (budgetBonus > 0) label += " + 💰 Budget Shield (+15%)";
 	return {
-		rate: tier.multiplier,
+		rate: Math.min(MAX_BOOST, tier.multiplier),
 		cleanStreak: safeClean,
 		budgetStreak: safeBudget,
 		budgetBonus,
@@ -15977,48 +16314,6 @@ function computeDailyInterestRate(cleanStreak) {
 		rate: .005,
 		percent: .5,
 		streakBonusActive: false
-	};
-}
-/**
-* Computes estimated daily coin dividend from staked amount:
-* If staked >= 50 coins, minimum yield is 1 coin/day.
-*/
-function computeDailyDividend(stakedCoins, cleanStreak) {
-	if (stakedCoins <= 0) return 0;
-	const { rate } = computeDailyInterestRate(cleanStreak);
-	const calculated = Math.floor(stakedCoins * rate);
-	return stakedCoins >= 50 ? Math.max(1, calculated) : calculated;
-}
-/**
-* Calculates accrued pending interest between lastClaimDay and currentDay.
-*/
-function calculateAccruedInterest(stakedCoins, lastClaimDay, currentDay, cleanStreak) {
-	if (stakedCoins <= 0 || !currentDay) return {
-		pendingInterest: 0,
-		daysPassed: 0
-	};
-	if (!lastClaimDay) return {
-		pendingInterest: 0,
-		daysPassed: 0
-	};
-	if (lastClaimDay >= currentDay) return {
-		pendingInterest: 0,
-		daysPassed: 0
-	};
-	const lastTime = Date.parse(`${lastClaimDay}T00:00:00Z`);
-	const currTime = Date.parse(`${currentDay}T00:00:00Z`);
-	if (isNaN(lastTime) || isNaN(currTime) || currTime <= lastTime) return {
-		pendingInterest: 0,
-		daysPassed: 0
-	};
-	const daysPassed = Math.floor((currTime - lastTime) / 864e5);
-	if (daysPassed <= 0) return {
-		pendingInterest: 0,
-		daysPassed: 0
-	};
-	return {
-		pendingInterest: computeDailyDividend(stakedCoins, cleanStreak) * daysPassed,
-		daysPassed
 	};
 }
 var CONSUMABLE_CATALOG = [
@@ -16314,9 +16609,9 @@ var UnifiedEconomyService = class {
 				const insert = this.db.prepare(`INSERT INTO wishlist_goals (title, target_coins, target_real_cost, allocated_coins, allocated_real_cost, category, pinned, completed, note, created_at, image_url, product_url, currency)
            VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, ?, ?, ?)`);
 				this.db.transaction(() => {
-					insert.run("Kaaba Pilgrimage Fund", 2e4, 15e3, "trip", 1, "The supreme spiritual milestone. Keep stacking.", now, "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80", "https://www.visitsaudi.com/en/umrah", "MDL");
-					insert.run("MacBook / Pro Warrior Setup", 12e3, 8e3, "tech", 0, "High-performance battle workstation.", now, "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=80", "https://darwin.md/apple-macbook-pro", "MDL");
-					insert.run("Luxury Recovery & Spa Retreat", 3500, 1500, "luxury", 0, "Deep restorative rest and rejuvenation.", now, "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&auto=format&fit=crop&q=80", "https://aquaterra.md/spa", "MDL");
+					insert.run("Weekend trip fund", 2e4, 15e3, "trip", 1, "The big one. Keep stacking.", now, null, null, "MDL");
+					insert.run("New laptop", 12e3, 8e3, "tech", 0, "For study and side projects.", now, null, "https://shop.example.com/laptops", "MDL");
+					insert.run("Spa afternoon", 3500, 1500, "luxury", 0, "Rest after a hard month.", now, null, null, "MDL");
 				})();
 			}
 		} catch {}
@@ -16540,10 +16835,19 @@ var UnifiedEconomyService = class {
 		const coinsRealValue = coinsToMoneyValue(coinsBalance, rate);
 		const vaultBalance = this.getVaultBalance();
 		const currency = this.getCurrency();
-		const monthlyBudget = Number(getSetting(this.db, "reward_budget") ?? 0);
+		const funRaw = getSetting(this.db, "fun_budget");
+		const monthlyBudget = parseFunBudget(funRaw)?.lei ?? migrateRewardBudget(funRaw, getSetting(this.db, "reward_budget"))?.lei ?? 0;
 		const month = dayKey(now, this.timeZone).slice(0, 7);
-		const monthSpent = this.db.prepare("SELECT COALESCE(SUM(real_cost), 0) as total FROM redemptions WHERE substr(day, 1, 7) = ?").get(month)?.total ?? 0;
-		const multiplier = computeActiveMultiplier(this.discipline?.state().current ?? 0, this.money?.state().today.underBudget ? 3 : 0);
+		const live = new Set(this.wallet.effective().map((e) => e.id));
+		const monthSpent = this.db.prepare("SELECT ledger_id, real_cost FROM redemptions WHERE substr(day, 1, 7) = ?").all(month).filter((r) => live.has(r.ledger_id)).reduce((a, r) => a + (r.real_cost || 0), 0);
+		const cleanStreak = this.discipline?.state().current ?? 0;
+		let budgetStreak = 0;
+		try {
+			budgetStreak = this.money?.savingStreak([], now).days ?? 0;
+		} catch {
+			budgetStreak = 0;
+		}
+		const multiplier = computeActiveMultiplier(cleanStreak, budgetStreak);
 		const goals = this.goals();
 		return {
 			coinsBalance,
@@ -16569,12 +16873,12 @@ var UnifiedEconomyService = class {
 		const maxStakingCap = computeMaxStakingCap(lvl);
 		const cleanStreak = this.discipline?.state(now).current ?? 0;
 		const rateInfo = computeDailyInterestRate(cleanStreak);
-		const { pendingInterest } = calculateAccruedInterest(stakedCoins, lastClaimDay, dayKey(now, this.timeZone), cleanStreak);
+		dayKey(now, this.timeZone);
 		return {
 			stakedCoins,
 			maxStakingCap,
 			dailyRatePercent: rateInfo.percent,
-			pendingInterest,
+			pendingInterest: 0,
 			totalInterestEarned,
 			lastClaimDay,
 			streakBonusActive: rateInfo.streakBonusActive,
@@ -16655,7 +16959,7 @@ var UnifiedEconomyService = class {
 	}
 	claimInterest(now = /* @__PURE__ */ new Date()) {
 		const state = this.getBankState(now);
-		if (state.pendingInterest <= 0) throw new LedgerError("No dividend yield available to claim yet today");
+		if (state.pendingInterest <= 0) throw new LedgerError("The bank pays no interest: points come only from what you do");
 		const currentDay = dayKey(now, this.timeZone);
 		const claimed = state.pendingInterest;
 		return this.db.transaction(() => {
@@ -16709,7 +17013,8 @@ var UnifiedEconomyService = class {
 	getBuffMultiplier(effectKind, now = /* @__PURE__ */ new Date()) {
 		try {
 			const nowIso = now.toISOString();
-			return this.db.prepare("SELECT MAX(effect_val) as val FROM active_buffs WHERE effect_kind = ? AND expires_at > ?").get(effectKind, nowIso)?.val ?? 1;
+			const row = this.db.prepare("SELECT MAX(effect_val) as val FROM active_buffs WHERE effect_kind = ? AND expires_at > ?").get(effectKind, nowIso);
+			return Math.min(MAX_BOOST, Math.max(1, row?.val ?? 1));
 		} catch {
 			return 1;
 		}
@@ -16818,7 +17123,7 @@ var QUEST_POOL = [
 		id: "study2",
 		title: "Finish 2 study blocks",
 		goal: 2,
-		count: rule("study.block_done")
+		count: (d) => d.filter((e) => e.ruleId === "study.block_done" || e.ruleId === "focus.session").length
 	},
 	{
 		id: "wake",
@@ -17435,6 +17740,87 @@ function afterUndo(s, id) {
 		at: Date.now(),
 		remove: true
 	});
+	if (e.ref.startsWith("saved:")) queueFinanceExpense(s.db, {
+		id: savedFinId(e.ref.slice(6), id),
+		amount: 0,
+		category: "",
+		note: "",
+		date: s.wallet.today(),
+		at: Date.now(),
+		remove: true
+	});
+}
+/**
+* Finance Helper's records as money days (FX3): in lei (never a foreign amount
+* as lei), live only when made on their own day and not imported. Expenses
+* logged in Life System (life-exp-…) are counted from Life System's own list.
+*/
+function financeDayTx(s, finance = financeOf(s), withLife = false) {
+	const txs = Array.isArray(finance?.tx) ? finance.tx : [];
+	if (!txs.length) return [];
+	const names = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
+	const dayOf = (ms) => s.wallet.today(new Date(ms));
+	return txs.filter((t) => t && !t.deleted && typeof t.date === "string" && t.type !== "transfer" && (withLife || !String(t.id ?? "").startsWith("life-exp-"))).map((t) => ({
+		date: t.date.slice(0, 10),
+		type: String(t.type),
+		category: names.get(String(t.category)) ?? String(t.category ?? ""),
+		note: String(t.note ?? ""),
+		amount: Math.round(txLei(t, finance?.rates, finance?.settings?.currency) * 100),
+		live: liveLog(t.date.slice(0, 10), Number(t.createdAt), dayOf, isImported(t))
+	}));
+}
+/** Today's money day, the last 14 judged days and the saving streak (FX3, RL6). */
+function moneyDays(s, now = /* @__PURE__ */ new Date()) {
+	const other = financeDayTx(s);
+	const today = s.wallet.today(now);
+	const marks = s.money.marks();
+	return {
+		today: {
+			day: today,
+			...moneyDay([...s.money.nativeDayTx(), ...other], today, {
+				nothingSpent: marks.nothingSpent.includes(today),
+				cookedConfirmed: marks.cooked.includes(today)
+			}),
+			nothingSpentTapped: marks.nothingSpent.includes(today)
+		},
+		dailyBudget: s.money.dailyBudgetSet(),
+		days: s.money.judged(other, addDays$5(today, -14), now).reverse(),
+		streak: s.money.savingStreak(other, now)
+	};
+}
+var SAVED_BONUS = 10;
+var savedFinId = (month, ledgerId) => `life-save-${month}-${ledgerId}`;
+/** RL7: what's left of this month's fun budget (else Finance Helper's month limit), and where it can go. */
+function leftover(s, now = /* @__PURE__ */ new Date()) {
+	const finance = financeOf(s);
+	const today = s.wallet.today(now);
+	const month = today.slice(0, 7);
+	const v = shopValue(s, now);
+	const moved = s.shop.savedMove(month);
+	let kind = "fun";
+	let budgetLei = v.funBudgetLei;
+	let leftLei = v.funLeftLei == null ? 0 : leftoverLei(v.funLeftLei + (moved?.kind === "fun" ? moved.lei : 0), 0);
+	if (budgetLei == null && finance) {
+		const n = moneyNumbers(finance, today);
+		if (n.limitLeft != null) {
+			kind = "month";
+			budgetLei = Math.round(Number(finance?.settings?.limit?.amount) / 100);
+			leftLei = leftoverLei(n.limitLeft / 100, 0);
+		}
+	}
+	const target = finance ? savingTarget(finance) : null;
+	const dim = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+	return {
+		month,
+		kind,
+		budgetLei,
+		leftLei: moved ? 0 : leftLei,
+		goal: target?.goal ?? null,
+		moved,
+		/** The last 3 days of the month: time to move it. */
+		monthEnd: Number(today.slice(8, 10)) > dim - 3,
+		toast: void 0
+	};
 }
 /** All services, built for one copy of the database. */
 function servicesFor(db) {
@@ -17532,45 +17918,7 @@ syncFinance: (recordDays) => write((s) => {
 					if (!(e instanceof LedgerError)) throw e;
 				}
 			}
-			const fin = financeStateFrom(db, typeof localStorage !== "undefined" ? localStorage : null);
-			const txs = Array.isArray(fin?.tx) ? fin.tx : [];
-			if (txs.length) {
-				const names = new Map((fin?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
-				const list = txs.filter((t) => t && !t.deleted && typeof t.date === "string").map((t) => ({
-					date: t.date,
-					type: t.type,
-					category: names.get(String(t.category)) ?? String(t.category ?? ""),
-					note: String(t.note ?? ""),
-					amount: Number(t.amount) || 0
-				}));
-				const start = from > addDays$5(today, -7) ? from : addDays$5(today, -7);
-				for (let d = start; d < today; d = addDays$5(d, 1)) {
-					const m = moneyDay(list, d);
-					for (const [ok, rule, tag, note] of [[
-						m.noSpend,
-						"money.no_spend",
-						"nospend",
-						"No-spend day (Finance Helper)"
-					], [
-						m.cooked,
-						"money.cooked_home",
-						"cooked",
-						"Cooked at home (Finance Helper)"
-					]]) {
-						if (!ok || handled.has(`fin:${tag}:${d}`)) continue;
-						try {
-							s.wallet.awardRule(rule, {
-								day: d,
-								ref: `fin:${tag}:${d}`,
-								note
-							});
-							paid++;
-						} catch (e) {
-							if (!(e instanceof LedgerError)) throw e;
-						}
-					}
-				}
-			}
+			paid += s.money.payDays(financeDayTx(s), since);
 			return paid;
 		}, W) },
 		rules: {
@@ -17636,6 +17984,61 @@ syncFinance: (recordDays) => write((s) => {
 					}
 				};
 			}, W),
+			/** RL7: what's left this month (fun budget, else Finance Helper's month limit) and the goal it can go to. */
+			leftover: () => read((s) => leftover(s)),
+			/** RL7: moves the leftover to the savings goal in Finance Helper (once a month), with a small "Saved" bonus. Undo takes both back. */
+			moveLeftover: () => write((s) => {
+				const l = leftover(s);
+				if (l.moved) throw new LedgerError(`Already moved ${l.moved.lei} lei to ${l.moved.goal} this month`);
+				if (!(l.leftLei > 0)) throw new LedgerError("Nothing left over to move this month");
+				if (!l.goal) throw new LedgerError("Add a savings goal in Finance Helper first (one you fill by hand, or one on a savings account)");
+				const now = /* @__PURE__ */ new Date();
+				const today = s.wallet.today(now);
+				const ledgerId = s.wallet.append({
+					ts: now.toISOString(),
+					day: today,
+					module: "money",
+					kind: "earn",
+					coins: SAVED_BONUS,
+					xp: 0,
+					ref: `saved:${l.month}`,
+					note: `Saved: ${l.leftLei} lei to ${l.goal.name}`
+				});
+				queueFinanceExpense(s.db, {
+					id: savedFinId(l.month, ledgerId),
+					type: "saving",
+					goalId: l.goal.id,
+					amount: l.leftLei * 100,
+					category: "",
+					note: `Left over from your ${l.kind === "fun" ? "fun" : "month"} budget`,
+					date: today,
+					at: now.getTime()
+				});
+				s.shop.recordMove(l.month, {
+					lei: l.leftLei,
+					ledgerId,
+					kind: l.kind,
+					goal: l.goal.name
+				});
+				return {
+					...leftover(s),
+					toast: `+${SAVED_BONUS} points · ${l.leftLei} lei moved to ${l.goal.name}`
+				};
+			}, W),
+			/** RL2: new prices from real cost for old rewards (only suggests; apply each with save). */
+			reprice: () => read((s) => repriceSuggestions(s.shop.state().rewards, shopValue(s).value, financeOf(s)?.rates)),
+			/** RL3: the monthly fun budget, by hand or from Finance Helper's Fun / Entertainment limit. */
+			setFunBudget: (b) => write((s) => {
+				if (b?.source === "finance") {
+					const cat = financeFunCategory(financeOf(s));
+					if (!cat) throw new LedgerError("Finance Helper has no Fun or Entertainment category with a monthly limit");
+					s.shop.setFunBudget({
+						lei: cat.lei,
+						source: "finance"
+					});
+				} else s.shop.setFunBudget(b);
+				return shopValue(s);
+			}),
 			openChest: (level) => write((s) => ({
 				coins: s.shop.openChest(level),
 				state: s.shop.state()
@@ -17702,7 +18105,10 @@ syncFinance: (recordDays) => write((s) => {
 			fun: (minutes, what) => write((s) => s.focus.fun(minutes, what), W)
 		},
 		progress: {
-			report: (spending) => read((s) => s.progress.report(spending)),
+			report: (spending) => read((s) => ({
+				...s.progress.report(spending),
+				savingStreak: s.money.savingStreak(financeDayTx(s))
+			})),
 			insights: () => read((s) => s.progress.insights()),
 			growth: (spending) => read((s) => s.progress.growth(spending))
 		},
@@ -17729,7 +18135,13 @@ syncFinance: (recordDays) => write((s) => {
 			addExpense: (amountBani, category, note) => write((s) => s.money.addExpense(amountBani, category, note), W),
 			deleteExpense: (id) => write((s) => s.money.deleteExpense(id)),
 			setBudget: (budgetBani) => write((s) => s.money.setBudget(budgetBani)),
-			setCurrency: (cur) => write((s) => s.money.setCurrency(cur))
+			setCurrency: (cur) => write((s) => s.money.setCurrency(cur)),
+			/** FX3: today, the last 14 judged days and the saving streak. */
+			days: () => read((s) => moneyDays(s)),
+			/** FX3: "Nothing spent today" (counts once the day is over, if it stays true). */
+			nothingSpent: () => write((s) => (s.money.nothingSpent(financeDayTx(s)), moneyDays(s)), W),
+			/** FX3: "I cooked at home today" (you confirm it, it pays). */
+			confirmCooked: () => write((s) => (s.money.confirmCooked(), moneyDays(s)), W)
 		},
 		shields: {
 			count: () => read((s) => s.shields.count()),
@@ -17756,6 +18168,61 @@ syncFinance: (recordDays) => write((s) => {
 			creditVault: (amount, note) => write((s) => s.economy.creditVault("manual_deposit", amount, note)),
 			setExchangeRate: (rate) => write((s) => (s.economy.setExchangeRate(rate), s.economy.getExchangeRate())),
 			setCurrency: (cur) => write((s) => (s.economy.setCurrency(cur), s.economy.getEconomySummary())),
+			/** RL7: what's left this month (fun budget, else Finance Helper's month limit) and the goal it can go to. */
+			leftover: () => read((s) => leftover(s)),
+			/** RL7: moves the leftover to the savings goal in Finance Helper (once a month), with a small "Saved" bonus. Undo takes both back. */
+			moveLeftover: () => write((s) => {
+				const l = leftover(s);
+				if (l.moved) throw new LedgerError(`Already moved ${l.moved.lei} lei to ${l.moved.goal} this month`);
+				if (!(l.leftLei > 0)) throw new LedgerError("Nothing left over to move this month");
+				if (!l.goal) throw new LedgerError("Add a savings goal in Finance Helper first (one you fill by hand, or one on a savings account)");
+				const now = /* @__PURE__ */ new Date();
+				const today = s.wallet.today(now);
+				const ledgerId = s.wallet.append({
+					ts: now.toISOString(),
+					day: today,
+					module: "money",
+					kind: "earn",
+					coins: SAVED_BONUS,
+					xp: 0,
+					ref: `saved:${l.month}`,
+					note: `Saved: ${l.leftLei} lei to ${l.goal.name}`
+				});
+				queueFinanceExpense(s.db, {
+					id: savedFinId(l.month, ledgerId),
+					type: "saving",
+					goalId: l.goal.id,
+					amount: l.leftLei * 100,
+					category: "",
+					note: `Left over from your ${l.kind === "fun" ? "fun" : "month"} budget`,
+					date: today,
+					at: now.getTime()
+				});
+				s.shop.recordMove(l.month, {
+					lei: l.leftLei,
+					ledgerId,
+					kind: l.kind,
+					goal: l.goal.name
+				});
+				return {
+					...leftover(s),
+					toast: `+${SAVED_BONUS} points · ${l.leftLei} lei moved to ${l.goal.name}`
+				};
+			}, W),
+			/** RL2: new prices from real cost for old rewards (only suggests; apply each with save). */
+			reprice: () => read((s) => repriceSuggestions(s.shop.state().rewards, shopValue(s).value, financeOf(s)?.rates)),
+			/** RL3: the monthly fun budget, by hand or from Finance Helper's Fun / Entertainment limit. */
+			setFunBudget: (b) => write((s) => {
+				if (b?.source === "finance") {
+					const cat = financeFunCategory(financeOf(s));
+					if (!cat) throw new LedgerError("Finance Helper has no Fun or Entertainment category with a monthly limit");
+					s.shop.setFunBudget({
+						lei: cat.lei,
+						source: "finance"
+					});
+				} else s.shop.setFunBudget(b);
+				return shopValue(s);
+			}),
 			openChest: (level) => write((s) => s.economy.openEnhancedChest(level), W),
 			bankState: () => read((s) => s.economy.getBankState()),
 			stakeCoins: (amount) => write((s) => s.economy.stakeCoins(amount), W),
@@ -24715,6 +25182,13 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					if (a.kind === "habit" || a.kind === "reward" || a.kind === "week" || a.kind === "bigdone") {
 						const line = await mirror.write((db) => {
 							const svc = services.services(db);
+							if (a.kind === "habit" && (a.habit === "nospend" || a.habit === "cooked")) try {
+								if (a.habit === "nospend") return svc.money.nothingSpent(financeDayTx(svc)).already ? null : "✅ Nothing spent today: it counts as a no-spend day once the day is over";
+								svc.money.confirmCooked();
+								return "✅ Cooked at home today";
+							} catch (e) {
+								return `⚠️ ${e.message}`;
+							}
 							if (a.kind === "habit") {
 								if ((svc.wallet.summary().todayRules ?? []).includes(a.habit === "oath" ? "discipline.oath" : a.habit === "clean" ? "discipline.clean_day" : "face.routine_done")) return null;
 								if (a.habit === "oath") svc.discipline.oath();
@@ -24723,16 +25197,17 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								return `✅ Habit: ${a.habit === "oath" ? "morning oath" : a.habit === "clean" ? "clean-day check-in" : "skincare"}`;
 							}
 							if (a.kind === "reward") {
+								const price = a.cost > 0 ? suggestPoints(a.cost, shopValue(svc).value) : a.points;
 								svc.shop.save({
 									title: a.title,
-									price: a.points,
+									price,
 									tier: "bronze",
 									realCost: a.cost,
 									pinned: false,
 									note: "Added by your coach",
 									currency: "MDL"
 								});
-								return `🎁 New reward: ${a.title} · ${a.points} points`;
+								return `🎁 New reward: ${a.title} · ${price} points`;
 							}
 							if (a.kind === "bigdone") {
 								const plan = svc.weekPlan.active();

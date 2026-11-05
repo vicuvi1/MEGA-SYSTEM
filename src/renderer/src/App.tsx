@@ -608,7 +608,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   if (nextEv && Date.parse(nextEv.start) - Date.now() < 60 * 60_000) {
     alerts.push({ id: `event-${nextEv.id}`, tone: 'info', icon: 'calendar', title: `${nextEv.title} at ${new Date(nextEv.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, body: `Starts ${countdown(Date.parse(nextEv.start) - Date.now())}${nextEv.location ? ` · ${nextEv.location}` : ''}`, page: 'calendar' })
   }
-  if (shop?.chests.length) alerts.push({ id: 'chest', tone: 'good', icon: 'gift', title: `${shop.chests.length} chest${shop.chests.length > 1 ? 's' : ''} to open`, page: 'shop' })
+  // No "chests to open" alert: the Rewards page can't open chests yet (FX7). Bring it back with a chest UI.
 
   // Sidebar: full, or a slim icon rail. "auto" turns it into a rail while an
   // app is open, so the app gets the room; hovering the rail slides it out.

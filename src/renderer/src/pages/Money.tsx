@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { usePoints } from '../usePoints'
-import type { ConnectionsState, Expense, NativeMoneySummary } from '@shared/api'
+import type { ConnectionsState, Expense, MoneyDaysState, NativeMoneySummary } from '@shared/api'
 import { life } from '../bridge'
 import { barFill, CountUp } from '../motionKit'
 import { Icon } from '../Icon'
@@ -20,6 +20,7 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
   if (hasFinance) {
     return (
       <div className="money">
+        <MoneyToday onWallet={onWallet} />
         <FinanceHelperView f={f} onState={onState} />
         <BankImport />
       </div>
@@ -28,6 +29,7 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
 
   return (
     <div className="money">
+      <MoneyToday onWallet={onWallet} />
       <NativeMoneyView onWallet={onWallet} />
       {!hasFinance && (
         <section className="panel" style={{ marginTop: '20px' }}>
@@ -50,6 +52,62 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
         </section>
       )}
     </div>
+  )
+}
+
+/**
+ * FX3: today's honest money moments. "Nothing spent today" counts once the
+ * day is over (if it stays true); cooking at home pays only when you say so.
+ */
+function MoneyToday({ onWallet }: { onWallet: () => void }) {
+  const pts = usePoints()
+  const act = useAction()
+  const [d, setD] = useState<MoneyDaysState | null>(null)
+  useEffect(() => {
+    // Finished days are judged (and paid once) first, then shown.
+    life.connections
+      .sync()
+      .then((r) => r.awarded && onWallet())
+      .catch(() => {})
+      .finally(() => life.money.days().then(setD).catch(() => {}))
+  }, [])
+  if (!d) return null
+  const t = d.today
+  const nothing = async () => {
+    const r = await act(() => life.money.nothingSpent(), `Noted. If it stays that way, tonight counts as a no-spend day (+${pts('money.no_spend', 8)})`)
+    if (r) setD(r)
+  }
+  const cooked = async () => {
+    const r = await act(() => life.money.confirmCooked(), `Cooked at home: +${pts('money.cooked_home', 5)}`)
+    if (r) {
+      setD(r)
+      soundCoin()
+      onWallet()
+    }
+  }
+  return (
+    <section className="panel money-today">
+      <header className="panel-head">
+        <h2>
+          <Icon name="coin" /> Today
+        </h2>
+        <span className="hint">
+          {d.streak.days > 0 ? `${d.streak.days} day${d.streak.days === 1 ? '' : 's'} in a row under budget` : 'Under budget days in a row: none yet'}
+          {d.streak.next ? ` · ${d.streak.next.days} in a row pays +${d.streak.next.points}` : ''}
+        </span>
+      </header>
+      <div className="row tight">
+        {t.everydayBani === 0 && (
+          <button className="btn small" onClick={nothing} disabled={t.nothingSpentTapped}>
+            {t.nothingSpentTapped ? '✓ Nothing spent today' : 'Nothing spent today'}
+          </button>
+        )}
+        <button className={`btn small ${t.cookedGuess && !t.cooked ? 'primary' : ''}`} onClick={cooked} disabled={t.cooked}>
+          {t.cooked ? '✓ Cooked at home' : t.cookedGuess ? 'Did you cook at home? Yes' : 'I cooked at home'}
+        </button>
+      </div>
+      <p className="hint small">A day counts only from what you log on the day itself. Forgetting to log pays nothing.</p>
+    </section>
   )
 }
 
@@ -252,7 +310,7 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
           <div className="big small-big">
             {today.underBudget ? 'Under' : today.everydaySpent > budget ? 'Over' : '–'}
           </div>
-          <span className="sub">{today.underBudget ? `On track for +${pts('money.under_budget', 5)} points` : 'Stay under budget'}</span>
+          <span className="sub">{today.underBudget ? `Stay under and tomorrow pays +${pts('money.under_budget', 5)}` : today.totalSpent === 0 ? 'Nothing logged today yet' : 'Stay under budget'}</span>
         </div>
       </section>
 
