@@ -1304,7 +1304,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       .write((db) => {
         const raw = getSetting(db as any, REMINDERS)
         if (!raw) return
-        setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw))))
+        setSetting(db as any, REMINDERS, JSON.stringify(answeredReminders(JSON.parse(raw), new Date(), text)))
       })
       .catch(() => null)
     // An excuse he repeats gets counted (Ben names the repeat kindly), and his profile note stays current.

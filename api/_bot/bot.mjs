@@ -6572,9 +6572,30 @@ function afterSend(list, id, now = /* @__PURE__ */ new Date()) {
 		};
 	});
 }
-/** You wrote to the coach: open follow-ups stop. */
-function answered(list, now = /* @__PURE__ */ new Date()) {
-	return list.map((r) => !r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() ? {
+/**
+* You wrote to the coach: the follow-ups your message answers stop (T3).
+* With your words, only a reply about it counts ("done", "not yet", "no",
+* or a word from the promise); "water 250" or "taxi 45" doesn't. With no
+* text (old callers), every open one stops, as before.
+*/
+function answered(list, now = /* @__PURE__ */ new Date(), text, replyTo) {
+	const t = String(text ?? "").toLowerCase();
+	const about = (r) => {
+		if (text == null || replyTo) return true;
+		if (/\b(done|did it|did|yes|yep|no|nope|not yet|later|skip|skipped|finished|can'?t|cannot|tomorrow|forgot|failed|gata|da|nu|am făcut|am facut|сделал|нет|да)\b/i.test(t)) return true;
+		return (String(r.text ?? "").toLowerCase().match(/\p{L}{4,}/gu) ?? []).filter((w) => ![
+			"that",
+			"this",
+			"with",
+			"your",
+			"will",
+			"have",
+			"from",
+			"today",
+			"tonight"
+		].includes(w)).some((w) => t.includes(w.slice(0, 5)));
+	};
+	return list.map((r) => !r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() && about(r) ? {
 		...r,
 		done: true,
 		ignored: false,
@@ -17243,7 +17264,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		await mirror.write((db) => {
 			const raw = getSetting(db, REMINDERS);
 			if (!raw) return;
-			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
+			setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw), /* @__PURE__ */ new Date(), text)));
 		}).catch(() => null);
 		const excuseNote = await mirror.write((db) => {
 			const svc = services.services(db);
@@ -20527,7 +20548,8 @@ async function handleTelegramUpdate(env, token, update) {
 	const { bots, mirror } = await botsFor(env);
 	if (update?.message) await mirror.write((db) => {
 		const raw = getSetting(db, REMINDERS);
-		if (raw) setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw))));
+		const m = update.message;
+		if (raw) setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw), /* @__PURE__ */ new Date(), String(m.text ?? m.caption ?? ""), !!m.reply_to_message)));
 	}).catch(() => null);
 	const reply = await bots.handleUpdate(token, update);
 	await payTodoistDone(env, { minGapMs: 18e4 }).catch(() => null);

@@ -219,7 +219,8 @@ export async function handleTelegramUpdate(env: BotEnv, token: string, update: u
     await mirror
       .write((db) => {
         const raw = getSetting(db as any, REMINDERS_KEY)
-        if (raw) setSetting(db as any, REMINDERS_KEY, JSON.stringify(answeredReminders(JSON.parse(raw))))
+        const m = (update as any).message
+        if (raw) setSetting(db as any, REMINDERS_KEY, JSON.stringify(answeredReminders(JSON.parse(raw), new Date(), String(m.text ?? m.caption ?? ''), !!m.reply_to_message)))
       })
       .catch(() => null)
   }

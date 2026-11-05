@@ -95,9 +95,21 @@ export function afterSend(list: Reminder[], id: string, now = new Date()): Remin
   })
 }
 
-/** You wrote to the coach: open follow-ups stop. */
-export function answered(list: Reminder[], now = new Date()): Reminder[] {
-  return list.map((r) => (!r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() ? { ...r, done: true, ignored: false, answeredAt: now.toISOString() } : r))
+/**
+ * You wrote to the coach: the follow-ups your message answers stop (T3).
+ * With your words, only a reply about it counts ("done", "not yet", "no",
+ * or a word from the promise); "water 250" or "taxi 45" doesn't. With no
+ * text (old callers), every open one stops, as before.
+ */
+export function answered(list: Reminder[], now = new Date(), text?: string, replyTo?: boolean): Reminder[] {
+  const t = String(text ?? '').toLowerCase()
+  const about = (r: Reminder) => {
+    if (text == null || replyTo) return true
+    if (/\b(done|did it|did|yes|yep|no|nope|not yet|later|skip|skipped|finished|can'?t|cannot|tomorrow|forgot|failed|gata|da|nu|am făcut|am facut|сделал|нет|да)\b/i.test(t)) return true
+    const words = (String(r.text ?? '').toLowerCase().match(/\p{L}{4,}/gu) ?? []).filter((w) => !['that', 'this', 'with', 'your', 'will', 'have', 'from', 'today', 'tonight'].includes(w))
+    return words.some((w) => t.includes(w.slice(0, 5)))
+  }
+  return list.map((r) => (!r.done && r.sentAt && Date.parse(r.sentAt) <= now.getTime() && about(r) ? { ...r, done: true, ignored: false, answeredAt: now.toISOString() } : r))
 }
 
 // ---- Follow-up nudges when you're slipping -------------------------------

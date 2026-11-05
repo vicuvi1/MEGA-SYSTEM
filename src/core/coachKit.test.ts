@@ -115,3 +115,14 @@ describe('nudges know if you are up (T2)', () => {
     expect(shouldNudge({}, { ...f, wakeLogged: true }, new Date('2026-11-01T10:00:00'))).toBe(true)
   })
 })
+
+describe('only a reply about it answers a check-in (T3)', () => {
+  it('"water 250" does not, "done" or a word from it does', () => {
+    const sent = [{ id: 1, text: 'Finish the lab report', at: '2026-11-01T10:00:00Z', sentAt: '2026-11-01T10:00:00Z', kind: 'checkin' } as any]
+    const now = new Date('2026-11-01T11:00:00Z')
+    expect(answered(sent, now, 'water 250')[0].done).toBeFalsy()
+    expect(answered(sent, now, 'done')[0].done).toBe(true)
+    expect(answered(sent, now, 'the lab is almost finished')[0].done).toBe(true)
+    expect(answered(sent, now, 'taxi 45', true)[0].done).toBe(true)
+  })
+})
