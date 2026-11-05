@@ -1966,3 +1966,13 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
   .main > .topbar .chip { padding: 6px; }
   .main > .topbar .title h1, .main > .topbar .title h2 { font-size: 22px; white-space: nowrap; }
 }
+
+/* Phone overlaps (U5): the idle island dot sat on the header buttons, and
+   Ben's bubble covered the embedded apps' own tab bars. */
+@media (max-width: 760px) {
+  .isl.idle.isl-dotmode { display: none; }
+  .isl.pos-top { top: 60px !important; }
+  body:has(.embed-host.on) .bb-bubble { display: none; }
+  .bb-bubble { width: 44px; height: 44px; font-size: 22px; opacity: 0.92; }
+  :root .content { padding-bottom: 150px; }
+}
