@@ -2010,3 +2010,12 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 @media (min-width: 761px) {
   .shell:not(.rail) .main > .topbar .tb-me { display: none; }
 }
+
+/* One button style everywhere (V10): the same corners, height and weight for
+   the app's buttons, Ben's desk buttons and the coach header buttons; one
+   accent for the main action. */
+:root .btn, :root .bd-btn, :root .cx-model { border-radius: 10px; min-height: 34px; font-weight: 600; font-size: 13px; }
+:root .btn.small, :root .bd-btn.small { min-height: 28px; border-radius: 8px; font-size: 12.5px; }
+:root .icon-btn { border-radius: 10px; }
+:root .bd-btn.strong, :root .btn.primary { background: var(--accent); color: var(--accent-ink, #0b0d12); border-color: transparent; }
+:root .bd-btn:not(.strong):not(.ghost) { background: var(--surface-2); border-color: var(--border); }
