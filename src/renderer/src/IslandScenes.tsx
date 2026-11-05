@@ -6,7 +6,7 @@
 // and the count-up. Pure presentation: no data is changed here. How much moves
 // follows the island's feel (Full / Calm / Off, islandFeel.ts).
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
+import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { useFeel, wavePath } from './islandFeel'
 
 /** A ring that counts down `seconds` from when it appears; calls onDone at the end. */
@@ -78,11 +78,16 @@ export function Glass({ pct, size = 48, splash, shimmer = 0, label = true }: { p
     }
   }, [tilt, amp])
   const [bubbles, setBubbles] = useState<{ id: number; x: number; r: number; d: number }[]>([])
+  // IC10: the waves move for 3 s after a pour (and in the peek, the panel, on hover: island.css), else still.
+  const [pouring, setPouring] = useState(false)
   const before = useRef(level)
   useEffect(() => {
     const was = before.current
     before.current = level
-    if (!f.extras || Math.abs(level - was) < 0.001) return
+    if (!f.extras || Math.abs(level - was) < 0.001) return setPouring(false)
+    setPouring(true)
+    const pour = window.setTimeout(() => setPouring(false), 3000)
+    const stopPour = () => clearTimeout(pour)
     // Slosh: the surface tips toward the pour and rocks back (a loose spring).
     tilt.set(level > was ? -6 : 4)
     amp.set(2.4)
@@ -96,17 +101,19 @@ export function Glass({ pct, size = 48, splash, shimmer = 0, label = true }: { p
         a.stop()
         b.stop()
         clearTimeout(t)
+        stopPour()
       }
     }
     return () => {
       a.stop()
       b.stop()
+      stopPour()
     }
   }, [level, f, tilt, amp])
   const tap = splash && splash.n > 0 && f.extras ? splash : null
   const w = Math.round((size * 40) / 48)
   return (
-    <span className={`glass ${f.extras ? 'live' : 'still'} ${level >= 1 ? 'full' : ''}`} style={{ width: w, height: size }} aria-hidden>
+    <span className={`glass ${f.extras ? 'live' : 'still'} ${pouring ? 'pouring' : ''} ${level >= 1 ? 'full' : ''}`} style={{ width: w, height: size }} aria-hidden>
       <svg viewBox="0 0 40 48" width={w} height={size}>
         <defs>
           <clipPath id={`gc${uid}`}>
@@ -178,26 +185,39 @@ export function WaterScene({ pct, splash, shimmer }: { pct: number; splash?: Wat
  * Rolling digits (IL5): each character slides in its own slot when it changes,
  * like a flip clock. `up`: new digits come up from below (a number growing);
  * else they drop from above (a countdown). Calm: a quick crossfade; Off: plain text.
+ * IC8: plain CSS animations (no animation library per digit): a ticking
+ * timer only changes the one or two characters that changed.
  */
 export function Roll({ text, up = false, className = '' }: { text: string; up?: boolean; className?: string }) {
   const f = useFeel()
+  // The text before the last change (kept while other things re-render, so a running roll isn't cut).
+  const hist = useRef({ cur: text, prev: text })
+  if (hist.current.cur !== text) hist.current = { cur: text, prev: hist.current.cur }
   if (f.mode === 'off') return <span className={className}>{text}</span>
   const chars = [...text]
-  const from = f.moves ? (up ? '90%' : '-90%') : '0%'
-  const to = f.moves ? (up ? '-90%' : '90%') : '0%'
+  const old = [...hist.current.prev]
+  const changedText = hist.current.prev !== text
   return (
-    <span className={`roll ${className}`} aria-label={text}>
-      {chars.map((c, i) => (
-        // Keyed from the right, so "9:59" → "10:00" keeps the digits lined up.
-        <span className="roll-slot" key={chars.length - i} aria-hidden>
-          <span className="roll-size">{c}</span>
-          <AnimatePresence initial={false}>
-            <motion.span key={c} className="roll-ch" initial={{ y: from, opacity: 0 }} animate={{ y: '0%', opacity: 1 }} exit={{ y: to, opacity: 0 }} transition={f.pop}>
+    <span className={`roll ${f.moves ? (up ? 'roll-up' : 'roll-down') : 'roll-fade'} ${className}`} aria-label={text}>
+      {chars.map((c, i) => {
+        // Lined up from the right, so "9:59" → "10:00" keeps the digits in their slots.
+        const fromRight = chars.length - i
+        const was = old[old.length - fromRight]
+        const changed = changedText && was !== c
+        return (
+          <span className="roll-slot" key={fromRight} aria-hidden>
+            <span className="roll-size">{c}</span>
+            {changed && was !== undefined && (
+              <span key={`o${was}>${c}`} className="roll-ch out">
+                {was}
+              </span>
+            )}
+            <span key={c} className={`roll-ch ${changed ? 'in' : ''}`}>
               {c}
-            </motion.span>
-          </AnimatePresence>
-        </span>
-      ))}
+            </span>
+          </span>
+        )
+      })}
     </span>
   )
 }

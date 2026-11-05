@@ -19,6 +19,7 @@ import { capture } from './capture'
 import { parseCapture } from '@core/capture'
 import { useLive } from './live'
 import { logIsland } from './islandLog'
+import { snapshotKey } from '@core/islandClicks'
 import { startIslandThemeSync } from './islandTheme'
 import { todoistErrorText } from '@core/islandErrors'
 import { addWater } from './water'
@@ -480,13 +481,16 @@ export function IslandFeed() {
     }
   }, [])
 
-  // IS16: builds run at once (the 15 s tick, live updates, Ben's steps, taps);
-  // each gets a number and an older one that finishes last is dropped.
-  const seq = useRef(0)
-  const shown = useRef(0)
-  const send = useCallback(async () => {
+  // IS16 / IC9: one build at a time, and at most one more waiting (the 15 s
+  // tick, live updates, Ben's steps and taps all ask for one). A snapshot
+  // that says nothing new isn't sent again: a tiny "still here" goes instead,
+  // so the island doesn't say "Reconnecting…" (and the whole snapshot again
+  // every 2 minutes, in case the island window reloaded).
+  const running = useRef<Promise<void> | null>(null)
+  const queued = useRef(false)
+  const sent = useRef({ key: '', at: 0 })
+  const sendOnce = useCallback(async () => {
     if (!desk?.islandState) return
-    const n = ++seq.current
     let snap: IslandSnapshot
     try {
       snap = await build()
@@ -496,14 +500,33 @@ export function IslandFeed() {
       const gone = !sessionValid(currentSession())
       snap = gone ? { ...last.current, at: Date.now(), locked: true, stale: false } : { ...last.current, stale: true }
     }
-    if (n < shown.current) return
-    shown.current = n
     last.current = snap
+    const key = snapshotKey(snap)
+    const now = Date.now()
+    if (key === sent.current.key && now - sent.current.at < 120_000) return desk.islandState({ beat: snap.at || now })
+    sent.current = { key, at: now }
     desk.islandState(snap)
   }, [build, desk])
+  const send = useCallback((): Promise<void> => {
+    if (running.current) {
+      queued.current = true
+      return running.current
+    }
+    const run = async () => {
+      do {
+        queued.current = false
+        await sendOnce()
+      } while (queued.current)
+    }
+    running.current = run().finally(() => {
+      running.current = null
+    })
+    return running.current
+  }, [sendOnce])
 
   const act = useCallback(
     async (a: IslandAction) => {
+      const t0 = Date.now()
       let error: string | null = null
       let said: string | null = null
       try {
@@ -759,7 +782,7 @@ export function IslandFeed() {
         error = (e as Error)?.message || 'It did not work'
       }
       // The island shows ✓ or the reason; the log (Settings → Island log) keeps it.
-      if (a.id) desk?.islandAck?.({ id: a.id, ok: !error, ...(error ? { error } : {}), ...(said ? { text: said } : {}) })
+      if (a.id) desk?.islandAck?.({ id: a.id, ok: !error, ...(error ? { error } : {}), ...(said ? { text: said } : {}), tookMs: Date.now() - t0 })
       logIsland({ at: new Date().toISOString(), kind: a.kind, ok: !error, error: error ?? undefined })
       if (error) void life.system?.logError('island', `${a.kind}: ${error}`).catch(() => {})
       await send()

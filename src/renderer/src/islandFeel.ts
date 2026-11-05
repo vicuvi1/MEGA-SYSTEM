@@ -104,25 +104,57 @@ export function bump(el: Element | null, f: Feel, scale = 1.08) {
 }
 
 // ---- one animation frame for every live thing (rings, sweeps) ----
+// IC10: every frame only while the island moves; otherwise 4 times a second
+// (a ring over 25 minutes moves a hair in that time); nothing at all while
+// the island is hidden or tucked away.
 type FrameFn = (now: number) => void
+export type FrameMode = 'fast' | 'slow' | 'paused'
 const frameFns = new Set<FrameFn>()
 let frameId = 0
-const loop = () => {
+let slowId = 0
+let mode: FrameMode = 'slow'
+const stopLoop = () => {
+  if (frameId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frameId)
+  if (slowId) clearTimeout(slowId)
+  frameId = 0
+  slowId = 0
+}
+const runAll = () => {
   const t = Date.now()
   for (const fn of frameFns) fn(t)
-  frameId = frameFns.size ? requestAnimationFrame(loop) : 0
 }
-/** Run `fn` on every frame (one shared requestAnimationFrame); returns the stop function. */
+const loop = () => {
+  frameId = 0
+  slowId = 0
+  if (!frameFns.size || mode === 'paused') return
+  runAll()
+  schedule()
+}
+const schedule = () => {
+  if (frameId || slowId || !frameFns.size || mode === 'paused') return
+  if (mode === 'fast' && typeof requestAnimationFrame === 'function') frameId = requestAnimationFrame(loop)
+  else slowId = setTimeout(loop, 250) as unknown as number
+}
+/** Every frame (fast), 4 times a second (slow) or not at all (paused). */
+export function setFrameMode(m: FrameMode) {
+  if (m === mode) return
+  mode = m
+  stopLoop()
+  if (m !== 'paused') {
+    // Catch up at once (back from hidden, or starting to move).
+    if (frameFns.size) runAll()
+    schedule()
+  }
+}
+export const frameMode = () => mode
+/** Run `fn` on the shared clock (see setFrameMode); returns the stop function. */
 export function onFrame(fn: FrameFn): () => void {
   frameFns.add(fn)
   fn(Date.now())
-  if (!frameId && typeof requestAnimationFrame === 'function') frameId = requestAnimationFrame(loop)
+  schedule()
   return () => {
     frameFns.delete(fn)
-    if (!frameFns.size && frameId) {
-      cancelAnimationFrame(frameId)
-      frameId = 0
-    }
+    if (!frameFns.size) stopLoop()
   }
 }
 

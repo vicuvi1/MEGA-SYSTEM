@@ -7,10 +7,22 @@
 // It never touches your data: the app window sends it snapshots and gets its
 // taps back. Clicks pass through everything except the visible shape.
 //
+// Clicks (IC1): the island page decides when it takes clicks. The desktop
+// forwards every mouse move to it (setIgnoreMouseEvents with forward), the page
+// checks the pointer against its own shape in its own pixels and says
+// island:takeClicks at once; no screen scaling has to be converted, so mixed
+// screens and 125/150% scaling can't put the pointer "outside" the right end
+// of the peek. The desktop's own 50 ms look at the pointer only notices it
+// leaving the window (and is the fallback for an older page).
+// The window still never takes the focus (focusable: false, a tool window, so
+// no taskbar button): a press on a window that doesn't take the focus can be
+// swallowed by Windows, so the page fires its buttons on the release (that
+// always arrives) and counts releases without a press in Island debug.
+//
 // Size: the page scales itself with CSS (`scale` in island:prefs). The island
 // page has the same origin as the app, and Chromium shares page zoom per
 // origin, so zooming the island would zoom the app too: its zoom stays locked.
-import { app, BrowserWindow, globalShortcut, ipcMain, powerMonitor, screen } from 'electron'
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, powerMonitor, screen } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -34,6 +46,8 @@ const cleanTheme = (t: any): IslandAppTheme | null => {
 const SIDE_PILL_Y = 40
 /** Above normal windows (on Windows every level above "normal" is plain topmost). */
 const LEVEL = 'pop-up-menu' as const
+/** Island debug switches itself off after this long (IC13). */
+const DEBUG_MS = 30 * 60_000
 
 type Slot = 'island' | 'quiet' | 'capture' | 'voice'
 
@@ -97,6 +111,14 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let hot: HotRect[] = []
   /** Over the shape (null: not known, check again on the next poll). */
   let inside: boolean | null = null
+  /** Clicks pass through the window right now (IC1). */
+  let ignoring = true
+  /** The page decides when it takes clicks (it said so at least once). */
+  let pageCtl = false
+  /** The pointer is inside the window's box (null: not known). */
+  let inWin: boolean | null = null
+  /** Island debug (IC13): the last poll's timing, for the overlay. */
+  const timing = { lastPoll: 0, jitter: 0, lastTick: 0, lag: 0, flips: 0 }
   let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number; startedAt: number; lastMove: number; lx: number; ly: number } | null = null
   /** The page is listening (IS22): shortcuts pressed before that wait here. */
   let ready = false
@@ -132,6 +154,14 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const pageZoom = () => {
     try { return win && !win.isDestroyed() ? win.webContents.getZoomFactor() || 1 : 1 } catch { return 1 }
   }
+  /** Clicks pass through (true) or the island takes them (false). */
+  const setIgnore = (ign: boolean, why: string, force = false) => {
+    if (!win || win.isDestroyed() || (!force && ign === ignoring)) return
+    ignoring = ign
+    timing.flips++
+    try { win.setIgnoreMouseEvents(ign, { forward: true }) } catch { /* fine */ }
+    diag(ign ? 'pass' : 'take', ign ? `Clicks pass through (${why})` : `The island takes clicks (${why})`)
+  }
   /** The size setting, done by the page itself with CSS. */
   const cssScale = () => ISLAND_ZOOM[prefs.size] ?? 1
   /** IF3: room for your widest view (the peek / panel width sliders). */
@@ -148,6 +178,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   }
 
   const sendPrefs = () => win?.webContents.send('island:prefs', { ...allPrefs(), scale: cssScale(), theme: appTheme })
+  /** Shown or hidden: the page pauses its animations while hidden (IC10). */
+  const sendVisible = () => { if (win && !win.isDestroyed() && ready) win.webContents.send('island:visible', win.isVisible()) }
   const sendPlacement = () => win?.webContents.send('island:placement', place)
   const onTop = () => {
     if (!win || win.isDestroyed()) return
@@ -168,6 +200,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     sendQuiet()
     sendPlacement()
     if (last) win?.webContents.send('island:state', last)
+    sendVisible()
   }
   const markReady = () => {
     if (!win || win.isDestroyed()) return
@@ -184,6 +217,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (win && !win.isDestroyed()) return
     ready = false
     inside = null
+    inWin = null
+    pageCtl = false
     const wa = display().workArea
     win = new BrowserWindow({
       ...islandSize(base(), cssScale(), wa), frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
@@ -199,6 +234,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     // No menu: its Ctrl+= / Ctrl+- would zoom the island (and with it the app).
     try { w.setMenu(null) } catch { /* fine */ }
     w.setIgnoreMouseEvents(true, { forward: true })
+    ignoring = true
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     w.webContents.on('will-navigate', (e) => e.preventDefault())
     // IS2: the zoom stays as it is (pinch, Ctrl+wheel and Ctrl+plus/minus do nothing here).
@@ -221,6 +257,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     // You clicked into another app: the panel may close (the island decides).
     w.on('blur', () => { if (!w.isDestroyed()) w.webContents.send('island:blur') })
     w.on('always-on-top-changed', (_e, on) => { if (!on) onTop() })
+    w.on('show', () => sendVisible())
+    w.on('hide', () => { sendVisible(); setIgnore(true, 'hidden') })
     placeWin()
     // IS13: shown only when it should be (not over a full-screen app or in a call you hide it in).
     void w.loadURL(o.origin + '/?island=1').then(() => applyVisibility(), () => applyVisibility())
@@ -231,7 +269,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const fromApp = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => e.sender === o.appWindow.webContents
   ipcMain.on('island:state', (e, s) => {
     if (!fromApp(e)) return
-    last = s
+    // IC9: "still the same" (a heartbeat) is passed on but never replaces the last real snapshot.
+    const beat = !!s && typeof s === 'object' && 'beat' in s && Object.keys(s).length === 1
+    if (!beat) last = s
     if (win && !win.isDestroyed()) win.webContents.send('island:state', s)
   })
   // The island page is ready (it loads a moment after the window): tell it where it lives and what to show.
@@ -244,6 +284,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   ipcMain.on('island:focus', (e) => {
     if (!fromIsland(e) || !win) return
     win.setFocusable(true)
+    // setFocusable(true) also brings back a taskbar button on Windows: never for the island.
+    try { win.setSkipTaskbar(true) } catch { /* fine */ }
     win.focus()
     win.webContents.focus()
     inside = null
@@ -252,6 +294,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (!fromIsland(e) || !win || on) return
     if (win.isFocused()) win.blur()
     win.setFocusable(false)
+    try { win.setSkipTaskbar(true) } catch { /* fine */ }
     inside = null
   })
   ipcMain.on('island:showApp', (e, page) => { if (fromIsland(e)) o.showApp(typeof page === 'string' ? page : undefined) })
@@ -263,6 +306,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     clearInterval(drag.timer)
     drag = null
     inside = null
+    inWin = null
     if (!win || win.isDestroyed()) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
@@ -283,8 +327,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     savePrefs()
     sendPlacement()
     placeWin()
-    // IS21: clicks pass through again where there's no island.
-    win.setIgnoreMouseEvents(true, { forward: true })
+    // IS21: clicks pass through again where there's no island (the page takes them again on the next move).
+    setIgnore(true, 'drag ended', true)
     if (why === 'stuck') {
       win.webContents.send('island:dragCancel')
       diag('drag', 'Drag ended by itself (no movement for 10 s)', true)
@@ -295,7 +339,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (!fromIsland(e) || !win || drag) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
-    win.setIgnoreMouseEvents(false)
+    setIgnore(false, 'dragging', true)
     const now = Date.now()
     drag = {
       offX: c.x - b.x,
@@ -328,20 +372,81 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     hot = list
     diag('hot', `Click area: ${list.map((h) => `${Math.round(h.x)},${Math.round(h.y)} ${Math.round(h.w)}×${Math.round(h.h)}`).join(' + ') || 'none'} (zoom ${pageZoom().toFixed(2)})`)
   })
-  // The real pointer, ~20 times a second: over the shape → it takes clicks
-  // (and hears "hover"); elsewhere clicks pass through to the apps below.
-  // (Polling avoids the browser's false mouse-leave events on Windows.)
+  // IC1: the page says when it takes clicks (it sees every mouse move in its own pixels).
+  ipcMain.on('island:takeClicks', (e, on) => {
+    if (!fromIsland(e) || !win || win.isDestroyed() || drag) return
+    if (!pageCtl) diag('ctl', 'The island page decides where it takes clicks', true)
+    pageCtl = true
+    inside = !!on
+    // A late "take" after the pointer already left the window is ignored.
+    if (on && inWin === false) return
+    setIgnore(!on, on ? 'pointer on the island' : 'pointer off the island')
+  })
+  // The real pointer, ~20 times a second. With the page deciding (IC1) it only
+  // notices the pointer leaving the window (the page then gets no more moves);
+  // an older page: over the shape → it takes clicks (and hears "hover"),
+  // elsewhere clicks pass through. (Polling avoids the browser's false
+  // mouse-leave events on Windows.)
   setInterval(() => {
+    const t = Date.now()
+    if (timing.lastPoll) timing.jitter = Math.max(timing.jitter * 0.9, Math.abs(t - timing.lastPoll - 50))
+    timing.lastPoll = t
     if (!win || win.isDestroyed() || drag || !win.isVisible()) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
+    if (pageCtl) {
+      const nowIn = c.x >= b.x && c.x < b.x + b.width && c.y >= b.y && c.y < b.y + b.height
+      if (nowIn === inWin) return
+      inWin = nowIn
+      if (!nowIn) {
+        setIgnore(true, 'pointer left the window')
+        if (inside !== false) win.webContents.send('island:hover', false)
+        inside = false
+      }
+      return
+    }
     const now = overRects(c.x - b.x, c.y - b.y, rectsToDip(hot, pageZoom()))
     if (now === inside) return
     inside = now
-    win.setIgnoreMouseEvents(!now, { forward: true })
+    setIgnore(!now, now ? 'pointer on the click area' : 'pointer off the click area', true)
     win.webContents.send('island:hover', now)
     diag(now ? 'hover-in' : 'hover-out', now ? 'Mouse over the island: it takes clicks' : 'Mouse left the island: clicks pass through')
   }, 50)
+
+  // ---- Island debug (IC13): what the desktop sees, ~10 times a second ----
+  const debugOn = () => desk.debugUntil > Date.now()
+  setInterval(() => {
+    const t = Date.now()
+    if (timing.lastTick) timing.lag = Math.max(timing.lag * 0.9, t - timing.lastTick - 100)
+    timing.lastTick = t
+    if (!desk.debugUntil) return
+    if (!debugOn()) {
+      // 30 minutes are over: it switches itself off.
+      desk = { ...desk, debugUntil: 0 }
+      savePrefs()
+      sendPrefs()
+      diag('debug', 'Island debug switched itself off (30 minutes)', true)
+      o.onChange?.()
+      return
+    }
+    if (!win || win.isDestroyed() || !ready || !win.isVisible()) return
+    try {
+      const c = screen.getCursorScreenPoint()
+      const b = win.getBounds()
+      const d = screen.getDisplayMatching(b)
+      const z = pageZoom()
+      win.webContents.send('island:debug', {
+        at: t, cursor: { x: c.x - b.x, y: c.y - b.y }, bounds: b, scaleFactor: d.scaleFactor, zoom: z,
+        rects: rectsToDip(hot, z), ignoring, ctl: pageCtl ? 'page' : 'poll', inWin, focused: win.isFocused(),
+        pollJitter: Math.round(timing.jitter), lag: Math.round(Math.max(0, timing.lag)), flips: timing.flips, until: desk.debugUntil
+      })
+    } catch { /* fine */ }
+  }, 100)
+  // IC13: "Copy report" from the island (its window can't always reach the clipboard without the focus).
+  ipcMain.on('island:copy', (e, text) => {
+    if (!fromIsland(e) || typeof text !== 'string') return
+    try { clipboard.writeText(text.slice(0, 400_000)) } catch { /* fine */ }
+  })
 
   // IS20: still on top after sleep, the screen turning off, a new screen or Explorer restarting.
   const reassert = (why: string) => {
@@ -667,6 +772,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     prefs = cleanIslandPrefs({ ...prefs, ...p })
     // Saved spots are the desktop's own: Settings can't overwrite them.
     desk = cleanDeskPrefs({ ...desk, ...p, layouts: desk.layouts })
+    // IC13: Island debug runs 30 minutes at most.
+    if (desk.debugUntil) desk = { ...desk, debugUntil: Math.min(desk.debugUntil, Date.now() + DEBUG_MS) }
+    if (!!desk.debugUntil !== !!before.debugUntil) diag('debug', desk.debugUntil ? 'Island debug on (30 minutes)' : 'Island debug off', true)
     // IF1: a position from Settings; IF2: a screen picked from the list.
     if (isPlacement(p?.place)) {
       place = p.place

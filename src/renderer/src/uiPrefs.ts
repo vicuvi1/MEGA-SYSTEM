@@ -142,7 +142,9 @@ export function applyTheme(): void {
   document.documentElement.classList.toggle('calm', current.calm !== false)
   // zoom scales the whole app (sizes are in px, so a root font size would not)
   const size = [90, 100, 110, 125].includes(Number(current.textSize)) ? Number(current.textSize) : 100
-  document.documentElement.style.setProperty('zoom', size === 100 ? '' : String(size / 100))
+  // IC11: never on the desktop island: its window is sized by the desktop, which doesn't know this zoom.
+  const island = typeof location !== 'undefined' && /[?&]island=1/.test(location.search)
+  document.documentElement.style.setProperty('zoom', size === 100 || island ? '' : String(size / 100))
 }
 
 systemDark?.addEventListener('change', () => current.theme === 'system' && applyTheme())

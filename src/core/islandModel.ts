@@ -19,7 +19,7 @@ export interface IslandBlock {
 }
 
 /** Every tap gets an answer from the app window: done, or why not. */
-export interface IslandAck { id: string; ok: boolean; error?: string; /** What happened, in words (the command bar's answer). */ text?: string }
+export interface IslandAck { id: string; ok: boolean; error?: string; /** What happened, in words (the command bar's answer). */ text?: string; /** How long the app window took to do it (ms; Island debug). */ tookMs?: number }
 
 export type IslandAction = { id?: string } & (
   | { kind: 'water'; ml: number }

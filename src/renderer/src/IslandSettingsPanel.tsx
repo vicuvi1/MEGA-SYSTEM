@@ -465,6 +465,22 @@ export function IslandSettingsPanel() {
       <Row title="Volume" hint={`${Math.round(p.volume * 100)}%`}>
         <input className="sx-range" type="range" min={0} max={100} step={5} value={Math.round(p.volume * 100)} onChange={(e) => void save({ volume: Number(e.target.value) / 100 })} aria-label="Volume" />
       </Row>
+
+      {p.debugUntil != null && (
+        <>
+          <h3 className="is-sec">Troubleshooting</h3>
+          <Row
+            title="Debug"
+            hint={
+              (p.debugUntil ?? 0) > Date.now()
+                ? `On until ${new Date(p.debugUntil!).toTimeString().slice(0, 5)}. On the island: green boxes are where it takes clicks, red dashed boxes where the desktop thinks they are. Try "Click test", then "Copy report" and send it to us.`
+                : 'Draws where the island takes clicks and how smoothly it runs, right on the island. Only on this PC; it turns itself off after 30 minutes.'
+            }
+          >
+            <Switch label="Island debug" on={(p.debugUntil ?? 0) > Date.now()} onChange={(v) => void save({ debugUntil: v ? Date.now() + 30 * 60_000 : 0 })} />
+          </Row>
+        </>
+      )}
     </section>
   )
 }

@@ -120,4 +120,10 @@ describe('PC-only settings', () => {
     expect(Object.keys(p.layouts)).toEqual(['a'])
     expect(p.layouts.a.pos.cx).toBe(1)
   })
+  it('Island debug is off unless a real time is set', () => {
+    expect(cleanDeskPrefs(null).debugUntil).toBe(0)
+    expect(cleanDeskPrefs({ debugUntil: 'soon' }).debugUntil).toBe(0)
+    expect(cleanDeskPrefs({ debugUntil: -5 }).debugUntil).toBe(0)
+    expect(cleanDeskPrefs({ debugUntil: 1_800_000.4 }).debugUntil).toBe(1_800_000)
+  })
 })

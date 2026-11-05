@@ -17610,7 +17610,6 @@ function nudgeText(n, idle, first, focusMin, tone) {
 	const step = first ? `Open <b>${esc(first)}</b> and do just the first 10 minutes.` : "Pick anything on your list and give it 10 minutes.";
 	return n === 1 ? `🎯 ${idle === "all day" ? "Nothing logged yet today." : `${idle} since your last thing.`} ${step}` : n <= 3 ? `🎯 Smallest next step: ${step} If something's in the way, tell me and I'll move it.` : `🎯 Still here when you're ready. ${step} Or pause me for today.`;
 }
-// src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
 /** Your day for water and reps: it turns at 04:00, like the rest of the app (S4). */
 var sportDay = (d = /* @__PURE__ */ new Date()) => dayKey(d);

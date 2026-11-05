@@ -1,8 +1,7 @@
 // The island's log (Settings → Island log), small on purpose: the island
-// window imports it too, without the app's data layer. Two lists in this
-// PC's storage (the app window and the island window share it):
+// window imports it too, without the app's data layer. Two lists:
 // - taps: what the app window did for each tap, ✓ or why not;
-// - island: what the island window itself saw (IS23): its view changing,
+// - island (in the island window's memory and the desktop's log): what the island window itself saw (IS23): its view changing,
 //   the pointer coming and going, the click area it reported, the zoom,
 //   why it's hidden or dimmed, and the desktop's own lines (island:diag).
 export const ISLAND_LOG = 'ls.islandLog'
@@ -27,7 +26,14 @@ const write = (k: string, v: unknown) => {
 }
 
 export const readIslandLog = () => read<IslandLogEntry>(ISLAND_LOG)
-export const readIslandUiLog = () => read<IslandUiLogEntry>(ISLAND_UI_LOG)
+/**
+ * What the island window saw: kept in its memory and in the desktop's island
+ * log (island:log → Settings → Diagnostics reads it with islandGetLog), never
+ * in this PC's storage: every write there woke the app window up (IC7).
+ * In the app window this is only an older desktop's leftovers.
+ */
+const uiLog: IslandUiLogEntry[] = []
+export const readIslandUiLog = (): IslandUiLogEntry[] => (uiLog.length ? uiLog.slice() : read<IslandUiLogEntry>(ISLAND_UI_LOG))
 
 export function logIsland(e: IslandLogEntry) {
   write(ISLAND_LOG, [...readIslandLog(), e].slice(-30))
@@ -39,11 +45,11 @@ export function logIsland(e: IslandLogEntry) {
  * came from there (`local`).
  */
 export function logIslandUi(kind: string, text: string, o: { local?: boolean; now?: number } = {}) {
-  const list = readIslandUiLog()
-  const last = list[list.length - 1]
+  const last = uiLog[uiLog.length - 1]
   if (last && last.kind === kind && last.text === text) return
   const line = String(text).slice(0, 200)
-  write(ISLAND_UI_LOG, [...list, { at: new Date(o.now ?? Date.now()).toISOString(), kind, text: line }].slice(-80))
+  uiLog.push({ at: new Date(o.now ?? Date.now()).toISOString(), kind, text: line })
+  if (uiLog.length > 80) uiLog.splice(0, uiLog.length - 80)
   if (!o.local) {
     try {
       window.desktop?.islandLog?.(`${kind}: ${line}`)
@@ -52,3 +58,20 @@ export function logIslandUi(kind: string, text: string, o: { local?: boolean; no
     }
   }
 }
+
+/** The island window's old copy in this PC's storage (from before IC7): removed once. */
+export function dropOldIslandUiLog() {
+  try {
+    if (localStorage.getItem(ISLAND_UI_LOG) != null) localStorage.removeItem(ISLAND_UI_LOG)
+  } catch {
+    /* fine */
+  }
+}
+
+/**
+ * Does a change in this PC's storage (made by another window: the island,
+ * an embedded app) mean the app should reload its data? Not for the island's
+ * own logs and the app's own small settings ("ls." keys); yes for the apps'
+ * data and when everything was cleared (key null).
+ */
+export const storageWakesApp = (key: string | null) => key == null || !key.startsWith('ls.')

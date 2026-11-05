@@ -8,14 +8,17 @@
 // The window never resizes (that made it jump): only the shape animates, with
 // springs that can reverse halfway. States and timers live in islandStep
 // (core/islandModel.ts), so nothing closes or opens behind your back.
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, clock, islandStep, islandTiming, isLive, liveActivity, meetingToOpen, pill, pillBubbles, tuckState, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
-import type { IslandPlacement, IslandTheme } from '../../shared/desktop'
+import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desktop'
 import { AlertScene, CountUp, Glass, Marquee, Roll, TypeIn, type WaterSplash } from './IslandScenes'
-import { FeelContext, bump, feelFor, flyId, onFrame, ringColor, useFeel, type Feel } from './islandFeel'
-import { logIslandUi } from './islandLog'
+import { FeelContext, bump, feelFor, flyId, onFrame, ringColor, setFrameMode, useFeel, type Feel } from './islandFeel'
+import { dropOldIslandUiLog, logIslandUi } from './islandLog'
+import { finalShapeRect, inRects, roundOut, SHIELD_OFF, SHIELD_PAD, shieldStep, unionRect, type Rect, type Shield } from '@core/islandClicks'
+import { installTaps, isPressed, onPress, tp } from './islandTap'
+import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
 import './island.css'
 
@@ -27,6 +30,8 @@ export const STALE_MS = 60_000
 /** A press becomes a drag only after moving this far and being held this long (IS3). */
 export const DRAG_PX = 8
 export const DRAG_MS = 120
+/** What may wait while you press a button (IC5): never your own clicks. */
+const HELD_EVENTS = new Set<IslandUiEvent['type']>(['hover', 'hoverHeld', 'leave', 'alert', 'alertEnd', 'autoOpen', 'blur'])
 
 /** One note: frequency, start (s), length (s), type. */
 type Note = [number, number, number, OscillatorType?]
@@ -168,6 +173,8 @@ function Sweep({ from, to }: { from: number; to: number }) {
   return <i ref={el} className="di-sweep" aria-hidden />
 }
 
+/** IC8: the view; things only fly (and are measured) when it changes, not on every redraw. */
+const ViewContext = createContext<string>('compact')
 /**
  * IA2: something that flies between the pill, the peek and the panel (its
  * icon, title or time share an id there). `pos`: it only moves (text that
@@ -175,9 +182,10 @@ function Sweep({ from, to }: { from: number; to: number }) {
  */
 function Fly({ id, pos = false, className, children }: { id: string; pos?: boolean; className?: string; children: ReactNode }) {
   const f = useFeel()
+  const view = useContext(ViewContext)
   const lid = flyId(f, id)
   return (
-    <motion.span layoutId={lid} layout={lid ? (pos ? 'position' : true) : undefined} transition={f.fly} className={`di-flyer ${className ?? ''}`}>
+    <motion.span layoutId={lid} layout={lid ? (pos ? 'position' : true) : undefined} layoutDependency={view} transition={f.fly} className={`di-flyer ${className ?? ''}`}>
       {children}
     </motion.span>
   )
@@ -198,7 +206,10 @@ function ActIcon({ a, face, small = false, size: px }: { a: Activity; face: stri
 function useNow(ms: number) {
   const [n, setN] = useState(Date.now())
   useEffect(() => {
-    const t = setInterval(() => setN(Date.now()), ms)
+    const t = setInterval(() => {
+      dbg.commits++
+      setN(Date.now())
+    }, ms)
     return () => clearInterval(t)
   }, [ms])
   return n
@@ -252,7 +263,7 @@ function RepBtn({ r, n = 10, onTap }: { r: IslandSnapshot['reps'][number]; n?: n
     was.current = r.done
   }, [r.done, f])
   return (
-    <button ref={el} onClick={onTap} title={`${r.done}/${r.target}`}>
+    <button ref={el} {...tp(`rep:${r.id}`, onTap)} title={`${r.done}/${r.target}`}>
       <span>{r.name}</span>
       <small>
         <CountUp value={r.done} />/{r.target}
@@ -269,15 +280,15 @@ function WaterBtn({ ml, onTap, children }: { ml: number; onTap: (ml: number) => 
   return (
     <button
       className="di-wbtn"
-      onClick={(e) => {
+      {...tp(`wbtn:${ml}`, (t) => {
         onTap(ml)
-        bump(e.currentTarget, f, 1.06)
+        bump(t.el, f, 1.06)
         if (!f.extras) return
-        const b = e.currentTarget.getBoundingClientRect()
+        const b = t.el.getBoundingClientRect()
         const id = Date.now()
-        setRip((x) => [...x.slice(-2), { id, x: e.clientX - b.left, y: e.clientY - b.top }])
+        setRip((x) => [...x.slice(-2), { id, x: t.keyboard ? b.width / 2 : t.x - b.left, y: t.keyboard ? b.height / 2 : t.y - b.top }])
         window.setTimeout(() => setRip((x) => x.filter((p) => p.id !== id)), 600)
-      }}
+      })}
     >
       {children}
       {rip.map((p) => (
@@ -340,6 +351,12 @@ export function DesktopIsland() {
   const fRef = useRef(f)
   fRef.current = f
 
+  // IC9: the last "still the same" from the app window.
+  const beatAt = useRef(0)
+  const heldSnap = useRef<IslandSnapshot | null>(null)
+  // IC10: shown or hidden (the desktop says; the window never throttles itself).
+  const [visible, setVisible] = useState(true)
+  const pointerLeft = useRef<() => void>(() => {})
   // ---- states: one reducer, one timer ----
   const [ui, setUi] = useState<IslandUi>(ISLAND_UI)
   const uiRef = useRef(ui)
@@ -350,11 +367,22 @@ export function DesktopIsland() {
     desk()?.islandFocus?.()
     window.setTimeout(() => input.current?.focus(), 40)
   }, [])
+  // IC5: from a press until 150 ms after its release, nothing changes under the
+  // pointer: what happens by itself (hover, timers, a new alert) waits.
+  const frozen = useRef(false)
+  const heldEvents = useRef<IslandUiEvent[]>([])
   const dispatch = useCallback((e: IslandUiEvent) => {
+    if (frozen.current && HELD_EVENTS.has(e.type)) {
+      heldEvents.current.push(e)
+      return
+    }
     // IF7, IF11: your hover delay (or click only), how long reminders peek, how long the panel stays.
     const step = islandStep(uiRef.current, e, islandTiming(prefsRef.current))
     // IS23: every change of view, and what caused it.
-    if (step.ui.view !== uiRef.current.view) logIslandUi('view', `${uiRef.current.view} → ${step.ui.view} (${e.type})`)
+    if (step.ui.view !== uiRef.current.view) {
+      logIslandUi('view', `${uiRef.current.view} → ${step.ui.view} (${e.type})`)
+      dbgEvent('view', { from: uiRef.current.view, to: step.ui.view, why: e.type })
+    }
     uiRef.current = step.ui
     setUi(step.ui)
     if (step.timer !== undefined) {
@@ -371,12 +399,27 @@ export function DesktopIsland() {
 
   useEffect(() => {
     document.documentElement.classList.add('di-root')
-    desk()?.onIslandState?.(setS)
-    // The desktop watches the real pointer and says when it is over the shape.
+    dropOldIslandUiLog()
+    desk()?.onIslandState?.((v) => {
+      // IC9: "still the same": only the time it was last heard from.
+      if (v && 'beat' in v) {
+        dbg.beats++
+        beatAt.current = Number((v as IslandBeat).beat) || Date.now()
+        return
+      }
+      dbg.snaps++
+      // IC5: a new picture waits while you press a button.
+      if (frozen.current) heldSnap.current = v as IslandSnapshot
+      else setS(v as IslandSnapshot)
+    })
+    // IC1: the page itself sees the pointer (pointerOver below); the desktop
+    // says when it left the window. An older desktop: it says in and out.
     desk()?.onIslandHover?.((on) => {
+      if (desk()?.islandTakeClicks && !on) return pointerLeft.current()
       logIslandUi('hover', on ? 'mouse in' : 'mouse out')
       dispatch({ type: 'hover', on })
     })
+    desk()?.onIslandVisible?.((v) => setVisible(v))
     // IS23: the desktop's own lines (click-through, zoom, why it's hidden) go in the island log.
     desk()?.onIslandDiag?.((d) => logIslandUi('desktop', String(d?.line ?? d), { local: true }))
     // IS21: the desktop ended a drag that got stuck.
@@ -541,8 +584,19 @@ export function DesktopIsland() {
   // ---- the shape's size: measured from the view inside it, animated with a spring ----
   const shape = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 120, h: 30 })
+  const sizeRef = useRef(size)
+  sizeRef.current = size
+  // IC12: each view's own element (a view that is still fading out is never the one measured).
+  const viewEls = useRef<Partial<Record<string, HTMLElement | null>>>({})
+  const viewRef = useMemo(() => {
+    const make = (v: string) => (el: HTMLElement | null) => {
+      if (el) viewEls.current[v] = el
+      else if (viewEls.current[v] && !viewEls.current[v]!.isConnected) viewEls.current[v] = null
+    }
+    return { compact: make('compact'), peek: make('peek'), expanded: make('expanded') } as Record<string, (el: HTMLElement | null) => void>
+  }, [])
   useLayoutEffect(() => {
-    const el = shape.current?.querySelector<HTMLElement>(`[data-view="${ui.view}"]`)
+    const el = viewEls.current[ui.view]
     if (!el) return
     const fit = () => {
       const max = ISLAND_SHAPE.expanded.maxHeight
@@ -558,72 +612,189 @@ export function DesktopIsland() {
     return () => ro.disconnect()
   }, [ui.view])
 
-  // Tell the desktop where the shape is: clicks elsewhere pass through (IS2).
-  // The real boxes on screen (getBoundingClientRect, so the hover lift and the
-  // drop's stretch count): the shape, the second bubble (IL2) and the toast,
-  // every frame while anything moves, on every size change, and once it settles (IA1).
+  // Where the island takes clicks (IS2, IC1–IC3). Measured once per change (a
+  // view opening, a new size, the bubble or the toast), never every frame: the
+  // shape where it is now AND where it will end, together, so a peek still
+  // growing already takes clicks at its right end. The page checks the pointer
+  // against this itself and tells the desktop at once (island:takeClicks); the
+  // desktop also gets the boxes (Island debug, and an older desktop's own check).
   const [moving, setMoving] = useState(false)
   const movingRef = useRef(false)
+  movingRef.current = moving
   const lastHot = useRef('')
   const rootEl = useRef<HTMLDivElement>(null)
+  const target = useRef<Rect[]>([])
+  const scaleRef = useRef(scale)
+  scaleRef.current = scale
+  const placeRef = useRef(place)
+  placeRef.current = place
+  const stretchRef = useRef(false)
+  stretchRef.current = stretch
+  const evaluateRef = useRef<(force?: boolean) => void>(() => {})
   const sendHot = useCallback((settled = false) => {
     const root = rootEl.current
-    if (!root) return
-    const rects: HotRect[] = []
-    for (const el of root.querySelectorAll<HTMLElement>('[data-hot]')) {
+    const sh = shape.current
+    if (!root || !sh) return
+    const sc = scaleRef.current || 1
+    const pl = placeRef.current
+    const now = sh.getBoundingClientRect()
+    const box = root.getBoundingClientRect()
+    const anchor = pl === 'left' || pl === 'top-left' ? 'left' : pl === 'right' || pl === 'top-right' ? 'right' : 'center'
+    const end = finalShapeRect({
+      anchor, ax: anchor === 'left' ? box.left : anchor === 'right' ? box.right : box.left + box.width / 2, top: now.top,
+      w: sizeRef.current.w * sc, h: (sizeRef.current.h + (stretchRef.current ? 8 : 0)) * sc
+    })
+    const cur = { x: now.left, y: now.top, w: now.width, h: now.height }
+    const rects: Rect[] = [roundOut(settled ? end : unionRect(cur, end))]
+    // The bubble, the toast and Island debug's buttons: where they are and their full size around their middle.
+    const dy = end.y + end.h - (now.top + now.height)
+    for (const el of document.querySelectorAll<HTMLElement>('[data-hot]')) {
+      if (el === sh || el.parentElement?.closest('[data-hot]')) continue
       const r = el.getBoundingClientRect()
       if (!r.width || !r.height) continue
-      const x = Math.floor(r.left)
-      const y = Math.floor(r.top)
-      rects.push({ x, y, w: Math.ceil(r.right) - x, h: Math.ceil(r.bottom) - y })
+      // Island debug's buttons aren't scaled with the island.
+      const k = el.closest('.di') ? sc : 1
+      const w = Math.max(r.width, el.offsetWidth * k)
+      const h = Math.max(r.height, el.offsetHeight * k)
+      const shift = el.classList.contains('di-toast') ? dy : 0
+      const full = { x: r.left + r.width / 2 - w / 2, y: r.top + r.height / 2 - h / 2 + shift, w, h }
+      rects.push(roundOut(settled ? full : unionRect({ x: r.left, y: r.top, w: r.width, h: r.height }, full)))
     }
-    if (!rects.length) return
+    target.current = rects
+    dbg.target = rects
     const key = rects.map((b) => `${b.x},${b.y} ${b.w}×${b.h}`).join(' ')
     if (key !== lastHot.current) {
       lastHot.current = key
       desk()?.islandHot?.({ rects })
+      if (settled) logIslandUi('click area', key)
     }
-    if (settled) logIslandUi('click area', key)
+    // The shape changed under a resting pointer: check it again.
+    evaluateRef.current()
   }, [])
-  const pumpUntil = useRef(0)
-  const raf = useRef(0)
-  /** Report the box every frame for `ms` (and as long as the shape is moving). */
+  const hotT = useRef(0)
+  /** The area now, and once more after `ms` (when what moved has settled). */
   const pump = useCallback((ms: number) => {
-    pumpUntil.current = Math.max(pumpUntil.current, performance.now() + ms)
-    if (raf.current) return
-    const tick = () => {
-      sendHot()
-      if (movingRef.current || performance.now() < pumpUntil.current) raf.current = requestAnimationFrame(tick)
-      else {
-        raf.current = 0
-        sendHot(true)
-      }
-    }
-    raf.current = requestAnimationFrame(tick)
+    sendHot()
+    clearTimeout(hotT.current)
+    hotT.current = window.setTimeout(() => sendHot(!movingRef.current), ms)
   }, [sendHot])
-  useEffect(() => () => cancelAnimationFrame(raf.current), [])
+  useEffect(() => () => clearTimeout(hotT.current), [])
   const onStart = () => {
     movingRef.current = true
     setMoving(true)
-    pump(50)
+    sendHot()
   }
   const onDone = () => {
     movingRef.current = false
     setMoving(false)
-    pump(50)
+    sendHot(true)
   }
-  // Any size change (content growing, fonts loading).
-  useEffect(() => {
-    const el = shape.current
-    if (!el) return
-    const ro = new ResizeObserver(() => pump(80))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [pump])
+  // A new size or view: the area it ends at.
+  useLayoutEffect(() => {
+    sendHot()
+  }, [size, ui.view, sendHot])
   useEffect(() => {
     lastHot.current = ''
     pump(400)
   }, [place, prefs.size, scale, pump])
+  // A safety net: anything missed (fonts loading, a scrollbar) is caught within 2 s; nothing is sent when nothing changed.
+  useEffect(() => {
+    const t = window.setInterval(() => sendHot(!movingRef.current), 2000)
+    const onResize = () => pump(200)
+    window.addEventListener('resize', onResize)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [sendHot, pump])
+
+  // ---- IC1, IC2: take clicks where the island is (the page decides) ----
+  // Every mouse move reaches the page (the desktop forwards them even while
+  // clicks pass through). On the shape (or within 12 px of it, or less than
+  // 400 ms after it left, or while a button is held): take clicks.
+  const shield = useRef<Shield>(SHIELD_OFF)
+  const lastPtr = useRef<{ x: number; y: number } | null>(null)
+  const takeSent = useRef<{ on: boolean; at: number } | null>(null)
+  const recheckT = useRef(0)
+  const evaluate = useCallback((force = false) => {
+    if (!desk()?.islandTakeClicks) return
+    const p = lastPtr.current
+    let inside = false
+    if (p) {
+      inside = inRects(p.x, p.y, target.current, SHIELD_PAD)
+      if (!inside) {
+        const hit = typeof document.elementFromPoint === 'function' ? (document.elementFromPoint(p.x, p.y) as HTMLElement | null) : null
+        inside = !!hit?.closest?.('[data-hot]')
+      }
+    }
+    const was = shield.current.take
+    const r = shieldStep(shield.current, { inside, pressed: isPressed(), now: Date.now() })
+    shield.current = r.st
+    clearTimeout(recheckT.current)
+    if (r.recheckIn != null) recheckT.current = window.setTimeout(() => evaluateRef.current(), r.recheckIn + 5)
+    const on = r.st.take
+    const t = Date.now()
+    dbg.take = on
+    // On change at once; while on, again every half second (the desktop may have reset after a drag).
+    if (force || takeSent.current?.on !== on || (on && t - takeSent.current.at > 500)) {
+      takeSent.current = { on, at: t }
+      desk()?.islandTakeClicks?.(on)
+    }
+    if (on !== was) {
+      dbgEvent(on ? 'take clicks' : 'pass through', p ? { x: Math.round(p.x), y: Math.round(p.y) } : {})
+      logIslandUi('hover', on ? 'mouse in' : 'mouse out')
+      dispatch({ type: 'hover', on })
+    }
+  }, [dispatch])
+  evaluateRef.current = evaluate
+  pointerLeft.current = () => {
+    lastPtr.current = null
+    dbg.ptr = null
+    clearTimeout(recheckT.current)
+    const was = shield.current.take
+    shield.current = SHIELD_OFF
+    dbg.take = false
+    takeSent.current = { on: false, at: Date.now() }
+    if (was || uiRef.current.over) {
+      logIslandUi('hover', 'mouse out (left the window)')
+      dbgEvent('left the window')
+      dispatch({ type: 'hover', on: false })
+    }
+  }
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      lastPtr.current = { x: e.clientX, y: e.clientY }
+      dbg.ptr = { x: e.clientX, y: e.clientY, at: Date.now() }
+      evaluateRef.current()
+    }
+    const press = () => evaluateRef.current()
+    window.addEventListener('pointermove', move, { capture: true, passive: true })
+    window.addEventListener('pointerdown', move, { capture: true, passive: true })
+    window.addEventListener('pointerup', press, { capture: true, passive: true })
+    const stopTaps = installTaps()
+    // IC5: what waited while you pressed comes now.
+    const stopPress = onPress((on) => {
+      frozen.current = on
+      if (on) return
+      const evs = heldEvents.current
+      heldEvents.current = []
+      for (const ev of evs) dispatch(ev)
+      if (heldSnap.current) {
+        const x = heldSnap.current
+        heldSnap.current = null
+        setS(x)
+      }
+      evaluateRef.current()
+    })
+    return () => {
+      window.removeEventListener('pointermove', move, true)
+      window.removeEventListener('pointerdown', move, true)
+      window.removeEventListener('pointerup', press, true)
+      stopTaps()
+      stopPress()
+      clearTimeout(recheckT.current)
+    }
+  }, [dispatch])
   // IS23: the zoom the click areas are measured in.
   useEffect(() => {
     logIslandUi('zoom', `size ${prefs.size} (page scale ×${scale}), screen scale ×${window.devicePixelRatio}, window ${window.innerWidth}×${window.innerHeight}`)
@@ -728,14 +899,24 @@ export function DesktopIsland() {
   }
   useEffect(() => {
     desk()?.onIslandAck?.((ack) => {
+      const lt = dbg.lastTap
+      if (lt && lt.id === ack.id) {
+        dbg.lastTap = { ...lt, rtt: Date.now() - lt.sentAt, took: ack.tookMs, ok: ack.ok }
+        dbgEvent('tap answered', { kind: lt.kind, roundTripMs: dbg.lastTap.rtt, appMs: ack.tookMs ?? null, ok: ack.ok })
+      }
       setToast((t) => (t && t.id === ack.id ? { ...t, state: ack.ok ? 'ok' : 'err', text: ack.ok ? (ack.text ?? `✓ ${t.text}`) : `⚠ ${plainError(ack.error)}` } : t))
       clearToastLater(ack.ok ? (ack.text ? 4500 : 2200) : 7000)
     })
   }, [])
   const send = (a: IslandAction) => {
     const t = label(a)
-    if (!t) return desk()?.islandAction?.(a)
+    dbgEvent('tap', { kind: a.kind })
+    if (!t) {
+      dbg.lastTap = { kind: a.kind, sentAt: Date.now() }
+      return desk()?.islandAction?.(a)
+    }
     const id = Math.random().toString(36).slice(2, 10)
+    dbg.lastTap = { id, kind: a.kind, sentAt: Date.now() }
     setToast({ id, state: 'busy', text: t })
     if (toastT.current) clearTimeout(toastT.current)
     // No answer at all: the app window isn't running (or is stuck).
@@ -783,7 +964,7 @@ export function DesktopIsland() {
   }
 
   // IS18: no fresh picture for a minute: dim and say so; the next snapshot brings it back.
-  const old = !s.locked && s.at > 0 && now - s.at > STALE_MS
+  const old = !s.locked && s.at > 0 && now - Math.max(s.at, beatAt.current) > STALE_MS
   // IS7: a scene that finishes (the eye break's 20 s) only answers its reminder;
   // it never closes the panel or clears what you pinned or typed.
   const alertDone = (id: string) => {
@@ -906,7 +1087,7 @@ export function DesktopIsland() {
     tasks: s.tasks?.length ? (<section className="di-tasks">
                   <span className="di-label">Todoist · next up{s.tasksStale && s.tasksAt ? ` · updated ${Math.max(1, Math.round((now - s.tasksAt) / 60000))} min ago` : ''}</span>
                   {s.tasks.map((t) => (
-                    <button key={t.id} className="di-task" onClick={() => send({ kind: 'todoDone', id: t.id, content: t.content })} title="Done: tick it in Todoist">
+                    <button key={t.id} className="di-task" {...tp(`task:${t.id}`, () => send({ kind: 'todoDone', id: t.id, content: t.content }))} title="Done: tick it in Todoist">
                       <i />
                       <span>{t.content}</span>
                       {t.time && <small>{t.time}</small>}
@@ -922,13 +1103,13 @@ export function DesktopIsland() {
                         <small>{moon ? 'Logged in Waky. See you tomorrow.' : s.windDown ? `Bed at ${s.windDown.bedAt} · ${s.windDown.minutesLeft} min to wind down` : `Target ${s.sleep.target ?? '23:00'} · one tap logs it in Waky`}</small>
                         {s.windDown && !moon && (
                           <ol className="di-steps">
-                            <li><button onClick={() => tap({ kind: 'closeDay' })}>Tomorrow's top 3 + close the day</button></li>
+                            <li><button {...tp('closeDay', () => tap({ kind: 'closeDay' }))}>Tomorrow's top 3 + close the day</button></li>
                             <li>Screens off, phone away</li>
                             <li>Tap Going to bed</li>
                           </ol>
                         )}
                       </div>
-                      <button className="primary" onClick={goToBed} disabled={moon}>🌙 Going to bed</button>
+                      <button className="primary" {...tp('bed', goToBed)} disabled={moon}>🌙 Going to bed</button>
                     </>
                   ) : (
                     <>
@@ -937,7 +1118,7 @@ export function DesktopIsland() {
                         <b>Good morning</b>
                         <small>Log your wake-up in Waky</small>
                       </div>
-                      <button className="primary" onClick={() => tap({ kind: 'wake' })}>☀️ I'm up</button>
+                      <button className="primary" {...tp('wake', () => tap({ kind: 'wake' }))}>☀️ I'm up</button>
                     </>
                   )}
                 </section>) : null,
@@ -951,14 +1132,14 @@ export function DesktopIsland() {
                   ) : (
                     <small className="di-pts-mid">Add a reward to work toward</small>
                   )}
-                  <button onClick={() => tap({ kind: 'open', page: 'shop' })}>Rewards</button>
+                  <button {...tp('rewards', () => tap({ kind: 'open', page: 'shop' }))}>Rewards</button>
                 </section>) : null,
 
     timer: run ? (<section className="di-timer">
                   <LiveTimer run={run} big guard={s.focusGuard} />
                   <div className="di-actions col">
-                    <button className="primary" onClick={() => tap({ kind: 'stop' })}>Stop & log</button>
-                    <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>
+                    <button className="primary" {...tp('panel:stop', () => tap({ kind: 'stop' }))}>Stop & log</button>
+                    <button {...tp('panel:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>
                   </div>
                 </section>) : null,
     plan: (<section className="di-plan">
@@ -983,12 +1164,12 @@ export function DesktopIsland() {
                     </div>
                   )}
                   {!run && s.now && !s.now.call && (
-                    <button className="di-go" onClick={() => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) })}>
+                    <button className="di-go" {...tp('plan:start', () => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>
                       Start
                     </button>
                   )}
                   {s.now?.call && s.now.meet && (
-                    <button className="di-go" onClick={() => tap({ kind: 'join', url: s.now!.meet! })}>
+                    <button className="di-go" {...tp('plan:join', () => tap({ kind: 'join', url: s.now!.meet! }))}>
                       Join
                     </button>
                   )}
@@ -1025,7 +1206,7 @@ export function DesktopIsland() {
     mustdos: s.mustdos.length ? (<section className="di-must">
                   <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>
                   {s.mustdos.map((m) => (
-                    <button key={m.i} className={`di-check ${m.done ? 'done' : ''}`} onClick={() => tap({ kind: 'mustdo', i: m.i })}>
+                    <button key={m.i} className={`di-check ${m.done ? 'done' : ''}`} {...tp(`must:${m.i}`, () => tap({ kind: 'mustdo', i: m.i }))}>
                       <i>{m.done ? '✓' : ''}</i>
                       <span>{m.text}</span>
                     </button>
@@ -1067,7 +1248,7 @@ export function DesktopIsland() {
                 ) : (
                   s.ben.last && <p className="di-last">{s.ben.last.text.replace(/<[^>]+>/g, '')}</p>
                 )}
-                {!s.ben.busy && <button className="di-reply" onClick={focusInput}>Reply</button>}
+                {!s.ben.busy && <button className="di-reply" {...tp('reply', focusInput)}>Reply</button>}
               </section>) : null
   }
   // ---- compact: the pill ----
@@ -1087,12 +1268,13 @@ export function DesktopIsland() {
     dispatch({ type: 'click' })
     setQuietMenu(true)
   }
+  // IC4: the left click fires on release (the browser's click can get lost while the pill redraws).
   const clickProps = {
-    onClick: () => {
+    ...tp('pill', () => {
       if (!clicked()) return
       if (s.locked) desk()?.showApp?.()
       else clickAction(prefs.clicks.left)
-    },
+    }),
     // The middle button would start the browser's scroll mode.
     onMouseDown: (e: React.MouseEvent) => { if (e.button === 1) e.preventDefault() },
     onAuxClick: (e: React.MouseEvent) => {
@@ -1153,14 +1335,7 @@ export function DesktopIsland() {
       {acts.length > 1 && !s.locked && (
         <span className="di-dots" aria-hidden>
           {acts.slice(0, 5).map((x) => (
-            <i
-              key={x.key}
-              className={x === main ? 'on' : ''}
-              onClick={(e) => {
-                e.stopPropagation()
-                pickKey(x.key)
-              }}
-            />
+            <i key={x.key} className={x === main ? 'on' : ''} {...tp(`dot:${x.key}`, () => pickKey(x.key))} />
           ))}
         </span>
       )}
@@ -1197,7 +1372,8 @@ export function DesktopIsland() {
       exit={f.moves ? { opacity: 0, scale: 0.3, x: side * -24 } : { opacity: 0 }}
       transition={f.pop}
       onAnimationStart={() => pump(700)}
-      onClick={() => pickKey(bubble.key)}
+      onAnimationComplete={() => sendHot(true)}
+      {...tp('bubble', () => pickKey(bubble.key))}
     >
       {bubbleIcon(bubble)}
     </motion.button>
@@ -1207,7 +1383,7 @@ export function DesktopIsland() {
   const a = s.alert && gateOf(s.alert.kind) !== 'drop' ? s.alert : null
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main) ? (
-    <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} onClick={() => clicked() && dispatch({ type: 'click' })} {...dragProps}>
+    <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
       <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />
       <div className="di-peek-top">
         <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
@@ -1219,13 +1395,13 @@ export function DesktopIsland() {
       {a.actions.length > 0 && (
         <div className="di-actions">
           {a.actions.slice(0, 3).map((x) => (
-            <button key={x.label} className={x.primary ? 'primary' : ''} onClick={(e) => (e.stopPropagation(), tap(x.action, x.label))}>{x.label}</button>
+            <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`peek:alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
           ))}
         </div>
       )}
     </div>
   ) : (
-    <div className="di-peek" onClick={() => clicked() && dispatch({ type: 'click' })} {...dragProps} onWheel={onWheel}>
+    <div className="di-peek" {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps} onWheel={onWheel}>
       <div className="di-peek-top">
         {main ? (
           <Fly id={`ic-${main.key}`} className="di-peek-ico">
@@ -1255,18 +1431,18 @@ export function DesktopIsland() {
           </small>
         </div>
         {run ? (
-          <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'stop' }))}>Stop & log</button>
+          <button className="primary" {...tp('peek:stop', () => tap({ kind: 'stop' }))}>Stop & log</button>
         ) : s.now?.call ? (
           // IS11: a meeting is joined, not started as focus.
           s.now.meet ? (
-            <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'join', url: s.now!.meet! }))}>🎥 Join</button>
+            <button className="primary" {...tp('peek:join', () => tap({ kind: 'join', url: s.now!.meet! }))}>🎥 Join</button>
           ) : (
-            <button className="primary" onClick={(e) => (e.stopPropagation(), muteForMeeting())}>🔕 Mute reminders</button>
+            <button className="primary" {...tp('peek:mute', muteForMeeting)}>🔕 Mute reminders</button>
           )
         ) : s.now ? (
-          <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>▶ Start</button>
+          <button className="primary" {...tp('peek:start', () => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>▶ Start</button>
         ) : (
-          <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'start', subject: 'Focus', minutes: focusMin }))}>▶ Focus {focusMin}</button>
+          <button className="primary" {...tp('peek:focus', () => tap({ kind: 'start', subject: 'Focus', minutes: focusMin }))}>▶ Focus {focusMin}</button>
         )}
       </div>
       {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
@@ -1283,10 +1459,10 @@ export function DesktopIsland() {
           <b>Ben</b>
           <small>{s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood}</small>
         </div>
-        <button className={`di-icon ${quietMenu || quiet ? 'on' : ''}`} onClick={() => (quiet ? setQuiet(null) : setQuietMenu((x) => !x))} title={quiet ? `Quiet until ${new Date(q.until).toTimeString().slice(0, 5)}: wake now` : 'Quiet for a while'}>🌙</button>
-        <button className={`di-icon ${ui.pinned ? 'on' : ''}`} onClick={() => dispatch({ type: 'pin' })} title={ui.pinned ? 'Unpin' : 'Keep open'}>📌</button>
-        <button className="di-icon" onClick={() => (desk()?.showApp?.(), close())} title="Open Life System">⤢</button>
-        <button className="di-icon" onClick={close} aria-label="Close" title="Close (Esc)">✕</button>
+        <button className={`di-icon ${quietMenu || quiet ? 'on' : ''}`} {...tp('head:quiet', () => (quiet ? setQuiet(null) : setQuietMenu((x) => !x)))} title={quiet ? `Quiet until ${new Date(q.until).toTimeString().slice(0, 5)}: wake now` : 'Quiet for a while'}>🌙</button>
+        <button className={`di-icon ${ui.pinned ? 'on' : ''}`} {...tp('head:pin', () => dispatch({ type: 'pin' }))} title={ui.pinned ? 'Unpin' : 'Keep open'}>📌</button>
+        <button className="di-icon" {...tp('head:app', () => (desk()?.showApp?.(), close()))} title="Open Life System">⤢</button>
+        <button className="di-icon" {...tp('head:close', close)} aria-label="Close" title="Close (Esc)">✕</button>
       </header>
 
       {old && <p className="di-reconnect-line">Reconnecting… this is from {hhmm(s.at)}</p>}
@@ -1294,7 +1470,7 @@ export function DesktopIsland() {
         <div className="di-quiet">
           <span>Quiet for</span>
           {([[30, '30 min'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'until tomorrow']] as const).map(([c, label]) => (
-            <button key={String(c)} onClick={() => (setQuietMenu(false), setQuiet(c))}>{label}</button>
+            <button key={String(c)} {...tp(`quiet:${c}`, () => (setQuietMenu(false), setQuiet(c)))}>{label}</button>
           ))}
         </div>
       )}
@@ -1318,19 +1494,19 @@ export function DesktopIsland() {
         <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
           {rec ? '●' : '🎤'}
         </button>
-        <button className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send">↑</button>
+        <button type="button" className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send" {...tp('send', chat)}>↑</button>
       </form>
       <div className="di-chips">
         {prefs.chips.water.map((ml) => (
-          <button key={`w${ml}`} onClick={(e) => (tap({ kind: 'water', ml }), bump(e.currentTarget, f))}>💧 +{ml} ml</button>
+          <button key={`w${ml}`} {...tp(`chip:w${ml}`, (t) => (tap({ kind: 'water', ml }), bump(t.el, f)))}>💧 +{ml} ml</button>
         ))}
         {firstRep && prefs.chips.reps.map((n) => (
-          <button key={`r${n}`} onClick={(e) => (tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n }), bump(e.currentTarget, f))}>💪 +{n} {firstRep.name}</button>
+          <button key={`r${n}`} {...tp(`chip:r${n}`, (t) => (tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n }), bump(t.el, f)))}>💪 +{n} {firstRep.name}</button>
         ))}
         {!run && prefs.chips.focus.map((m) => (
-          <button key={`f${m}`} onClick={() => tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: m })}>▶ Focus {m}</button>
+          <button key={`f${m}`} {...tp(`chip:f${m}`, () => tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: m }))}>▶ Focus {m}</button>
         ))}
-        {run && <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>}
+        {run && <button {...tp('chip:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>}
       </div>
 
       {a && (
@@ -1343,7 +1519,7 @@ export function DesktopIsland() {
           <p>{a.kind === 'ben' ? <TypeIn key={a.id} text={a.text} /> : a.text}</p>
           <div className="di-actions">
             {a.actions.map((x) => (
-              <button key={x.label} className={x.primary ? 'primary' : ''} onClick={() => tap(x.action, x.label)}>{x.label}</button>
+              <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
             ))}
           </div>
         </section>
@@ -1371,7 +1547,7 @@ export function DesktopIsland() {
           <b>{quiet ? `Quiet until ${until(q.until)}` : fsDot ? 'Full-screen app' : 'In a call'}</b>
           <small>{quiet ? 'No reminders until then. Time-up still waits for you here.' : fsDot ? 'It stays small while a full-screen app is open on this screen.' : s.call ? `${s.call.title} · until ${until(s.call.end)}` : 'Your microphone or camera is on.'}</small>
         </div>
-        {quiet && <button className="primary" onClick={() => setQuiet(null)}>Wake now</button>}
+        {quiet && <button className="primary" {...tp('moon:wake', () => setQuiet(null))}>Wake now</button>}
       </div>
     </div>
   )
@@ -1407,11 +1583,38 @@ export function DesktopIsland() {
     document.addEventListener('visibilitychange', on)
     return () => document.removeEventListener('visibilitychange', on)
   }, [])
+  // IC10: the island window never throttles itself, so the desktop says when it is hidden.
+  const hidden = docHidden || !visible
+  // Rings and sweeps: every frame only while the shape moves, 4 times a second otherwise, not at all hidden or tucked away.
+  useEffect(() => {
+    setFrameMode(hidden || tuck !== 'none' ? 'paused' : moving ? 'fast' : 'slow')
+  }, [hidden, tuck, moving])
+  useEffect(() => {
+    logIslandUi('visible', hidden ? 'hidden: animations paused' : 'shown')
+  }, [hidden])
+  // Island debug (IC13): Settings → Desktop island → Debug.
+  const debugOn = Number((prefs as { debugUntil?: number }).debugUntil ?? 0) > Date.now()
+  useEffect(() => {
+    dbg.commits++
+  })
+  dbg.view = ui.view
+  dbg.place = place
+  dbg.cssScale = scale
+  const peekBox = (): Rect | null => {
+    const root = rootEl.current
+    const sh = shape.current
+    if (!root || !sh) return null
+    const b = root.getBoundingClientRect()
+    const anchor = place === 'left' || place === 'top-left' ? 'left' : place === 'right' || place === 'top-right' ? 'right' : 'center'
+    const h = (ui.view === 'peek' ? size.h : 96) * scale
+    return finalShapeRect({ anchor, ax: anchor === 'left' ? b.left : anchor === 'right' ? b.right : b.left + b.width / 2, top: sh.getBoundingClientRect().top, w: prefs.peekWidth * scale, h })
+  }
   const benUnread = s.ben.unread > 0 && !hushed && !s.locked
   const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
   const sweep = ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old ? (run ? <Sweep from={run.startedAt} to={run.endsAt} /> : s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null) : null
   return (
     <FeelContext.Provider value={f}>
+      <ViewContext.Provider value={ui.view}>
       <MotionConfig reducedMotion={f.mode === 'off' ? 'always' : 'never'}>
         <LayoutGroup>
           <div
@@ -1427,8 +1630,9 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${docHidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
           >
+            <i className="di-breath" style={{ borderRadius: radius }} aria-hidden />
             <motion.i className="di-glow" style={{ scale: lift, originX: origin, originY: 0 }} animate={{ borderRadius: radius }} transition={transition} aria-hidden />
             <motion.div
               ref={shape}
@@ -1444,6 +1648,7 @@ export function DesktopIsland() {
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
                   key={ui.view}
+                  ref={viewRef[ui.view]}
                   data-view={ui.view}
                   className={`di-view di-v-${ui.view}`}
                   // IA4: opacity and scale only (no blur): cheap and crisp.
@@ -1464,14 +1669,16 @@ export function DesktopIsland() {
             </div>
             <AnimatePresence>
               {toast && (
-                <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)}>
+                <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)} onAnimationComplete={() => sendHot(true)}>
                   {toast.state === 'busy' ? `${toast.text}…` : toast.text}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </LayoutGroup>
+        {debugOn && <IslandDebug peek={peekBox()} />}
       </MotionConfig>
+      </ViewContext.Provider>
     </FeelContext.Provider>
   )
 }

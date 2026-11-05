@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useWater } from './water'
 import { dayKey } from '@core/dates'
-import { findExercise, readSport, updateSport } from './sportTrack'
+import { findExercise, readSport, SPORT_KEY, updateSport } from './sportTrack'
 import type { BodyState, Summary } from '@shared/api'
 import { life } from './bridge'
 import { triggerRpgPopup } from './RpgFloatingPopups'
@@ -33,13 +33,15 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
       const s = readSport()
       if (s) setSportState(s)
     }
-    window.addEventListener('storage', syncSport)
+    // IC7: only Sport Track's own data (or everything cleared), not every key another window writes.
+    const onStorage = (e: StorageEvent) => { if (e.key == null || e.key === SPORT_KEY) syncSport() }
+    window.addEventListener('storage', onStorage)
     window.addEventListener('focus', syncSport)
     window.addEventListener('life-body-changed', syncSport)
     window.addEventListener('life-sport-changed', syncSport)
     return () => {
       window.removeEventListener('life-sport-changed', syncSport)
-      window.removeEventListener('storage', syncSport)
+      window.removeEventListener('storage', onStorage)
       window.removeEventListener('focus', syncSport)
       window.removeEventListener('life-body-changed', syncSport)
     }

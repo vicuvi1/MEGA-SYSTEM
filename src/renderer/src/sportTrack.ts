@@ -4,7 +4,9 @@
 // adds reps here applies the same rule first, so reps never land on yesterday.
 import { dayKey } from '@core/dates'
 
-const KEY = 'life_sport_tracker_v1'
+/** Where Sport Track keeps its data in this PC's storage. */
+export const SPORT_KEY = 'life_sport_tracker_v1'
+const KEY = SPORT_KEY
 
 /** Your day for water and reps: it turns at 04:00, like the rest of the app (S4). */
 export const sportDay = (d = new Date()) => dayKey(d)

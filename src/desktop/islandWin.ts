@@ -119,10 +119,12 @@ export interface IslandDeskPrefs {
   layouts: Record<string, IslandLayout>
   /** Apps it always hides over, by their program name ("vlc", "eldenring") (IF6). */
   hideApps: string[]
+  /** Island debug is on until this time (ms), 0 = off (IC13). */
+  debugUntil: number
 }
 export const DEFAULT_DESK_PREFS: IslandDeskPrefs = {
   fullscreen: 'hide', captureShortcut: CAPTURE_SHORTCUTS[0], voiceShortcut: VOICE_SHORTCUTS[0],
-  offset: { x: 0, y: 0 }, monitor: 'fixed', perScreen: true, layouts: {}, hideApps: []
+  offset: { x: 0, y: 0 }, monitor: 'fixed', perScreen: true, layouts: {}, hideApps: [], debugUntil: 0
 }
 
 const clampInt = (v: unknown, min: number, max: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(max, Math.max(min, v))) : d)
@@ -158,7 +160,8 @@ export function cleanDeskPrefs(p: any): IslandDeskPrefs {
     monitor: ['fixed', 'main', 'mouse', 'window'].includes(p?.monitor) ? p.monitor : d.monitor,
     perScreen: p?.perScreen !== false,
     layouts,
-    hideApps: Array.isArray(p?.hideApps) ? [...new Set(p.hideApps.map(appKey).filter(Boolean) as string[])].slice(0, 40) : []
+    hideApps: Array.isArray(p?.hideApps) ? [...new Set(p.hideApps.map(appKey).filter(Boolean) as string[])].slice(0, 40) : [],
+    debugUntil: typeof p?.debugUntil === 'number' && Number.isFinite(p.debugUntil) && p.debugUntil > 0 ? Math.round(p.debugUntil) : 0
   }
 }
 

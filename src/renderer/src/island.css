@@ -34,8 +34,10 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
   transition: box-shadow 0.4s;
 }
 .di.view-expanded .di-shape { box-shadow: 0 24px 70px rgb(0 0 0 / 0.6), 0 0 0 1px var(--line), 0 0 40px -12px var(--glow); }
-.di.has-timer.view-compact .di-shape { animation: di-breathe 3.2s ease-in-out infinite; }
-@keyframes di-breathe { 50% { box-shadow: 0 10px 32px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line), 0 0 30px -2px var(--glow); } }
+/* IC10: a running timer's pill breathes: a glow drawn once, only its opacity changes (no shadow repainted every frame). */
+.di-breath { position: absolute; inset: 0; pointer-events: none; opacity: 0; will-change: opacity; box-shadow: 0 0 30px -2px var(--glow); }
+.di.has-timer.view-compact .di-breath { animation: di-breath 3.2s ease-in-out infinite; }
+@keyframes di-breath { 50% { opacity: 1; } }
 .di.dropping .di-shape { box-shadow: 0 0 0 2px var(--lime), 0 0 28px -4px var(--lime); }
 .di.look-glass { --bg: rgb(24 27 36 / calc(var(--di-alpha, 1) * 0.78)); --line: rgb(var(--ink) / 0.16); }
 /* Glass blur only while still (redrawing it on every animation frame is what stutters). */
@@ -63,8 +65,9 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di-face-sm { font-size: 17px; line-height: 1; }
 .di-act-ico { font-size: 15px; line-height: 1; }
 .di-moon-sm { display: inline-block; }
-.di-dot { flex: none; width: 7px; height: 7px; margin-left: -2px; border-radius: 50%; background: var(--red); animation: di-pulse 1.8s infinite; }
-@keyframes di-pulse { 50% { box-shadow: 0 0 0 5px rgb(255 90 95 / 0.22); } }
+.di-dot { position: relative; flex: none; width: 7px; height: 7px; margin-left: -2px; border-radius: 50%; background: var(--red); }
+.di-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: rgb(255 90 95 / 0.4); animation: di-pulse 1.8s infinite; }
+@keyframes di-pulse { 0% { transform: scale(1); opacity: 0.8; } 70%, 100% { transform: scale(2.4); opacity: 0; } }
 
 /* peek */
 .di-peek { width: var(--di-peek-w, 400px); box-sizing: border-box; padding: 12px 14px; display: grid; gap: 10px; cursor: pointer; touch-action: none; }
@@ -385,6 +388,20 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .roll-slot { position: relative; display: inline-block; overflow: hidden; vertical-align: bottom; }
 .roll-size { visibility: hidden; }
 .roll-ch { position: absolute; inset: 0; text-align: center; }
+/* IC8: plain CSS, only the characters that changed move. */
+.roll-ch.out { opacity: 0; }
+.roll-down .roll-ch.in { animation: roll-in-down 0.32s cubic-bezier(0.2, 0.8, 0.2, 1.15) both; }
+.roll-down .roll-ch.out { animation: roll-out-down 0.28s ease-in both; }
+.roll-up .roll-ch.in { animation: roll-in-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1.15) both; }
+.roll-up .roll-ch.out { animation: roll-out-up 0.28s ease-in both; }
+.roll-fade .roll-ch.in { animation: roll-fade-in 0.2s ease-out both; }
+.roll-fade .roll-ch.out { animation: roll-fade-out 0.2s ease-in both; }
+@keyframes roll-in-down { from { transform: translateY(-90%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes roll-out-down { from { transform: none; opacity: 1; } to { transform: translateY(90%); opacity: 0; } }
+@keyframes roll-in-up { from { transform: translateY(90%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes roll-out-up { from { transform: none; opacity: 1; } to { transform: translateY(-90%); opacity: 0; } }
+@keyframes roll-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes roll-fade-out { from { opacity: 1; } to { opacity: 0; } }
 
 /* IP2: long text fades at the right edge and scrolls slowly while the mouse is on the island (Full). */
 .mq { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -408,12 +425,15 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 @keyframes di-tick { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
 .di-dot.tick { background: var(--amber); }
 .di.motion-full .di-dot.tick { animation: di-tickdot 1s ease-in-out infinite; }
-@keyframes di-tickdot { 50% { transform: scale(1.35); box-shadow: 0 0 0 4px rgb(255 181 71 / 0.2); } }
+.di-dot.tick::after { background: rgb(255 181 71 / 0.35); }
+@keyframes di-tickdot { 50% { transform: scale(1.35); } }
 
 /* IP1: Ben has something unread: a very slow, faint glow around the shape (Full; paused while hidden). */
 .di-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: 0 0 18px 3px var(--ben-glow), 0 0 0 1px rgb(150 205 255 / 0.3); }
 .di.motion-full.ben-unread .di-glow { animation: di-benglow 5.5s ease-in-out infinite; }
 .di.doc-hidden .di-glow { animation-play-state: paused; }
+/* IC10: hidden (over a full-screen app, in a call) or tucked away: nothing moves. */
+.di.doc-hidden *, .di.doc-hidden *::before, .di.doc-hidden *::after, .di.tucked *, .di.tucked *::before, .di.tucked *::after { animation-play-state: paused !important; }
 @keyframes di-benglow { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.7; } }
 
 /* IL6: points and water fly into the pill. */
@@ -427,8 +447,10 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 /* WATER: the glass. Two waves slide past each other (transform only). */
 .glass { position: relative; display: inline-block; flex: none; line-height: 0; }
 .glass svg { display: block; overflow: visible; }
-.glass.live .gl-w { transform-box: fill-box; animation: gl-wave 2.6s linear infinite; }
+/* IC10: the waves only move in the peek and the panel, on hover, and for 3 s after a pour; still in the pill. */
+.glass.live .gl-w { transform-box: fill-box; animation: gl-wave 2.6s linear infinite paused; }
 .glass.live .gl-w.back { animation-duration: 3.9s; animation-direction: reverse; }
+.di.view-peek .glass.live .gl-w, .di.view-expanded .glass.live .gl-w, .di.is-hover .glass.live .gl-w, .glass.live.pouring .gl-w { animation-play-state: running; }
 @keyframes gl-wave { to { transform: translateX(-50%); } }
 .glass.full .gl-edge { stroke: rgb(191 234 255 / 0.85); }
 .gl-label { position: absolute; left: 50%; top: 0; translate: -50% 0; white-space: nowrap; font-size: 11px; line-height: 1; font-weight: 800; color: var(--water-hi); text-shadow: 0 0 8px rgb(71 181 255 / 0.8); pointer-events: none; z-index: 3; }
@@ -446,3 +468,23 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di.look-app.theme-light .di-glow { box-shadow: 0 0 18px 3px rgb(60 130 220 / 0.35), 0 0 0 1px rgb(60 130 220 / 0.25); }
 .di.look-app.theme-light .di-bubble { box-shadow: 0 8px 20px rgb(20 25 34 / 0.18), 0 0 0 1px var(--line); }
 .di.look-app.theme-light .glass .gl-edge { stroke: rgb(var(--ink) / 0.35); }
+
+/* ---- IC13: Island debug (Settings → Desktop island → Debug) ---- */
+.dbg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 50; font: 11px/1.3 ui-monospace, Consolas, monospace; color: #e8ffe0; }
+.dbg-box { position: fixed; box-sizing: border-box; pointer-events: none; }
+.dbg-box.page { outline: 1.5px solid #3dff6e; outline-offset: -1px; }
+.dbg-box.main { outline: 1.5px dashed #ff4d4d; outline-offset: -1px; }
+.dbg-dot { position: fixed; width: 9px; height: 9px; margin: -5px 0 0 -5px; border-radius: 50%; pointer-events: none; }
+.dbg-dot.page { background: #3dff6e; }
+.dbg-dot.main { border: 2px solid #ff4d4d; width: 7px; height: 7px; }
+.dbg-panel { position: fixed; left: 6px; bottom: 6px; width: min(300px, calc(100vw - 12px)); max-height: 46vh; overflow: auto; padding: 8px 9px; border-radius: 10px; background: rgb(0 0 0 / 0.86); box-shadow: 0 0 0 1px rgb(61 255 110 / 0.5); pointer-events: auto; user-select: text; }
+.dbg-panel b { color: #fff; }
+.dbg-chip { display: inline-block; padding: 1px 6px; border-radius: 6px; font-weight: 700; margin-right: 4px; }
+.dbg-chip.take { background: #3dff6e; color: #041; }
+.dbg-chip.pass { background: #ff4d4d; color: #fff; }
+.dbg-row { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; }
+.dbg-btns { display: flex; gap: 6px; margin-top: 6px; }
+.dbg-btns button, .dbg-target { font: inherit; color: #041; background: #3dff6e; border: 0; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+.dbg-tests { position: fixed; display: flex; justify-content: space-between; pointer-events: none; }
+.dbg-target { pointer-events: auto; min-width: 46px; padding: 6px 4px; background: rgb(61 255 110 / 0.25); color: #e8ffe0; box-shadow: inset 0 0 0 1.5px #3dff6e; }
+.dbg-target.hit { background: #3dff6e; color: #041; }

@@ -133,7 +133,7 @@ try {
   // IP6: the desktop island on its own page, with a stand-in for the desktop
   // bridge: the pill, a click opens the panel, Escape closes it, hover peeks,
   // a right click opens the quiet menu, a reminder drops down.
-  await step('Desktop island: pill → click → panel → Escape → pill, hover peeks, reminders drop down', async () => {
+  await step('Desktop island: pill → click → panel → Escape → pill, hover peeks, takes clicks on the shape, Stop & log on release, reminders drop down', async () => {
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
     ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
     await ip.addInitScript(() => {
@@ -147,9 +147,11 @@ try {
         now: null, next: { title: 'Gym', start: now + 2 * 3600_000, end: now + 3 * 3600_000 },
         mustdos: [{ i: 0, text: 'Call the bank', done: false }], water: { ml: 500, target: 2000 }, reps: [], alert: null
       }
-      window.__island = { hot: 0, send: (name, v) => cbs[name]?.(v), snap }
+      window.__island = { hot: 0, take: [], actions: [], send: (name, v) => cbs[name]?.(v), snap }
       window.desktop = new Proxy({
         islandHot: () => { window.__island.hot++ },
+        islandTakeClicks: (on) => { window.__island.take.push(on) },
+        islandAction: (a) => { window.__island.actions.push(a) },
         onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
         onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
       }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
@@ -172,6 +174,34 @@ try {
     await ip.waitForSelector('.di-quiet', { timeout: 5000 })
     await ip.keyboard.press('Escape')
     await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    // IC1: the page itself takes clicks as soon as the pointer comes onto the shape.
+    await ip.mouse.move(8, 640)
+    await ip.evaluate(() => { window.__island.take = [] })
+    const pill = await ip.locator('.di-pill').boundingBox()
+    await ip.mouse.move(pill.x + pill.width / 2, pill.y + pill.height / 2, { steps: 5 })
+    await ip.waitForFunction(() => window.__island.take.includes(true), null, { timeout: 3000 })
+    // IC4: "Stop & log" in the peek fires on release and sends a stop (and doesn't open the panel).
+    await ip.evaluate(() => window.__island.send('hover', true))
+    await ip.waitForSelector('.di-peek [data-tap="peek:stop"]', { timeout: 4000 })
+    await ip.waitForTimeout(400)
+    await ip.click('.di-peek [data-tap="peek:stop"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'stop'), null, { timeout: 3000 })
+    if (await ip.$('.di-panel')) throw new Error('Stop & log also opened the panel')
+    // A release whose press got lost (Windows can swallow it) still fires the button.
+    await ip.waitForTimeout(300)
+    const n = await ip.evaluate(() => {
+      window.__island.actions = []
+      const b = document.querySelector('.di-peek [data-tap="peek:stop"]')?.getBoundingClientRect()
+      if (!b) return -1
+      window.dispatchEvent(new PointerEvent('pointerup', { clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, button: 0, bubbles: true }))
+      return window.__island.actions.filter((a) => a.kind === 'stop').length
+    })
+    if (n !== 1) throw new Error(`a release without a press fired ${n} stops`)
+    // Off the shape: clicks pass through again (after the short shield).
+    await ip.mouse.move(8, 640, { steps: 3 })
+    await ip.waitForFunction(() => window.__island.take[window.__island.take.length - 1] === false, null, { timeout: 3000 })
+    await ip.evaluate(() => window.__island.send('hover', false))
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
     // A reminder drops down by itself, and Escape puts it away.
     await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: { id: 'water:1', kind: 'water', title: 'Water', text: 'A glass of water?', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
     await ip.waitForSelector('.di-peek.alert', { timeout: 5000 })

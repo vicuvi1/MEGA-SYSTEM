@@ -4,6 +4,25 @@ import type { BackupStatus, BackupWhere } from '../desktop/backups'
 import type { IslandDeskPrefs, Placement } from '../desktop/islandWin'
 export type { IslandDeskPrefs } from '../desktop/islandWin'
 
+/** "Nothing new": the app window's heartbeat while the snapshot stays the same (IC9). */
+export interface IslandBeat { beat: number }
+/** What the desktop sees, for Island debug (IC13). Positions are in the window's screen pixels (DIP). */
+export interface IslandDebugSample {
+  at: number
+  cursor: { x: number; y: number }
+  bounds: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  zoom: number
+  rects: { x: number; y: number; w: number; h: number }[]
+  ignoring: boolean
+  ctl: 'page' | 'poll'
+  inWin: boolean | null
+  focused: boolean
+  pollJitter: number
+  lag: number
+  flips: number
+  until: number
+}
 /** Where the island lives: top center / left / right, docked on a side, or floating (IF1). */
 export type IslandPlacement = Placement
 /** The app's colours, for the island's "Match the app" look (IP4). */
@@ -69,7 +88,7 @@ export interface DesktopApi {
   vaultForget?(): Promise<void>
   // ---- the desktop island (optional: older desktops don't have it) ----
   /** App window → island: what to show. */
-  islandState?(s: IslandSnapshot): void
+  islandState?(s: IslandSnapshot | IslandBeat): void
   /** App window: taps from the island. */
   onIslandAction?(cb: (a: IslandAction) => void): void
   /** App window → island: a tap was done (or why not). */
@@ -104,7 +123,7 @@ export interface DesktopApi {
   /** Text you just copied (≤ 200 chars), for the island's "save this?". */
   onClip?(cb: (text: string) => void): void
   /** Island window: new snapshots. */
-  onIslandState?(cb: (s: IslandSnapshot) => void): void
+  onIslandState?(cb: (s: IslandSnapshot | IslandBeat) => void): void
   /** Island window: send a tap. */
   islandAction?(a: IslandAction): void
   /** Island window: done typing (false): give the keyboard back to your app. */
@@ -117,6 +136,14 @@ export interface DesktopApi {
   onIslandQuiet?(cb: (q: { until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: IslandDeskPrefs['fullscreen'] }) => void): void
   /** Island window: where the visible shape is, in CSS pixels of the page (one or more areas); clicks pass through elsewhere. The old single rect still works. */
   islandHot?(rect: { rects: { x: number; y: number; w: number; h: number }[] } | { x: number; y: number; width: number; height: number }): void
+  /** Island window: the pointer is on the island (take clicks) or not (let them pass through) (IC1). */
+  islandTakeClicks?(on: boolean): void
+  /** Island window: shown or hidden (it pauses its animations while hidden). */
+  onIslandVisible?(cb: (visible: boolean) => void): void
+  /** Island window: what the desktop sees, ~10 times a second while Island debug is on (IC13). */
+  onIslandDebug?(cb: (d: IslandDebugSample) => void): void
+  /** Island window: put text on the clipboard (Island debug's "Copy report"). */
+  islandCopy?(text: string): void
   /** Island window: a calendar meeting is going on now (hides the island when "in a call: hide"). */
   islandCall?(inCall: boolean): void
   /** Island window: a line for the island log. */

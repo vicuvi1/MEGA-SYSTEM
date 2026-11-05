@@ -35,6 +35,7 @@ import type { TodoTask } from '@core/todoist'
 import { soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './sound'
 import { countdown, nextUp } from '@core/dayGlance'
 import { useTodayEvents } from './todayEvents'
+import { storageWakesApp } from './islandLog'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at once).
 function lazyNamed<M extends Record<K, ComponentType<any>>, K extends keyof M>(load: () => Promise<M>, name: K) {
@@ -290,13 +291,15 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       }
     }
     const onModuleSync = () => refresh()
+    // IC7: only data changes made by another window (an embedded app), not the island's logs.
+    const onStorage = (e: StorageEvent) => { if (storageWakesApp(e.key)) refresh() }
 
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('focus', onVisibilityChange)
     window.addEventListener('life-body-changed', onModuleSync)
     window.addEventListener('life-discipline-changed', onModuleSync)
     window.addEventListener('life-wallet-changed', onModuleSync)
-    window.addEventListener('storage', onModuleSync)
+    window.addEventListener('storage', onStorage)
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -304,7 +307,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       window.removeEventListener('life-body-changed', onModuleSync)
       window.removeEventListener('life-discipline-changed', onModuleSync)
       window.removeEventListener('life-wallet-changed', onModuleSync)
-      window.removeEventListener('storage', onModuleSync)
+      window.removeEventListener('storage', onStorage)
     }
   }, [refresh])
 
