@@ -77,6 +77,47 @@ function categoryKeyboard(state: any, t: any): any {
   return { inline_keyboard: rows }
 }
 
+/** What a money message would log, without logging it (X5): "45 lei · Food", or null. */
+export function previewMoney(db: Db, text: string): { amount: number; label: string } | null {
+  const state = financeState(db)
+  if (!state) return null
+  const f = parseQuick(text, state)
+  if (!f || !(f.amount > 0)) return null
+  f.category = betterCategory(state, f)
+  const c = catOf(state, f.category)
+  const cur = accOf(state, f.account)?.currency || state.settings.currency
+  return { amount: f.amount, label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ''}${f.type === 'income' ? ' (income)' : ''}` }
+}
+
+const ASK_KEY = 'money_ask'
+/** Keeps an unclear money message for its [Log it] / [Not money] buttons; returns its id. */
+export function keepMoneyAsk(db: Db, text: string, now = Date.now()): string {
+  let all: Record<string, { text: string; at: number }> = {}
+  try {
+    all = JSON.parse(getSetting(db, ASK_KEY) || '{}')
+  } catch {
+    all = {}
+  }
+  const id = now.toString(36)
+  all[id] = { text, at: now }
+  const keep = Object.entries(all).filter(([, v]) => now - v.at < 3 * 86400_000).slice(-20)
+  setSetting(db, ASK_KEY, JSON.stringify(Object.fromEntries(keep)))
+  return id
+}
+/** Takes back a kept message (once). */
+export function takeMoneyAsk(db: Db, id: string): string | null {
+  try {
+    const all = JSON.parse(getSetting(db, ASK_KEY) || '{}')
+    const v = all[id]
+    if (!v) return null
+    delete all[id]
+    setSetting(db, ASK_KEY, JSON.stringify(all))
+    return String(v.text)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Logs a money message into Finance Helper's data, or returns null when it
  * isn't one (no amount) or Finance Helper was never synced yet.

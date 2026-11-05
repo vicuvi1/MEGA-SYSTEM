@@ -13531,6 +13531,51 @@ function categoryKeyboard(state, t) {
 	}]);
 	return { inline_keyboard: rows };
 }
+/** What a money message would log, without logging it (X5): "45 lei · Food", or null. */
+function previewMoney(db, text) {
+	const state = financeState(db);
+	if (!state) return null;
+	const f = parseQuick(text, state);
+	if (!f || !(f.amount > 0)) return null;
+	f.category = betterCategory(state, f);
+	const c = category(state, f.category);
+	const cur = account(state, f.account)?.currency || state.settings.currency;
+	return {
+		amount: f.amount,
+		label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ""}${f.type === "income" ? " (income)" : ""}`
+	};
+}
+var ASK_KEY = "money_ask";
+/** Keeps an unclear money message for its [Log it] / [Not money] buttons; returns its id. */
+function keepMoneyAsk(db, text, now = Date.now()) {
+	let all = {};
+	try {
+		all = JSON.parse(getSetting(db, ASK_KEY) || "{}");
+	} catch {
+		all = {};
+	}
+	const id = now.toString(36);
+	all[id] = {
+		text,
+		at: now
+	};
+	const keep = Object.entries(all).filter(([, v]) => now - v.at < 2592e5).slice(-20);
+	setSetting(db, ASK_KEY, JSON.stringify(Object.fromEntries(keep)));
+	return id;
+}
+/** Takes back a kept message (once). */
+function takeMoneyAsk(db, id) {
+	try {
+		const all = JSON.parse(getSetting(db, ASK_KEY) || "{}");
+		const v = all[id];
+		if (!v) return null;
+		delete all[id];
+		setSetting(db, ASK_KEY, JSON.stringify(all));
+		return String(v.text);
+	} catch {
+		return null;
+	}
+}
 /**
 * Logs a money message into Finance Helper's data, or returns null when it
 * isn't one (no amount) or Finance Helper was never synced yet.
@@ -15990,6 +16035,23 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (viaFocus) return viaFocus;
 		const parsed = parseTelegramText(text);
 		if ((parsed.type === "expense" || parsed.type === "unknown") && !text.startsWith("/") && !notMoney(text)) {
+			if (parsed.type === "unknown" && currentDb) {
+				const p = previewMoney(currentDb, text);
+				if (p) {
+					const id = keepMoneyAsk(currentDb, text);
+					return {
+						reply: `💸 Log <b>${esc(p.label)}</b>?
+<i>${esc(text.slice(0, 80))}</i>`,
+						keyboard: { inline_keyboard: [[{
+							text: "✅ Log it",
+							callback_data: `ml|${id}`
+						}, {
+							text: "💬 Not money",
+							callback_data: `mn|${id}`
+						}]] }
+					};
+				}
+			}
 			const money = runMoney(s, text, key);
 			if (money) return money;
 		}
@@ -16212,7 +16274,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd)\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd|m[ln])\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -16330,6 +16392,44 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					text: said
 				}
 			}, cfg, said, `${key}:say`);
+		}
+		if (data.startsWith("ml|") || data.startsWith("mn|")) {
+			if (!await markSeen(key)) return null;
+			const said = await mirror.write((db) => takeMoneyAsk(db, data.slice(3)));
+			if (!said) {
+				await answer("Already done");
+				return null;
+			}
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message?.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			if (data.startsWith("mn|")) {
+				await answer("Asking Ben");
+				return handleBrain(botId, {
+					__token: update.__token,
+					update_id: update.update_id,
+					message: {
+						chat: { id: chat },
+						text: said
+					}
+				}, cfg, said, `${key}:nm`);
+			}
+			await answer("Logged");
+			const r = await mirror.write((db) => {
+				currentDb = db;
+				return runMoney(services.services(db), said, `${key}:ml`);
+			});
+			const text = r?.reply ?? "Could not log that: try \"taxi 45\".";
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text,
+				parse_mode: "HTML",
+				...r?.keyboard ? { reply_markup: r.keyboard } : {}
+			}).catch(() => null);
+			onExpense?.();
+			return text;
 		}
 		if (data.startsWith("fb|")) {
 			if (!await markSeen(key)) return null;

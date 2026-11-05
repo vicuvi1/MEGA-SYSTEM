@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { beforeAll, describe, expect, it } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
 import { BrowserDb } from './browserDb'
-import { deleteMoney, editMoney, financeState, logMoney, moneyButton, recentMoney } from './financeBot'
+import { deleteMoney, editMoney, financeState, keepMoneyAsk, logMoney, moneyButton, previewMoney, recentMoney, takeMoneyAsk } from './financeBot'
 
 const require = createRequire(import.meta.url)
 let SQL: SqlJsStatic
@@ -94,5 +94,18 @@ describe('the coach fixes money records', () => {
     expect(st.tx.some((t: any) => t.id === r.tx.id)).toBe(false)
     expect(st.deleted[r.tx.id]).toBeTruthy()
     expect(deleteMoney(d, r.tx.id)).toBeNull()
+  })
+})
+
+describe('unclear money asks first (X5)', () => {
+  it('previews without logging, and keeps the text for one tap', () => {
+    const d = db()
+    const p = previewMoney(d, 'taxi 45')!
+    expect(p.amount).toBe(4500)
+    expect(p.label).toContain('45 MDL')
+    expect(financeState(d).tx).toHaveLength(1)
+    const id = keepMoneyAsk(d, 'taxi 45', 1000)
+    expect(takeMoneyAsk(d, id)).toBe('taxi 45')
+    expect(takeMoneyAsk(d, id)).toBeNull()
   })
 })

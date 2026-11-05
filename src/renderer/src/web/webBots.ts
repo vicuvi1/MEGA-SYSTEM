@@ -23,7 +23,7 @@ import { addDays } from '@core/dates'
 import { formatMoney } from '@core/money'
 import { getSetting, setSetting } from '../../../main/settings'
 import { queueFinanceExpense } from './financeInbox'
-import { deleteMoney, editMoney, logMoney, moneyButton, recentMoney } from './financeBot'
+import { deleteMoney, editMoney, keepMoneyAsk, logMoney, moneyButton, previewMoney, recentMoney, takeMoneyAsk } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
 import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
@@ -518,6 +518,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const parsed = parseTelegramText(text)
     // "exam on 12 december", "woke up at 7 am": a number, but not money (X2).
     if ((parsed.type === 'expense' || parsed.type === 'unknown') && !text.startsWith('/') && !notMoney(text)) {
+      // Not a clear "word amount" message: ask first, never log a guess (X5).
+      if (parsed.type === 'unknown' && currentDb) {
+        const p = previewMoney(currentDb, text)
+        if (p) {
+          const id = keepMoneyAsk(currentDb, text)
+          return { reply: `💸 Log <b>${esc(p.label)}</b>?
+<i>${esc(text.slice(0, 80))}</i>`, keyboard: { inline_keyboard: [[{ text: '✅ Log it', callback_data: `ml|${id}` }, { text: '💬 Not money', callback_data: `mn|${id}` }]] } }
+        }
+      }
       const money = runMoney(s, text, key)
       if (money) return money
     }
@@ -718,7 +727,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd)\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd|m[ln])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -798,6 +807,29 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const said = data.slice(3)
       await tg(update.__token, 'sendMessage', { chat_id: chat, text: `💬 <i>${esc(said)}</i>`, parse_mode: 'HTML' }).catch(() => null)
       return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:say`)
+    }
+    // An unclear money message (X5): [Log it] logs it, [Not money] gives it to Ben.
+    if (data.startsWith('ml|') || data.startsWith('mn|')) {
+      if (!(await markSeen(key))) return null
+      const said = await mirror.write((db) => takeMoneyAsk(db as any, data.slice(3)))
+      if (!said) {
+        await answer('Already done')
+        return null
+      }
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message?.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      if (data.startsWith('mn|')) {
+        await answer('Asking Ben')
+        return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:nm`)
+      }
+      await answer('Logged')
+      const r = await mirror.write((db) => {
+        currentDb = db
+        return runMoney(services.services(db), said, `${key}:ml`)
+      })
+      const text = r?.reply ?? 'Could not log that: try "taxi 45".'
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', ...(r?.keyboard ? { reply_markup: r.keyboard } : {}) }).catch(() => null)
+      onExpense?.()
+      return text
     }
     // 👍 / 👎 / too long / wrong on a reply: saved, and Ben adjusts.
     if (data.startsWith('fb|')) {
