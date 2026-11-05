@@ -146,7 +146,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
 
       soundCoin()
       triggerRpgPopup({
-        main: `+${addedMl} ml water`,
+        main: `${addedMl > 0 ? '+' : '−'}${Math.abs(addedMl)} ml water`,
         sub: 'logged',
         kind: 'xp',
         x: rect.left + rect.width / 2,
@@ -240,6 +240,19 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
                   ))}
                   <button className="chip on" onClick={(e) => log(e, Math.max(1, obj.target - obj.current))} title="Log what's left">
                     ✓ All
+                  </button>
+                  {/* Took one too many? Take a glass back (F5). */}
+                  {water && obj.current > 0 && (
+                    <button className="chip" onClick={(e) => log(e, -Math.min(250, obj.current))} title="Take back 250 ml">
+                      −250ml
+                    </button>
+                  )}
+                </div>
+              )}
+              {isDone && water && obj.current > 0 && (
+                <div className="reps-btns">
+                  <button className="chip" onClick={(e) => log(e, -Math.min(250, obj.current))} title="Take back 250 ml">
+                    −250ml
                   </button>
                 </div>
               )}

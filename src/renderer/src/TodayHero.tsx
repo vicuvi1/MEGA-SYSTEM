@@ -199,8 +199,9 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
         <span title={focusStreak(st.week) >= 2 ? `Focus streak: ${focusStreak(st.week)} days` : `Goal: ${focusGoal} min`} style={{ ['--p' as string]: `${Math.min(100, (st.today.focusMin / focusGoal) * 100)}%` }}>
           <b>{fm >= 60 ? `${Math.floor(fm / 60)}h${fm % 60 ? ` ${fm % 60}m` : ''}` : `${fm}m`}</b> focus
         </span>
-        <span title={st.today.waterTarget ? `of ${(st.today.waterTarget / 1000).toFixed(1)} L` : 'log with Ben: water 250'} style={{ ['--p' as string]: `${Math.min(100, water * 100)}%` }}>
-          <b>{st.today.waterTarget ? `${(st.today.waterMl / 1000).toFixed(1)}L` : '—'}</b> water
+        <span title={st.today.waterTarget ? `of ${st.today.waterTarget.toLocaleString('en-GB')} ml` : 'log with Ben: water 250'} style={{ ['--p' as string]: `${Math.min(100, water * 100)}%` }}>
+          {/* In ml, like everywhere you log it (F5). */}
+          <b>{st.today.waterTarget ? `${st.today.waterMl.toLocaleString('en-GB')}` : '—'}</b> ml water
         </span>
         <span>
           <b>{st.today.mustTotal ? `${st.today.mustDone}/${st.today.mustTotal}` : '—'}</b> must-dos
