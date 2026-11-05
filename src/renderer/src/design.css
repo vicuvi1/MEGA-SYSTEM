@@ -1907,3 +1907,16 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .st-vol-cell.z-high { background: color-mix(in srgb, var(--red) 20%, transparent); }
 .st-vol-note { margin: 0 0 10px; }
 @media (max-width: 480px) { .st-vol { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Readiness (H4) */
+.rd-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.rd-top { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 260px; }
+.rd-top p { margin: 0; color: var(--muted); }
+.rd-badge { flex: none; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: rgb(var(--ink) / 0.06); }
+.rd-full .rd-badge { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.rd-light .rd-badge { background: color-mix(in srgb, var(--orange) 24%, transparent); }
+.rd-rest .rd-badge { background: color-mix(in srgb, var(--red) 20%, transparent); }
+.rd-sore { display: flex; align-items: center; gap: 4px; }
+.rd-sore small { color: var(--muted); margin-right: 4px; }
+.rd-sore button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font: inherit; }
+.rd-sore button.on { background: var(--accent); color: var(--accent-ink, #111); border-color: transparent; }
