@@ -8,7 +8,8 @@ const ev = (title: string, s: string, e: string) => ({ id: title, calendarId: 'c
 describe('rhythm: when things are due', () => {
   it('sends the morning plan after the wake-up, once, before noon', () => {
     const s = rhythmFor(null, today)
-    expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '07:30' }))).toEqual([])
+    expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '07:29' }))).toEqual([])
+    expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '07:30' }))).toEqual(['briefing']) // autopilot: ready by 07:30
     expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '07:45' }))).toEqual(['briefing'])
     expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '06:40', wakeAt: '06:30' }))).toEqual(['briefing'])
     expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '12:10', waterMl: 2000 }))).toEqual([])
@@ -86,5 +87,16 @@ describe('morning plan: rules build, AI only names and ranks (N6)', () => {
   it('ignores made-up must-dos and junk', () => {
     expect(nameAndRank(rules, { mustdos: ['Buy a boat'], names: [42] }).mustdos).toEqual(['Lab report', 'Read ch. 4'])
     expect(nameAndRank(rules, null)).toBe(rules)
+  })
+})
+
+describe('autopilot morning (N12)', () => {
+  it('the plan is ready by 07:30, never before the wake-up target', async () => {
+    const { dueRhythm, DEFAULT_RHYTHM_PREFS } = await import('./rhythm')
+    const f = (time: string, wakeTarget: string) => ({ time, today: '2026-11-05', weekday: 4, wakeTarget, wakeAt: null, paused: false, waterMl: 0, waterTarget: 2500, workoutDone: false }) as any
+    const st = { day: '2026-11-05' } as any
+    expect(dueRhythm(st, DEFAULT_RHYTHM_PREFS, f('07:30', '07:00'))).toContain('briefing') // 45 min after would be 07:45
+    expect(dueRhythm(st, DEFAULT_RHYTHM_PREFS, f('07:29', '07:00'))).not.toContain('briefing')
+    expect(dueRhythm(st, DEFAULT_RHYTHM_PREFS, f('07:30', '09:00'))).not.toContain('briefing') // weekend lie-in
   })
 })

@@ -19,7 +19,7 @@ import type { PageId } from './modules'
 import { useFocus } from './pages/Focus'
 import { useWeekPlan } from './WeekPlanner'
 import { soundSuccess } from './sound'
-import { useAction } from './ui'
+import { useAction, useToast } from './ui'
 import { useLive } from './live'
 import { localToday, useTodayEvents } from './todayEvents'
 
@@ -52,6 +52,7 @@ const STATE_TITLE: Record<BlockState, string> = { upcoming: 'Coming up', now: 'N
 
 export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
   const act = useAction()
+  const toast = useToast()
   const today = localToday()
   const { events, connected, reload, error: calError } = useTodayEvents()
   const [todo, setTodo] = useState<TodoTask[]>([])
@@ -170,6 +171,20 @@ export function DayTimeline({ onGo }: { onGo: (p: PageId) => void }) {
     })
     if (v === 'done') soundSuccess()
     await life.timeline?.mark(today, e.id, v).catch(() => null)
+    // Autopilot (N12): a skipped block → offer to re-plan the rest of the day in one tap.
+    if (v === 'skip') toast(`Skipped: ${e.title}`, 'info', {
+        label: 'Re-plan the rest',
+        run: () => {
+          // Ben's desk (Today tab) re-plans what's left: open it, then run the rescue.
+          try {
+            localStorage.setItem('ls.deskTab', 'today')
+          } catch {
+            /* fine */
+          }
+          window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'coach' }))
+          setTimeout(() => window.dispatchEvent(new CustomEvent('life-rescue-day')), 900)
+        }
+      })
   }
   const focusOn = async (e: CalEvent) => {
     const left = Math.round((Date.parse(e.end) - Math.max(now, Date.parse(e.start))) / 60000)

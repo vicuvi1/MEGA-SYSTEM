@@ -11989,7 +11989,8 @@ var DEFAULT_RHYTHM_PREFS = {
 	evening: "21:00",
 	weekly: "19:00",
 	water: true,
-	training: true
+	training: true,
+	autopilot: "07:30"
 };
 var HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 var toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
@@ -11999,6 +12000,7 @@ function cleanPrefs(p) {
 		on: p?.on !== false,
 		evening: HM.test(p?.evening) ? p.evening : DEFAULT_RHYTHM_PREFS.evening,
 		weekly: HM.test(p?.weekly) ? p.weekly : DEFAULT_RHYTHM_PREFS.weekly,
+		autopilot: HM.test(p?.autopilot) ? p.autopilot : DEFAULT_RHYTHM_PREFS.autopilot,
 		water: p?.water !== false,
 		training: p?.training !== false
 	};
@@ -12022,7 +12024,8 @@ function dueRhythm(state, prefs, f) {
 	if (!prefs.on) return [];
 	const t = toMin(f.time);
 	const out = [];
-	const start = Math.max(toMin("06:00"), f.wakeAt ? toMin(f.wakeAt) + 5 : toMin(f.wakeTarget) + 45);
+	const auto = Math.max(toMin(prefs.autopilot ?? "07:30"), toMin(f.wakeTarget));
+	const start = Math.max(toMin("06:00"), Math.min(f.wakeAt ? toMin(f.wakeAt) + 5 : toMin(f.wakeTarget) + 45, auto));
 	if (!state.briefing && t >= start && t < toMin("12:00")) out.push("briefing");
 	if (!f.paused && prefs.water && waterBehind(state, f)) out.push("water");
 	if (!f.paused && prefs.training && !f.workoutDone && !state.training && t >= toMin("18:00") && t < toMin("21:00")) out.push("training");

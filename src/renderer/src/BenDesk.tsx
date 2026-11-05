@@ -4,7 +4,7 @@
 //   You:   the weekly pattern report, energy map, mood, excuses, Ben's profile of you
 //   Money: the spending coach, repeating charges, "should I buy it?"
 //   Month: the month as a calendar, its numbers and Ben's letter
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { life } from './bridge'
 import { useAction } from './ui'
 import { useLive } from './live'
@@ -213,6 +213,12 @@ function RescueCard({ status }: { status: CoachStatus | null }) {
   const act = useAction()
   const [plan, setPlan] = useState<{ r: Rescue; evs: CalEvent[] } | null>(null)
   const [busy, setBusy] = useState(false)
+  const makeRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    const on = () => makeRef.current()
+    window.addEventListener('life-rescue-day', on)
+    return () => window.removeEventListener('life-rescue-day', on)
+  }, [])
   if (!life.google) return null
   const make = async () => {
     setBusy(true)
@@ -227,6 +233,7 @@ function RescueCard({ status }: { status: CoachStatus | null }) {
     end.setHours(22, 30, 0, 0)
     setPlan({ r: rescueDay(blocks, Date.now(), end.getTime()), evs: timed })
   }
+  makeRef.current = () => void make()
   const apply = async () => {
     if (!plan) return
     setBusy(true)
