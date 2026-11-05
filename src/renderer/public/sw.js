@@ -61,7 +61,8 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      // Only Life System's own old caches: embedded apps (Finance Helper) keep theirs (Y6).
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k.startsWith('life-')).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   )
 })

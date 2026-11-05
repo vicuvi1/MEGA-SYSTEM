@@ -92,9 +92,10 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
+// Only its own old caches: the same site also holds Life System's (Y6).
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k.startsWith('finance-helper')).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
