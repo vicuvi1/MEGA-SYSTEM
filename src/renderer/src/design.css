@@ -1954,3 +1954,15 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .urge-action p { margin: 4px 0 8px; }
 .rw-days { color: var(--muted); font-weight: 400; }
 .rd-grit { flex-basis: 100%; margin: 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+/* Phone header in one row (U4): the extra buttons live in the tab bar and
+   More already (Coach, Settings, full screen); the backup chip is just its icon. */
+@media (max-width: 760px) {
+  .main > .topbar { flex-wrap: nowrap !important; gap: 6px; min-height: 56px; }
+  .main > .topbar .tb-icon[aria-label='Coach'],
+  .main > .topbar .tb-icon[aria-label='Settings'],
+  .main > .topbar .tb-icon[aria-label='Full screen'] { display: none; }
+  .main > .topbar .chip .chip-text { display: none; }
+  .main > .topbar .chip { padding: 6px; }
+  .main > .topbar .title h1, .main > .topbar .title h2 { font-size: 22px; white-space: nowrap; }
+}
