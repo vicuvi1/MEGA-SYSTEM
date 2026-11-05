@@ -2210,6 +2210,52 @@ function queueFinanceExpense(db, entry) {
 	list.push(entry);
 	setSetting(db, SETTING$1, JSON.stringify(list));
 }
+// src/core/strength.ts
+var e1rm = (reps, kg) => reps >= 1 && reps <= 12 && kg > 0 ? Math.round(kg * (1 + reps / 30) * 10) / 10 : 0;
+var key$1 = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+/** Every weighted lift in the workouts, newest activity first. */
+function strengthSummary(workouts) {
+	const by = /* @__PURE__ */ new Map();
+	for (const w of [...workouts].sort((a, b) => a.day.localeCompare(b.day))) for (const it of w.items) {
+		const weighted = (it.sets ?? []).filter((s) => (s.weight ?? 0) > 0);
+		if (!weighted.length) continue;
+		const k = key$1(it.name);
+		const g = by.get(k) ?? {
+			name: it.name,
+			days: /* @__PURE__ */ new Map()
+		};
+		const d = g.days.get(w.day) ?? {
+			e: 0,
+			w: 0
+		};
+		for (const s of weighted) {
+			d.e = Math.max(d.e, e1rm(s.reps, s.weight));
+			d.w = Math.max(d.w, s.weight);
+		}
+		g.days.set(w.day, d);
+		by.set(k, g);
+	}
+	const out = [];
+	for (const g of by.values()) {
+		const days = [...g.days.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+		const last = days[days.length - 1];
+		const before = days.slice(0, -1);
+		const prevE = Math.max(0, ...before.map(([, v]) => v.e));
+		const prevW = Math.max(0, ...before.map(([, v]) => v.w));
+		out.push({
+			name: g.name,
+			points: days.map(([day, v]) => ({
+				day,
+				e1rm: v.e
+			})),
+			bestE1rm: Math.max(...days.map(([, v]) => v.e)),
+			bestWeight: Math.max(...days.map(([, v]) => v.w)),
+			lastDay: last[0],
+			newPr: before.length > 0 && (last[1].e > prevE || last[1].w > prevW)
+		});
+	}
+	return out.sort((a, b) => b.lastDay.localeCompare(a.lastDay));
+}
 // src/main/body.ts
 var REST_DAYS = "sport_rest_days";
 var Body = class {
@@ -2317,6 +2363,7 @@ var Body = class {
 			previousWaist,
 			weeklyAverages,
 			recentWorkouts: allWorkouts.slice(0, 25),
+			strength: strengthSummary(allWorkouts),
 			metrics: allMetrics,
 			exercises
 		};

@@ -8,6 +8,7 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { soundCoin } from '../sound'
 import { useWater } from '../water'
+import { StrengthCard } from '../StrengthCard'
 import { useAction } from '../ui'
 import '../body.css'
 
@@ -307,6 +308,9 @@ export function Body({
           })}
         </div>
       </section>
+
+      {/* STRENGTH: sets × reps × kg, records, estimated max (H2) */}
+      <StrengthCard state={state} onChange={(s2) => (onState(s2), onWallet())} />
 
       {/* DAILY HYDRATION TRACKER */}
       <section className="sporty-hydration-panel">

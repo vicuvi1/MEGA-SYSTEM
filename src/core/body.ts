@@ -75,6 +75,8 @@ export interface BodySummary {
   previousWaist: number | null
   weeklyAverages: { week: string; avg: number; count: number }[]
   recentWorkouts: Workout[]
+  /** Weighted lifts: records and estimated max over time (core/strength.ts). */
+  strength?: import('./strength').LiftSummary[]
   metrics: BodyMetric[]
   exercises: Exercise[]
 }
