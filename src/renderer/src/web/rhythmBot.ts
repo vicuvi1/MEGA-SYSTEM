@@ -2,6 +2,7 @@
 // the day, puts an approved plan into your calendar and Todoist, writes the
 // evening and Sunday reviews, and the water and training nudges. Used by the
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
+import { waterToday } from './coachStatus'
 import { withTimeout } from '@core/ai'
 import { addDays } from '@core/dates'
 import { progressReport, financeSpending } from '@core/progress'
@@ -175,8 +176,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const svc = services.services(db)
       const today = svc.wallet.today(now)
       const st = load(db, today)
-      const sport = sportState(db)
-      const water = sport ? sharedView(sport, sportToday()).water.target : 2700
+      const water = waterToday(db, svc, now).target
       const workoutDone = (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done') || !!svc.body.state(now).restToday
       return { today, st, water, workoutDone }
     })
@@ -310,8 +310,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const st = load(db, today)
       const f = svc.focus.state()
       const plan = svc.focus.plan(today)
-      const sport = sportState(db)
-      const water = sport ? sharedView(sport, sportToday()).water : { ml: 0, target: 2700 }
+      const water = waterToday(db, svc)
       const blocks = st.briefing?.status === 'approved' ? st.briefing.plan.blocks : []
       return {
         mustdosDone: plan.items.filter((x) => x.done).length,

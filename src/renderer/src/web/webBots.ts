@@ -47,7 +47,7 @@ import { answerLocal, type LookupData, appendLog, loadProfile, type Persona, RAT
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
-import { coachStatus } from './coachStatus'
+import { coachStatus, waterToday } from './coachStatus'
 import { createRhythm } from './rhythmBot'
 import { addReps, addWater, parseWater, sharedView, sportForDay, sportToday } from '@core/sportShared'
 import { activeExercises, allDone, applyWorkoutTap, defaultSport, progression, recordWorkoutDay, removeExercise, setExercise, waterCard, workoutCard, type WorkoutLog } from '@core/sportCards'
@@ -511,7 +511,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const st = sportState(s.db) ?? defaultSport(day)
       const next = addWater(st, ml, day)
       setSetting(s.db, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: next }))
-      const c = waterCard(next, day)
+      const c = waterCard(next, day, waterToday(s.db, s).target)
       return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> logged.\n\n${c.text}`, keyboard: c.keyboard }
     }
     const viaFocus = runFocus(s, text)
@@ -751,7 +751,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             st = addWater(st, Number(data.slice(3)) || 0, day)
             save(st)
           }
-          const c = waterCard(st, day)
+          const c = waterCard(st, day, waterToday(db, svc).target)
           return { ...c, toast: show ? '' : `${Number(data.slice(3)) > 0 ? '+' : ''}${data.slice(3)} ml` }
         }
         let extra = ''

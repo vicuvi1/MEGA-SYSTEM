@@ -19,6 +19,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
   // The one shared water log (water.ts), not a counter of its own.
   const water = useWater()
   const waterMl = water.ml
+  const waterTarget = water.target
 
   const todayKey = dayKey(new Date(), undefined, 0)
 
@@ -67,7 +68,6 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
     const pushups = findEx('push')
     const situps = findEx('sit')
     const press = findEx('press')
-    const water = sportState?.water
 
     return [
       {
@@ -98,12 +98,13 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
         id: 'water',
         name: 'Hydration',
         icon: '💧',
-        current: water?.currentMl ?? waterMl,
-        target: water?.targetMl ?? 2700,
+        // The shared water log and its one goal, not Sport Track's local copy (N3).
+        current: waterMl,
+        target: waterTarget,
         unit: 'ml'
       }
     ]
-  }, [sportState, doneMap, waterMl])
+  }, [sportState, doneMap, waterMl, waterTarget])
 
   const allCompleted = useMemo(() => objectives.every((o) => o.current >= o.target), [objectives])
 

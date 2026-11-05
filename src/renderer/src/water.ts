@@ -25,6 +25,8 @@ export async function addWater(ml: number): Promise<Water> {
   const r = life.coach?.water ? await life.coach.water(ml) : null
   const data = updateSport((d) => {
     if (d.water) d.water.currentMl = Math.max(0, r ? r.ml : (Number(d.water.currentMl) || 0) + ml)
+    // A take-back is marked so the sync with other devices keeps it (N1).
+    if (d.water && ml < 0) d.water.fixedAt = Date.now()
   })
   window.dispatchEvent(new CustomEvent('life-body-changed'))
   window.dispatchEvent(new CustomEvent('life-water-changed'))
@@ -37,8 +39,10 @@ export function useWater(): Water & { add: (ml: number) => Promise<Water>; set: 
   useEffect(() => {
     load()
     window.addEventListener('life-water-changed', load)
+    window.addEventListener('life-sport-changed', load)
     window.addEventListener('focus', load)
     return () => {
+      window.removeEventListener('life-sport-changed', load)
       window.removeEventListener('life-water-changed', load)
       window.removeEventListener('focus', load)
     }

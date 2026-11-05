@@ -14361,6 +14361,30 @@ function nextMove(m, now = Date.now()) {
 	};
 }
 // src/renderer/src/web/coachStatus.ts
+/**
+* Today's water and its ONE goal (N2/N4), used by every screen, the bot's
+* water card and Ben: your weight's target (35 ml/kg, +500 ml on a training
+* day), else Sport Track's.
+*/
+function waterToday(db, s, now = /* @__PURE__ */ new Date()) {
+	const sport = json(db, "sport_tracker_json")?.data;
+	const w = sport ? sharedView(sport, sportToday(now)).water : {
+		ml: 0,
+		target: 2700
+	};
+	try {
+		const b = s.body.state(now);
+		const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday);
+		if (t) return {
+			ml: w.ml,
+			target: t
+		};
+	} catch {}
+	return {
+		ml: w.ml,
+		target: w.target || 2700
+	};
+}
 var json = (db, key) => {
 	try {
 		return JSON.parse(getSetting(db, key) || "null");
@@ -14377,20 +14401,7 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 	const awaiting = reminders.filter((r) => r.kind === "checkin" && r.sentAt && !r.done).map((r) => r.text);
 	const rh = rhythmFor(json(db, RHYTHM), today);
 	const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)));
-	const sport = json(db, "sport_tracker_json")?.data;
-	const water0 = sport ? sharedView(sport, sportToday(now)).water : {
-		ml: 0,
-		target: 0
-	};
-	let water = water0;
-	try {
-		const b = s.body.state(now);
-		const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday);
-		if (t) water = {
-			...water0,
-			target: t
-		};
-	} catch {}
+	const water = waterToday(db, s, now);
 	const lastLedger = s.wallet.entries().filter((e) => e.day === today).map((e) => Date.parse(e.ts)).filter(Number.isFinite);
 	const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? "")).filter(Number.isFinite);
 	const last = Math.max(0, ...lastLedger, ...lastFocus);
@@ -14748,12 +14759,10 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		const base = await mirror.read((db) => {
 			const svc = services.services(db);
 			const today = svc.wallet.today(now);
-			const st = load(db, today);
-			const sport = sportState(db);
 			return {
 				today,
-				st,
-				water: sport ? sharedView(sport, sportToday()).water.target : 2700,
+				st: load(db, today),
+				water: waterToday(db, svc, now).target,
 				workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done") || !!svc.body.state(now).restToday
 			};
 		});
@@ -14925,11 +14934,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const st = load(db, today);
 			const f = svc.focus.state();
 			const plan = svc.focus.plan(today);
-			const sport = sportState(db);
-			const water = sport ? sharedView(sport, sportToday()).water : {
-				ml: 0,
-				target: 2700
-			};
+			const water = waterToday(db, svc);
 			const blocks = st.briefing?.status === "approved" ? st.briefing.plan.blocks : [];
 			return {
 				mustdosDone: plan.items.filter((x) => x.done).length,
@@ -15349,10 +15354,11 @@ function bar(done, target, len = 8) {
 	return "█".repeat(f) + "░".repeat(len - f);
 }
 var esc$1 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-function waterCard(st, today) {
+/** target: the one goal every screen shows (coachStatus waterToday), else Sport Track's. */
+function waterCard(st, today, goal) {
 	const s = sportForDay(st, today);
 	const ml = Math.round(Number(s.water.currentMl) || 0);
-	const target = Number(s.water.targetMl) || 2700;
+	const target = goal || Number(s.water.targetMl) || 2700;
 	const glass = Number(s.water.glassSizeMl) || 250;
 	const left = Math.max(0, target - ml);
 	return {
@@ -16072,7 +16078,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				savedAt: Date.now(),
 				data: next
 			}));
-			const c = waterCard(next, day);
+			const c = waterCard(next, day, waterToday(s.db, s).target);
 			return {
 				reply: `💧 <b>${ml > 0 ? "+" : ""}${ml} ml</b> logged.\n\n${c.text}`,
 				keyboard: c.keyboard
@@ -16360,7 +16366,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						save(st);
 					}
 					return {
-						...waterCard(st, day),
+						...waterCard(st, day, waterToday(db, svc).target),
 						toast: show ? "" : `${Number(data.slice(3)) > 0 ? "+" : ""}${data.slice(3)} ml`
 					};
 				}

@@ -25,10 +25,11 @@ export function bar(done: number, target: number, len = 8): string {
 const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 type Kb = { inline_keyboard: { text: string; callback_data: string }[][] }
 
-export function waterCard(st: any, today: string): { text: string; keyboard: Kb } {
+/** target: the one goal every screen shows (coachStatus waterToday), else Sport Track's. */
+export function waterCard(st: any, today: string, goal?: number): { text: string; keyboard: Kb } {
   const s = sportForDay(st, today)
   const ml = Math.round(Number(s.water.currentMl) || 0)
-  const target = Number(s.water.targetMl) || 2700
+  const target = goal || Number(s.water.targetMl) || 2700
   const glass = Number(s.water.glassSizeMl) || 250
   const left = Math.max(0, target - ml)
   const text = [

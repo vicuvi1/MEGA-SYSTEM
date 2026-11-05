@@ -11,6 +11,25 @@ import { loadStyle } from './botBrain'
 import { addDays } from '@core/dates'
 import type { Services } from './webServices'
 
+
+/**
+ * Today's water and its ONE goal (N2/N4), used by every screen, the bot's
+ * water card and Ben: your weight's target (35 ml/kg, +500 ml on a training
+ * day), else Sport Track's.
+ */
+export function waterToday(db: any, s: any, now = new Date()): { ml: number; target: number } {
+  const sport = json(db, 'sport_tracker_json')?.data
+  const w = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: 2700 }
+  try {
+    const b = s.body.state(now)
+    const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday)
+    if (t) return { ml: w.ml, target: t }
+  } catch {
+    /* no body data yet */
+  }
+  return { ml: w.ml, target: w.target || 2700 }
+}
+
 export interface CoachStatus {
   mood: Mood
   face: string
@@ -44,17 +63,7 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
   const awaiting = reminders.filter((r) => r.kind === 'checkin' && r.sentAt && !r.done).map((r) => r.text)
   const rh = rhythmFor(json(db, RHYTHM), today)
   const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))
-  const sport = json(db, 'sport_tracker_json')?.data
-  const water0 = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: 0 }
-  // Your target from your weight (35 ml/kg, +500 ml when you train today), else Sport Track's.
-  let water = water0
-  try {
-    const b = s.body.state(now)
-    const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday)
-    if (t) water = { ...water0, target: t }
-  } catch {
-    /* no body data yet */
-  }
+  const water = waterToday(db, s, now)
   const lastLedger = s.wallet.entries().filter((e: any) => e.day === today).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite)
   const lastFocus = f.todaySessions.map((x) => Date.parse(x.endedAt ?? '')).filter(Number.isFinite)
   const last = Math.max(0, ...lastLedger, ...lastFocus)
