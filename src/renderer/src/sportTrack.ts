@@ -5,7 +5,11 @@
 const KEY = 'life_sport_tracker_v1'
 
 /** Today on this device, YYYY-MM-DD in local time (a new day starts at your midnight). */
-export const sportDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+/** Your day for water and reps: it turns at 04:00, like the rest of the app (S4). */
+export const sportDay = (d = new Date()) => {
+  const x = new Date(d.getTime() - 4 * 3600_000)
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+}
 
 /** Sport Track's data with today's checklist (reset if its day has passed). */
 export function readSport(): any | null {

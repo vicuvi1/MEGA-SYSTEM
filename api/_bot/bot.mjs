@@ -1699,7 +1699,7 @@ function weekSoFar(today, focus, workouts, tasks) {
 }
 // src/core/sportShared.ts
 /** The calendar day in local time (Sport Track and Sporty use the same; never UTC). */
-var sportToday = (now = /* @__PURE__ */ new Date()) => dayKey(now, void 0, 0);
+var sportToday = (now = /* @__PURE__ */ new Date()) => dayKey(now);
 /** A new day starts a fresh checklist (reps and water back to 0). */
 function sportForDay(st, today) {
 	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : {};
@@ -5293,7 +5293,7 @@ var Mirror = class Mirror {
 					}
 					this.lastError = null;
 				} catch (e) {
-					if (isOffline(e)) {
+					if (isOffline(e) || typeof window !== "undefined" && isRetryable(e)) {
 						this.queueOffline([
 							...writeOnce(version),
 							...checks,
@@ -5347,25 +5347,33 @@ var Mirror = class Mirror {
 		return this.refreshing;
 	}
 	static OUTBOX = "life_offline_writes";
+	offline = null;
+	outboxUnsaved = false;
 	outbox() {
+		if (this.offline) return this.offline;
 		try {
 			const v = typeof localStorage !== "undefined" ? JSON.parse(localStorage.getItem(Mirror.OUTBOX) || "[]") : [];
-			return Array.isArray(v) ? v : [];
+			this.offline = Array.isArray(v) ? v : [];
 		} catch {
-			return [];
+			this.offline = [];
 		}
+		return this.offline;
 	}
 	saveOutbox(list) {
+		this.offline = list;
 		try {
 			if (typeof localStorage === "undefined") return;
 			if (list.length) localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list));
 			else localStorage.removeItem(Mirror.OUTBOX);
-		} catch {}
+			this.outboxUnsaved = false;
+		} catch {
+			this.outboxUnsaved = list.length > 0;
+		}
 	}
 	queueOffline(batch) {
-		const list = [...this.outbox(), batch].slice(-500);
+		const list = [...this.outbox(), batch];
 		this.saveOutbox(list);
-		this.lastError = `Offline: ${list.length} change${list.length === 1 ? "" : "s"} waiting to sync`;
+		this.lastError = this.outboxUnsaved ? `⚠ ${list.length} change${list.length === 1 ? "" : "s"} not synced yet and this browser can't store them: keep this tab open until you're back online` : `Offline: ${list.length} change${list.length === 1 ? "" : "s"} waiting to sync`;
 	}
 	/** Changes made offline and not yet in Turso. */
 	get pendingOffline() {
@@ -14628,7 +14636,11 @@ function nudgeText(n, idle, first, focusMin, tone) {
 // src/renderer/src/sportTrack.ts
 var KEY = "life_sport_tracker_v1";
 /** Today on this device, YYYY-MM-DD in local time (a new day starts at your midnight). */
-var sportDay = (d = /* @__PURE__ */ new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Your day for water and reps: it turns at 04:00, like the rest of the app (S4). */
+var sportDay = (d = /* @__PURE__ */ new Date()) => {
+	const x = /* @__PURE__ */ new Date(d.getTime() - 144e5);
+	return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+};
 /** Sport Track's data with today's checklist (reset if its day has passed). */
 function readSport() {
 	try {

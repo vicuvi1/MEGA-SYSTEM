@@ -202,8 +202,10 @@ export class Mirror {
         }
         this.lastError = null
       } catch (e) {
-        // Offline (the phone in a tunnel): keep the change here and send it when back online.
-        if (isOffline(e)) {
+        // Offline (the phone in a tunnel), or a server hiccup / timeout / locked
+        // session: keep the change here and send it later (S3). Re-downloading
+        // everything on a hiccup threw the change away.
+        if (isOffline(e) || (typeof window !== 'undefined' && isRetryable(e))) {
           // With its checks (Y3): sent later, it must still find the rows as they were read
           // here; if another device changed them meanwhile, it goes to "couldn't sync" (Y1)
           // instead of overwriting their newer edit.
@@ -267,27 +269,39 @@ export class Mirror {
 
   // ---- Offline queue (web): changes made without a connection --------------
   private static OUTBOX = 'life_offline_writes'
+  // The waiting changes live in memory too (S3): if the browser can't store
+  // them (storage full, private window) they still go out from this tab, and
+  // you're told plainly instead of losing them on the next reload.
+  private offline: Change[][] | null = null
+  private outboxUnsaved = false
   private outbox(): Change[][] {
+    if (this.offline) return this.offline
     try {
       const v = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem(Mirror.OUTBOX) || '[]') : []
-      return Array.isArray(v) ? v : []
+      this.offline = Array.isArray(v) ? v : []
     } catch {
-      return []
+      this.offline = []
     }
+    return this.offline
   }
   private saveOutbox(list: Change[][]): void {
+    this.offline = list
     try {
       if (typeof localStorage === 'undefined') return
       if (list.length) localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list))
       else localStorage.removeItem(Mirror.OUTBOX)
+      this.outboxUnsaved = false
     } catch {
-      /* full or blocked: the change stays on this copy only */
+      this.outboxUnsaved = list.length > 0
     }
   }
   private queueOffline(batch: Change[]): void {
-    const list = [...this.outbox(), batch].slice(-500)
+    // Never trimmed: an old change is never dropped to make room (S3).
+    const list = [...this.outbox(), batch]
     this.saveOutbox(list)
-    this.lastError = `Offline: ${list.length} change${list.length === 1 ? '' : 's'} waiting to sync`
+    this.lastError = this.outboxUnsaved
+      ? `⚠ ${list.length} change${list.length === 1 ? '' : 's'} not synced yet and this browser can't store them: keep this tab open until you're back online`
+      : `Offline: ${list.length} change${list.length === 1 ? '' : 's'} waiting to sync`
   }
   /** Changes made offline and not yet in Turso. */
   get pendingOffline(): number {

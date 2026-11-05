@@ -11,7 +11,8 @@ export interface SharedSport {
 }
 
 /** The calendar day in local time (Sport Track and Sporty use the same; never UTC). */
-export const sportToday = (now = new Date()) => dayKey(now, undefined, 0)
+// Water and reps turn the day at 04:00 like the rest of the app (S4): a glass at 01:00 is still tonight's.
+export const sportToday = (now = new Date()) => dayKey(now)
 
 /** A new day starts a fresh checklist (reps and water back to 0). */
 export function sportForDay(st: any, today: string): any {

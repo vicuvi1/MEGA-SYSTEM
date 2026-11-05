@@ -1997,7 +1997,8 @@
 
     // --- Helpers ---
     /** Today in local time (a new day starts at your midnight, not UTC's). */
-    const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // The day turns at 04:00, like Life System (a glass at 01:00 is still tonight's).
+    const localDay = (d = new Date()) => { const x = new Date(d.getTime() - 4 * 3600000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
     /** Text for innerHTML (a name with < or & can't break the page). */
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     /** The day of a history entry (new entries keep an ISO day; old ones a locale date or a timestamp id). */

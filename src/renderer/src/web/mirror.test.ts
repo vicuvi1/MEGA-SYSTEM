@@ -242,4 +242,42 @@ describe('offline on the phone', () => {
     expect(m.failedSync).toHaveLength(0)
     vi.stubGlobal('fetch', realFetch)
   })
+
+  it('a server hiccup while saving keeps the change and sends it later (S3)', async () => {
+    const remote = fakeTurso()
+    const realFetch = globalThis.fetch
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) })
+    vi.stubGlobal('window', { addEventListener: () => {}, dispatchEvent: () => true })
+    vi.stubGlobal('navigator', { onLine: true })
+    const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await m.ready
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 503, statusText: 'Unavailable', text: async () => 'busy' }))
+    await m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('s3', 'kept') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run())
+    expect(m.pendingOffline).toBe(1)
+    expect(await m.read((db) => (db.prepare("SELECT value FROM settings WHERE key = 's3'").get() as any)?.value)).toBe('kept')
+    vi.stubGlobal('fetch', realFetch)
+    await m.refresh()
+    expect(m.pendingOffline).toBe(0)
+    expect(remote.exec("SELECT value FROM settings WHERE key = 's3'")[0].values[0][0]).toBe('kept')
+  })
+
+  it("storage full: the change still goes out from this tab, and you're told (S3)", async () => {
+    fakeTurso()
+    const realFetch = globalThis.fetch
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError') }, removeItem: () => {} })
+    vi.stubGlobal('window', { addEventListener: () => {}, dispatchEvent: () => true })
+    vi.stubGlobal('navigator', { onLine: true })
+    const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await m.ready
+    vi.stubGlobal('fetch', async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('s3b', 'x') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run())
+    expect(m.pendingOffline).toBe(1)
+    expect(m.lastError).toMatch(/can't store them/)
+    vi.stubGlobal('fetch', realFetch)
+    await m.refresh()
+    expect(m.pendingOffline).toBe(0)
+  })
 })

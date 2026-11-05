@@ -90,7 +90,7 @@ Ben's actions (the model returns JSON with `reply`, `mood`, `chips`, `buttons`, 
 
 ### Database: `settings` table keys (key → JSON value)
 
-`coach_memory`, `coach_profile`, `coach_log`, `coach_mind`, `coach_reminders`, `coach_nudges`, `coach_tick_at`, `coach_rhythm`, `coach_rhythm_prefs`, `coach_history`, `coach_letters`, `goal_booking`, `sport_tracker_json` (**the one shared water + reps log**: `{savedAt, data:{lastDate, exercises[], water:{currentMl,targetMl,glassSizeMl}}}`; its day is the UTC date), `ben_workouts`, `app_sync_finance` (Finance Helper data), `week_plan`, `focus_running`, `block_marks`, `cal_templates`, `today_order`, `milestones_seen`, `data_version`. There are also normal tables (ledger, focus_sessions, focus_goals, sleep_logs, workouts…; see `src/core/schema.ts`).
+`coach_memory`, `coach_profile`, `coach_log`, `coach_mind`, `coach_reminders`, `coach_nudges`, `coach_rhythm`, `coach_rhythm_prefs`, `coach_history`, `coach_letters`, `goal_booking`, `sport_tracker_json` (**the one shared water + reps log**: `{savedAt, data:{lastDate, exercises[], water:{currentMl,targetMl,glassSizeMl}}}`; its day turns at 04:00 local, like the rest of the app), `ben_workouts`, `app_sync_finance` (Finance Helper data), `week_plan`, `focus_running`, `block_marks`, `cal_templates`, `today_order`, `milestones_seen`, `data_version`. There are also normal tables (ledger, focus_sessions, focus_goals, sleep_logs, workouts…; see `src/core/schema.ts`).
 
 ## 5. How to work
 
@@ -130,7 +130,7 @@ Next planned (Stage 2, ask me first):
 Known limits:
 - Vercel Hobby keeps only 1 hour of logs.
 - Max 12 functions (put new endpoints inside existing ones).
-- The Sport Track day is the UTC date.
+- Water and reps (Sport Track) turn the day at 04:00 local, like the rest of the app.
 
 ### Reliability (how the system protects itself)
 - **Checks before shipping:** `.github/workflows/ci.yml` (every push: tsc, vitest, server bundle up to date, build, `e2e/smoke.mjs` in a real browser against `e2e/server.mjs`, a fake Turso). The Windows release runs the same smoke test; Vercel's `vercel-build` runs tests + tsc, so a red commit never goes live. CI runs on `ubuntu-24.04` (Playwright can't install on 26.04 yet). Always commit `api/_bot/bot.mjs` after `npm run build:bot`.
