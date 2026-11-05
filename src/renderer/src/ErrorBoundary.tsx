@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react'
 import { life } from './bridge'
 import { reportError } from './errorReport'
+import { canGoBack, goBackOneVersion } from './goBack'
 import { Icon } from './Icon'
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
 interface State {
   error: Error | null
   copied: boolean
+  goingBack?: boolean
+  backMsg?: string | null
 }
 
 /**
@@ -56,6 +59,21 @@ export class ErrorBoundary extends Component<Props, State> {
               Go to Today
             </button>
           )}
+          {canGoBack() && (
+            <button
+              className="btn ghost"
+              disabled={this.state.goingBack}
+              title="If this started after an update: use the version before it until a fix is out"
+              onClick={() => {
+                this.setState({ goingBack: true, backMsg: null })
+                goBackOneVersion()
+                  .then((msg) => this.setState({ goingBack: false, backMsg: msg }))
+                  .catch((e) => this.setState({ goingBack: false, backMsg: (e as Error).message }))
+              }}
+            >
+              {this.state.goingBack ? 'Going back…' : 'Go back one version'}
+            </button>
+          )}
           <button
             className="btn ghost"
             onClick={() => {
@@ -65,6 +83,7 @@ export class ErrorBoundary extends Component<Props, State> {
             {copied ? 'Copied' : 'Copy details'}
           </button>
         </div>
+        {this.state.backMsg && <p className="hint small">{this.state.backMsg}</p>}
       </section>
     )
   }

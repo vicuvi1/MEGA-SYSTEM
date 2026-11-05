@@ -13,6 +13,8 @@ export interface DesktopApi {
   updateStatus(): Promise<UpdateStatus>
   checkUpdates(): Promise<UpdateStatus>
   installUpdate(): Promise<UpdateStatus>
+  /** Go back one version (installs the previous release and restarts). */
+  rollback?(): Promise<{ ok: boolean; version?: string; error?: string }>
   /** A Windows notification (silent: the page plays its own chime). */
   notify?(n: { id: string; title: string; body?: string | null }): Promise<boolean>
   /** You clicked one: the app is in front, run its action. */

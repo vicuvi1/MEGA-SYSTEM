@@ -102,6 +102,7 @@ if (firstCopy) void app.whenReady().then(async () => {
   handle('desktop:updateStatus', () => updater.get())
   handle('desktop:checkUpdates', () => updater.check())
   handle('desktop:installUpdate', async () => { await saves; return updater.update() })
+  handle('desktop:rollback', async () => { await saves; return updater.rollback() })
   handle('desktop:loginGithub', () => new Promise<void>((resolveLogin, reject) => {
     const command = join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'mingw64', 'bin', 'git-credential-manager.exe')
     execFile(command, ['github', 'login', '--browser', '--force'], { windowsHide: true, timeout: 180_000 }, (error) => error ? reject(new Error('GitHub sign-in did not finish. Install Git for Windows and try again.')) : resolveLogin())
@@ -197,7 +198,7 @@ if (firstCopy) void app.whenReady().then(async () => {
           title: 'Life System',
           message: 'Life System had trouble starting.',
           detail: `${why}\n\nYour data is safe (in the cloud and on this PC).`,
-          buttons: ['Try again', 'Save a backup', 'Get the previous version'],
+          buttons: ['Try again', 'Save a backup', 'Go back one version'],
           defaultId: 0
         })
         .then(async ({ response }) => {
@@ -205,7 +206,13 @@ if (firstCopy) void app.whenReady().then(async () => {
             await saves
             const r = await dialog.showSaveDialog(win, { defaultPath: 'Life-System-backup.sqlite' })
             if (!r.canceled && r.filePath) await copyFile(file, r.filePath).catch(() => {})
-          } else if (response === 2) void shell.openExternal('https://github.com/vicuvi1/MEGA-SYSTEM/releases')
+          } else if (response === 2) {
+            // Installs the previous release and restarts (the releases page if that fails).
+            await saves
+            const r = await updater.rollback()
+            if (r.ok) return
+            void shell.openExternal('https://github.com/vicuvi1/MEGA-SYSTEM/releases')
+          }
           win.reload()
         })
     } else win.reload()
