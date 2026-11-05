@@ -4,6 +4,8 @@
 // call, the month's story, the spending coach and the sleep link. The same
 // code runs in the app (instant, read from the local mirror) and on the
 // server (Ben's prompt, the tick that enforces stakes).
+import { fullHouse, weekOf, type FullHouse } from '@core/fullHouse'
+import { sleepRegularity } from '@core/sleepRegularity'
 import { lifeReview, type LifeReview } from '@core/lifeReview'
 import { urgeEvents } from './disciplinePatterns'
 import { EXPERIMENTS, measureExperiment, pickExperiment, type ExpMetric, type ExpResult, type ExpState, type Experiment, type Series } from '@core/experiment'
@@ -92,6 +94,8 @@ export interface DeskView {
   experiment: { current: ExpResult | null; suggest: Experiment }
   /** The week in one look: 3 findings across training, sleep, money, focus, urges + 1 experiment (N13). */
   review: LifeReview
+  /** Steady sleep, 3+ workouts, clean, under budget this week (M5); claimed: paid this week. */
+  fullHouse: FullHouse & { claimed: boolean }
 }
 
 function sessionsOf(db: any, from: string) {
@@ -218,6 +222,11 @@ export function deskView(s: Services, finance: any, now = new Date()): DeskView 
     return d >= addDays(today, -to) && d <= addDays(today, -from)
   }
   const review = lifeReview(series, { crushed: ue.filter((e) => e.kind === 'urge' && inWeek(e.ts, 0, 6)).length, slips: ue.filter((e) => e.kind === 'reset' && inWeek(e.ts, 0, 6)).length, prevCrushed: ue.filter((e) => e.kind === 'urge' && inWeek(e.ts, 7, 13)).length }, today)
+  // The weekly full house (M5).
+  const sevenDays = (m: ExpMetric) => Array.from({ length: 7 }, (_, k) => series[m][addDays(today, -k)] ?? 0).reduce((a, b) => a + b, 0)
+  const usualWeekSpend = (Array.from({ length: 28 }, (_, k) => series.spend[addDays(today, -7 - k)] ?? 0).reduce((a, b) => a + b, 0) / 28) * 7
+  const fh = fullHouse({ sleepScore: sleepRegularity(logs as any).score, workouts: sevenDays('workouts'), slips: ue.filter((e) => e.kind === 'reset' && inWeek(e.ts, 0, 6)).length, spent: sevenDays('spend'), usualSpent: usualWeekSpend })
+  const fullHouseState = { ...fh, claimed: s.wallet.entries().some((e: any) => e.ref === `fullhouse:${weekOf(today)}`) }
   const lastNight = logs.find((l) => l.day === today) ?? null
   const tx = Array.isArray(finance?.tx) ? finance.tx : null
   return {
@@ -247,7 +256,8 @@ export function deskView(s: Services, finance: any, now = new Date()): DeskView 
     exams,
     restDays,
     experiment,
-    review
+    review,
+    fullHouse: fullHouseState
   }
 }
 
@@ -351,6 +361,7 @@ export type DeskOp =
   | { op: 'letter'; month: string; text: string }
   | { op: 'experiment'; id: string }
   | { op: 'stopExperiment' }
+  | { op: 'fullHouse' }
 
 /** One change on the desk (from the Coach page or Ben's actions). Returns a short line for the screen. */
 export function deskChange(s: Services, o: DeskOp, now = new Date()): string {
@@ -361,6 +372,14 @@ export function deskChange(s: Services, o: DeskOp, now = new Date()): string {
     if (!e) throw new Error('No such experiment')
     setSetting(db, EXP_KEY, JSON.stringify({ id: e.id, start: today }))
     return `Experiment on for 7 days: ${e.title}`
+  }
+  if (o.op === 'fullHouse') {
+    const v = deskView(s, null, now)
+    if (!v.fullHouse.hit) throw new Error(`Not yet: ${v.fullHouse.missing.join(', ')}`)
+    const ref = `fullhouse:${weekOf(today)}`
+    if (s.wallet.entries().some((e: any) => e.ref === ref)) return 'Already claimed this week'
+    s.wallet.awardRule('general.full_house', { now, ref, note: 'Weekly full house' })
+    return 'Full house! +40 points 🏆'
   }
   if (o.op === 'stopExperiment') {
     setSetting(db, EXP_KEY, '')

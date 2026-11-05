@@ -107,7 +107,7 @@ export function BenDesk({ tab, setTab, status, slots, onChange, onSay }: { tab: 
         ) : tab === 'log' ? (
           <BenLog />
         ) : (
-          <MonthTab v={v} reload={load} />
+          <MonthTab v={v} reload={load} change={change} />
         )}
       </div>
     </div>
@@ -854,7 +854,7 @@ function MoneyTab({ v }: { v: DeskView }) {
 
 // ------------------------------------------------------------------- Month
 
-function MonthTab({ v, reload }: { v: DeskView; reload: () => void }) {
+function MonthTab({ v, reload, change }: { v: DeskView; reload: () => void; change: Change }) {
   const act = useAction()
   const [busy, setBusy] = useState(false)
   const [pick, setPick] = useState<string | null>(null)
@@ -868,6 +868,25 @@ function MonthTab({ v, reload }: { v: DeskView; reload: () => void }) {
   }
   return (
     <>
+      {v.fullHouse && (
+        <Card
+          title={v.fullHouse.hit ? 'Full house this week 🏆' : 'Weekly full house'}
+          icon="🃏"
+          tone={v.fullHouse.hit ? 'accent' : undefined}
+          sub="steady sleep · 3+ workouts · clean · under budget"
+          action={v.fullHouse.hit && !v.fullHouse.claimed ? <button className="bd-btn strong" onClick={() => void change({ op: 'fullHouse' })}>Claim +40</button> : undefined}
+        >
+          <p className="bd-line">
+            {v.fullHouse.got.length > 0 && <>✅ {v.fullHouse.got.join(' · ')}</>}
+            {v.fullHouse.missing.length > 0 && (
+              <>
+                <br />⏳ Still to go: {v.fullHouse.missing.join(', ')}
+              </>
+            )}
+            {v.fullHouse.claimed && <><br />Claimed this week.</>}
+          </p>
+        </Card>
+      )}
       {v.review && v.review.findings.length > 0 && (
         <Card title="Your week in one look" icon="🔎" sub="training · sleep · money · focus · urges">
           <ul className="bd-review">

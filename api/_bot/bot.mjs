@@ -1952,7 +1952,7 @@ function minutesUntil(hmText, now) {
 	return Math.max(1, Math.round((d.getTime() - now.getTime()) / 6e4));
 }
 /** The Monday a week starts on. */
-function weekOf(day) {
+function weekOf$1(day) {
 	return addDays$3(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
 }
 /** The call is due Saturday 18:00 → Monday 12:00 when this week has none. */
@@ -1961,7 +1961,7 @@ function callDue(calls, now) {
 	const dow = now.getDay();
 	const h = now.getHours();
 	if (!(dow === 6 && h >= 18 || dow === 0 || dow === 1 && h < 12)) return false;
-	const wk = dow === 1 ? addDays$3(weekOf(day), -7) : weekOf(day);
+	const wk = dow === 1 ? addDays$3(weekOf$1(day), -7) : weekOf$1(day);
 	return !calls.some((c) => c.week === wk);
 }
 function big3Of(answer) {
@@ -3970,6 +3970,16 @@ var DEFAULT_RULES = [
 		enabled: true
 	},
 	{
+		id: "general.full_house",
+		module: "general",
+		title: "Weekly full house",
+		coins: 40,
+		xp: 60,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
 		id: "grand_slam.all_four",
 		module: "general",
 		title: "4-Pillar Grand Slam (Sovereign Day)",
@@ -5630,6 +5640,42 @@ function moneyDay(tx, day) {
 		cooked: !eatOut && groceries
 	};
 }
+// src/core/fullHouse.ts
+function fullHouse(i) {
+	const checks = [
+		[
+			(i.sleepScore ?? 0) >= 70,
+			"Steady sleep",
+			`steady sleep (${i.sleepScore ?? "–"}/100, need 70)`
+		],
+		[
+			i.workouts >= 3,
+			`${i.workouts} workouts`,
+			`${Math.max(0, 3 - i.workouts)} more workout${3 - i.workouts === 1 ? "" : "s"}`
+		],
+		[
+			i.slips === 0,
+			"A clean week",
+			"a clean week"
+		],
+		[
+			i.usualSpent > 0 ? i.spent <= i.usualSpent : true,
+			"Under budget",
+			`spending under your usual (${Math.round(i.spent)} of ${Math.round(i.usualSpent)} lei)`
+		]
+	];
+	return {
+		hit: checks.every(([ok]) => ok),
+		got: checks.filter(([ok]) => ok).map(([, g]) => g),
+		missing: checks.filter(([ok]) => !ok).map(([, , m]) => m)
+	};
+}
+/** Monday of the week (for paying the bonus once a week). */
+function weekOf(day) {
+	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
+	d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+	return d.toISOString().slice(0, 10);
+}
 // src/core/experiment.ts
 var EXPERIMENTS = [
 	{
@@ -6868,6 +6914,18 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 		slips: ue.filter((e) => e.kind === "reset" && inWeek(e.ts, 0, 6)).length,
 		prevCrushed: ue.filter((e) => e.kind === "urge" && inWeek(e.ts, 7, 13)).length
 	}, today);
+	const sevenDays = (m) => Array.from({ length: 7 }, (_, k) => series[m][addDays$3(today, -k)] ?? 0).reduce((a, b) => a + b, 0);
+	const usualWeekSpend = Array.from({ length: 28 }, (_, k) => series.spend[addDays$3(today, -7 - k)] ?? 0).reduce((a, b) => a + b, 0) / 28 * 7;
+	const fullHouseState = {
+		...fullHouse({
+			sleepScore: sleepRegularity(logs).score,
+			workouts: sevenDays("workouts"),
+			slips: ue.filter((e) => e.kind === "reset" && inWeek(e.ts, 0, 6)).length,
+			spent: sevenDays("spend"),
+			usualSpent: usualWeekSpend
+		}),
+		claimed: s.wallet.entries().some((e) => e.ref === `fullhouse:${weekOf(today)}`)
+	};
 	const lastNight = logs.find((l) => l.day === today) ?? null;
 	const tx = Array.isArray(finance?.tx) ? finance.tx : null;
 	return {
@@ -6910,7 +6968,8 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 		exams,
 		restDays,
 		experiment,
-		review
+		review,
+		fullHouse: fullHouseState
 	};
 }
 /** What the desk adds to Ben's prompt (short lines; only what's there). */
@@ -7022,6 +7081,18 @@ function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
 			start: today
 		}));
 		return `Experiment on for 7 days: ${e.title}`;
+	}
+	if (o.op === "fullHouse") {
+		const v = deskView(s, null, now);
+		if (!v.fullHouse.hit) throw new Error(`Not yet: ${v.fullHouse.missing.join(", ")}`);
+		const ref = `fullhouse:${weekOf(today)}`;
+		if (s.wallet.entries().some((e) => e.ref === ref)) return "Already claimed this week";
+		s.wallet.awardRule("general.full_house", {
+			now,
+			ref,
+			note: "Weekly full house"
+		});
+		return "Full house! +40 points 🏆";
 	}
 	if (o.op === "stopExperiment") {
 		setSetting(db, EXP_KEY, "");
