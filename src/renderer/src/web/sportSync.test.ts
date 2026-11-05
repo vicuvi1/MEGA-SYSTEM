@@ -53,6 +53,17 @@ describe('Sport Track sync', () => {
     expect(m.history.map((h: any) => h.id)).toEqual([2, 1])
   })
 
+  it('a correction down (undo, −250 ml) survives the merge (N1)', () => {
+    const a: any = sport('2026-10-31', 30, [])
+    a.exercises[0].fixedAt = 1000
+    a.water = { currentMl: 250, fixedAt: 1000 }
+    const b: any = sport('2026-10-31', 60, [])
+    b.water = { currentMl: 500 }
+    const m = mergeSport(a, b, false)
+    expect(m.exercises[0].doneToday).toBe(30)
+    expect(m.water.currentMl).toBe(250)
+  })
+
   it("never brings yesterday's reps into today", () => {
     const m = mergeSport(sport('2026-10-30', 90), sport('2026-10-31', 10), true)
     expect(m.lastDate).toBe('2026-10-31')

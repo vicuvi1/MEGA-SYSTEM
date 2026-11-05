@@ -1,13 +1,17 @@
 // Sport Track keeps its data in this browser (localStorage). This copies it
 // to Turso (settings.sport_tracker_json) and back, so the phone and the PC
 // see the same reps, water and workout history. When both changed, they are
-// merged: history from both, and for the same day the higher rep counts.
+// merged: history from both, and for the same day the higher rep counts,
+// unless one side corrected it down (fixedAt: −250 ml, an undo) after the other did (N1).
 import { createAppSync, type AppSyncSpec } from './appSync'
 import type { Mirror } from './mirror'
 
 export const SPORT_KEY = 'life_sport_tracker_v1'
 const SETTING = 'sport_tracker_json'
 const day = (s: any) => String(s?.lastDate ?? '')
+
+/** The same day's count from two devices: the later correction wins, else the higher number. */
+const pick = (a: number, aFix: number, b: number, bFix: number) => (aFix || bFix ? (aFix >= bFix ? a : b) : Math.max(a, b))
 
 /** Both versions in one; `newer` wins where they disagree. */
 export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
@@ -23,14 +27,16 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
   const fromOther = byId((later === a ? b : a).exercises)
   out.exercises = (Array.isArray(newer.exercises) ? newer.exercises : later.exercises ?? []).map((e: any) => {
     const k = String(e.id ?? e.name)
-    const done = sameDay
-      ? Math.max(Number(fromLater.get(k)?.doneToday) || 0, Number(fromOther.get(k)?.doneToday) || 0)
-      : Number(fromLater.get(k)?.doneToday) || 0
-    return { ...e, doneToday: done }
+    const x = fromLater.get(k)
+    const y = fromOther.get(k)
+    const done = sameDay ? pick(Number(x?.doneToday) || 0, Number(x?.fixedAt) || 0, Number(y?.doneToday) || 0, Number(y?.fixedAt) || 0) : Number(x?.doneToday) || 0
+    const fixedAt = Math.max(Number(x?.fixedAt) || 0, sameDay ? Number(y?.fixedAt) || 0 : 0)
+    return { ...e, doneToday: done, ...(fixedAt ? { fixedAt } : {}) }
   })
   if (newer.water || later.water) {
-    const ml = sameDay ? Math.max(Number(a.water?.currentMl) || 0, Number(b.water?.currentMl) || 0) : Number(later.water?.currentMl) || 0
-    out.water = { ...(older.water ?? {}), ...(newer.water ?? {}), currentMl: ml }
+    const ml = sameDay ? pick(Number(a.water?.currentMl) || 0, Number(a.water?.fixedAt) || 0, Number(b.water?.currentMl) || 0, Number(b.water?.fixedAt) || 0) : Number(later.water?.currentMl) || 0
+    const fixedAt = Math.max(Number(a.water?.fixedAt) || 0, Number(b.water?.fixedAt) || 0)
+    out.water = { ...(older.water ?? {}), ...(newer.water ?? {}), currentMl: ml, ...(fixedAt ? { fixedAt } : {}) }
   }
   const seen = new Set<string>()
   out.history = [...(Array.isArray(newer.history) ? newer.history : []), ...(Array.isArray(older.history) ? older.history : [])]

@@ -207,7 +207,8 @@ export function IslandFeed() {
       .filter((e: any) => !e.archived && Number(e.target) > 0)
       .slice(0, 3)
       .map((e: any) => ({ id: String(e.id ?? e.name), name: String(e.name), done: Number(e.doneToday) || 0, target: Number(e.target) || 0 }))
-    const localWater = Number(sport?.water?.currentMl) || 0
+    // This device's Sport Track copy is the synced truth here (a −250 must show, not the higher of two copies: N1).
+    const localWater = sport?.water ? Number(sport.water.currentMl) || 0 : status.today.waterMl
     const { now: cur, next } = nowNext(blocks.current.list, now)
     const dismissed = get<Record<string, number>>(DISMISSED, {})
     // Phase 4: the reward you're working toward, your best streak, today's ring and highlight.
@@ -244,7 +245,7 @@ export function IslandFeed() {
       now: cur,
       next,
       mustdos: status.mustdos,
-      water: { ml: Math.max(status.today.waterMl, localWater), target: status.today.waterTarget || Number(sport?.water?.targetMl) || 2700 },
+      water: { ml: localWater, target: status.today.waterTarget || Number(sport?.water?.targetMl) || 2700 },
       reps,
       alert: (() => {
         const pick = pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
@@ -260,7 +261,7 @@ export function IslandFeed() {
         const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
         const first = get<{ day: string; at: number } | null>(FIRST, null)
         const firstBlock = blocks.current.list.filter((b) => b.end > now).sort((x, y) => x.start - y.start)[0] ?? null
-        const body = { now, busy, idleSec, activeSince, water: { ml: Math.max(status.today.waterMl, localWater), target: status.today.waterTarget || 2700 }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
+        const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || 2700 }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
         return (
           bedAlert(dismissed, now, !!running) ??
           qualityAlert(dismissed, now) ??

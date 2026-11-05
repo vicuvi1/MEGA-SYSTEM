@@ -1734,6 +1734,7 @@ function sharedView(st, today) {
 function addWater(st, ml, today) {
 	const s = sportForDay(st, today);
 	s.water.currentMl = Math.max(0, Math.round((Number(s.water.currentMl) || 0) + ml));
+	if (ml < 0) s.water.fixedAt = Date.now();
 	return s;
 }
 var key$1 = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
@@ -1753,6 +1754,7 @@ function addReps(st, name, amount, today) {
 	const ex = findSharedExercise(s, name);
 	if (!ex) return null;
 	ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount));
+	if (amount < 0) ex.fixedAt = Date.now();
 	return {
 		st: s,
 		exercise: {

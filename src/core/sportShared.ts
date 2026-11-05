@@ -39,6 +39,8 @@ export function sharedView(st: any, today: string): SharedSport {
 export function addWater(st: any, ml: number, today: string): any {
   const s = sportForDay(st, today)
   s.water.currentMl = Math.max(0, Math.round((Number(s.water.currentMl) || 0) + ml))
+  // A correction is marked, so syncing with another device keeps it (N1).
+  if (ml < 0) s.water.fixedAt = Date.now()
   return s
 }
 
@@ -61,6 +63,7 @@ export function addReps(st: any, name: string, amount: number, today: string): {
   const ex = findSharedExercise(s, name)
   if (!ex) return null
   ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount))
+  if (amount < 0) ex.fixedAt = Date.now()
   return { st: s, exercise: { name: String(ex.name ?? ex.id), done: ex.doneToday, target: Number(ex.target) || 0 } }
 }
 
