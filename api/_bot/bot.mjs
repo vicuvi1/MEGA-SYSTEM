@@ -3512,6 +3512,143 @@ function examSleepGuard(i) {
 		text: `📚 ${exam.title} ${left === 0 ? "is today" : `in ${left} day${left === 1 ? "" : "s"}`}, and you are ${h} h short on sleep this week. Tonight, bed at ${i.bedTarget} helps more than another hour of cramming: sleep is when what you studied sticks.`
 	};
 }
+// src/renderer/src/web/tursoHttp.ts
+var toHrana$1 = (v) => {
+	if (v === null) return { type: "null" };
+	if (typeof v === "number") return Number.isInteger(v) ? {
+		type: "integer",
+		value: String(v)
+	} : {
+		type: "float",
+		value: v
+	};
+	if (v instanceof Uint8Array) {
+		let s = "";
+		v.forEach((b) => s += String.fromCharCode(b));
+		return {
+			type: "blob",
+			base64: btoa(s)
+		};
+	}
+	return {
+		type: "text",
+		value: String(v)
+	};
+};
+var fromHrana$1 = (v) => {
+	if (!v || v.type === "null") return null;
+	if (v.type === "integer") return Number(v.value);
+	if (v.type === "float") return Number(v.value);
+	if (v.type === "blob") {
+		const s = atob(v.base64 ?? "");
+		return Uint8Array.from(s, (c) => c.charCodeAt(0));
+	}
+	return v.value ?? "";
+};
+/** Turso said the session is over (the web server answers 401). */
+var UnauthorizedError = class extends Error {};
+var TursoHttp = class {
+	onUnauthorized;
+	fetchImpl;
+	url;
+	token;
+	/**
+	* `url` is a Turso database URL, or a path on this site ("/api/db") that
+	* passes the request on with the server's key.
+	*/
+	constructor(url, token, onUnauthorized, fetchImpl = (...a) => fetch(...a)) {
+		this.onUnauthorized = onUnauthorized;
+		this.fetchImpl = fetchImpl;
+		let base = (url || "").trim();
+		if (base.startsWith("/")) this.url = base;
+		else {
+			if (base.startsWith("libsql://")) base = "https://" + base.slice(9);
+			if (!/^https?:\/\//.test(base)) base = "https://" + base;
+			this.url = base.replace(/\/+$/, "") + "/v2/pipeline";
+		}
+		this.token = typeof token === "function" ? token : () => token;
+	}
+	async pipeline(requests) {
+		const res = await this.fetchImpl(this.url, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${this.token()}`,
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify({ requests: [...requests, { type: "close" }] }),
+			signal: AbortSignal.timeout(2e4)
+		});
+		if (res.status === 401 && this.onUnauthorized) {
+			this.onUnauthorized();
+			throw new UnauthorizedError("Locked: enter your PIN again");
+		}
+		if (!res.ok) throw new Error(`Turso HTTP ${res.status}: ${await res.text().catch(() => "") || res.statusText}`);
+		return (await res.json()).results ?? [];
+	}
+	/** Several reads in one round trip; a failed one comes back as an Error. */
+	async readMany(stmts) {
+		const results = await this.pipeline(stmts.map((s) => ({
+			type: "execute",
+			stmt: {
+				sql: s.sql,
+				args: s.args.map(toHrana$1)
+			}
+		})));
+		return stmts.map((_, i) => {
+			const r = results[i];
+			if (!r || r.type === "error") return new Error(r?.error?.message ?? "Turso read failed");
+			const result = r.response?.result;
+			return {
+				cols: (result?.cols ?? []).map((c) => String(c.name)),
+				rows: (result?.rows ?? []).map((row) => row.map(fromHrana$1))
+			};
+		});
+	}
+	/** Runs the statements in one transaction: all of them, or none. */
+	async writeAtomic(stmts) {
+		if (!stmts.length) return;
+		const steps = [{ stmt: { sql: "BEGIN" } }];
+		stmts.forEach((s, i) => steps.push({
+			condition: {
+				type: "ok",
+				step: i
+			},
+			stmt: {
+				sql: s.sql,
+				args: s.args.map(toHrana$1)
+			}
+		}));
+		const last = steps.length - 1;
+		steps.push({
+			condition: {
+				type: "ok",
+				step: last
+			},
+			stmt: { sql: "COMMIT" }
+		});
+		steps.push({
+			condition: {
+				type: "not",
+				cond: {
+					type: "ok",
+					step: last + 1
+				}
+			},
+			stmt: { sql: "ROLLBACK" }
+		});
+		const [r] = await this.pipeline([{
+			type: "batch",
+			batch: { steps }
+		}]);
+		if (!r || r.type === "error") throw new Error(r?.error?.message ?? "Turso write failed");
+		const res = r.response?.result;
+		const errs = res?.step_errors ?? [];
+		if (!(res?.step_results?.[last + 1] != null)) {
+			const firstErr = errs.find((e) => e);
+			throw new Error(firstErr?.message ?? "Turso did not save the change");
+		}
+	}
+};
 // src/core/schema.ts
 var MIGRATIONS = [
 	`
@@ -5193,11 +5330,35 @@ var Mirror = class Mirror {
 			await this.turso.writeAtomic(batch);
 			sent++;
 		} catch (e) {
-			if (isOffline(e)) break;
+			if (isOffline(e) || isRetryable(e)) break;
+			this.saveFailed([...this.failedSync, {
+				at: (/* @__PURE__ */ new Date()).toISOString(),
+				error: String(e?.message ?? e).slice(0, 200),
+				batch
+			}]);
 			sent++;
 		}
 		this.saveOutbox(list.slice(sent));
 		if (sent) this.lastError = list.length - sent ? `Offline: ${list.length - sent} changes waiting to sync` : null;
+	}
+	static FAILED = "life_sync_failed";
+	/** Offline changes the database refused (newest last, up to 50), for the sync panel. */
+	get failedSync() {
+		try {
+			const v = typeof localStorage !== "undefined" ? JSON.parse(localStorage.getItem(Mirror.FAILED) || "[]") : [];
+			return Array.isArray(v) ? v : [];
+		} catch {
+			return [];
+		}
+	}
+	saveFailed(list) {
+		try {
+			if (typeof localStorage !== "undefined") localStorage.setItem(Mirror.FAILED, JSON.stringify(list.slice(-50)));
+		} catch {}
+	}
+	/** Forget the "couldn't sync" list (after you've looked at it). */
+	clearFailed() {
+		this.saveFailed([]);
 	}
 	/**
 	* Brings the copy up to Turso: nothing when nothing changed (one tiny
@@ -5575,145 +5736,10 @@ function rowCasStatements(rows, haveTable) {
 		args: [r.id, r.value]
 	}))];
 }
+/** A failure worth retrying: locked (PIN), a 5xx, a timeout, too many requests (Y1). */
+var isRetryable = (e) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String(e?.message ?? "")) || e?.name === "TimeoutError" || e?.name === "AbortError";
 /** A failure because there's no connection (not a refusal by the database). */
 var isOffline = (e) => typeof window !== "undefined" && (navigator.onLine === false || e instanceof TypeError || /failed to fetch|network|load failed/i.test(String(e?.message ?? "")));
-// src/renderer/src/web/tursoHttp.ts
-var toHrana$1 = (v) => {
-	if (v === null) return { type: "null" };
-	if (typeof v === "number") return Number.isInteger(v) ? {
-		type: "integer",
-		value: String(v)
-	} : {
-		type: "float",
-		value: v
-	};
-	if (v instanceof Uint8Array) {
-		let s = "";
-		v.forEach((b) => s += String.fromCharCode(b));
-		return {
-			type: "blob",
-			base64: btoa(s)
-		};
-	}
-	return {
-		type: "text",
-		value: String(v)
-	};
-};
-var fromHrana$1 = (v) => {
-	if (!v || v.type === "null") return null;
-	if (v.type === "integer") return Number(v.value);
-	if (v.type === "float") return Number(v.value);
-	if (v.type === "blob") {
-		const s = atob(v.base64 ?? "");
-		return Uint8Array.from(s, (c) => c.charCodeAt(0));
-	}
-	return v.value ?? "";
-};
-/** Turso said the session is over (the web server answers 401). */
-var UnauthorizedError = class extends Error {};
-var TursoHttp = class {
-	onUnauthorized;
-	fetchImpl;
-	url;
-	token;
-	/**
-	* `url` is a Turso database URL, or a path on this site ("/api/db") that
-	* passes the request on with the server's key.
-	*/
-	constructor(url, token, onUnauthorized, fetchImpl = (...a) => fetch(...a)) {
-		this.onUnauthorized = onUnauthorized;
-		this.fetchImpl = fetchImpl;
-		let base = (url || "").trim();
-		if (base.startsWith("/")) this.url = base;
-		else {
-			if (base.startsWith("libsql://")) base = "https://" + base.slice(9);
-			if (!/^https?:\/\//.test(base)) base = "https://" + base;
-			this.url = base.replace(/\/+$/, "") + "/v2/pipeline";
-		}
-		this.token = typeof token === "function" ? token : () => token;
-	}
-	async pipeline(requests) {
-		const res = await this.fetchImpl(this.url, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${this.token()}`,
-				"Content-Type": "application/json"
-			},
-			body: JSON.stringify({ requests: [...requests, { type: "close" }] }),
-			signal: AbortSignal.timeout(2e4)
-		});
-		if (res.status === 401 && this.onUnauthorized) {
-			this.onUnauthorized();
-			throw new UnauthorizedError("Locked: enter your PIN again");
-		}
-		if (!res.ok) throw new Error(`Turso HTTP ${res.status}: ${await res.text().catch(() => "") || res.statusText}`);
-		return (await res.json()).results ?? [];
-	}
-	/** Several reads in one round trip; a failed one comes back as an Error. */
-	async readMany(stmts) {
-		const results = await this.pipeline(stmts.map((s) => ({
-			type: "execute",
-			stmt: {
-				sql: s.sql,
-				args: s.args.map(toHrana$1)
-			}
-		})));
-		return stmts.map((_, i) => {
-			const r = results[i];
-			if (!r || r.type === "error") return new Error(r?.error?.message ?? "Turso read failed");
-			const result = r.response?.result;
-			return {
-				cols: (result?.cols ?? []).map((c) => String(c.name)),
-				rows: (result?.rows ?? []).map((row) => row.map(fromHrana$1))
-			};
-		});
-	}
-	/** Runs the statements in one transaction: all of them, or none. */
-	async writeAtomic(stmts) {
-		if (!stmts.length) return;
-		const steps = [{ stmt: { sql: "BEGIN" } }];
-		stmts.forEach((s, i) => steps.push({
-			condition: {
-				type: "ok",
-				step: i
-			},
-			stmt: {
-				sql: s.sql,
-				args: s.args.map(toHrana$1)
-			}
-		}));
-		const last = steps.length - 1;
-		steps.push({
-			condition: {
-				type: "ok",
-				step: last
-			},
-			stmt: { sql: "COMMIT" }
-		});
-		steps.push({
-			condition: {
-				type: "not",
-				cond: {
-					type: "ok",
-					step: last + 1
-				}
-			},
-			stmt: { sql: "ROLLBACK" }
-		});
-		const [r] = await this.pipeline([{
-			type: "batch",
-			batch: { steps }
-		}]);
-		if (!r || r.type === "error") throw new Error(r?.error?.message ?? "Turso write failed");
-		const res = r.response?.result;
-		const errs = res?.step_errors ?? [];
-		if (!(res?.step_results?.[last + 1] != null)) {
-			const firstErr = errs.find((e) => e);
-			throw new Error(firstErr?.message ?? "Turso did not save the change");
-		}
-	}
-};
 // src/core/moneyDays.ts
 var BILL = /bill|rent|chirie|utilit|subscript|abonament|internet|phone|telefon|insurance|asigur|loan|credit|\btax(es)?\b|impozit/i;
 var EAT_OUT = /restaurant|cafe|café|coffee|cafea|bar\b|delivery|glovo|wolt|fast ?food|takeaway|mcdonald|kfc|pizza|burger|eat(ing)? out|lunch out|dinner out/i;

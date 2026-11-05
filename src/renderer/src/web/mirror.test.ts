@@ -202,4 +202,25 @@ describe('offline on the phone', () => {
     expect(m.pendingOffline).toBe(0)
     expect(remote.exec("SELECT value FROM settings WHERE key = 'offline_test'")[0].values[0][0]).toBe('yes')
   })
+
+  it('a server error (500) keeps the offline change for later instead of dropping it (Y1)', async () => {
+    fakeTurso()
+    const realFetch = globalThis.fetch
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) })
+    vi.stubGlobal('window', { addEventListener: () => {}, dispatchEvent: () => true })
+    vi.stubGlobal('navigator', { onLine: true })
+    const m = new Mirror(SQL, new TursoHttp('https://fake.turso.io', 't'))
+    await m.ready
+    vi.stubGlobal('fetch', async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await m.write((db) => db.prepare("INSERT INTO settings (key, value) VALUES ('y1', 'kept') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run())
+    expect(m.pendingOffline).toBe(1)
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 500, statusText: 'Server error', text: async () => 'boom' }))
+    await m.refresh().catch(() => null)
+    expect(m.pendingOffline).toBe(1)
+    expect(m.failedSync).toHaveLength(0)
+    vi.stubGlobal('fetch', realFetch)
+  })
 })

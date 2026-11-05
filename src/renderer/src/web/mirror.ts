@@ -5,6 +5,7 @@
 //
 // Startup is instant on a phone: the last copy is kept in IndexedDB and
 // shown at once, then refreshed from Turso in the background.
+import { UnauthorizedError } from './tursoHttp'
 import type { SqlJsStatic, Database as SqlJsDatabase } from 'sql.js'
 import { MIGRATIONS } from '@core/schema'
 import { DEFAULT_RULES } from '@core/rules'
@@ -273,12 +274,39 @@ export class Mirror {
         await this.turso.writeAtomic(batch)
         sent++
       } catch (e) {
-        if (isOffline(e)) break
-        sent++ // refused for good (e.g. a row deleted elsewhere): drop it, keep going
+        // No connection, locked (PIN), a server hiccup or a timeout: keep it and
+        // try again later, never drop it (Y1).
+        if (isOffline(e) || isRetryable(e)) break
+        // Refused by the database for good (e.g. a row deleted elsewhere): kept
+        // in "couldn't sync" (Settings shows it) instead of vanishing.
+        this.saveFailed([...this.failedSync, { at: new Date().toISOString(), error: String((e as Error)?.message ?? e).slice(0, 200), batch }])
+        sent++
       }
     }
     this.saveOutbox(list.slice(sent))
     if (sent) this.lastError = list.length - sent ? `Offline: ${list.length - sent} changes waiting to sync` : null
+  }
+
+  private static FAILED = 'life_sync_failed'
+  /** Offline changes the database refused (newest last, up to 50), for the sync panel. */
+  get failedSync(): { at: string; error: string; batch: Change[] }[] {
+    try {
+      const v = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem(Mirror.FAILED) || '[]') : []
+      return Array.isArray(v) ? v : []
+    } catch {
+      return []
+    }
+  }
+  private saveFailed(list: { at: string; error: string; batch: Change[] }[]): void {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(Mirror.FAILED, JSON.stringify(list.slice(-50)))
+    } catch {
+      /* storage full */
+    }
+  }
+  /** Forget the "couldn't sync" list (after you've looked at it). */
+  clearFailed(): void {
+    this.saveFailed([])
   }
 
   /**
@@ -664,6 +692,9 @@ export function rowCasStatements(rows: { table: string; id: unknown; cols: strin
     ...rows.map((r) => ({ sql: `INSERT INTO sys_cas (ok) VALUES ((SELECT ${r.cols.map((c) => `quote("${c}")`).join(" || '|' || ")} FROM "${r.table}" WHERE id = ?) IS ?)`, args: [r.id, r.value] as Param[] }))
   ]
 }
+
+/** A failure worth retrying: locked (PIN), a 5xx, a timeout, too many requests (Y1). */
+const isRetryable = (e: unknown) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String((e as Error)?.message ?? '')) || (e as Error)?.name === 'TimeoutError' || (e as Error)?.name === 'AbortError'
 
 /** A failure because there's no connection (not a refusal by the database). */
 const isOffline = (e: unknown) =>
