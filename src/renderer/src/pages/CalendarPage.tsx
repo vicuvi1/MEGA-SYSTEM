@@ -80,11 +80,13 @@ type Drag =
 export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
   const act = useAction()
   const today = ymd(new Date())
-  const [view, setViewRaw] = useState<View>(() => store.get('ls.calView', 'week'))
+  // On a phone a week is 7 slivers: it opens on 3 days unless you picked a view there (U7).
+  const phone = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 760px)').matches
+  const [view, setViewRaw] = useState<View>(() => store.get(phone ? 'ls.calViewPhone' : 'ls.calView', phone ? '3day' : 'week'))
   const setView = (v: View) => {
     setMenu(null)
     setViewRaw(v)
-    store.set('ls.calView', v)
+    store.set(phone ? 'ls.calViewPhone' : 'ls.calView', v)
   }
   // Roomier by default (56 px an hour); your zoom is remembered.
   const [zoom, setZoomRaw] = useState<number>(() => store.get('ls.calZoom2', 2))

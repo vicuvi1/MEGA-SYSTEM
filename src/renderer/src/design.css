@@ -1985,3 +1985,14 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
   .main > .topbar .seg-switch { order: 20; flex: 1 1 100%; min-width: 0; }
   .main > .topbar .seg-switch button { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline: 8px; font-size: 13px; }
 }
+
+/* Phone calendar (U7): the grid first, "To schedule" under it (drag doesn't
+   work on touch anyway), and task / event titles wrap instead of being cut. */
+@media (max-width: 760px) {
+  .cal-body { display: flex; flex-direction: column; }
+  .cal-body > .cal-main { order: 1; }
+  .cal-body > .cal-side { order: 2; }
+  .cal-side .hint.small { display: none; }
+  .cal-todo li span { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .cal-head .ta-tabs button, .ta-tabs[aria-label="View"] button { white-space: nowrap; padding-inline: 8px; }
+}
