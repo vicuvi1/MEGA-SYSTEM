@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SleepSteady } from '../SleepSteady'
 import { usePoints } from '../usePoints'
 import { motion } from 'framer-motion'
 import type { ConnectionsState, SleepLog, SleepSummary } from '@shared/api'
@@ -327,6 +328,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
           <span className="sub">calculated from bedtimes</span>
         </div>
       </section>
+      <SleepSteady logs={summary.recentLogs} />
 
       <div className="cols even">
         <section className="panel">

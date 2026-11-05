@@ -1932,3 +1932,13 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .sk-steps i { flex: 1; height: 5px; border-radius: 99px; background: rgb(var(--ink) / 0.08); }
 .sk-steps i.on { background: var(--accent); }
 .sk-steps i.now { background: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* Sleep regularity (H8/H9) */
+.ss-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+.ss-nums div { padding: 10px; border-radius: 10px; background: rgb(var(--ink) / 0.03); }
+.ss-nums b { display: block; font-size: 22px; }
+.ss-nums small { color: var(--muted); }
+.ss-bars { display: flex; align-items: flex-end; gap: 4px; height: 64px; margin-top: 8px; }
+.ss-bars span { flex: 1; height: var(--h); min-height: 3px; border-radius: 4px 4px 0 0; background: var(--accent); opacity: 0.85; }
+.ss-bars span.short { background: var(--orange); }
+@media (max-width: 480px) { .ss-nums b { font-size: 18px; } }
