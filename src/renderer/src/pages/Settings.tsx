@@ -3,6 +3,7 @@
 import { UpdatePanel } from '../updates'
 import { features } from '../bridge'
 import { PcPrivacyPanel } from '../PcPrivacyPanel'
+import { IslandEyesPanel } from '../IslandEyesPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
 import { HealthPanel } from '../HealthPanel'
 import { AiAppsPanel } from '../AiAppsPanel'
@@ -113,6 +114,14 @@ export function Settings(props: SettingsProps) {
       hint: 'What the desktop app may see, and what it saw today',
       keywords: 'privacy pc computer app activity focus distraction clipboard idle sensors block sites do not disturb shortcuts',
       body: <PcPrivacyPanel />
+    },
+    {
+      id: 'eyes',
+      label: 'Island eyes',
+      icon: 'search',
+      hint: 'Let the island read the window in front (off until you turn it on)',
+      keywords: 'eyes read screen window text ocr caption florence model download privacy pause private list what the eyes saw',
+      body: <IslandEyesPanel />
     },
         ]
       : []),

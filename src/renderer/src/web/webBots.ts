@@ -54,6 +54,7 @@ import { defaultSport, removeExercise, setExercise, waterCard, workoutCard } fro
 import { cleanRecipes, recipeText } from '@core/recipes'
 import { addAsk, cleanPcState, deskReady, pcActText, pcDenied, PC_ACTIONS_HELP } from '@core/pcActions'
 import { dayLog } from './dayLog'
+import { benNowLine } from '@core/eyesSense'
 
 const LOGS_KEY = 'life_bot_logs'
 const store = typeof localStorage !== 'undefined' ? localStorage : null
@@ -737,7 +738,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         })(),
         desk: (() => {
           try {
-            return [deskPrompt(svc, finance), excuseNote ? `Repeat excuse just now. Say it kindly with the count: "${excuseNote}"` : ''].filter(Boolean).join('\n')
+            return [deskPrompt(svc, finance), excuseNote ? `Repeat excuse just now. Say it kindly with the count: "${excuseNote}"` : '', benNowLine(dayLog(db, svc.wallet.today()).eyes, Date.now())].filter(Boolean).join('\n')
           } catch {
             return ''
           }

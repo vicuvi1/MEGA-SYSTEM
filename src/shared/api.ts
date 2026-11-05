@@ -403,6 +403,8 @@ export interface LifeApi {
     setWeb?(day: string, line: string): Promise<void>
     /** SI8/SI22: the day by kind of doing ("coding 3h10, study 1h05") and minutes per hour (only if you share totals). */
     setDoing?(day: string, line: string, hours: Record<string, Record<string, number>>): Promise<void>
+    /** Island eyes: what's in front now, one short line for Ben (only with "Tell Ben" on). */
+    setEyes?(day: string, line: string, at: number): Promise<void>
   }
   /** AU2 / AU7: Ben's asks for the PC and the last hour's summary (synced settings pc_asks, pc_last_hour). */
   pcAuto?: {

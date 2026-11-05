@@ -17,6 +17,8 @@ export interface DayLogDay {
   doing?: string
   /** SI22/SI25: minutes of each kind per hour, only if you share totals. */
   hours?: Record<string, Record<string, number>>
+  /** Island eyes: the last short line of what's in front (120 chars), only if you share it with Ben. */
+  eyes?: { at: number; line: string }
 }
 type All = Record<string, DayLogDay>
 
@@ -76,6 +78,17 @@ export function setDoingLine(db: any, day: string, line: string, hours: Record<s
       .filter(([h]) => /^\d{1,2}$/.test(h) && Number(h) < 24)
       .map(([h, v]) => [h, Object.fromEntries(Object.entries(v ?? {}).filter(([k, n]) => /^[a-z]{2,10}$/.test(k) && Number.isFinite(n)).map(([k, n]) => [k, Math.round(Number(n))]))])
   )
+  all[day] = d
+  write(db, all)
+}
+
+/** Island eyes: what's in front now, one short line (only with "Tell Ben" on). An empty line clears it. */
+export function setEyesLine(db: any, day: string, line: string, at: number): void {
+  const all = read(db)
+  const d = all[day] ?? empty()
+  const clean = String(line ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
+  if (clean) d.eyes = { at: Number.isFinite(at) ? at : Date.now(), line: clean }
+  else delete d.eyes
   all[day] = d
   write(db, all)
 }

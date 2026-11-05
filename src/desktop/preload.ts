@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { DesktopApi } from '../shared/desktop'
+import { eyesPreload } from './eyes/preloadEyes'
 
 const api: DesktopApi = {
   load: () => ipcRenderer.invoke('desktop:load'),
@@ -91,6 +92,8 @@ const api: DesktopApi = {
   onLock: (cb) => void ipcRenderer.on('desktop:lock', (_e, l) => cb(l)),
   onJump: (cb) => void ipcRenderer.on('desktop:jump', (_e, a) => cb(String(a))),
   onIslandCapture: (cb) => void ipcRenderer.on('island:capture', () => cb()),
-  onIslandVoice: (cb) => void ipcRenderer.on('island:voice', () => cb())
+  onIslandVoice: (cb) => void ipcRenderer.on('island:voice', () => cb()),
+  // Island eyes (EY1–EY6)
+  eyes: eyesPreload(ipcRenderer)
 }
 contextBridge.exposeInMainWorld('desktop', api)

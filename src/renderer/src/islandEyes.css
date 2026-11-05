@@ -1,0 +1,29 @@
+/* Island eyes: Settings panel and the eye under the island. Motion: opacity only. */
+.eyes-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.eyes-btns { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.eyes-deny { width: 100%; box-sizing: border-box; font: 12.5px/1.45 ui-monospace, Consolas, monospace; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line, rgb(127 127 127 / 0.3)); background: var(--surface-2, transparent); color: inherit; resize: vertical; }
+.eyes-model { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 4px 0 8px; }
+.eyes-model small { flex: 1 1 220px; color: var(--muted); }
+.eyes-bar { flex: 1 1 100%; height: 6px; border-radius: 999px; background: var(--surface-2, rgb(127 127 127 / 0.2)); }
+.eyes-bar > i { border-radius: 999px; background: var(--accent); }
+.eyes-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 320px; overflow: auto; }
+.eyes-log li { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; padding: 4px 0; border-bottom: 1px solid var(--line, rgb(127 127 127 / 0.15)); min-width: 0; }
+.eyes-log li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.eyes-log li.skip { color: var(--muted); }
+.eyes-log time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.eyes-kind { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2, rgb(127 127 127 / 0.2)); white-space: nowrap; }
+
+.di-eyes { position: absolute; top: calc(100% + 6px); right: 0; display: grid; justify-items: end; gap: 6px; z-index: 3; }
+.di.at-right .di-eyes { right: auto; left: 0; justify-items: start; }
+.di-eye { display: inline-flex; align-items: center; gap: 6px; height: 26px; min-width: 26px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--bg); color: var(--fg); opacity: 0.75; font: 600 11.5px/1 inherit; box-shadow: 0 6px 18px rgb(0 0 0 / 0.4), 0 0 0 1px var(--line); cursor: pointer; transition: opacity 0.15s; }
+.di-eye:hover { opacity: 1; }
+.di-eye.paused { opacity: 0.9; color: var(--muted, #9aa0a8); }
+.di-eye.reading { opacity: 1; color: var(--accent, #d4ff3f); }
+.di-eye.reading svg { animation: di-eye-glow 1.2s ease-in-out infinite; }
+@keyframes di-eye-glow { 50% { opacity: 0.35; } }
+.di-eyes-menu { display: grid; gap: 4px; padding: 6px; border-radius: 14px; background: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.45), 0 0 0 1px var(--line); }
+.di-eyes-menu button { border: 0; border-radius: 9px; padding: 7px 12px; background: transparent; color: var(--fg); font: 600 12px/1.2 inherit; text-align: left; cursor: pointer; white-space: nowrap; }
+.di-eyes-menu button:hover:not(:disabled) { background: rgb(255 255 255 / 0.08); }
+.di-eyes-menu button:disabled { opacity: 0.5; cursor: default; }
+.di-eyes-menu button.big, .di-eyes-menu button.primary { padding: 10px 14px; font-size: 13px; background: rgb(255 255 255 / 0.08); }
+.di-eyes-said { max-width: 300px; padding: 7px 12px; border-radius: 12px; font-size: 12px; background: var(--bg); color: var(--fg); box-shadow: 0 6px 18px rgb(0 0 0 / 0.4), 0 0 0 1px var(--line); overflow-wrap: anywhere; }

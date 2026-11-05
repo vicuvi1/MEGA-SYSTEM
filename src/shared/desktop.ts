@@ -75,6 +75,8 @@ export interface DesktopApi {
   /** Island window: the add-a-task shortcut (Alt+Shift+N) / talk-to-Ben (Alt+Shift+B). */
   onIslandCapture?(cb: () => void): void
   onIslandVoice?(cb: () => void): void
+  /** Island eyes (EY1–EY6): off until you turn them on; every look goes through one gate. */
+  eyes?: import('./eyes').EyesApi
   /** A button on a Windows notification (N9). */
   onNotifAction?(cb: (a: { id: string; action: string }) => void): void
   /** You clicked one: the app is in front, run its action. */

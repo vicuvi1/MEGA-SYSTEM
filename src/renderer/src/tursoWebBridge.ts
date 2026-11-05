@@ -56,7 +56,7 @@ import { NOTIF_SETTINGS_KEY, cleanNotifSettings } from '@core/eventAlerts'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginKey, pluginsOn, setOn as setPluginOn, configKey as pluginConfigKey } from '../../plugins/store'
 import { importBank, importText } from '../../plugins/bank'
-import { addBlockResult, addFocusQuality, setDoingLine, setPcLine, setWebLine } from './web/dayLog'
+import { addBlockResult, addFocusQuality, setDoingLine, setEyesLine, setPcLine, setWebLine } from './web/dayLog'
 import { cleanRecipes, type Recipe } from '@core/recipes'
 import { cleanPcState, setAskStatus, type PcAsk } from '@core/pcActions'
 import type { LastHour } from '@core/pcLastHour'
@@ -1187,6 +1187,9 @@ export function createTursoWebBridge(): Bridge {
       },
       setDoing: async (day: string, line: string, hours: Record<string, Record<string, number>>) => {
         await (await mirrorP).write((db) => setDoingLine(db as any, day, line, hours))
+      },
+      setEyes: async (day: string, line: string, at: number) => {
+        await (await mirrorP).write((db) => setEyesLine(db as any, day, line, at))
       }
     },
     pcAuto: {

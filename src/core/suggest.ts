@@ -25,6 +25,7 @@ export type SuggestKind =
   | 'recipe' // SI7: a recipe's first run, or one Ben proposes (SI24)
   | 'note' // a meeting ended: a note?
   | 'closeDay' // SI27: close the day in one go
+  | 'eyes' // Island eyes: what's in front (start a focus block for it, save it as a task)
 
 export const SUGGEST_LABEL: Record<SuggestKind, string> = {
   ctx: 'What am I doing?',
@@ -39,7 +40,8 @@ export const SUGGEST_LABEL: Record<SuggestKind, string> = {
   bedtime: 'Bedtime from closing the laptop',
   recipe: 'Automations',
   note: 'A note after a meeting',
-  closeDay: 'Close the day in one go'
+  closeDay: 'Close the day in one go',
+  eyes: 'Ideas from what the eyes read'
 }
 
 export interface Suggestion {

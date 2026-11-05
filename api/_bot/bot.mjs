@@ -23121,6 +23121,26 @@ async function undoReply(c, at, index) {
 		lines
 	};
 }
+/** Emails, links, long numbers (cards, codes, phones) and key-like strings are taken out. */
+function scrub(text) {
+	return String(text ?? "").replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "…").replace(/\bhttps?:\/\/\S+/gi, "…").replace(/\b(?:\d[ -]?){5,}\d\b/g, "…").replace(/\b[A-Za-z0-9_\-]{24,}\b/g, "…").replace(/(…\s*){2,}/g, "… ");
+}
+/** One line, at most `max` characters (whole words, with … when cut). */
+function summarize(text, max = 120) {
+	const t = scrub(text).replace(/\s+/g, " ").trim();
+	if (t.length <= max) return t;
+	const cut = t.slice(0, max - 1);
+	const sp = cut.lastIndexOf(" ");
+	return `${(sp > max * .6 ? cut.slice(0, sp) : cut).replace(/[\s,.;:–-]+$/, "")}…`;
+}
+// src/core/eyesSense.ts
+/** What Ben is told, when you share it (the line is already short and checked). */
+function benNowLine(seen, now, maxAgeMin = 10) {
+	if (!seen || typeof seen.line !== "string" || !seen.line.trim() || !Number.isFinite(seen.at)) return "";
+	if (now - seen.at > maxAgeMin * 6e4 || seen.at - now > 6e4) return "";
+	const mins = Math.max(0, Math.round((now - seen.at) / 6e4));
+	return `Right now on his PC (island eyes, ${mins ? `${mins} min ago` : "just now"}): ${summarize(seen.line)}. Use it only if it helps; never quote it back word for word.`;
+}
 // src/renderer/src/web/webBots.ts
 var LOGS_KEY = "life_bot_logs";
 var store = typeof localStorage !== "undefined" ? localStorage : null;
@@ -23852,7 +23872,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				})(),
 				desk: (() => {
 					try {
-						return [deskPrompt(svc, finance), excuseNote ? `Repeat excuse just now. Say it kindly with the count: "${excuseNote}"` : ""].filter(Boolean).join("\n");
+						return [
+							deskPrompt(svc, finance),
+							excuseNote ? `Repeat excuse just now. Say it kindly with the count: "${excuseNote}"` : "",
+							benNowLine(dayLog(db, svc.wallet.today()).eyes, Date.now())
+						].filter(Boolean).join("\n");
 					} catch {
 						return "";
 					}

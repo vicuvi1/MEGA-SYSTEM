@@ -31,6 +31,7 @@ import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
 import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
 import { CalendarCap, Crescent, DropCap, LiquidBorder, Sky, TodayRing, pageTurn } from './islandShapes'
+import { IslandEyesBadge } from './IslandEyesBadge'
 import { BenThinking, EveningScene, LiveStack, MomentPill, PillEditor, RECAP_MS, SnapGhost, ThinkWave, leanFor, makeJelly, snapBounceIn } from './islandWidgets'
 
 const desk = () => window.desktop
@@ -2066,6 +2067,8 @@ export function DesktopIsland() {
             {menu && <ActMenu items={menu} subject={run?.subject} onPick={pickMenu} onRename={(n) => (setMenu(null), tap({ kind: 'rename', subject: n }))} onClose={() => setMenu(null)} />}
             <WheelBadge text={wheelText} />
             <SnapGhost spot={ghost} />
+            {/* Island eyes: the eye (reading / paused / Pause button), only with the eyes on. */}
+            <IslandEyesBadge near={ui.over || ui.view === 'expanded'} onLayout={() => sendHot(true)} />
             <AnimatePresence>
               {toast && (
                 <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)} onAnimationComplete={() => sendHot(true)}>

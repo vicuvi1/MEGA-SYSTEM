@@ -55,7 +55,7 @@ const DEBUG_MS = 30 * 60_000
 
 type Slot = 'island' | 'quiet' | 'capture' | 'voice'
 
-export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null, seconds: number) => void }) {
+export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null, seconds: number) => void; onFg?: (proc: string) => void }) {
   const prefFile = join(o.dir, 'island.json')
   let enabled = true
   let place: IslandPlacement = 'top'
@@ -769,6 +769,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       if ((w.proc ?? '') !== fgProc) {
         fgProc = w.proc ?? ''
         checkProfile()
+        // Island eyes: the window in front changed (EY1 reads it only if you turned that on).
+        if (fgProc) o.onFg?.(fgProc)
       }
       // Full screen counts only on the island's own screen; presentation mode everywhere.
       const fsHere = !!w.fs && onIslandScreen(w.fs)

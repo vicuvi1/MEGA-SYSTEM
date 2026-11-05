@@ -16,6 +16,7 @@ import type { PcPrefs } from '@core/pcActivity'
 import { calendarDay } from '@core/dates'
 import { life } from './bridge'
 import { canUndo, logAutomation, markUndone, readAutoLog, type UndoOp } from './islandLog'
+import { eyesSuggestion, startEyes } from './islandEyes'
 
 const STATE = 'ls.suggest'
 const STATS = 'ls.suggestStats'
@@ -65,6 +66,8 @@ const recipesOn = () => !!prefs?.smartRecipes && !!window.desktop?.islandState
 export function startSmart(onChange: () => void) {
   changed = onChange
   const desk = window.desktop
+  // Island eyes (off until you turn them on): their offers join the same queue.
+  startEyes(() => changed())
   desk?.onActivity?.((e) => {
     if (!e || typeof e !== 'object' || typeof (e as ActivityEvent).at !== 'number') return
     events = pushEvent(events, e)
@@ -368,13 +371,15 @@ export function smartSuggestion(m: SmartMoment): IslandAlert | null {
     const id = `benrecipe:${idea.id}`
     return { id, kind: 'suggest', title: `Ben's idea: ${idea.name}`, text: recipeText(idea), face: '🧩', actions: [{ label: 'Turn it on', action: { kind: 'recipeAdd', recipe: idea, answer: 'add', alertId: id }, primary: true }, { label: 'No thanks', action: { kind: 'recipeAdd', recipe: idea, answer: 'no', alertId: id } }] }
   }
-  if (!suggestOn()) return null
+  // Island eyes have their own switch: their offer can come even with the other suggestions off.
+  const eyesCand = eyesSuggestion({ now: m.now, running: m.running })
+  if (!suggestOn() && !eyesCand) return null
   const sp = spans(m.now)
   const d = doing ? { ctx: doing.context, ...(doing.detail ? { detail: doing.detail } : {}), conf: doing.conf } : null
   const base = { now: m.now, blocks: m.blocks, running: m.running, spans: sp, doing: d }
   const away = get<{ from: number; to: number } | null>(AWAY, null)
   const unfinished = m.unfinished.length && (m.windDown || new Date(m.now).getHours() >= 22) && !m.running
-  const cands: (Suggestion | null)[] = [
+  const cands: (Suggestion | null)[] = !suggestOn() ? [eyesCand] : [
     bedtimeFromClose({ now: m.now, away, bedLogged: m.bedLogged }),
     note ? meetingNote({ now: m.now, endedAt: note.endedAt, title: note.title }) : null,
     backToBlock(base),
@@ -395,7 +400,8 @@ export function smartSuggestion(m: SmartMoment): IslandAlert | null {
     startFromOpened({ ...base, goals: m.goals }),
     emailBox(base),
     comeBack({ ...base, last: m.last }),
-    nextMustdo({ ...base, mustdos: m.mustdos })
+    nextMustdo({ ...base, mustdos: m.mustdos }),
+    eyesCand
   ]
   const day = dayOf(m.now)
   let st = cleanSuggestState(get<SuggestState | null>(STATE, null), day)

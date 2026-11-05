@@ -14,6 +14,7 @@ import { createBackups } from './backups'
 import { createVault } from './vault'
 import { createPc } from './pc'
 import { registerPcExtras } from './pc/index'
+import { createEyes } from './eyes'
 import { installNow, memoryReloadDue } from '../core/nightCare'
 
 const origin = 'life-system://app'
@@ -48,6 +49,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   await mkdir(dir, { recursive: true })
   const file = join(dir, 'life-local.sqlite')
   const ui = resolve(__dirname, '../renderer')
+  // Island eyes (EY1–EY6): off until you turn them on; their downloaded files are served below.
+  const eyes = createEyes({ dir, origin })
   // Update status goes to the window as it changes (set once the window exists).
   let pushUpdate: (s: ReturnType<Updater['get']>) => void = () => {}
   let markQuitting = () => {}
@@ -55,6 +58,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   protocol.handle('life-system', async (request) => {
     const url = new URL(request.url)
     if (url.host !== 'app') return new Response('Not found', { status: 404 })
+    const eyeFile = await eyes.serve(url.pathname)
+    if (eyeFile) return eyeFile
     if (url.pathname.startsWith('/api/')) {
       try {
         return await net.fetch(server + url.pathname + url.search, {
@@ -223,7 +228,11 @@ if (firstCopy) void app.whenReady().then(async () => {
     dir,
     onChange: () => refreshTray(),
     pc: () => ({ activeApp: !!pcRef.current?.prefs().activeApp, titles: !!pcRef.current?.prefs().titles }),
-    onApp: (proc, title, seconds) => pcRef.current?.sample(proc, title, seconds)
+    onApp: (proc, title, seconds) => {
+      pcRef.current?.sample(proc, title, seconds)
+      eyes.noteWindow(proc, title)
+    },
+    onFg: (proc) => eyes.noteWindow(proc, null)
   })
   // AF1: a light clock for the island. While the app window is hidden its own
   // timers are slowed down, but a message from here still runs at once, so
@@ -249,6 +258,7 @@ if (firstCopy) void app.whenReady().then(async () => {
   pcRef.current = pc
   // Settings → PC & automation: music, ActivityWatch, Ben's actions (all off until switched on).
   await registerPcExtras({ dir, win, origin }).catch(() => {})
+  eyes.attach(win, () => refreshTray(), () => pc.prefs().goalWords ?? [])
   let pcPrefsNow = pc.prefs()
   pcAction = (a) => {
     if (a === 'talk') island.voice()
@@ -269,6 +279,7 @@ if (firstCopy) void app.whenReady().then(async () => {
     island.quietUntil()
       ? { label: `Island quiet until ${new Date(island.quietUntil()).toTimeString().slice(0, 5)} · Wake now`, click: () => { island.setQuiet(null); tray.setContextMenu(menu()) } }
       : { label: 'Quiet the island for…', submenu: ([[30, '30 minutes'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'Until tomorrow 06:00']] as const).map(([c, label]) => ({ label, click: () => { island.setQuiet(c); tray.setContextMenu(menu()) } })) },
+    ...eyes.trayItems(() => tray.setContextMenu(menu())),
     // IC18: Work, Study, Gaming, Night: each changes a few island settings; or it switches by itself.
     {
       label: `Island profile: ${PROFILE_LABEL[island.profile().active]}`,
