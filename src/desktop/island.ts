@@ -1,26 +1,21 @@
 // The desktop island window: frameless, transparent, always on top. It lives
 // at the top of the screen, docked on the left or right edge, or floating
-// where you dropped it. When nothing is happening it is fully hidden: touch
-// that screen edge with the mouse (or press Ctrl+Alt+Space) and it appears;
-// a running timer, a block coming up or Ben's message show it on their own.
+// where you dropped it. The window has ONE fixed size and never resizes: the
+// pill, the peek and the command center are one shape animated inside it
+// (resizing a transparent window on Windows is what made it jump and flicker).
+// It never takes the keyboard on its own, only when you type in it.
 // It never touches your data: the app window sends it snapshots and gets its
-// taps back. Clicks pass through everything except the visible pill/card.
+// taps back. Clicks pass through everything except the visible shape.
 import { app, BrowserWindow, globalShortcut, ipcMain, screen } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { IslandMode, IslandPlacement } from '../shared/desktop'
+import type { IslandPlacement } from '../shared/desktop'
 import { cleanIslandPrefs, ISLAND_ZOOM, type IslandPrefs } from '../core/islandModel'
 
-const OPEN_W = 490
-const OPEN_MAX_H = 680
-
-/** Window size for each placement and mode (the open height follows the card). */
-function size(place: IslandPlacement, mode: IslandMode, openH: number): { width: number; height: number } {
-  if (mode === 'open') return { width: OPEN_W, height: openH }
-  if (place === 'left' || place === 'right') return { width: 100, height: 140 }
-  if (mode === 'pill') return { width: 500, height: 60 }
-  return place === 'free' ? { width: 64, height: 40 } : { width: 320, height: 34 }
-}
+/** The window: room for the biggest state (the command center); the rest is see-through. */
+const WIN = { width: 500, height: 660 }
+/** Where the pill sits inside the window on the side placements (from the window's top). */
+const SIDE_PILL_Y = 40
 
 export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void }) {
   const prefFile = join(o.dir, 'island.json')
@@ -30,6 +25,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let pos = { cx: 0.5, top: 0, cy: 0.5 }
   // Your settings (Settings → Desktop island): size, look, sections, sound, hide speed, shortcut.
   let prefs: IslandPrefs = cleanIslandPrefs(null)
+  // The screen you put it on (kept after a restart; the main screen if it's gone).
+  let savedDisplay = -1
   try {
     if (existsSync(prefFile)) {
       const p = JSON.parse(readFileSync(prefFile, 'utf8'))
@@ -38,45 +35,36 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       if (Number.isFinite(p.cx)) pos.cx = Math.min(1, Math.max(0, p.cx))
       if (Number.isFinite(p.top)) pos.top = Math.max(0, p.top)
       if (Number.isFinite(p.cy)) pos.cy = Math.min(1, Math.max(0, p.cy))
+      if (Number.isFinite(p.displayId)) savedDisplay = p.displayId
       // Older versions saved a dragged spot without a placement: that was "free".
       if (!p.place && p.top > 0) place = 'free'
       prefs = cleanIslandPrefs(p.prefs)
     }
   } catch { /* defaults */ }
-  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, place, ...pos, prefs })) } catch { /* fine */ } }
+  const savePrefs = () => { try { writeFileSync(prefFile, JSON.stringify({ enabled, place, ...pos, displayId: savedDisplay, prefs })) } catch { /* fine */ } }
   /** Size setting: the page is zoomed, so the window and its click areas scale too. */
   const zoom = () => ISLAND_ZOOM[prefs.size]
-  const scaled = (m: IslandMode) => {
-    const s = size(place, m, openHeight)
-    return { width: Math.round(s.width * zoom()), height: Math.round(s.height * zoom()) }
-  }
+  const scaled = () => ({ width: Math.round(WIN.width * zoom()), height: Math.round(WIN.height * zoom()) })
 
   let win: BrowserWindow | null = null
-  let mode: IslandMode = 'hidden'
   let last: unknown = null
-  let displayId = -1
-  let openHeight = OPEN_MAX_H
   let hot = { x: 0, y: 0, width: 0, height: 0 }
   let inside = false
   let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number } | null = null
 
-  const display = () => (displayId >= 0 ? screen.getAllDisplays().find((d) => d.id === displayId) : null) ?? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  /** Fully hidden: only for the edge placements (floating keeps a small dot). */
-  const tucked = () => mode === 'hidden' && place !== 'free'
+  const display = () => (savedDisplay >= 0 ? screen.getAllDisplays().find((d) => d.id === savedDisplay) : null) ?? screen.getPrimaryDisplay()
 
   const placeWin = () => {
     if (!win || win.isDestroyed()) return
-    const d = display()
-    displayId = d.id
-    const wa = d.workArea
-    const { width, height } = scaled(mode)
+    const wa = display().workArea
+    const { width, height } = scaled()
     const clampX = (x: number) => Math.round(Math.min(wa.x + wa.width - width, Math.max(wa.x, x)))
     const clampY = (y: number) => Math.round(Math.min(wa.y + wa.height - height, Math.max(wa.y, y)))
     let x: number
     let y: number
     if (place === 'left' || place === 'right') {
       x = place === 'left' ? wa.x : wa.x + wa.width - width
-      y = clampY(wa.y + pos.cy * wa.height - height / 2)
+      y = clampY(wa.y + pos.cy * wa.height - SIDE_PILL_Y * zoom())
     } else {
       x = clampX(wa.x + pos.cx * wa.width - width / 2)
       y = place === 'free' ? clampY(wa.y + pos.top) : wa.y
@@ -88,17 +76,20 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const showWin = () => {
     if (!win || win.isDestroyed()) return
     if (!win.isVisible()) win.showInactive()
+    win.setAlwaysOnTop(true, 'pop-up-menu')
   }
 
   const open = () => {
     if (win && !win.isDestroyed()) return
     win = new BrowserWindow({
-      ...scaled('hidden'), frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
-      fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true, backgroundColor: '#00000000',
+      ...scaled(), frame: false, transparent: true, resizable: false, movable: false, minimizable: false, maximizable: false,
+      // Not focusable: clicking it never takes the keyboard from your app (only typing in it does).
+      fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true, backgroundColor: '#00000000', focusable: false,
       type: process.platform === 'win32' ? 'toolbar' : undefined, title: 'Life System island',
       webPreferences: { preload: o.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false }
     })
-    win.setAlwaysOnTop(true, 'screen-saver')
+    // Above normal windows, below full-screen video and games.
+    win.setAlwaysOnTop(true, 'pop-up-menu')
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
     win.setIgnoreMouseEvents(true, { forward: true })
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -110,8 +101,11 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       if (last) win?.webContents.send('island:state', last)
     })
     win.on('closed', () => { win = null })
+    // You clicked into another app: the panel may close (the island decides).
+    win.on('blur', () => win?.webContents.send('island:blur'))
+    win.on('always-on-top-changed', (_e, on) => { if (!on) win?.setAlwaysOnTop(true, 'pop-up-menu') })
     placeWin()
-    void win.loadURL(o.origin + '/?island=1').then(() => { if (!tucked()) showWin() })
+    void win.loadURL(o.origin + '/?island=1').then(() => showWin())
   }
   const close = () => { if (win && !win.isDestroyed()) win.destroy() }
 
@@ -131,12 +125,18 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   })
   ipcMain.on('island:action', (e, a) => { if (fromIsland(e)) o.appWindow.webContents.send('island:action', a) })
   ipcMain.on('island:ack', (e, ack) => { if (fromApp(e)) win?.webContents.send('island:ack', ack) })
-  // Typing to Ben: the island takes the keyboard (it never takes it on its own).
+  // Typing: the island takes the keyboard (it never takes it on its own), and gives it back.
   ipcMain.on('island:focus', (e) => {
     if (!fromIsland(e) || !win) return
+    win.setFocusable(true)
     win.setIgnoreMouseEvents(false)
     win.focus()
     win.webContents.focus()
+  })
+  ipcMain.on('island:keyboard', (e, on) => {
+    if (!fromIsland(e) || !win || on) return
+    if (win.isFocused()) win.blur()
+    win.setFocusable(false)
   })
   ipcMain.on('island:showApp', (e, page) => { if (fromIsland(e)) o.showApp(typeof page === 'string' ? page : undefined) })
 
@@ -153,8 +153,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       timer: setInterval(() => {
         if (!win || win.isDestroyed()) return
         const p = screen.getCursorScreenPoint()
-        const nb = win.getBounds()
-        win.setBounds({ x: p.x - drag!.offX, y: p.y - drag!.offY, width: nb.width, height: nb.height })
+        // Only the position: the size is set once on drop (no jumps between screens).
+        win.setPosition(p.x - drag!.offX, p.y - drag!.offY)
       }, 16)
     }
   })
@@ -165,14 +165,14 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
     const d = screen.getDisplayNearestPoint(c)
-    displayId = d.id
+    savedDisplay = d.id
     const sb = d.bounds
     const wa = d.workArea
     if (c.x - sb.x < 70) place = 'left'
     else if (sb.x + sb.width - c.x < 70) place = 'right'
     else if (c.y - sb.y < 50) place = 'top'
     else place = 'free'
-    pos.cy = Math.min(1, Math.max(0, (c.y - wa.y) / wa.height))
+    pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * zoom() - wa.y) / wa.height))
     pos.cx = Math.min(1, Math.max(0, (b.x + b.width / 2 - wa.x) / wa.width))
     pos.top = Math.max(0, b.y - wa.y)
     savePrefs()
@@ -183,69 +183,32 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   ipcMain.on('island:hot', (e, r) => {
     if (fromIsland(e) && r && [r.x, r.y, r.width, r.height].every(Number.isFinite)) hot = r
   })
-  ipcMain.on('island:mode', (e, m: IslandMode, height?: number) => {
-    if (!fromIsland(e) || !['hidden', 'pill', 'open'].includes(m)) return
-    const h = m === 'open' && Number.isFinite(height) ? Math.max(120, Math.min(OPEN_MAX_H, Math.round(height!))) : openHeight
-    if (m === mode && h === openHeight && (m !== 'hidden' || !win?.isVisible() || place === 'free')) return
-    mode = m
-    openHeight = h
-    placeWin()
-    if (tucked()) win?.hide()
-    else showWin()
-    // Typing to Ben needs the keyboard; collapsed it never steals focus.
-    if (m !== 'open' && win?.isFocused()) win.blur()
-  })
-
-  const reveal = () => {
-    if (!win || win.isDestroyed()) return
-    showWin()
-    win.webContents.send('island:reveal')
-  }
-
-  // The real pointer, ~16 times a second:
-  // - over the pill/card → it takes clicks (and hears "hover"); elsewhere clicks
-  //   pass through (polling avoids the browser's false mouse-leave events);
-  // - hidden at an edge → touching that edge of the screen brings it out.
-  let edgeHits = 0
+  // The real pointer, ~16 times a second: over the shape → it takes clicks
+  // (and hears "hover"); elsewhere clicks pass through to the apps below.
+  // (Polling avoids the browser's false mouse-leave events on Windows.)
   setInterval(() => {
-    if (!win || win.isDestroyed() || drag) return
+    if (!win || win.isDestroyed() || drag || !win.isVisible()) return
     const c = screen.getCursorScreenPoint()
-    if (!win.isVisible()) {
-      if (!tucked()) return
-      const d = screen.getDisplayNearestPoint(c)
-      const sb = d.bounds
-      const wa = d.workArea
-      const near =
-        place === 'top' ? c.y <= sb.y + 1 && Math.abs(c.x - (wa.x + pos.cx * wa.width)) <= 230
-        : place === 'left' ? c.x <= sb.x + 1 && Math.abs(c.y - (wa.y + pos.cy * wa.height)) <= 280
-        : c.x >= sb.x + sb.width - 2 && Math.abs(c.y - (wa.y + pos.cy * wa.height)) <= 280
-      edgeHits = near ? edgeHits + 1 : 0
-      if (edgeHits === 2) {
-        displayId = d.id
-        reveal()
-      }
-      return
-    }
     const b = win.getBounds()
     const x = c.x - b.x
     const y = c.y - b.y
     const z = zoom()
-    const now = hot.width > 0 && x >= hot.x * z - 4 && x <= (hot.x + hot.width) * z + 4 && y >= hot.y * z - 4 && y <= (hot.y + hot.height) * z + 6
+    const now = hot.width > 0 && x >= hot.x * z - 4 && x <= (hot.x + hot.width) * z + 4 && y >= hot.y * z - 4 && y <= (hot.y + hot.height) * z + 4
     if (now === inside) return
     inside = now
     win.setIgnoreMouseEvents(!now, { forward: true })
     win.webContents.send('island:hover', now)
-  }, 60)
+  }, 50)
 
-  // Follow the mouse to another screen (only while collapsed and visible).
-  setInterval(() => {
-    if (!win || win.isDestroyed() || mode === 'open' || drag || !win.isVisible()) return
-    if (screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id !== displayId) {
-      displayId = -1
-      placeWin()
-    }
-  }, 1500)
-  screen.on('display-metrics-changed', placeWin)
+  // Screens plugged in or out, scaling changed: back on its screen (or the main one).
+  const replace = () => {
+    if (savedDisplay >= 0 && !screen.getAllDisplays().some((d) => d.id === savedDisplay)) savedDisplay = -1
+    if (win && !win.isDestroyed()) win.setBounds({ ...win.getBounds(), ...scaled() })
+    placeWin()
+  }
+  screen.on('display-metrics-changed', replace)
+  screen.on('display-removed', replace)
+  screen.on('display-added', replace)
 
   // Ctrl+Alt+Space: open / close it from anywhere.
   const toggle = () => {
@@ -277,6 +240,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (win && !win.isDestroyed()) {
       win.webContents.setZoomFactor(zoom())
       win.webContents.send('island:prefs', prefs)
+      win.setBounds({ ...win.getBounds(), ...scaled() })
       placeWin()
     }
     o.onChange?.()
@@ -295,8 +259,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       savePrefs()
       sendPlacement()
       placeWin()
-      if (tucked()) win?.hide()
-      else showWin()
+      showWin()
     },
     /** Back to the top center. */
     resetPosition() {

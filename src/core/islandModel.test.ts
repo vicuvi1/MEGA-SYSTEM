@@ -71,3 +71,49 @@ describe('live activities', () => {
     expect(activities({ ...EMPTY_ISLAND, locked: false }, at(9))).toEqual([])
   })
 })
+
+describe('island states (command center)', () => {
+  it('hover held peeks, a click opens, leaving shrinks it back', async () => {
+    const { ISLAND_UI, islandStep } = await import('./islandModel')
+    let s = islandStep(ISLAND_UI, { type: 'hover', on: true })
+    expect(s.ui.view).toBe('compact')
+    expect(s.timer?.event.type).toBe('hoverHeld')
+    s = islandStep(s.ui, { type: 'hoverHeld' })
+    expect(s.ui.view).toBe('peek')
+    s = islandStep(s.ui, { type: 'click' })
+    expect(s.ui.view).toBe('expanded')
+    s = islandStep(s.ui, { type: 'hover', on: false })
+    expect(s.timer?.ms).toBe(2000)
+    expect(islandStep(s.ui, { type: 'leave' }).ui.view).toBe('compact')
+  })
+  it('a quick pass over the pill does nothing', async () => {
+    const { ISLAND_UI, islandStep } = await import('./islandModel')
+    let s = islandStep(ISLAND_UI, { type: 'hover', on: true })
+    s = islandStep(s.ui, { type: 'hover', on: false })
+    expect(s.timer).toBeNull()
+    expect(islandStep(s.ui, { type: 'hoverHeld' }).ui.view).toBe('compact')
+  })
+  it('never closes while you type or when pinned; blur closes otherwise', async () => {
+    const { ISLAND_UI, islandStep } = await import('./islandModel')
+    let s = islandStep(ISLAND_UI, { type: 'toggle' })
+    expect(s.focusInput).toBe(true)
+    s = islandStep(s.ui, { type: 'typing', on: true })
+    expect(islandStep(s.ui, { type: 'hover', on: false }).timer).toBeNull()
+    expect(islandStep(s.ui, { type: 'blur' }).ui.view).toBe('expanded')
+    s = islandStep(s.ui, { type: 'typing', on: false })
+    expect(islandStep(s.ui, { type: 'blur' }).ui.view).toBe('compact')
+    const pinned = islandStep(s.ui, { type: 'pin' }).ui
+    expect(islandStep(pinned, { type: 'leave' }).ui.view).toBe('expanded')
+    expect(islandStep(pinned, { type: 'close' }).ui).toMatchObject({ view: 'compact', pinned: false })
+  })
+  it('something new peeks for a moment, never opens the panel by itself', async () => {
+    const { ISLAND_UI, islandStep } = await import('./islandModel')
+    const s = islandStep(ISLAND_UI, { type: 'alert' })
+    expect(s.ui).toMatchObject({ view: 'peek', byAlert: true })
+    expect(islandStep(s.ui, { type: 'alertEnd' }).ui.view).toBe('compact')
+    const hovered = islandStep(s.ui, { type: 'hover', on: true }).ui
+    expect(islandStep(hovered, { type: 'alertEnd' }).ui.view).toBe('peek')
+    const open = islandStep(ISLAND_UI, { type: 'click' }).ui
+    expect(islandStep(open, { type: 'alert' }).ui.view).toBe('expanded')
+  })
+})

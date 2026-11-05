@@ -2,7 +2,6 @@ import type { UpdateStatus } from './api'
 import type { IslandAck, IslandAction, IslandPrefs, IslandSnapshot } from '../core/islandModel'
 import type { BackupStatus, BackupWhere } from '../desktop/backups'
 
-export type IslandMode = 'hidden' | 'pill' | 'open'
 /** Where the island lives: top of the screen, docked on a side, or floating. */
 export type IslandPlacement = 'top' | 'left' | 'right' | 'free'
 
@@ -60,16 +59,17 @@ export interface DesktopApi {
   onIslandState?(cb: (s: IslandSnapshot) => void): void
   /** Island window: send a tap. */
   islandAction?(a: IslandAction): void
-  /** Island window: its size (and whether the mouse is over it, so clicks pass through elsewhere). */
-  islandMode?(mode: IslandMode, height?: number): void
+  /** Island window: done typing (false): give the keyboard back to your app. */
+  islandKeyboard?(on: boolean): void
+  /** Island window: you clicked into another app. */
+  onIslandBlur?(cb: () => void): void
   /** Island window: where the visible pill/card is (window pixels); clicks pass through elsewhere. */
   islandHot?(rect: { x: number; y: number; width: number; height: number }): void
   /** Island window: start / stop dragging it (the desktop moves the window with the pointer). */
   islandDrag?(on: boolean): void
   /** Island window: where it lives now (changes when you drop it on an edge). */
   onIslandPlacement?(cb: (p: IslandPlacement) => void): void
-  /** Island window: the screen edge was touched (or the shortcut pressed): come out. */
-  onIslandReveal?(cb: () => void): void
+  /** Island window: the shortcut was pressed. */
   onIslandToggle?(cb: () => void): void
   /** Island window: listening now (send placement + latest snapshot). */
   islandReady?(): void

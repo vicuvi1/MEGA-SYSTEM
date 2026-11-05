@@ -300,3 +300,84 @@ export function activities(s: IslandSnapshot, now: number): Activity[] {
   if (s.water.target > 0 && s.water.ml < s.water.target && out.length) out.push({ key: 'water', kind: 'water', text: `${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`, sub: 'Water', pct: s.water.ml / s.water.target, over: false, dot })
   return out
 }
+
+// ---- The island's states (desktop command center) --------------------------
+// compact: the pill, always there. peek: a bigger pill (hover held, or
+// something new) with one action. expanded: the command center (click, the
+// shortcut, Reply). One timer at a time, owned here: every event says what
+// the next timer is (or cancels it), so nothing closes behind your back.
+
+export type IslandView = 'compact' | 'peek' | 'expanded'
+export interface IslandUi {
+  view: IslandView
+  pinned: boolean
+  /** The pointer is over the shape. */
+  over: boolean
+  /** You are typing (the box has focus or text): never closes by itself. */
+  typing: boolean
+  /** Opened by something new (an alert), not by you. */
+  byAlert: boolean
+}
+export type IslandUiEvent =
+  | { type: 'hover'; on: boolean }
+  | { type: 'hoverHeld' }
+  | { type: 'leave' }
+  | { type: 'click' }
+  | { type: 'toggle' }
+  | { type: 'alert' }
+  | { type: 'alertEnd' }
+  | { type: 'close' }
+  | { type: 'blur' }
+  | { type: 'pin' }
+  | { type: 'typing'; on: boolean }
+/** undefined: keep the current timer; null: cancel it; else replace it. */
+export interface IslandUiStep { ui: IslandUi; timer?: { ms: number; event: IslandUiEvent } | null; focusInput?: boolean }
+
+export const ISLAND_UI: IslandUi = { view: 'compact', pinned: false, over: false, typing: false, byAlert: false }
+/** How long the pointer must stay to peek, and how long it may be away before it shrinks. */
+export const ISLAND_TIMING = { hoverToPeek: 350, peekLeave: 700, alertPeek: 5000, expandedLeave: { fast: 1000, normal: 2000, slow: 4000 } as Record<IslandPrefs['hide'], number> }
+
+export function islandStep(ui: IslandUi, e: IslandUiEvent, hide: IslandPrefs['hide'] = 'normal'): IslandUiStep {
+  const to = (view: IslandView, extra: Partial<IslandUi> = {}): IslandUi => ({ ...ui, view, ...extra })
+  const stays = ui.pinned || ui.typing
+  switch (e.type) {
+    case 'hover':
+      if (e.on) return { ui: { ...ui, over: true }, timer: ui.view === 'compact' ? { ms: ISLAND_TIMING.hoverToPeek, event: { type: 'hoverHeld' } } : null }
+      if (ui.view === 'peek') return { ui: { ...ui, over: false }, timer: { ms: ISLAND_TIMING.peekLeave, event: { type: 'leave' } } }
+      if (ui.view === 'expanded' && !stays) return { ui: { ...ui, over: false }, timer: { ms: ISLAND_TIMING.expandedLeave[hide], event: { type: 'leave' } } }
+      return { ui: { ...ui, over: false }, timer: null }
+    case 'hoverHeld':
+      return ui.over && ui.view === 'compact' ? { ui: to('peek', { byAlert: false }), timer: null } : { ui }
+    case 'leave':
+      if (ui.over) return { ui }
+      if (ui.view === 'peek') return { ui: to('compact', { byAlert: false }), timer: null }
+      if (ui.view === 'expanded' && !stays) return { ui: to('compact', { byAlert: false }), timer: null }
+      return { ui }
+    case 'click':
+      return ui.view === 'expanded' ? { ui } : { ui: to('expanded', { byAlert: false }), timer: null }
+    case 'toggle':
+      return ui.view === 'expanded' ? { ui: to('compact', { pinned: false, typing: false, byAlert: false }), timer: null } : { ui: to('expanded', { byAlert: false }), timer: null, focusInput: true }
+    case 'alert':
+      // Something new peeks (never opens the whole panel by itself).
+      if (ui.view === 'expanded') return { ui }
+      return { ui: to('peek', { byAlert: true }), timer: { ms: ISLAND_TIMING.alertPeek, event: { type: 'alertEnd' } } }
+    case 'alertEnd':
+      return ui.view === 'peek' && !ui.over ? { ui: to('compact', { byAlert: false }), timer: null } : { ui: { ...ui, byAlert: false } }
+    case 'close':
+      return { ui: to('compact', { pinned: false, typing: false, byAlert: false }), timer: null }
+    case 'blur':
+      // You clicked into another app: the panel goes, unless pinned or you wrote something.
+      return ui.view === 'expanded' && !stays ? { ui: to('compact', { byAlert: false }), timer: null } : { ui }
+    case 'pin':
+      return { ui: { ...ui, pinned: !ui.pinned }, timer: null }
+    case 'typing':
+      return e.on ? { ui: { ...ui, typing: true }, timer: null } : { ui: { ...ui, typing: false } }
+  }
+}
+
+/** The shape's size per view (CSS px before the size setting); expanded height follows the content. */
+export const ISLAND_SHAPE = {
+  compact: { radius: 19 },
+  peek: { width: 400, radius: 28 },
+  expanded: { width: 460, maxHeight: 600, radius: 32 }
+} as const

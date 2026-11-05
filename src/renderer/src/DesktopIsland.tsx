@@ -1,11 +1,17 @@
-// The desktop island (its own little always-on-top window, Windows). Hidden as
-// a thin line at the top of the screen; hover or click and it drops down with
-// your plan now & next, must-dos, quick logs and Ben. While a timer runs (or
-// a block is coming up) the collapsed pill shows it. New things from Ben, a
-// block starting, or time up drop it down for a few seconds by themselves.
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+// The desktop island: a command center in its own always-on-top window
+// (Windows). One black shape that springs between three states:
+// - compact: the pill (what's running, what's next), always there;
+// - peek: hold the mouse on it, or something new happens: a bigger pill with
+//   one action (start/stop focus, the alert's buttons) and Ben's last line;
+// - expanded: click, the shortcut or Reply: the command bar (quick logs or
+//   Ben), focus, Ben's message, must-dos, water and the rest of your sections.
+// The window never resizes (that made it jump): only the shape animates, with
+// springs that can reverse halfway. States and timers live in islandStep
+// (core/islandModel.ts), so nothing closes or opens behind your back.
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, HIDE_MS, activities, clock, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, ISLAND_SHAPE, ISLAND_UI, activities, clock, islandStep, pill, type Activity, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
 import type { IslandPlacement } from '../../shared/desktop'
 import './island.css'
 
@@ -58,181 +64,175 @@ function ActIcon({ a, face, small = false }: { a: Activity; face: string; small?
   if (a.kind === 'next') return <span className="di-act-ico">⏭</span>
   return <span className="di-face-sm">{face}</span>
 }
+/** The time, ticking on its own (the rest of the island doesn't re-render every second). */
+function useNow(ms: number) {
+  const [n, setN] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setN(Date.now()), ms)
+    return () => clearInterval(t)
+  }, [ms])
+  return n
+}
+
+type Run = NonNullable<IslandSnapshot['running']>
+function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard?: IslandSnapshot['focusGuard'] }) {
+  const now = useNow(1000)
+  const left = (run.endsAt - now) / 1000
+  const over = left < 0
+  const pct = (now - run.startedAt) / Math.max(1, run.endsAt - run.startedAt)
+  if (!big) return <span className={`di-pill-time ${over ? 'over' : ''}`}>{over ? '+' : ''}{clock(left)}</span>
+  return (
+    <>
+      <Ring pct={pct} over={over} size={58} stroke={4} />
+      <div className="di-timer-mid">
+        <span className={`di-clock ${over ? 'over' : ''}`}>{over ? '+' : ''}{clock(left)}</span>
+        <small>{run.subject}</small>
+        {guard && (
+          <small className={`di-guard ${guard.pct >= 85 ? 'good' : guard.pct < 60 ? 'low' : ''}`} title="How much of this session you've been at the PC (no mouse/keys for 2+ min counts as away)">
+            🎯 {guard.pct}% at the PC{guard.idleMin ? ` · away ${guard.idleMin} min` : ''}
+          </small>
+        )}
+      </div>
+    </>
+  )
+}
+function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
+  const now = useNow(1000)
+  return <Ring pct={(now - run.startedAt) / Math.max(1, run.endsAt - run.startedAt)} over={now > run.endsAt} size={size} />
+}
+
+const SPRING_OPEN = { type: 'spring', stiffness: 400, damping: 30, mass: 0.8 } as const
+const SPRING_CLOSE = { type: 'spring', stiffness: 520, damping: 44, mass: 0.8 } as const
+const PAD = 6 // the shape's distance from the window edge
 
 export function DesktopIsland() {
   const [s, setS] = useState<IslandSnapshot>(EMPTY_ISLAND)
-  const [now, setNow] = useState(Date.now())
-  const [open, setOpen] = useState(false)
-  const [pinned, setPinned] = useState(false)
-  const [alertOnly, setAlertOnly] = useState(false)
-  const [text, setText] = useState('')
-  const input = useRef<HTMLInputElement>(null)
-  const closeT = useRef<number | null>(null)
-  const alertT = useRef<number | null>(null)
-  const seenAlert = useRef<string | null>(null)
-  const over = useRef(false)
-  const root = useRef<HTMLDivElement>(null)
-
-  const hoverRef = useRef<(on: boolean) => void>(() => {})
-  const timerPill = useRef(false)
-  const revealRef = useRef<() => void>(() => {})
-  const toggleRef = useRef<() => void>(() => {})
+  const now = useNow(s.running ? 5000 : 15_000)
   const [place, setPlace] = useState<IslandPlacement>('top')
   const [prefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
+  const [text, setText] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+  const reduce = useReducedMotion()
+
+  // ---- states: one reducer, one timer ----
+  const [ui, setUi] = useState<IslandUi>(ISLAND_UI)
+  const uiRef = useRef(ui)
+  const timer = useRef<number | null>(null)
+  const focusInput = useCallback(() => {
+    desk()?.islandFocus?.()
+    window.setTimeout(() => input.current?.focus(), 40)
+  }, [])
+  const dispatch = useCallback((e: IslandUiEvent) => {
+    const step = islandStep(uiRef.current, e, prefsRef.current.hide)
+    uiRef.current = step.ui
+    setUi(step.ui)
+    if (step.timer !== undefined) {
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = null
+      if (step.timer) {
+        const next = step.timer.event
+        timer.current = window.setTimeout(() => dispatch(next), step.timer.ms)
+      }
+    }
+    if (step.focusInput) focusInput()
+  }, [focusInput])
+  const close = () => dispatch({ type: 'close' })
+
   useEffect(() => {
     document.documentElement.classList.add('di-root')
     desk()?.onIslandState?.(setS)
-    // The desktop watches the real pointer and says when it is over the island.
-    desk()?.onIslandHover?.((on) => hoverRef.current(on))
+    // The desktop watches the real pointer and says when it is over the shape.
+    desk()?.onIslandHover?.((on) => dispatch({ type: 'hover', on }))
     desk()?.onIslandPlacement?.(setPlace)
     desk()?.onIslandPrefs?.(setPrefs)
-    // You touched its screen edge / pressed Ctrl+Alt+Space.
-    desk()?.onIslandReveal?.(() => revealRef.current())
-    desk()?.onIslandToggle?.(() => toggleRef.current())
+    desk()?.onIslandToggle?.(() => dispatch({ type: 'toggle' }))
+    desk()?.onIslandBlur?.(() => dispatch({ type: 'blur' }))
     desk()?.islandReady?.()
-  }, [])
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && dispatch({ type: 'close' })
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [dispatch])
+  // Not open any more: the keyboard goes back to your app.
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), s.running ? 1000 : 15_000)
-    return () => clearInterval(t)
-  }, [s.running])
-
-  const p = useMemo(() => pill(s, now), [s, now])
-  // Live activities: the main one (first, or the one you scrolled/clicked to) and the next one as a bubble.
-  const acts = useMemo(() => activities(s, now), [s, now])
-  const [mainKey, setMainKey] = useState<string | null>(null)
-  const main = acts.find((a) => a.key === mainKey) ?? acts[0] ?? null
-  const second = acts.find((a) => a !== main) ?? null
-  const cycle = (d: 1 | -1) => {
-    if (acts.length < 2 || !main) return
-    const i = acts.indexOf(main)
-    setMainKey(acts[(i + d + acts.length) % acts.length].key)
-  }
-  const hasPill = s.locked || !!main || p.dot
-  timerPill.current = main?.kind === 'timer'
-  const mode = open ? 'open' : hasPill ? 'pill' : 'hidden'
-  const st = useRef({ open, pinned, alertOnly })
-  st.current = { open, pinned, alertOnly }
-
-  // The window grows before the island animates open (to the card's height),
-  // and shrinks after it closed.
-  const card = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (mode !== 'open') {
-      const t = window.setTimeout(() => desk()?.islandMode?.(mode), 320)
-      return () => clearTimeout(t)
+    if (ui.view !== 'expanded') {
+      input.current?.blur()
+      desk()?.islandKeyboard?.(false)
     }
-    desk()?.islandMode?.('open', 660)
-    const el = card.current
-    if (!el) return
-    const fit = () => desk()?.islandMode?.('open', el.scrollHeight + 24)
-    const ro = new ResizeObserver(fit)
-    ro.observe(el)
-    const t = window.setTimeout(fit, 450)
-    return () => {
-      ro.disconnect()
-      clearTimeout(t)
-    }
-  }, [mode, alertOnly])
+  }, [ui.view])
 
-  // Tell the desktop where the visible shape is: clicks elsewhere pass through.
-  useEffect(() => {
-    const report = () => {
-      const el = root.current?.firstElementChild as HTMLElement | null
-      if (!el || !root.current) return
-      // Layout size, not the on-screen one: while the card animates open it is
-      // drawn smaller, and clicks there used to fall through for half a second.
-      const base = root.current.getBoundingClientRect()
-      const x = base.left + el.offsetLeft
-      const y = base.top + el.offsetTop
-      const w = el.offsetWidth
-      const h = el.offsetHeight
-      const fromTop = place === 'top'
-      desk()?.islandHot?.({ x: Math.round(x), y: fromTop ? 0 : Math.round(y), width: Math.round(w), height: Math.round(fromTop ? y + h : h) })
-    }
-    report()
-    const t1 = window.setTimeout(report, 120)
-    const t2 = window.setTimeout(report, 500)
-    const ro = new ResizeObserver(report)
-    if (root.current?.firstElementChild) ro.observe(root.current.firstElementChild)
-    return () => {
-      clearTimeout(t1)
-      clearTimeout(t2)
-      ro.disconnect()
-    }
-  })
-
-  const show = (alert = false) => {
-    if (closeT.current) clearTimeout(closeT.current)
-    setAlertOnly(alert)
-    setOpen(true)
-  }
-  // The card shrinks back into the pill before it goes.
-  const [closing, setClosing] = useState(false)
-  const hide = () => {
-    if (!st.current.open) return
-    setClosing(true)
-    window.setTimeout(() => {
-      setClosing(false)
-      setOpen(false)
-      setPinned(false)
-      setAlertOnly(false)
-    }, 200)
-  }
-  const scheduleHide = (ms = 450) => {
-    if (closeT.current) clearTimeout(closeT.current)
-    closeT.current = window.setTimeout(() => {
-      if (st.current.pinned || over.current || document.activeElement === input.current) return
-      hide()
-    }, ms)
-  }
-  revealRef.current = () => {
-    show(false)
-    // Came out at the edge but you didn't move onto it: tuck it away again.
-    window.setTimeout(() => {
-      if (!over.current && !st.current.pinned && document.activeElement !== input.current) hide()
-    }, 1800)
-  }
-  toggleRef.current = () => {
-    if (st.current.open) hide()
-    else {
-      show(false)
-      setPinned(true)
-    }
-  }
-  hoverRef.current = (on: boolean) => {
-    over.current = on
-    if (closeT.current) clearTimeout(closeT.current)
-    if (on) {
-      if (!st.current.open) closeT.current = window.setTimeout(() => show(false), timerPill.current ? 650 : 140)
-    } else if (st.current.open) scheduleHide(st.current.alertOnly ? 1500 : HIDE_MS[prefsRef.current.hide])
-  }
-
-  // Something new: drop down for 8 seconds (stays while the mouse is on it).
+  // Something new: peek for a moment (only time-up gets through during a call).
+  const seenAlert = useRef<string | null>(null)
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
-    // In a call the island stays quiet (only time-up drops it down).
     if (s.call && a.kind !== 'over') return
     seenAlert.current = a.id
-    if (open && !alertOnly) return
-    show(true)
-    if (prefsRef.current.sound) chime()
-    if (alertT.current) clearTimeout(alertT.current)
-    alertT.current = window.setTimeout(() => {
-      if (!over.current && !st.current.pinned) hide()
-    }, 8000)
-  }, [s.alert, s.call]) // eslint-disable-line react-hooks/exhaustive-deps
+    dispatch({ type: 'alert' })
+    if (prefsRef.current.sound && uiRef.current.view !== 'expanded') chime()
+  }, [s.alert, s.call, dispatch])
 
-  // Press and drag (pill or the open card's header) to move the island anywhere;
-  // a plain click still opens it.
+  const p = useMemo(() => pill(s, now), [s, now])
+  const acts = useMemo(() => activities(s, now), [s, now])
+  const main: Activity | null = acts[0] ?? null
+  const run = s.running
+
+  // ---- the shape's size: measured from the view inside it, animated with a spring ----
+  const shape = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ w: 120, h: 30 })
+  useLayoutEffect(() => {
+    const el = shape.current?.querySelector<HTMLElement>(`[data-view="${ui.view}"]`)
+    if (!el) return
+    const fit = () => {
+      const max = ISLAND_SHAPE.expanded.maxHeight
+      setSize((o) => {
+        const w = Math.ceil(el.offsetWidth)
+        const h = Math.ceil(Math.min(max, el.offsetHeight))
+        return o.w === w && o.h === h ? o : { w, h }
+      })
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ui.view])
+
+  // Tell the desktop where the shape is: clicks elsewhere pass through.
+  // While it grows, the bigger of now and the target; exact when it settles.
+  const rectFor = useCallback((w: number, h: number) => {
+    const W = window.innerWidth
+    const x = place === 'left' ? PAD : place === 'right' ? W - PAD - w : (W - w) / 2
+    const y = place === 'left' || place === 'right' ? 40 - 19 : PAD
+    return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) }
+  }, [place])
+  const [moving, setMoving] = useState(false)
+  const reportNow = () => {
+    const r = shape.current?.getBoundingClientRect()
+    if (r) desk()?.islandHot?.({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) })
+  }
+  const onStart = () => {
+    setMoving(true)
+    const r = shape.current?.getBoundingClientRect()
+    const t = rectFor(size.w, size.h)
+    if (!r) return desk()?.islandHot?.(t)
+    const x = Math.min(r.left, t.x)
+    const y = Math.min(r.top, t.y)
+    desk()?.islandHot?.({ x: Math.round(x), y: Math.round(y), width: Math.round(Math.max(r.right, t.x + t.width) - x), height: Math.round(Math.max(r.bottom, t.y + t.height) - y) })
+  }
+  const onDone = () => {
+    setMoving(false)
+    reportNow()
+  }
+  useEffect(() => {
+    desk()?.islandHot?.(rectFor(size.w, size.h))
+  }, [rectFor]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- drag (the pill or the panel's header); a plain click still opens ----
   const dragged = useRef(false)
   const dragProps = {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
       if (e.button !== 0 || !desk()?.islandDrag) return
-      // A button or the message box inside the header is a button, not a handle.
-      // (Grabbing the pointer on press sent ✕ / ⤢ / 📌 clicks to the header.)
       const hit = (e.target as HTMLElement).closest('button, input, textarea, a')
       if (hit && hit !== e.currentTarget) return
       const el = e.currentTarget
@@ -264,7 +264,7 @@ export function DesktopIsland() {
     }
   }
 
-  // Every tap shows what happened: "Saving…", then ✓ or the reason it didn't work.
+  // ---- taps: every one shows what happened ("Saving…", then ✓ or why not) ----
   const [toast, setToast] = useState<{ id: string; state: 'busy' | 'ok' | 'err'; text: string } | null>(null)
   const toastT = useRef<number | null>(null)
   const label = (a: IslandAction): string | null =>
@@ -299,62 +299,50 @@ export function DesktopIsland() {
     })
   }, [])
   const send = (a: IslandAction) => {
-    const text = label(a)
-    if (!text) return desk()?.islandAction?.(a)
+    const t = label(a)
+    if (!t) return desk()?.islandAction?.(a)
     const id = Math.random().toString(36).slice(2, 10)
-    setToast({ id, state: 'busy', text })
+    setToast({ id, state: 'busy', text: t })
     if (toastT.current) clearTimeout(toastT.current)
     // No answer at all: the app window isn't running (or is stuck).
     toastT.current = window.setTimeout(
-      () => setToast((t) => (t && t.id === id && t.state === 'busy' ? { id, state: 'err', text: "⚠ The app didn't answer. Is Life System running? Open it from the tray." } : t)),
+      () => setToast((x) => (x && x.id === id && x.state === 'busy' ? { id, state: 'err', text: "⚠ The app didn't answer. Is Life System running? Open it from the tray." } : x)),
       a.kind === 'chat' ? 120_000 : 12_000
     )
     desk()?.islandAction?.({ ...a, id })
   }
-  const tap = (a: IslandAction, label?: string) => {
+  const tap = (a: IslandAction, lbl?: string) => {
+    if (lbl === 'Reply') {
+      dispatch({ type: 'click' })
+      focusInput()
+      return send(a)
+    }
     send(a)
-    if (label === 'Reply') {
-      setAlertOnly(false)
-      setPinned(true)
-      desk()?.islandFocus?.()
-      setTimeout(() => input.current?.focus(), 60)
-      return
+    if (a.kind === 'open' || a.kind === 'closeDay') {
+      desk()?.showApp?.(a.kind === 'open' ? a.page : 'today')
+      close()
     }
-    if (a.kind === 'open') {
-      desk()?.showApp?.(a.page)
-      hide()
-    }
-    if (a.kind === 'closeDay') {
-      desk()?.showApp?.('today')
-      hide()
-    }
-    if (a.kind === 'dismiss' || a.kind === 'start' || a.kind === 'stop' || a.kind === 'push' || a.kind === 'blockResult' || a.kind === 'moveBreak' || a.kind === 'clipSave' || (a.kind === 'water' && s.alert?.kind === 'water')) {
-      if (alertOnly) hide()
-    }
+    // Answered the thing that peeked: it goes back to the pill.
+    if (uiRef.current.byAlert && ['dismiss', 'start', 'stop', 'push', 'blockResult', 'moveBreak', 'clipSave', 'water'].includes(a.kind)) close()
   }
   const chat = () => {
     const t = text.trim()
     if (!t || s.ben.busy) return
     setText('')
+    dispatch({ type: 'typing', on: false })
     send({ kind: 'chat', text: t })
   }
 
-  const run = s.running
-  const left = run ? (run.endsAt - now) / 1000 : 0
-  const runOver = !!run && left < 0
-  const runPct = run ? (now - run.startedAt) / Math.max(1, run.endsAt - run.startedAt) : 0
   const water = s.water
   const mustOpen = s.mustdos.filter((m) => !m.done).length
-
-  // The card's sections, in your order (Settings → Desktop island).
   const [moon, setMoon] = useState(false)
   const goToBed = () => {
     setMoon(true)
     send({ kind: 'bed' })
-    window.setTimeout(() => (setMoon(false), hide()), 2600)
+    window.setTimeout(() => (setMoon(false), close()), 2600)
   }
   const pts = s.points
-  // Points that pop: each new point flies up from the pill; a reward unlocking gets confetti.
+  // Points that pop from the pill; a reward unlocking gets confetti.
   const [pop, setPop] = useState<{ n: number; key: number } | null>(null)
   const prevPts = useRef<number | null>(null)
   useEffect(() => {
@@ -389,7 +377,7 @@ export function DesktopIsland() {
       const started = Date.now()
       r.start()
       setRec({ r, parts, at: started })
-      setPinned(true)
+      dispatch({ type: 'typing', on: true })
     } catch {
       setToast({ id: 'mic', state: 'err', text: '⚠ No microphone (allow it for Life System in Windows privacy settings)' })
       clearToastLater(6000)
@@ -399,6 +387,7 @@ export function DesktopIsland() {
     if (!rec) return
     rec.r.stop()
     setRec(null)
+    dispatch({ type: 'typing', on: !!text.trim() })
   }
   // Drop a task (text) on the island: booked in the next free slot today.
   const [dropping, setDropping] = useState(false)
@@ -417,7 +406,8 @@ export function DesktopIsland() {
       if (t) send({ kind: 'book', text: t })
     }
   }
-  const blocks: Record<IslandSection, ReactNode> = {
+
+    const blocks: Record<IslandSection, ReactNode> = {
     tasks: s.tasks?.length ? (<section className="di-tasks">
                   <span className="di-label">Todoist · next up</span>
                   {s.tasks.map((t) => (
@@ -470,16 +460,7 @@ export function DesktopIsland() {
                 </section>) : null,
 
     timer: run ? (<section className="di-timer">
-                  <Ring pct={runPct} over={runOver} size={58} stroke={4} />
-                  <div className="di-timer-mid">
-                    <span className={`di-clock ${runOver ? 'over' : ''}`}>{runOver ? '+' : ''}{clock(left)}</span>
-                    <small>{run.subject}</small>
-                    {s.focusGuard && (
-                      <small className={`di-guard ${s.focusGuard.pct >= 85 ? 'good' : s.focusGuard.pct < 60 ? 'low' : ''}`} title="How much of this session you've been at the PC (no mouse/keys for 2+ min counts as away)">
-                        🎯 {s.focusGuard.pct}% at the PC{s.focusGuard.idleMin ? ` · away ${s.focusGuard.idleMin} min` : ''}
-                      </small>
-                    )}
-                  </div>
+                  <LiveTimer run={run} big guard={s.focusGuard} />
                   <div className="di-actions col">
                     <button className="primary" onClick={() => tap({ kind: 'stop' })}>Stop & log</button>
                     <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>
@@ -563,7 +544,7 @@ export function DesktopIsland() {
                   <span>👁️ 20-20-20 eye breaks</span>
                 </label>
               </section>),
-    ben: (<section className="di-ben">
+    ben: s.ben.busy || s.ben.last ? (<section className="di-ben">
                 {s.ben.busy ? (
                   <p className="di-typing">
                     <i />
@@ -574,172 +555,196 @@ export function DesktopIsland() {
                 ) : (
                   s.ben.last && <p className="di-last">{s.ben.last.text.replace(/<[^>]+>/g, '')}</p>
                 )}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    chat()
-                  }}
-                >
-                  <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="spent 40 taxi · water 500 · focus 50 algebra · or ask Ben" onPointerDown={() => desk()?.islandFocus?.()} onFocus={() => { setPinned(true); desk()?.islandFocus?.() }} />
-                  <button
-                    type="button"
-                    className={`di-mic ${rec ? 'on' : ''}`}
-                    aria-label="Hold to talk to Ben"
-                    title="Hold to talk to Ben"
-                    disabled={s.ben.busy}
-                    onPointerDown={(e) => (e.preventDefault(), void startRec())}
-                    onPointerUp={stopRec}
-                    onPointerLeave={stopRec}
-                  >
-                    {rec ? '●' : '🎤'}
-                  </button>
-                  <button disabled={!text.trim() || s.ben.busy} aria-label="Send">↑</button>
-                </form>
-              </section>)
+                {!s.ben.busy && <button className="di-reply" onClick={focusInput}>Reply</button>}
+              </section>) : null
   }
+  // ---- compact: the pill ----
+  const pillTime = (a: Activity) => {
+    if (a.kind === 'timer' && run) return <LiveTimer run={run} />
+    const t = a.kind === 'water' ? '' : a.sub
+    return <span className={`di-pill-time ${a.over ? 'over' : ''}`}>{place === 'left' || place === 'right' ? String(t ?? '').replace(/\s*left$/i, '') : t}</span>
+  }
+  const icon = (a: Activity) => (a.kind === 'timer' && run ? <LiveRing run={run} /> : <ActIcon a={a} face={s.ben.face} />)
+  const compact = (
+    <div
+      className={`di-pill kind-${s.locked ? 'locked' : main?.kind ?? 'idle'}`}
+      role="button"
+      tabIndex={0}
+      {...dragProps}
+      onClick={() => {
+        if (dragged.current) return void (dragged.current = false)
+        if (s.locked) desk()?.showApp?.()
+        else dispatch({ type: 'click' })
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && dispatch({ type: 'click' })}
+      aria-label="Open the island (drag to move it)"
+    >
+      {s.locked ? (
+        <span className="di-pill-text">🔒 Open Life System</span>
+      ) : !main ? (
+        <>
+          <span className="di-face-sm">{s.ben.face}</span>
+          {s.streak && <span className={`di-flame ${s.streak.atRisk ? 'risk' : ''}`}>🔥<b>{s.streak.days}</b></span>}
+        </>
+      ) : (
+        <>
+          {icon(main)}
+          <span className="di-pill-text">{main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text}</span>
+          {pillTime(main)}
+          {s.streak && <span className={`di-flame ${s.streak.atRisk ? 'risk' : ''}`} title={`${s.streak.days}-day ${s.streak.kind} streak${s.streak.atRisk ? ' · at risk today!' : ''}`}>🔥<b>{s.streak.days}</b></span>}
+        </>
+      )}
+      {pop && <span key={pop.key} className="di-pop" aria-live="polite">+{pop.n} ⭐</span>}
+      {p.dot && <i className="di-dot" />}
+    </div>
+  )
 
+  // ---- peek: the alert, or what's on with one action and Ben's last line ----
+  const a = s.alert
+  const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  const peek = a && (ui.byAlert || !main) ? (
+    <div className={`di-peek alert kind-${a.kind}`} onClick={(e) => e.target === e.currentTarget && dispatch({ type: 'click' })}>
+      <div className="di-peek-top">
+        <span className="di-peek-face">{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
+        <div className="di-peek-mid">
+          <b>{a.title}</b>
+          <small>{a.text}</small>
+        </div>
+      </div>
+      {a.actions.length > 0 && (
+        <div className="di-actions">
+          {a.actions.slice(0, 3).map((x) => (
+            <button key={x.label} className={x.primary ? 'primary' : ''} onClick={() => tap(x.action, x.label)}>{x.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : (
+    <div className="di-peek" onClick={() => dispatch({ type: 'click' })} {...dragProps}>
+      <div className="di-peek-top">
+        {main ? (run && main.kind === 'timer' ? <LiveRing run={run} size={34} /> : <span className="di-peek-face">{main.kind === 'ben' ? s.ben.face : <ActIcon a={main} face={s.ben.face} />}</span>) : <span className="di-peek-face">{s.ben.face}</span>}
+        <div className="di-peek-mid">
+          <b>{main ? (main.kind === 'timer' ? main.sub : main.text) : s.ben.move?.title ?? 'Nothing running'}</b>
+          <small>{main ? (main.kind === 'timer' && run ? <LiveTimer run={run} /> : main.sub) : s.ben.move?.sub ?? 'Click for the command center'}</small>
+        </div>
+        {run ? (
+          <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'stop' }))}>Stop & log</button>
+        ) : s.now ? (
+          <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>▶ Start</button>
+        ) : (
+          <button className="primary" onClick={(e) => (e.stopPropagation(), tap({ kind: 'start', subject: 'Focus', minutes: 25 }))}>▶ Focus 25</button>
+        )}
+      </div>
+      {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span>{benLine}</p>}
+    </div>
+  )
+
+  // ---- expanded: the command center ----
+  const firstRep = s.reps[0]
+  const expanded = (
+    <div className="di-panel" role="dialog" aria-label="Life System command center">
+      <header className="di-head" {...dragProps}>
+        <span className={`di-face mood-${s.ben.mood}`}>{s.ben.face}</span>
+        <div className="di-who">
+          <b>Ben</b>
+          <small>{s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood}</small>
+        </div>
+        <button className={`di-icon ${ui.pinned ? 'on' : ''}`} onClick={() => dispatch({ type: 'pin' })} title={ui.pinned ? 'Unpin' : 'Keep open'}>📌</button>
+        <button className="di-icon" onClick={() => (desk()?.showApp?.(), close())} title="Open Life System">⤢</button>
+        <button className="di-icon" onClick={close} aria-label="Close" title="Close (Esc)">✕</button>
+      </header>
+
+      <form
+        className="di-cmd"
+        onSubmit={(e) => {
+          e.preventDefault()
+          chat()
+        }}
+      >
+        <input
+          ref={input}
+          value={text}
+          onChange={(e) => (setText(e.target.value), uiRef.current.typing || dispatch({ type: 'typing', on: true }))}
+          placeholder="spent 40 taxi · water 500 · 30 pushups · ask Ben"
+          onPointerDown={() => desk()?.islandFocus?.()}
+          onFocus={() => dispatch({ type: 'typing', on: true })}
+          onBlur={() => dispatch({ type: 'typing', on: !!text.trim() })}
+        />
+        <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
+          {rec ? '●' : '🎤'}
+        </button>
+        <button className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send">↑</button>
+      </form>
+      <div className="di-chips">
+        <button onClick={() => tap({ kind: 'water', ml: 250 })}>💧 +250 ml</button>
+        {firstRep && <button onClick={() => tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n: 10 })}>💪 +10 {firstRep.name}</button>}
+        {!run && <button onClick={() => tap({ kind: 'start', subject: s.now?.title ?? 'Focus', minutes: 25 })}>▶ Focus 25</button>}
+        {run && <button onClick={() => tap({ kind: 'extend', minutes: 5 })}>+5 min</button>}
+      </div>
+
+      {confetti && (
+        <div className="di-confetti" aria-hidden>
+          {Array.from({ length: 18 }, (_, i) => (
+            <i key={i} style={{ ['--i' as string]: String(i) }}>{['🎉', '⭐', '✨', '🎁'][i % 4]}</i>
+          ))}
+        </div>
+      )}
+      {a && (
+        <section className={`di-alert kind-${a.kind}`}>
+          <div className="di-alert-top">
+            <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
+            <b>{a.title}</b>
+          </div>
+          <p>{a.text}</p>
+          <div className="di-actions">
+            {a.actions.map((x) => (
+              <button key={x.label} className={x.primary ? 'primary' : ''} onClick={() => tap(x.action, x.label)}>{x.label}</button>
+            ))}
+          </div>
+        </section>
+      )}
+      {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
+    </div>
+  )
+
+  const views = { compact, peek, expanded }
+  const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
+  const transition = reduce ? { duration: 0 } : ui.view === 'compact' ? SPRING_CLOSE : SPRING_OPEN
   return (
     <div
-      ref={root}
       {...dropProps}
       style={{ ['--di-alpha' as string]: String(prefs.opacity) }}
-      className={`di at-${place} look-${prefs.look} ${mode} ${alertOnly ? "alert-only" : ""} mood-${s.ben.mood} ${runOver ? "is-over" : ""} ${run ? "has-timer" : ""} ${s.alert?.kind === "drift" ? "has-drift" : ""} ${s.call ? "in-call" : ""} ${s.windDown ? "winddown" : ""} ${dropping ? "dropping" : ""} tod-${dayPart(now)} ${confetti ? "confetti" : ""}`}
+      className={`di at-${place} look-${prefs.look} view-${ui.view} mood-${s.ben.mood} ${run ? 'has-timer' : ''} ${run && now > run.endsAt ? 'is-over' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} tod-${dayPart(now)} ${confetti ? 'confetti' : ''}`}
     >
-      {/* Collapsed: a thin line, or the live pill (main activity + a bubble for the next one) */}
-      {!open && (
-        <div className="di-pillrow">
-          <div
-            role="button"
-            tabIndex={0}
-            className={`di-pill kind-${s.locked ? 'locked' : main?.kind ?? 'idle'}`}
-            style={{ ['--day' as string]: `${Math.max(0, Math.min(100, s.dayPct ?? 0))}%` }}
-            {...dragProps}
-            onClick={() => {
-              if (dragged.current) return void (dragged.current = false)
-              if (s.locked) desk()?.showApp?.()
-              else (show(false), setPinned(true))
-            }}
-            onKeyDown={(e) => e.key === 'Enter' && (show(false), setPinned(true))}
-            onWheel={(e) => cycle(e.deltaY > 0 ? 1 : -1)}
-            aria-label="Open the island (drag to move it, scroll to switch)"
-            title={`${main ? `${main.kind === 'next' ? 'Next: ' : ''}${main.text}${main.sub ? ` · ${main.sub}` : ''}\n` : ''}${acts.length > 1 ? 'Click to open · scroll to switch · drag to move' : 'Click to open · drag to move'}`}
+      <motion.div
+        ref={shape}
+        className="di-shape"
+        initial={false}
+        animate={{ width: size.w, height: size.h, borderRadius: radius }}
+        transition={transition}
+        onAnimationStart={onStart}
+        onAnimationComplete={onDone}
+      >
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            key={ui.view}
+            data-view={ui.view}
+            className={`di-view di-v-${ui.view}`}
+            initial={reduce ? false : { opacity: 0, scale: 0.94, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', transition: reduce ? { duration: 0 } : { delay: 0.06, duration: 0.24, ease: [0.2, 0.8, 0.2, 1] } }}
+            exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.97, filter: 'blur(4px)', transition: { duration: 0.12 } }}
           >
-            {s.locked ? (
-              <span className="di-pill-text">🔒 Open Life System</span>
-            ) : !main ? (
-              <span className="di-line" />
-            ) : (
-              <>
-                <ActIcon a={main} face={s.ben.face} />
-                <span key={main.key} className="di-pill-text di-fade">
-                  {main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.text}
-                </span>
-                <span className={`di-pill-time ${main.over ? 'over' : ''}`}>{(() => {
-                  const t = main.kind === 'timer' || main.kind === 'water' ? (main.kind === 'water' ? '' : main.text) : main.sub
-                  // On a side tab every character counts: "3h 07m left" → "3h 07m".
-                  return place === 'left' || place === 'right' ? String(t ?? '').replace(/\s*left$/i, '') : t
-                })()}</span>
-                {main.kind === 'timer' && (
-                  <span className="di-pill-ctl">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (closeT.current) clearTimeout(closeT.current)
-                        tap({ kind: 'extend', minutes: 5 })
-                      }}
-                      title="5 more minutes"
-                    >
-                      +5
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (closeT.current) clearTimeout(closeT.current)
-                        tap({ kind: 'stop' })
-                      }}
-                      title="Stop and log"
-                      aria-label="Stop and log"
-                    >
-                      ■
-                    </button>
-                  </span>
-                )}
-              </>
-            )}
-            {!s.locked && (s.dayPct ?? 0) > 0 && <i className="di-dayring" aria-hidden title={`Today: ${s.dayPct}% done`} />}
-            {s.streak && !s.locked && (
-              <span className={`di-flame ${s.streak.atRisk ? 'risk' : ''}`} style={{ ['--s' as string]: String(1 + Math.min(s.streak.days, 30) / 40) }} title={`${s.streak.days}-day ${s.streak.kind} streak${s.streak.atRisk ? ' · at risk today!' : ''}`}>
-                🔥<b>{s.streak.days}</b>
-              </span>
-            )}
-            {pop && (
-              <span key={pop.key} className="di-pop" aria-live="polite">
-                +{pop.n} ⭐
-              </span>
-            )}
-            {s.water.target > 0 && !s.locked && (
-              <i className="di-drop" style={{ ['--p' as string]: `${Math.min(100, (s.water.ml / s.water.target) * 100)}%` }} title={`Water ${(s.water.ml / 1000).toFixed(1)} / ${(s.water.target / 1000).toFixed(1)} L`} />
-            )}
-            {p.dot && <i className="di-dot" />}
-          </div>
-          {second && !s.locked && (
-            <button className={`di-bubble kind-${second.kind}`} onClick={() => setMainKey(second.key)} title={second.kind === 'next' ? `Next: ${second.text} ${second.sub}` : `${second.sub}: ${second.text}`} aria-label="Switch to this">
-              <ActIcon a={second} face={s.ben.face} small />
-            </button>
-          )}
-        </div>
-      )}
-
-      {open && (
-        <div ref={card} className={`di-card ${closing ? 'closing' : ''}`} role="dialog" aria-label="Life System island">
-          <header className="di-head" {...dragProps}>
-            <span className={`di-face mood-${s.ben.mood}`}>{s.ben.face}</span>
-            <div className="di-who">
-              <b>Ben</b>
-              <small>{s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood}</small>
-            </div>
-            <button className={`di-icon ${pinned ? 'on' : ''}`} onClick={() => setPinned((x) => !x)} title={pinned ? 'Unpin' : 'Keep open'}>
-              📌
-            </button>
-            <button className="di-icon" onClick={() => (desk()?.showApp?.(), hide())} title="Open Life System">
-              ⤢
-            </button>
-            <button className="di-icon" onClick={hide} aria-label="Close">
-              ✕
-            </button>
-          </header>
-
-          {confetti && (
-            <div className="di-confetti" aria-hidden>
-              {Array.from({ length: 18 }, (_, i) => (
-                <i key={i} style={{ ['--i' as string]: String(i) }}>{['🎉', '⭐', '✨', '🎁'][i % 4]}</i>
-              ))}
-            </div>
-          )}
-          {s.alert && (
-            <section className={`di-alert kind-${s.alert.kind}`}>
-              <div className="di-alert-top">
-                <span>{s.alert.face ?? (s.alert.kind === 'ben' ? s.ben.face : s.alert.kind === 'over' ? '⏰' : '▶')}</span>
-                <b>{s.alert.title}</b>
-              </div>
-              <p>{s.alert.text}</p>
-              <div className="di-actions">
-                {s.alert.actions.map((a) => (
-                  <button key={a.label} className={a.primary ? 'primary' : ''} onClick={() => tap(a.action, a.label)}>
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {!alertOnly &&
-            prefs.sections
-              .filter((x) => x.on)
-              .map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
-          {toast && <div className={`di-toast ${toast.state}`} role="status">{toast.state === 'busy' ? `${toast.text}…` : toast.text}</div>}
-        </div>
-      )}
+            {views[ui.view]}
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
+      <AnimatePresence>
+        {toast && (
+          <motion.div key="toast" className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+            {toast.state === 'busy' ? `${toast.text}…` : toast.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
