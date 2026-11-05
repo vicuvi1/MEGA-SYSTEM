@@ -318,3 +318,23 @@ export function stackRate(s: Stack, today: string): number {
   }
   return days ? Math.round((full / days) * 100) : 0
 }
+
+// ---- The planning agent's steps (N5) --------------------------------------
+export interface AgentStep { label: string; detail: string }
+
+/**
+ * What Ben did to plan your week, in at most 4 steps: read the calendar,
+ * find free time, check deadlines, propose. The proposal waits for your OK.
+ */
+export function planningSteps(i: { events: number; busyMin: number; days: number; goals: { title: string; hoursLeft: number; deadline: string }[]; today: string; blocks: WeekBlock[] }): AgentStep[] {
+  const freeH = Math.max(0, Math.round(((i.days * 14 * 60 - i.busyMin) / 60) * 10) / 10)
+  const soon = [...i.goals].filter((g) => g.hoursLeft > 0).sort((a, b) => a.deadline.localeCompare(b.deadline)).slice(0, 2)
+  const deep = i.blocks.filter((b) => b.kind === 'deep')
+  const days = (d: string) => Math.max(0, Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${i.today}T12:00:00Z`)) / 86400000))
+  return [
+    { label: 'Read your calendar', detail: `${i.events} event${i.events === 1 ? '' : 's'} in the next ${i.days} days` },
+    { label: 'Found free time', detail: `about ${freeH} h free between 8:00 and 22:00` },
+    { label: 'Checked deadlines', detail: soon.length ? soon.map((g) => `${g.title}: ${g.hoursLeft} h left, ${days(g.deadline)} days`).join(' · ') : 'no goal with a deadline' },
+    { label: 'Proposed', detail: `${i.blocks.length} blocks (${(deep.reduce((t, b) => t + b.minutes, 0) / 60).toFixed(1)} h deep work). Waiting for your OK.` }
+  ]
+}

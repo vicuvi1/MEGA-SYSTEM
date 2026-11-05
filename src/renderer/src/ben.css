@@ -293,3 +293,7 @@
 .bl-text { font-size: 12.5px; margin-top: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .bl-failed { box-shadow: inset 3px 0 0 var(--red); }
 .bl-skipped { opacity: 0.85; }
+
+/* Planning agent's steps (N5) */
+.bd-agent { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 3px; font-size: 12.5px; }
+.bd-agent small { color: var(--muted); }

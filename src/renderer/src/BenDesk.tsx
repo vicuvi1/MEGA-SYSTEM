@@ -11,7 +11,7 @@ import { useLive } from './live'
 import type { DeskView } from './web/benDesk'
 import type { CoachStatus } from './web/coachStatus'
 import { MOOD_FACES, hoursText, moodFace } from '@core/benKnows'
-import { planWeek, rescueDay, type DayBlock, type Rescue, type WeekBlock } from '@core/benPlans'
+import { planningSteps, planWeek, rescueDay, type AgentStep, type DayBlock, type Rescue, type WeekBlock } from '@core/benPlans'
 import { CALL_QUESTIONS, type CallId } from '@core/benStakes'
 import { purchaseCheck, type PurchaseVerdict } from '@core/benMoney'
 import { isFocusBlock, type CalEvent } from '@core/dayTime'
@@ -374,6 +374,7 @@ function PlanTab({ v, change, slots, onSay, reload }: { v: DeskView; change: Cha
 function WeekCard({ v }: { v: DeskView }) {
   const act = useAction()
   const [blocks, setBlocks] = useState<WeekBlock[] | null>(null)
+  const [steps, setSteps] = useState<AgentStep[]>([])
   const [busy, setBusy] = useState(false)
   const [booked, setBooked] = useState(0)
   if (!life.google) return null
@@ -391,7 +392,12 @@ function WeekCard({ v }: { v: DeskView }) {
     const evs = (await act(() => life.google!.events(from.toISOString(), new Date(from.getTime() + 7 * 86400000).toISOString()))) ?? []
     const busyT = evs.filter((e) => !e.allDay).map((e) => ({ start: Date.parse(e.start), end: Date.parse(e.end) }))
     const reviews = v.study.filter((t) => t.next).map((t) => ({ day: t.next as string, title: t.topic }))
-    setBlocks(planWeek({ start, today: v.today, busy: busyT, goals: v.goals.map((g) => ({ title: g.title, hoursLeft: g.hoursLeft, deadline: g.deadline })), energy: v.energy, restDays: v.restDays, gymPerWeek: 3, reviews }))
+    const goals = v.goals.map((g) => ({ title: g.title, hoursLeft: g.hoursLeft, deadline: g.deadline }))
+    const proposal = planWeek({ start, today: v.today, busy: busyT, goals, energy: v.energy, restDays: v.restDays, gymPerWeek: 3, reviews })
+    // The agent's 4 steps, shown above the proposal (N5).
+    const daysLeft = Math.max(1, 7 - Math.max(0, Math.round((Date.parse(`${v.today}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86400000)))
+    setSteps(planningSteps({ events: evs.length, busyMin: busyT.reduce((t, b) => t + (b.end - b.start) / 60000, 0), days: daysLeft, goals, today: v.today, blocks: proposal }))
+    setBlocks(proposal)
     setBusy(false)
   }
   const book = async () => {
@@ -417,6 +423,15 @@ function WeekCard({ v }: { v: DeskView }) {
   const hours = (blocks ?? []).filter((b) => b.kind === 'deep').reduce((t, b) => t + b.minutes, 0) / 60
   return (
     <Card title="Plan my week" icon="🗓" sub={blocks ? `${blocks.length} blocks · ${hours.toFixed(1)}h deep work${v.energy.ready ? ` in your best hours (${hoursText(v.energy.best)})` : ''}` : 'Exams, goals, gym, rest days and buffers around your calendar.'} action={!blocks && <button className="bd-btn strong" disabled={busy} onClick={() => void make()}>{busy ? '…' : 'Propose'}</button>} className="bd-week">
+      {blocks && steps.length > 0 && (
+        <ol className="bd-agent">
+          {steps.map((s, i) => (
+            <li key={i}>
+              <b>{s.label}</b> <small>{s.detail}</small>
+            </li>
+          ))}
+        </ol>
+      )}
       {blocks && (
         <>
           {blocks.length ? (
