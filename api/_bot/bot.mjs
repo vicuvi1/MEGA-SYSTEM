@@ -172,6 +172,8 @@ function parseTelegramText(text) {
 		raw: trimmed,
 		period: /yesterday|ieri|вчера/.test(q) ? "yesterday" : /week|saptaman|недел/.test(q) ? "week" : /month|luna|месяц/.test(q) ? "month" : "today"
 	};
+	const words = args.filter((a) => !/\d/.test(a));
+	if (!parts[0].startsWith("/") && !/^\d/.test(cmd) && args.length && (words.length === args.length || words.length > 2)) cmd = "\0";
 	const exerciseShortcuts = {
 		pushups: "pushups",
 		pushup: "pushups",

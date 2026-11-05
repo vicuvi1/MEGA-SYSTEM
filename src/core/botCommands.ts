@@ -177,6 +177,12 @@ export function parseTelegramText(text: string): ParsedCommand {
     return { type: 'spent', args: [], raw: trimmed, period }
   }
 
+  // Without a slash, a command word counts only alone or with a number:
+  // "run 5km", "done 1", "weight 74.5" yes; "clean my room", "done with the lab
+  // report", "sleep is bad lately", "help me plan" are sentences for Ben (X3).
+  const words = args.filter((a) => !/\d/.test(a))
+  if (!parts[0].startsWith('/') && !/^\d/.test(cmd) && args.length && (words.length === args.length || words.length > 2)) cmd = '\u0000'
+
   // 1. Direct exercise shortcuts like /pushups 50, /situps 30, /press 20
   const exerciseShortcuts: Record<string, string> = {
     pushups: 'pushups',

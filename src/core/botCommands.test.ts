@@ -228,3 +228,15 @@ describe('botCommands core parser', () => {
     expect(balanceReply).toContain('2800.00 MDL')
   })
 })
+
+describe('sentences are not commands (X3)', () => {
+  it('a command word in a sentence goes to Ben', () => {
+    for (const t of ['clean my room', 'done with the lab report', 'sleep is bad lately', 'today was hard', 'help me plan', 'run late today']) expect(parseTelegramText(t).type, t).toBe('unknown')
+  })
+  it('short commands still work without a slash', () => {
+    expect(parseTelegramText('today').type).toBe('today')
+    expect(parseTelegramText('help').type).toBe('help')
+    expect(parseTelegramText('weight 74.5').type).not.toBe('unknown')
+    expect(parseTelegramText('/done with it').type).not.toBe('unknown')
+  })
+})
