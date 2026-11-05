@@ -21,7 +21,8 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
   const waterMl = water.ml
   const waterTarget = water.target
 
-  const todayKey = dayKey(new Date(), undefined, 0)
+  // The app's day (turns at 04:00, like workouts and points: N8).
+  const todayKey = dayKey(new Date())
 
   // Live real-time Sport Track state from shared browser storage
   // (yesterday's reps don't count: readSport starts a new day like Sport Track does)

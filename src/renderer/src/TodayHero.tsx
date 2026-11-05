@@ -1,6 +1,7 @@
 // Today's top, one thin row: Ben (click to talk), what's on now and its one
 // button, your points and the bar to the reward you're working toward, and
 // the day's numbers (score, focus, water, must-dos).
+import { appHour, dayKey } from '@core/dates'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CoachStatus } from './web/coachStatus'
 import type { ShopState } from '@shared/api'
@@ -79,7 +80,7 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   }, [])
   const [closed, setClosed] = useState(() => {
     try {
-      return localStorage.getItem('ls.dayClosed') === new Date().toDateString()
+      return localStorage.getItem('ls.dayClosed') === dayKey(new Date())
     } catch {
       return false
     }
@@ -124,7 +125,7 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
     workoutDone: !!st.today.workoutDone
   })
   // What the row's left side says and does: evening close, a block now/soon, or Ben's move.
-  const evening = new Date(tick).getHours() >= 19 && !closed && m.kind !== 'running'
+  const evening = appHour(new Date(tick)) >= 19 && !closed && m.kind !== 'running'
   const block = !evening && m.kind !== 'running' && m.kind !== 'answer' ? nowBlock : null
   const soon = !evening && !block && m.kind !== 'running' && m.kind !== 'answer' && nextBlock && Date.parse(nextBlock.start) - tick < 60 * 60000 ? nextBlock : null
   const b = block ?? soon

@@ -32,7 +32,8 @@ export function Body({
   const [exerciseOpen, setExerciseOpen] = useState(false)
   const [shortOnTime, setShortOnTime] = useState(false)
 
-  const todayKey = dayKey(new Date(), undefined, 0)
+  // The app's day (turns at 04:00, like workouts and points: N8).
+  const todayKey = dayKey(new Date())
   // The one shared water log (water.ts): Ben, Sporty, Telegram and Today see the same number.
   const water = useWater()
   const waterMl = water.ml

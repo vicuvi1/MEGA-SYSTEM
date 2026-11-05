@@ -43,3 +43,9 @@ export function addDays(day: string, n: number): string {
 export function monthKey(day: string): string {
   return day.slice(0, 7)
 }
+
+/** The hour on the app's clock: 00:00–03:59 still belong to the evening before (25, 26, 27). */
+export const appHour = (now = new Date()) => {
+  const h = now.getHours()
+  return h < DAY_START_HOUR ? h + 24 : h
+}

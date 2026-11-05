@@ -1,6 +1,7 @@
 // Today's core: the morning plan / evening shut-down cards, the "Now" card
 // (one next step, a live timer while focusing), habit chips, and one list:
 // must-dos, the week's big 3 and today's Todoist, grouped by area.
+import { appHour } from '@core/dates'
 import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nowActions, type NowAction } from '@core/nextAction'
@@ -232,7 +233,7 @@ export function DayFlow(props: Props) {
   const actions = useMemo(() => {
     if (!st) return []
     return nowActions({
-      hour: new Date().getHours(),
+      hour: appHour(),
       running: st.running,
       wakeLogged: !!connections?.waky.today?.time,
       plan: st.plan.items,
@@ -264,13 +265,13 @@ export function DayFlow(props: Props) {
   const decision: DoNow | null = st
     ? decideNow({
         now: Date.now(),
-        hour: new Date().getHours(),
+        hour: appHour(),
         running: st.running ? { subject: st.running.subject, title: st.running.task?.title } : null,
         awaiting: coachNow.awaiting,
         planProposed: coachNow.proposed,
         blockNow: blockNow ? { id: blockNow.id, title: blockNow.title, start: blockNow.start, end: blockNow.end } : null,
         nextBlock: nextBlock ? { id: nextBlock.id, title: nextBlock.title, start: nextBlock.start, end: nextBlock.end } : null,
-        dayClosed: mode === 'evening' || storeGet('ls.dayClosed') === new Date().toDateString(),
+        dayClosed: mode === 'evening' || storeGet('ls.dayClosed') === dayKey(new Date()),
         actions: shown,
         skipped
       })
@@ -776,7 +777,7 @@ export function DayFlow(props: Props) {
       )}
 
       {mode === 'evening' && <div ref={shutRef} />}
-      {mode === 'evening' && <ShutDown today={today} focusMin={st.todayMin} doneToday={doneToday} planLen={plan.length} todoDone={0} openMustDos={openLeft.map((x) => x.p.text)} openTodo={(todoList ?? []).filter((t) => t.due && t.due <= today)} onTomorrow={toTomorrow} onMustDoTomorrow={mustDoToTomorrow} onClose={closeMode} onSaved={() => { loadFocus(); closeMode(); try { localStorage.setItem('ls.dayClosed', new Date().toDateString()) } catch { /* fine */ } window.dispatchEvent(new CustomEvent('life-day-closed')) }} />}
+      {mode === 'evening' && <ShutDown today={today} focusMin={st.todayMin} doneToday={doneToday} planLen={plan.length} todoDone={0} openMustDos={openLeft.map((x) => x.p.text)} openTodo={(todoList ?? []).filter((t) => t.due && t.due <= today)} onTomorrow={toTomorrow} onMustDoTomorrow={mustDoToTomorrow} onClose={closeMode} onSaved={() => { loadFocus(); closeMode(); try { localStorage.setItem('ls.dayClosed', dayKey(new Date())) } catch { /* fine */ } window.dispatchEvent(new CustomEvent('life-day-closed')) }} />}
 
       {ended && (
         <section className="now-card ended" aria-label="Session finished">
