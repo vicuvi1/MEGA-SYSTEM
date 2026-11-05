@@ -1723,6 +1723,12 @@
             background: #EF4444;
         }
 
+            .man-ask { background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--spartan-bronze); border-radius: 14px; padding: 20px; width: min(360px, 90vw); }
+        .man-ask::backdrop { background: rgba(0, 0, 0, .65); }
+        .man-ask-text { margin: 0 0 14px; white-space: pre-line; line-height: 1.5; }
+        .man-ask-actions { display: flex; justify-content: flex-end; gap: 8px; }
+        .man-ask-actions button { font: inherit; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--card-border); background: transparent; color: var(--text-primary); cursor: pointer; }
+        .man-ask-actions .man-ask-ok { background: var(--spartan-gold); color: #12141D; border-color: transparent; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -3116,6 +3122,26 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
+        // A small in-page message box. The desktop app has no browser pop-ups
+        // (alert() and confirm() do nothing there), so we show our own.
+        // Resolves true for OK, false for Cancel.
+        function manDialog(text, { okLabel = "OK", cancelLabel = "" } = {}) {
+            return new Promise((resolve) => {
+                const d = document.createElement("dialog");
+                d.className = "man-ask";
+                d.innerHTML = `<form method="dialog"><p class="man-ask-text"></p><div class="man-ask-actions">
+                    ${cancelLabel ? '<button value="cancel" class="man-ask-cancel"></button>' : ""}<button value="ok" class="man-ask-ok"></button></div></form>`;
+                d.querySelector(".man-ask-text").textContent = text;
+                d.querySelector(".man-ask-ok").textContent = okLabel;
+                if (cancelLabel) d.querySelector(".man-ask-cancel").textContent = cancelLabel;
+                d.addEventListener("close", () => { resolve(d.returnValue === "ok"); d.remove(); });
+                document.body.appendChild(d);
+                d.showModal();
+                d.querySelector(".man-ask-ok").focus();
+            });
+        }
+        const manConfirm = (text, okLabel = "Delete") => manDialog(text, { okLabel, cancelLabel: "Cancel" });
+
         function showToast(msg) {
             const t = document.getElementById("toast");
             t.innerText = msg;
@@ -3329,7 +3355,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                         }));
                     } catch (e) {}
                     
-                    alert("⚔️ SPARTAN OATH SWORN!\n\n\"I will not trade my masculine fire for cheap pixels today. My mind is an iron fortress. Molon Labe!\"\n\nStand firm in the phalanx today, warrior.");
+                    manDialog("⚔️ SPARTAN OATH SWORN!\n\n\"I will not trade my masculine fire for cheap pixels today. My mind is an iron fortress. Molon Labe!\"\n\nStand firm in the phalanx today, warrior.", { okLabel: "Stand firm" });
                 }
             }, 100);
         }
@@ -3649,8 +3675,8 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             }
         }
 
-        function deleteCustomReward(id) {
-            if (!confirm("Remove this custom reward?")) return;
+        async function deleteCustomReward(id) {
+            if (!(await manConfirm("Remove this custom reward?", "Remove"))) return;
             if (appData.customRewards) {
                 appData.customRewards = appData.customRewards.filter(r => r.id !== id);
             }
@@ -4408,8 +4434,8 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
-        window.deleteDiaryEntry = function(id) {
-            if (!confirm("Delete this warrior reflection from your chronicle?")) return;
+        window.deleteDiaryEntry = async function(id) {
+            if (!(await manConfirm("Delete this warrior reflection from your chronicle?"))) return;
             appData.diary = (appData.diary || []).filter(e => e.id !== id);
             saveData();
             renderDiaryFeed();

@@ -937,3 +937,7 @@ body[data-theme="legend"] { --sun: #c084fc; --sun-2: #f5c44a; --gold: #f5c44a;
 }
 /* WK27: calm motion when asked */
 @media (prefers-reduced-motion: reduce) { .view.active, .reveal, .wake-btn .rays { animation: none !important; } }
+.nap-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.nap-pick input { width: 72px; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); padding: 6px 8px; font-size: 13px; border-radius: 10px; }
+.nap-chip.on { border-color: var(--sun); color: var(--sun); }
+.ask-dialog .ask-text { margin: 0 0 12px; line-height: 1.45; }

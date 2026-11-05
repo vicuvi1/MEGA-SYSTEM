@@ -1,6 +1,6 @@
 // The state behind Settings (LT11): what used to sit at the top of
 // pages/Settings.tsx, shared by every section in src/renderer/src/settings/.
-import { askConfirm } from '../confirmSheet'
+import { askConfirm, askText } from '../confirmSheet'
 import { useEffect, useState } from 'react'
 import { rememberPinLength } from '../pages/LockScreen'
 import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, BotBridgeConfig, UpdateStatus, VerifyResult, AIConfig, CalendarConfig, SyncConfig } from '@shared/api'
@@ -520,9 +520,9 @@ export function useSettingsState({ auth, onAuth, backup, onBackup, onRestored, u
         }
       }
     } else {
-      const folder = window.prompt(
-        'Enter your preferred local backup folder path on your PC (e.g. C:\\Users\\victo\\Documents\\LifeSystem Backups):',
-        backupFolderName || 'C:\\Users\\victo\\Documents\\LifeSystem Backups'
+      const folder = await askText(
+        'Which folder on your PC should backups go to? (for example Documents\\LifeSystem Backups)',
+        backupFolderName || 'Documents\\LifeSystem Backups'
       )
       if (folder) {
         setBackupFolderName(folder)

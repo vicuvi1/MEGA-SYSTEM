@@ -613,7 +613,11 @@
       const avgSleep = sleeps.length ? Math.round(sleeps.reduce((a, b) => a + b, 0) / sleeps.length) : 0;
       const moods = { great: 0, okay: 0, tired: 0 };
       for (const [, r] of entries) if (moods[r.mood] !== undefined) moods[r.mood]++;
-      return new Response(JSON.stringify({ label: month, rankFrom: '', rankTo: '', mornings: entries.length, onTime, earliest: earliest ? { date: earliest[0], time: earliest[1].time } : null, longestStreak: longest, avgSleep, sleepHours: Math.round(sleeps.reduce((a, b) => a + b, 0) / 60), coins: 0, chests: Object.values(data.opened || {}).filter((o) => String(o.openedOn || '').startsWith(month)).length, bestChest: null, moods }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      // The story shows the month's name, your rank and a quote to end on.
+      const rankNow = buildState().stats?.journey?.rank || RANKS[1];
+      const label = new Date(month + '-15T12:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      const quote = QUOTES[Number(month.slice(5, 7)) % QUOTES.length];
+      return new Response(JSON.stringify({ label, rankFrom: rankNow, rankTo: rankNow, quote, mornings: entries.length, onTime, earliest: earliest ? { date: earliest[0], time: earliest[1].time } : null, longestStreak: longest, avgSleep, sleepHours: Math.round(avgSleep / 6) / 10, coins: 0, chests: Object.values(data.opened || {}).filter((o) => String(o.openedOn || '').startsWith(month)).length, bestChest: null, moods }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (u.includes('/api/checkin')) {

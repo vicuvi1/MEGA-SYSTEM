@@ -9,6 +9,12 @@ const fromMin = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 let state = null;
+let napOpen = false; // The "how long was the nap?" row is showing.
+const napPicker = () => `<div class="nap-pick" id="nap-pick">
+  ${[10, 20, 30, 45].map((m) => `<button type="button" class="btn small nap-chip" data-nap="${m}">${m} min</button>`).join("")}
+  <input type="number" id="nap-min" min="5" max="240" step="5" placeholder="min" aria-label="Nap minutes">
+  <button type="button" class="btn primary small" id="nap-save">Save</button>
+  <button type="button" class="btn ghost small" id="nap-cancel">Cancel</button></div>`;
 
 // Numbers roll up to their new value instead of jumping.
 function countTo(el, to) {
@@ -60,6 +66,23 @@ async function act(method, path, body, okMsg) {
   }
 }
 
+// A small in-page "are you sure?" box. The desktop app has no browser pop-ups
+// (confirm() does nothing there), so every question is asked here instead.
+function askConfirm(text, okLabel = "Yes") {
+  return new Promise((resolve) => {
+    const d = document.createElement("dialog");
+    d.className = "ask-dialog";
+    d.innerHTML = `<form method="dialog" class="form"><p class="ask-text"></p><div class="dialog-actions">
+      <button class="btn ghost" value="cancel">Cancel</button><button class="btn primary" value="ok"></button></div></form>`;
+    d.querySelector(".ask-text").textContent = text;
+    d.querySelector('[value="ok"]').textContent = okLabel;
+    d.addEventListener("close", () => { resolve(d.returnValue === "ok"); d.remove(); });
+    document.body.appendChild(d);
+    d.showModal();
+    d.querySelector('[value="ok"]').focus();
+  });
+}
+
 function toast(msg, error = false) {
   const el = $("toast");
   el.textContent = msg;
@@ -108,7 +131,7 @@ function renderToday() {
         ${stillUpLine(t.stillUp, t.record, t.ontime)}
         ${s.sleep.last ? `<div class="su-line sleep-line">😴 Slept ${fmtDur(s.sleep.last)}</div>` : ""}
         <div class="mood-ask inline">${moodButtons(t.record.mood)}</div>
-        <div class="nap-row"><span class="su-line" id="nap-line"></span><button class="btn ghost small" id="log-nap">💤 Log a nap</button></div>
+        <div class="nap-row"><span class="su-line" id="nap-line"></span>${napOpen ? napPicker() : `<button class="btn ghost small" id="log-nap">💤 Log a nap</button>`}</div>
       </div>
       <svg class="hero-check ${t.ontime ? "" : "late"}" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg>`;
   } else {
@@ -805,18 +828,17 @@ $("view-rewards").onclick = (e) => {
   if (btn.dataset.open) openChest(btn.dataset.open);
   if (btn.dataset.redeem) {
     const r = state.rewards.find((x) => x.id === btn.dataset.redeem);
-    if (r && confirm(`Claim ${r.emoji} ${r.name} for ${r.cost} coins?`)) {
-      act("POST", "/api/redeem", { id: r.id }, `Enjoy it! ${r.emoji}`).then((ok) => ok && confetti($("chest-confetti"), 120));
-    }
+    if (r) askConfirm(`Claim ${r.emoji} ${r.name} for ${r.cost} coins?`, "Claim").then((yes) => yes &&
+      act("POST", "/api/redeem", { id: r.id }, `Enjoy it! ${r.emoji}`).then((ok) => ok && confetti($("chest-confetti"), 120)));
   }
   if (btn.dataset.voucher) {
     const r = state.rewards.find((x) => x.id === btn.dataset.voucher);
-    if (r && confirm(`Use a voucher to claim ${r.emoji} ${r.name} for free?`)) {
-      act("POST", "/api/redeem", { id: r.id, voucher: true }, `Enjoy it! ${r.emoji}`);
-    }
+    if (r) askConfirm(`Use a voucher to claim ${r.emoji} ${r.name} for free?`, "Use voucher").then((yes) => yes &&
+      act("POST", "/api/redeem", { id: r.id, voucher: true }, `Enjoy it! ${r.emoji}`));
   }
   if (btn.dataset.undo) act("DELETE", `/api/spent/${btn.dataset.undo}`, null, "Coins returned");
-  if (btn.dataset.delReward && confirm("Remove this reward?")) act("DELETE", `/api/rewards/${btn.dataset.delReward}`, null, "Removed");
+  const delReward = btn.dataset.delReward;
+  if (delReward) askConfirm("Remove this reward?", "Remove").then((yes) => yes && act("DELETE", `/api/rewards/${delReward}`, null, "Removed"));
 };
 
 $("add-reward").onsubmit = async (e) => {
@@ -856,7 +878,7 @@ document.querySelectorAll("[data-step]").forEach((b) => {
 
 $("history").onclick = (e) => {
   const del = e.target.dataset.del, edit = e.target.dataset.edit;
-  if (del && confirm(`Delete ${del}?`)) act("DELETE", `/api/days/${del}`, null, "Deleted");
+  if (del) askConfirm(`Delete ${del}?`, "Delete").then((yes) => yes && act("DELETE", `/api/days/${del}`, null, "Deleted"));
   if (edit) openDayDialog(edit);
 };
 $("add-day").onclick = () => openDayDialog(null);
@@ -1084,7 +1106,7 @@ async function goToBed() {
 }
 
 async function sleepPc() {
-  if (!confirm(`Put the PC to sleep now? It wakes itself for the alarm at ${state.pcAlarm.next ? state.pcAlarm.next.slice(11, 16) : "your wake-up time"}.`)) return;
+  if (!(await askConfirm(`Put the PC to sleep now? It wakes itself for the alarm at ${state.pcAlarm.next ? state.pcAlarm.next.slice(11, 16) : "your wake-up time"}.`, "Sleep now"))) return;
   try {
     await api("POST", "/api/sleep-pc", {});
     toast("Sleeping in 3 seconds. Good night 🌙");
@@ -1189,14 +1211,14 @@ async function openRecap(month) {
   const RAR = { common: "Common", rare: "Rare", epic: "Epic", legendary: "Legendary" };
   const moods = r.moods.great + r.moods.okay + r.moods.tired;
   const slides = [
-    `<div class="st-kicker">Your month</div><div class="st-huge">${esc(r.label)}</div><p>${r.rankFrom === r.rankTo ? `You held the line as <b>${esc(r.rankTo)}</b>.` : `You rose from <b>${esc(r.rankFrom)}</b> to <b>${esc(r.rankTo)}</b>.`}</p>`,
+    `<div class="st-kicker">Your month</div><div class="st-huge">${esc(r.label)}</div>${!r.rankTo ? "" : `<p>${r.rankFrom === r.rankTo ? `You held the line as <b>${esc(r.rankTo)}</b>.` : `You rose from <b>${esc(r.rankFrom)}</b> to <b>${esc(r.rankTo)}</b>.`}</p>`}`,
     `<div class="st-kicker">Mornings on time</div><div class="st-huge">${r.onTime}<small>/${r.mornings}</small></div><p>${r.mornings ? `${Math.round((100 * r.onTime) / Math.max(1, r.mornings))}% of the mornings you checked in.` : "No check-ins this month."}</p>`,
     r.earliest ? `<div class="st-kicker">Your earliest morning</div><div class="st-huge">${esc(r.earliest.time)}</div><p>${new Date(r.earliest.date + "T12:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>` : null,
     `<div class="st-kicker">Longest streak</div><div class="st-huge">${r.longestStreak}<small> days</small></div><p>${r.longestStreak >= 7 ? "A full week and more. That's a Spartan." : "Next month: beat it."}</p>`,
     r.avgSleep ? `<div class="st-kicker">Sleep</div><div class="st-huge">${r.sleepHours}<small> h</small></div><p>${fmtDur(r.avgSleep)} a night on average.</p>` : null,
     `<div class="st-kicker">Badges</div><div class="st-huge">${r.chests}<small> badge${r.chests === 1 ? "" : "s"}</small></div><p>${r.chests ? "Milestones you reached this month." : "No new milestones this month."}</p>`,
     moods ? `<div class="st-kicker">How you felt</div><div class="st-moods"><div>⚡<b>${r.moods.great}</b></div><div>🙂<b>${r.moods.okay}</b></div><div>😴<b>${r.moods.tired}</b></div></div>` : null,
-    `<div class="st-kicker">For next month</div><blockquote>${esc(r.quote.text)}</blockquote><cite>${esc(r.quote.who)}</cite>`,
+    r.quote ? `<div class="st-kicker">For next month</div><blockquote>${esc(r.quote.text)}</blockquote><cite>${esc(r.quote.who)}</cite>` : null,
   ].filter(Boolean);
   story = { slides, i: 0, timer: null };
   $("story").hidden = false;
@@ -1265,10 +1287,23 @@ addEventListener("focus", () => refresh().catch(() => {}));
 // WK12 + WK22: log a nap; show every journey stage.
 document.addEventListener("click", async (e) => {
   if (e.target.closest("#log-nap")) {
-    const v = prompt("How long was the nap? (minutes)", "20");
-    if (!v) return;
-    const r = await fetch("/api/nap", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ minutes: Number(v) }) }).then((x) => x.json()).catch(() => null);
-    if (r) { state = r; render(); toast(r.note || "Nap logged"); }
+    napOpen = true;
+    renderToday();
+    $("nap-min")?.focus();
+  }
+  if (e.target.closest("#nap-cancel")) { napOpen = false; renderToday(); }
+  const chip = e.target.closest("[data-nap]");
+  if (chip) document.querySelectorAll(".nap-chip").forEach((b) => b.classList.toggle("on", b === chip));
+  if (chip || e.target.closest("#nap-save")) {
+    const minutes = Number(chip ? chip.dataset.nap : $("nap-min")?.value);
+    if (!minutes || minutes < 1) { toast("Pick how many minutes", true); return; }
+    try {
+      const r = await api("POST", "/api/nap", { minutes });
+      napOpen = false;
+      state = r;
+      render();
+      toast(r.note || "Nap logged");
+    } catch (err) { toast(err.message, true); }
   }
   if (e.target.closest("#journey-more")) {
     document.documentElement.classList.add("journey-all");

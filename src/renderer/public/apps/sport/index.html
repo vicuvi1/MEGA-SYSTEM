@@ -1437,6 +1437,13 @@
   
     /* ---- Night 6 (SP17–SP25) ---- */
     .rank-crest, .xp-meter-wrap, .hunter-badge { display: none !important; }
+    .st-ask { background: #0d1424; color: var(--text-main); border: 1px solid var(--card-border-glow); border-radius: 14px; padding: 20px; width: min(320px, 90vw); font-family: var(--font); }
+    .st-ask::backdrop { background: rgba(0, 0, 0, .6); }
+    .st-ask-label { display: block; font-weight: 600; margin-bottom: 10px; }
+    .st-ask-input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 18px; border-radius: 10px; border: 1px solid var(--card-border); background: #060913; color: var(--text-main); }
+    .st-ask-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    .st-ask-actions button { font: inherit; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--card-border); background: transparent; color: var(--text-main); cursor: pointer; }
+    .st-ask-actions button.primary { background: var(--cyan-neon); color: #04121c; border-color: transparent; font-weight: 700; }
     #week-goal-pill { cursor: pointer; font: inherit; color: inherit; background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0; text-align: inherit; }
     #combat-power.done { color: #34d399; }
     .st-tabs { display: flex; gap: 6px; margin: 0 0 18px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); width: fit-content; }
@@ -2352,6 +2359,25 @@
       }
     }
 
+    // A small in-page box that asks for a number. The desktop app has no browser
+    // pop-ups (prompt() does nothing there), so we ask here instead.
+    function askNumber(label, value, min, max) {
+      return new Promise((resolve) => {
+        const d = document.createElement('dialog');
+        d.className = 'st-ask';
+        d.innerHTML = `<form method="dialog"><label class="st-ask-label"></label>
+          <input type="number" class="st-ask-input" min="${min}" max="${max}" required>
+          <div class="st-ask-actions"><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></div></form>`;
+        d.querySelector('.st-ask-label').textContent = label;
+        const input = d.querySelector('input');
+        input.value = String(value);
+        d.addEventListener('close', () => { resolve(d.returnValue === 'ok' ? parseInt(input.value, 10) : null); d.remove(); });
+        document.body.appendChild(d);
+        d.showModal();
+        input.select();
+      });
+    }
+
     function showToast(text) {
       const toast = document.getElementById('toast');
       document.getElementById('toast-text').textContent = text;
@@ -2871,7 +2897,7 @@
         const newUnit = document.getElementById('edit-ex-unit').value;
 
         if (!newName || isNaN(newTarget) || newTarget < 1) {
-          alert('Please enter a valid title and target amount.');
+          showToast('Please enter a valid title and target amount.');
           return;
         }
 
@@ -2899,7 +2925,7 @@
       const unit = unitInput.value;
 
       if (!name || isNaN(target) || target < 1) {
-        alert('Please provide a name and target for the exercise.');
+        showToast('Please provide a name and target for the exercise.');
         return;
       }
 
@@ -3457,8 +3483,8 @@
     try { const t = localStorage.getItem('st_tab'); if (t) document.querySelector(`.st-tab[data-tab="${t}"]`)?.click(); } catch (e) {}
 
     // SP15: tap the weekly pill to set your goal.
-    document.getElementById('week-goal-pill').addEventListener('click', () => {
-      const v = parseInt(prompt('Sessions a week you aim for:', String(state.sportySettings.weeklyGoal || 4)), 10);
+    document.getElementById('week-goal-pill').addEventListener('click', async () => {
+      const v = await askNumber('Sessions a week you aim for:', state.sportySettings.weeklyGoal || 4, 1, 14);
       if (!(v >= 1 && v <= 14)) return;
       state.sportySettings.weeklyGoal = v;
       saveState(state);
