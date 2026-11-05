@@ -2280,6 +2280,8 @@ His note: ${note}`,
     quick,
     pollOnce,
     handleUpdate,
+    /** One of your own chats (the bots' whitelist): strangers can't touch your data. */
+    allowedChat: async (chat: string | number) => allowed(await config(), String(chat)),
     /** The app's Coach page: the same brain and memory as the bots. */
     think: (text: string, key = `app:${Date.now()}`, onStep?: (s: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }) => think('mega', text, key, media, 'app', onStep),
     /** The daily rhythm (morning plan, reviews), for the tick and the app. */

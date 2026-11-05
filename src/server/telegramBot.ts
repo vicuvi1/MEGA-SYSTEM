@@ -214,8 +214,10 @@ export async function handleTelegramUpdate(env: BotEnv, token: string, update: u
   // Days, wake-up times and streaks follow your time zone, not the server's.
   process.env.TZ = env.timeZone || 'Europe/Chisinau'
   const { bots, mirror } = await botsFor(env)
-  // You wrote something: open check-ins stop asking (you answered).
-  if ((update as any)?.message) {
+  // You wrote something: open check-ins stop asking (you answered). Only
+  // from your own chats: a stranger writing to the bot changes nothing (A5).
+  const msgChat = (update as any)?.message?.chat?.id
+  if (msgChat != null && (await bots.allowedChat(msgChat))) {
     await mirror
       .write((db) => {
         const raw = getSetting(db as any, REMINDERS_KEY)

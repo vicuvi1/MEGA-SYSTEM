@@ -5,7 +5,9 @@
 // to enter the PIN again (this one gets a fresh session).
 // POST /api/login {passkey:'options'|'register'|'login', …}: fingerprint/face unlock (_passkey.mjs).
 // POST /api/login {devices: session} → your devices and passkeys; {revokeDevice: sid | revokePasskey: id, session} (A6).
-import { clientIp, config, liveEpoch, login, makeSession, readBody, send, sessionOk, sessionSigned, signOutAll } from './_lib.mjs'
+// POST /api/login {changePin: session, current, pin} → {session}: the new PIN, checked here (A2).
+// A PIN login may send {prev: <old session>} so the device keeps its id.
+import { changePin, clientIp, config, liveEpoch, login, makeSession, readBody, send, sessionOk, sessionSigned, sidOf, signOutAll } from './_lib.mjs'
 import { expectedSite, passkeyLogin, passkeyOptions, passkeyRegister } from './_passkey.mjs'
 import { listDevices, removePasskey, revokeDevice, touchDevice } from './_devices.mjs'
 
@@ -34,7 +36,13 @@ export default async function handler(req, res) {
     if (body.passkey === 'options') return send(res, 200, await passkeyOptions(cfg, body.op))
     if (body.passkey === 'register') {
       if (!(await sessionOk(cfg, body.session))) return send(res, 401, { error: 'Unlock with your PIN first' })
-      return send(res, 200, await passkeyRegister(cfg, body, expectedSite(req)))
+      return send(res, 200, await passkeyRegister(cfg, body, expectedSite(req), Date.now(), fetch, sessionSigned(cfg, body.session)?.sid ?? null))
+    }
+    // A new PIN (A2): your session AND the current PIN, both checked here.
+    if (body.changePin) {
+      if (!(await sessionOk(cfg, body.changePin))) return send(res, 401, { error: 'Session expired: enter your PIN' })
+      const r = await changePin(cfg, body.current, body.pin, sessionSigned(cfg, body.changePin)?.sid, Date.now(), fetch, clientIp(req))
+      return r.body?.session ? reply(r.status, r.body) : send(res, r.status, r.body)
     }
     if (body.passkey === 'login') {
       try {
@@ -43,14 +51,14 @@ export default async function handler(req, res) {
         return send(res, 401, { error: e.message || 'Passkey failed' })
       }
     }
-    if (all) return (await sessionOk(cfg, all)) ? reply(200, { session: await signOutAll(cfg) }) : send(res, 401, { error: 'Session expired: enter your PIN' })
+    if (all) return (await sessionOk(cfg, all)) ? reply(200, { session: await signOutAll(cfg, Date.now(), fetch, sessionSigned(cfg, all)?.sid ?? null) }) : send(res, 401, { error: 'Session expired: enter your PIN' })
     if (renew) {
       // Renewing keeps the same device id.
       if (!(await sessionOk(cfg, renew))) return send(res, 401, { error: 'Session expired: enter your PIN' })
       const sid = sessionSigned(cfg, renew)?.sid
       return reply(200, { session: makeSession(cfg, Date.now(), await liveEpoch(cfg), sid || undefined) })
     }
-    const r = await login(cfg, pin, Date.now(), fetch, clientIp(req))
+    const r = await login(cfg, pin, Date.now(), fetch, clientIp(req), sidOf(cfg, body.prev))
     return r.body?.session ? reply(r.status, r.body) : send(res, r.status, r.body)
   } catch (e) {
     send(res, 502, { error: e.message || 'Login failed' })

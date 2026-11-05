@@ -2,7 +2,7 @@
 //      {op:'status'}                     → {configured}
 // Google Gemini for the website, with the key kept on the server
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
-import { bearer, config, getSetting, readBody, send, sessionOk, setSetting, turso } from './_lib.mjs'
+import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso } from './_lib.mjs'
 import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, costOf, monthStart } from './_budget.mjs'
 
 const MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']
@@ -253,7 +253,7 @@ export async function askModel(prompt, opts = {}, env = process.env, fetchImpl =
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
-  if (!(await sessionOk(config(), bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await requireSession(res, config(), bearer(req)))) return
   const key = (process.env.GEMINI_API_KEY || '').trim()
   let body
   try {

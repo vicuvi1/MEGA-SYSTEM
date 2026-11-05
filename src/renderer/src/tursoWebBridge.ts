@@ -52,7 +52,7 @@ import { profileView } from './web/coachProfile'
 import { dismissNotif, listNotifs, readNotifs } from './web/notifications'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { addBlockResult, addFocusQuality } from './web/dayLog'
-import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
+import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 
 /**
  * A direct Turso connection, only for development and tests (set turso_url
@@ -230,7 +230,15 @@ export function createTursoWebBridge(): Bridge {
   // The embedded apps' data (Sport Track, Finance Helper, Waky, MAN) lives in
   // this browser: copied to Turso and back so every device shows the same.
   const syncsP = mirrorP.then((m) => {
-    const list = [SPORT, FINANCE, WAKY, MAN].map((spec) => createAppSync(m, spec))
+    // Waky's mornings and nights also go into the sleep log (where it has no time yet).
+    const wakyToSleep = () =>
+      void svcP
+        .then((s) => s.sleep.fromWaky())
+        .then((r) => {
+          if (r.wakes || r.beds) window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+        })
+        .catch(() => null)
+    const list = [SPORT, FINANCE, WAKY, MAN].map((spec) => createAppSync(m, spec, undefined, spec === WAKY ? wakyToSleep : undefined))
     for (const s of list) void s.sync()
     return list
   })
@@ -1012,11 +1020,16 @@ export function createTursoWebBridge(): Bridge {
         if (direct) throw new Error('Passkeys work on the website and the installed app')
         await setupPasskey()
       },
-      // A new PIN ends every session (all devices); this one logs in again with it.
+      // A new PIN ends every session (all devices). On the website and the
+      // installed app the server checks the current PIN and saves the new one
+      // (A2); this device keeps working with a fresh session.
       setPin: async (pin: string, current?: string) => {
-        const r = await (await authP).setPin(pin, current)
-        if (!direct) await serverLogin(pin).catch(() => null)
-        return r
+        if (direct) return (await authP).setPin(pin, current)
+        if (!/^\d{4,12}$/.test(pin)) throw new Error('PIN must be 4 to 12 digits')
+        await serverChangePin(current ?? '', pin)
+        void (await mirrorP).refresh().catch(() => null)
+        unlocked = true
+        return { pinSet: true, locked: false }
       },
       signOutOthers: async () => {
         if (!direct) await signOutOthers()

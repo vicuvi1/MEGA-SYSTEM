@@ -45,7 +45,7 @@ export async function listDevices(cfg, fetchImpl = fetch) {
     cfg,
     [
       [T_DEVICES],
-      ['CREATE TABLE IF NOT EXISTS sys_passkeys (id TEXT PRIMARY KEY, spki TEXT NOT NULL, alg INTEGER NOT NULL, counter INTEGER NOT NULL DEFAULT 0, label TEXT, created INTEGER NOT NULL)'],
+      [T_KEYS_PLAIN],
       ['SELECT sid, label, created, last_seen FROM sys_devices WHERE revoked = 0 ORDER BY last_seen DESC LIMIT 30'],
       ['SELECT id, label, created FROM sys_passkeys ORDER BY created DESC']
     ],
@@ -57,10 +57,22 @@ export async function listDevices(cfg, fetchImpl = fetch) {
   }
 }
 
+/** Signs one device out, and removes the passkeys it made (A3). */
 export async function revokeDevice(cfg, sid, fetchImpl = fetch) {
-  await run(cfg, [[T_DEVICES], ['UPDATE sys_devices SET revoked = 1 WHERE sid = ?', [String(sid)]]], fetchImpl)
+  await run(cfg, [[T_DEVICES], ['INSERT INTO sys_devices (sid, label, created, last_seen, revoked) VALUES (?, ?, 0, 0, 1) ON CONFLICT(sid) DO UPDATE SET revoked = 1', [String(sid), 'Signed out']]], fetchImpl)
+  await removeDevicePasskeys(cfg, sid, fetchImpl)
   forgetRevoked()
 }
+
+/** Passkeys made on that device (or, with `keep`, every passkey except that device's). */
+export async function removeDevicePasskeys(cfg, sid, fetchImpl = fetch, keep = false) {
+  await run(cfg, [[T_KEYS_PLAIN], [keep ? 'DELETE FROM sys_passkeys WHERE sid IS NOT ?' : 'DELETE FROM sys_passkeys WHERE sid = ?', [sid == null ? null : String(sid)]]], fetchImpl).catch((e) => {
+    if (!/no such column/i.test(String(e?.message))) throw e
+    // An older table without device ids: "everyone else" means every passkey.
+    if (keep) return run(cfg, [['DELETE FROM sys_passkeys']], fetchImpl)
+  })
+}
+const T_KEYS_PLAIN = 'CREATE TABLE IF NOT EXISTS sys_passkeys (id TEXT PRIMARY KEY, spki TEXT NOT NULL, alg INTEGER NOT NULL, counter INTEGER NOT NULL DEFAULT 0, label TEXT, created INTEGER NOT NULL, sid TEXT)'
 
 export async function removePasskey(cfg, id, fetchImpl = fetch) {
   await run(cfg, [['DELETE FROM sys_passkeys WHERE id = ?', [String(id)]]], fetchImpl)

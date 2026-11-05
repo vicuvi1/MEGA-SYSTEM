@@ -39,7 +39,8 @@ export function sessionValid(token = getSession(), now = Date.now()): boolean {
 export async function serverLogin(pin: string): Promise<void> {
   let res: Response
   try {
-    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin }) })
+    // prev: the old session, so this device keeps its id (its passkey stays tied to it).
+    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin, prev: currentSession() || undefined }) })
   } catch {
     throw new NetworkError('No connection to the server')
   }
@@ -94,6 +95,28 @@ export async function renewSession(now = Date.now()): Promise<void> {
   } catch {
     /* offline: next start tries again */
   }
+}
+
+/**
+ * A new PIN, checked by the server (A2): it needs this session and the
+ * current PIN. Every other device has to enter the new PIN; this one gets a
+ * fresh session.
+ */
+export async function serverChangePin(current: string, pin: string): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ changePin: currentSession(), current, pin }) })
+  } catch {
+    throw new NetworkError('No connection: the PIN can only be changed online')
+  }
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok || !body.session) throw new Error(body.error || `PIN change failed (${res.status})`)
+  try {
+    store()?.setItem(KEY, body.session)
+  } catch {
+    /* private window */
+  }
+  memory = body.session
 }
 
 /** "Sign out all other devices": every other session ends; this device gets a fresh one. */

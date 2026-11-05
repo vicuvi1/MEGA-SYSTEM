@@ -5847,7 +5847,7 @@ function fullHouse(i) {
 		[
 			(i.sleepScore ?? 0) >= 70,
 			"Steady sleep",
-			`steady sleep (${i.sleepScore ?? "–"}/100, need 70)`
+			i.sleepScore == null ? "steady sleep (log 3 nights for a score, need 70)" : `steady sleep (${i.sleepScore}/100, need 70)`
 		],
 		[
 			i.workouts >= 3,
@@ -9883,6 +9883,49 @@ function computeSleepStats(logs, today, weekdayTarget = "07:00", weekendTarget =
 function bedNightDay(appToday, hour) {
 	return hour >= 12 || hour < 4 ? new Date(Date.parse(`${appToday}T12:00:00Z`) + 864e5).toISOString().slice(0, 10) : appToday;
 }
+var HHMM = /^(\d{1,2}):(\d{2})$/;
+var cleanTime = (t) => {
+	const m = HHMM.exec(String(t ?? "").trim());
+	if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+	return `${m[1].padStart(2, "0")}:${m[2]}`;
+};
+var isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+/**
+* Waky's mornings (`days[date].time`) and nights (`nights[evening date].time`,
+* the night of that evening) for the last `horizon` days, where the sleep log
+* has no time yet. Times already in the log are never overwritten: a time you
+* typed in Life System wins (Waky's own edits come through "Edit day").
+*/
+function wakyFill(waky, logs, today, horizon = 14) {
+	const w = waky && typeof waky === "object" ? waky : {};
+	const byDay = new Map(logs.map((l) => [l.day, l]));
+	const recent = (d) => isDay(d) && d <= today && daysBetween$1(d, today) <= horizon;
+	const wakes = [];
+	for (const [day, rec] of Object.entries(w.days ?? {})) {
+		const time = cleanTime(rec?.time);
+		if (!time || !recent(day) || byDay.get(day)?.wakeTime) continue;
+		wakes.push({
+			day,
+			time
+		});
+	}
+	const beds = [];
+	for (const [evening, rec] of Object.entries(w.nights ?? {})) {
+		const time = cleanTime(rec?.time);
+		if (!time || !isDay(evening)) continue;
+		const day = addDays$3(evening, 1);
+		if (!recent(day) && day !== addDays$3(today, 1)) continue;
+		if (byDay.get(day)?.bedTime) continue;
+		beds.push({
+			day,
+			time
+		});
+	}
+	return {
+		wakes: wakes.sort((a, b) => a.day.localeCompare(b.day)),
+		beds: beds.sort((a, b) => a.day.localeCompare(b.day))
+	};
+}
 // src/main/sleep.ts
 function toLog(r) {
 	return {
@@ -10034,6 +10077,52 @@ var SleepService = class {
 		return {
 			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today)),
 			state: this.state(now),
+			awarded
+		};
+	}
+	/** A bedtime for a past night (the morning row `day`): the record only, no coins. */
+	setBed(day, time, now = /* @__PURE__ */ new Date()) {
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)) throw new LedgerError("Use a day and a time like 23:30");
+		const target = this.bedtimeTarget();
+		const onTime = isBedOnTime(time, target) ? 1 : 0;
+		if (this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day)) this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(time, target, onTime, day);
+		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)").run(day, "", targetForDay(day, this.weekdayTarget(), this.weekendTarget()), time, target, onTime, now.toISOString());
+		return toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day));
+	}
+	/**
+	* Copies Waky's wake-ups and bedtimes (its synced data) into the sleep log
+	* where the log has no time yet. Today's wake-up and tonight's bedtime pay
+	* like logging them here (once); earlier days are records only.
+	*/
+	fromWaky(now = /* @__PURE__ */ new Date()) {
+		let waky = null;
+		try {
+			waky = JSON.parse(getSetting(this.db, "app_sync_waky") || "null")?.data ?? JSON.parse(getSetting(this.db, "waky_backup_json") || "null");
+		} catch {
+			return {
+				wakes: 0,
+				beds: 0,
+				awarded: false
+			};
+		}
+		if (!waky) return {
+			wakes: 0,
+			beds: 0,
+			awarded: false
+		};
+		const today = this.wallet.today(now);
+		const plan = wakyFill(waky, this.logs(), today);
+		let awarded = false;
+		for (const w of plan.wakes) try {
+			awarded = (w.day === today ? this.logWake(w.time, void 0, now) : this.setWake(w.day, w.time, now)).awarded || awarded;
+		} catch {}
+		const night = now.getHours() >= 12 || now.getHours() < 4;
+		const tonight = bedNightDay(today, now.getHours());
+		for (const b of plan.beds) if (night && b.day === tonight) awarded = this.logBed(b.time, now).awarded || awarded;
+		else this.setBed(b.day, b.time, now);
+		return {
+			wakes: plan.wakes.length,
+			beds: plan.beds.length,
 			awarded
 		};
 	}
@@ -12479,6 +12568,8 @@ syncFinance: (recordDays) => write((s) => {
 			logWake: (time, quality) => write((s) => s.sleep.logWake(time, quality), W),
 			logBed: (time) => write((s) => s.sleep.logBed(time), W),
 			setWake: (day, time) => write((s) => s.sleep.setWake(day, time), W),
+			/** Waky's wake-ups and bedtimes into the sleep log, where it has none yet. */
+			fromWaky: () => write((s) => s.sleep.fromWaky(), W),
 			setTargets: (weekday, weekend, bedtime) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime))
 		},
 		money: {
@@ -18444,6 +18535,8 @@ His note: ${note}`, { json: true }));
 		quick,
 		pollOnce,
 		handleUpdate,
+		/** One of your own chats (the bots' whitelist): strangers can't touch your data. */
+		allowedChat: async (chat) => allowed(await config(), String(chat)),
 		/** The app's Coach page: the same brain and memory as the bots. */
 		think: (text, key = `app:${Date.now()}`, onStep, media) => think("mega", text, key, media, "app", onStep),
 		/** The daily rhythm (morning plan, reviews), for the tick and the app. */
@@ -20560,7 +20653,8 @@ async function coachUndo(env, at, index) {
 async function handleTelegramUpdate(env, token, update) {
 	process.env.TZ = env.timeZone || "Europe/Chisinau";
 	const { bots, mirror } = await botsFor(env);
-	if (update?.message) await mirror.write((db) => {
+	const msgChat = update?.message?.chat?.id;
+	if (msgChat != null && await bots.allowedChat(msgChat)) await mirror.write((db) => {
 		const raw = getSetting(db, REMINDERS);
 		const m = update.message;
 		if (raw) setSetting(db, REMINDERS, JSON.stringify(answered(JSON.parse(raw), /* @__PURE__ */ new Date(), String(m.text ?? m.caption ?? ""), !!m.reply_to_message)));

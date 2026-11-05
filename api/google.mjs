@@ -8,7 +8,7 @@
 //   move {calendarId, id, start, end} · remove {calendarId, id}
 //   setCalendars {on, target} · disconnect
 import { randomBytes } from "node:crypto"
-import { bearer, config, getSetting, readBody, send, sessionOk, setSetting, sign } from './_lib.mjs'
+import { bearer, config, getSetting, readBody, send, requireSession, setSetting, sign } from './_lib.mjs'
 import { GOOGLE_SETTING, authUrl, createCalendarApi } from './_bot/bot.mjs'
 
 export function googleEnv(cfg, env = process.env) {
@@ -42,7 +42,7 @@ async function stored(cfg) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
-  if (!(await sessionOk(cfg, bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await requireSession(res, cfg, bearer(req)))) return
   let body
   try {
     body = await readBody(req)

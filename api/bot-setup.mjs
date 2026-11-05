@@ -2,7 +2,7 @@
 // settings at /api/telegram, so they answer 24/7. Safe to call often: a bot
 // already pointed here is left as it is. Production only (a preview must not
 // take the bots away from the live site).
-import { bearer, config, leftBots, readBody, send, serverBots, sessionOk, webhookSecret } from './_lib.mjs'
+import { bearer, config, leftBots, readBody, send, serverBots, requireSession, webhookSecret } from './_lib.mjs'
 
 async function tg(token, method, body) {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
@@ -17,7 +17,7 @@ async function tg(token, method, body) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
-  if (!(await sessionOk(cfg, bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await requireSession(res, cfg, bearer(req)))) return
   // {test: true}: a test message from the server's main bot (tokens never reach the page).
   if (req.headers['content-type']?.includes('json')) {
     let body = {}

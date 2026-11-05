@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
 import { handlePipeline } from './fakeTurso'
 // @ts-expect-error plain JS module without types
-import { config, liveEpoch, makeSession, sessionOk, sessionSigned } from '../../../../api/_lib.mjs'
+import { config, liveEpoch, makeSession, sessionOk, sessionSigned, signOutAll } from '../../../../api/_lib.mjs'
 // @ts-expect-error plain JS module without types
 import { deviceLabel, forgetRevoked, listDevices, revokeDevice, touchDevice } from '../../../../api/_devices.mjs'
 
@@ -38,5 +38,25 @@ describe('devices (A6)', () => {
     expect((await listDevices(cfg, fetchImpl)).devices.map((d: { sid: string }) => d.sid)).toEqual(['device-a'])
     expect(await sessionOk(cfg, b, t + 10, fetchImpl)).toBe(false)
     expect(await sessionOk(cfg, a, t + 10, fetchImpl)).toBe(true)
+  })
+
+  it('signing a device out removes its passkeys; "all other devices" keeps only yours (A3)', async () => {
+    const db = new SQL.Database()
+    db.run('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)')
+    // An older passkeys table, without device ids.
+    db.run('CREATE TABLE sys_passkeys (id TEXT PRIMARY KEY, spki TEXT NOT NULL, alg INTEGER NOT NULL, counter INTEGER NOT NULL DEFAULT 0, label TEXT, created INTEGER NOT NULL)')
+    db.run("INSERT INTO sys_passkeys VALUES ('old', 'k', -7, 0, 'Old', 1)")
+    const fetchImpl = (async (_u: string, init: { body: string }) => ({ ok: true, status: 200, text: async () => JSON.stringify(handlePipeline(db, JSON.parse(init.body))) })) as unknown as typeof fetch
+    // @ts-expect-error plain JS module without types
+    const { ensureKeys } = await import('../../../../api/_passkey.mjs')
+    await ensureKeys(cfg, fetchImpl)
+    db.run("INSERT INTO sys_passkeys VALUES ('pa', 'k', -7, 0, 'A', 2, 'device-a'), ('pb', 'k', -7, 0, 'B', 3, 'device-b'), ('pc', 'k', -7, 0, 'C', 4, 'device-c')")
+    const ids = () => (db.exec('SELECT id FROM sys_passkeys ORDER BY id')[0]?.values ?? []).map((r) => r[0])
+    forgetRevoked()
+    await revokeDevice(cfg, 'device-c', fetchImpl)
+    expect(ids()).toEqual(['old', 'pa', 'pb'])
+    const s = await signOutAll(cfg, Date.now(), fetchImpl, 'device-a')
+    expect(ids()).toEqual(['pa'])
+    expect(sessionSigned(cfg, s)?.sid).toBe('device-a')
   })
 })

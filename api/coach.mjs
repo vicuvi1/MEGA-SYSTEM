@@ -3,7 +3,7 @@
 //   {"ok":true,"reply":"…","done":[…]} at the end.
 // The app's Coach page talks to the same coach as the Telegram bots: same
 // brain (OpenRouter DeepSeek, Gemini as backup), memory, goals & rules.
-import { bearer, botDefaults, config, readBody, send, sessionOk } from './_lib.mjs'
+import { bearer, botDefaults, config, readBody, send, requireSession } from './_lib.mjs'
 import { coachChat, coachRhythm, coachUndo } from './_bot/bot.mjs'
 import { askModel } from './ai.mjs'
 import { googleEnv } from './google.mjs'
@@ -11,7 +11,7 @@ import { googleEnv } from './google.mjs'
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
-  if (!(await sessionOk(cfg, bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await requireSession(res, cfg, bearer(req)))) return
   let body
   try {
     body = await readBody(req)

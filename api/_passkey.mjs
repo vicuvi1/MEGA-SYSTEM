@@ -8,9 +8,17 @@
 // Keys live in server-only tables (sys_), never synced to devices.
 import { createHash, createPublicKey, randomBytes, timingSafeEqual, verify } from 'node:crypto'
 import { liveEpoch, makeSession, run } from './_lib.mjs'
+import { newSid } from './_devices.mjs'
 
 const T_CHAL = 'CREATE TABLE IF NOT EXISTS sys_passkey_chal (challenge TEXT PRIMARY KEY, op TEXT NOT NULL, exp INTEGER NOT NULL)'
-const T_KEYS = 'CREATE TABLE IF NOT EXISTS sys_passkeys (id TEXT PRIMARY KEY, spki TEXT NOT NULL, alg INTEGER NOT NULL, counter INTEGER NOT NULL DEFAULT 0, label TEXT, created INTEGER NOT NULL)'
+// sid: the device that made it (A3): signing that device out removes it too.
+export const T_KEYS = 'CREATE TABLE IF NOT EXISTS sys_passkeys (id TEXT PRIMARY KEY, spki TEXT NOT NULL, alg INTEGER NOT NULL, counter INTEGER NOT NULL DEFAULT 0, label TEXT, created INTEGER NOT NULL, sid TEXT)'
+
+/** The table, with the sid column added on older databases. */
+export async function ensureKeys(cfg, fetchImpl = fetch) {
+  await run(cfg, [[T_KEYS]], fetchImpl)
+  await run(cfg, [['ALTER TABLE sys_passkeys ADD COLUMN sid TEXT']], fetchImpl).catch(() => null) // already there
+}
 const b64u = (buf) => Buffer.from(buf).toString('base64url')
 const fromB64u = (s) => Buffer.from(String(s || ''), 'base64url')
 const sha256 = (b) => createHash('sha256').update(b).digest()
@@ -45,8 +53,9 @@ async function takeClientData(cfg, clientDataJSON, type, origin, op, now, fetchI
   if (!rows.length) throw new Error('Passkey request expired: try again')
 }
 
-/** Saves a new passkey (only with a valid session: the PIN came first). */
-export async function passkeyRegister(cfg, body, site, now = Date.now(), fetchImpl = fetch) {
+/** Saves a new passkey (only with a valid session: the PIN came first); `sid`: that session's device. */
+export async function passkeyRegister(cfg, body, site, now = Date.now(), fetchImpl = fetch, sid = null) {
+  await ensureKeys(cfg, fetchImpl)
   await takeClientData(cfg, body.clientDataJSON, 'webauthn.create', site.origin, 'register', now, fetchImpl)
   const alg = Number(body.alg)
   if (alg !== -7 && alg !== -257) throw new Error('This passkey type is not supported')
@@ -56,7 +65,7 @@ export async function passkeyRegister(cfg, body, site, now = Date.now(), fetchIm
   if (auth.length < 37 || !timingSafeEqual(auth.subarray(0, 32), sha256(site.rpId))) throw new Error('Passkey for another site')
   const id = String(body.credentialId || '')
   if (!/^[A-Za-z0-9_-]{16,512}$/.test(id)) throw new Error('Passkey id missing')
-  const [, , [[n]]] = await run(cfg, [[T_KEYS], ['INSERT OR REPLACE INTO sys_passkeys (id, spki, alg, counter, label, created) VALUES (?, ?, ?, 0, ?, ?)', [id, b64u(spki), alg, String(body.label || 'This device').slice(0, 40), now]], ['SELECT COUNT(*) FROM sys_passkeys']], fetchImpl)
+  const [, , [[n]]] = await run(cfg, [[T_KEYS], ['INSERT OR REPLACE INTO sys_passkeys (id, spki, alg, counter, label, created, sid) VALUES (?, ?, ?, 0, ?, ?, ?)', [id, b64u(spki), alg, String(body.label || 'This device').slice(0, 40), now, sid]], ['SELECT COUNT(*) FROM sys_passkeys']], fetchImpl)
   if (Number(n) > 5) await run(cfg, [['DELETE FROM sys_passkeys WHERE id IN (SELECT id FROM sys_passkeys ORDER BY created LIMIT ?)', [Number(n) - 5]]], fetchImpl)
   return { ok: true }
 }
@@ -64,10 +73,11 @@ export async function passkeyRegister(cfg, body, site, now = Date.now(), fetchIm
 /** Unlocks with a passkey: every check passes → a session, like the PIN. */
 export async function passkeyLogin(cfg, body, site, now = Date.now(), fetchImpl = fetch) {
   const id = String(body.credentialId || '')
-  const [, rows] = await run(cfg, [[T_KEYS], ['SELECT spki, alg, counter FROM sys_passkeys WHERE id = ?', [id]]], fetchImpl)
+  await ensureKeys(cfg, fetchImpl)
+  const [rows] = await run(cfg, [['SELECT spki, alg, counter, sid FROM sys_passkeys WHERE id = ?', [id]]], fetchImpl)
   if (!rows.length) throw new Error('Unknown passkey: unlock with your PIN')
   await takeClientData(cfg, body.clientDataJSON, 'webauthn.get', site.origin, 'login', now, fetchImpl)
-  const [spki, alg, counter] = rows[0]
+  const [spki, alg, counter, keySid] = rows[0]
   const auth = fromB64u(body.authenticatorData)
   if (auth.length < 37 || !timingSafeEqual(auth.subarray(0, 32), sha256(site.rpId))) throw new Error('Passkey for another site')
   const flags = auth[32]
@@ -78,6 +88,8 @@ export async function passkeyLogin(cfg, body, site, now = Date.now(), fetchImpl 
   if (!ok) throw new Error('Passkey signature is wrong')
   const count = auth.readUInt32BE(33)
   if (count !== 0 && count <= Number(counter)) throw new Error('Passkey was copied: unlock with your PIN')
-  await run(cfg, [['UPDATE sys_passkeys SET counter = ? WHERE id = ?', [count, id]]], fetchImpl)
-  return { session: makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now)) }
+  // The session keeps the device of the passkey, so signing that device out ends it (A3).
+  const sid = keySid ? String(keySid) : newSid()
+  await run(cfg, [['UPDATE sys_passkeys SET counter = ?, sid = ? WHERE id = ?', [count, sid, id]]], fetchImpl)
+  return { session: makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now), sid) }
 }

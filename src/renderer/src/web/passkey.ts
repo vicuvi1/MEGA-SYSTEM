@@ -22,6 +22,14 @@ export const hasPasskeyHere = () => {
   }
 }
 
+export const forgetPasskeyHere = () => {
+  try {
+    localStorage.removeItem(ID)
+  } catch {
+    /* private window */
+  }
+}
+
 /** Makes a passkey on this device (you are unlocked with the PIN). */
 export async function setupPasskey(): Promise<void> {
   if (!passkeySupported()) throw new Error('This browser has no fingerprint / face unlock')
@@ -56,7 +64,14 @@ export async function unlockWithPasskey(): Promise<string> {
   const cred = (await navigator.credentials.get({ publicKey: { challenge: fromB64u(challenge), rpId: location.hostname, allowCredentials: [{ type: 'public-key', id: fromB64u(id) }], userVerification: 'required', timeout: 60000 } })) as PublicKeyCredential | null
   if (!cred) throw new Error('Cancelled')
   const res = cred.response as AuthenticatorAssertionResponse
-  const { session } = await post({ passkey: 'login', credentialId: b64u(cred.rawId), clientDataJSON: b64u(res.clientDataJSON), authenticatorData: b64u(res.authenticatorData), signature: b64u(res.signature) })
+  let session: string
+  try {
+    ;({ session } = await post({ passkey: 'login', credentialId: b64u(cred.rawId), clientDataJSON: b64u(res.clientDataJSON), authenticatorData: b64u(res.authenticatorData), signature: b64u(res.signature) }))
+  } catch (e) {
+    // Removed on the server (this device was signed out, A3): forget it here too.
+    if (/Unknown passkey/.test((e as Error).message)) forgetPasskeyHere()
+    throw e
+  }
   localStorage.setItem('life_web_session', session)
   return session
 }

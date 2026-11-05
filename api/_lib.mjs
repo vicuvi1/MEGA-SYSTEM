@@ -3,7 +3,7 @@
 // session, and sends its database requests here. Files starting with "_"
 // are not functions on Vercel.
 import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
-import { revokedSids } from './_devices.mjs'
+import { removeDevicePasskeys, revokedSids } from './_devices.mjs'
 
 const DEFAULT_PIN = '2007' // only while no PIN was ever set, like the app
 const SESSION_DAYS = 30
@@ -98,38 +98,95 @@ export function sessionSigned(cfg, token, now = Date.now()) {
   }
 }
 
-const EPOCH_KEY = 'session_epoch'
+// The PIN hash and the sign-out counter live in a server-only table (A1/A2):
+// /api/db refuses it (_sqlguard.mjs), so a page can neither read the hash nor
+// set a PIN of its own. The first read copies them over from settings, where
+// older versions kept them; from then on settings.pin_hash is only the copy
+// devices check while offline (the server writes it, never trusts it).
+const T_AUTH = 'CREATE TABLE IF NOT EXISTS sys_auth (key TEXT PRIMARY KEY, value TEXT NOT NULL)'
+
+/** { pin: "salt:hash" | null (none set: 2007), counter } from sys_auth. */
+export async function authState(cfg, fetchImpl = fetch) {
+  const [, , , rows] = await run(
+    cfg,
+    [
+      [T_AUTH],
+      ["INSERT OR IGNORE INTO sys_auth (key, value) VALUES ('pin_hash', COALESCE((SELECT value FROM settings WHERE key = 'pin_hash'), ''))"],
+      ["INSERT OR IGNORE INTO sys_auth (key, value) VALUES ('session_epoch', COALESCE((SELECT value FROM settings WHERE key = 'session_epoch'), '0'))"],
+      ['SELECT key, value FROM sys_auth']
+    ],
+    fetchImpl
+  )
+  const m = Object.fromEntries(rows.map((r) => [String(r[0]), r[1] == null ? '' : String(r[1])]))
+  return { pin: m.pin_hash || null, counter: m.session_epoch || '0' }
+}
+
 let epochCache = { at: 0, value: '' }
 /** The current epoch (cached 30 s per server instance). */
 export async function liveEpoch(cfg, fetchImpl = fetch, now = Date.now()) {
   if (epochCache.value && now - epochCache.at < 30_000) return epochCache.value
-  const [pin, counter] = await Promise.all([getSetting(cfg, 'pin_hash', fetchImpl), getSetting(cfg, EPOCH_KEY, fetchImpl)])
-  const value = createHash('sha256').update(`${pin ?? ''}|${counter ?? '0'}`).digest('base64url').slice(0, 16)
+  const { pin, counter } = await authState(cfg, fetchImpl)
+  const value = createHash('sha256').update(`${pin ?? ''}|${counter}`).digest('base64url').slice(0, 16)
   epochCache = { at: now, value }
   return value
 }
 export const forgetEpoch = () => (epochCache = { at: 0, value: '' })
 
-/** A valid session: signed, not expired, and from the current epoch. */
+/**
+ * A valid session: signed, not expired, and from the current epoch.
+ * When the database can't be reached it throws (it doesn't say "no"): a
+ * network hiccup must never sign you out (A4).
+ */
 export async function sessionOk(cfg, token, now = Date.now(), fetchImpl = fetch) {
   const p = sessionSigned(cfg, token, now)
   if (!p) return false
-  try {
-    if (p.ep !== (await liveEpoch(cfg, fetchImpl, now))) return false
-    // A device signed out on its own (A6).
-    if (p.sid && (await revokedSids(cfg, fetchImpl, now)).has(p.sid)) return false
-    return true
-  } catch {
-    return false
-  }
+  if (p.ep !== (await liveEpoch(cfg, fetchImpl, now))) return false
+  // A device signed out on its own (A6).
+  if (p.sid && (await revokedSids(cfg, fetchImpl, now)).has(p.sid)) return false
+  return true
 }
 
-/** "Sign out all devices": a new epoch; returns a fresh session for the device that asked. */
-export async function signOutAll(cfg, now = Date.now(), fetchImpl = fetch) {
-  const n = Number((await getSetting(cfg, EPOCH_KEY, fetchImpl)) || 0) + 1
-  await setSetting(cfg, EPOCH_KEY, String(n), fetchImpl)
+/**
+ * For a handler: true when the session is valid. Otherwise it answers itself:
+ * 401 (enter the PIN again) or 503 (couldn't check: the app keeps the session).
+ */
+export async function requireSession(res, cfg, token) {
+  try {
+    if (await sessionOk(cfg, token)) return true
+    send(res, 401, { error: 'Locked: enter your PIN again' })
+  } catch {
+    send(res, 503, { error: 'Database not reachable: try again in a moment' })
+  }
+  return false
+}
+
+/**
+ * "Sign out all devices": a new epoch, and the other devices' passkeys are
+ * removed (A3), so a lost phone can't come back with its fingerprint.
+ * Returns a fresh session for the device that asked (same device id).
+ */
+export async function signOutAll(cfg, now = Date.now(), fetchImpl = fetch, sid = null) {
+  await authState(cfg, fetchImpl)
+  await run(cfg, [["UPDATE sys_auth SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'session_epoch'"]], fetchImpl)
+  await removeDevicePasskeys(cfg, sid, fetchImpl, true)
   forgetEpoch()
-  return makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now))
+  return makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now), sid || undefined)
+}
+
+/** The device id of a session we signed, even an expired or older one (to keep a device's id across logins). */
+export function sidOf(cfg, token) {
+  if (!cfg.secret || typeof token !== 'string') return null
+  const [data, sig] = token.split('.')
+  if (!data || !sig) return null
+  const want = Buffer.from(sign(cfg.secret, data))
+  const got = Buffer.from(sig)
+  if (want.length !== got.length || !timingSafeEqual(want, got)) return null
+  try {
+    const sid = JSON.parse(Buffer.from(data, 'base64url').toString()).sid
+    return typeof sid === 'string' && /^[A-Za-z0-9_-]{6,32}$/.test(sid) ? sid : null
+  } catch {
+    return null
+  }
 }
 
 /** Runs statements in one Turso pipeline; returns each statement's rows (arrays of cells). */
@@ -155,7 +212,11 @@ const GUARD_TABLE = 'CREATE TABLE IF NOT EXISTS sys_login_guard (scope TEXT PRIM
 const LIMITS = { ip: { free: 5, max: 86400_000 }, all: { free: 20, max: 15 * 60_000 } }
 const wait = (fails, lim) => (fails >= lim.free ? Math.min(60_000 * 2 ** (fails - lim.free), lim.max) : 0)
 
-export async function login(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 'unknown') {
+/**
+ * Checks a PIN with the wrong-PIN limits: null when it's right, else the
+ * answer to send ({ status: 401 | 429, body }).
+ */
+export async function checkPin(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 'unknown') {
   const scopes = [`ip:${String(ip).slice(0, 64)}`, 'all']
   const lims = [LIMITS.ip, LIMITS.all]
   const [, rows] = await run(cfg, [[GUARD_TABLE], ['SELECT scope, until FROM sys_login_guard WHERE scope IN (?, ?)', scopes]], fetchImpl)
@@ -174,7 +235,7 @@ export async function login(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 
     await run(cfg, over.map((sc) => ['UPDATE sys_login_guard SET until = MAX(until, ?) WHERE scope = ?', [until, sc]]), fetchImpl)
     return tooMany(until)
   }
-  const stored = await getSetting(cfg, 'pin_hash', fetchImpl)
+  const { pin: stored } = await authState(cfg, fetchImpl)
   if (!(await pinMatches(stored, pin))) {
     const waits = fails.map((f, k) => wait(f, lims[k]))
     const locks = waits.map((w, k) => [w ? 'UPDATE sys_login_guard SET until = ?, quota = ? WHERE scope = ?' : 'SELECT ?, ?, ?', [now + w, fails[k] + 1, scopes[k]]])
@@ -182,8 +243,46 @@ export async function login(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 
     return Math.max(...waits) ? tooMany(now + Math.max(...waits)) : { status: 401, body: { error: 'Wrong PIN' } }
   }
   await run(cfg, scopes.map((sc, k) => ['UPDATE sys_login_guard SET fails = 0, until = 0, quota = ? WHERE scope = ?', [lims[k].free, sc]]), fetchImpl)
+  return null
+}
+
+/** `sid`: this device's id from its previous session (kept unless it was signed out). */
+export async function login(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 'unknown', sid = null) {
+  const refused = await checkPin(cfg, pin, now, fetchImpl, ip)
+  if (refused) return refused
   forgetEpoch()
-  return { status: 200, body: { session: makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now)) } }
+  if (sid && (await revokedSids(cfg, fetchImpl, now)).has(sid)) sid = null
+  return { status: 200, body: { session: makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now), sid || undefined) } }
+}
+
+/** "saltHex:scryptHex", the format the app and the desktop read. */
+export async function hashPinServer(pin, salt = randomBytes(16)) {
+  return `${salt.toString('hex')}:${(await scryptAsync(String(pin), salt)).toString('hex')}`
+}
+
+/**
+ * A new PIN, checked here (A2): the current PIN must be right (same wrong-PIN
+ * limits as the login). Every other session ends; this device gets a fresh
+ * one. Devices get the new hash for their offline check with the next sync.
+ */
+export async function changePin(cfg, current, next, sid, now = Date.now(), fetchImpl = fetch, ip = 'unknown') {
+  next = String(next ?? '')
+  if (!/^\d{4,12}$/.test(next)) return { status: 400, body: { error: 'PIN must be 4 to 12 digits' } }
+  const refused = await checkPin(cfg, current, now, fetchImpl, ip)
+  if (refused) return refused.status === 401 ? { status: 403, body: { error: 'Current PIN is wrong' } } : refused
+  const hash = await hashPinServer(next)
+  await run(
+    cfg,
+    [
+      ["UPDATE sys_auth SET value = ? WHERE key = 'pin_hash'", [hash]],
+      ["INSERT INTO settings (key, value) VALUES ('pin_hash', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [hash]],
+      // An untracked change: every device downloads everything once (and gets the new copy).
+      ["INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [`pin-${now}-${randomBytes(4).toString('hex')}`]]
+    ],
+    fetchImpl
+  )
+  forgetEpoch()
+  return { status: 200, body: { session: makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now), sid || undefined) } }
 }
 
 /** The caller's IP (Vercel puts the real one first in x-forwarded-for). */

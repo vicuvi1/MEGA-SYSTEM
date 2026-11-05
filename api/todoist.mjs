@@ -13,7 +13,7 @@
 //   addArea {name}  → {area}   renameArea {area, name}
 //   cleanup           → {changes, ai}    suggested fixes to approve (AI, else duplicates/overdue)
 // New tasks without a #project go to the right area (by their words, else Gemini).
-import { bearer, config, readBody, send, sessionOk } from './_lib.mjs'
+import { bearer, config, readBody, send, requireSession } from './_lib.mjs'
 import { cleanupPrompt, createTodoistApi, localCleanup, parseCleanup } from './_bot/bot.mjs'
 import { askModel } from './ai.mjs'
 
@@ -29,7 +29,7 @@ export function geminiAreaPicker(key) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
-  if (!(await sessionOk(config(), bearer(req)))) return send(res, 401, { error: 'Locked: enter your PIN again' })
+  if (!(await requireSession(res, config(), bearer(req)))) return
   const token = (process.env.TODOIST_TOKEN || '').trim()
   let body
   try {
