@@ -11,31 +11,12 @@
 
 import { normalizeState, defaultState } from './model.js';
 import { deriveKey, seal, open, openWithPin, newSalt, isSealed } from './cipher.js';
-import { SEED_FINANCE_STATE } from './seedFinance.js';
+import { demoFinanceState } from './seedFinance.js';
 
-// Through the Life System web server, with the session from the PIN login
-// (the Turso key stays on the server).
-const tursoSession = () => { try { return localStorage.getItem('life_web_session') || ''; } catch { return ''; } };
-
-function syncFinanceToTurso(state) {
-  try {
-    fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + tursoSession(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [
-          {
-            type: 'execute',
-            stmt: {
-              sql: "INSERT INTO settings (key, value) VALUES ('finance_backup_json', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-              args: [{ type: 'text', value: JSON.stringify(state) }]
-            }
-          }
-        ]
-      })
-    }).catch(() => {});
-  } catch {}
-}
+// Nothing here writes to the Life System database: Life's own sync
+// (src/renderer/src/web/appSync.ts, settings.app_sync_finance) copies the
+// data. Older versions also wrote the whole state to finance_backup_json on
+// every save; Life still reads that old key once on a new device.
 
 const KEY = 'finance-helper.state';
 const ENC = 'finance-helper.enc';
@@ -75,25 +56,27 @@ export function load(storage = globalThis.localStorage) {
     s._sealed = true;
     return s;
   }
-  try {
-    const raw = storage?.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const seedTxCount = (typeof SEED_FINANCE_STATE !== 'undefined' && Array.isArray(SEED_FINANCE_STATE?.tx)) ? SEED_FINANCE_STATE.tx.length : 0;
-      const storedTxCount = Array.isArray(parsed?.tx) ? parsed.tx.length : 0;
-      if (storedTxCount >= seedTxCount && storedTxCount > 0) {
-        return normalizeState(parsed);
-      }
-    }
-  } catch {}
-  if (typeof SEED_FINANCE_STATE !== 'undefined' && SEED_FINANCE_STATE) {
-    try {
-      storage?.setItem(KEY, JSON.stringify(SEED_FINANCE_STATE));
-      syncFinanceToTurso(SEED_FINANCE_STATE);
-      return normalizeState(JSON.parse(JSON.stringify(SEED_FINANCE_STATE)));
-    } catch {}
+  let raw = null;
+  try { raw = storage?.getItem(KEY) ?? null; } catch {}
+  const pick = initialSource(raw, { demo: globalThis.FH_DEMO === true });
+  if (pick === 'stored') {
+    try { return normalizeState(JSON.parse(raw)); } catch {}
   }
+  // The example data is shown, never saved here: the first real save
+  // replaces it, and it never reaches the Life System database.
+  if (pick === 'demo') return normalizeState(demoFinanceState());
   return fresh();
+}
+
+// What load() starts from. Whatever this device has saved always wins (even
+// a short list: records are deleted by removing them, so "fewer records"
+// is real data, not a reason to bring old data back). The example data is
+// only for the demo preview on a device with nothing saved.
+export function initialSource(raw, { demo = false } = {}) {
+  if (raw != null && raw !== '') {
+    try { if (JSON.parse(raw)) return 'stored'; } catch {}
+  }
+  return demo ? 'demo' : 'fresh';
 }
 
 function headerOf(state, enc) {
@@ -112,7 +95,7 @@ export function save(state, storage = globalThis.localStorage) {
     const head = readHead(storage);
     if (!head?.enc) {
       if (isPlaceholder(state)) return false;
-      storage?.setItem(KEY, JSON.stringify(state)); syncFinanceToTurso(state);
+      storage?.setItem(KEY, JSON.stringify(state));
       return true;
     }
     storage.setItem(HEAD, headerOf(state, head.enc));
