@@ -78,6 +78,10 @@ const api: DesktopApi = {
   pcDnd: () => ipcRenderer.invoke('pc:dnd'),
   pcExtensionFolder: () => ipcRenderer.invoke('pc:extensionFolder'),
   onPcApp: (cb) => void ipcRenderer.on('desktop:app', (_e, a) => cb(a)),
+  // Smart island: title-free events, what you're doing, the block/meeting on now.
+  onActivity: (cb) => void ipcRenderer.on('desktop:activity', (_e, ev) => cb(ev)),
+  pcDoing: () => ipcRenderer.invoke('pc:doing'),
+  pcSmartState: (s) => ipcRenderer.send('pc:smartState', s),
   onLock: (cb) => void ipcRenderer.on('desktop:lock', (_e, l) => cb(l)),
   onJump: (cb) => void ipcRenderer.on('desktop:jump', (_e, a) => cb(String(a))),
   onIslandCapture: (cb) => void ipcRenderer.on('island:capture', () => cb()),

@@ -2,8 +2,28 @@
 // computer: which sensors are on (P1), what kind of app you're in (P2, P3),
 // the day's totals (P8), honest focus quality (P7), real breaks (P11), the
 // late-night guard (P13) and the sites a focus block keeps away (P19).
+import { cleanContextRules, type ContextRule } from './activityContext'
 
 export interface PcPrefs {
+  // ---- Smart island (SI1–SI27): all off until you turn them on ----
+  /** Work out what you're doing (coding, study, video…) from the app in front. */
+  smart: boolean
+  /** Suggestions on the island (Accept / Not now / Never). */
+  smartSuggest: boolean
+  /** Your recipes run (desktop only). */
+  smartRecipes: boolean
+  /** SI14: notice when you leave your bank's site (titles on) to offer "log spending". */
+  smartBank: boolean
+  /** Words for your bank sites (matched on this PC only). */
+  bankWords: string[]
+  /** Your goals and subjects (the app sends them): the only words a detail can be. */
+  goalWords: string[]
+  /** "That's not right": your fixes per app. */
+  contextRules: ContextRule[]
+  /** Suggestions a day at most. */
+  suggestBudget: number
+  /** SI19: a music link the focus pack opens (allow-listed sites only), or ''. */
+  musicLink: string
   /** Idle time (away, breaks, focus quality). */
   idle: boolean
   /** Copied text with a date in it ("save this?"). */
@@ -29,6 +49,15 @@ export interface PcPrefs {
 }
 
 export const DEFAULT_PC: PcPrefs = {
+  smart: false,
+  smartSuggest: false,
+  smartRecipes: false,
+  smartBank: false,
+  bankWords: [],
+  goalWords: [],
+  contextRules: [],
+  suggestBudget: 6,
+  musicLink: '',
   idle: true,
   clipboard: true,
   activeApp: false,
@@ -46,7 +75,18 @@ export const DEFAULT_PC: PcPrefs = {
 const words = (x: unknown, max = 60) => (Array.isArray(x) ? [...new Set(x.map((v) => String(v).trim().toLowerCase()).filter((v) => v && v.length <= 40))].slice(0, max) : null)
 export function cleanPcPrefs(p: any): PcPrefs {
   const b = (k: keyof PcPrefs) => (typeof p?.[k] === 'boolean' ? p[k] : DEFAULT_PC[k])
+  const budget = Math.round(Number(p?.suggestBudget))
+  const music = typeof p?.musicLink === 'string' && /^https:\/\/[^\s]{4,300}$/.test(p.musicLink) ? p.musicLink : ''
   return {
+    smart: b('smart') as boolean,
+    smartSuggest: b('smartSuggest') as boolean,
+    smartRecipes: b('smartRecipes') as boolean,
+    smartBank: b('smartBank') as boolean,
+    bankWords: words(p?.bankWords, 20) ?? [],
+    goalWords: (Array.isArray(p?.goalWords) ? [...new Set(p.goalWords.map((v: unknown) => String(v).trim()).filter((v: string) => v.length >= 3 && v.length <= 40))] as string[] : []).slice(0, 40),
+    contextRules: cleanContextRules(p?.contextRules),
+    suggestBudget: Number.isFinite(budget) ? Math.max(0, Math.min(20, budget)) : DEFAULT_PC.suggestBudget,
+    musicLink: music,
     idle: b('idle') as boolean,
     clipboard: b('clipboard') as boolean,
     activeApp: b('activeApp') as boolean,
@@ -93,13 +133,29 @@ export function appLabel(proc: string, title: string | null): string {
   return NICE[name] ?? (name ? name[0].toUpperCase() + name.slice(1) : 'Unknown')
 }
 
-export interface DayActivity { day: string; apps: Record<string, { sec: number; kind: AppKind }> }
+export interface DayActivity {
+  day: string
+  apps: Record<string, { sec: number; kind: AppKind }>
+  /** Smart island: seconds of each kind of doing (coding, study…). */
+  ctx?: Record<string, number>
+  /** Smart island: minutes of each kind per hour ("9" → {coding: 40}). */
+  hours?: Record<string, Record<string, number>>
+}
 
 /** Adds a sample (the watcher looks every few seconds). */
 export function addActivity(d: DayActivity | null, day: string, label: string, kind: AppKind, sec: number): DayActivity {
   const base: DayActivity = d && d.day === day ? d : { day, apps: {} }
   const cur = base.apps[label] ?? { sec: 0, kind }
-  return { day, apps: { ...base.apps, [label]: { sec: cur.sec + sec, kind } } }
+  return { ...base, day, apps: { ...base.apps, [label]: { sec: cur.sec + sec, kind } } }
+}
+
+/** Smart island: adds seconds of a kind of doing to the day and to its hour. */
+export function addDoing(d: DayActivity | null, day: string, ctx: string, sec: number, hour: number): DayActivity {
+  const base: DayActivity = d && d.day === day ? d : { day, apps: {} }
+  const h = String(hour)
+  const hours = { ...(base.hours ?? {}) }
+  hours[h] = { ...(hours[h] ?? {}), [ctx]: Math.round(((hours[h]?.[ctx] ?? 0) + sec / 60) * 10) / 10 }
+  return { ...base, ctx: { ...(base.ctx ?? {}), [ctx]: (base.ctx?.[ctx] ?? 0) + sec }, hours }
 }
 
 const hm = (sec: number) => {

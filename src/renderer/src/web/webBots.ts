@@ -49,6 +49,8 @@ import type { BotContext } from './bots/context'
 export { focusKeyboard }
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport, removeExercise, setExercise, waterCard, workoutCard } from '@core/sportCards'
+import { cleanRecipes, recipeText } from '@core/recipes'
+import { dayLog } from './dayLog'
 
 const LOGS_KEY = 'life_bot_logs'
 const store = typeof localStorage !== 'undefined' ? localStorage : null
@@ -590,6 +592,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const wakes = inp.wakes.filter((w: any) => w.day >= monday)
               return quickReply(q, { streaks: { training: svc.body.state().streak ?? 0, clean: svc.discipline.state().current ?? 0, focusWeekMin: inp.focus.filter((x: any) => x.day >= monday).reduce((t: number, x: any) => t + x.minutes, 0), wakeOnTime: wakes.length ? `${wakes.filter((w: any) => w.onTime).length}/${wakes.length} on time` : undefined } })
             }
+            if (q.kind === 'wrong') {
+              // SI23: today's numbers, the day by activity (only if he shares it from the desktop), one push.
+              const open = st.mustdos.filter((x) => !x.done)
+              return quickReply(q, { wrong: { focusMin: st.today.focusMin, focusGoal: Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0)), mustDone: st.today.mustDone, mustTotal: st.today.mustTotal, nextMust: open[0]?.text ?? null, doing: dayLog(db, today).doing ?? null } })
+            }
             return quickReply(q, { move: st.move as any, water: { ml: st.today.waterMl, target: st.today.waterTarget } })
           })
           .catch(() => null)
@@ -1049,6 +1056,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               return `💪 Workout logged for ${a.day} · streak ${b.streak}`
             })
             done.push(line)
+            continue
+          }
+          if (a.kind === 'recipe') {
+            // SI24: saved OFF, marked as Ben's; the desktop island shows it as a card to turn on (or not).
+            const name = await mirror.write((db) => {
+              const list = cleanRecipes(readSetting(db as any, 'island_recipes'))
+              if (list.some((r) => r.byBen && recipeText(r) === recipeText(a.recipe))) return null
+              writeSetting(db as any, 'island_recipes', cleanRecipes([...list, a.recipe]))
+              return a.recipe.name
+            })
+            if (name) done.push(`🧩 Recipe idea saved (off): ${recipeText(a.recipe)}. Turn it on from the desktop island or Settings → Smart island.`)
             continue
           }
           if (a.kind === 'style') {

@@ -3,6 +3,8 @@
 // the tray) sends it a snapshot of your moment; the island sends back taps.
 // This file is the pure part: what it shows, and when it drops down.
 import { normalizeAccelerator } from './islandKeys'
+import type { ContextKind } from './activityContext'
+import type { SafeAction } from './recipes'
 
 export interface IslandBlock {
   title: string
@@ -49,17 +51,31 @@ export type IslandAction = { id?: string } & (
   | { kind: 'lockPc'; alertId: string }
   /** IS11: join the meeting on now (opens its video link). */
   | { kind: 'join'; url: string }
+  /** Smart island: your answer to a suggestion, and what Accept runs. */
+  | { kind: 'suggest'; sid: string; sk: string; answer: 'accept' | 'later' | 'never'; run?: IslandAction; laterMin?: number }
+  /** SI1: "that's not right": pick what you're doing (ctx set), or open the picker (no ctx). */
+  | { kind: 'ctxFix'; ctx?: ContextKind; app?: string }
+  /** SI7: safe actions only (a recipe, the focus pack). */
+  | { kind: 'safe'; acts: SafeAction[]; why: string; recipeId?: string }
+  /** SI7: a recipe's first run: always, just now, or turn it off. */
+  | { kind: 'recipeAnswer'; recipeId: string; answer: 'always' | 'now' | 'off'; acts: SafeAction[] }
+  /** SI24: Ben proposed a recipe: add it (off until you turn it on) or not. */
+  | { kind: 'recipeAdd'; recipe: unknown; answer: 'add' | 'no'; alertId: string }
+  /** SI27: close the day in one go (ends timers, unfinished blocks to tomorrow or dropped, drafts the note). */
+  | { kind: 'closeAll'; blocks: 'move' | 'drop' }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest'
   title: string
   text: string
   face?: string
   actions: { label: string; action: IslandAction; primary?: boolean }[]
   /** A calendar meeting (a call link or other people) starting: its own rule in Settings (IF5). */
   meeting?: boolean
+  /** SI6: you've been ignoring this kind: only a dot, it waits in the panel. */
+  dot?: boolean
 }
 
 export interface IslandSnapshot {
@@ -103,6 +119,8 @@ export interface IslandSnapshot {
   focusGuard?: { pct: number; idleMin: number } | null
   /** Your points and the reward you're working toward. */
   points?: { balance: number; goal: { title: string; price: number } | null }
+  /** SI1: what you're doing on the PC now (Smart island on): a kind, never a window title. Tap to fix. */
+  doing?: { ctx: ContextKind; label: string; icon: string; detail?: string; app: string; conf: number } | null
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {
@@ -698,7 +716,7 @@ export const PEEK_GAP_MS = 3 * 60_000
  * quiet, calls, and the least time between two pop-ups (`gapMin`, 3 min by
  * default; time-up always drops down unless you made it a dot).
  */
-export function alertGate(o: { kind: string; meeting?: boolean; prefs: Pick<IslandPrefs, 'kinds'> & Partial<Pick<IslandPrefs, 'gapMin'>>; quiet: boolean; call: boolean; lastPeekAt: number; now: number }): AlertGate {
+export function alertGate(o: { kind: string; meeting?: boolean; dot?: boolean; prefs: Pick<IslandPrefs, 'kinds'> & Partial<Pick<IslandPrefs, 'gapMin'>>; quiet: boolean; call: boolean; lastPeekAt: number; now: number }): AlertGate {
   const pref = alertPref(o.kind, !!o.meeting)
   const k = pref ? o.prefs.kinds[pref] : null
   const rule: AlertRule = !k ? 'peek' : k.show ?? (k.on ? 'peek' : 'never')
@@ -706,7 +724,7 @@ export function alertGate(o: { kind: string; meeting?: boolean; prefs: Pick<Isla
   const p = alertPriority(o.kind)
   // Quiet: nothing drops down; your own timer running out still waits for you.
   if (o.quiet) return p === 'urgent' ? 'silent' : 'drop'
-  if (rule === 'dot') return 'silent'
+  if (rule === 'dot' || o.dot) return 'silent'
   // In a call: only time-up drops down.
   if (o.call) return p === 'urgent' ? 'peek' : 'silent'
   // At most one pop-up every few minutes (time-up always).

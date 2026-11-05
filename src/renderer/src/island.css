@@ -339,6 +339,9 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di.is-old .di-shape > * { opacity: 0.55; }
 .di-reconnect { color: var(--sub); font-style: italic; }
 .di-reconnect-line { margin: 0; padding: 6px 10px; border-radius: 10px; font-size: 12px; color: var(--sub); background: var(--line); }
+/* SI1: what you're doing (tap to fix). */
+.di-doing { align-self: flex-start; margin: 0; padding: 3px 10px; border: 0; border-radius: 999px; font: inherit; font-size: 12px; color: var(--sub); background: var(--line); cursor: pointer; }
+.di-doing:hover { color: var(--text, inherit); }
 
 /* ---- Make it yours (IF1, IF3, IP3, IP4) ---- */
 /* Top left / top right: the shape hugs that corner (the window sits there). */

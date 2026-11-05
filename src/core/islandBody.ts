@@ -25,6 +25,12 @@ export interface BodyInput {
   lastEyesAt: number
   eyeBreaks: boolean
   dismissed: Record<string, number>
+  /**
+   * SI12 (Smart island on): what you're doing, and whether this is a natural
+   * pause (you just switched apps). A work stretch waits for a pause (up to
+   * 75 min) and says what it was: "90 min of coding: walk + water?".
+   */
+  doing?: { ctx: string; pause: boolean } | null
 }
 
 export function waterAlert(a: BodyInput): IslandAlert | null {
@@ -55,11 +61,15 @@ export function moveAlert(a: BodyInput): IslandAlert | null {
   const id = `move:${Math.floor(a.activeSince / 60_000)}`
   if ((a.dismissed[id] ?? 0) > a.now) return null
   const sat = Math.round((a.now - a.activeSince) / 60_000)
+  const work = !!a.doing && ['coding', 'study', 'writing', 'ctf'].includes(a.doing.ctx)
+  // SI12: in the middle of real work, wait for a natural pause (not past 75 min).
+  if (work && !a.doing!.pause && sat < 75) return null
+  const what = a.doing?.ctx === 'ctf' ? 'CTF work' : a.doing?.ctx
   return {
     id,
     kind: 'move',
-    title: `${sat} min at the PC`,
-    text: '2-minute break: 20 squats? Your back will thank you.',
+    title: work ? `${sat} min of ${what}: walk + water?` : `${sat} min at the PC`,
+    text: work ? '2 minutes away from the screen, a glass of water, then back to it.' : '2-minute break: 20 squats? Your back will thank you.',
     face: '🏃',
     actions: [
       { label: '✓ 20 squats', action: { kind: 'moveBreak', name: 'Squats', n: 20, alertId: id }, primary: true },

@@ -594,7 +594,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   setInterval(quietCheck, 15_000)
   powerMonitor.on('resume', quietCheck)
   ipcMain.on('island:quiet', (e, choice) => {
-    if (!fromIsland(e)) return
+    // The app window too: a recipe or the focus pack (SI7, SI19) quiets the island.
+    if (!fromIsland(e) && !fromApp(e)) return
     setQuiet(choice === 'tomorrow' ? 'tomorrow' : Number.isFinite(choice) && choice > 0 ? Number(choice) : null)
   })
   // IS12: a calendar meeting is on now (the island page knows the plan).

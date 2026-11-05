@@ -3,7 +3,8 @@
 // click area, zoom, why it hid, the desktop's own lines), so a screenshot
 // shows exactly what didn't work and why.
 import { useEffect, useState } from 'react'
-import { readIslandLog, readIslandUiLog, type IslandLogEntry, type IslandUiLogEntry } from './islandLog'
+import { canUndo, readAutoLog, readIslandLog, readIslandUiLog, type AutoLogEntry, type IslandLogEntry, type IslandUiLogEntry } from './islandLog'
+import { undoAutomation } from './smartIsland'
 import { Icon } from './Icon'
 
 const keyName = (k: string) => (k ? k.replace('Control', 'Ctrl').replace(/\+/g, '+') : '')
@@ -12,11 +13,13 @@ export function IslandLogPanel() {
   const [list, setList] = useState<IslandLogEntry[]>(readIslandLog)
   const [seen, setSeen] = useState<IslandUiLogEntry[]>(readIslandUiLog)
   const [more, setMore] = useState(false)
+  const [autos, setAutos] = useState<AutoLogEntry[]>(readAutoLog)
   const [shortcut, setShortcut] = useState<string | null>(null)
   useEffect(() => {
     // The desktop keeps its own lines and the island page's together; an older desktop: what the page saved here.
     const load = () => {
       setList(readIslandLog())
+      setAutos(readAutoLog())
       const get = window.desktop?.islandGetLog
       if (!get) return setSeen(readIslandUiLog())
       get()
@@ -54,6 +57,25 @@ export function IslandLogPanel() {
             </li>
           ))}
         </ul>
+      )}
+      {autos.length > 0 && (
+        <>
+          <p className="muted bk-note">What your recipes did (Undo works for 10 minutes).</p>
+          <ul className="bk-list">
+            {[...autos].reverse().slice(0, 12).map((e) => (
+              <li key={e.id}>
+                <span>{new Date(e.at).toLocaleTimeString()}</span>
+                <small>{e.why}</small>
+                <small style={{ margin: 0 }}>{e.undone ? `↺ undone: ${e.did.join(', ')}` : e.did.join(', ')}</small>
+                {canUndo(e) && (
+                  <button className="btn small ghost" onClick={() => void undoAutomation(e.id).then(() => setAutos(readAutoLog()))}>
+                    Undo
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       {seen.length > 0 && (
         <>

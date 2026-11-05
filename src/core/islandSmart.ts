@@ -42,6 +42,8 @@ export interface SmartInput {
   dismissed: Record<string, number>
   /** Blocks you already answered "did you finish it?" for. */
   answered: Record<string, string>
+  /** SI10: what you were really doing in a block ("You were coding 38 of 45 min."), when the Smart island knows. */
+  reality?: (b: IslandBlock) => string
 }
 
 /** The smart alert to show now (end-of-block check first, then drift), or null. */
@@ -58,7 +60,7 @@ export function smartAlert(a: SmartInput): IslandAlert | null {
         id,
         kind: 'end',
         title: 'Block finished',
-        text: `Did you finish “${ended.title}”?`,
+        text: `${a.reality?.(ended) ? `${a.reality(ended)} ` : ''}Did you finish “${ended.title}”?`,
         face: '🏁',
         actions: [
           { label: '✓ Done', action: { kind: 'blockResult', block: ended, result: 'done', alertId: id }, primary: true },
@@ -99,4 +101,62 @@ export function focusQuality(elapsedSec: number, idleSec: number): number {
 export function autoStartBlock(blocks: IslandBlock[], now: number, running: boolean, started: Record<string, true>): IslandBlock | null {
   if (running) return null
   return blocks.find((b) => !meeting(b) && !b.maybe && b.start <= now && now - b.start <= 3 * 60_000 && now < b.end && !started[blockKey(b)]) ?? null
+}
+
+// ---- Smart island (SI3, SI10, SI11): what you were really doing ----
+
+/** A stretch of doing (from activityStream's sessionize): kind and time only. */
+export interface DoingSpan { context: string; start: number; end: number }
+const DRIFT_KINDS = ['video', 'gaming']
+
+/** Minutes in a row (from now backwards) in these kinds. */
+const minutesBack = (spans: DoingSpan[], kinds: string[], now: number) => {
+  let t = 0
+  for (let i = spans.length - 1; i >= 0; i--) {
+    if (!kinds.includes(spans[i].context)) break
+    t += (Math.min(now, spans[i].end) - spans[i].start) / 60000
+  }
+  return t
+}
+
+/**
+ * SI3: a planned block is on, no timer runs, and you've been on video or a
+ * game for 3+ minutes: back to it? Once per block (the id). CTF/VM work
+ * (SI11) never counts as drifting.
+ */
+export function blockDrift(o: { now: number; blocks: IslandBlock[]; running: boolean; spans: DoingSpan[]; minMin?: number }): { id: string; block: IslandBlock; left: number; minutes: number } | null {
+  if (o.running) return null
+  const b = workNow(o.blocks, o.now)
+  if (!b || callNow(o.blocks, o.now)) return null
+  const minutes = minutesBack(o.spans, DRIFT_KINDS, o.now)
+  if (minutes < (o.minMin ?? 3)) return null
+  const left = mins(b.end - o.now)
+  if (left < 5) return null
+  return { id: `back:${blockKey(b)}`, block: b, left, minutes: Math.round(minutes) }
+}
+
+const WORKISH = ['coding', 'study', 'writing', 'ctf']
+/**
+ * SI10: plan vs reality for a block that ended: "You were coding 38 of 45 min".
+ * The kind you spent most of it on; null when nothing was seen.
+ */
+export function blockReality(spans: DoingSpan[], b: { start: number; end: number }): { kind: string; minutes: number; of: number; workMin: number } | null {
+  const of = Math.round((b.end - b.start) / 60000)
+  const by: Record<string, number> = {}
+  for (const s of spans) {
+    const a = Math.max(b.start, s.start)
+    const z = Math.min(b.end, s.end)
+    if (z > a) by[s.context] = (by[s.context] ?? 0) + (z - a) / 60000
+  }
+  const top = Object.entries(by).filter(([k]) => k !== 'idle').sort((x, y) => y[1] - x[1])[0]
+  if (!top || of <= 0) return null
+  const workMin = Math.round(Object.entries(by).filter(([k]) => WORKISH.includes(k)).reduce((t, [, v]) => t + v, 0))
+  return { kind: top[0], minutes: Math.round(top[1]), of, workMin }
+}
+
+/** "You were coding 38 of 45 min." */
+export function realityLine(r: ReturnType<typeof blockReality>): string {
+  if (!r) return ''
+  const verb: Record<string, string> = { coding: 'coding', study: 'studying', writing: 'writing', ctf: 'on CTF/lab work', video: 'on video', gaming: 'gaming', social: 'on chat & social', email: 'in email', browsing: 'browsing', meeting: 'in a meeting', money: 'banking', other: 'on other things' }
+  return `You were ${verb[r.kind] ?? r.kind} ${Math.min(r.minutes, r.of)} of ${r.of} min.`
 }

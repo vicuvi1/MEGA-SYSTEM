@@ -450,12 +450,13 @@ export function DesktopIsland() {
   const seenAlert = useRef<string | null>(null)
   const lastPeek = useRef(0)
   const held = useRef(0)
-  const gateOf = (kind: string, meeting = false) => alertGate({ kind, meeting, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() })
+  const gateOf = (kind: string, meeting = false, dot = false) => alertGate({ kind, meeting, dot, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() })
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
     seenAlert.current = a.id
-    const g = gateOf(a.kind, !!a.meeting)
+    // SI6: a suggestion you keep ignoring is only a dot.
+    const g = gateOf(a.kind, !!a.meeting, !!a.dot)
     if (g !== 'peek') {
       if (quiet || inCall) held.current += 1
       return
@@ -1451,6 +1452,13 @@ export function DesktopIsland() {
       </header>
 
       {old && <p className="di-reconnect-line">Reconnecting… this is from {hhmm(s.at)}</p>}
+      {s.doing && (
+        // SI1: what Ben thinks you're doing (a kind, never a title); tap to fix it.
+        <button className="di-doing" title="That's not right? Tap to fix" {...tp('doing', () => tap({ kind: 'ctxFix', app: s.doing!.app }))}>
+          {s.doing.icon} {s.doing.label}
+          {s.doing.detail ? ` · ${s.doing.detail}` : ''}
+        </button>
+      )}
       {quietMenu && !quiet && (
         <div className="di-quiet">
           <span>Quiet for</span>

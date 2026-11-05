@@ -401,6 +401,13 @@ export interface LifeApi {
     setPc?(day: string, line: string): Promise<void>
     /** MC11: minutes on listed sites from the browser history (only with that switch on). */
     setWeb?(day: string, line: string): Promise<void>
+    /** SI8/SI22: the day by kind of doing ("coding 3h10, study 1h05") and minutes per hour (only if you share totals). */
+    setDoing?(day: string, line: string, hours: Record<string, Record<string, number>>): Promise<void>
+  }
+  /** SI7: your Smart island recipes (synced; they run only in the desktop app). */
+  recipes?: {
+    list(): Promise<import('@core/recipes').Recipe[]>
+    save(list: import('@core/recipes').Recipe[]): Promise<import('@core/recipes').Recipe[]>
   }
   /** The notebook (Obsidian-like): your notes and Ben's. */
   notes?: {

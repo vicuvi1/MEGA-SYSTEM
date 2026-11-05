@@ -388,7 +388,13 @@ if (firstCopy) void app.whenReady().then(async () => {
     }
     setInterval(tick, 60_000)
     // Seconds since the last mouse/keys, for the island (drift, focus quality).
-    setInterval(() => pcPrefsNow.idle && win.webContents.send('desktop:idle', powerMonitor.getSystemIdleTime()), 15_000)
+    setInterval(() => {
+      if (!pcPrefsNow.idle) return
+      const sec = powerMonitor.getSystemIdleTime()
+      win.webContents.send('desktop:idle', sec)
+      // Smart island: away / back as events (only with it on).
+      pc.idle(sec)
+    }, 15_000)
     // Copied text, for the island's "save this?". The check happens HERE, in
     // the main process: only short dated text ("exam friday 10:00") ever
     // reaches a page; passwords, codes, keys, links and long text never do.
@@ -413,12 +419,20 @@ if (firstCopy) void app.whenReady().then(async () => {
     powerMonitor.on('lock-screen', leaving)
     powerMonitor.on('suspend', leaving)
     powerMonitor.on('shutdown', leaving)
-    powerMonitor.on('lock-screen', () => win.webContents.send('desktop:lock', { locked: true, at: Date.now() }))
+    powerMonitor.on('lock-screen', () => {
+      win.webContents.send('desktop:lock', { locked: true, at: Date.now() })
+      pc.power('lock')
+    })
     powerMonitor.on('unlock-screen', () => {
       setTimeout(tick, 1500)
       win.webContents.send('desktop:lock', { locked: false, at: Date.now() })
+      pc.power('unlock')
     })
-    powerMonitor.on('resume', () => setTimeout(tick, 3000))
+    powerMonitor.on('suspend', () => pc.power('sleep'))
+    powerMonitor.on('resume', () => {
+      setTimeout(tick, 3000)
+      pc.power('wake')
+    })
   }
   // Look for a new version shortly after start, every 30 minutes and when the
   // window comes back to the front; a failed look is tried again in 3 minutes.

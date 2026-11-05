@@ -26,6 +26,8 @@ import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
 import { calendarDay } from '@core/dates'
 import { WATER_TARGET_ML } from '@core/defaults'
+import { preferSlot, workHours } from '@core/bestHours'
+import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart, shareGoalWords, smartAct, smartNotice, smartOn, smartSuggestion, smartTick, startSmart } from './smartIsland'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
@@ -254,6 +256,8 @@ export { ISLAND_LOG, type IslandLogEntry } from './islandLog'
 
 /** Logs the bedtime by itself (once a night), and leaves a note for the island. */
 async function onAway(w: { from: string; to: string }): Promise<void> {
+  // SI20: with Smart island suggestions on, it asks in the morning instead (logged only on your tap).
+  if (noteAway(w)) return
   const st = await life.sleep.state().catch(() => null)
   if (!st) return
   const from = new Date(w.from)
@@ -348,7 +352,18 @@ export function IslandFeed() {
         const line = [w?.line, w?.todayLine].filter(Boolean).join('; ')
         if (line) await life.dayLog?.setWeb?.(localDayOf(now), line).catch(() => {})
       })()
+      // SI8/SI22: the day by kind of doing ("coding 3h10, study 1h05") and minutes per hour, only if you share totals.
+      void (async () => {
+        const p = await window.desktop!.pcGetPrefs!().catch(() => null)
+        if (!p?.prefs.shareTotals || !p.prefs.smart) return
+        const d = await window.desktop!.pcDoing?.().catch(() => null)
+        if (d?.line) await life.dayLog?.setDoing?.(localDayOf(now), d.line, d.hours).catch(() => {})
+      })()
     }
+    // Smart island: switches and recipes (once a minute), focus/blocks/meetings into the stream, your goal words to the desktop.
+    await refreshSmart().catch(() => {})
+    smartTick({ now, running, blocks: blocks.current.list })
+    if (smartOn()) shareGoalWords([...focus.goals.flatMap((g) => [g.title, g.subject]), ...(focus.subjects ?? [])])
     // Focus state for the PC (P19 site blocker, P20 holding notifications).
     window.desktop?.pcFocus?.({ running: !!running, subject: running?.subject ?? '', endsAt: running?.endsAt ?? 0, startedAt: running?.startedAt ?? 0 })
     const seen = get<number>(SEEN, 0) || now
@@ -406,7 +421,8 @@ export function IslandFeed() {
       alert: (() => {
         const pick = pickAlert({ now, running, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
         if (pick?.kind === 'over') return pick
-        const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered: get<Record<string, string>>(ANSWERED, {}) })
+        const answered = get<Record<string, string>>(ANSWERED, {})
+        const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered, reality: realityOf })
         // In a call: only what you must see (time up); the rest waits.
         const call = callNow(blocks.current.list, now)
         // Your body and your day's edges (phase 2): never during a call or a focus timer.
@@ -417,7 +433,15 @@ export function IslandFeed() {
         const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
         const first = get<{ day: string; at: number } | null>(FIRST, null)
         const firstBlock = blocks.current.list.filter((b) => b.end > now).sort((x, y) => x.start - y.start)[0] ?? null
-        const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || WATER_TARGET_ML }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
+        const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || WATER_TARGET_ML }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed, doing: doingForBreaks(now) }
+        // Smart island: one suggestion at a time (budget, cooldowns, learning), recipes asking first, the fix-it picker.
+        const suggestion = () => {
+          if (call) return null
+          const last = [...(focus.todaySessions ?? [])].filter((x) => x.endedAt).sort((x, y) => Date.parse(y.endedAt!) - Date.parse(x.endedAt!))[0]
+          const unfinished = blocks.current.list.filter((b) => !b.call && !b.maybe && b.start < now && b.end - b.start >= 15 * 60_000 && !answered[blockKey(b)])
+          const sg = smartSuggestion({ now, blocks: blocks.current.list, running: !!running, mustdos: status.mustdos, goals: focus.goals.flatMap((g) => [g.title, g.subject]), windDown: wd, last: last ? { subject: last.subject, endedAt: Date.parse(last.endedAt!) } : null, bedLogged: bedLoggedTonight(logs, new Date(now)), unfinished })
+          return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
+        }
         return (
           backAlert(running, now, dismissed) ??
           driftAlert(running, now, dismissed) ??
@@ -435,6 +459,8 @@ export function IslandFeed() {
             return c && !call ? clipAlert(c.text, c.at, dismissed, now) : null
           })() ??
           smart ??
+          smartNotice(now) ??
+          suggestion() ??
           (running ? null : lateAlert(now, target, dismissed)) ??
           windDownAlert(wd, now, dismissed) ??
           (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
@@ -450,6 +476,7 @@ export function IslandFeed() {
         return c ? { title: c.title, end: c.end } : null
       })(),
       inMeeting: !!callNow(blocks.current.list, now),
+      doing: doingNow(),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
@@ -690,7 +717,10 @@ export function IslandFeed() {
             const text = a.text.trim().split('\n')[0].slice(0, 120)
             if (!text) throw new Error('Nothing to book')
             const minutes = taskMinutes(text)
-            const slot = nextFreeSlot(blocks.current.list, Date.now(), minutes)
+            // SI22: with Smart island on, a free slot in one of your best work hours (from this PC's last week) comes first.
+            const week = smartOn() ? (await window.desktop?.pcDoing?.().catch(() => null))?.week ?? [] : []
+            const best = workHours(week.map((w) => w.hours))
+            const slot = best.length ? preferSlot(blocks.current.list, Date.now(), minutes, best) : nextFreeSlot(blocks.current.list, Date.now(), minutes)
             const on = !!(await life.google?.status().catch(() => null))?.connected
             if (!slot || !on) {
               await life.todoist!.quickAdd(`${text} today`)
@@ -734,6 +764,55 @@ export function IslandFeed() {
             if (!/^https:\/\//.test(a.url)) throw new Error('That meeting has no call link')
             window.open(a.url, '_blank', 'noopener')
             said = '🎥 Opening the call'
+            break
+          }
+          case 'suggest':
+          case 'ctxFix':
+          case 'safe':
+          case 'recipeAnswer':
+          case 'recipeAdd': {
+            // Smart island (smartIsland.ts): answers, fixes, recipes; Accept runs its own action here.
+            const r = await smartAct(a)
+            if (a.kind === 'suggest' || a.kind === 'recipeAdd') {
+              const d = get<Record<string, number>>(DISMISSED, {})
+              d[a.kind === 'suggest' ? `sg:${a.sid}` : a.alertId] = Date.now() + (a.kind === 'suggest' && a.answer === 'later' ? (a.laterMin ?? 30) * 60_000 : 864e5)
+              put(DISMISSED, d)
+            }
+            if (r?.run) await actRef.current(r.run)
+            said = r?.said ?? null
+            break
+          }
+          case 'closeAll': {
+            // SI27: the day in one go: the timer stops (logging the minutes you really did),
+            // blocks not checked off go to tomorrow or are dropped, and tonight's note is drafted.
+            const now = Date.now()
+            const f = await life.focus.state()
+            if (f.running) await life.focus.stop()
+            const answered = get<Record<string, string>>(ANSWERED, {})
+            const open = blocks.current.list.filter((b) => !b.call && !b.maybe && b.start < now && b.end - b.start >= 15 * 60_000 && !answered[blockKey(b)])
+            const day = localDayOf(now)
+            let moved = 0
+            for (const b of open) {
+              if (a.blocks === 'move' && b.id && b.calendarId && life.google?.move) {
+                await life.google.move(b.calendarId, b.id, new Date(b.start + 864e5).toISOString(), new Date(b.end + 864e5).toISOString()).then(() => moved++, () => {})
+              } else {
+                await life.dayLog?.addBlock(day, { at: new Date().toISOString(), title: b.title, result: 'no' }).catch(() => {})
+                if (b.id) await life.timeline?.mark(day, b.id, 'skip').catch(() => {})
+              }
+              answered[blockKey(b)] = a.blocks === 'move' ? 'moved' : 'no'
+            }
+            put(ANSWERED, answered)
+            blocks.current = { ...blocks.current, at: 0 }
+            // The draft: what really happened (focus, blocks, the day by activity), for you to finish.
+            const doingLine = (await window.desktop?.pcDoing?.().catch(() => null))?.line
+            const fs = await life.focus.state()
+            const lines = [`# Evening ${day}`, '', `- Focus: ${fs.todayMin} min${fs.todayBySubject.length ? ` (${fs.todayBySubject.map((x) => `${x.subject} ${x.minutes}m`).join(', ')})` : ''}`, ...(open.length ? [`- ${a.blocks === 'move' ? 'Moved to tomorrow' : 'Dropped'}: ${open.map((b) => b.title).join(', ')}`] : []), ...(doingLine ? [`- On the PC: ${doingLine}`] : []), '- What went well:', '- What I change tomorrow:', '']
+            await life.notes?.save({ title: `Evening ${day}`, body: lines.join('\n') }).catch(() => null)
+            window.dispatchEvent(new CustomEvent('life-external-changed'))
+            window.dispatchEvent(new Event('life-focus-changed'))
+            window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'today' }))
+            setTimeout(() => window.dispatchEvent(new CustomEvent('life-close-day')), 600)
+            said = `🌇 Day closed${open.length ? ` · ${a.blocks === 'move' ? `${moved} moved to tomorrow` : `${open.length} dropped`}` : ''} · note drafted`
             break
           }
           case 'open':
@@ -803,6 +882,8 @@ export function IslandFeed() {
     if (!listening) {
       listening = true
       desk.onIslandAction?.((a) => void actRef.current(a))
+      // Smart island: title-free activity events from the desktop.
+      startSmart(() => void sendRef.current())
       desk.onNavigate?.((page) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: page })))
       // Back after a night away from the PC: that's when you went to bed.
       desk.onAway?.((w) => void onAway(w).then(() => void sendRef.current()))

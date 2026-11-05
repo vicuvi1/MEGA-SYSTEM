@@ -60,6 +60,12 @@ export interface DesktopApi {
   pcExtensionFolder?(): Promise<string | null>
   /** The app in front (only with the sensor on): its friendly name and kind, every few seconds. */
   onPcApp?(cb: (a: { label: string; kind: 'work' | 'distract' | 'neutral'; seconds: number }) => void): void
+  /** Smart island: one channel of small, title-free events (only with Smart island on), sent only on change. */
+  onActivity?(cb: (e: import('../core/activityStream').ActivityEvent) => void): void
+  /** Smart island: what you're doing now, today's kinds of doing, and the last week's (this PC only). */
+  pcDoing?(): Promise<{ now: { label: string; context: import('../core/activityContext').ContextKind; conf: number; detail?: string } | null; ctx: Record<string, number>; line: string; hours: Record<string, Record<string, number>>; week: { day: string; ctx: Record<string, number>; hours: Record<string, Record<string, number>> }[] } | null>
+  /** Smart island: the block on now (its title) and whether a meeting is on. */
+  pcSmartState?(s: { block: string | null; meeting: boolean }): void
   /** The PC locked / unlocked. */
   onLock?(cb: (l: { locked: boolean; at: number }) => void): void
   /** A taskbar shortcut (P17): "focus25". */

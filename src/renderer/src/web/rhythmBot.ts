@@ -44,7 +44,9 @@ import type { AskModel, CalendarLike, TodoistLike } from './webBots'
 import type { WebServices } from './webServices'
 import { benNote, writeJournal } from './notes'
 import { nightMinutes } from '@core/readiness'
-import { dayLog, dayLogLine } from './dayLog'
+import { dayLog, dayLogLine, recentDayLogs } from './dayLog'
+import { bestHours, historyFacts, latestHour, moveLateStudy } from '@core/bestHours'
+import { localDay } from '@core/dayTime'
 
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
 const localHm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -280,8 +282,17 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           return ''
         }
       })()
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today) }
+      // SI25: last week's real activity (only what he shares from the desktop): best hours, when he never studies.
+      let past: ReturnType<typeof recentDayLogs> = []
+      try {
+        past = recentDayLogs(db, today, 7)
+      } catch {
+        past = []
+      }
+      const hist = { focus: past.flatMap((x) => x.d.focus ?? []), hours: past.map((x) => x.d.hours).filter((h): h is NonNullable<typeof h> => !!h && Object.keys(h).length > 0) }
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist }
     })
+    const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : ''
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
     // Goal blocks already in today's calendar are busy time; only the rest still needs a slot.
     const bookedToday = (p: GoalPlan) => events.some((e) => isGoalBlock(e, p))
@@ -315,6 +326,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
               `Plan: ${JSON.stringify({ blocks: fallback.blocks.map((b) => ({ start: b.start, minutes: b.minutes, title: b.title })), mustdos: fallback.mustdos, training: fallback.training })}`,
               plans.length ? `Goals: ${plans.map((p) => planLine(p)).join(' | ')}` : '',
               base.yday ? `Yesterday (use it: the headline names what went well or slipped and how today fixes it, e.g. "Yesterday 2/3, focus slipped after lunch, so the hard block is first"): ${base.yday}` : '',
+              histFacts ? `His last week, from real activity: ${histFacts}.` : '',
               'Answer ONLY with JSON: {"headline": string, "mustdos": string[], "names": string[]} (names: one per block, same order).'
             ]
               .filter(Boolean)
@@ -340,6 +352,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           'headline: one short line with numbers ("3 must-dos · 2h40 focus · gym 18:00").',
           note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : '',
           plans.length ? `Goals planned backward from their deadlines (today's minutes are a MUST; booked ones are already in the calendar):\n${plans.map((p) => `- ${planLine(p)}${bookedToday(p) ? ' (booked today)' : ''}`).join('\n')}` : '',
+          histFacts ? `His last week, from real activity (put hard blocks in his best hours; never plan study later than he ever does): ${histFacts}.` : '',
           `A simple starting point (improve it): ${JSON.stringify(fallback)}`,
           'Answer ONLY with JSON: {"headline": string, "mustdos": string[], "blocks": [{"title": string, "start": "HH:MM", "minutes": number}], "training": {"time": "HH:MM", "what": string} | null, "waterMl": number}',
           '',
@@ -357,6 +370,17 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     }
     // A short night: a lighter plan (W5).
     plan = lightenForSleep(plan, base.slept)
+    // SI25: a study block later than he ever studies moves to his best free hour (and the headline says so).
+    if (base.hist.hours.length >= 3) {
+      const minOfDay = (iso: string) => {
+        const d = new Date(iso)
+        return d.getHours() * 60 + d.getMinutes()
+      }
+      const busy = events.filter((e) => !e.allDay && localDay(e.start) === base.today).map((e) => ({ start: minOfDay(e.start), end: minOfDay(e.end) }))
+      const words = [...plans.flatMap((p) => [p.subject, p.title]), 'study']
+      const moved = moveLateStudy(plan.blocks, { lastHour: latestHour(base.hist.hours, 'study'), best: bestHours(base.hist.focus), now: hmNow(now), busy, words })
+      if (moved.note) plan = { ...plan, blocks: moved.blocks, headline: `${plan.headline} · ${moved.note}`.slice(0, 200) }
+    }
     return mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1

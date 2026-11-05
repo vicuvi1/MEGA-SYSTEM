@@ -26,6 +26,21 @@ const write = (k: string, v: unknown) => {
 }
 
 export const readIslandLog = () => read<IslandLogEntry>(ISLAND_LOG)
+
+// ---- SI7: what your recipes did, with a 10-minute Undo ----
+export const AUTO_LOG = 'ls.islandAutoLog'
+export const UNDO_MS = 10 * 60_000
+export type UndoOp = { op: 'stopFocus'; startedAt: number } | { op: 'pcPrefs'; patch: Record<string, unknown> } | { op: 'quietOff' } | { op: 'deleteNote'; id: string }
+export interface AutoLogEntry { id: string; at: number; why: string; did: string[]; undo: UndoOp[]; undone?: boolean }
+export const readAutoLog = () => read<AutoLogEntry>(AUTO_LOG)
+export function logAutomation(e: AutoLogEntry) {
+  write(AUTO_LOG, [...readAutoLog().filter((x) => x.id !== e.id), e].slice(-30))
+}
+export function markUndone(id: string) {
+  write(AUTO_LOG, readAutoLog().map((x) => (x.id === id ? { ...x, undone: true } : x)))
+}
+/** Can it still be undone (10 minutes, not undone yet, something to undo)? */
+export const canUndo = (e: AutoLogEntry, now = Date.now()) => !e.undone && e.undo.length > 0 && now - e.at < UNDO_MS
 /**
  * What the island window saw: kept in its memory and in the desktop's island
  * log (island:log → Settings → Diagnostics reads it with islandGetLog), never

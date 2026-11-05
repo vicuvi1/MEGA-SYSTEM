@@ -33,6 +33,8 @@ import { UNTRUSTED_NOTE } from '@core/benSafety'
 import type { NudgeInfo, NudgeKind } from '@core/chatFeed'
 import { pluginActionsHelp, pluginContext, readPluginAction, type PluginActionCall } from '../../../plugins'
 import { WATER_MAX_ML } from '@core/defaults'
+import { dayLog } from './dayLog'
+import { parseRecipeLine, type Recipe } from '@core/recipes'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -318,6 +320,13 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
   lines.push(...nowContext(s, db, extra.events ?? null, extra.finance, now))
   // Plugins (Settings → Plugins): weather, GitHub, mail, phone numbers, notes.
   lines.push(...pluginContext(db, now))
+  // SI8: the day by kind of doing on his PC (only when he shares totals from the desktop app).
+  try {
+    const doing = dayLog(db, today).doing
+    if (doing) lines.push(`On his PC today by activity (from the desktop app): ${doing}.`)
+  } catch {
+    /* no day log yet */
+  }
   if (extra.todoToday) {
     const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? ' (late)' : ''}${t.priority >= 3 ? ` P${5 - t.priority}` : ''}${t.section ? ` [${t.section}]` : ''}`)
     lines.push(`Todoist today/late (${extra.todoToday.length}): ${list.join('; ') || 'nothing'}.`)
@@ -579,6 +588,7 @@ Logging and the day:
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "stop" ends the running focus timer and logs it (he says he's done); "extend: <minutes>" adds time to it ("5 more minutes"). Only when a timer is running.
 - "focus: <minutes> <subject>" start a focus timer now: ONLY when he clearly says to start it now ("start 25 min", "go", "timer"). Otherwise never start it yourself: offer a button {"label": "▶ 25 min <subject>", "do": "focus:25:<subject>"} and let him tap. "fun: <minutes> <what>" spend points on fun.
+- Desktop island recipes (small automations; only when a pattern keeps repeating or he asks): one line RECIPE: {"name":"Study evenings","when":{"on":"context","ctx":"study"},"if":{"days":[1,2,3,4,5],"from":"18:00","to":"21:00","noTimer":true},"then":[{"do":"focus","subject":"Study","minutes":45}]}. when.on: context (ctx: coding|study|writing|ctf|email|video|gaming|social|meeting|browsing), time (at "HH:MM"), focus:start, focus:end, meeting:start, meeting:end, block:start. then.do: focus, stopFocus, blockSites, dnd, quiet (minutes), note (text), task (text), open (page), focusPack, windDown, offerNote. It is saved OFF: he turns it on.
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
@@ -858,6 +868,8 @@ export type BrainAction =
   | { kind: 'style'; length?: 'short' | 'normal' | 'detailed'; tone?: number }
   | { kind: 'workout'; day: string; title: string }
   | { kind: 'editmoney'; ref: string; amount?: number; category?: string; account?: string; note?: string; date?: string }
+  /** SI24: Ben proposes a Smart island recipe: a card to accept, never switched on by itself. */
+  | { kind: 'recipe'; recipe: Recipe }
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -871,6 +883,11 @@ export function readAction(line: string): BrainAction | null {
   // Plugin verbs first ("steps: 8000"); the built-ins after.
   const plugin = readPluginAction(line)
   if (plugin) return plugin
+  // SI24: "RECIPE: {json}": a Smart island recipe to offer (whitelisted actions only, off until he says yes).
+  if (/^\s*RECIPE\s*:/i.test(line)) {
+    const recipe = parseRecipeLine(line.replace(/^\s*recipe\s*:/i, 'RECIPE:'))
+    return recipe ? { kind: 'recipe', recipe } : null
+  }
   // W7: "stop" (he's done) and "extend: 5" (5 more minutes) on a running timer.
   if (/^\s*stop(focus)?\s*:?\s*$/i.test(line) || /^\s*stopfocus\s*:/i.test(line)) return { kind: 'stopfocus' }
   // SP14: "sets: bench 3x8x60" (sets × reps × kg), also "pullups 3x10".

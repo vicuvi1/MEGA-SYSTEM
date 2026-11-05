@@ -55,7 +55,8 @@ import { NOTIF_SETTINGS_KEY, cleanNotifSettings } from '@core/eventAlerts'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginKey, pluginsOn, setOn as setPluginOn, configKey as pluginConfigKey } from '../../plugins/store'
 import { importBank, importText } from '../../plugins/bank'
-import { addBlockResult, addFocusQuality, setPcLine, setWebLine } from './web/dayLog'
+import { addBlockResult, addFocusQuality, setDoingLine, setPcLine, setWebLine } from './web/dayLog'
+import { cleanRecipes, type Recipe } from '@core/recipes'
 import { createExtras } from './web/lifeExtras'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
@@ -1157,6 +1158,17 @@ export function createTursoWebBridge(): Bridge {
       },
       setWeb: async (day: string, line: string) => {
         await (await mirrorP).write((db) => setWebLine(db as any, day, line))
+      },
+      setDoing: async (day: string, line: string, hours: Record<string, Record<string, number>>) => {
+        await (await mirrorP).write((db) => setDoingLine(db as any, day, line, hours))
+      }
+    },
+    recipes: {
+      list: async () => (await mirrorP).read((db) => cleanRecipes(readSetting(db as any, 'island_recipes'))),
+      save: async (list: Recipe[]) => {
+        const clean = cleanRecipes(list)
+        await (await mirrorP).write((db) => writeSetting(db as any, 'island_recipes', clean))
+        return clean
       }
     },
     // Settings → Plugins (src/plugins): on/off, their settings, what their jobs fetched.

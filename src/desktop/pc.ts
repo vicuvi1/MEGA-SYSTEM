@@ -12,7 +12,9 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { activityLine, addActivity, appLabel, classifyApp, cleanPcPrefs, type AppKind, type DayActivity, type PcPrefs } from '../core/pcActivity'
+import { activityLine, addActivity, addDoing, appLabel, classifyApp, cleanPcPrefs, type AppKind, type DayActivity, type PcPrefs } from '../core/pcActivity'
+import { inferContext, type ContextKind } from '../core/activityContext'
+import { appChanged, contextLine, type ActivityEvent } from '../core/activityStream'
 import { addFocusSample, FOCUS_SAMPLE_SEC, focusAppsSummary, newFocusApps, type FocusApps } from '../core/focusApps'
 import { browserDistraction } from './history'
 import { calendarDay } from '../core/dates'
@@ -27,6 +29,9 @@ export interface PcHandle {
   focus(): { running: boolean; subject: string; endsAt: number; startedAt: number }
   /** Jump-list / second-start actions ("--action=focus25"). */
   actionFrom(argv: string[]): string | null
+  /** Smart island: seconds since the last input (every 15 s), and lock / unlock / sleep / wake. */
+  idle(sec: number): void
+  power(t: 'lock' | 'unlock' | 'sleep' | 'wake'): void
 }
 
 const dayKey = (d = new Date()) => calendarDay(d)
@@ -65,17 +70,61 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
 
   let focusState = { running: false, subject: '', endsAt: 0, startedAt: 0 }
   let current: { label: string; kind: AppKind } | null = null
+  // ---- Smart island (SI1, SI2): what you're doing, worked out HERE ----
+  // The title (only with the titles switch on) is read in this process and
+  // dropped right away: what goes to the app is the friendly app name, the
+  // kind of doing, how sure, and a detail only when it is one of your own
+  // words (goals, subjects, the block on now). One channel, only on change.
+  let doing: { label: string; kind: AppKind; context: ContextKind; conf: number; detail?: string } | null = null
+  const recent: ContextKind[] = []
+  let smartCtx = { block: null as string | null, meeting: false }
+  let away = false
+  const emit = (e: ActivityEvent) => {
+    if (prefs.smart && !o.win.isDestroyed()) o.win.webContents.send('desktop:activity', e)
+  }
   const sample = (proc: string, title: string | null, seconds: number) => {
     if (!prefs.activeApp || !proc) return
     const t = prefs.titles ? title : null
-    const kind = classifyApp(proc, t, prefs)
+    let kind = classifyApp(proc, t, prefs)
     const label = appLabel(proc, t)
+    if (prefs.smart) {
+      const g = inferContext({ proc, label, title: t, block: smartCtx.block, meeting: smartCtx.meeting, hour: new Date().getHours(), recent, rules: prefs.contextRules, words: prefs.goalWords, bankWords: prefs.smartBank && prefs.titles ? prefs.bankWords : [] })
+      // SI11: CTF / VM work is work (no drift warnings, honest focus quality).
+      if (g.kind === 'ctf' && kind !== 'distract') kind = 'work'
+      const next = { label, kind, context: g.kind, conf: g.conf, ...(g.detail ? { detail: g.detail } : {}) }
+      if (appChanged(doing, next) || doing?.detail !== next.detail) {
+        // SI14: you just left your bank's site (nothing about what was there).
+        if (doing?.context === 'money' && next.context !== 'money') emit({ t: 'bank:left', at: Date.now() })
+        doing = next
+        recent.push(g.kind)
+        if (recent.length > 6) recent.shift()
+        emit({ t: 'app', at: Date.now(), ...next })
+      }
+      if (prefs.history) {
+        today = addDoing(today, dayKey(), g.kind, seconds, new Date().getHours())
+        dirty = true
+      }
+    } else doing = null
     current = { label, kind }
     if (prefs.history) {
       today = addActivity(today, dayKey(), label, kind, seconds)
       dirty = true
     }
     if (!o.win.isDestroyed()) o.win.webContents.send('desktop:app', { label, kind, seconds })
+  }
+  const idle = (sec: number) => {
+    if (!prefs.smart) return
+    if (!away && sec >= 300) {
+      away = true
+      emit({ t: 'idle', at: Date.now() - sec * 1000 })
+    } else if (away && sec < 60) {
+      away = false
+      emit({ t: 'active', at: Date.now() - sec * 1000 })
+    }
+  }
+  const power = (t: 'lock' | 'unlock' | 'sleep' | 'wake') => {
+    if (t === 'unlock' || t === 'wake') away = false
+    emit({ t, at: Date.now() })
   }
 
   // ---- IPC (only the app window) ----
@@ -98,6 +147,24 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
     today = null
     await rm(histDir, { recursive: true, force: true }).catch(() => {})
     return true
+  })
+  /** Smart island: what you're doing now (kind only), today's kinds, and your last 7 days (this PC only). */
+  ipcMain.handle('pc:doing', async (e) => {
+    if (!mine(e)) return null
+    const day = today && today.day === dayKey() ? today : null
+    const week: { day: string; ctx: Record<string, number>; hours: Record<string, Record<string, number>> }[] = []
+    if (prefs.history) {
+      const names = await readdir(histDir).catch(() => [] as string[])
+      for (const n of names.filter((x) => /^\d{4}-\d{2}-\d{2}\.json$/.test(x)).sort().slice(-8)) {
+        const d: DayActivity | null = n === `${dayKey()}.json` ? day : await readFile(join(histDir, n), 'utf8').then((t) => JSON.parse(t), () => null)
+        if (d?.ctx) week.push({ day: d.day, ctx: d.ctx, hours: d.hours ?? {} })
+      }
+    }
+    return { now: prefs.smart && doing ? { label: doing.label, context: doing.context, conf: doing.conf, ...(doing.detail ? { detail: doing.detail } : {}) } : null, ctx: day?.ctx ?? {}, line: contextLine(day?.ctx), hours: day?.hours ?? {}, week }
+  })
+  /** Smart island: the block on now (its title is your word) and whether a meeting is on, to read what you do. */
+  ipcMain.on('pc:smartState', (e, s: { block?: string | null; meeting?: boolean }) => {
+    if (mine(e)) smartCtx = { block: typeof s?.block === 'string' ? s.block.slice(0, 60) : null, meeting: !!s?.meeting }
   })
   ipcMain.on('pc:focus', (e, f: { running: boolean; subject: string; endsAt: number; startedAt?: number }) => {
     if (mine(e)) focusState = { running: !!f?.running, subject: String(f?.subject ?? '').slice(0, 60), endsAt: Number(f?.endsAt) || 0, startedAt: Number(f?.startedAt) || 0 }
@@ -225,5 +292,5 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
   const first = actionFrom(process.argv)
   if (first) setTimeout(() => o.onAction(first), 4000)
 
-  return { prefs: () => prefs, sample, focus: () => focusState, actionFrom }
+  return { prefs: () => prefs, sample, focus: () => focusState, actionFrom, idle, power }
 }

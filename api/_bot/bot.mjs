@@ -646,7 +646,7 @@ function formatUrgeResponse() {
 	].join("\n");
 }
 // src/core/factTypes.ts
-var MONTHS$4 = {
+var MONTHS$5 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -676,9 +676,9 @@ function dateIn(text, today) {
 		return cand < addDays$6(today, -60) ? `${y + 1}${cand.slice(4)}` : cand;
 	};
 	const dm = /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.exec(text) ?? null;
-	if (dm) return pick(MONTHS$4[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
+	if (dm) return pick(MONTHS$5[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
 	const md = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i.exec(text);
-	if (md) return pick(MONTHS$4[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
+	if (md) return pick(MONTHS$5[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
 	const num = /\b(\d{1,2})[./](\d{1,2})\b/.exec(text);
 	if (num) return pick(Number(num[2]), Number(num[1]));
 	return null;
@@ -1398,6 +1398,7 @@ var SETTINGS = {
 	notif_settings: json$4("quiet hours, event warnings, travel times (N2, N3, N6)", null),
 	milestones_seen: json$4("milestones already celebrated", []),
 	island_day_log: json$4("the island's log of the day", null),
+	island_recipes: json$4("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
 	sport_tracker_json: json$4("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
 	sport_sync_seen: json$4("when Sporty last synced water and workouts", null),
 	sporty_status: json$4("Sporty's last status", null),
@@ -1746,11 +1747,11 @@ function cleanStats(start, relapses, today) {
 // src/core/myHabits.ts
 var MY_HABITS = "my_habits";
 var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
-var clip$2 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var clip$3 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanBook(v) {
-	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$2(h.name, 60)).map((h) => ({
-		id: clip$2(h.id, 40),
-		name: clip$2(h.name, 60),
+	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$3(h.name, 60)).map((h) => ({
+		id: clip$3(h.id, 40),
+		name: clip$3(h.name, 60),
 		at: String(h.at ?? "")
 	})) : [];
 	const log = {};
@@ -2013,17 +2014,17 @@ var TRACKS = {
 };
 var TRACK_IDS = Object.keys(TRACKS);
 var DAY$1 = /^\d{4}-\d{2}-\d{2}$/;
-var clip$1 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var clip$2 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var cleanLink = (s) => {
-	const t = clip$1(s, 300);
+	const t = clip$2(s, 300);
 	return /^https?:\/\/\S+$/i.test(t) ? t : null;
 };
 function cleanLearn(v) {
-	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$1(e.title, 120) && DAY$1.test(e.day)).map((e) => ({
-		id: clip$1(e.id, 40) || `l${e.day}`,
+	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$2(e.title, 120) && DAY$1.test(e.day)).map((e) => ({
+		id: clip$2(e.id, 40) || `l${e.day}`,
 		track: e.track,
-		title: clip$1(e.title, 120),
-		tag: clip$1(e.tag, 30).toLowerCase(),
+		title: clip$2(e.title, 120),
+		tag: clip$2(e.tag, 30).toLowerCase(),
 		link: cleanLink(e.link),
 		day: e.day
 	})).slice(-500);
@@ -2129,22 +2130,22 @@ var MAX = {
 	people: 20
 };
 var norm$1 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-var clip = (t, n = 160) => String(t ?? "").trim().slice(0, n);
+var clip$1 = (t, n = 160) => String(t ?? "").trim().slice(0, n);
 function cleanMind(m) {
 	const list = (x) => Array.isArray(x) ? x.filter((e) => e && typeof e.t === "string").map((e) => ({
-		t: clip(e.t),
+		t: clip$1(e.t),
 		at: String(e.at ?? "")
 	})) : [];
 	return {
 		people: Array.isArray(m?.people) ? m.people.filter((x) => x && typeof x.name === "string").map((x) => ({
-			name: clip(x.name, 40),
-			note: clip(x.note ?? "", 120),
+			name: clip$1(x.name, 40),
+			note: clip$1(x.note ?? "", 120),
 			at: String(x.at ?? "")
 		})) : [],
 		goals: Array.isArray(m?.goals) ? m.goals.filter((g) => g && typeof g.title === "string").map((g) => ({
-			title: clip(g.title, 120),
+			title: clip$1(g.title, 120),
 			deadline: /^\d{4}-\d{2}-\d{2}$/.test(g.deadline) ? g.deadline : "",
-			weekly: clip(g.weekly ?? "", 80),
+			weekly: clip$1(g.weekly ?? "", 80),
 			at: String(g.at ?? "")
 		})) : [],
 		works: list(m?.works),
@@ -2164,26 +2165,26 @@ function readMindOp(line) {
 		if (!title) return null;
 		return {
 			kind: "aim",
-			title: clip(title, 120),
+			title: clip$1(title, 120),
 			deadline: /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : "",
-			weekly: clip(weekly.replace(/^-$/, ""), 80)
+			weekly: clip$1(weekly.replace(/^-$/, ""), 80)
 		};
 	}
 	if (kind === "aimdone") return {
 		kind: "aimdone",
-		title: clip(arg, 120)
+		title: clip$1(arg, 120)
 	};
 	if (kind === "person") {
 		const [name, note = ""] = arg.split("|").map((x) => x.trim());
 		return name ? {
 			kind: "person",
-			name: clip(name, 40),
-			note: clip(note, 120)
+			name: clip$1(name, 40),
+			note: clip$1(note, 120)
 		} : null;
 	}
 	return {
 		kind,
-		text: clip(arg)
+		text: clip$1(arg)
 	};
 }
 var sameIdea = (a, b) => {
@@ -2531,7 +2532,7 @@ function waterTargetFor(weightKg, trained = false) {
 	return Math.round(Math.max(1500, Math.min(4500, ml)) / 50) * 50;
 }
 // src/core/urgePatterns.ts
-var DAYS = [
+var DAYS$1 = [
 	"Sun",
 	"Mon",
 	"Tue",
@@ -2604,7 +2605,7 @@ function upcomingRisk(windows, now = /* @__PURE__ */ new Date(), aheadMin = 60) 
 	return null;
 }
 function windowLabel(w) {
-	return `${w.weekday === null ? "every day" : DAYS[w.weekday]} ${w.from}–${w.to}`;
+	return `${w.weekday === null ? "every day" : DAYS$1[w.weekday]} ${w.from}–${w.to}`;
 }
 /** What sets it off most (last 90 days). */
 function topTriggers(notes, now = /* @__PURE__ */ new Date(), max = 3) {
@@ -4013,7 +4014,7 @@ function readMessage(m) {
 		snippet: String(m?.snippet ?? "").replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").slice(0, 240)
 	};
 }
-var MONTHS$3 = {
+var MONTHS$4 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -4046,7 +4047,7 @@ function findDate(text, today) {
 	};
 	if (dmy) return fix(Number(dmy[1]), Number(dmy[2]), dmy[3] ? dmy[3].length === 2 ? 2e3 + Number(dmy[3]) : Number(dmy[3]) : void 0);
 	const word = /\b(\d{1,2})\s+([a-z]{3})[a-z]*\b/i.exec(text);
-	if (word && MONTHS$3[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$3[word[2].toLowerCase()]);
+	if (word && MONTHS$4[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$4[word[2].toLowerCase()]);
 	return null;
 }
 var KIND = [
@@ -4864,6 +4865,309 @@ function pluginMcpTools(db) {
 		plugin: p.id
 	})));
 }
+var read = (db) => {
+	try {
+		const v = JSON.parse(getSetting(db, "island_day_log") || "{}");
+		return v && typeof v === "object" ? v : {};
+	} catch {
+		return {};
+	}
+};
+var empty = () => ({
+	focus: [],
+	blocks: []
+});
+/** The last days of the log (oldest first), for the morning plan's facts (SI25). */
+function recentDayLogs(db, today, n = 7) {
+	return Object.entries(read(db)).filter(([k]) => k < today).sort((a, b) => a[0] < b[0] ? -1 : 1).slice(-n).map(([day, d]) => ({
+		day,
+		d
+	}));
+}
+function dayLog(db, day) {
+	return read(db)[day] ?? empty();
+}
+/** One line for Ben: "Focus quality 82% (3 sessions). Blocks: 2 done, 1 half, 1 not done." */
+function dayLogLine(d) {
+	const parts = [];
+	if (d.focus.length) {
+		const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1;
+		const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins);
+		parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? "" : "s"} (share of the time he was really on it)`);
+		const drift = d.focus.reduce((t, x) => t + (x.distractMin ?? 0), 0);
+		if (d.focus.some((x) => x.distractMin != null)) parts.push(`During focus: ${d.focus.reduce((t, x) => t + (x.workMin ?? 0), 0)} min on work apps, ${drift} min on distracting ones`);
+	}
+	if (d.blocks.length) {
+		const n = (r) => d.blocks.filter((x) => x.result === r).length;
+		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
+	}
+	if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`);
+	if (d.web) parts.push(`From his browser history: ${d.web}`);
+	if (d.doing) parts.push(`His day on the PC by activity: ${d.doing}`);
+	return parts.join(". ");
+}
+// src/core/activityContext.ts
+var CONTEXT_KINDS = [
+	"coding",
+	"study",
+	"writing",
+	"meeting",
+	"email",
+	"ctf",
+	"video",
+	"gaming",
+	"social",
+	"browsing",
+	"money",
+	"idle",
+	"other"
+];
+var CONTEXT_LABEL = {
+	coding: "Coding",
+	study: "Studying",
+	writing: "Writing",
+	meeting: "In a meeting",
+	email: "Email",
+	ctf: "CTF / lab",
+	video: "Video",
+	gaming: "Gaming",
+	social: "Chat & social",
+	browsing: "Browsing",
+	money: "Banking",
+	idle: "Away",
+	other: "Something else"
+};
+// src/core/recipes.ts
+var RECIPE_ON = [
+	"context",
+	"time",
+	"focus:start",
+	"focus:end",
+	"meeting:start",
+	"meeting:end",
+	"block:start"
+];
+var RECIPE_ON_LABEL = {
+	context: "I start…",
+	time: "It is…",
+	"focus:start": "A focus timer starts",
+	"focus:end": "A focus timer ends",
+	"meeting:start": "A meeting starts",
+	"meeting:end": "A meeting ends",
+	"block:start": "A planned block starts"
+};
+/** The pages a recipe may open (the app's own). */
+var SAFE_PAGES = [
+	"today",
+	"calendar",
+	"tasks",
+	"goals",
+	"focus",
+	"coach",
+	"sleep",
+	"discipline",
+	"money",
+	"body",
+	"rewards",
+	"notebook",
+	"insights"
+];
+/** Links a recipe may open: https, and only these sites (music to focus with, your course sites). */
+var LINK_HOSTS = [
+	"open.spotify.com",
+	"music.youtube.com",
+	"music.apple.com",
+	"soundcloud.com",
+	"www.soundcloud.com",
+	"lofi.cafe",
+	"www.lofi.cafe",
+	"mynoise.net",
+	"www.mynoise.net",
+	"brain.fm",
+	"www.brain.fm",
+	"tidal.com",
+	"listen.tidal.com",
+	"deezer.com",
+	"www.deezer.com"
+];
+var SAFE_LABEL = {
+	focus: "Start a focus timer",
+	stopFocus: "Stop the focus timer",
+	blockSites: "Keep distracting sites away",
+	dnd: "Open Windows' Do Not Disturb",
+	quiet: "Quiet the island",
+	note: "Add a line to the notebook",
+	task: "Add a task",
+	open: "Open a page of the app",
+	link: "Open an allowed link",
+	focusPack: "Focus pack (sites away, Do Not Disturb, quiet)",
+	windDown: "Wind-down reminder",
+	offerNote: "Offer a meeting note"
+};
+var HM$1 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var clip = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
+function safeLink(url) {
+	try {
+		const u = new URL(String(url ?? ""));
+		return u.protocol === "https:" && LINK_HOSTS.includes(u.hostname.toLowerCase()) ? u.toString() : null;
+	} catch {
+		return null;
+	}
+}
+/** One action → the safe version, or null when it isn't on the whitelist. */
+function cleanAction(a) {
+	switch (a?.do) {
+		case "focus": {
+			const subject = clip(a.subject, 60) || "Focus";
+			const minutes = Math.round(Number(a.minutes));
+			return {
+				do: "focus",
+				subject,
+				minutes: Number.isFinite(minutes) ? Math.max(5, Math.min(180, minutes)) : 25
+			};
+		}
+		case "quiet": {
+			const m = Math.round(Number(a.minutes));
+			return {
+				do: "quiet",
+				minutes: Number.isFinite(m) ? Math.max(5, Math.min(240, m)) : 60
+			};
+		}
+		case "focusPack": {
+			const m = Math.round(Number(a.minutes));
+			return Number.isFinite(m) ? {
+				do: "focusPack",
+				minutes: Math.max(5, Math.min(240, m))
+			} : { do: "focusPack" };
+		}
+		case "note":
+		case "task": {
+			const text = clip(a.text, 160);
+			return text ? {
+				do: a.do,
+				text
+			} : null;
+		}
+		case "open": return SAFE_PAGES.includes(a.page) ? {
+			do: "open",
+			page: a.page
+		} : null;
+		case "link": {
+			const url = safeLink(a.url);
+			return url ? {
+				do: "link",
+				url
+			} : null;
+		}
+		case "stopFocus":
+		case "blockSites":
+		case "dnd":
+		case "windDown":
+		case "offerNote": return { do: a.do };
+		default: return null;
+	}
+}
+/** A saved (or Ben-made) recipe → a valid one, or null. */
+function cleanRecipe(r, i = 0) {
+	if (!r || typeof r !== "object") return null;
+	const on = RECIPE_ON.includes(r.when?.on) ? r.when.on : null;
+	if (!on) return null;
+	const when = { on };
+	if (on === "context") {
+		if (!CONTEXT_KINDS.includes(r.when.ctx) || r.when.ctx === "idle") return null;
+		when.ctx = r.when.ctx;
+	}
+	if (on === "time") {
+		if (!HM$1.test(String(r.when.at ?? ""))) return null;
+		when.at = r.when.at;
+	}
+	const then = (Array.isArray(r.then) ? r.then : []).map(cleanAction).filter((x) => !!x).slice(0, 5);
+	if (!then.length) return null;
+	const iff = {};
+	if (Array.isArray(r.if?.days)) {
+		const days = [...new Set(r.if.days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+		if (days.length && days.length < 7) iff.days = days;
+	}
+	if (HM$1.test(String(r.if?.from ?? "")) && HM$1.test(String(r.if?.to ?? ""))) {
+		iff.from = r.if.from;
+		iff.to = r.if.to;
+	}
+	if (r.if?.noTimer) iff.noTimer = true;
+	return {
+		id: clip(r.id, 40) || `r${Date.now().toString(36)}${i}`,
+		name: clip(r.name, 60) || recipeText({
+			when,
+			if: iff,
+			then
+		}),
+		on: r.on === true,
+		when,
+		...Object.keys(iff).length ? { if: iff } : {},
+		then,
+		confirmFirst: r.confirmFirst === true,
+		ranOnce: r.ranOnce === true,
+		...r.byBen ? { byBen: true } : {}
+	};
+}
+function cleanRecipes(x) {
+	if (!Array.isArray(x)) return [];
+	const out = [];
+	for (const [i, r] of x.entries()) {
+		const c = cleanRecipe(r, i);
+		if (c && !out.some((o) => o.id === c.id)) out.push(c);
+	}
+	return out.slice(0, 30);
+}
+var DAYS = [
+	"Sun",
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat"
+];
+var actionText = (a) => {
+	switch (a.do) {
+		case "focus": return `focus “${a.subject}” ${a.minutes} min`;
+		case "quiet": return `quiet ${a.minutes} min`;
+		case "note": return `note “${a.text}”`;
+		case "task": return `task “${a.text}”`;
+		case "open": return `open ${a.page}`;
+		case "link": return `open ${new URL(a.url).hostname}`;
+		case "focusPack": return "focus pack";
+		default: return SAFE_LABEL[a.do].toLowerCase();
+	}
+};
+/** "When coding · Mon–Fri 09:00–12:00 → focus “Coding” 50 min". */
+function recipeText(r) {
+	const w = r.when.on === "context" ? `When ${CONTEXT_LABEL[r.when.ctx].toLowerCase()}` : r.when.on === "time" ? `At ${r.when.at}` : `When ${RECIPE_ON_LABEL[r.when.on].toLowerCase()}`;
+	const cond = [
+		r.if?.days?.length ? r.if.days.join(",") === "1,2,3,4,5" ? "weekdays" : r.if.days.join(",") === "0,6" ? "weekends" : r.if.days.map((d) => DAYS[d]).join(" ") : "",
+		r.if?.from ? `${r.if.from}–${r.if.to}` : "",
+		r.if?.noTimer ? "no timer" : ""
+	].filter(Boolean).join(" ");
+	return `${w}${cond ? ` · ${cond}` : ""} → ${r.then.map(actionText).join(", ")}`;
+}
+/**
+* SI24: Ben's line "RECIPE: {json}" → a recipe to offer (always off, made by
+* Ben, asks on its first run). Anything outside the whitelist is dropped.
+*/
+function parseRecipeLine(line) {
+	const m = /^\s*RECIPE:\s*(\{.*\})\s*$/i.exec(line);
+	if (!m) return null;
+	try {
+		return cleanRecipe({
+			...JSON.parse(m[1]),
+			on: false,
+			ranOnce: false,
+			byBen: true,
+			id: `ben${Date.now().toString(36)}`
+		});
+	} catch {
+		return null;
+	}
+}
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
 function loadMemory(db) {
@@ -5072,6 +5376,10 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 	}
 	lines.push(...nowContext(s, db, extra.events ?? null, extra.finance, now));
 	lines.push(...pluginContext(db, now));
+	try {
+		const doing = dayLog(db, today).doing;
+		if (doing) lines.push(`On his PC today by activity (from the desktop app): ${doing}.`);
+	} catch {}
 	if (extra.todoToday) {
 		const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? " (late)" : ""}${t.priority >= 3 ? ` P${5 - t.priority}` : ""}${t.section ? ` [${t.section}]` : ""}`);
 		lines.push(`Todoist today/late (${extra.todoToday.length}): ${list.join("; ") || "nothing"}.`);
@@ -5340,6 +5648,7 @@ Logging and the day:
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
 - "stop" ends the running focus timer and logs it (he says he's done); "extend: <minutes>" adds time to it ("5 more minutes"). Only when a timer is running.
 - "focus: <minutes> <subject>" start a focus timer now: ONLY when he clearly says to start it now ("start 25 min", "go", "timer"). Otherwise never start it yourself: offer a button {"label": "▶ 25 min <subject>", "do": "focus:25:<subject>"} and let him tap. "fun: <minutes> <what>" spend points on fun.
+- Desktop island recipes (small automations; only when a pattern keeps repeating or he asks): one line RECIPE: {"name":"Study evenings","when":{"on":"context","ctx":"study"},"if":{"days":[1,2,3,4,5],"from":"18:00","to":"21:00","noTimer":true},"then":[{"do":"focus","subject":"Study","minutes":45}]}. when.on: context (ctx: coding|study|writing|ctf|email|video|gaming|social|meeting|browsing), time (at "HH:MM"), focus:start, focus:end, meeting:start, meeting:end, block:start. then.do: focus, stopFocus, blockSites, dnd, quiet (minutes), note (text), task (text), open (page), focusPack, windDown, offerNote. It is saved OFF: he turns it on.
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
@@ -5576,6 +5885,13 @@ var MREF = /^M\d{1,2}$/i;
 function readAction(line) {
 	const plugin = readPluginAction(line);
 	if (plugin) return plugin;
+	if (/^\s*RECIPE\s*:/i.test(line)) {
+		const recipe = parseRecipeLine(line.replace(/^\s*recipe\s*:/i, "RECIPE:"));
+		return recipe ? {
+			kind: "recipe",
+			recipe
+		} : null;
+	}
 	if (/^\s*stop(focus)?\s*:?\s*$/i.test(line) || /^\s*stopfocus\s*:/i.test(line)) return { kind: "stopfocus" };
 	const sm = /^\s*sets\s*:\s*(.{3,80})$/i.exec(line);
 	if (sm) return parseSets(sm[1].replace(/\s*\|\s*/g, " ")) ? {
@@ -6027,7 +6343,7 @@ function nightMinutes(log) {
 	return m >= 120 && m <= 960 ? m : null;
 }
 // src/core/sleepRegularity.ts
-var toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var toM$1 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 /** Minutes around midnight-noon, so 23:30 and 00:30 are an hour apart (not 23). */
 var around = (m) => m >= 720 ? m - 1440 : m;
 var sd = (xs) => {
@@ -6038,8 +6354,8 @@ var sd = (xs) => {
 var isWeekendMorning = (day) => [0, 6].includes((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay());
 function sleepRegularity(logs) {
 	const recent = [...logs].sort((a, b) => b.day.localeCompare(a.day)).slice(0, 14);
-	const beds = recent.filter((l) => l.bedTime).map((l) => around(toM(l.bedTime)));
-	const wakes = recent.filter((l) => l.wakeTime).map((l) => toM(l.wakeTime));
+	const beds = recent.filter((l) => l.bedTime).map((l) => around(toM$1(l.bedTime)));
+	const wakes = recent.filter((l) => l.wakeTime).map((l) => toM$1(l.wakeTime));
 	const bedSpread = beds.length >= 3 ? Math.round(sd(beds)) : null;
 	const wakeSpread = wakes.length >= 3 ? Math.round(sd(wakes)) : null;
 	const spreads = [bedSpread, wakeSpread].filter((x) => x != null);
@@ -6048,7 +6364,7 @@ function sleepRegularity(logs) {
 		day: l.day,
 		minutes: nightMinutes(l)
 	})).filter((n) => n.minutes != null);
-	const mid = (l) => l.bedTime && l.wakeTime ? around(toM(l.bedTime)) + (nightMinutes(l) ?? 0) / 2 : null;
+	const mid = (l) => l.bedTime && l.wakeTime ? around(toM$1(l.bedTime)) + (nightMinutes(l) ?? 0) / 2 : null;
 	const wk = recent.filter((l) => !isWeekendMorning(l.day)).map(mid).filter((x) => x != null);
 	const we = recent.filter((l) => isWeekendMorning(l.day)).map(mid).filter((x) => x != null);
 	const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -10226,39 +10542,6 @@ function coachMood(f) {
 		mood: heat >= 5 ? "furious" : heat >= 3 && good < 2 ? "angry" : score <= -1 ? "annoyed" : score >= 4 ? "proud" : score >= 2 ? "happy" : "chill",
 		why: why.join(", ") || "a normal day so far"
 	};
-}
-var read = (db) => {
-	try {
-		const v = JSON.parse(getSetting(db, "island_day_log") || "{}");
-		return v && typeof v === "object" ? v : {};
-	} catch {
-		return {};
-	}
-};
-var empty = () => ({
-	focus: [],
-	blocks: []
-});
-function dayLog(db, day) {
-	return read(db)[day] ?? empty();
-}
-/** One line for Ben: "Focus quality 82% (3 sessions). Blocks: 2 done, 1 half, 1 not done." */
-function dayLogLine(d) {
-	const parts = [];
-	if (d.focus.length) {
-		const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1;
-		const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins);
-		parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? "" : "s"} (share of the time he was really on it)`);
-		const drift = d.focus.reduce((t, x) => t + (x.distractMin ?? 0), 0);
-		if (d.focus.some((x) => x.distractMin != null)) parts.push(`During focus: ${d.focus.reduce((t, x) => t + (x.workMin ?? 0), 0)} min on work apps, ${drift} min on distracting ones`);
-	}
-	if (d.blocks.length) {
-		const n = (r) => d.blocks.filter((x) => x.result === r).length;
-		parts.push(`Blocks he checked off: ${n("done")} done, ${n("half")} half, ${n("no")} not done${d.blocks.filter((x) => x.result !== "done").length ? ` (${d.blocks.filter((x) => x.result !== "done").map((x) => `${x.title}: ${x.result}`).join("; ")})` : ""}`);
-	}
-	if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`);
-	if (d.web) parts.push(`From his browser history: ${d.web}`);
-	return parts.join(". ");
 }
 // src/core/notebook.ts
 /** Notes you start with (empty, for you to fill). */
@@ -16287,7 +16570,7 @@ function group(n) {
 	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
 }
 // src/renderer/public/apps/finance/js/dates.js
-var MONTHS$2 = [
+var MONTHS$3 = [
 	"January",
 	"February",
 	"March",
@@ -16308,7 +16591,7 @@ function toISO(d) {
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
 	const [y, m] = key.split("-").map(Number);
-	const name = MONTHS$2[m - 1];
+	const name = MONTHS$3[m - 1];
 	return `${short ? name.slice(0, 3) : name} ${y}`;
 }
 function addMonths(key, n) {
@@ -16362,7 +16645,7 @@ function convert(cents, from, to, rates) {
 	return Math.round(cents / a * b);
 }
 // src/renderer/public/apps/finance/js/recurring.js
-var MONTHS$1 = {
+var MONTHS$2 = {
 	month: 1,
 	"3months": 3,
 	year: 12
@@ -16372,7 +16655,7 @@ function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays(rule.start, 14 * n);
-	const key = addMonths(monthKey(rule.start), (MONTHS$1[rule.every] || 1) * n);
+	const key = addMonths(monthKey(rule.start), (MONTHS$2[rule.every] || 1) * n);
 	return `${key}-${pad$3(Math.min(Number(rule.start.slice(8, 10)), daysInMonth(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
@@ -18734,7 +19017,7 @@ var plus = (day, n) => {
 	d.setDate(d.getDate() + n);
 	return ymd(d);
 };
-var MONTHS = [
+var MONTHS$1 = [
 	"january",
 	"february",
 	"march",
@@ -18748,7 +19031,7 @@ var MONTHS = [
 	"november",
 	"december"
 ];
-var MONTH_RE = new RegExp(`\\b(${MONTHS.map((m) => m.slice(0, 3)).join("|")})[a-z]*\\b`);
+var MONTH_RE = new RegExp(`\\b(${MONTHS$1.map((m) => m.slice(0, 3)).join("|")})[a-z]*\\b`);
 /** "today", "yesterday", "this/last week", "this/last month", "in October", "last 7 days" → a date range. */
 function rangeOf(text, today) {
 	const t = text.toLowerCase();
@@ -18796,7 +19079,7 @@ function rangeOf(text, today) {
 	};
 	const m = MONTH_RE.exec(t);
 	if (m && /\b(in|during|for|from|of|on)\s+\w+/.test(t)) {
-		const idx = MONTHS.findIndex((x) => x.startsWith(m[1]));
+		const idx = MONTHS$1.findIndex((x) => x.startsWith(m[1]));
 		let year = Number(today.slice(0, 4));
 		if (idx > Number(today.slice(5, 7)) - 1) year -= 1;
 		const from = `${year}-${pad$1(idx + 1)}-01`;
@@ -18804,7 +19087,7 @@ function rangeOf(text, today) {
 		return {
 			from,
 			to: ymd(end) > today ? today : ymd(end),
-			label: MONTHS[idx][0].toUpperCase() + MONTHS[idx].slice(1)
+			label: MONTHS$1[idx][0].toUpperCase() + MONTHS$1[idx].slice(1)
 		};
 	}
 	return null;
@@ -18836,6 +19119,7 @@ function preLookups(text, today) {
 */
 function quickKind(text, today) {
 	const t = text.trim().toLowerCase().replace(/\s+/g, " ");
+	if (/^(what am i doing wrong|what('s| is) going wrong|where am i (slipping|failing)|what am i messing up)( today)?[?!. ]*$/.test(t)) return { kind: "wrong" };
 	if (!t || /\d/.test(t) || t.split(" ").length > 8 || /\b(why|should|plan|move|add|log|book|remind|help|but|because|and then)\b/.test(t)) return null;
 	const q = t.replace(/[?!.…]+$/g, "").trim();
 	if (/^(what now|now what|what('s| is) next|next|what should i do( now)?|what do i do( now)?|ce fac( acum)?|ce urmeaza)$/.test(q)) return { kind: "now" };
@@ -18861,6 +19145,45 @@ var ICON = {
 	tasks: "✅",
 	points: "🪙"
 };
+var mm = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m}m`;
+/** SI23: the biggest leak in "video 1h10, coding 35m" (video, gaming or chat & social). */
+function biggestLeak(doing) {
+	if (!doing) return null;
+	return doing.split(/,\s*/).map((p) => {
+		const m = /^([a-z/ &]+?)\s+(?:(\d+)h)?(\d+)?m?$/i.exec(p.trim());
+		if (!m) return null;
+		const min = Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+		return {
+			kind: m[1].trim(),
+			text: p.trim(),
+			min
+		};
+	}).filter((x) => !!x && [
+		"video",
+		"gaming",
+		"social"
+	].includes(x.kind) && x.min >= 15).sort((a, b) => b.min - a.min)[0] ?? null;
+}
+/** SI23: numbers first, then the one thing to fix, then one push (a button). */
+function wrongReply(w) {
+	const nums = [
+		`⏱ focus ${mm(w.focusMin)} of ${mm(w.focusGoal)}`,
+		`✅ must-dos ${w.mustDone}/${w.mustTotal}`,
+		...w.doing ? [`🖥 ${w.doing}`] : []
+	].join(" · ");
+	const leak = biggestLeak(w.doing);
+	const behind = w.focusMin < w.focusGoal * .5;
+	const what = leak ? `Biggest leak: ${leak.text} of ${leak.kind}. That's your focus gap right there.` : behind ? `You're under half your focus goal.` : w.mustDone < w.mustTotal ? "Focus is fine, but must-dos are open." : "Honestly? Not much. Don't get cocky.";
+	const target = w.nextMust ?? null;
+	return {
+		reply: `${nums}\n${what}${target ? ` One push: 25 min on “${target}”, now.` : " One push: 25 minutes, now."}`,
+		chips: ["What now?"],
+		buttons: [{
+			label: `▶ 25 min ${target ?? "Focus"}`.slice(0, 32),
+			do: `focus:25:${target ?? "Focus"}`
+		}]
+	};
+}
 /** The reply in Ben's voice, from templates. null when the data isn't there (then the AI answers). */
 function quickReply(q, d, now = /* @__PURE__ */ new Date()) {
 	if (q.kind === "now") {
@@ -18882,6 +19205,7 @@ function quickReply(q, d, now = /* @__PURE__ */ new Date()) {
 			buttons
 		};
 	}
+	if (q.kind === "wrong") return d.wrong ? wrongReply(d.wrong) : null;
 	if (q.kind === "water") {
 		const w = d.water;
 		if (!w || !w.target) return null;
@@ -19044,6 +19368,92 @@ function impactVerdict(rows) {
 		verdict: up > down && up >= 2 ? "working" : down > up ? "not yet" : "mixed",
 		lines
 	};
+}
+// src/core/islandActions.ts
+var MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|ian|ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie|янв|фев|мар|апр|май|июн|июл|авг|сен|окт|ноя|дек";
+new RegExp(`(\\b\\d{1,2}[./-]\\d{1,2}(?:[./-]\\d{2,4})?\\b|\\b\\d{1,2}\\s+(?:${MONTHS})\\b|\\b(?:${MONTHS})\\s+\\d{1,2}\\b|\\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|luni|marți|marti|miercuri|joi|vineri|sâmbătă|sambata|duminică|duminica|today|tomorrow|tonight|azi|mâine|maine|astăzi|astazi|сегодня|завтра)\\b|\\b\\d{1,2}:\\d{2}\\b|\\b(?:deadline|due|exam|examen|test|colocviu|interview|interviu|meeting|appointment|programare)\\b)`, "i");
+// src/core/bestHours.ts
+/** Hours of the day by how well you focus in them (minutes × quality), best first; only hours with 30+ good minutes. */
+function bestHours(focus, n = 3) {
+	const by = {};
+	for (const f of focus) {
+		const t = Date.parse(f.at);
+		if (!Number.isFinite(t) || !(f.minutes > 0)) continue;
+		let left = f.minutes;
+		let at = t;
+		while (left > 0) {
+			const h = new Date(at).getHours();
+			const inHour = Math.min(left, 60 - new Date(at).getMinutes());
+			by[h] = (by[h] ?? 0) + inHour * Math.max(0, Math.min(100, f.pct)) / 100;
+			left -= inHour;
+			at += inHour * 6e4;
+		}
+	}
+	return Object.entries(by).filter(([, v]) => v >= 30).sort((a, b) => b[1] - a[1] || Number(a[0]) - Number(b[0])).slice(0, n).map(([h]) => Number(h));
+}
+/** The latest hour (over these days) with 10+ minutes of this kind, or null. */
+function latestHour(days, ctx) {
+	let last = null;
+	for (const d of days) for (const [h, v] of Object.entries(d)) if ((v[ctx] ?? 0) >= 10 && (last == null || Number(h) > last)) last = Number(h);
+	return last;
+}
+/** The hours this kind happens most (over these days), best first. */
+function ctxHours(days, ctx, n = 3) {
+	const by = {};
+	for (const d of days) for (const [h, v] of Object.entries(d)) by[h] = (by[h] ?? 0) + (v[ctx] ?? 0);
+	return Object.entries(by).filter(([, v]) => v >= 20).sort((a, b) => b[1] - a[1]).slice(0, n).map(([h]) => Number(h));
+}
+var toM = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+var toHm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+/**
+* SI25: a study block planned later than you ever study (last week) moves to
+* your best free hour today: "You never study after 21:00; moved Algorithms to 10:00."
+* `busy`: other events, minutes of the day. Only blocks whose title has one of `words`.
+*/
+function moveLateStudy(blocks, o) {
+	if (o.lastHour == null || !o.best.length) return {
+		blocks,
+		note: ""
+	};
+	const cutoff = (o.lastHour + 1) * 60;
+	const out = blocks.map((b) => ({ ...b }));
+	const notes = [];
+	for (const b of out) {
+		if (toM(b.start) < cutoff || !o.words.some((w) => w.length >= 3 && b.title.toLowerCase().includes(w.toLowerCase()))) continue;
+		const taken = [...o.busy, ...out.filter((x) => x !== b).map((x) => ({
+			start: toM(x.start),
+			end: toM(x.start) + x.minutes
+		}))];
+		const slot = [...o.best].sort((a, c) => a - c).map((h) => h * 60).find((m) => m >= toM(o.now) && m + b.minutes <= cutoff && !taken.some((t) => t.start < m + b.minutes + 10 && t.end + 10 > m));
+		if (slot == null) continue;
+		notes.push(`moved ${b.title} to ${toHm(slot)}`);
+		b.start = toHm(slot);
+	}
+	return {
+		blocks: out.sort((a, c) => toM(a.start) - toM(c.start)),
+		note: notes.length ? `You never study after ${toHm(cutoff)}; ${notes.join(", ")}.` : ""
+	};
+}
+var range = (hs) => hs.map((h) => `${String(h).padStart(2, "0")}:00`).join(", ");
+/**
+* SI25: facts for the morning plan from last week (only from what you share):
+* "Best focus hours: 09:00, 10:00. Study never after 21:00 last week. Last week: coding 12h, study 5h."
+*/
+function historyFacts(o) {
+	const parts = [];
+	const best = bestHours(o.focus);
+	if (best.length) parts.push(`Best focus hours (focus quality × minutes, last 7 days): ${range(best)}`);
+	for (const k of ["study", "coding"]) {
+		const last = latestHour(o.hours, k);
+		if (last != null && last < 21 && o.hours.length >= 3) parts.push(`He never did ${k} after ${String(last + 1).padStart(2, "0")}:00 last week`);
+		const top = ctxHours(o.hours, k, 2);
+		if (top.length) parts.push(`${k} happens most at ${range(top)}`);
+	}
+	if (o.totals) {
+		const t = Object.entries(o.totals).filter(([k, v]) => k !== "idle" && k !== "other" && v >= 30).sort((a, b) => b[1] - a[1]).slice(0, 5);
+		if (t.length) parts.push(`Last week on the PC: ${t.map(([k, v]) => `${k} ${v >= 60 ? `${Math.round(v / 6) / 10}h` : `${Math.round(v)}m`}`).join(", ")}`);
+	}
+	return parts.join(". ");
 }
 // src/renderer/src/web/rhythmBot.ts
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
@@ -19286,27 +19696,41 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const water = waterToday(db, svc, now).target;
 			const workoutDone = (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done") || !!svc.body.state(now).restToday;
 			const night = db.prepare("SELECT bed_time, wake_time FROM sleep_logs WHERE day = ?").get(today);
+			const slept = nightMinutes({
+				bedTime: night?.bed_time ?? null,
+				wakeTime: night?.wake_time ?? null
+			});
+			const yday = (() => {
+				try {
+					const j = listNotes(db).find((n) => n.title === `Journal/${addDays$5(today, -1)}`);
+					const self = JSON.parse(getSetting(db, "coach_selfreview") || "null");
+					return [j ? String(j.body ?? "").replace(/\s+/g, " ").slice(0, 300) : "", self?.day === addDays$5(today, -1) ? `Your notes: ${(self.notes ?? []).join(" / ")}` : ""].filter(Boolean).join(" ");
+				} catch {
+					return "";
+				}
+			})();
+			let past = [];
+			try {
+				past = recentDayLogs(db, today, 7);
+			} catch {
+				past = [];
+			}
+			const hist = {
+				focus: past.flatMap((x) => x.d.focus ?? []),
+				hours: past.map((x) => x.d.hours).filter((h) => !!h && Object.keys(h).length > 0)
+			};
 			return {
 				today,
 				st,
 				water,
 				workoutDone,
-				slept: nightMinutes({
-					bedTime: night?.bed_time ?? null,
-					wakeTime: night?.wake_time ?? null
-				}),
-				yday: (() => {
-					try {
-						const j = listNotes(db).find((n) => n.title === `Journal/${addDays$5(today, -1)}`);
-						const self = JSON.parse(getSetting(db, "coach_selfreview") || "null");
-						return [j ? String(j.body ?? "").replace(/\s+/g, " ").slice(0, 300) : "", self?.day === addDays$5(today, -1) ? `Your notes: ${(self.notes ?? []).join(" / ")}` : ""].filter(Boolean).join(" ");
-					} catch {
-						return "";
-					}
-				})(),
-				mode: todayMode(db, today)
+				slept,
+				yday,
+				mode: todayMode(db, today),
+				hist
 			};
 		});
+		const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : "";
 		const plans = await goalPlans().catch(() => []);
 		const bookedToday = (p) => events.some((e) => isGoalBlock(e, p));
 		const allGoalItems = plans.filter((p) => p.todayLeftMin >= 20 && !bookedToday(p)).map((p) => ({
@@ -19356,6 +19780,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				})}`,
 				plans.length ? `Goals: ${plans.map((p) => planLine(p)).join(" | ")}` : "",
 				base.yday ? `Yesterday (use it: the headline names what went well or slipped and how today fixes it, e.g. "Yesterday 2/3, focus slipped after lunch, so the hard block is first"): ${base.yday}` : "",
+				histFacts ? `His last week, from real activity: ${histFacts}.` : "",
 				"Answer ONLY with JSON: {\"headline\": string, \"mustdos\": string[], \"names\": string[]} (names: one per block, same order)."
 			].filter(Boolean).join("\n"), {
 				json: true,
@@ -19377,6 +19802,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				"headline: one short line with numbers (\"3 must-dos · 2h40 focus · gym 18:00\").",
 				note ? `He asked to change the previous plan: "${note}". Previous plan: ${JSON.stringify(prev ?? null)}` : prev ? `He asked for a different plan than: ${JSON.stringify(prev)}` : "",
 				plans.length ? `Goals planned backward from their deadlines (today's minutes are a MUST; booked ones are already in the calendar):\n${plans.map((p) => `- ${planLine(p)}${bookedToday(p) ? " (booked today)" : ""}`).join("\n")}` : "",
+				histFacts ? `His last week, from real activity (put hard blocks in his best hours; never plan study later than he ever does): ${histFacts}.` : "",
 				`A simple starting point (improve it): ${JSON.stringify(fallback)}`,
 				"Answer ONLY with JSON: {\"headline\": string, \"mustdos\": string[], \"blocks\": [{\"title\": string, \"start\": \"HH:MM\", \"minutes\": number}], \"training\": {\"time\": \"HH:MM\", \"what\": string} | null, \"waterMl\": number}",
 				"",
@@ -19394,6 +19820,29 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			plan = fallback;
 		}
 		plan = lightenForSleep(plan, base.slept);
+		if (base.hist.hours.length >= 3) {
+			const minOfDay = (iso) => {
+				const d = new Date(iso);
+				return d.getHours() * 60 + d.getMinutes();
+			};
+			const busy = events.filter((e) => !e.allDay && localDay$1(e.start) === base.today).map((e) => ({
+				start: minOfDay(e.start),
+				end: minOfDay(e.end)
+			}));
+			const words = [...plans.flatMap((p) => [p.subject, p.title]), "study"];
+			const moved = moveLateStudy(plan.blocks, {
+				lastHour: latestHour(base.hist.hours, "study"),
+				best: bestHours(base.hist.focus),
+				now: hmNow(now),
+				busy,
+				words
+			});
+			if (moved.note) plan = {
+				...plan,
+				blocks: moved.blocks,
+				headline: `${plan.headline} · ${moved.note}`.slice(0, 200)
+			};
+		}
 		return mirror.write((db) => {
 			const st = load(db, plan.day);
 			const version = (st.briefing?.version ?? 0) + 1;
@@ -22134,6 +22583,17 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							wakeOnTime: wakes.length ? `${wakes.filter((w) => w.onTime).length}/${wakes.length} on time` : void 0
 						} });
 					}
+					if (q.kind === "wrong") {
+						const open = st.mustdos.filter((x) => !x.done);
+						return quickReply(q, { wrong: {
+							focusMin: st.today.focusMin,
+							focusGoal: Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0)),
+							mustDone: st.today.mustDone,
+							mustTotal: st.today.mustTotal,
+							nextMust: open[0]?.text ?? null,
+							doing: dayLog(db, today).doing ?? null
+						} });
+					}
 					return quickReply(q, {
 						move: st.move,
 						water: {
@@ -22660,6 +23120,15 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							return `💪 Workout logged for ${a.day} · streak ${b.streak}`;
 						});
 						done.push(line);
+						continue;
+					}
+					if (a.kind === "recipe") {
+						if (await mirror.write((db) => {
+							const list = cleanRecipes(readSetting(db, "island_recipes"));
+							if (list.some((r) => r.byBen && recipeText(r) === recipeText(a.recipe))) return null;
+							writeSetting(db, "island_recipes", cleanRecipes([...list, a.recipe]));
+							return a.recipe.name;
+						})) done.push(`🧩 Recipe idea saved (off): ${recipeText(a.recipe)}. Turn it on from the desktop island or Settings → Smart island.`);
 						continue;
 					}
 					if (a.kind === "style") {

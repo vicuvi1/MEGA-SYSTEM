@@ -13,6 +13,10 @@ export interface DayLogDay {
   pc?: string
   /** MC11: minutes on listed sites from the browser history ("2 h on YouTube yesterday"), only with that switch on. */
   web?: string
+  /** SI8: the day by kind of doing ("coding 3h10, study 1h05, video 55m"), only if you share totals. */
+  doing?: string
+  /** SI22/SI25: minutes of each kind per hour, only if you share totals. */
+  hours?: Record<string, Record<string, number>>
 }
 type All = Record<string, DayLogDay>
 
@@ -62,6 +66,29 @@ export function setWebLine(db: any, day: string, line: string): void {
   write(db, all)
 }
 
+export function setDoingLine(db: any, day: string, line: string, hours: Record<string, Record<string, number>>): void {
+  const all = read(db)
+  const d = all[day] ?? empty()
+  d.doing = line.slice(0, 200)
+  // Only small numbers per hour (kind → minutes), at most 24 hours.
+  d.hours = Object.fromEntries(
+    Object.entries(hours ?? {})
+      .filter(([h]) => /^\d{1,2}$/.test(h) && Number(h) < 24)
+      .map(([h, v]) => [h, Object.fromEntries(Object.entries(v ?? {}).filter(([k, n]) => /^[a-z]{2,10}$/.test(k) && Number.isFinite(n)).map(([k, n]) => [k, Math.round(Number(n))]))])
+  )
+  all[day] = d
+  write(db, all)
+}
+
+/** The last days of the log (oldest first), for the morning plan's facts (SI25). */
+export function recentDayLogs(db: any, today: string, n = 7): { day: string; d: DayLogDay }[] {
+  return Object.entries(read(db))
+    .filter(([k]) => k < today)
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .slice(-n)
+    .map(([day, d]) => ({ day, d }))
+}
+
 export function dayLog(db: any, day: string): DayLogDay {
   return read(db)[day] ?? empty()
 }
@@ -82,5 +109,6 @@ export function dayLogLine(d: DayLogDay): string {
   }
   if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`)
   if (d.web) parts.push(`From his browser history: ${d.web}`)
+  if (d.doing) parts.push(`His day on the PC by activity: ${d.doing}`)
   return parts.join('. ')
 }

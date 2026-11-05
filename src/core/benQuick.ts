@@ -73,7 +73,7 @@ export function preLookups(text: string, today: string): string[] {
   return topic && r ? [`${topic} ${r.from} ${r.to}`] : []
 }
 
-export type Quick = { kind: 'now' } | { kind: 'water' } | { kind: 'streak' } | { kind: 'lookup'; need: string; label: string; topic: Topic }
+export type Quick = { kind: 'now' } | { kind: 'water' } | { kind: 'streak' } | { kind: 'wrong' } | { kind: 'lookup'; need: string; label: string; topic: Topic }
 
 /**
  * B3: a short, plain question Ben can answer from the data. Anything with a
@@ -82,6 +82,8 @@ export type Quick = { kind: 'now' } | { kind: 'water' } | { kind: 'streak' } | {
  */
 export function quickKind(text: string, today: string): Quick | null {
   const t = text.trim().toLowerCase().replace(/\s+/g, ' ')
+  // SI23: "what am I doing wrong (today)?": numbers first, one push.
+  if (/^(what am i doing wrong|what('s| is) going wrong|where am i (slipping|failing)|what am i messing up)( today)?[?!. ]*$/.test(t)) return { kind: 'wrong' }
   if (!t || /\d/.test(t) || t.split(' ').length > 8 || /\b(why|should|plan|move|add|log|book|remind|help|but|because|and then)\b/.test(t)) return null
   const q = t.replace(/[?!.…]+$/g, '').trim()
   if (/^(what now|now what|what('s| is) next|next|what should i do( now)?|what do i do( now)?|ce fac( acum)?|ce urmeaza)$/.test(q)) return { kind: 'now' }
@@ -104,6 +106,36 @@ export interface QuickData {
   streaks?: { training: number; clean: number; focusWeekMin: number; wakeOnTime?: string }
   /** The looked-up answer for a lookup (answerLocal). */
   found?: string | null
+  /** SI23: today so far: focus vs goal, must-dos, and the day by activity (only when shared from the desktop). */
+  wrong?: { focusMin: number; focusGoal: number; mustDone: number; mustTotal: number; nextMust: string | null; doing: string | null }
+}
+
+const mm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, '0') : ''}` : `${m}m`)
+/** SI23: the biggest leak in "video 1h10, coding 35m" (video, gaming or chat & social). */
+export function biggestLeak(doing: string | null): { kind: string; text: string; min: number } | null {
+  if (!doing) return null
+  const list = doing.split(/,\s*/).map((p) => {
+    const m = /^([a-z/ &]+?)\s+(?:(\d+)h)?(\d+)?m?$/i.exec(p.trim())
+    if (!m) return null
+    const h = Number(m[2] ?? 0)
+    const min = h * 60 + Number(m[3] ?? 0)
+    return { kind: m[1].trim(), text: p.trim(), min }
+  })
+  return list.filter((x): x is NonNullable<typeof x> => !!x && ['video', 'gaming', 'social'].includes(x.kind) && x.min >= 15).sort((a, b) => b.min - a.min)[0] ?? null
+}
+
+/** SI23: numbers first, then the one thing to fix, then one push (a button). */
+export function wrongReply(w: NonNullable<QuickData['wrong']>): QuickReply {
+  const nums = [`⏱ focus ${mm(w.focusMin)} of ${mm(w.focusGoal)}`, `✅ must-dos ${w.mustDone}/${w.mustTotal}`, ...(w.doing ? [`🖥 ${w.doing}`] : [])].join(' · ')
+  const leak = biggestLeak(w.doing)
+  const behind = w.focusMin < w.focusGoal * 0.5
+  const what = leak ? `Biggest leak: ${leak.text} of ${leak.kind}. That's your focus gap right there.` : behind ? `You're under half your focus goal.` : w.mustDone < w.mustTotal ? 'Focus is fine, but must-dos are open.' : "Honestly? Not much. Don't get cocky."
+  const target = w.nextMust ?? null
+  return {
+    reply: `${nums}\n${what}${target ? ` One push: 25 min on “${target}”, now.` : ' One push: 25 minutes, now.'}`,
+    chips: ['What now?'],
+    buttons: [{ label: `▶ 25 min ${target ?? 'Focus'}`.slice(0, 32), do: `focus:25:${target ?? 'Focus'}` }]
+  }
 }
 
 export interface QuickReply {
@@ -127,6 +159,7 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
             : []
     return { reply: `🎯 ${m.title}. ${m.sub}`, chips: m.kind === 'answer' ? ['Done ✅', 'Not yet'] : ['Something else?', 'Give me 10 min'], buttons }
   }
+  if (q.kind === 'wrong') return d.wrong ? wrongReply(d.wrong) : null
   if (q.kind === 'water') {
     const w = d.water
     if (!w || !w.target) return null

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { PcPrefs } from '@core/pcActivity'
 import { Row, Switch } from './settingsUi'
 import { useAction } from './ui'
+import { IslandRecipesPanel, SmartLearned } from './IslandRecipesPanel'
 
 type Info = { prefs: PcPrefs; port: number; token: string; now: { label: string; kind: string } | null; windows: boolean; siteServer?: string | null }
 
@@ -92,6 +93,49 @@ export function PcPrivacyPanel() {
           Delete app history
         </button>
       </div>
+
+      <h4 className="pc-h">Smart island</h4>
+      <p className="hint small">
+        The island works out what you're doing (coding, study, video…) from the app in front, on this PC. Window titles are read here only with "Window titles" on, and never leave this PC: the island only gets a kind of doing, and a detail only when it's one of your goals or subjects. All off until you turn it on.
+      </p>
+      <Row title="Know what I'm doing" hint="Shows “⌨️ Coding · Algorithms” on the island (tap it to fix). Needs “The app in front”." disabled={!p.activeApp}>
+        <Switch label="Smart island" on={p.smart} disabled={!p.activeApp} onChange={(v) => void set({ smart: v })} />
+      </Row>
+      <Row title="Suggestions" hint={`At most ${p.suggestBudget} a day, each with Accept / Not now / Never. They only start timers or open things; logging stays your tap. What you keep ignoring becomes a dot, then stops.`} disabled={!p.smart}>
+        <Switch label="Suggestions" on={p.smartSuggest} disabled={!p.smart} onChange={(v) => void set({ smartSuggest: v })} />
+      </Row>
+      {p.smartSuggest && (
+        <label className="pc-list">
+          <span>A day, at most</span>
+          <input type="number" min={0} max={20} defaultValue={p.suggestBudget} onBlur={(e) => void set({ suggestBudget: Number(e.target.value) })} />
+        </label>
+      )}
+      <Row title="Recipes" hint="Your own small automations (below). Safe actions only: timers, sites away, Do Not Disturb, quiet, notes, tasks, pages. The first run asks.">
+        <Switch label="Recipes" on={p.smartRecipes} onChange={(v) => void set({ smartRecipes: v })} />
+      </Row>
+      <Row title="Log spending after the bank" hint="With window titles on: when you leave your bank's site, the island offers to log what you spent. It never reads amounts." disabled={!p.smart || !p.titles}>
+        <Switch label="Spending after the bank" on={p.smartBank} disabled={!p.smart || !p.titles} onChange={(v) => void set({ smartBank: v })} />
+      </Row>
+      {p.smartBank && (
+        <label className="pc-list">
+          <span>Bank site words</span>
+          <input defaultValue={list(p.bankWords)} placeholder="mybank, online banking" onBlur={(e) => void set({ bankWords: read(e.target.value) })} />
+        </label>
+      )}
+      <label className="pc-list">
+        <span>Focus music link</span>
+        <input defaultValue={p.musicLink} placeholder="https://open.spotify.com/… (optional, for the focus pack)" onBlur={(e) => void set({ musicLink: e.target.value.trim() })} />
+      </label>
+      {p.contextRules.length > 0 && (
+        <p className="hint small">
+          Your fixes: {p.contextRules.map((r) => `${r.app} = ${r.kind}`).join(', ')}{' '}
+          <button className="btn small ghost" onClick={() => void set({ contextRules: [] })}>
+            Forget them
+          </button>
+        </p>
+      )}
+      <SmartLearned />
+      <IslandRecipesPanel />
 
       <h4 className="pc-h">Work and distraction</h4>
       <p className="hint small">Program names (like code, steam) or site words (like youtube). Your work list wins. "It's for this" on the island adds to it.</p>

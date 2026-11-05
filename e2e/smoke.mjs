@@ -207,6 +207,24 @@ try {
     await ip.waitForSelector('.di-peek.alert', { timeout: 5000 })
     await ip.keyboard.press('Escape')
     await ip.waitForSelector('.di-peek.alert', { state: 'detached', timeout: 5000 })
+    // Smart island: a suggestion drops down with Accept / Not now / Never, and each sends its answer.
+    const sg = (answer, run) => ({ kind: 'suggest', sid: 'back:a1', sk: 'back', answer, ...(run ? { run } : {}) })
+    await ip.evaluate((acts) => {
+      window.__island.actions = []
+      // No 3-minute gap after the water reminder, for the test.
+      window.__island.send('prefs', { size: 'normal', gapMin: 0 })
+      window.__island.send('state', { ...window.__island.snap, running: null, at: Date.now() + 1, alert: { id: 'sg:back:a1', kind: 'suggest', title: 'Algorithms block · 20 min left', text: '4 min of video. Back to it?', face: '↩️', actions: acts } })
+    }, [
+      { label: '↩ Back', action: sg('accept', { kind: 'start', subject: 'Algorithms', minutes: 20 }), primary: true },
+      { label: 'Not now', action: sg('later') },
+      { label: 'Never', action: sg('never') }
+    ])
+    await ip.waitForSelector('.di-peek.alert.kind-suggest', { timeout: 8000 })
+    const labels = await ip.$$eval('.di-peek.alert .di-actions button', (bs) => bs.map((b) => b.textContent))
+    if (labels.join('|') !== '↩ Back|Not now|Never') throw new Error(`suggestion buttons: ${labels.join('|')}`)
+    await ip.waitForTimeout(400)
+    await ip.click('.di-peek.alert [data-tap="peek:alert:Not now"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'suggest' && a.answer === 'later'), null, { timeout: 3000 })
     await ip.context().close()
   })
   await step('no uncaught page errors', async () => {
