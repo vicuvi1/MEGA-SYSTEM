@@ -1,3 +1,4 @@
+import { askConfirm } from '../confirmSheet'
 import { RestDayCard } from '../RestDay'
 import { usePoints } from '../usePoints'
 import { dayKey } from '@core/dates'
@@ -96,7 +97,7 @@ export function Body({
   const handleUndoLast = async () => {
     if (state.recentWorkouts.length === 0) return
     const last = state.recentWorkouts[0]
-    if (!confirm(`Undo last workout "${last.title}" and give the points back?`)) return
+    if (!await askConfirm(`Undo last workout "${last.title}" and give the points back?`)) return
     const next = await act(() => life.body.deleteWorkout(last.id), `Reverted "${last.title}"`)
     if (next) {
       onState(next)
@@ -115,7 +116,7 @@ export function Body({
       : null
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this workout record? Any points earned from it will be taken back.')) return
+    if (!await askConfirm('Delete this workout record? Any points earned from it will be taken back.')) return
     const next = await act(() => life.body.deleteWorkout(id), 'Workout removed')
     if (next) {
       onState(next)
@@ -341,7 +342,7 @@ export function Body({
           </button>
           <button
             className="btn-hydration"
-            onClick={() => { if (confirm('Reset today\'s water intake to 0?')) saveWater(0); }}
+            onClick={async () => { if (await askConfirm('Reset today\'s water intake to 0?')) saveWater(0); }}
             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748b', fontSize: '11px' }}
           >
             Reset
@@ -578,6 +579,7 @@ function WorkoutModal({
                   <button
                     type="button"
                     className="icon-btn"
+                    aria-label={`Remove ${it.name ?? 'exercise'}`}
                     onClick={() => removeItem(it.exerciseId)}
                   >
                     ×

@@ -5,6 +5,7 @@ import { features, isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { Coins, ToastProvider, useToast } from './ui'
+import { ConfirmHost } from './confirmSheet'
 import { LockScreen } from './pages/LockScreen'
 import { Today } from './pages/Today'
 import { Soon } from './pages/Soon'
@@ -66,6 +67,7 @@ export function App() {
     <ToastProvider>
       <ErrorBoundary area="Life System">
         <WindowErrors />
+        <ConfirmHost />
         <NewVersionBar />
         <Gate />
       </ErrorBoundary>

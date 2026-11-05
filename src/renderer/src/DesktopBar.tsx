@@ -3,6 +3,7 @@
 // Windows' own minimize/maximize/close sit on the right, in the same dark.
 // Shows sync state in one word; update / sign-in / conflict buttons appear
 // only when they're needed. Backups live in Settings → Backups on this PC.
+import { askConfirm } from './confirmSheet'
 import { useEffect, useRef, useState } from 'react'
 import type { UpdateStatus } from '../../shared/api'
 import type {} from '../../shared/desktop'
@@ -141,7 +142,7 @@ export function DesktopBar() {
       <span className="dbar-space" />
       {conflict && (
         <button className="dbar-btn" disabled={busy} onClick={() => void action(async () => {
-          if (!window.confirm('Save a backup of your local changes, then replace this device’s copy with the server copy? Your unsynced changes will remain in the backup, and will not be uploaded automatically.')) return
+          if (!await askConfirm('Save a backup of your local changes, then replace this device’s copy with the server copy? Your unsynced changes will remain in the backup, and will not be uploaded automatically.')) return
           const path = await desktop.backup()
           if (path) window.dispatchEvent(new Event('life-desktop-use-server'))
         })}>Back up and use server copy</button>

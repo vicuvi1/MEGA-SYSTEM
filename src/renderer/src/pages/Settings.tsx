@@ -8,6 +8,7 @@ function downloadBlob(content: string, mime: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+import { askConfirm } from '../confirmSheet'
 import { useEffect, useState } from 'react'
 import { rememberPinLength } from './LockScreen'
 import type { AppPrefs, AuthStatus, BackupStatus, LogEntry, TelegramConfig, BotBridgeConfig, UpdateStatus, VerifyResult, AIConfig, CalendarConfig, SyncConfig, SyncResult } from '@shared/api'
@@ -566,21 +567,21 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       // 1. Finance Helper standalone backup (e.g. finance-helper-2026-10-29.json)
       if (data.app === 'finance-helper' || (Array.isArray(data.tx) && data.tx.length > 0)) {
         const count = Array.isArray(data.tx) ? data.tx.length : 0
-        if (!window.confirm(`Import Finance Helper backup from "${file.name}" (${count} transactions)?`)) return
+        if (!await askConfirm(`Import Finance Helper backup from "${file.name}" (${count} transactions)?`)) return
         localStorage.setItem('finance-helper.state', JSON.stringify(data))
         importedType = `Finance Helper (${count} transactions)`
       }
       // 2. Waky sleep companion standalone backup (e.g. waky.json)
       else if (data.days && data.settings) {
         const daysCount = Object.keys(data.days).length
-        if (!window.confirm(`Import Waky sleep backup from "${file.name}" (${daysCount} days logged)?`)) return
+        if (!await askConfirm(`Import Waky sleep backup from "${file.name}" (${daysCount} days logged)?`)) return
         localStorage.setItem('waky_web_data_v2', JSON.stringify(data))
         importedType = `Waky Sleep Companion (${daysCount} days logged)`
       }
       // 3. MAN Spartan discipline backup
       else if (data.streakDays != null) {
         const streak = Number(data.streakDays) || 1
-        if (!window.confirm(`Import MAN Spartan streak from "${file.name}" (Streak: Day ${streak})?`)) return
+        if (!await askConfirm(`Import MAN Spartan streak from "${file.name}" (Streak: Day ${streak})?`)) return
         // MAN's Day N started N-1 days ago (setting today wiped the streak).
         const d = await life.discipline.state()
         await life.discipline.setStart(addDays(d.today, -streak + 1))
@@ -588,7 +589,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       }
       // 4. Full Life System Unified Backup
       else if (data.tables || data.version || data.financeState || data.wakyState) {
-        if (!window.confirm(`Restore full Life System backup from "${file.name}"? This will update your cloud database and local state.`)) return
+        if (!await askConfirm(`Restore full Life System backup from "${file.name}"? This will update your cloud database and local state.`)) return
         if (data.tables && life.data.restoreSnapshot) {
           // The real thing: every table back, on every device (PIN and bot setup kept).
           await life.data.restoreSnapshot(text)
@@ -621,7 +622,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
   }
 
   async function restore() {
-    if (!window.confirm(`Replace all current data with ${restoreName}? A backup of the current state is made first.`)) return
+    if (!await askConfirm(`Replace all current data with ${restoreName}? A backup of the current state is made first.`)) return
     const ok = await act(async () => {
       await life.backup.restore(restoreName, restorePass)
       return true
@@ -1422,7 +1423,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
                     className="btn small ghost"
                     style={{ fontSize: '11px', padding: '3px 8px' }}
                     onClick={async () => {
-                      if (!window.confirm(`Restore entire system state to ${snap.day}? A full snapshot is restored across all 4 apps.`)) return
+                      if (!await askConfirm(`Restore entire system state to ${snap.day}? A full snapshot is restored across all 4 apps.`)) return
                       const ok = await life.data.restoreCloudSnapshot?.(snap.day)
                       if (ok) {
                         setBackupStatusMsg(`🎉 Successfully restored cloud snapshot for ${snap.day}! Reloading...`)

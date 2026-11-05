@@ -1,5 +1,6 @@
 // Desktop: a backup file every day, on its own (PC folder + Google Drive), and
 // Settings → Backups on this PC to see them, back up now, and restore one.
+import { askConfirm } from './confirmSheet'
 import { useCallback, useEffect, useState } from 'react'
 import type { BackupStatus, BackupWhere } from '../../desktop/backups'
 import { life } from './bridge'
@@ -67,7 +68,7 @@ export function DesktopBackupPanel() {
   if (!desk?.backupStatus || !s) return null
 
   const restore = async (where: BackupWhere, name: string, day: string) => {
-    if (!window.confirm(`Put back your data from ${day}? Everything changes to how it was then, on every device (your PIN and bot setup stay). Today's backup is saved first.`)) return
+    if (!await askConfirm(`Put back your data from ${day}? Everything changes to how it was then, on every device (your PIN and bot setup stay). Today's backup is saved first.`)) return
     setRestoring(name)
     const ok = await act(async () => {
       await backupNow()

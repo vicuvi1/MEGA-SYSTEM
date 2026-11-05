@@ -356,7 +356,7 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
                   <b>{money(e.amount)} {cur}</b> · <span className="cat-pill">{e.category}</span> {e.note ? `— ${e.note}` : ''}
                 </span>
                 <span className="when">{e.day}</span>
-                <button className="icon-btn delete-btn" title="Delete expense" onClick={() => handleDeleteExpense(e.id)}>
+                <button className="icon-btn delete-btn" title="Delete expense" aria-label="Delete expense" onClick={() => handleDeleteExpense(e.id)}>
                   <Icon name="undo" size={14} />
                 </button>
               </li>
