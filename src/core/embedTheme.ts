@@ -10,11 +10,30 @@ export function embedThemeCss(kind: EmbedKind, t: Tokens): string {
   body { font-family: ${t.font} !important; background: ${t.bg} !important; color: ${t.text} !important; }
   button, input, select, textarea { font-family: inherit; }`
   if (kind === 'sport')
-    return `:root { --bg-dark: ${t.bg}; --card-bg: ${t.surface}; --card-border: ${t.border}; --text-main: ${t.text}; --text-sub: ${t.muted}; --text-muted: ${t.muted}; --cyan-neon: ${t.accent}; --font: ${t.font}; }${base}`
+    return `:root { --bg-dark: ${t.bg}; --card-bg: ${t.surface}; --card-border: ${t.border}; --card-border-glow: ${t.border}; --text-main: ${t.text}; --text-sub: ${t.muted}; --text-muted: ${t.muted}; --cyan-neon: ${t.accent}; --azure-neon: ${t.accent}; --electric-blue: ${t.accent}; --font: ${t.font}; }${base}${CALM_LOOK}
+  #ambient-canvas { display: none !important; }
+  .glass-card, .today-routine-card, .hunter-hud { background: ${t.surface} !important; border: 1px solid ${t.border} !important; border-radius: 18px !important; box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px rgba(0,0,0,.6) !important; backdrop-filter: none !important; }
+  .hunter-hud::before, .glass-card::before { display: none !important; }
+  .rank-crest { border-radius: 16px !important; box-shadow: none !important; }
+  .chip-btn.primary, .btn-primary, button.primary { background: ${t.accent} !important; color: #0b0d12 !important; border-color: transparent !important; box-shadow: none !important; }`
   if (kind === 'waky')
     return `:root { --bg: ${t.bg}; --surface: ${t.surface}; --surface-2: ${t.surface2}; --line: ${t.border}; --text: ${t.text}; --muted: ${t.muted}; }${base}`
-  return `:root { --bg-dark: ${t.bg}; --card-bg: ${t.surface}; --card-border: ${t.border}; --text-primary: ${t.text}; --text-secondary: ${t.muted}; --text-muted: ${t.muted}; }${base}`
+  return `:root { --bg-dark: ${t.bg}; --card-bg: ${t.surface}; --card-border: ${t.border}; --text-primary: ${t.text}; --text-secondary: ${t.muted}; --text-muted: ${t.muted}; --spartan-gold: ${t.accent}; }${base}${CALM_LOOK}
+  .card { background: ${t.surface} !important; border: 1px solid ${t.border} !important; border-radius: 18px !important; box-shadow: 0 18px 40px -28px rgba(0,0,0,.6) !important; }
+  .nav-tabs { background: ${t.surface2} !important; border: 1px solid ${t.border} !important; border-radius: 14px !important; }
+  .nav-tab.active { background: ${t.accent} !important; color: #0b0d12 !important; border-color: transparent !important; box-shadow: none !important; }`
 }
+
+/**
+ * Life System's calm look on top of the colours (V1, V2): no neon glow,
+ * no glowing text, titles in normal case, Life's font. Each app keeps its
+ * layout and features.
+ */
+const CALM_LOOK = `
+  *, *::before, *::after { text-shadow: none !important; }
+  h1, h2, h3, .card-title, .crest-label, .lbl, .header-title { letter-spacing: 0 !important; }
+  .card-title, .lbl, .hunter-badge, .metric-pill .lbl { text-transform: none !important; }
+  [class*="glow"], [class*="neon"] { box-shadow: none !important; filter: none !important; }`
 
 /** Phone layouts (U6), applied even when the colours aren't matched. */
 export function embedPhoneCss(kind: EmbedKind): string {
