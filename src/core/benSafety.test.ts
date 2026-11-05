@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { askedFor, confirmButton, loggedInText, riskOf } from './benSafety'
+import { askedFor, confirmButton, loggedInText, readConfirm, riskOf } from './benSafety'
 
 describe('Ben cannot be hijacked', () => {
   it('knows which actions are risky', () => {
@@ -71,5 +71,14 @@ describe('free-text log actions (X1)', () => {
     expect(loggedInText('lunch 50', { kind: 'log', text: '/expense 80 lunch' })).toBe(false)
     expect(loggedInText('meditated today', { kind: 'log', text: 'meditation' })).toBe(true)
     expect(loggedInText('hello', { kind: 'log', text: 'meditation' })).toBe(false)
+  })
+})
+
+describe('a confirm tap carries its action (X6)', () => {
+  it('puts the id first so Telegram trimming keeps it', () => {
+    const b = confirmButton('log', '30 pushups', 'k3x9a0')
+    expect(b.do).toBe('say:✓k3x9a0 I did 30 pushups')
+    expect(readConfirm(b.do.slice(4))).toEqual({ id: 'k3x9a0', rest: 'I did 30 pushups' })
+    expect(readConfirm('I did 30 pushups')).toBeNull()
   })
 })

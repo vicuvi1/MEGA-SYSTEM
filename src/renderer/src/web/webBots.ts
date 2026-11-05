@@ -36,7 +36,7 @@ import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
 import { askedFor, confirmButton,
-  loggedInText, riskOf } from '@core/benSafety'
+  loggedInText, readConfirm, riskOf } from '@core/benSafety'
 import { notMoney } from '@core/moneyGuess'
 import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
@@ -805,7 +805,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         return text
       }
       const said = data.slice(3)
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text: `💬 <i>${esc(said)}</i>`, parse_mode: 'HTML' }).catch(() => null)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text: `💬 <i>${esc(readConfirm(said)?.rest ?? said)}</i>`, parse_mode: 'HTML' }).catch(() => null)
       return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:say`)
     }
     // An unclear money message (X5): [Log it] logs it, [Not money] gives it to Ben.
@@ -1252,6 +1252,31 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * its memory and your goals & rules; it answers and acts. Shared by the
    * Telegram bots and the app's Coach page (same memory, same log).
    */
+  /** Ben's actions waiting for your "✅ Yes" tap (X6), kept 2 days. */
+  function keepConfirm(db: any, id: string, a: BrainAction): void {
+    let all: Record<string, { a: BrainAction; at: number }> = {}
+    try {
+      all = JSON.parse(getSetting(db, 'ben_confirm') || '{}')
+    } catch {
+      all = {}
+    }
+    all[id] = { a, at: Date.now() }
+    const keep = Object.entries(all).filter(([, v]) => Date.now() - v.at < 2 * 86400_000).slice(-30)
+    setSetting(db, 'ben_confirm', JSON.stringify(Object.fromEntries(keep)))
+  }
+  function takeConfirm(db: any, id: string): BrainAction | null {
+    try {
+      const all = JSON.parse(getSetting(db, 'ben_confirm') || '{}')
+      const v = all[id]
+      if (!v) return null
+      delete all[id]
+      setSetting(db, 'ben_confirm', JSON.stringify(all))
+      return v.a as BrainAction
+    } catch {
+      return null
+    }
+  }
+
   async function think(
     persona: Persona,
     text: string,
@@ -1266,6 +1291,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       } catch {
         /* the screen's problem */
       }
+    }
+    // A "✅ Yes, …" tap: run the action Ben stored, no second AI call (X6).
+    const conf = readConfirm(text)
+    let confirmed: BrainAction | null = null
+    if (conf) {
+      text = conf.rest
+      confirmed = await mirror.write((db) => takeConfirm(db, conf.id)).catch(() => null)
+      // Tapped twice (or too late): never log it a second time.
+      if (!confirmed) return { ok: true, reply: '✅ Already done.', done: [] }
     }
     const dayStart = new Date()
     dayStart.setHours(0, 0, 0, 0)
@@ -1395,7 +1429,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined }), Math.max(4_000, deadline - Date.now()))
     let out: BrainOut
     try {
-      out = parseBrain(await ask())
+      if (confirmed) out = parseBrain('{"reply":"👍 Done.","actions":[]}')
+      else out = parseBrain(await ask())
       // It asked for facts it didn't have: look them up, then it answers.
       if (out.need?.length && !out.actions.length) {
         const found: string[] = []
@@ -1446,6 +1481,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let keyboard: any
     let expense = false
     let acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
+    if (confirmed) acts = [confirmed]
     // A focus timer starts only when he asked for it now; otherwise it becomes a ▶ button he can tap.
     const askedToStart = /\b(start|go|begin|timer|focus now|let'?s go|incep|încep|porne|start\w*|начн|запуст|поехали)\b/i.test(text)
     if (!askedToStart) {
@@ -1459,14 +1495,19 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // Deletes, big moves, rewards and habit ticks run only when HIS message asked for
     // that kind of thing; otherwise a one-tap "Yes, …" button (text in his calendar or
     // Todoist can't make Ben delete or pay anything).
+    const toKeep: { id: string; a: BrainAction }[] = []
     acts = acts.filter((a) => {
       const risk = riskOf(a as any)
-      if (!risk || (askedFor(text, risk) && (risk !== 'log' || loggedInText(text, a as any)))) return true
+      if (confirmed || !risk || (askedFor(text, risk) && (risk !== 'log' || loggedInText(text, a as any)))) return true
       const what =
         a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : a.kind === 'reps' ? `${a.amount} ${a.exercise}` : a.kind === 'water' ? `${a.ml} ml water` : a.kind === 'log' ? a.text.replace(/^\/\w+\s*/, '') : ''
-      out.buttons = [...(out.buttons ?? []), confirmButton(risk, what)].slice(0, 3)
+      // Actions that don't point at a list (logs, habits, rewards) are kept, so the tap runs exactly this one.
+      const id = a.kind === 'reps' || a.kind === 'water' || a.kind === 'log' || a.kind === 'habit' || a.kind === 'reward' ? `${Date.now().toString(36).slice(-6)}${toKeep.length}` : undefined
+      if (id) toKeep.push({ id, a })
+      out.buttons = [...(out.buttons ?? []), confirmButton(risk, what, id)].slice(0, 3)
       return false
     })
+    if (toKeep.length) await mirror.write((db) => toKeep.forEach((k) => keepConfirm(db, k.id, k.a))).catch(() => null)
     // Its notebook: a dated line under the right note.
     const noteOps = out.actions.map(readNoteOp).filter((x): x is { title: string; line: string } => !!x)
     if (noteOps.length) {
