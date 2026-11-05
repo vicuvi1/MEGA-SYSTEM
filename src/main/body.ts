@@ -17,6 +17,7 @@ import {
   type WorkoutInput
 } from '@core/body'
 import { strengthSummary } from '@core/strength'
+import { skillStatus } from '@core/skills'
 import { LedgerError } from '@core/ledger'
 import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
@@ -182,6 +183,7 @@ export class Body {
       weeklyAverages,
       recentWorkouts: allWorkouts.slice(0, 25),
       strength: strengthSummary(allWorkouts),
+      skills: skillStatus(allWorkouts),
       metrics: allMetrics,
       exercises
     }

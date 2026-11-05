@@ -1920,3 +1920,15 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .rd-sore small { color: var(--muted); margin-right: 4px; }
 .rd-sore button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font: inherit; }
 .rd-sore button.on { background: var(--accent); color: var(--accent-ink, #111); border-color: transparent; }
+
+/* Skill paths (H6) */
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.sk-path { padding: 10px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.03); }
+.sk-top { display: flex; justify-content: space-between; align-items: baseline; }
+.sk-top small, .sk-path p small { color: var(--muted); }
+.sk-path p { margin: 6px 0 0; }
+.sk-path p small { display: block; }
+.sk-steps { display: flex; gap: 4px; margin-top: 6px; }
+.sk-steps i { flex: 1; height: 5px; border-radius: 99px; background: rgb(var(--ink) / 0.08); }
+.sk-steps i.on { background: var(--accent); }
+.sk-steps i.now { background: color-mix(in srgb, var(--accent) 40%, transparent); }

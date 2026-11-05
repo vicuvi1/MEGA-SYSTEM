@@ -79,6 +79,8 @@ export interface BodySummary {
   recentWorkouts: Workout[]
   /** Weighted lifts: records and estimated max over time (core/strength.ts). */
   strength?: import('./strength').LiftSummary[]
+  /** Calisthenics skill paths: where you are, what unlocks next (core/skills.ts). */
+  skills?: import('./skills').PathStatus[]
   metrics: BodyMetric[]
   exercises: Exercise[]
 }

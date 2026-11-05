@@ -10,6 +10,7 @@ import { soundCoin } from '../sound'
 import { useWater } from '../water'
 import { StrengthCard } from '../StrengthCard'
 import { ReadinessCard } from '../ReadinessCard'
+import { SkillPaths } from '../SkillPaths'
 import { useAction } from '../ui'
 import '../body.css'
 
@@ -315,6 +316,7 @@ export function Body({
 
       {/* STRENGTH: sets × reps × kg, records, estimated max (H2) */}
       <StrengthCard state={state} onChange={(s2) => (onState(s2), onWallet())} />
+      <SkillPaths state={state} />
 
       {/* DAILY HYDRATION TRACKER */}
       <section className="sporty-hydration-panel">
