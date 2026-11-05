@@ -6,10 +6,13 @@ import { getSetting, setSetting } from '../../../main/settings'
 export const DAY_LOG = 'island_day_log'
 
 export interface DayLogDay {
-  focus: { at: string; subject: string; minutes: number; pct: number }[]
+  /** pct: the share of the session really spent on it; workMin/distractMin (MC10) only when you share PC totals. */
+  focus: { at: string; subject: string; minutes: number; pct: number; workMin?: number; distractMin?: number }[]
   blocks: { at: string; title: string; result: 'done' | 'half' | 'no' }[]
   /** P8: the day's PC totals ("VS Code 3h10, YouTube 35m · work 3h, distracting 40m"), only if you share them. */
   pc?: string
+  /** MC11: minutes on listed sites from the browser history ("2 h on YouTube yesterday"), only with that switch on. */
+  web?: string
 }
 type All = Record<string, DayLogDay>
 
@@ -51,6 +54,14 @@ export function setPcLine(db: any, day: string, line: string): void {
   write(db, all)
 }
 
+export function setWebLine(db: any, day: string, line: string): void {
+  const all = read(db)
+  const d = all[day] ?? empty()
+  d.web = line.slice(0, 200)
+  all[day] = d
+  write(db, all)
+}
+
 export function dayLog(db: any, day: string): DayLogDay {
   return read(db)[day] ?? empty()
 }
@@ -61,12 +72,15 @@ export function dayLogLine(d: DayLogDay): string {
   if (d.focus.length) {
     const mins = d.focus.reduce((t, x) => t + x.minutes, 0) || 1
     const pct = Math.round(d.focus.reduce((t, x) => t + x.pct * x.minutes, 0) / mins)
-    parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? '' : 's'} (share of the time he was really at the PC)`)
+    parts.push(`Focus quality ${pct}% over ${d.focus.length} session${d.focus.length === 1 ? '' : 's'} (share of the time he was really on it)`)
+    const drift = d.focus.reduce((t, x) => t + (x.distractMin ?? 0), 0)
+    if (d.focus.some((x) => x.distractMin != null)) parts.push(`During focus: ${d.focus.reduce((t, x) => t + (x.workMin ?? 0), 0)} min on work apps, ${drift} min on distracting ones`)
   }
   if (d.blocks.length) {
     const n = (r: string) => d.blocks.filter((x) => x.result === r).length
     parts.push(`Blocks he checked off: ${n('done')} done, ${n('half')} half, ${n('no')} not done${d.blocks.filter((x) => x.result !== 'done').length ? ` (${d.blocks.filter((x) => x.result !== 'done').map((x) => `${x.title}: ${x.result}`).join('; ')})` : ''}`)
   }
   if (d.pc) parts.push(`On his PC today (apps, from the desktop): ${d.pc}`)
+  if (d.web) parts.push(`From his browser history: ${d.web}`)
   return parts.join('. ')
 }

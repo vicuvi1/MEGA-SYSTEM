@@ -14,6 +14,7 @@ export function PcPrivacyPanel() {
   const act = useAction()
   const [info, setInfo] = useState<Info | null>(null)
   const [today, setToday] = useState<{ line: string } | null>(null)
+  const [web, setWeb] = useState<{ line: string; todayLine: string } | null>(null)
   const load = useCallback(() => {
     desk?.pcGetPrefs?.().then((i) => i && setInfo(i)).catch(() => {})
     desk?.pcToday?.().then((t) => t && setToday(t)).catch(() => {})
@@ -24,6 +25,11 @@ export function PcPrivacyPanel() {
     const t = setInterval(load, 5000)
     return () => clearInterval(t)
   }, [load])
+  const historyOn = !!info?.prefs.browserHistory
+  useEffect(() => {
+    if (!historyOn) return setWeb(null)
+    desk?.pcBrowserMinutes?.().then((w) => setWeb(w), () => setWeb(null))
+  }, [desk, historyOn])
   if (!desk?.pcGetPrefs) return <p className="hint small">Update the desktop app to get these settings.</p>
   if (!info) return <p className="hint small">Loading…</p>
   const p = info.prefs
@@ -63,6 +69,18 @@ export function PcPrivacyPanel() {
       </Row>
       <Row title="Share totals with Ben" hint="Only the day's top apps and minutes go into Ben's evening review. Never titles, never the minute-by-minute log." disabled={!p.history}>
         <Switch label="Share totals" on={p.shareTotals} disabled={!p.history} onChange={(v) => void set({ shareTotals: v })} />
+      </Row>
+      <Row
+        title="Distraction minutes from browser history"
+        hint={
+          p.browserHistory
+            ? web
+              ? `${[web.line, web.todayLine].filter(Boolean).join('; ') || 'Nothing on your sites list yet.'} Only minutes per site from the Sites list below; never full addresses.`
+              : 'Reading…'
+            : "Counts minutes on the sites in your Sites list below from Chrome, Edge or Brave history (a temporary copy, deleted right away). Only site names and minutes; never full addresses. Ben gets one line for the evening review, like “2 h on YouTube yesterday”."
+        }
+      >
+        <Switch label="Browser history minutes" on={p.browserHistory} disabled={!desk.pcBrowserMinutes} onChange={(v) => void set({ browserHistory: v })} />
       </Row>
       <div className="row">
         <button

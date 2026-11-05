@@ -100,6 +100,27 @@ function distractAlert(running: { subject: string; startedAt: number } | null, n
     ]
   }
 }
+/** MC10: drifted 2+ minutes in distracting apps during focus: one word, once per session. */
+const DRIFT = 'ls.pcDrift'
+function driftAlert(running: { subject: string; startedAt: number } | null, now: number, dismissed: Record<string, number>): IslandAlert | null {
+  const d = get<{ startedAt: number; label: string; subject: string; minutes: number; at: number } | null>(DRIFT, null)
+  if (!running || !d || d.startedAt !== running.startedAt || now - d.at > 5 * 60_000) return null
+  const id = `drift:${d.startedAt}`
+  if ((dismissed[id] ?? 0) > now) return null
+  return {
+    id,
+    kind: 'distract',
+    title: `${d.minutes} min on ${d.label}`,
+    text: `You're drifting from ${running.subject}. Back to it?`,
+    face: '👀',
+    actions: [
+      { label: '↩ Back to it', action: { kind: 'dismiss', id, snoozeMin: 60 * 24 }, primary: true },
+      { label: "It's for this", action: { kind: 'pcWork', app: d.label, alertId: id } },
+      { label: '⏹ Stop & log', action: { kind: 'stop' } }
+    ]
+  }
+}
+
 /** P6: back after locking the PC during focus: add the time away, or stop. */
 function backAlert(running: { subject: string } | null, now: number, dismissed: Record<string, number>): IslandAlert | null {
   const b = get<{ at: number; away: number } | null>(BACK, null)
@@ -154,20 +175,29 @@ async function finishGuard(g: Guard) {
   put(GUARD, null)
   const elapsed = Math.max(0, (Math.min(g.last || Date.now(), Date.now()) - g.startedAt) / 1000)
   if (elapsed < 5 * 60) return
-  const pct = focusQuality(elapsed, g.idle)
+  const idlePct = focusQuality(elapsed, g.idle)
   const idleMin = Math.round(g.idle / 60)
-  put(QUALITY, { id: `q:${g.startedAt}`, pct, idleMin, subject: g.subject, at: Date.now() })
-  await life.dayLog?.addFocus(localDayOf(g.startedAt), { at: new Date(g.startedAt).toISOString(), subject: g.subject, minutes: Math.round(elapsed / 60), pct }).catch(() => {})
+  // MC10: what was on screen (work vs distracting apps, sampled every 30 s by the desktop).
+  const apps = await window.desktop?.pcFocusApps?.(g.startedAt).catch(() => null)
+  const appsPct = apps?.pct ?? null
+  const pct = appsPct == null ? idlePct : Math.min(idlePct, focusQualityPc(elapsed, g.idle, (apps!.distractMin ?? 0) * 60))
+  put(QUALITY, { id: `q:${g.startedAt}`, pct, idleMin, subject: g.subject, at: Date.now(), ...(apps && appsPct != null ? { workMin: apps.workMin, distractMin: apps.distractMin } : {}) })
+  // Ben gets the app totals only if you share them (Settings → Ben on this PC).
+  const share = appsPct != null && !!(await window.desktop?.pcGetPrefs?.().catch(() => null))?.prefs.shareTotals
+  await life.dayLog
+    ?.addFocus(localDayOf(g.startedAt), { at: new Date(g.startedAt).toISOString(), subject: g.subject, minutes: Math.round(elapsed / 60), pct: share ? pct : idlePct, ...(share ? { workMin: apps!.workMin, distractMin: apps!.distractMin } : {}) })
+    .catch(() => {})
 }
 
 function qualityAlert(dismissed: Record<string, number>, now: number): IslandAlert | null {
-  const q = get<{ id: string; pct: number; idleMin: number; subject: string; at: number } | null>(QUALITY, null)
+  const q = get<{ id: string; pct: number; idleMin: number; subject: string; at: number; workMin?: number; distractMin?: number } | null>(QUALITY, null)
   if (!q || now - q.at > 30 * 60_000 || (dismissed[q.id] ?? 0) > now) return null
+  const apps = q.distractMin != null ? ` · work apps ${q.workMin ?? 0} min, distracting ${q.distractMin} min` : ''
   return {
     id: q.id,
     kind: 'quality',
-    title: `Focus done · ${q.pct}% quality`,
-    text: q.pct >= 85 ? `${q.subject}: you were there the whole time. 🔥` : `${q.subject}: away ${q.idleMin} min of it. Next one: phone in another room?`,
+    title: `Focus done · focus quality ${q.pct}%`,
+    text: q.pct >= 85 ? `${q.subject}: you were there the whole time. 🔥${apps}` : q.distractMin ? `${q.subject}: ${q.distractMin} min in distracting apps${q.idleMin ? `, away ${q.idleMin} min` : ''}. Next one: close them first?` : `${q.subject}: away ${q.idleMin} min of it. Next one: phone in another room?`,
     face: q.pct >= 85 ? '🎯' : '🤏',
     actions: [{ label: 'Got it', action: { kind: 'dismiss', id: q.id }, primary: true }]
   }
@@ -304,14 +334,20 @@ export function IslandFeed() {
         const t = await window.desktop!.pcToday?.().catch(() => null)
         if (t?.line) await life.dayLog?.setPc?.(localDayOf(now), t.line).catch(() => {})
       })()
+      // MC11: minutes on listed sites from the browser history, one line for the evening review (only with that switch on).
+      void (async () => {
+        const w = await window.desktop!.pcBrowserMinutes?.().catch(() => null)
+        const line = [w?.line, w?.todayLine].filter(Boolean).join('; ')
+        if (line) await life.dayLog?.setWeb?.(localDayOf(now), line).catch(() => {})
+      })()
     }
     // Focus state for the PC (P19 site blocker, P20 holding notifications).
-    window.desktop?.pcFocus?.({ running: !!running, subject: running?.subject ?? '', endsAt: running?.endsAt ?? 0 })
+    window.desktop?.pcFocus?.({ running: !!running, subject: running?.subject ?? '', endsAt: running?.endsAt ?? 0, startedAt: running?.startedAt ?? 0 })
     const seen = get<number>(SEEN, 0) || now
     const faceOf = (m?: string) => (m && MOOD_FACE[m as Mood]) || status.face
     const coach = log.filter((e) => e.role === 'coach')
     const newest = coach[coach.length - 1]
-    const unread = coach.filter((e) => e.via !== 'app' && Date.parse(e.at) > seen).length
+    const unread = coach.filter((e) => e.via !== 'app' && e.via !== 'mcp' && Date.parse(e.at) > seen).length
     const sport = readSport()
     const reps = (Array.isArray(sport?.exercises) ? sport.exercises : [])
       .filter((e: any) => !e.archived && Number(e.target) > 0)
@@ -374,6 +410,7 @@ export function IslandFeed() {
         const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || 2700 }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed }
         return (
           backAlert(running, now, dismissed) ??
+          driftAlert(running, now, dismissed) ??
           distractAlert(running, now, dismissed) ??
           bedAlert(dismissed, now, !!running) ??
           qualityAlert(dismissed, now) ??
@@ -721,6 +758,11 @@ export function IslandFeed() {
         const before = pcNow?.kind
         pcSample(a)
         if (before !== pcNow?.kind) void sendRef.current()
+      })
+      // MC10: 2+ minutes in distracting apps during focus (the desktop says it once per session).
+      desk.onPcDrift?.((d) => {
+        put(DRIFT, { ...d, at: Date.now() })
+        void sendRef.current()
       })
       desk.onLock?.((l) => {
         if (l.locked) lockedAt = l.at

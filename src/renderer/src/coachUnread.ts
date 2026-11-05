@@ -37,7 +37,7 @@ export function useCoachUnread(onCoachPage: boolean, sound = true): number {
       seen = Date.now()
       write(seen)
     }
-    const fresh = log.filter((e) => e.role === 'coach' && e.via !== 'app' && Date.parse(e.at) > seen)
+    const fresh = log.filter((e) => e.role === 'coach' && e.via !== 'app' && e.via !== 'mcp' && Date.parse(e.at) > seen)
     setN(onCoachPage ? 0 : fresh.length)
     const newest = fresh[fresh.length - 1]
     if (newest && newest.at !== last.current && !onCoachPage) {

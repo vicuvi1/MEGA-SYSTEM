@@ -1,3 +1,6 @@
+// GET /api/google?callback=1&code&state (also /api/google-callback, a rewrite
+// in vercel.json, the redirect URI Google knows): where Google sends you back
+// after signing in. Saves the sealed refresh token and returns to the app.
 // POST /api/google (session required) {op, ...}: your Google Calendar for
 // the app. The sign-in's refresh token stays sealed in the database; only
 // this server opens it (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in Vercel).
@@ -9,7 +12,7 @@
 //   setCalendars {on, target} · disconnect
 import { randomBytes } from "node:crypto"
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, sign } from './_lib.mjs'
-import { GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, createCalendarApi } from './_bot/bot.mjs'
+import { GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, keepGooglePrefs } from './_bot/bot.mjs'
 
 export function googleEnv(cfg, env = process.env) {
   const clientId = (env.GOOGLE_CLIENT_ID || '').trim()
@@ -39,7 +42,40 @@ async function stored(cfg) {
   }
 }
 
+const back = (res, q) => {
+  res.statusCode = 302
+  res.setHeader('Location', `/?google=${q}`)
+  res.end()
+}
+
+/** Google's redirect back here after you sign in (was api/google-callback.mjs). */
+export async function googleCallback(req, res) {
+  const cfg = config()
+  const url = new URL(req.url, 'http://x')
+  const env = googleEnv(cfg)
+  if (url.searchParams.get('error')) return back(res, 'cancelled')
+  if (!env || !cfg.ok) return back(res, 'not-configured')
+  if (!stateOk(cfg, url.searchParams.get('state'))) return back(res, 'expired')
+  try {
+    const got = await exchangeCode(env, redirectUri(req), String(url.searchParams.get('code') || ''))
+    // Connecting Gmail later keeps the calendars you picked.
+    await setSetting(cfg, GOOGLE_SETTING, JSON.stringify(keepGooglePrefs(await getSetting(cfg, GOOGLE_SETTING).catch(() => null), got)))
+    back(res, 'connected')
+  } catch (e) {
+    console.error('google callback:', e)
+    back(res, 'failed')
+  }
+}
+
+/** A GET with ?callback=1 (the rewrite), the old path, or Google's own code/error answer. */
+export const isCallback = (req) => {
+  if (req.method !== 'GET') return false
+  const url = new URL(req.url || '/', 'http://x')
+  return url.searchParams.has('callback') || url.pathname.endsWith('/google-callback') || url.searchParams.has('code') || url.searchParams.has('error')
+}
+
 export default async function handler(req, res) {
+  if (isCallback(req)) return googleCallback(req, res)
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
   if (!(await requireSession(res, cfg, bearer(req)))) return

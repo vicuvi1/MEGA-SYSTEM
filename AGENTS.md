@@ -26,7 +26,9 @@ It ships three ways from one codebase:
 ```
 api/              Vercel functions (max 12 on the Hobby plan): login (PIN, passkeys,
                   devices), db (guarded Turso proxy), coach, telegram webhook, cron
-                  (tick, daily jobs, sport), ai, google, todoist, config, bot-setup/health.
+                  (tick, daily jobs, sport), ai, google (+ its sign-in callback), todoist, config,
+                  bot-setup (+ health on GET), mcp (AI apps: MCP tools, tokens, OAuth; logic
+                  in src/server/mcp.ts). Old URLs live on as vercel.json rewrites.
 api/_bot/bot.mjs  The server bundle of src/server/telegramBot.ts (npm run build:bot;
                   Vercel also rebuilds it on deploy).
 src/core/         Pure TypeScript logic, no DOM/Electron: dates, ledger, rules, streaks,

@@ -87,6 +87,19 @@ try {
       if (!ok) throw new Error(`${name} looks empty`)
     }
   })
+  await step('Settings: connect an AI app (make a token, see it listed, it opens the tools)', async () => {
+    await pg.locator('.st-item', { hasText: 'Connect an AI app' }).first().click()
+    await pg.waitForSelector('.ai-input', { timeout: 8000 })
+    await pg.fill('.ai-input', 'Smoke test app')
+    await pg.getByRole('button', { name: 'Make a token' }).click()
+    await pg.waitForSelector('.ai-new pre', { timeout: 10000 })
+    const tok = await pg.locator('.ai-new pre').innerText()
+    if (!/^lsm_[0-9a-f]{12}_/.test(tok.trim())) throw new Error(`odd token: ${tok.slice(0, 12)}`)
+    await pg.waitForSelector('.ai-list li', { timeout: 8000 })
+    if (!(await pg.locator('.ai-list li', { hasText: 'Smoke test app' }).count())) throw new Error('the new connection is not listed')
+    const init = await pg.evaluate(async (t) => (await fetch('/api/mcp', { method: 'POST', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) })).json(), tok.trim())
+    if (!init?.result?.tools?.some((x) => x.name === 'get_today')) throw new Error('the token does not open the MCP tools')
+  })
   await step('Notebook opens with your starter notes', async () => {
     await open('notebook')
     await pg.waitForSelector('.nb-item', { timeout: 15000 })

@@ -13,6 +13,8 @@ import { createServer, type Server } from 'node:http'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { activityLine, addActivity, appLabel, classifyApp, cleanPcPrefs, type AppKind, type DayActivity, type PcPrefs } from '../core/pcActivity'
+import { addFocusSample, FOCUS_SAMPLE_SEC, focusAppsSummary, newFocusApps, type FocusApps } from '../core/focusApps'
+import { browserDistraction } from './history'
 
 export const SITE_PORT = 47321
 
@@ -21,7 +23,7 @@ export interface PcHandle {
   /** A sample from the Windows watcher (every ~4 s): the process in front and maybe its title. */
   sample(proc: string, title: string | null, seconds: number): void
   /** Focus running? (from the app window) */
-  focus(): { running: boolean; subject: string; endsAt: number }
+  focus(): { running: boolean; subject: string; endsAt: number; startedAt: number }
   /** Jump-list / second-start actions ("--action=focus25"). */
   actionFrom(argv: string[]): string | null
 }
@@ -60,7 +62,7 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
     await writeFile(histFile(today.day), JSON.stringify(today)).catch(() => {})
   }, 60_000)
 
-  let focusState = { running: false, subject: '', endsAt: 0 }
+  let focusState = { running: false, subject: '', endsAt: 0, startedAt: 0 }
   let current: { label: string; kind: AppKind } | null = null
   const sample = (proc: string, title: string | null, seconds: number) => {
     if (!prefs.activeApp || !proc) return
@@ -82,6 +84,7 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
     if (!mine(e)) return null
     prefs = cleanPcPrefs({ ...prefs, ...p })
     if (!prefs.activeApp) current = null
+    if (!prefs.browserHistory) historyCache = null
     await save()
     o.onPrefs(prefs)
     return prefs
@@ -95,8 +98,43 @@ export async function createPc(o: { dir: string; win: BrowserWindow; onPrefs: (p
     await rm(histDir, { recursive: true, force: true }).catch(() => {})
     return true
   })
-  ipcMain.on('pc:focus', (e, f: { running: boolean; subject: string; endsAt: number }) => {
-    if (mine(e)) focusState = { running: !!f?.running, subject: String(f?.subject ?? '').slice(0, 60), endsAt: Number(f?.endsAt) || 0 }
+  ipcMain.on('pc:focus', (e, f: { running: boolean; subject: string; endsAt: number; startedAt?: number }) => {
+    if (mine(e)) focusState = { running: !!f?.running, subject: String(f?.subject ?? '').slice(0, 60), endsAt: Number(f?.endsAt) || 0, startedAt: Number(f?.startedAt) || 0 }
+  })
+
+  // ---- MC10: honest focus from what's on screen ----
+  // While a focus timer runs (and the app sensor is on), every 30 s: the app in
+  // front counts as work, distraction or other for this session. App names
+  // only. 2 minutes of drift in a row: the island says it once.
+  let session: FocusApps | null = null
+  let lastSession: FocusApps | null = null
+  setInterval(() => {
+    const on = focusState.running && focusState.endsAt > Date.now() && focusState.startedAt > 0
+    if (!on || (session && session.startedAt !== focusState.startedAt)) {
+      if (session) lastSession = session
+      session = null
+    }
+    if (!on || !prefs.activeApp || !current) return
+    session ??= newFocusApps(focusState.startedAt, focusState.subject)
+    const r = addFocusSample(session, current.kind, current.label, FOCUS_SAMPLE_SEC)
+    session = r.s
+    if (r.warn && !o.win.isDestroyed()) o.win.webContents.send('desktop:drift', { startedAt: session.startedAt, label: current.label, subject: session.subject, minutes: Math.round(session.streakSec / 60) })
+  }, FOCUS_SAMPLE_SEC * 1000)
+  /** This session's (or the one that just ended) minutes on work vs distracting apps. */
+  ipcMain.handle('pc:focusApps', (e, startedAt?: number) => {
+    if (!mine(e)) return null
+    const pick = [session, lastSession].find((x) => x && (!startedAt || x.startedAt === startedAt)) ?? null
+    return pick ? { startedAt: pick.startedAt, subject: pick.subject, ...focusAppsSummary(pick)! } : null
+  })
+
+  // ---- MC11: distraction minutes from browser history (off until you turn it on) ----
+  let historyCache: { at: number; value: Awaited<ReturnType<typeof browserDistraction>> } | null = null
+  ipcMain.handle('pc:browserMinutes', async (e) => {
+    if (!mine(e) || !prefs.browserHistory) return null
+    if (historyCache && Date.now() - historyCache.at < 10 * 60_000) return historyCache.value
+    const value = await browserDistraction(prefs.sites).catch(() => null)
+    if (value) historyCache = { at: Date.now(), value }
+    return value
   })
   /** P14: lock the PC (Windows), for a real break. */
   ipcMain.handle('pc:lock', (e) => {

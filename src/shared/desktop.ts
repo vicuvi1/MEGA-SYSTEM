@@ -21,7 +21,13 @@ export interface DesktopApi {
   pcSetPrefs?(p: Partial<import('../core/pcActivity').PcPrefs>): Promise<import('../core/pcActivity').PcPrefs | null>
   pcToday?(): Promise<{ line: string; apps: Record<string, { sec: number; kind: string }> } | null>
   pcClear?(): Promise<boolean>
-  pcFocus?(f: { running: boolean; subject: string; endsAt: number }): void
+  pcFocus?(f: { running: boolean; subject: string; endsAt: number; startedAt?: number }): void
+  /** MC10: a focus session's minutes on work vs distracting apps (this one, or the one that just ended). */
+  pcFocusApps?(startedAt?: number): Promise<{ startedAt: number; subject: string; workMin: number; distractMin: number; otherMin: number; pct: number | null } | null>
+  /** MC10: drifting in distracting apps for 2+ minutes during focus (once per session). */
+  onPcDrift?(cb: (d: { startedAt: number; label: string; subject: string; minutes: number }) => void): void
+  /** MC11: minutes on listed sites from the browser history (only with that switch on). */
+  pcBrowserMinutes?(): Promise<{ today: Record<string, number>; yesterday: Record<string, number>; line: string; todayLine: string } | null>
   pcLock?(): Promise<boolean>
   pcDnd?(): Promise<boolean>
   pcExtensionFolder?(): Promise<string | null>

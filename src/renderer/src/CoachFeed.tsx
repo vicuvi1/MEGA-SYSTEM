@@ -27,10 +27,14 @@ export function BenMark({ ghost = false, big = false }: { ghost?: boolean; big?:
 /** CN5: one small label: the time, and a plane when it came by Telegram. */
 export function Meta({ m, label }: { m: Entry; label?: string }) {
   return (
-    <span className="cf-meta" title={`${m.via === 'app' ? 'In the app' : 'Telegram'} · ${new Date(m.at).toLocaleString('en-GB')}`}>
+    <span className="cf-meta" title={`${m.via === 'app' ? 'In the app' : m.via === 'mcp' ? 'From an AI app you connected' : 'Telegram'} · ${new Date(m.at).toLocaleString('en-GB')}`}>
       {label ? `${label} · ` : ''}
       {hm(m.at)}
-      {m.via !== 'app' && <i className="cf-via" aria-label="via Telegram">✈</i>}
+      {m.via === 'mcp' ? (
+        <i className="cf-via" aria-label="from an AI app">🔌</i>
+      ) : (
+        m.via !== 'app' && <i className="cf-via" aria-label="via Telegram">✈</i>
+      )}
     </span>
   )
 }

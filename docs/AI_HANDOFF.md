@@ -60,7 +60,7 @@ Bot tokens come from @BotFather. If a token was ever pasted in a chat or screens
   - `api/coach.mjs`: the app's coach chat (streams NDJSON: `{"step":…}` lines, then the reply). It also takes `{op:'rhythm'|'undo'}`.
   - `api/cron.mjs`: `job=tick` (Ben writes first: reminders, check-ins, daily rhythm). It is called every 10 min by GitHub Actions (`.github/workflows/tick.yml`) and every 2 min by the open app. There are also daily jobs and `job=sport`.
   - `api/ai.mjs`: `askModel()`. OpenRouter DeepSeek **flash** for quick replies, the **strong** model (newest DeepSeek pro/reasoning) for plans, reviews, corrections and photos, falling back to flash, with Gemini as backup and for media.
-  - `api/google.mjs`, `api/todoist.mjs`, `api/login.mjs`, `api/db.mjs` (proxy to Turso), `api/config.mjs`, `api/bot-*.mjs`.
+  - `api/google.mjs`, `api/todoist.mjs`, `api/login.mjs`, `api/db.mjs` (proxy to Turso), `api/config.mjs`, `api/bot-setup.mjs` (bot health on GET, also `/api/bot-health`), `api/mcp.mjs` (Life System for AI apps over MCP: personal tokens in `sys_mcp_tokens`, OAuth for claude.ai/ChatGPT; tools in `src/server/mcp.ts`; local bridge `scripts/life-mcp.mjs`). `/api/google-callback` is a rewrite to `api/google.mjs`.
 - **Bot bundle:** all server logic is in `src/server/telegramBot.ts`, built into `api/_bot/bot.mjs` with `npm run build:bot`. **Rebuild and commit `api/_bot/bot.mjs` after changing anything under `src/server`, `src/renderer/src/web`, `src/core` or `src/main` that the server uses.**
 - **Pure logic in `src/core/*.ts`, with tests next to it (`*.test.ts`, vitest).** Keep logic pure and tested; UI files only render.
 

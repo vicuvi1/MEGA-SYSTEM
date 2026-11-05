@@ -1,8 +1,12 @@
+// GET /api/bot-setup (also /api/bot-health, a rewrite in vercel.json): for
+// each bot in the server's settings, what Telegram says about it (name,
+// webhook or not, messages waiting, last error). Reads nothing from the chats
+// and shows no tokens; still, only you (a session or the CRON_SECRET) may ask.
 // POST /api/bot-setup (session required): points every bot in the server's
 // settings at /api/telegram, so they answer 24/7. Safe to call often: a bot
 // already pointed here is left as it is. Production only (a preview must not
 // take the bots away from the live site).
-import { bearer, config, leftBots, readBody, send, serverBots, requireSession, webhookSecret } from './_lib.mjs'
+import { bearer, config, cronSecretOk, leftBots, readBody, send, serverBots, sessionOk, requireSession, webhookSecret } from './_lib.mjs'
 
 async function tg(token, method, body) {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
@@ -14,7 +18,51 @@ async function tg(token, method, body) {
   return res.json()
 }
 
+const BOTS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN', 'WAKY_BOT_TOKEN']
+
+async function check(token) {
+  try {
+    const [me, hook] = await Promise.all([tg(token, 'getMe'), tg(token, 'getWebhookInfo')])
+    const h = hook?.result ?? {}
+    return {
+      bot: me?.result?.username ? '@' + me.result.username : null,
+      name: me?.result?.first_name ?? null,
+      ok: !!me?.ok,
+      error: me?.ok ? null : me?.description ?? 'no answer',
+      webhook: h.url ? new URL(h.url).host : null,
+      waiting: h.pending_update_count ?? null,
+      lastError: h.last_error_message ?? null,
+      lastErrorAt: h.last_error_date ? new Date(h.last_error_date * 1000).toISOString() : null
+    }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+}
+
+/** The bots' health (was api/bot-health.mjs). */
+export async function botHealth(req, res) {
+  if (!cronSecretOk(req) && !(await sessionOk(config(), bearer(req)).catch(() => false))) return send(res, 401, { error: 'Not allowed' })
+  const out = {}
+  const seen = new Map()
+  for (const name of BOTS) {
+    const token = (process.env[name] || '').trim()
+    if (!token) {
+      out[name] = 'not set'
+      continue
+    }
+    const id = token.split(':')[0]
+    if (seen.has(id)) {
+      out[name] = `same bot as ${seen.get(id)}`
+      continue
+    }
+    seen.set(id, name)
+    out[name] = await check(token)
+  }
+  send(res, 200, out)
+}
+
 export default async function handler(req, res) {
+  if (req.method === 'GET') return botHealth(req, res)
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
   if (!(await requireSession(res, cfg, bearer(req)))) return

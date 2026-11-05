@@ -39,7 +39,7 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
 
 Object.assign(process.env, { TURSO_URL: `http://127.0.0.1:${port}`, TURSO_TOKEN: 'fake-turso-key', SESSION_SECRET: 'e2e-secret' })
 const api = {}
-for (const n of ['login', 'db', 'config']) api[n] = (await import(pathToFileURL(join(repo, 'api', `${n}.mjs`)).href)).default
+for (const n of ['login', 'db', 'config', 'mcp']) api[n] = (await import(pathToFileURL(join(repo, 'api', `${n}.mjs`)).href)).default
 
 const toH = (v) => (v === null || v === undefined ? { type: 'null' } : typeof v === 'number' ? (Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v }) : { type: 'text', value: String(v) })
 const fromH = (v) => (!v || v.type === 'null' ? null : v.type === 'integer' || v.type === 'float' ? Number(v.value) : v.value)

@@ -395,10 +395,12 @@ export interface LifeApi {
   /** The notification center (synced across devices). */
   /** What the desktop island learns about your day (focus quality, blocks checked off). */
   dayLog?: {
-    addFocus(day: string, e: { at: string; subject: string; minutes: number; pct: number }): Promise<void>
+    addFocus(day: string, e: { at: string; subject: string; minutes: number; pct: number; workMin?: number; distractMin?: number }): Promise<void>
     addBlock(day: string, e: { at: string; title: string; result: 'done' | 'half' | 'no' }): Promise<void>
     /** P8: the day's PC totals for Ben (only if you share them). */
     setPc?(day: string, line: string): Promise<void>
+    /** MC11: minutes on listed sites from the browser history (only with that switch on). */
+    setWeb?(day: string, line: string): Promise<void>
   }
   /** The notebook (Obsidian-like): your notes and Ben's. */
   notes?: {

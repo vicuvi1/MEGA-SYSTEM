@@ -16,3 +16,9 @@ declare module '*?url' {
   const url: string
   export default url
 }
+
+// A file's text at build time (the MCP bridge script offered in Settings).
+declare module '*?raw' {
+  const text: string
+  export default text
+}

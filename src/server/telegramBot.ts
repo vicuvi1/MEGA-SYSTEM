@@ -59,6 +59,7 @@ import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState, missedTwiceText } from '@core/rhythm'
 import { missTwiceLine } from '@core/neverMissTwice'
 import { coachStatus } from '../renderer/src/web/coachStatus'
+import { handleMcp, type McpCtx, type McpLife } from './mcp'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
 import { PLUGINS } from '../plugins'
 import { runPluginJobs, type PluginStatus } from '../plugins/run'
@@ -1421,3 +1422,25 @@ export async function healthPush(env: BotEnv, body: unknown): Promise<{ ok: bool
   }
 }
 
+export { handleMcp, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, NEEDS_WRITE as MCP_NEEDS_WRITE } from './mcp'
+
+/**
+ * MC1: one MCP request from an AI app (api/mcp.mjs checked the token). The
+ * tools read this server's warm copy of the database and write through Ben's
+ * own executor, so points, undo and the coach log match Ben exactly.
+ */
+export async function mcpCall(env: BotEnv, body: unknown, ctx: McpCtx): Promise<unknown | null> {
+  process.env.TZ = env.timeZone || 'Europe/Chisinau'
+  const life = async (): Promise<McpLife> => {
+    const { bots, mirror, services, calendar } = await botsFor(env)
+    return {
+      read: (fn) => mirror.read((db) => fn(db, services.services(db))),
+      todoist: env.todoistToken ? createTodoistApi(env.todoistToken, todoistFetch(env)) : null,
+      calendar,
+      act: (said, lines, opts) => bots.act(said, lines, opts),
+      undo: (at) => bots.undoReply(at),
+      ask: env.model ? async (text) => coachChat(env, text) : undefined
+    }
+  }
+  return handleMcp(life, body, ctx)
+}

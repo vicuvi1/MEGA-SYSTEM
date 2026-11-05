@@ -26,6 +26,7 @@ import { HealthPanel } from '../HealthPanel'
 import { IslandLogPanel } from '../IslandLogPanel'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
 import { PcPrivacyPanel } from '../PcPrivacyPanel'
+import { AiAppsPanel } from '../AiAppsPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
 import { ConnectionsOverview } from '../ConnectionsOverview'
 import { NotifSettings } from '../NotifSettings'
@@ -1341,6 +1342,14 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
       hint: 'Weather, GitHub, Gmail, bank import, phone numbers, notes',
       keywords: 'plugins weather rain sunset github ctf gmail mail deadlines bank csv statement import phone shortcut steps weight sleep health obsidian notion notes vault',
       body: <PluginsPanel />
+    },
+    {
+      id: 'ai-apps',
+      label: 'Connect an AI app',
+      icon: 'bot',
+      hint: 'Claude, ChatGPT and other AI apps',
+      keywords: 'ai app claude chatgpt mcp connector token connect desktop code phone',
+      body: <AiAppsPanel />
     },
     ...(window.desktop
       ? [

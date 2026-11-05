@@ -54,7 +54,7 @@ import { NOTIF_SETTINGS_KEY, cleanNotifSettings } from '@core/eventAlerts'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginKey, pluginsOn, setOn as setPluginOn, configKey as pluginConfigKey } from '../../plugins/store'
 import { importBank, importText } from '../../plugins/bank'
-import { addBlockResult, addFocusQuality, setPcLine } from './web/dayLog'
+import { addBlockResult, addFocusQuality, setPcLine, setWebLine } from './web/dayLog'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 
 /**
@@ -1040,7 +1040,7 @@ export function createTursoWebBridge(): Bridge {
       }
     },
     dayLog: {
-      addFocus: async (day: string, e: { at: string; subject: string; minutes: number; pct: number }) => {
+      addFocus: async (day: string, e: { at: string; subject: string; minutes: number; pct: number; workMin?: number; distractMin?: number }) => {
         await (await mirrorP).write((db) => addFocusQuality(db as any, day, e))
       },
       addBlock: async (day: string, e: { at: string; title: string; result: 'done' | 'half' | 'no' }) => {
@@ -1048,6 +1048,9 @@ export function createTursoWebBridge(): Bridge {
       },
       setPc: async (day: string, line: string) => {
         await (await mirrorP).write((db) => setPcLine(db as any, day, line))
+      },
+      setWeb: async (day: string, line: string) => {
+        await (await mirrorP).write((db) => setWebLine(db as any, day, line))
       }
     },
     // Settings → Plugins (src/plugins): on/off, their settings, what their jobs fetched.

@@ -1455,7 +1455,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     key: string,
     media?: { kind: 'voice' | 'photo'; mime: string; data: string },
     via = 'telegram',
-    onStep?: (step: string) => void
+    onStep?: (step: string) => void,
+    /**
+     * MC1: action lines from an AI app (MCP), run as they are: no model call,
+     * the same executor, points, undo and coach log as Ben's own actions.
+     * `tasks`: the Todoist tasks the lines point at (T1, T2… in this order).
+     */
+    direct?: { lines: string[]; reply: string; tasks?: TodoTask[] }
   ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }> {
     const step = (s: string) => {
       try {
@@ -1475,6 +1481,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     // What Ben can do without the AI: a stored confirm, a fix in code (B10), an instant answer (B3).
     let preset: { reply: string; acts: BrainAction[]; chips?: string[]; buttons?: { label: string; do: string }[] } | null = confirmed ? { reply: '👍 Done.', acts: [confirmed] } : null
+    if (direct) preset = { reply: direct.reply, acts: direct.lines.map(readAction).filter((a): a is BrainAction => !!a) }
     if (!preset && !media && text) {
       const fix = codeFix(text)
       if (fix) preset = await fixInCode(fix).catch(() => null)
@@ -1513,8 +1520,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
       calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 8 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
     ])
-    // You wrote: open follow-up check-ins stop asking.
-    await mirror
+    // You wrote: open follow-up check-ins stop asking (an AI app's action isn't you answering).
+    if (!direct) await mirror
       .write((db) => {
         const raw = getSetting(db as any, REMINDERS)
         if (!raw) return
@@ -1530,7 +1537,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         } catch {
           /* the notebook can wait */
         }
-        return text ? noteExcuse(db, text, svc.wallet.today()) : null
+        return text && !direct ? noteExcuse(db, text, svc.wallet.today()) : null
       })
       .catch(() => null)
     const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk } = await mirror.read((db) => {
@@ -1611,7 +1618,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
     })
     // Tasks and events the coach can point at (E1, T3); grows when it asks for more.
-    let allTasks: TodoTask[] = [...(todoToday ?? []), ...(upcoming ?? [])].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i)
+    let allTasks: TodoTask[] = [...(direct?.tasks ?? []), ...(todoToday ?? []), ...(upcoming ?? [])].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i)
     let allEvents: CalEvent[] = events ?? []
     let areas: { key: string; name: string }[] = []
     let made = makeRefs(allEvents, allTasks)
@@ -1619,7 +1626,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const moneyRefs = new Map(money.map((m, i) => [`M${i + 1}`, m.id]))
     const moneyLines = money.length ? `Money records, newest first (use the M-number):\n${money.map((m, i) => `M${i + 1} ${m.line}`).join('\n')}` : ''
     // Deep (paid) thinking only for big asks and corrections (B2); a "?" or a long line isn't a big ask.
-    const correcting = isCorrection(text)
+    const correcting = !direct && isCorrection(text)
     const big = isBigAsk(text) || correcting
     if (big) step('Thinking it through')
     // One reply must fit Vercel's 60 s, actions and sending included: the model
@@ -1629,7 +1636,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind, ...(onStep && (kind === 'chat' || kind === 'chat-deep' || kind === 'lookup') ? { onDelta: (t: string) => step(`\u0001${t}`) } : {}) }), Math.max(4_000, deadline - Date.now()))
     let out: BrainOut
     try {
-      if (preset) out = { reply: preset.reply, actions: [], remember: [], chips: preset.chips, buttons: preset.buttons }
+      if (preset) out = { reply: preset.reply, actions: direct ? direct.lines : [], remember: [], chips: preset.chips, buttons: preset.buttons }
       else {
         // A question about history: its numbers are looked up first, so one call answers it (B9).
         const pre = media ? [] : preLookups(text, dayStart.toLocaleDateString('sv-SE')).map((n) => answerLocal(n, look)).filter((x): x is string => !!x && !/not available|give dates/.test(x))
@@ -1689,7 +1696,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (preset) acts = preset.acts
     // A focus timer starts only when he asked for it now; otherwise it becomes a ▶ button he can tap.
     // "I'll start at 5" or "later" is not now (X10).
-    const askedToStart = startsNow(text)
+    const askedToStart = !!direct || startsNow(text)
     if (!askedToStart) {
       for (const a of acts) {
         if (a.kind !== 'focus') continue
@@ -1706,7 +1713,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     acts = acts.filter((a) => a.kind !== 'plugin' || confirmed || !!preset || pluginActionInText(text, a))
     acts = acts.filter((a) => {
       const risk = riskOf(a as any)
-      if (confirmed || !risk || (askedFor(text, risk) && (risk !== 'log' || loggedInText(text, a as any)))) return true
+      if (confirmed || direct || !risk || (askedFor(text, risk) && (risk !== 'log' || loggedInText(text, a as any)))) return true
       const what =
         a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : a.kind === 'reps' ? `${a.amount} ${a.exercise}` : a.kind === 'water' ? `${a.ml} ml water` : a.kind === 'log' ? a.text.replace(/^\/\w+\s*/, '') : ''
       // Actions that don't point at a list (logs, habits, rewards) are kept, so the tap runs exactly this one.
@@ -2146,7 +2153,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     await runActs(acts)
     // Act → check → fix: when something failed, the coach sees the results and
     // tries once more (another time, the right item), or says plainly what didn't work.
-    if (done.some((d) => d.startsWith('⚠️'))) {
+    if (!direct && done.some((d) => d.startsWith('⚠️'))) {
       step('Fixing what failed')
       try {
         const fix = parseBrain(
@@ -2176,7 +2183,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         // /why: each thing done keeps your words that led to it and where it came from (N7).
         try {
           const prev = JSON.parse(getSetting(db as any, WHY_KEY) || '[]')
-          setSetting(db as any, WHY_KEY, JSON.stringify(addWhy(Array.isArray(prev) ? prev : [], done, text || `[${media?.kind ?? 'message'}]`, via === 'telegram' ? 'your Telegram message' : 'your message in the app', at)))
+          setSetting(db as any, WHY_KEY, JSON.stringify(addWhy(Array.isArray(prev) ? prev : [], done, text || `[${media?.kind ?? 'message'}]`, via === 'telegram' ? 'your Telegram message' : via === 'mcp' ? 'an AI app you connected' : 'your message in the app', at)))
         } catch {
           /* the action still counts */
         }
@@ -2614,6 +2621,12 @@ His note: ${note}`,
     allowedChat: async (chat: string | number) => allowed(await config(), String(chat)),
     /** The app's Coach page: the same brain and memory as the bots. */
     think: (text: string, key = `app:${Date.now()}`, onStep?: (s: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }) => think('mega', text, key, media, 'app', onStep),
+    /**
+     * MC1: run action lines (the ones readAction understands) for an AI app,
+     * through the same path as Ben: points, streaks, undo and a coach log entry
+     * (via 'mcp', with Undo on the Coach page). `said` is what shows as "you wrote".
+     */
+    act: (said: string, lines: string[], opts: { reply?: string; tasks?: TodoTask[] } = {}) => think('mega', said, `mcp:${Date.now()}`, undefined, 'mcp', undefined, { lines, reply: opts.reply ?? 'Done from your AI app.', tasks: opts.tasks }),
     /** The daily rhythm (morning plan, reviews), for the tick and the app. */
     rhythm,
     /** Undo what the coach did in one reply (all, or one line). */

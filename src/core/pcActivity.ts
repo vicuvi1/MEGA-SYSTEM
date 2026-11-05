@@ -24,6 +24,8 @@ export interface PcPrefs {
   sites: string[]
   /** Hold Life System's own Windows notifications during focus (P20). */
   holdNotifs: boolean
+  /** MC11: minutes on listed sites from the browser's own history (off until you turn it on). */
+  browserHistory: boolean
 }
 
 export const DEFAULT_PC: PcPrefs = {
@@ -37,7 +39,8 @@ export const DEFAULT_PC: PcPrefs = {
   distract: ['steam', 'epicgameslauncher', 'discord', 'spotify', 'netflix', 'tiktok', 'youtube', 'reddit', 'instagram', 'facebook', 'twitch', 'x.com'],
   blockSites: false,
   sites: ['youtube.com', 'reddit.com', 'tiktok.com', 'instagram.com', 'facebook.com', 'x.com', 'twitter.com', 'netflix.com', 'twitch.tv'],
-  holdNotifs: true
+  holdNotifs: true,
+  browserHistory: false
 }
 
 const words = (x: unknown, max = 60) => (Array.isArray(x) ? [...new Set(x.map((v) => String(v).trim().toLowerCase()).filter((v) => v && v.length <= 40))].slice(0, max) : null)
@@ -54,7 +57,8 @@ export function cleanPcPrefs(p: any): PcPrefs {
     distract: words(p?.distract) ?? DEFAULT_PC.distract,
     blockSites: b('blockSites') as boolean,
     sites: (words(p?.sites, 80) ?? DEFAULT_PC.sites).map((s) => s.replace(/^https?:\/\//, '').replace(/\/.*$/, '')),
-    holdNotifs: b('holdNotifs') as boolean
+    holdNotifs: b('holdNotifs') as boolean,
+    browserHistory: b('browserHistory') as boolean
   }
 }
 
