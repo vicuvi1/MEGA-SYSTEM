@@ -1,6 +1,28 @@
 import { createRequire } from "node:module";
 import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+// src/core/stealth.ts
+var SWAPS = [
+	[/\bporn(ography)?\b/gi, "distraction"],
+	[/\bnofap\b/gi, "the challenge"],
+	[/\brelaps(e|ed|es|ing)\b/gi, "slip"],
+	[/\burge crusher\b/gi, "focus reset"],
+	[/\burges\b/gi, "tough moments"],
+	[/\burge\b/gi, "tough moment"],
+	[/\bclean streak\b/gi, "streak"],
+	[/\bclean days?\b/gi, "good day"],
+	[/\bclean\b(?= (check-?in|day|streak))/gi, "daily"],
+	[/\bMAN\b/g, "Challenge"],
+	[/\bspartan\b/gi, "challenge"],
+	[/\b(reset|resets)\b(?= (day|streak|today))/gi, "restart"]
+];
+function neutral(text) {
+	let t = String(text ?? "");
+	for (const [re, to] of SWAPS) t = t.replace(re, (m) => m[0] === m[0].toUpperCase() && to[0] !== to[0].toUpperCase() ? to[0].toUpperCase() + to.slice(1) : to);
+	return t;
+}
+/** The line for Ben's prompt while stealth is on. */
+var STEALTH_NOTE = "Stealth mode is on: never name the discipline challenge, urges, relapses, porn or MAN. Say \"the challenge\", \"a tough moment\", \"your streak\". Messages may be seen by others.";
 // src/core/readiness.ts
 /** Hours actually slept that night: bedtime and wake-up on the same morning's row. */
 function nightMinutes(log) {
@@ -12626,6 +12648,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		PERSONA[persona],
 		"Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks \"why\"/\"how come\" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.",
 		UNTRUSTED_NOTE,
+		extra.stealth ? STEALTH_NOTE : "",
 		"Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don't have a number, don't make one up; ask for it with \"need\" or leave it out.",
 		"Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count (\"3rd promise missed this week\"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn't).",
 		(extra.tone ?? 4) >= 5 ? "Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits." : "Start the reply with ONE face: 😎/🔥 proud, 😄 happy, 🙂 chill, 🎯 focused (he is slipping: you help him move). NEVER angry faces or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. Then 1–2 more emoji at most. When he just chats, chat back like a friend, short.",
@@ -16198,7 +16221,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						style: styleText(loadStyle(db)),
 						tone: loadStyle(db).tone,
 						feedback: feedbackText(loadFeedback(db)),
-						selfReview: sr && sr.day >= addDays$1(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join("\n") : ""
+						selfReview: sr && sr.day >= addDays$1(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join("\n") : "",
+						stealth: getSetting(db, "discipline_stealth") === "1"
 					};
 				})(),
 				feel: (() => {
@@ -16291,7 +16315,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			feedback: talk.feedback,
 			selfReview: talk.selfReview,
 			notes,
-			desk
+			desk,
+			stealth: talk.stealth
 		}), {
 			json: true,
 			think: big,
@@ -18681,6 +18706,13 @@ function notifFromMessage(html, markup, at) {
 // src/renderer/src/web/notifications.ts
 /** Adds one (once per id), and keeps the newest 200 from the last 30 days. */
 function addNotif(db, n) {
+	try {
+		if (db.prepare("SELECT value FROM settings WHERE key = 'discipline_stealth'").all()[0]?.value === "1") n = {
+			...n,
+			title: neutral(n.title),
+			body: n.body ? neutral(n.body) : n.body
+		};
+	} catch {}
 	db.prepare("INSERT OR IGNORE INTO notifications (id, at, kind, title, body, action) VALUES (?, ?, ?, ?, ?, ?)").run(n.id, n.at, n.kind, n.title, n.body, n.action ? JSON.stringify(n.action) : null);
 	const cut = (/* @__PURE__ */ new Date(Date.parse(n.at) - 2592e6)).toISOString();
 	db.prepare("DELETE FROM notifications WHERE at < ? OR id IN (SELECT id FROM notifications ORDER BY at DESC LIMIT -1 OFFSET 200)").run(cut);
@@ -19404,7 +19436,9 @@ async function runDaily(env, job) {
 			return [];
 		}
 	}
+	const stealth = await mirror.read((db) => getSetting(db, "discipline_stealth") === "1").catch(() => false);
 	const send = async (text, reply_markup, token = env.botToken) => {
+		if (stealth) text = neutral(text);
 		const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -19643,6 +19677,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				note("skipped", original, "Already sent one like it today");
 				return false;
 			}
+			if (await mirror.read((db) => getSetting(db, "discipline_stealth") === "1").catch(() => false)) text = neutral(text);
 			text = await voiced(text);
 			const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
 				method: "POST",

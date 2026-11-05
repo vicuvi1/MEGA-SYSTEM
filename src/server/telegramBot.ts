@@ -3,6 +3,7 @@
 // handled exactly like the app does (same services, same Turso transaction
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
+import { neutral } from '../core/stealth'
 import { examSleepGuard, sleepRegularity } from '../core/sleepRegularity'
 import { createRequire } from 'node:module'
 import initSqlJs from 'sql.js'
@@ -243,7 +244,9 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       return []
     }
   }
+  const stealth = await mirror.read((db) => getSetting(db as any, 'discipline_stealth') === '1').catch(() => false)
   const send = async (text: string, reply_markup?: unknown, token = env.botToken) => {
+    if (stealth) text = neutral(text)
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -457,6 +460,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       note('skipped', original, 'Already sent one like it today')
       return false
     }
+    // Stealth mode: neutral words in everything Ben sends on his own (H14).
+    if (await mirror.read((db) => getSetting(db as any, 'discipline_stealth') === '1').catch(() => false)) text = neutral(text)
     // Nudges in Ben's own words for this moment of your day (the fixed line if that fails).
     text = await voiced(text)
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {

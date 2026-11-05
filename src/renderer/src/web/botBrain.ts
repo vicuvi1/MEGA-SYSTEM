@@ -5,6 +5,7 @@ import { parseTelegramText } from '@core/botCommands'
 // and can act: log things, add must-dos, start focus, add Todoist tasks, set
 // goals. Each bot is a specialist (Mega: head + training, Finance: money,
 // Waky: sleep). Pure helpers here; webBots.ts runs it.
+import { STEALTH_NOTE } from '@core/stealth'
 import type { BotBridgeConfig } from '@shared/api'
 import { addDays } from '@core/dates'
 import { hm } from '@core/focus'
@@ -602,7 +603,7 @@ export function pickFacts(facts: Memory['facts'], about: string, max = 24): Memo
 }
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean } = {}): string {
   // Prompt diet: the last 12 turns (240 chars each) and only the facts that matter now.
   const turns = memory.chat.slice(-12)
   const chat = turns.map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${c.text.replace(/<[^>]+>/g, '').slice(0, 240)}`)
@@ -611,6 +612,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     PERSONA[persona],
     'Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks "why"/"how come" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.',
     UNTRUSTED_NOTE,
+    extra.stealth ? STEALTH_NOTE : '',
     'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
     (extra.tone ?? 4) >= 5

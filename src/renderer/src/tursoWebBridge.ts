@@ -41,6 +41,7 @@ import { beat, logError, logErrors, readBenLog, readHealth, type ErrorReport } f
 import { addTrigger, loadTriggers, urgeEvents } from './web/disciplinePatterns'
 import { addReminder, REMINDERS, type Reminder } from '@core/coachKit'
 import { comebackPlan } from '@core/comeback'
+import { neutral } from '@core/stealth'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
 import { defaultSport } from '@core/sportCards'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
@@ -1043,7 +1044,8 @@ export function createTursoWebBridge(): Bridge {
       comeback: async () =>
         (await svcP).write((s) => {
           const trig = topTriggers(loadTriggers(s.db))[0]?.trigger ?? null
-          const plan = comebackPlan(new Date(), trig, s.sleep.bedtimeTarget())
+          const stealth = getSetting(s.db as any, 'discipline_stealth') === '1'
+          const plan = comebackPlan(new Date(), trig, s.sleep.bedtimeTarget()).map((x) => (stealth ? { ...x, text: neutral(x.text) } : x))
           let list: Reminder[] = []
           try {
             list = JSON.parse(getSetting(s.db as any, REMINDERS) || '[]')

@@ -1,5 +1,6 @@
 // The notification center's storage: a small synced table, so every device
 // shows the same list and "read" on one is read everywhere.
+import { neutral } from '@core/stealth'
 import type { Notif } from '@core/notify'
 
 interface Db {
@@ -8,6 +9,13 @@ interface Db {
 
 /** Adds one (once per id), and keeps the newest 200 from the last 30 days. */
 export function addNotif(db: Db, n: Omit<Notif, 'readAt'>): void {
+  // Stealth mode: the bell uses neutral words too (H14).
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'discipline_stealth'").all()[0] as { value?: string } | undefined
+    if (row?.value === '1') n = { ...n, title: neutral(n.title), body: n.body ? neutral(n.body) : n.body }
+  } catch {
+    /* no settings table yet */
+  }
   db.prepare('INSERT OR IGNORE INTO notifications (id, at, kind, title, body, action) VALUES (?, ?, ?, ?, ?, ?)').run(n.id, n.at, n.kind, n.title, n.body, n.action ? JSON.stringify(n.action) : null)
   const cut = new Date(Date.parse(n.at) - 30 * 86400000).toISOString()
   db.prepare('DELETE FROM notifications WHERE at < ? OR id IN (SELECT id FROM notifications ORDER BY at DESC LIMIT -1 OFFSET 200)').run(cut)
