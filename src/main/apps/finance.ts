@@ -26,6 +26,8 @@ export interface FinanceHost {
     note?: string
     date?: string
   }): Promise<{ ok: boolean; txId?: string; balanceTotal?: number; accountName?: string; error?: string }>
+  /** Removes a record Life System added (an expense deleted there), with a sync tombstone (P5). */
+  removeTransaction?(txId: string): Promise<boolean>
   /** Calculates the current balance across all Finance Helper accounts. */
   getFinanceSummary(): Promise<{ totalMdl: number; currency: string; accounts: { id: string; name: string; balanceMdl: number }[] } | null>
   /** Syncs a Telegram bot token and chat ID to Finance Helper's telegram.bin */
@@ -457,6 +459,29 @@ export function setupFinance(appsDir: string, onShow: () => void): FinanceHost {
     }
   }
 
+  const removeTransaction = async (txId: string): Promise<boolean> => {
+    try {
+      const r = await ensureReader()
+      const stateStr = await readState()
+      const state = stateStr && stateStr !== 'null' ? JSON.parse(stateStr) : null
+      if (!state || state.sealed || state._sealed || !Array.isArray(state.tx)) return false
+      const before = state.tx.length
+      state.tx = state.tx.filter((t: any) => t.id !== txId)
+      if (state.tx.length === before) return false
+      state.deleted = { ...(state.deleted ?? {}), [txId]: Date.now() }
+      const serialized = JSON.stringify(state)
+      await r.webContents.executeJavaScript(`localStorage.setItem('finance-helper.state', ${JSON.stringify(serialized)}); true;`)
+      try {
+        folder.push(JSON.stringify({ v: 1, data: state }))
+      } catch (err) {
+        console.warn('Finance folder sync push warning:', err)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
   return {
     readState,
     preload: join(root, 'electron', 'preload.cjs'),
@@ -465,6 +490,7 @@ export function setupFinance(appsDir: string, onShow: () => void): FinanceHost {
       toPage('quick-add')
     },
     addTransaction,
+    removeTransaction,
     getFinanceSummary,
     syncTelegram
   }

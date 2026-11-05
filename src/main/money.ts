@@ -118,6 +118,9 @@ export class MoneyService {
         amount: roundedBani,
         category: category.trim(),
         note: note?.trim() || undefined
+      }).then((r) => {
+        // Remember which Finance Helper record it made, so deleting it here removes it there (P5).
+        if (r?.ok && r.txId) this.link(row.id, r.txId)
       }).catch((err) => {
         console.warn('FinanceHost dual-write warning:', err)
       })
@@ -130,8 +133,28 @@ export class MoneyService {
     }
   }
 
+  private links(): Record<string, string> {
+    try {
+      return JSON.parse(getSetting(this.db, 'fin_tx_links') || '{}')
+    } catch {
+      return {}
+    }
+  }
+  private link(expenseId: number, txId: string | null): void {
+    const all = this.links()
+    if (txId) all[String(expenseId)] = txId
+    else delete all[String(expenseId)]
+    setSetting(this.db, 'fin_tx_links', JSON.stringify(Object.fromEntries(Object.entries(all).slice(-500))))
+  }
+
   deleteExpense(id: number): NativeMoneySummary {
     this.db.prepare('DELETE FROM expenses WHERE id = ?').run(id)
+    // The desktop's Finance Helper record goes too (P5).
+    const txId = this.links()[String(id)]
+    if (txId && this.financeHost?.removeTransaction) {
+      void this.financeHost.removeTransaction(txId).catch(() => false)
+      this.link(id, null)
+    }
     // …and out of Finance Helper too.
     this.toFinance?.({ id: `life-exp-${id}`, amount: 0, category: '', note: '', date: this.wallet.today(), at: Date.now(), remove: true })
     return this.state()

@@ -252,7 +252,11 @@ handle('shop:archive', (id: number) => {
   return shop.state()
 })
 handle('shop:redeem', (id: number) => {
+  const reward = shop.state().rewards.find((r) => r.id === id)
   shop.redeem(id)
+  // A reward with a real cost is logged as spending in Finance Helper, like on the website (P5).
+  const lei = reward?.realCost ?? 0
+  if (lei > 0 && reward && financeHost) void financeHost.addTransaction({ type: 'expense', amount: Math.round(lei * 100), category: 'fun', note: `Reward: ${reward.title}` }).catch(() => null)
   return shop.state()
 })
 handle('shop:openChest', (level: number) => ({ coins: shop.openChest(level), state: shop.state() }))

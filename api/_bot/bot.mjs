@@ -8316,6 +8316,8 @@ var MoneyService = class {
 			amount: roundedBani,
 			category: category.trim(),
 			note: note?.trim() || void 0
+		}).then((r) => {
+			if (r?.ok && r.txId) this.link(row.id, r.txId);
 		}).catch((err) => {
 			console.warn("FinanceHost dual-write warning:", err);
 		});
@@ -8325,8 +8327,26 @@ var MoneyService = class {
 			awarded
 		};
 	}
+	links() {
+		try {
+			return JSON.parse(getSetting(this.db, "fin_tx_links") || "{}");
+		} catch {
+			return {};
+		}
+	}
+	link(expenseId, txId) {
+		const all = this.links();
+		if (txId) all[String(expenseId)] = txId;
+		else delete all[String(expenseId)];
+		setSetting(this.db, "fin_tx_links", JSON.stringify(Object.fromEntries(Object.entries(all).slice(-500))));
+	}
 	deleteExpense(id) {
 		this.db.prepare("DELETE FROM expenses WHERE id = ?").run(id);
+		const txId = this.links()[String(id)];
+		if (txId && this.financeHost?.removeTransaction) {
+			this.financeHost.removeTransaction(txId).catch(() => false);
+			this.link(id, null);
+		}
 		this.toFinance?.({
 			id: `life-exp-${id}`,
 			amount: 0,
