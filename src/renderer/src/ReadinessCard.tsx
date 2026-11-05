@@ -15,6 +15,15 @@ const readSore = (): number | null => {
     return null
   }
 }
+/** Soreness picked BEFORE today's workout (only that one can earn the grit bonus: P6). */
+const soreBefore = (): number | null => {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || 'null')
+    return v && v.day === today() && v.pre ? Number(v.v) : null
+  } catch {
+    return null
+  }
+}
 
 export function ReadinessCard({ workoutDone = false }: { workoutDone?: boolean }) {
   const [slept, setSlept] = useState<{ min: number | null; quality: number | null }>({ min: null, quality: null })
@@ -28,7 +37,8 @@ export function ReadinessCard({ workoutDone = false }: { workoutDone?: boolean }
   const pick = (v: number) => {
     setSore(v)
     try {
-      localStorage.setItem(KEY, JSON.stringify({ day: today(), v }))
+      // Set after training it still guides tomorrow, but no longer counts for the grit bonus.
+      localStorage.setItem(KEY, JSON.stringify({ day: today(), v, pre: !workoutDone }))
     } catch {
       /* this session only */
     }
@@ -37,7 +47,9 @@ export function ReadinessCard({ workoutDone = false }: { workoutDone?: boolean }
   // Surprise on a hard day (M4): trained anyway on a light/rest day → a grit bonus, once a day.
   const [grit, setGrit] = useState<string | null>(null)
   useEffect(() => {
-    if (!workoutDone || r.kind === 'full') return
+    // The bonus needs a hard day you reported before training (not soreness tapped after: P6).
+    const before = readiness({ sleptMin: slept.min, soreness: soreBefore(), quality: slept.quality })
+    if (!workoutDone || before.kind === 'full' || slept.min == null) return
     const key = `ls.grit.${today()}`
     try {
       if (localStorage.getItem(key)) return
@@ -53,7 +65,7 @@ export function ReadinessCard({ workoutDone = false }: { workoutDone?: boolean }
         window.dispatchEvent(new CustomEvent('life-wallet-changed'))
       })
       .catch(() => {})
-  }, [workoutDone, r.kind])
+  }, [workoutDone, r.kind, slept.min])
   return (
     <section className={`card rd-card rd-${r.kind}`} aria-label="Readiness for training today">
       <div className="rd-top">

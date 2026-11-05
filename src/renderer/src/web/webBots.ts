@@ -550,7 +550,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         s.discipline.checkIn()
         // The same day number MAN shows (its start day is Day 1).
         const st = s.discipline.state()
-        return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), 20) }
+        return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), ruleCoins(s, 'discipline.clean_day', 20)) }
       }
       case 'oath':
         s.discipline.oath()
@@ -563,7 +563,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           items: [{ exerciseId: name.toLowerCase(), name, amount, unit: 'reps' }],
           note: 'Logged via Telegram'
         })
-        return { reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? 10 : 0), sport: { name, amount } }
+        return { reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0), sport: { name, amount } }
       }
       case 'sport': {
         const name = parsed.exerciseName || 'Workout'
@@ -576,7 +576,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           items: [{ exerciseId: name.toLowerCase().replace(/\s+/g, '_'), name, amount, unit }],
           note: `Logged via Telegram (${amount} ${rawUnit})`
         })
-        return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? 10 : 0, res.awarded ? 25 : 0) }
+        return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0, res.awarded ? 25 : 0) }
       }
       case 'weight': {
         const w = parsed.metricWeight

@@ -53,12 +53,11 @@ export function isWakeOnTime(wakeTime: string, targetTime: string, graceMinutes 
   return w <= t + graceMinutes
 }
 
-/** Bedtime check: in bed within 30 min of bedtime target. */
+/** Bedtime check: in bed by the target, with 30 min grace. Earlier is on time too (P6). */
 export function isBedOnTime(bedTime: string, targetTime: string, graceMinutes = 30): boolean {
-  const b = toMinutes(bedTime)
-  const t = toMinutes(targetTime)
-  const diff = Math.abs(b - t)
-  return diff <= graceMinutes || diff >= 1440 - graceMinutes
+  // Minutes since noon, so 23:30 and 00:30 compare the right way round.
+  const night = (m: number) => (m - 720 + 1440) % 1440
+  return night(toMinutes(bedTime)) <= night(toMinutes(targetTime)) + graceMinutes
 }
 
 export function targetForDay(day: string, weekdayTarget: string, weekendTarget: string): string {

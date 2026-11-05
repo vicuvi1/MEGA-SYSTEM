@@ -154,6 +154,7 @@ function WakeEditor({ state, onState, onWallet, openSignal = 0 }: { state: Conne
 }
 
 function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
+  const pts = usePoints()
   const rows = w.mornings.slice(0, 14).reverse()
   const maxOff = Math.max(30, ...rows.map((m) => Math.abs(toMin(m.time) - toMin(m.target))))
   return (
@@ -162,7 +163,7 @@ function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
         <div className="stat hero teal">
           <span className="label">This morning</span>
           <div className="big">{w.today ? w.today.time : '–'}</div>
-          <span className="sub">{w.today ? (w.today.onTime ? `On time (target ${w.today.target}) · +10 paid` : `Late (target ${w.today.target})`) : 'No check-in in Waky yet today'}</span>
+          <span className="sub">{w.today ? (w.today.onTime ? `On time (target ${w.today.target}) · +${pts('sleep.up_on_time', 10)} paid` : `Late (target ${w.today.target})`) : 'No check-in in Waky yet today'}</span>
         </div>
         <div className="stat">
           <span className="label">Wake streak</span>

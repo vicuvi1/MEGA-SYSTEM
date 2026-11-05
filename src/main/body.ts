@@ -72,11 +72,12 @@ export class Body {
   }
 
   /** Marks a day (default today) as a rest day, or takes it back. */
-  setRest(day: string | null, on: boolean, now = new Date()): BodySummary {
+  setRest(day: string | null, on: boolean, now = new Date(), shieldPaid = false): BodySummary {
     const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : this.wallet.today(now)
     const set = new Set(this.restDays())
-    // Rest budget: 2 a week keep the streak; a 3rd (or more) costs a shield.
-    if (on && !set.has(d) && restInWeek([...set], d) >= FREE_REST_DAYS) {
+    // Rest budget: 2 a week keep the streak; a 3rd (or more) costs a shield
+    // (only one: "Save yesterday" already paid its shield: P6).
+    if (on && !shieldPaid && !set.has(d) && restInWeek([...set], d) >= FREE_REST_DAYS) {
       if (!this.shields || !this.shields.consume()) throw new LedgerError(`${FREE_REST_DAYS} rest days this week already: one more costs a streak shield, and you have none (buy one in the Shop)`)
     }
     if (on) set.add(d)

@@ -3881,6 +3881,7 @@ function planUndo(entries, id, note, ts, day) {
 	if (!target) throw new LedgerError("Entry not found");
 	if (target.kind === "undo") throw new LedgerError("Cannot undo an undo");
 	if (target.ref?.startsWith("chest:")) throw new LedgerError("Chest prizes are final");
+	if (target.coins < 0 && /^(bank:|goal:)/.test(target.ref ?? "")) throw new LedgerError("Take them back out of the bank or goal instead");
 	if (entries.some((e) => e.kind === "undo" && e.undoOf === id)) throw new LedgerError("Already undone");
 	if (balance(entries) - target.coins < 0) throw new LedgerError("Those coins were already spent");
 	return {
@@ -7511,7 +7512,10 @@ var passed = (w, s) => w.items.some((it) => {
 function skillStatus(workouts, paths = PATHS) {
 	return paths.map((p) => {
 		let level = 0;
-		while (level < p.steps.length && workouts.some((w) => passed(w, p.steps[level]))) level++;
+		for (let i = p.steps.length - 1; i >= 0; i--) if (workouts.some((w) => passed(w, p.steps[i]))) {
+			level = i + 1;
+			break;
+		}
 		const done = level >= p.steps.length;
 		const at = Math.min(level, p.steps.length - 1);
 		return {
@@ -7549,10 +7553,10 @@ var Body = class {
 		}
 	}
 	/** Marks a day (default today) as a rest day, or takes it back. */
-	setRest(day, on, now = /* @__PURE__ */ new Date()) {
+	setRest(day, on, now = /* @__PURE__ */ new Date(), shieldPaid = false) {
 		const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : this.wallet.today(now);
 		const set = new Set(this.restDays());
-		if (on && !set.has(d) && restInWeek([...set], d) >= 2) {
+		if (on && !shieldPaid && !set.has(d) && restInWeek([...set], d) >= 2) {
 			if (!this.shields || !this.shields.consume()) throw new LedgerError(`2 rest days this week already: one more costs a streak shield, and you have none (buy one in the Shop)`);
 		}
 		if (on) set.add(d);
@@ -9693,12 +9697,10 @@ function toMinutes(hhmm) {
 function isWakeOnTime(wakeTime, targetTime, graceMinutes = 20) {
 	return toMinutes(wakeTime) <= toMinutes(targetTime) + graceMinutes;
 }
-/** Bedtime check: in bed within 30 min of bedtime target. */
+/** Bedtime check: in bed by the target, with 30 min grace. Earlier is on time too (P6). */
 function isBedOnTime(bedTime, targetTime, graceMinutes = 30) {
-	const b = toMinutes(bedTime);
-	const t = toMinutes(targetTime);
-	const diff = Math.abs(b - t);
-	return diff <= graceMinutes || diff >= 1440 - graceMinutes;
+	const night = (m) => (m - 720 + 1440) % 1440;
+	return night(toMinutes(bedTime)) <= night(toMinutes(targetTime)) + graceMinutes;
 }
 function targetForDay(day, weekdayTarget, weekendTarget) {
 	const dow = (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
@@ -12353,7 +12355,7 @@ syncFinance: (recordDays) => write((s) => {
 			/** Spends a shield to save the workout streak for a missed day (it becomes a rest day). */
 			protect: (day) => write((s) => {
 				if (!s.shields.consume()) throw new Error("No shields left: buy one in the shop");
-				return s.body.setRest(day, true);
+				return s.body.setRest(day, true, /* @__PURE__ */ new Date(), true);
 			}, W)
 		},
 		exporter: {
@@ -16241,7 +16243,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			case "checkin": {
 				s.discipline.checkIn();
 				const st = s.discipline.state();
-				return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), 20) };
+				return { reply: formatCleanCheckinResponse(st.current + (st.resets === 0 ? 1 : 0), ruleCoins(s, "discipline.clean_day", 20)) };
 			}
 			case "oath":
 				s.discipline.oath();
@@ -16260,7 +16262,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					note: "Logged via Telegram"
 				});
 				return {
-					reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? 10 : 0),
+					reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0),
 					sport: {
 						name,
 						amount
@@ -16288,7 +16290,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					}],
 					note: `Logged via Telegram (${amount} ${rawUnit})`
 				});
-				return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? 10 : 0, res.awarded ? 25 : 0) };
+				return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0, res.awarded ? 25 : 0) };
 			}
 			case "weight": {
 				const w = parsed.metricWeight;

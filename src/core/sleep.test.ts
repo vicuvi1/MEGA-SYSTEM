@@ -23,6 +23,10 @@ describe('sleep core', () => {
     expect(isBedOnTime('23:25', '23:00')).toBe(true)
     expect(isBedOnTime('22:45', '23:00')).toBe(true)
     expect(isBedOnTime('00:10', '23:00')).toBe(false)
+    // Early is on time (P6); after midnight against a midnight target still works.
+    expect(isBedOnTime('21:00', '23:00')).toBe(true)
+    expect(isBedOnTime('00:20', '00:00')).toBe(true)
+    expect(isBedOnTime('01:00', '00:00')).toBe(false)
   })
 
   it('determines targets based on weekday vs weekend', () => {

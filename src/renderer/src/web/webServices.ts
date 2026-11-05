@@ -283,7 +283,7 @@ export function createWebServices(mirror: Mirror) {
       protect: (day: string) =>
         write((s) => {
           if (!s.shields.consume()) throw new Error('No shields left: buy one in the shop')
-          return s.body.setRest(day, true)
+          return s.body.setRest(day, true, new Date(), true)
         }, W)
     },
     exporter: {

@@ -54,8 +54,9 @@ export interface PathStatus { id: string; title: string; level: number; total: n
 /** Where you are on each path: the first move whose test you haven't passed. */
 export function skillStatus(workouts: Workout[], paths = PATHS): PathStatus[] {
   return paths.map((p) => {
+    // The hardest move you've passed counts, even if you never logged the easier ones (P6).
     let level = 0
-    while (level < p.steps.length && workouts.some((w) => passed(w, p.steps[level]))) level++
+    for (let i = p.steps.length - 1; i >= 0; i--) if (workouts.some((w) => passed(w, p.steps[i]))) { level = i + 1; break }
     const done = level >= p.steps.length
     const at = Math.min(level, p.steps.length - 1)
     return { id: p.id, title: p.title, level, total: p.steps.length, current: p.steps[at], next: done ? null : p.steps[at + 1] ?? null, done }

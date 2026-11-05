@@ -365,7 +365,7 @@ export function Body({
         <section className="panel">
           <header className="panel-head">
             <h2>Recent workouts</h2>
-            <span className="hint">Logs feed into your streaks and earn 10 coins.</span>
+            <span className="hint">Logs feed into your streaks and earn {pts('body.workout_done', 10)} points.</span>
           </header>
 
           {state.recentWorkouts.length === 0 ? (

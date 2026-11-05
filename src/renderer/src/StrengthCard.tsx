@@ -35,9 +35,10 @@ export function StrengthCard({ state, onChange }: { state: BodyState; onChange: 
   const log = async () => {
     if (!parsed) return
     const reps = parsed.sets.reduce((t, s) => t + s.reps, 0)
+    // The amount is reps (the weight lives in each set), so the unit is reps, never kg (P6).
     const kg = parsed.sets[0].weight
     const r = await act(
-      () => life.body.logWorkout({ title: parsed.name, items: [{ exerciseId: parsed.name.toLowerCase().replace(/[^a-z0-9]/g, ''), name: parsed.name, unit: kg ? 'kg' : 'reps', amount: reps, sets: parsed.sets }], note: 'Strength' }),
+      () => life.body.logWorkout({ title: parsed.name, items: [{ exerciseId: parsed.name.toLowerCase().replace(/[^a-z0-9]/g, ''), name: parsed.name, unit: 'reps', amount: reps, sets: parsed.sets }], note: 'Strength' }),
       `${parsed.name}: ${parsed.sets.length}×${parsed.sets[0].reps}${kg ? ` × ${kg} kg` : ''}`
     )
     if (r) {

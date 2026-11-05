@@ -11,6 +11,7 @@ import { ConnectCard } from './Connected'
 const money = (bani: number) => (bani / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })
 
 export function Money({ state, onState, onWallet }: { state: ConnectionsState; onState: (s: ConnectionsState) => void; onWallet: () => void }) {
+  const pts = usePoints()
   const f = state.finance
   const hasFinance = f.found && Boolean(f.connectedSince)
   const [mode, setMode] = useState<'finance' | 'native'>(() => (hasFinance ? 'finance' : 'native'))
@@ -52,7 +53,7 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
             icon="coin"
             color="#F5C84B"
             {...f}
-            what="Finance Helper stays where you log money. Connect it and logging spending (+3) and staying under your daily budget (+5) pay into this wallet."
+            what={`Finance Helper stays where you log money. Connect it and logging spending (+${pts('money.logged', 3)}) and staying under your daily budget (+${pts('money.under_budget', 5)}) pay into this wallet.`}
             onState={onState}
             onWallet={onWallet}
           />
@@ -63,6 +64,7 @@ export function Money({ state, onState, onWallet }: { state: ConnectionsState; o
 }
 
 function FinanceHelperView({ f, onState }: { f: ConnectionsState['finance']; onState: (s: ConnectionsState) => void }) {
+  const pts = usePoints()
   const act = useAction()
   const [draft, setDraft] = useState<string | null>(null)
   const cur = f.currency
@@ -90,7 +92,7 @@ function FinanceHelperView({ f, onState }: { f: ConnectionsState['finance']; onS
           <div className="big">
             {money(f.today?.everydaySpent ?? 0)} <small>{cur}</small>
           </div>
-          <span className="sub">{todayLeft === null ? 'Set a daily budget to earn +5 a day' : todayLeft >= 0 ? `${money(todayLeft)} ${cur} left today` : `${money(-todayLeft)} ${cur} over today`}</span>
+          <span className="sub">{todayLeft === null ? `Set a daily budget to earn +${pts('money.under_budget', 5)} a day` : todayLeft >= 0 ? `${money(todayLeft)} ${cur} left today` : `${money(-todayLeft)} ${cur} over today`}</span>
         </div>
         <div className="stat">
           <span className="label">Daily budget</span>
@@ -141,7 +143,7 @@ function FinanceHelperView({ f, onState }: { f: ConnectionsState['finance']; onS
               <div key={d.day} className={`dg ${cls}`} title={d.day}>
                 <small>{new Date(`${d.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}</small>
                 <b>{d.logged ? money(d.everydaySpent) : '–'}</b>
-                <span>{!d.logged ? 'not logged' : !d.judged ? 'today' : budget === 0 ? 'logged' : under ? 'under +5' : 'over'}</span>
+                <span>{!d.logged ? 'not logged' : !d.judged ? 'today' : budget === 0 ? 'logged' : under ? `under +${pts('money.under_budget', 5)}` : 'over'}</span>
               </div>
             )
           })}
