@@ -93,6 +93,25 @@ describe('Todoist API client', () => {
     expect(calls).toContain('POST /api/v1/tasks/1/close')
   })
 
+  it('closing: an old numeric id is mapped to its new id; a task already gone counts as done; errors say why', async () => {
+    const calls: string[] = []
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const path = url.replace('https://api.todoist.com', '')
+      calls.push(`${init?.method ?? 'GET'} ${path}`)
+      if (path === '/api/v1/tasks/123456/close') return { ok: false, status: 400, text: async () => JSON.stringify({ error: 'Invalid argument value' }) } as unknown as Response
+      if (path === '/api/v1/id_mappings/tasks/123456') return json([{ old_id: '123456', new_id: '6Abc' }])
+      if (path === '/api/v1/tasks/6Abc/close') return { ok: true, status: 204, text: async () => '' } as unknown as Response
+      if (path === '/api/v1/tasks/gone/close') return { ok: false, status: 404, text: async () => '{"error":"Task not found"}' } as unknown as Response
+      if (path === '/api/v1/tasks/bad/close') return { ok: false, status: 400, text: async () => '{"error":"Invalid argument value"}' } as unknown as Response
+      return json({}, 404)
+    }) as unknown as typeof fetch
+    const api = createTodoistApi('tok', fetchImpl)
+    await api.close('123456')
+    expect(calls).toContain('POST /api/v1/tasks/6Abc/close')
+    await api.close('gone')
+    await expect(api.close('bad')).rejects.toThrow('Todoist 400: Invalid argument value')
+  })
+
   it('falls back to the older API when the new one is not there', async () => {
     const fetchImpl = (async (url: string) => {
       if (url.includes('/api/v1/')) return json({}, 410)

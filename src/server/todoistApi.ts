@@ -20,7 +20,16 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
     })
     if (res.status === 401 || res.status === 403) throw new Error('Todoist refused the token: check TODOIST_TOKEN in Vercel')
     if (!res.ok) {
-      const err: any = new Error(`Todoist ${res.status}`)
+      // Todoist's own words ("Invalid argument value", "Task not found"), not just a number.
+      const body = await res.text().catch(() => '')
+      let why = ''
+      try {
+        const j = JSON.parse(body)
+        why = String(j.error ?? j.error_tag ?? j.message ?? '')
+      } catch {
+        why = body.replace(/\s+/g, ' ').trim()
+      }
+      const err: any = new Error(`Todoist ${res.status}${why ? `: ${why.slice(0, 120)}` : ''}`)
       err.status = res.status
       throw err
     }
@@ -220,11 +229,42 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
       const [list, names, secs] = await Promise.all([either(() => all(`${V1}/tasks/filter?query=${q}`), () => all(`${V2}/tasks?filter=${q}`)), projects(), sections()])
       return list.filter((t: any) => !t.checked && !t.is_completed).map((t: any) => toTask(t, names, secs))
     },
+    /**
+     * Ticks a task off. Todoist's v1 API refuses old numeric (v2) ids with 400,
+     * so such an id is first turned into its v1 id. A task that is already
+     * gone (done or deleted elsewhere) counts as done: that's what you wanted.
+     */
     async close(id: string): Promise<void> {
-      await either(
-        () => call(`${V1}/tasks/${encodeURIComponent(id)}/close`, { method: 'POST' }),
-        () => call(`${V2}/tasks/${encodeURIComponent(id)}/close`, { method: 'POST' })
-      )
+      const closeV1 = (x: string) => call(`${V1}/tasks/${encodeURIComponent(x)}/close`, { method: 'POST' })
+      try {
+        await closeV1(id)
+        return
+      } catch (e: any) {
+        if (e?.status !== 400 && e?.status !== 404) throw e
+        if (/^\d+$/.test(id)) {
+          const map = await call(`${V1}/id_mappings/tasks/${encodeURIComponent(id)}`).catch(() => null)
+          const v1 = Array.isArray(map) ? map.find((m: any) => String(m.old_id) === id)?.new_id : null
+          if (v1) {
+            try {
+              await closeV1(String(v1))
+              return
+            } catch (e2: any) {
+              if (e2?.status !== 404) throw e2
+              return // already gone
+            }
+          }
+          // Not mapped: the older API, if this account still has it.
+          try {
+            await call(`${V2}/tasks/${encodeURIComponent(id)}/close`, { method: 'POST' })
+            return
+          } catch (e3: any) {
+            if (e3?.status === 404) return
+            throw e3
+          }
+        }
+        if (e?.status === 404) return // already done or deleted elsewhere
+        throw e
+      }
     },
     /**
      * Todoist reads the date, time, priority and #project from the text. A

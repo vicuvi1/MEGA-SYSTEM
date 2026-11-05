@@ -567,7 +567,13 @@ export function IslandFeed() {
             break
           }
           case 'todoDone': {
-            await life.todoist!.complete({ id: a.id, content: a.content, priority: 1, due: null, dueTime: null, project: null, recurring: false } as any)
+            try {
+              await life.todoist!.complete({ id: a.id, content: a.content, priority: 1, due: null, dueTime: null, project: null, recurring: false } as any)
+            } catch (e) {
+              // The list may be stale (a task done elsewhere): fetch it fresh next time.
+              todoCache.at = 0
+              throw e
+            }
             todoCache = { at: 0, list: todoCache.list.filter((t) => t.id !== a.id) }
             window.dispatchEvent(new CustomEvent('life-external-changed'))
             said = `✓ ${a.content}`
