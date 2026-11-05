@@ -39,7 +39,7 @@ import { askedFor, confirmButton,
   loggedInText, readConfirm, riskOf } from '@core/benSafety'
 import { startsNow } from '@core/startNow'
 import { notMoney } from '@core/moneyGuess'
-import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
+import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile, saveDesk } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
 import { moodFace } from '@core/benKnows'
 import { benNote, listNotes, seedNotes } from './notes'
@@ -50,6 +50,7 @@ import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus, waterToday } from './coachStatus'
 import { nextSlot } from '@core/benActs'
 import { rescueFromEvents } from '@core/benPlans'
+import { addStake, suggestStake } from '@core/benStakes'
 import { AREA_WORDS, learnAreaWords } from '@core/areaWords'
 import { amountIn, codeFix, preLookups, quickKind, quickReply } from '@core/benQuick'
 import { createRhythm } from './rhythmBot'
@@ -721,7 +722,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|m[ln])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[ln])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -909,7 +910,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
         if (data === 'rv|k') {
           await answer('Saved for tomorrow')
-          const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.`
+          // W18: tomorrow's plan is drafted now, ready when you wake.
+          const draft = await rhythm.planTomorrow().catch(() => null)
+          const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.${draft?.blocks.length ? ` Tomorrow's draft is ready: ${draft.blocks.length} block${draft.blocks.length === 1 ? '' : 's'} from ${draft.blocks[0].start}.` : ''}`
           await edit(text)
           return text
         }
@@ -917,6 +920,21 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           const line = await rhythm.applyWeekly()
           await answer('Week planned')
           const text = `${esc(msg)}\n\n✅ ${esc(line)}`
+          await edit(text, { inline_keyboard: [[{ text: '📅 Book the big 3 in my calendar', callback_data: 'rw|b' }]] })
+          return text
+        }
+        // W13: the big 3 as blocks: shown first, booked on "Book them".
+        if (data === 'rw|b') {
+          const list = await rhythm.bookingPreview()
+          await answer(list.length ? 'Here they are' : 'No free time found')
+          const text = list.length ? `📅 <b>The big 3 this week</b>, in your free time:\n${list.map((b) => `${new Date(`${b.day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })} ${b.start}–${b.end} ${esc(b.title)}`).join('\n')}` : 'No free time found for the big 3 this week (or they are done).'
+          await tg(update.__token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', ...(list.length ? { reply_markup: { inline_keyboard: [[{ text: '✅ Book them', callback_data: 'rw|y' }, { text: 'Not now', callback_data: 'rw|n' }]] } } : {}) })
+          return text
+        }
+        if (data === 'rw|y' || data === 'rw|n') {
+          const done = data === 'rw|y' ? await rhythm.bookWeek() : []
+          await answer(data === 'rw|y' ? `Booked ${done.length}` : 'Not booked')
+          const text = `${esc(msg)}\n\n${data === 'rw|y' ? `✅ Booked ${done.length} block${done.length === 1 ? '' : 's'}.` : 'Not booked.'}`
           await edit(text)
           return text
         }
@@ -1038,6 +1056,21 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
       const text = ok ? '✕ Dropped for today. Your calendar is up to date.' : 'Could not find that block anymore; it may already be gone.'
       await answer(ok ? 'Dropped' : 'Not found')
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
+      return text
+    }
+    // W15: a stake Ben suggested, made only now that you said yes (settles by the focus log, W16).
+    if (data.startsWith('sg|')) {
+      if (!(await markSeen(key))) return null
+      const subject = data.slice(3) || 'Focus'
+      const s = suggestStake(subject, new Date())
+      await mirror.write((db) => {
+        const d = loadDesk(db)
+        saveDesk(db, { ...d, stakes: addStake(d.stakes, s.text, s.due, s.points, new Date(), s.proof) })
+      })
+      const text = `🎯 Deal: ${s.text}. ${s.points} points on it. It settles by itself when the focus log shows the 25 minutes.`
+      await answer('Stake set')
       await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
       await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
       return text

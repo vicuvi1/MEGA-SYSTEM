@@ -24,11 +24,11 @@ import {
   type DayProposal,
   type DayResult,
   type RhythmPrefs,
-  type RhythmState, blocksKept, editPlan, lightenForSleep } from '@core/rhythm'
+  type RhythmState, blocksKept, editPlan, lightenForSleep, draftFits, bookBig3, fromMin, toMin } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
-import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStory, pickFacts, saveLetter, saveMind, sportState } from './botBrain'
+import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStory, pickFacts, saveLetter, saveMind, sportState, loadStyle, saveStyle } from './botBrain'
 import { REMINDERS, promiseLine, promiseStats } from '@core/coachKit'
-import { deskPrompt } from './benDesk'
+import { deskPrompt, deskView } from './benDesk'
 import { notesForBen } from '@core/notebook'
 import { listNotes } from './notes'
 import { applyMind } from '@core/coachMind'
@@ -290,9 +290,13 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       workoutDone: base.workoutDone
     })
     let plan = fallback
+    // W18: tomorrow's plan was drafted last night: used as it is when nothing new clashes (no AI call).
+    const draft = !note && base.st.tomorrow?.day === base.today ? base.st.tomorrow.plan : undefined
+    const useDraft = !!draft && draft.blocks.length > 0 && draftFits(draft, events) && draft.blocks.every((b) => b.start >= hmNow(now))
+    if (useDraft) plan = { ...draft!, headline: `Planned last night: ${draft!.headline}`.slice(0, 160) }
     // No change asked: the rules' plan, named and ranked by a quick AI call (N6:
     // never times out; 15 s at most, else the rules' plan as it is).
-    if (ai && !note) {
+    if (ai && !note && !useDraft) {
       try {
         const raw = await withTimeout(
           ai(
@@ -428,7 +432,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
   }
 
   /** The evening review: the score, one lesson, tomorrow's top 3 (saved for the morning plan). */
-  async function evening(): Promise<{ result: DayResult; score: number; lesson: string; top3: string[]; goals: string[]; rebooked: string[] }> {
+  async function evening(): Promise<{ result: DayResult; score: number; lesson: string; top3: string[]; goals: string[]; rebooked: string[]; money: string | null }> {
     const result = await dayResult()
     const score = dayScore(result)
     const [open, tomorrowTasks] = await Promise.all([
@@ -491,7 +495,128 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     // Goals: today's misses are spread over the days left, and booked blocks move.
     const goals = (await goalPlans().catch(() => [] as GoalPlan[])).filter((p) => p.status !== 'done')
     const rebooked = await rebookGoals().catch(() => [] as string[])
-    return { result, score, lesson, top3, goals: goals.map(planLine), rebooked }
+    return { result, score, lesson, top3, goals: goals.map(planLine), rebooked, money: await moneyLine() }
+  }
+
+  /** W17: one money line when the week runs over your usual spending (else null). */
+  async function moneyLine(): Promise<string | null> {
+    return mirror
+      .read((db) => {
+        const v = deskView(services.services(db), financeStateFrom(db, null))
+        // A regular charge due in the next 2 days.
+        const today = services.services(db).wallet.today()
+        const big = v.recurring?.find((r) => r.next >= today && r.next <= addDays(today, 2))
+        const when = big ? (big.next === today ? 'today' : big.next === addDays(today, 1) ? 'tomorrow' : 'in 2 days') : ''
+        return [v.spend?.line ?? '', big ? `${big.name} (${Math.round(big.amount / 100)} lei) usually comes out ${when}.` : ''].filter(Boolean).join(' ') || null
+      })
+      .catch(() => null)
+  }
+
+  /** W18: after you keep tomorrow's top 3, the plan for tomorrow is drafted now (ready when you wake). */
+  async function planTomorrow(): Promise<DayProposal | null> {
+    const today = await mirror.read((db) => services.services(db).wallet.today())
+    const day = addDays(today, 1)
+    const [events, tasks] = await Promise.all([
+      calendar ? calendar.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => []) : Promise.resolve([]),
+      todoist?.upcoming ? todoist.upcoming(2).catch(() => [] as TodoTask[]) : Promise.resolve([] as TodoTask[])
+    ])
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const st = load(db, today)
+      const top3 = st.tomorrow?.day === day ? st.tomorrow.top3 : []
+      const plan = localProposal({ today: day, now: '08:00', events, tasks: tasks.filter((t) => t.due === day).map((t) => ({ content: t.content, starred: isStarred(t), priority: t.priority, due: t.due })), top3, waterTarget: waterToday(db, svc).target, workoutDone: false })
+      save(db, { ...st, tomorrow: { day, top3, plan } })
+      return plan
+    })
+  }
+
+  /** W14: Wednesday: where the week stands, rules only. */
+  async function midweek(): Promise<string> {
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const st = load(db, svc.wallet.today())
+      save(db, { ...st, midweek: true })
+      const plan = svc.weekPlan.active()
+      const report = progressReport(svc.progress.input(financeSpending(financeStateFrom(db, null))))
+      const m = plan ? report.metrics.find((x) => x.id === plan.focus) : null
+      const lines = [
+        '📊 <b>Midweek check</b>',
+        m ? `Week focus (${focusName(plan!.focus)}): ${m.text}${m.target ? ` of ${m.targetText}` : ''}.` : '',
+        plan?.big3?.length ? `Big 3: ${plan.big3.filter((b: any) => b.done).length} of ${plan.big3.length} done${plan.big3.some((b: any) => !b.done) ? ` · still open: ${plan.big3.filter((b: any) => !b.done).map((b: any) => b.text).join(', ')}` : ''}.` : '',
+        ...report.metrics.filter((x) => x.target && x.id !== plan?.focus && x.id !== 'spend').slice(0, 3).map((x) => `${x.label}: ${x.text} of ${x.targetText}`)
+      ].filter(Boolean)
+      const open = plan?.big3?.filter((b: any) => !b.done) ?? []
+      lines.push(open.length ? `Thu–Sat needs: one block for each open big task (${open.length}). Want them booked?` : 'On track. Keep the rhythm through the weekend.')
+      return lines.join('\n')
+    })
+  }
+
+  /** W13: the week's big 3 as blocks in free time, shown first (saved until you tap "Book them"). */
+  async function bookingPreview(): Promise<{ title: string; day: string; start: string; end: string }[]> {
+    const today = await mirror.read((db) => services.services(db).wallet.today())
+    const days = Array.from({ length: 7 }, (_, k) => addDays(today, k + (new Date().getHours() >= 20 ? 1 : 0)))
+    const events = calendar ? await calendar.events(new Date(`${days[0]}T00:00:00`).toISOString(), new Date(`${days[6]}T23:59:59`).toISOString()).catch(() => []) : []
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const st = load(db, today)
+      const big3 = (svc.weekPlan.active()?.big3 ?? []).filter((b: any) => !b.done).map((b: any) => b.text)
+      const booking = bookBig3(big3, events, days, new Date().toISOString())
+      save(db, { ...st, booking })
+      return booking
+    })
+  }
+  async function bookWeek(): Promise<string[]> {
+    const list = await mirror.read((db) => load(db, services.services(db).wallet.today()).booking ?? [])
+    if (!calendar || !list.length) return []
+    const done: string[] = []
+    for (const b of list) {
+      const ok = await calendar.create({ title: b.title, start: new Date(`${b.day}T${b.start}:00`).toISOString(), end: new Date(`${b.day}T${b.end}:00`).toISOString(), description: 'Week plan · booked by Ben in Life System' }).then(() => true).catch(() => false)
+      if (ok) done.push(`${b.day.slice(5)} ${b.start} ${b.title}`)
+    }
+    await mirror.write((db) => {
+      const st = load(db, services.services(db).wallet.today())
+      save(db, { ...st, booking: [] })
+    })
+    return done
+  }
+
+  /**
+   * W20: when "is Ben helping?" says not working yet, Ben changes ONE thing
+   * for next week (fewer nudges, the plan 30 minutes earlier, a gentler
+   * tone), in turn, and says what he changed.
+   */
+  async function adaptIfNotWorking(verdict: string): Promise<string | null> {
+    if (verdict !== 'not yet') return null
+    return mirror.write((db) => {
+      const today = services.services(db).wallet.today()
+      const week = mondayOf(today)
+      let done: { week: string; change: string }[] = []
+      try {
+        done = JSON.parse(getSetting(db as any, 'coach_adapt') || '[]')
+      } catch {
+        done = []
+      }
+      if (done.some((d) => d.week === week)) return null
+      const order = ['fewer-nudges', 'earlier-plan', 'gentler']
+      const change = order[done.length % order.length]
+      let line = ''
+      if (change === 'fewer-nudges') {
+        const cur = JSON.parse(getSetting(db as any, 'coach_nudges') || '{}')
+        setSetting(db as any, 'coach_nudges', JSON.stringify({ ...cur, max: 5 }))
+        line = 'fewer nudges: 5 a day at most, so each one counts'
+      } else if (change === 'earlier-plan') {
+        const prefs = cleanPrefs(readJson(db, RHYTHM_PREFS, null))
+        const at = fromMin(Math.max(toMin('06:30'), toMin(prefs.autopilot ?? '07:30') - 30))
+        setSetting(db as any, RHYTHM_PREFS, JSON.stringify({ ...prefs, autopilot: at }))
+        line = `your plan comes 30 minutes earlier (${at}), before the day runs away`
+      } else {
+        const tone = loadStyle(db).tone
+        saveStyle(db, { tone: Math.max(2, tone - 1) })
+        line = 'a gentler tone: smaller steps, less pressure'
+      }
+      setSetting(db as any, 'coach_adapt', JSON.stringify([...done, { week, change }].slice(-20)))
+      return `🔧 It isn't working yet, so I'm changing one thing next week: ${line}.`
+    })
   }
 
   async function setTop3(text: string): Promise<string[]> {
@@ -516,10 +641,12 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const rows = scorecard(cleanHistory(readJson(db, COACH_HISTORY, null)), svc.progress.input(null, new Date(), 70).focus, svc.wallet.today(), 8)
       const v = impactVerdict(rows)
       const label = { working: 'working, you are improving', mixed: 'mixed', 'not yet': 'not working yet, we change something', 'too early': 'too early to tell' }[v.verdict]
-      return `Is the coach working? ${label}${v.verdict === 'too early' ? '' : ` (${v.lines.join('; ')})`}`
+      return { text: `Is the coach working? ${label}${v.verdict === 'too early' ? '' : ` (${v.lines.join('; ')})`}`, verdict: v.verdict as string }
     })
+    const adapt = await adaptIfNotWorking(coachCheck.verdict).catch(() => null)
+    const money = await moneyLine()
     const goalLines = (await goalPlans().catch(() => [] as GoalPlan[])).filter((p) => p.status !== 'done').map((p) => `🎯 ${planLine(p)}`)
-    const lines = [...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`), ...goalLines, coachCheck]
+    const lines = [...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`), ...goalLines, coachCheck.text, ...(adapt ? [adapt] : []), ...(money ? [`💸 ${money}`] : [])]
     const ranked = report.metrics.filter((m) => m.target && m.id !== 'spend').map((m) => ({ m, k: m.now / (m.target as number) })).sort((a, b) => b.k - a.k)
     const upcoming = todoist?.upcoming ? await todoist.upcoming(8).catch(() => [] as TodoTask[]) : []
     let out = {
@@ -771,7 +898,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, writeStory, checkoutStart, checkoutMark, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, writeStory, checkoutStart, checkoutMark, planTomorrow, midweek, bookingPreview, bookWeek, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

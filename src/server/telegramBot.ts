@@ -49,7 +49,7 @@ import { autoApproveDue, planWaitingText, missedBlocks, movedText, nextSlot, nud
 import { loadStyle } from '../renderer/src/web/botBrain'
 import { deskChange, deskView, loadDesk, saveDesk } from '../renderer/src/web/benDesk'
 import { financeStateFrom, loadProfile } from '../renderer/src/web/botBrain'
-import { monthTakePrompt, callDue, loseStakes, overdueStakes, stakeLostText, stakeRemindText, type Stake } from '@core/benStakes'
+import { monthTakePrompt, callDue, loseStakes, overdueStakes, stakeLostText, stakeRemindText, type Stake, proofMet, keepStake } from '@core/benStakes'
 import { dueTopics } from '@core/benPlans'
 import { MOOD_FACES, moodDue } from '@core/benKnows'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
@@ -502,7 +502,28 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       note('skipped', text, `Quiet hours (${notifSet.quiet.from}–${notifSet.quiet.to}): in the bell instead`)
       return false
     }
-    // Each kind of message at most once a day (not the same water nudge 4 times).
+    // W21: at most 15 messages a day on his own; the rest go to the bell. Your reminders (🔔 ⏰),
+    // urgent things (leave now) and event warnings always go through.
+    const dayKey = now.toLocaleDateString('sv-SE')
+    const own = !opts.urgent && !opts.notif && !/^\s*(🔔|⏰)/u.test(text)
+    if (own) {
+      const count = await mirror.read((db) => {
+        try {
+          const c = JSON.parse(getSetting(db as any, 'ben_sent_count') || 'null')
+          return c?.day === dayKey ? Number(c.n) || 0 : 0
+        } catch {
+          return 0
+        }
+      })
+      if (count >= 15) {
+        await mirror.write((db) => {
+          const n = notifFromMessage(text, reply_markup, new Date())
+          if (n) addNotif(db as any, n)
+        }).catch(() => null)
+        note('skipped', text, "Today's message budget is used up: in the bell instead")
+        return false
+      }
+    }
     // Each kind of message at most once a day (not the same water nudge 4 times).
     // Checked now, but marked as sent only once Telegram says ok (a failed send
     // is tried again on the next tick instead of counting as sent).
@@ -554,6 +575,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
         .catch(() => null)
     }
     void beat(healthDb, 'telegram', true)
+    if (own)
+      await mirror
+        .write((db) => {
+          let c = { day: dayKey, n: 0 }
+          try {
+            const p = JSON.parse(getSetting(db as any, 'ben_sent_count') || 'null')
+            if (p?.day === dayKey) c = { day: dayKey, n: Number(p.n) || 0 }
+          } catch {
+            /* new day */
+          }
+          setSetting(db as any, 'ben_sent_count', JSON.stringify({ day: dayKey, n: c.n + 1 }))
+        })
+        .catch(() => null)
     sent.push(text)
     note('sent', text, text !== original ? 'In his own words for this moment' : undefined, messageKind(original) ?? undefined)
     // What the coach says on its own shows in the app's chat too (live).
@@ -663,6 +697,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
         await sysSet(healthDb, 'ben_cal_seen', JSON.stringify(seenNow))
         for (const ch of calendarChanges(prev, seenNow, now, must)) {
           const subject = (must ?? 'Focus').split(/\s+/).slice(0, 3).join(' ').slice(0, 28)
+          // W19: something new over one of Ben's blocks → that block moves to the next free time that day.
+          if (ch.kind === 'added' && calendar.move) {
+            const s0 = Date.parse(ch.ev.start)
+            const e0 = Date.parse(ch.ev.end)
+            const hit = evs.filter((e) => isFocusBlock(e) && e.ours && Date.parse(e.start) < e0 && Date.parse(e.end) > s0)
+            for (const b of hit) {
+              const day = new Date(b.start).toLocaleDateString('sv-SE')
+              const len = Math.round((Date.parse(b.end) - Date.parse(b.start)) / 60000)
+              const after = day === now.toLocaleDateString('sv-SE') ? now.toTimeString().slice(0, 5) : '08:00'
+              const slot = nextSlot(evs.filter((e) => e.id !== b.id), day, after, len)
+              if (slot && (await calendar.move(b.calendarId, b.id, new Date(`${day}T${slot.start}:00`).toISOString(), new Date(`${day}T${slot.end}:00`).toISOString()).then(() => true).catch(() => false))) ch.text += `\n↪️ It was on top of <b>${escapeHtml(b.title)}</b>, so I moved that to ${slot.start}–${slot.end}.`
+            }
+          }
           await send(ch.text, ch.kind === 'cancelled' && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{ text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`, callback_data: `fo|${subject}` }]] } : undefined, { always: true }).catch(() => null)
         }
       }
@@ -739,7 +786,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // W2: a block that should be running but hasn't started: one nudge about THAT block,
   // and no "nothing done" nudge while a block is on (the plan is the nudge).
   const blockNow = events.find((e) => isFocusBlock(e) && Date.parse(e.start) <= now.getTime() - 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
-  if (blockNow && !st.focus.running && !paused && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
+  if (blockNow && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
     const subject = blockSubject(blockNow.title).slice(0, 28)
     const later = `bx|${blockNow.id}`.length <= 64 ? [{ text: '↪️ Next free time', callback_data: `bx|${blockNow.id}` }] : []
     try {
@@ -807,6 +854,22 @@ export const outboxAdd = (list: OutMsg[], m: OutMsg): OutMsg[] => [...list.filte
 
 /** Stakes (points taken when time is up, a reminder an hour before), study reviews, mood, the Sunday call. */
 async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: string, markup?: unknown) => Promise<void>, esc: (s: string) => string): Promise<void> {
+  // 0) W16: stakes the data already proves (focus minutes, a workout, a wake-up) settle by themselves.
+  const proven = await mirror.write((db) => {
+    const svc = services.services(db)
+    const d = loadDesk(db)
+    const f = svc.focus.state(now)
+    const today = svc.wallet.today(now)
+    const wake = (db.prepare('SELECT wake_time FROM sleep_logs WHERE day = ?').get(today) as any)?.wake_time ?? null
+    const workout = (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done')
+    const ok = d.stakes.filter((st: Stake) => st.status === 'open' && proofMet(st, { sessions: f.todaySessions, workoutSince: workout, wakeTime: wake }))
+    if (!ok.length) return [] as Stake[]
+    let stakes = d.stakes
+    for (const st of ok) stakes = keepStake(stakes, st.id, now)
+    saveDesk(db, { ...d, stakes })
+    return ok
+  }).catch(() => [] as Stake[])
+  for (const st of proven) await send(esc(`💎 Stake kept, the log shows it: "${st.text}". Your ${st.points} points are safe.`)).catch(() => null)
   // 1) Stakes that ran out: the points go, once (the ledger ref makes it idempotent).
   const lost = await mirror.write((db) => {
     const svc = services.services(db)
@@ -955,7 +1018,8 @@ async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unk
       await mark({ asked: [m.event.id] })
       const tomorrow = `bt|${m.event.id}`.length <= 64 ? [{ text: '📅 Tomorrow', callback_data: `bt|${m.event.id}` }] : []
       const drop = `bd|${m.event.id}`.length <= 64 ? [{ text: '✕ Drop', callback_data: `bd|${m.event.id}` }] : []
-      await send(missedTwiceText(m.event.title), { inline_keyboard: [[{ text: `▶ 25 min now`, callback_data: `fo|${subject}` }, ...tomorrow, ...drop]] })
+      const stake = `sg|${subject}`.length <= 64 ? [[{ text: '🎯 Put 50 points on doing it today', callback_data: `sg|${subject}` }]] : []
+      await send(missedTwiceText(m.event.title), { inline_keyboard: [[{ text: `▶ 25 min now`, callback_data: `fo|${subject}` }, ...tomorrow, ...drop], ...stake] })
       continue
     }
     await mark({ moved: [m.event.id] })
@@ -1066,12 +1130,18 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     }
   }
   await benActs(env, now, send, f.state, f.prefs.on, f.facts.time).catch((e) => console.error('ben acts:', e))
-  const jobs = dueRhythm(f.state, f.prefs, f.facts)
+  const due0 = dueRhythm(f.state, f.prefs, f.facts)
+  // W21: water and training due together go out as one message.
+  const mergeWater = due0.includes('water') && due0.includes('training')
+  const jobs = mergeWater ? due0.filter((x) => x !== 'water') : due0
   for (const job of jobs) {
     if (job === 'briefing') {
       // Mark it first: a slow model must not make two plans.
       const { plan, version } = await bots.rhythm.propose()
       await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD)
+    } else if (job === 'midweek') {
+      const text = await bots.rhythm.midweek()
+      await send(text, text.includes('Want them booked') ? { inline_keyboard: [[{ text: '📅 Book them', callback_data: 'rw|b' }]] } : undefined)
     } else if (job === 'replan') {
       // W8: no plan by noon: half a day left is still worth a plan.
       const { plan, version } = await bots.rhythm.propose()
@@ -1084,7 +1154,11 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
         await bots.rhythm.markWater()
       }
     } else if (job === 'training') {
-      await send(await bots.rhythm.trainingLine(), { inline_keyboard: [[{ text: '🏋️ Start workout', callback_data: 'wk|show' }, { text: '😴 30 min', callback_data: 'ns|' }]] })
+      // W21: water due at the same time rides along in one message.
+      const water = mergeWater ? await bots.rhythm.waterLine().catch(() => null) : null
+      const due = !!water
+      await send(`${await bots.rhythm.trainingLine()}${due ? `\n\n${water}` : ''}`, { inline_keyboard: [[{ text: '🏋️ Start workout', callback_data: 'wk|show' }, { text: '😴 30 min', callback_data: 'ns|' }]] })
+      if (due) await bots.rhythm.markWater()
     } else if (job === 'weekly') {
       const w = await bots.rhythm.weekly()
       await send(weeklyText(w), WEEKLY_KEYBOARD)
@@ -1108,7 +1182,8 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
         return payOnce(svc.wallet, `weekfocus:${plan.week}`, WEEK_FOCUS_POINTS, `Week focus reached: ${m.label}`) ? `\n\n🏆 Week focus reached: <b>${m.label}</b> (${m.text}). +${WEEK_FOCUS_POINTS} points.` : ''
       })
       const goalText = r.goals.length ? `\n\n🎯 <b>Goals</b>\n${r.goals.map((g) => escapeHtml(g)).join('\n')}${r.rebooked.length ? `\n${r.rebooked.map((x) => escapeHtml(x)).join('\n')}` : ''}` : ''
-      await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
+      const moneyText = r.money ? `\n\n💸 ${escapeHtml(r.money)}` : ''
+      await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + bonus, r.top3.length ? REVIEW_KEYBOARD : undefined)
     }
   }
 }

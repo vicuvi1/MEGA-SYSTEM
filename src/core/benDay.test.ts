@@ -70,3 +70,32 @@ describe('stop or extend focus from chat (W7)', () => {
     expect(readAction('extend: 500')).toBeNull()
   })
 })
+
+describe('the week and stakes (W13–W18)', () => {
+  it('books the big 3 in free time, one block per task per day (W13)', async () => {
+    const { bookBig3 } = await import('./rhythm')
+    const days = ['2026-11-06', '2026-11-07']
+    const events = [{ id: 'c', calendarId: 'x', title: 'Class', start: new Date('2026-11-06T09:00:00').toISOString(), end: new Date('2026-11-06T12:00:00').toISOString(), allDay: false }]
+    const list = bookBig3(['Lab report', 'CV'], events as any, days, new Date('2026-11-05T20:00:00').toISOString())
+    expect(list).toHaveLength(4)
+    expect(list[0]).toMatchObject({ day: '2026-11-06', start: '12:00', end: '12:50', title: '🎯 Lab report' })
+    expect(list.filter((b) => b.title.includes('CV'))).toHaveLength(2)
+  })
+  it("uses last night's draft only when nothing clashes (W18)", async () => {
+    const { draftFits } = await import('./rhythm')
+    const plan = { day: '2026-11-06', headline: '', mustdos: [], blocks: [{ title: 'A', start: '10:00', minutes: 50 }], training: null, waterMl: 0 }
+    expect(draftFits(plan, [])).toBe(true)
+    expect(draftFits(plan, [{ id: 'x', calendarId: '', title: 'New class', start: new Date('2026-11-06T10:30:00').toISOString(), end: new Date('2026-11-06T11:30:00').toISOString(), allDay: false }])).toBe(false)
+  })
+  it('suggests a stake and settles it by the focus log (W15, W16)', async () => {
+    const { suggestStake, proofMet, addStake } = await import('./benStakes')
+    const now = new Date('2026-11-05T14:00:00')
+    const s = suggestStake('Algebra', now)
+    expect(s.text).toBe('25 min focus on Algebra by 17:00')
+    const [st] = addStake([], s.text, s.due, s.points, now, s.proof)
+    const later = (min: number, subject = 'Algebra') => ({ sessions: [{ subject, startedAt: new Date('2026-11-05T15:00:00').toISOString(), minutes: min }] })
+    expect(proofMet(st, later(25))).toBe(true)
+    expect(proofMet(st, later(10))).toBe(false)
+    expect(proofMet(st, later(30, 'Reading'))).toBe(false)
+  })
+})

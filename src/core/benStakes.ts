@@ -15,11 +15,40 @@ export interface Stake {
   status: 'open' | 'kept' | 'lost'
   at: string
   settledAt?: string
+  /** W16: settles by itself when the data shows it (focus minutes on a subject, a workout, a wake-up). */
+  proof?: { kind: 'focus'; subject: string; minutes: number } | { kind: 'workout' } | { kind: 'wake'; by: string }
 }
 
-export function addStake(list: Stake[], text: string, due: string, points: number, now: Date): Stake[] {
+export function addStake(list: Stake[], text: string, due: string, points: number, now: Date, proof?: Stake['proof']): Stake[] {
   const p = Math.max(10, Math.min(500, Math.round(points)))
-  return [...list, { id: `k${now.getTime().toString(36)}${list.length}`, text: text.slice(0, 120), due, points: p, status: 'open' as const, at: now.toISOString() }].slice(-100)
+  return [...list, { id: `k${now.getTime().toString(36)}${list.length}`, text: text.slice(0, 120), due, points: p, status: 'open' as const, at: now.toISOString(), ...(proof ? { proof } : {}) }].slice(-100)
+}
+
+/**
+ * W15: the stake Ben offers when a block slipped twice: 25 minutes on it,
+ * by 3 hours from now (21:30 at the latest), 50 points. Only made if you
+ * tap Yes.
+ */
+export function suggestStake(subject: string, now: Date): { text: string; due: string; points: number; proof: Stake['proof'] } {
+  const due = new Date(Math.min(now.getTime() + 3 * 3600_000, new Date(now).setHours(21, 30, 0, 0)))
+  if (due.getTime() <= now.getTime() + 30 * 60000) due.setTime(now.getTime() + 60 * 60000)
+  const s = subject.slice(0, 40)
+  return { text: `25 min focus on ${s} by ${due.toTimeString().slice(0, 5)}`, due: due.toISOString(), points: 50, proof: { kind: 'focus', subject: s, minutes: 25 } }
+}
+
+/** W16: whether the data already shows the stake is kept. */
+export function proofMet(st: Stake, d: { sessions: { subject: string; startedAt: string | null; minutes: number }[]; workoutSince?: boolean; wakeTime?: string | null }): boolean {
+  const p = st.proof
+  if (!p || st.status !== 'open') return false
+  if (p.kind === 'focus') {
+    const want = p.subject.toLowerCase().split(/\s+/).filter((w) => w.length >= 3)
+    const mins = d.sessions
+      .filter((x) => x.startedAt && x.startedAt >= st.at && (!want.length || want.some((w) => x.subject.toLowerCase().includes(w.slice(0, 5)))))
+      .reduce((t, x) => t + x.minutes, 0)
+    return mins >= p.minutes
+  }
+  if (p.kind === 'workout') return !!d.workoutSince
+  return !!d.wakeTime && d.wakeTime <= p.by
 }
 
 export function keepStake(list: Stake[], id: string, now: Date): Stake[] {

@@ -130,6 +130,8 @@ export interface NudgeState {
   slots?: Record<string, [number, number]>
   /** The hour of the last nudge (to score it when the next one comes). */
   lastHour?: number
+  /** A lower daily cap (W20: Ben chose fewer nudges because they weren't working). */
+  max?: number
 }
 
 export interface NudgeFacts {
@@ -162,7 +164,7 @@ export function shouldNudge(st: NudgeState, f: NudgeFacts, now = new Date()): bo
   if (f.openMustDos === 0 && f.focusMinToday >= 50) return false
   if (f.idleMin < 60) return false
   const count = st.day === f.today ? (st.count ?? 0) : 0
-  if (count >= NUDGE_MAX_PER_DAY) return false
+  if (count >= Math.min(NUDGE_MAX_PER_DAY, st.max ?? NUDGE_MAX_PER_DAY)) return false
   if (st.lastAt && now.getTime() - Date.parse(st.lastAt) < nudgeGapMin(st) * 60000) return false
   // W9: an hour where he almost never reacts gets no nudge (after 4+ tries there).
   if (badHour(st, now.getHours())) return false

@@ -1962,7 +1962,7 @@ function urgeEvents(db) {
 	}
 }
 // src/core/benStakes.ts
-function addStake(list, text, due, points, now) {
+function addStake(list, text, due, points, now, proof) {
 	const p = Math.max(10, Math.min(500, Math.round(points)));
 	return [...list, {
 		id: `k${now.getTime().toString(36)}${list.length}`,
@@ -1970,8 +1970,40 @@ function addStake(list, text, due, points, now) {
 		due,
 		points: p,
 		status: "open",
-		at: now.toISOString()
+		at: now.toISOString(),
+		...proof ? { proof } : {}
 	}].slice(-100);
+}
+/**
+* W15: the stake Ben offers when a block slipped twice: 25 minutes on it,
+* by 3 hours from now (21:30 at the latest), 50 points. Only made if you
+* tap Yes.
+*/
+function suggestStake(subject, now) {
+	const due = new Date(Math.min(now.getTime() + 108e5, new Date(now).setHours(21, 30, 0, 0)));
+	if (due.getTime() <= now.getTime() + 18e5) due.setTime(now.getTime() + 36e5);
+	const s = subject.slice(0, 40);
+	return {
+		text: `25 min focus on ${s} by ${due.toTimeString().slice(0, 5)}`,
+		due: due.toISOString(),
+		points: 50,
+		proof: {
+			kind: "focus",
+			subject: s,
+			minutes: 25
+		}
+	};
+}
+/** W16: whether the data already shows the stake is kept. */
+function proofMet(st, d) {
+	const p = st.proof;
+	if (!p || st.status !== "open") return false;
+	if (p.kind === "focus") {
+		const want = p.subject.toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
+		return d.sessions.filter((x) => x.startedAt && x.startedAt >= st.at && (!want.length || want.some((w) => x.subject.toLowerCase().includes(w.slice(0, 5))))).reduce((t, x) => t + x.minutes, 0) >= p.minutes;
+	}
+	if (p.kind === "workout") return !!d.workoutSince;
+	return !!d.wakeTime && d.wakeTime <= p.by;
 }
 function keepStake(list, id, now) {
 	return list.map((s) => s.id === id && s.status === "open" ? {
@@ -6845,7 +6877,7 @@ function shouldNudge(st, f, now = /* @__PURE__ */ new Date()) {
 	if (f.focusRunning) return false;
 	if (f.openMustDos === 0 && f.focusMinToday >= 50) return false;
 	if (f.idleMin < 60) return false;
-	if ((st.day === f.today ? st.count ?? 0 : 0) >= 8) return false;
+	if ((st.day === f.today ? st.count ?? 0 : 0) >= Math.min(8, st.max ?? 8)) return false;
 	if (st.lastAt && now.getTime() - Date.parse(st.lastAt) < nudgeGapMin(st) * 6e4) return false;
 	if (badHour(st, now.getHours())) return false;
 	return true;
@@ -14552,6 +14584,7 @@ function dueRhythm(state, prefs, f) {
 	if (!f.paused && prefs.water && waterBehind(state, f)) out.push("water");
 	if (!f.paused && prefs.training && !f.workoutDone && !state.training && t >= toMin("18:00") && t < toMin("21:00")) out.push("training");
 	if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push("weekly");
+	if (f.weekday === 3 && !state.midweek && t >= toMin(prefs.evening) - 90 && t < toMin(prefs.evening)) out.push("midweek");
 	if (!state.evening && t >= toMin(prefs.evening)) out.push("evening");
 	return out;
 }
@@ -14898,6 +14931,53 @@ var WEEKLY_KEYBOARD = { inline_keyboard: [[{
 	text: "✏️ Change",
 	callback_data: "rw|e"
 }]] };
+/**
+* W13: the week's big 3 as calendar blocks in free time: each task gets
+* `perTask` blocks of `minutes`, spread over the coming days (one per task
+* per day), between 09:00 and 20:00. Shown first; booked only on "Book them".
+*/
+function bookBig3(big3, events, days, nowIso, perTask = 2, minutes = 50) {
+	const out = [];
+	const taken = [...events];
+	const now = new Date(nowIso);
+	const todayKey = now.toLocaleDateString("sv-SE");
+	const left = new Map(big3.map((t) => [t, perTask]));
+	for (const day of days) for (const title of big3) {
+		if ((left.get(title) ?? 0) <= 0) continue;
+		const from = day === todayKey ? quarter(now.toTimeString().slice(0, 5)) : "09:00";
+		const gap = freeGaps(taken, day, {
+			after: from < "09:00" ? "09:00" : from,
+			to: "20:00",
+			minMinutes: minutes + 10
+		})[0];
+		if (!gap) continue;
+		const end = fromMin(toMin(gap.start) + minutes);
+		out.push({
+			title: `🎯 ${title}`.slice(0, 80),
+			day,
+			start: gap.start,
+			end
+		});
+		taken.push({
+			id: `b${out.length}`,
+			calendarId: "",
+			title,
+			start: (/* @__PURE__ */ new Date(`${day}T${gap.start}:00`)).toISOString(),
+			end: (/* @__PURE__ */ new Date(`${day}T${fromMin(toMin(gap.start) + minutes + 10)}:00`)).toISOString(),
+			allDay: false
+		});
+		left.set(title, (left.get(title) ?? 0) - 1);
+	}
+	return out;
+}
+/** W18: last night's draft still fits this morning (no block over a new event). */
+function draftFits(plan, events) {
+	return plan.blocks.every((b) => {
+		const s = Date.parse(`${plan.day}T${b.start}:00`);
+		const e = s + b.minutes * 6e4;
+		return !events.some((x) => !x.allDay && Date.parse(x.start) < e && Date.parse(x.end) > s);
+	});
+}
 var WEEK_ASK = "Next week's 3 big tasks? One per line.";
 /** "1. a\n2) b\n- c" → ['a','b','c'] (at most 3). */
 function readLines(text) {
@@ -16031,7 +16111,13 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			workoutDone: base.workoutDone
 		});
 		let plan = fallback;
-		if (ai && !note) try {
+		const draft = !note && base.st.tomorrow?.day === base.today ? base.st.tomorrow.plan : void 0;
+		const useDraft = !!draft && draft.blocks.length > 0 && draftFits(draft, events) && draft.blocks.every((b) => b.start >= hmNow(now));
+		if (useDraft) plan = {
+			...draft,
+			headline: `Planned last night: ${draft.headline}`.slice(0, 160)
+		};
+		if (ai && !note && !useDraft) try {
 			const raw = await withTimeout(ai([
 				"You are BEN, Victor's coach. His day plan is built (times fixed). Only: name each block in a few words tied to his goal, rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
 				`Plan: ${JSON.stringify({
@@ -16273,8 +16359,161 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			lesson,
 			top3,
 			goals: goals.map(planLine),
-			rebooked
+			rebooked,
+			money: await moneyLine()
 		};
+	}
+	/** W17: one money line when the week runs over your usual spending (else null). */
+	async function moneyLine() {
+		return mirror.read((db) => {
+			const v = deskView(services.services(db), financeStateFrom(db, null));
+			const today = services.services(db).wallet.today();
+			const big = v.recurring?.find((r) => r.next >= today && r.next <= addDays$3(today, 2));
+			const when = big ? big.next === today ? "today" : big.next === addDays$3(today, 1) ? "tomorrow" : "in 2 days" : "";
+			return [v.spend?.line ?? "", big ? `${big.name} (${Math.round(big.amount / 100)} lei) usually comes out ${when}.` : ""].filter(Boolean).join(" ") || null;
+		}).catch(() => null);
+	}
+	/** W18: after you keep tomorrow's top 3, the plan for tomorrow is drafted now (ready when you wake). */
+	async function planTomorrow() {
+		const today = await mirror.read((db) => services.services(db).wallet.today());
+		const day = addDays$3(today, 1);
+		const [events, tasks] = await Promise.all([calendar ? calendar.events((/* @__PURE__ */ new Date(`${day}T00:00:00`)).toISOString(), (/* @__PURE__ */ new Date(`${day}T23:59:59`)).toISOString()).catch(() => []) : Promise.resolve([]), todoist?.upcoming ? todoist.upcoming(2).catch(() => []) : Promise.resolve([])]);
+		return mirror.write((db) => {
+			const svc = services.services(db);
+			const st = load(db, today);
+			const top3 = st.tomorrow?.day === day ? st.tomorrow.top3 : [];
+			const plan = localProposal({
+				today: day,
+				now: "08:00",
+				events,
+				tasks: tasks.filter((t) => t.due === day).map((t) => ({
+					content: t.content,
+					starred: isStarred(t),
+					priority: t.priority,
+					due: t.due
+				})),
+				top3,
+				waterTarget: waterToday(db, svc).target,
+				workoutDone: false
+			});
+			save(db, {
+				...st,
+				tomorrow: {
+					day,
+					top3,
+					plan
+				}
+			});
+			return plan;
+		});
+	}
+	/** W14: Wednesday: where the week stands, rules only. */
+	async function midweek() {
+		return mirror.write((db) => {
+			const svc = services.services(db);
+			const st = load(db, svc.wallet.today());
+			save(db, {
+				...st,
+				midweek: true
+			});
+			const plan = svc.weekPlan.active();
+			const report = progressReport(svc.progress.input(financeSpending(financeStateFrom(db, null))));
+			const m = plan ? report.metrics.find((x) => x.id === plan.focus) : null;
+			const lines = [
+				"📊 <b>Midweek check</b>",
+				m ? `Week focus (${focusName(plan.focus)}): ${m.text}${m.target ? ` of ${m.targetText}` : ""}.` : "",
+				plan?.big3?.length ? `Big 3: ${plan.big3.filter((b) => b.done).length} of ${plan.big3.length} done${plan.big3.some((b) => !b.done) ? ` · still open: ${plan.big3.filter((b) => !b.done).map((b) => b.text).join(", ")}` : ""}.` : "",
+				...report.metrics.filter((x) => x.target && x.id !== plan?.focus && x.id !== "spend").slice(0, 3).map((x) => `${x.label}: ${x.text} of ${x.targetText}`)
+			].filter(Boolean);
+			const open = plan?.big3?.filter((b) => !b.done) ?? [];
+			lines.push(open.length ? `Thu–Sat needs: one block for each open big task (${open.length}). Want them booked?` : "On track. Keep the rhythm through the weekend.");
+			return lines.join("\n");
+		});
+	}
+	/** W13: the week's big 3 as blocks in free time, shown first (saved until you tap "Book them"). */
+	async function bookingPreview() {
+		const today = await mirror.read((db) => services.services(db).wallet.today());
+		const days = Array.from({ length: 7 }, (_, k) => addDays$3(today, k + ((/* @__PURE__ */ new Date()).getHours() >= 20 ? 1 : 0)));
+		const events = calendar ? await calendar.events((/* @__PURE__ */ new Date(`${days[0]}T00:00:00`)).toISOString(), (/* @__PURE__ */ new Date(`${days[6]}T23:59:59`)).toISOString()).catch(() => []) : [];
+		return mirror.write((db) => {
+			const svc = services.services(db);
+			const st = load(db, today);
+			const booking = bookBig3((svc.weekPlan.active()?.big3 ?? []).filter((b) => !b.done).map((b) => b.text), events, days, (/* @__PURE__ */ new Date()).toISOString());
+			save(db, {
+				...st,
+				booking
+			});
+			return booking;
+		});
+	}
+	async function bookWeek() {
+		const list = await mirror.read((db) => load(db, services.services(db).wallet.today()).booking ?? []);
+		if (!calendar || !list.length) return [];
+		const done = [];
+		for (const b of list) if (await calendar.create({
+			title: b.title,
+			start: (/* @__PURE__ */ new Date(`${b.day}T${b.start}:00`)).toISOString(),
+			end: (/* @__PURE__ */ new Date(`${b.day}T${b.end}:00`)).toISOString(),
+			description: "Week plan · booked by Ben in Life System"
+		}).then(() => true).catch(() => false)) done.push(`${b.day.slice(5)} ${b.start} ${b.title}`);
+		await mirror.write((db) => {
+			const st = load(db, services.services(db).wallet.today());
+			save(db, {
+				...st,
+				booking: []
+			});
+		});
+		return done;
+	}
+	/**
+	* W20: when "is Ben helping?" says not working yet, Ben changes ONE thing
+	* for next week (fewer nudges, the plan 30 minutes earlier, a gentler
+	* tone), in turn, and says what he changed.
+	*/
+	async function adaptIfNotWorking(verdict) {
+		if (verdict !== "not yet") return null;
+		return mirror.write((db) => {
+			const week = mondayOf(services.services(db).wallet.today());
+			let done = [];
+			try {
+				done = JSON.parse(getSetting(db, "coach_adapt") || "[]");
+			} catch {
+				done = [];
+			}
+			if (done.some((d) => d.week === week)) return null;
+			const order = [
+				"fewer-nudges",
+				"earlier-plan",
+				"gentler"
+			];
+			const change = order[done.length % order.length];
+			let line = "";
+			if (change === "fewer-nudges") {
+				const cur = JSON.parse(getSetting(db, "coach_nudges") || "{}");
+				setSetting(db, "coach_nudges", JSON.stringify({
+					...cur,
+					max: 5
+				}));
+				line = "fewer nudges: 5 a day at most, so each one counts";
+			} else if (change === "earlier-plan") {
+				const prefs = cleanPrefs(readJson(db, RHYTHM_PREFS, null));
+				const at = fromMin(Math.max(toMin("06:30"), toMin(prefs.autopilot ?? "07:30") - 30));
+				setSetting(db, RHYTHM_PREFS, JSON.stringify({
+					...prefs,
+					autopilot: at
+				}));
+				line = `your plan comes 30 minutes earlier (${at}), before the day runs away`;
+			} else {
+				const tone = loadStyle(db).tone;
+				saveStyle(db, { tone: Math.max(2, tone - 1) });
+				line = "a gentler tone: smaller steps, less pressure";
+			}
+			setSetting(db, "coach_adapt", JSON.stringify([...done, {
+				week,
+				change
+			}].slice(-20)));
+			return `🔧 It isn't working yet, so I'm changing one thing next week: ${line}.`;
+		});
 	}
 	async function setTop3(text) {
 		const top3 = readLines(text);
@@ -16303,18 +16542,25 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		const coachCheck = await mirror.read((db) => {
 			const svc = services.services(db);
 			const v = impactVerdict(scorecard(cleanHistory(readJson(db, COACH_HISTORY, null)), svc.progress.input(null, /* @__PURE__ */ new Date(), 70).focus, svc.wallet.today(), 8));
-			return `Is the coach working? ${{
-				working: "working, you are improving",
-				mixed: "mixed",
-				"not yet": "not working yet, we change something",
-				"too early": "too early to tell"
-			}[v.verdict]}${v.verdict === "too early" ? "" : ` (${v.lines.join("; ")})`}`;
+			return {
+				text: `Is the coach working? ${{
+					working: "working, you are improving",
+					mixed: "mixed",
+					"not yet": "not working yet, we change something",
+					"too early": "too early to tell"
+				}[v.verdict]}${v.verdict === "too early" ? "" : ` (${v.lines.join("; ")})`}`,
+				verdict: v.verdict
+			};
 		});
+		const adapt = await adaptIfNotWorking(coachCheck.verdict).catch(() => null);
+		const money = await moneyLine();
 		const goalLines = (await goalPlans().catch(() => [])).filter((p) => p.status !== "done").map((p) => `🎯 ${planLine(p)}`);
 		const lines = [
 			...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`),
 			...goalLines,
-			coachCheck
+			coachCheck.text,
+			...adapt ? [adapt] : [],
+			...money ? [`💸 ${money}`] : []
 		];
 		const ranked = report.metrics.filter((m) => m.target && m.id !== "spend").map((m) => ({
 			m,
@@ -16626,6 +16872,10 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		writeStory,
 		checkoutStart,
 		checkoutMark,
+		planTomorrow,
+		midweek,
+		bookingPreview,
+		bookWeek,
 		waterLine,
 		markWater,
 		trainingLine,
@@ -17657,7 +17907,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|m[ln])\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[ln])\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -17924,7 +18174,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				}
 				if (data === "rv|k") {
 					await answer("Saved for tomorrow");
-					const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.`;
+					const draft = await rhythm.planTomorrow().catch(() => null);
+					const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.${draft?.blocks.length ? ` Tomorrow's draft is ready: ${draft.blocks.length} block${draft.blocks.length === 1 ? "" : "s"} from ${draft.blocks[0].start}.` : ""}`;
 					await edit(text);
 					return text;
 				}
@@ -17932,6 +18183,34 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					const line = await rhythm.applyWeekly();
 					await answer("Week planned");
 					const text = `${esc(msg)}\n\n✅ ${esc(line)}`;
+					await edit(text, { inline_keyboard: [[{
+						text: "📅 Book the big 3 in my calendar",
+						callback_data: "rw|b"
+					}]] });
+					return text;
+				}
+				if (data === "rw|b") {
+					const list = await rhythm.bookingPreview();
+					await answer(list.length ? "Here they are" : "No free time found");
+					const text = list.length ? `📅 <b>The big 3 this week</b>, in your free time:\n${list.map((b) => `${(/* @__PURE__ */ new Date(`${b.day}T12:00:00`)).toLocaleDateString("en-GB", { weekday: "short" })} ${b.start}–${b.end} ${esc(b.title)}`).join("\n")}` : "No free time found for the big 3 this week (or they are done).";
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text,
+						parse_mode: "HTML",
+						...list.length ? { reply_markup: { inline_keyboard: [[{
+							text: "✅ Book them",
+							callback_data: "rw|y"
+						}, {
+							text: "Not now",
+							callback_data: "rw|n"
+						}]] } } : {}
+					});
+					return text;
+				}
+				if (data === "rw|y" || data === "rw|n") {
+					const done = data === "rw|y" ? await rhythm.bookWeek() : [];
+					await answer(data === "rw|y" ? `Booked ${done.length}` : "Not booked");
+					const text = `${esc(msg)}\n\n${data === "rw|y" ? `✅ Booked ${done.length} block${done.length === 1 ? "" : "s"}.` : "Not booked."}`;
 					await edit(text);
 					return text;
 				}
@@ -18066,6 +18345,29 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			}
 			const text = ok ? "✕ Dropped for today. Your calendar is up to date." : "Could not find that block anymore; it may already be gone.";
 			await answer(ok ? "Dropped" : "Not found");
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text
+			}).catch(() => null);
+			return text;
+		}
+		if (data.startsWith("sg|")) {
+			if (!await markSeen(key)) return null;
+			const s = suggestStake(data.slice(3) || "Focus", /* @__PURE__ */ new Date());
+			await mirror.write((db) => {
+				const d = loadDesk(db);
+				saveDesk(db, {
+					...d,
+					stakes: addStake(d.stakes, s.text, s.due, s.points, /* @__PURE__ */ new Date(), s.proof)
+				});
+			});
+			const text = `🎯 Deal: ${s.text}. ${s.points} points on it. It settles by itself when the focus log shows the 25 minutes.`;
+			await answer("Stake set");
 			await tg(update.__token, "editMessageReplyMarkup", {
 				chat_id: chat,
 				message_id: cq.message.message_id,
@@ -22365,6 +22667,25 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				note("skipped", text, `Quiet hours (${notifSet.quiet.from}–${notifSet.quiet.to}): in the bell instead`);
 				return false;
 			}
+			const dayKey = now.toLocaleDateString("sv-SE");
+			const own = !opts.urgent && !opts.notif && !/^\s*(🔔|⏰)/u.test(text);
+			if (own) {
+				if (await mirror.read((db) => {
+					try {
+						const c = JSON.parse(getSetting(db, "ben_sent_count") || "null");
+						return c?.day === dayKey ? Number(c.n) || 0 : 0;
+					} catch {
+						return 0;
+					}
+				}) >= 15) {
+					await mirror.write((db) => {
+						const n = notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
+						if (n) addNotif(db, n);
+					}).catch(() => null);
+					note("skipped", text, "Today's message budget is used up: in the bell instead");
+					return false;
+				}
+			}
 			const original = text;
 			const once = opts.always ? null : await mirror.read((db) => {
 				let prev = null;
@@ -22417,6 +22738,23 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				if (r.send) setSetting(db, BEN_SENT, JSON.stringify(r.next));
 			}).catch(() => null);
 			beat(healthDb, "telegram", true);
+			if (own) await mirror.write((db) => {
+				let c = {
+					day: dayKey,
+					n: 0
+				};
+				try {
+					const p = JSON.parse(getSetting(db, "ben_sent_count") || "null");
+					if (p?.day === dayKey) c = {
+						day: dayKey,
+						n: Number(p.n) || 0
+					};
+				} catch {}
+				setSetting(db, "ben_sent_count", JSON.stringify({
+					day: dayKey,
+					n: c.n + 1
+				}));
+			}).catch(() => null);
 			sent.push(text);
 			note("sent", text, text !== original ? "In his own words for this moment" : void 0, messageKind(original) ?? void 0);
 			await mirror.write((db) => {
@@ -22517,6 +22855,18 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				await sysSet(healthDb, "ben_cal_seen", JSON.stringify(seenNow));
 				for (const ch of calendarChanges(prev, seenNow, now, must)) {
 					const subject = (must ?? "Focus").split(/\s+/).slice(0, 3).join(" ").slice(0, 28);
+					if (ch.kind === "added" && calendar.move) {
+						const s0 = Date.parse(ch.ev.start);
+						const e0 = Date.parse(ch.ev.end);
+						const hit = evs.filter((e) => isFocusBlock(e) && e.ours && Date.parse(e.start) < e0 && Date.parse(e.end) > s0);
+						for (const b of hit) {
+							const day = new Date(b.start).toLocaleDateString("sv-SE");
+							const len = Math.round((Date.parse(b.end) - Date.parse(b.start)) / 6e4);
+							const after = day === now.toLocaleDateString("sv-SE") ? now.toTimeString().slice(0, 5) : "08:00";
+							const slot = nextSlot(evs.filter((e) => e.id !== b.id), day, after, len);
+							if (slot && await calendar.move(b.calendarId, b.id, (/* @__PURE__ */ new Date(`${day}T${slot.start}:00`)).toISOString(), (/* @__PURE__ */ new Date(`${day}T${slot.end}:00`)).toISOString()).then(() => true).catch(() => false)) ch.text += `\n↪️ It was on top of <b>${escapeHtml(b.title)}</b>, so I moved that to ${slot.start}–${slot.end}.`;
+						}
+					}
 					await send(ch.text, ch.kind === "cancelled" && ch.freeMin && ch.freeMin >= 25 ? { inline_keyboard: [[{
 						text: `▶ ${Math.min(90, ch.freeMin)} min: ${subject}`,
 						callback_data: `fo|${subject}`
@@ -22612,7 +22962,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			}
 		}
 		const blockNow = events.find((e) => isFocusBlock(e) && Date.parse(e.start) <= now.getTime() - 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
-		if (blockNow && !st.focus.running && !paused && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
+		if (blockNow && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
 			const subject = blockSubject(blockNow.title).slice(0, 28);
 			const later = `bx|${blockNow.id}`.length <= 64 ? [{
 				text: "↪️ Next free time",
@@ -22686,6 +23036,28 @@ var readOutbox = (db) => {
 var outboxAdd = (list, m) => [...list.filter((x) => x.text !== m.text), m].slice(-20);
 /** Stakes (points taken when time is up, a reminder an hour before), study reviews, mood, the Sunday call. */
 async function deskTick(mirror, services, now, send, esc) {
+	const proven = await mirror.write((db) => {
+		const svc = services.services(db);
+		const d = loadDesk(db);
+		const f = svc.focus.state(now);
+		const today = svc.wallet.today(now);
+		const wake = db.prepare("SELECT wake_time FROM sleep_logs WHERE day = ?").get(today)?.wake_time ?? null;
+		const workout = (svc.wallet.summary(now).todayRules ?? []).includes("body.workout_done");
+		const ok = d.stakes.filter((st) => st.status === "open" && proofMet(st, {
+			sessions: f.todaySessions,
+			workoutSince: workout,
+			wakeTime: wake
+		}));
+		if (!ok.length) return [];
+		let stakes = d.stakes;
+		for (const st of ok) stakes = keepStake(stakes, st.id, now);
+		saveDesk(db, {
+			...d,
+			stakes
+		});
+		return ok;
+	}).catch(() => []);
+	for (const st of proven) await send(esc(`💎 Stake kept, the log shows it: "${st.text}". Your ${st.points} points are safe.`)).catch(() => null);
 	const lost = await mirror.write((db) => {
 		const svc = services.services(db);
 		const d = loadDesk(db);
@@ -22883,6 +23255,10 @@ async function benActs(env, now, send, state, on, time) {
 				text: "✕ Drop",
 				callback_data: `bd|${m.event.id}`
 			}] : [];
+			const stake = `sg|${subject}`.length <= 64 ? [[{
+				text: "🎯 Put 50 points on doing it today",
+				callback_data: `sg|${subject}`
+			}]] : [];
 			await send(missedTwiceText(m.event.title), { inline_keyboard: [[
 				{
 					text: `▶ 25 min now`,
@@ -22890,7 +23266,7 @@ async function benActs(env, now, send, state, on, time) {
 				},
 				...tomorrow,
 				...drop
-			]] });
+			], ...stake] });
 			continue;
 		}
 		await mark({ moved: [m.event.id] });
@@ -23017,10 +23393,18 @@ async function rhythmTick(env, now, send) {
 		}
 	}
 	await benActs(env, now, send, f.state, f.prefs.on, f.facts.time).catch((e) => console.error("ben acts:", e));
-	const jobs = dueRhythm(f.state, f.prefs, f.facts);
+	const due0 = dueRhythm(f.state, f.prefs, f.facts);
+	const mergeWater = due0.includes("water") && due0.includes("training");
+	const jobs = mergeWater ? due0.filter((x) => x !== "water") : due0;
 	for (const job of jobs) if (job === "briefing") {
 		const { plan, version } = await bots.rhythm.propose();
 		await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD);
+	} else if (job === "midweek") {
+		const text = await bots.rhythm.midweek();
+		await send(text, text.includes("Want them booked") ? { inline_keyboard: [[{
+			text: "📅 Book them",
+			callback_data: "rw|b"
+		}]] } : void 0);
 	} else if (job === "replan") {
 		const { plan, version } = await bots.rhythm.propose();
 		await send(`🕐 <b>Half a day left</b>: here's a plan for the rest of it.\n\n${proposalText(plan, { version })}`, PROPOSAL_KEYBOARD);
@@ -23036,14 +23420,18 @@ async function rhythmTick(env, now, send) {
 			}]] }, { always: true });
 			await bots.rhythm.markWater();
 		}
-	} else if (job === "training") await send(await bots.rhythm.trainingLine(), { inline_keyboard: [[{
-		text: "🏋️ Start workout",
-		callback_data: "wk|show"
-	}, {
-		text: "😴 30 min",
-		callback_data: "ns|"
-	}]] });
-	else if (job === "weekly") {
+	} else if (job === "training") {
+		const water = mergeWater ? await bots.rhythm.waterLine().catch(() => null) : null;
+		const due = !!water;
+		await send(`${await bots.rhythm.trainingLine()}${due ? `\n\n${water}` : ""}`, { inline_keyboard: [[{
+			text: "🏋️ Start workout",
+			callback_data: "wk|show"
+		}, {
+			text: "😴 30 min",
+			callback_data: "ns|"
+		}]] });
+		if (due) await bots.rhythm.markWater();
+	} else if (job === "weekly") {
 		await send(weeklyText(await bots.rhythm.weekly()), WEEKLY_KEYBOARD);
 		await bots.rhythm.writeStory().catch(() => null);
 		const letter = await bots.rhythm.letter().catch(() => null);
@@ -23065,7 +23453,8 @@ async function rhythmTick(env, now, send) {
 			return payOnce(svc.wallet, `weekfocus:${plan.week}`, 50, `Week focus reached: ${m.label}`) ? `\n\n🏆 Week focus reached: <b>${m.label}</b> (${m.text}). +50 points.` : "";
 		});
 		const goalText = r.goals.length ? `\n\n🎯 <b>Goals</b>\n${r.goals.map((g) => escapeHtml(g)).join("\n")}${r.rebooked.length ? `\n${r.rebooked.map((x) => escapeHtml(x)).join("\n")}` : ""}` : "";
-		await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + bonus, r.top3.length ? REVIEW_KEYBOARD : void 0);
+		const moneyText = r.money ? `\n\n💸 ${escapeHtml(r.money)}` : "";
+		await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + bonus, r.top3.length ? REVIEW_KEYBOARD : void 0);
 	}
 }
 /** The app: today's rhythm (state), or an action on it. */

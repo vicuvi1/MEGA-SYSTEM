@@ -32,6 +32,10 @@ export interface RhythmState {
   asked?: string[]
   /** "Rescue my day" offered today (W1). */
   rescued?: boolean
+  /** The midweek check went out (W14, Wednesdays). */
+  midweek?: boolean
+  /** Big-3 blocks Ben proposed for the week, waiting for "Book them" (W13). */
+  booking?: { title: string; day: string; start: string; end: string }[]
   /** The honest end-of-day check-out (W6): what you say you did, never paid. */
   checkout?: { items: string[]; marks: (null | 'k' | 'p' | 'x')[] }
   briefing?: { status: 'proposed' | 'approved'; sentAt: string; plan: DayProposal; version: number }
@@ -39,7 +43,7 @@ export interface RhythmState {
   water: string[]
   training?: boolean
   /** Tomorrow's top 3 from the evening review (they become the morning's must-dos). */
-  tomorrow?: { day: string; top3: string[] }
+  tomorrow?: { day: string; top3: string[]; /** W18: tomorrow's plan, drafted the evening before. */ plan?: DayProposal }
   /** The Sunday of the last weekly review, and its suggested plan. */
   weekly?: { day: string; focus: string; note: string; big3: string[] }
 }
@@ -94,7 +98,7 @@ export interface RhythmFacts {
   paused: boolean
 }
 
-export type RhythmJob = 'briefing' | 'replan' | 'evening' | 'weekly' | 'water' | 'training'
+export type RhythmJob = 'briefing' | 'replan' | 'midweek' | 'evening' | 'weekly' | 'water' | 'training'
 
 /** What the coach should send now (in order). */
 export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts): RhythmJob[] {
@@ -111,6 +115,8 @@ export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts
   if (!f.paused && prefs.water && waterBehind(state, f)) out.push('water')
   if (!f.paused && prefs.training && !f.workoutDone && !state.training && t >= toMin('18:00') && t < toMin('21:00')) out.push('training')
   if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push('weekly')
+  // W14: Wednesday, 90 minutes before the evening review: where the week stands.
+  if (f.weekday === 3 && !state.midweek && t >= toMin(prefs.evening) - 90 && t < toMin(prefs.evening)) out.push('midweek')
   if (!state.evening && t >= toMin(prefs.evening)) out.push('evening')
   return out
 }
@@ -409,6 +415,41 @@ export function weeklyText(o: { score: number; prevScore: number; lines: string[
 }
 
 export const WEEKLY_KEYBOARD = { inline_keyboard: [[{ text: '✅ Use this plan', callback_data: 'rw|a' }, { text: '✏️ Change', callback_data: 'rw|e' }]] }
+
+/**
+ * W13: the week's big 3 as calendar blocks in free time: each task gets
+ * `perTask` blocks of `minutes`, spread over the coming days (one per task
+ * per day), between 09:00 and 20:00. Shown first; booked only on "Book them".
+ */
+export function bookBig3(big3: string[], events: CalEvent[], days: string[], nowIso: string, perTask = 2, minutes = 50): { title: string; day: string; start: string; end: string }[] {
+  const out: { title: string; day: string; start: string; end: string }[] = []
+  const taken: CalEvent[] = [...events]
+  const now = new Date(nowIso)
+  const todayKey = now.toLocaleDateString('sv-SE')
+  const left = new Map(big3.map((t) => [t, perTask]))
+  for (const day of days) {
+    for (const title of big3) {
+      if ((left.get(title) ?? 0) <= 0) continue
+      const from = day === todayKey ? quarter(now.toTimeString().slice(0, 5)) : '09:00'
+      const gap = freeGaps(taken, day, { after: from < '09:00' ? '09:00' : from, to: '20:00', minMinutes: minutes + 10 })[0]
+      if (!gap) continue
+      const end = fromMin(toMin(gap.start) + minutes)
+      out.push({ title: `🎯 ${title}`.slice(0, 80), day, start: gap.start, end })
+      taken.push({ id: `b${out.length}`, calendarId: '', title, start: new Date(`${day}T${gap.start}:00`).toISOString(), end: new Date(`${day}T${fromMin(toMin(gap.start) + minutes + 10)}:00`).toISOString(), allDay: false })
+      left.set(title, (left.get(title) ?? 0) - 1)
+    }
+  }
+  return out
+}
+
+/** W18: last night's draft still fits this morning (no block over a new event). */
+export function draftFits(plan: DayProposal, events: CalEvent[]): boolean {
+  return plan.blocks.every((b) => {
+    const s = Date.parse(`${plan.day}T${b.start}:00`)
+    const e = s + b.minutes * 60000
+    return !events.some((x) => !x.allDay && Date.parse(x.start) < e && Date.parse(x.end) > s)
+  })
+}
 export const WEEK_ASK = "Next week's 3 big tasks? One per line."
 
 /** "1. a\n2) b\n- c" → ['a','b','c'] (at most 3). */
