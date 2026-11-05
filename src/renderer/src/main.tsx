@@ -35,6 +35,12 @@ if (isIsland) {
   void Promise.all([import('./appStyles'), import('./HudBar')]).then(([, { HudBar }]) => root.render(<StrictMode><HudBar /></StrictMode>))
 } else {
   void import('./errorReport').then((m) => m.installErrorReport())
+  // The soak test (e2e/soak.mjs) makes changes through the app's own functions, only when it set this flag in its browser.
+  try {
+    if (localStorage.getItem('life_soak') === '1') void import('./bridge').then((m) => ((window as any).__life = m.life))
+  } catch {
+    /* private window */
+  }
   // The desktop-only parts (title bar, island feed, auto backups) load only in
   // the desktop app; the website never downloads them.
   const desk = window.desktop

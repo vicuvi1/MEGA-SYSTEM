@@ -346,7 +346,10 @@ export function createTursoWebBridge(): Bridge {
   // minutes for the island). Changing an event clears it.
   let gStatus: { at: number; j: any } | null = null
   let gWins: { from: number; to: number; at: number; events: any[] }[] = []
-  const calendarTtl = () => (document.visibilityState === 'visible' ? 60_000 : window.desktop ? 5 * 60_000 : Infinity)
+  // A minute while you use the app; 5 minutes when it sits open untouched (or in the desktop tray).
+  let lastInput = Date.now()
+  for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, () => (lastInput = Date.now()), { passive: true })
+  const calendarTtl = () => (document.visibilityState === 'visible' ? (Date.now() - lastInput < 3 * 60_000 ? 60_000 : 5 * 60_000) : window.desktop ? 5 * 60_000 : Infinity)
   const forgetCalendar = () => {
     gWins = []
   }
@@ -633,6 +636,12 @@ export function createTursoWebBridge(): Bridge {
         .then((j: any) => !!j.configured)
         .catch(() => false)
   const aiP = svcP.then((svc) => createWebAi(svc, serverAi(currentSession), () => aiOnP, { on: () => todoistOnP, quickAdd: (text) => todoist.quickAdd(text) }))
+  // CL2: Ben's log is read every minute by several cards; each read used to ask the server too
+  // (175 calls an idle hour). The live loop keeps the copy fresh; here only a copy over 5 minutes old is refreshed.
+  const freshCopy = async () => {
+    const m = await mirrorP
+    if (!m.pendingOffline && (!m.syncedAt || Date.now() - Date.parse(m.syncedAt) > 5 * 60_000)) await m.refresh().catch(() => false)
+  }
   const syncNow = async () => {
     const m = await mirrorP
     await m.refresh()
@@ -690,7 +699,7 @@ export function createTursoWebBridge(): Bridge {
         void syncNow().catch(() => null)
         return last
       },
-      memory: async () => (await mirrorP).refresh().then(() => svcP).then((svc) => svc.read((s) => ({ facts: loadMemory(s.db).facts }))),
+      memory: async () => freshCopy().then(() => svcP).then((svc) => svc.read((s) => ({ facts: loadMemory(s.db).facts }))),
       setFacts: async (facts: { t: string; at: string }[]) => {
         await (await svcP).write((s) => saveMemory(s.db, { ...loadMemory(s.db), facts }))
       },
@@ -775,7 +784,7 @@ export function createTursoWebBridge(): Bridge {
       },
       profile: async () => (await svcP).read((s) => loadProfile(s.db)),
       saveProfile: async (p: { about: string; goals: string[]; rules: string[] }) => (await svcP).write((s) => saveProfile(s.db, p)),
-      log: async () => (await mirrorP).refresh().then(() => svcP).then((svc) => svc.read((s) => loadLog(s.db))),
+      log: async () => freshCopy().then(() => svcP).then((svc) => svc.read((s) => loadLog(s.db))),
       model: async () => {
         const r = await fetch('/api/ai', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: '{"op":"status"}' }).catch(() => null)
         const j = r ? await r.json().catch(() => ({})) : {}

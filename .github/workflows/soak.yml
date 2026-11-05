@@ -1,0 +1,28 @@
+# Every night: the soak test (e2e/soak.mjs). The real app on the test server,
+# with a fake clock through a night and a day and two years of made-up
+# history: memory, listeners, server calls per idle hour, offline and an
+# outage, a database version bump, the day turning at 04:00. A red run means
+# something would break after weeks of an open tab.
+name: Soak test
+on:
+  schedule:
+    - cron: '23 1 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  soak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:web
+      - name: Soak (a simulated day and a half, two years of history)
+        run: |
+          npx playwright install --with-deps chromium
+          node e2e/soak.mjs --months=24

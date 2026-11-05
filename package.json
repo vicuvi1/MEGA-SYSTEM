@@ -20,7 +20,8 @@
     "vercel-build": "vitest run && tsc --noEmit -p tsconfig.json && vite build --config vite.bot.mts && vite build --config vite.web.mts",
     "dist": "npm run build:electron && electron-builder --win --publish never",
     "release": "node scripts/release.mjs",
-    "smoke": "npm run build:web && node e2e/smoke.mjs"
+    "smoke": "npm run build:web && node e2e/smoke.mjs",
+    "soak": "node e2e/soak.mjs"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

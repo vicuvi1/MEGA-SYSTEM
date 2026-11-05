@@ -223,10 +223,12 @@ function capAnswer(r) {
 // For the soak test (e2e/soak.mjs): calls counted by path, and "the server is down" on demand.
 const stats = { calls: {}, tooBig: 0 }
 let down = false
+let schemaOld = false
 function e2eControl(q, r) {
   const b = q.body || {}
   if (b.op === 'down') down = !!b.on
-  if (b.op === 'reset') stats.calls = {}
+  if (b.op === 'schema') schemaOld = !!b.on
+  if (b.op === 'reset') (stats.calls = {}), (stats.db = undefined)
   if (b.op === 'sql') {
     try {
       const out = db.exec(String(b.sql))
@@ -262,7 +264,14 @@ http
         if (n === '_e2e') return e2eControl(q, r)
         const key = n + (q.body?.op ? `:${q.body.op}` : url.searchParams.get('job') ? `:${url.searchParams.get('job')}` : '')
         stats.calls[key] = (stats.calls[key] ?? 0) + 1
+        if (n === 'db' && process.env.SOAK_DEBUG) {
+          const first = (q.body.requests ?? []).map((x) => x.stmt?.sql ?? x.batch?.steps?.map((st) => st.stmt.sql).join(';') ?? '').join(' | ').slice(0, 90)
+          stats.db = stats.db ?? {}
+          stats.db[first] = (stats.db[first] ?? 0) + 1
+        }
         if (down) return ((r.statusCode = 503), r.end('{"error":"down for the soak test"}'))
+        // The soak test's "new database version": writes from this page are refused until it reloads (LT22).
+        if (schemaOld && n === 'db' && /\b(INSERT|UPDATE|DELETE)\b/i.test(body)) return (r.setHeader('Content-Type', 'application/json'), (r.statusCode = 409), r.end('{"error":"A new version is out — please reload","reload":true}'))
         // A stand-in for Ben's server tick (the app wakes it every few minutes).
         if (n === 'cron') return (r.setHeader('Content-Type', 'application/json'), r.end('{"ok":true,"skipped":true}'))
         if (n === 'google') return gcal(q, r)
