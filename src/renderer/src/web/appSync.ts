@@ -100,6 +100,13 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       const mine = parse(localRaw)
       merged = mine ? pruneDeleted(spec, spec.merge(mine, remoteNow!.data, false), parse(synced), share(mine), remoteNow!.data) : fromShared(remoteNow!.data)
     }
+    // You changed the app again while this sync was waiting (Y4): never overwrite
+    // that newer edit; the next run merges it.
+    if (get(spec.localKey) !== localRaw) {
+      if (localChanged) set(SYNCED, JSON.stringify(share(merged)))
+      soon()
+      return
+    }
     set(SYNCED, JSON.stringify(share(merged)))
     const next = JSON.stringify(merged)
     if (next !== localRaw) {

@@ -134,6 +134,12 @@ export function createFinanceInbox(mirror: Mirror, store: Storage | null = typeo
     }
     if (!raw) return 0 // no Finance Helper on this device, or its data is locked
     const inbox = await mirror.read((db) => parse<InboxEntry[]>(getSetting(db as any, SETTING), []))
+    // Read Finance Helper again after the wait: it may have saved meanwhile (Y4).
+    try {
+      raw = store.getItem(FINANCE_KEY) ?? raw
+    } catch {
+      /* keep the first read */
+    }
     const { state, added } = applyInbox(parse<any>(raw, null), inbox)
     if (!added) return 0
     try {
