@@ -296,8 +296,6 @@ export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWal
   const planNow = plan !== undefined && (editing || shouldPlan(plan, r.to))
   return (
     <div className="pg">
-      {planNow && <WeekPlanner report={r} plan={plan ?? null} today={r.to} onDone={() => setEditing(false)} />}
-      {!planNow && active && <WeekCard plan={active} report={r} onEdit={() => setEditing(true)} />}
       <section className="panel pg-hero">
         <ScoreRing score={r.score} />
         <div className="pg-hero-text">
@@ -313,6 +311,9 @@ export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWal
           <p className="hint">The score is how close your last 7 days came to a good week in each area (the goal under each bar). Arrows compare with the 7 days before.</p>
         </div>
       </section>
+      {/* The score first, then planning the week (V6). */}
+      {planNow && <WeekPlanner report={r} plan={plan ?? null} today={r.to} onDone={() => setEditing(false)} />}
+      {!planNow && active && <WeekCard plan={active} report={r} onEdit={() => setEditing(true)} />}
       <GrowthSections />
       {ins && <Streaks ins={ins} />}
       {ins && <YearHeatmap ins={ins} />}
