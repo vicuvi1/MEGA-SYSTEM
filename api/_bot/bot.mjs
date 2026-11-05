@@ -1729,7 +1729,19 @@ function addReps(st, name, amount, today) {
 * how much water a short message means (ml), or null. A small number with
 * "water" and no unit ("water 15") is a bottle bought (money), not drunk.
 */
+/** Edit distance, for typos like "eawster", "watr", "wtaer". */
+var near = (a, b) => {
+	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+	for (let j = 1; j <= b.length; j++) d[0][j] = j;
+	for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+	return d[a.length][b.length];
+};
 function parseWater(text, glass = 250) {
+	const typo = /^([a-z]{4,8})\s*\+?(\d{2,4})$|^\+?(\d{2,4})\s*([a-z]{4,8})$/i.exec(text.trim());
+	if (typo) {
+		const w = (typo[1] ?? typo[4]).toLowerCase();
+		if (w !== "water" && w.includes("w") && w.includes("t") && near(w, "water") <= 3) text = `water ${typo[2] ?? typo[3]}`;
+	}
 	const t = text.trim().toLowerCase();
 	if (t.length > 40 || /\b(lei|mdl|ron|leu|\$|€|usd|eur)\b/.test(t)) return null;
 	const word = /(water|apa|apă|вод[аыу]|drank|drink)/.test(t);
@@ -2304,6 +2316,16 @@ var ASKED = {
 /** Did his own message ask for this kind of action? */
 /** Text that tries to give Ben orders ("SYSTEM:", "ignore your rules", a quoted order) never counts as your own ask. */
 var INJECTION = /(^|\n)\s*(system|assistant|developer)\s*:|ignore (all |any )?(your |the |previous )?(rules|instructions)|\bjailbreak\b|[“"«][^”"»]*\b(delete|remove|cancel)\b[^”"»]*[”"»]/i;
+/** A log action matches your words: water needs water/ml/glass/drank; reps need the exercise (or reps/sets). */
+function loggedInText(text, a) {
+	const t = String(text ?? "").toLowerCase();
+	if (a.kind === "water") return /water|apa|apă|вод|\bml\b|\d\s*l\b|glass|pahar|drank|drunk|drink|выпил|am băut|am baut/.test(t);
+	if (a.kind === "reps") {
+		const ex = String(a.exercise ?? "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 4);
+		return !!ex && t.replace(/[^a-z]/g, "").includes(ex) || /\b(reps?|sets?|push|sit|squat|pull|press|flotari|abdomene|genuflex)/.test(t);
+	}
+	return true;
+}
 function askedFor(text, risk) {
 	const t = String(text ?? "");
 	if (INJECTION.test(t)) return false;
@@ -16998,7 +17020,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}
 		acts = acts.filter((a) => {
 			const risk = riskOf(a);
-			if (!risk || askedFor(text, risk)) return true;
+			if (!risk || askedFor(text, risk) && (risk !== "log" || loggedInText(text, a))) return true;
 			const what = a.kind === "delevent" ? made.refs.events.get(a.ref)?.title ?? "that event" : a.kind === "deltask" ? made.refs.tasks.get(a.ref)?.content ?? "that task" : a.kind === "delmoney" ? "that money record" : a.kind === "shift" ? `${a.refs.length} blocks` : a.kind === "reward" ? a.title : a.kind === "habit" ? a.habit : a.kind === "reps" ? `${a.amount} ${a.exercise}` : a.kind === "water" ? `${a.ml} ml water` : "";
 			out.buttons = [...out.buttons ?? [], confirmButton(risk, what)].slice(0, 3);
 			return false;

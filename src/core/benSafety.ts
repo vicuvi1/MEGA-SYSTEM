@@ -39,6 +39,17 @@ const ASKED: Record<RiskKind, RegExp> = {
 /** Text that tries to give Ben orders ("SYSTEM:", "ignore your rules", a quoted order) never counts as your own ask. */
 export const INJECTION = /(^|\n)\s*(system|assistant|developer)\s*:|ignore (all |any )?(your |the |previous )?(rules|instructions)|\bjailbreak\b|[“"«][^”"»]*\b(delete|remove|cancel)\b[^”"»]*[”"»]/i
 
+/** A log action matches your words: water needs water/ml/glass/drank; reps need the exercise (or reps/sets). */
+export function loggedInText(text: string, a: { kind: string; exercise?: string }): boolean {
+  const t = String(text ?? '').toLowerCase()
+  if (a.kind === 'water') return /water|apa|apă|вод|\bml\b|\d\s*l\b|glass|pahar|drank|drunk|drink|выпил|am băut|am baut/.test(t)
+  if (a.kind === 'reps') {
+    const ex = String(a.exercise ?? '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 4)
+    return (!!ex && t.replace(/[^a-z]/g, '').includes(ex)) || /\b(reps?|sets?|push|sit|squat|pull|press|flotari|abdomene|genuflex)/.test(t)
+  }
+  return true
+}
+
 export function askedFor(text: string, risk: RiskKind): boolean {
   const t = String(text ?? '')
   if (INJECTION.test(t)) return false

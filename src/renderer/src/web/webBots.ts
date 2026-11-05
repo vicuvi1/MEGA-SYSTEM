@@ -35,7 +35,8 @@ import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FAC
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
-import { askedFor, confirmButton, riskOf } from '@core/benSafety'
+import { askedFor, confirmButton,
+  loggedInText, riskOf } from '@core/benSafety'
 import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
 import { moodFace } from '@core/benKnows'
@@ -1426,7 +1427,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // Todoist can't make Ben delete or pay anything).
     acts = acts.filter((a) => {
       const risk = riskOf(a as any)
-      if (!risk || askedFor(text, risk)) return true
+      if (!risk || (askedFor(text, risk) && (risk !== 'log' || loggedInText(text, a as any)))) return true
       const what =
         a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : a.kind === 'reps' ? `${a.amount} ${a.exercise}` : a.kind === 'water' ? `${a.ml} ml water` : ''
       out.buttons = [...(out.buttons ?? []), confirmButton(risk, what)].slice(0, 3)

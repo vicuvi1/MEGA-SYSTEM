@@ -49,3 +49,16 @@ describe('"I am awake" logs the wake-up', () => {
     expect(parseTelegramText('woke up at 7:30')).toMatchObject({ type: 'wake', args: ['07:30'] })
   })
 })
+
+describe('typos and logs that must match your words', () => {
+  it('"eawster 250" is 250 ml of water; Ben cannot add push-ups to it', async () => {
+    const { parseWater } = await import('./sportShared')
+    const { loggedInText } = await import('./benSafety')
+    expect(parseWater('eawster 250')).toBe(250)
+    expect(parseWater('watr 500')).toBe(500)
+    expect(parseWater('taxi 250')).toBeNull()
+    expect(loggedInText('eawster 250', { kind: 'reps', exercise: 'Push-ups' })).toBe(false)
+    expect(loggedInText('did 30 pushups', { kind: 'reps', exercise: 'Push-ups' })).toBe(true)
+    expect(loggedInText('I am awake', { kind: 'water' })).toBe(false)
+  })
+})
