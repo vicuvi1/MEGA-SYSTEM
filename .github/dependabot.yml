@@ -12,7 +12,8 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Big upgrades are done by hand, with the desktop tested on Windows.
+      # Big upgrades are done by hand, with the desktop tested on Windows
+      # (a quarterly task: docs/PLAN.md, "Keeping the platform supported").
       - dependency-name: electron
         update-types: [version-update:semver-major]
       - dependency-name: sql.js

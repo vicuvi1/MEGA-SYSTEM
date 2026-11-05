@@ -84,12 +84,12 @@ Life System includes a unified 2-way Telegram Bot Command Center that connects a
 **Phases 0-11 are fully implemented (v1.2.0): Visual Motivation Engine (Real Photos, Multi-Currency LEI/USD, Dual Price Comparisons, Effort Grit Matrix), Solo Leveling Hunter Awakening Progression System (30 Described Ranks, Dynamic Attributes, Holographic System Window), Grand Unified Rewarding & Financial Ecosystem (Vault, Wishlists, Multipliers, Loot Tables), Telegram Bot Command Center (2-Way Remote Ledger Control), Standalone Sleep & Expense Hub, Streak Shield Economy, Full Data Export: Core economy, Tasks + Schedule, Discipline (MAN), Sleep (Waky), Body & Training workouts, Finance Helper money tracking, Daily Rituals hub, Telegram bot nudges, custom backups, and desktop installer.**
 
 Apps inside Life System (same screens, same features):
-- **Money → Finance Helper**: the real Finance Helper (copied into `apps/finance`) runs in its own tab with its desktop features: folder and Drive sync, daily backups in Documents\Finance Helper\Backups, Binance, Telegram bot and Ctrl+Alt+N quick add. `src/main/apps/finance.ts` replaces only its main.cjs.
-- **Discipline → MAN**: the MAN desktop page (`apps/man`) runs in its own tab.
+- **Money → Finance Helper**: the real Finance Helper (copied into `src/renderer/public/apps/finance`) runs in its own tab, on the website and in the desktop app.
+- **Discipline**: one built-in page (MAN is no longer embedded).
 - **Sleep → Waky**: Life System starts your installed Waky (no window of its own) and shows it in its tab, so its alarm, wake task and updates keep working.
 - On first start the standalone Finance Helper's and MAN's saved data is copied in (originals untouched). Secrets stored by the standalone apps (Telegram, Binance, Drive keys) are tied to those apps, so connect them once again inside Life System.
 - Each section has a second tab with Life System's own view (coins, streak, stats). Coins from Finance now come from the copy inside Life System, so its Drive sync file is no longer needed.
-- Refresh the copies with `node scripts/sync-apps.mjs --finance <checkout> --man <index.html>`.
+- The embedded apps live in `src/renderer/public/apps/` (the old root `apps/` copy and its sync script were removed).
 
 Connected apps (Sleep, Money, Connected apps pages):
 - Waky stays the alarm. Life System reads `data/waky.json`: each on-time wake-up pays +10 and each on-time bedtime +5, from the day you connect. Sleep shows this morning, the wake streak, on-time rate, a two-week chart and average sleep.

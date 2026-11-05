@@ -96,7 +96,7 @@ jobs:
       - name: Update config inside the app
         shell: bash
         run: |
-          printf 'provider: github\nowner: vicuvi1\nrepo: MEGA-SYSTEM\nprivate: true\nreleaseType: release\nupdaterCacheDirName: life-system-updater\n' > release/win-unpacked/resources/app-update.yml
+          printf 'provider: github\nowner: vicuvi1\nrepo: MEGA-SYSTEM\nprivate: false\nreleaseType: release\nupdaterCacheDirName: life-system-updater\n' > release/win-unpacked/resources/app-update.yml
           cat release/win-unpacked/resources/app-update.yml
       - name: The app opens on Windows
         shell: pwsh

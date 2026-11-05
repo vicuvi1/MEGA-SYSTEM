@@ -21,3 +21,26 @@ variables → Actions). Without them it keeps building unsigned.
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | the app registration |
 
 The next push to `main` builds a signed installer and signed updates.
+
+## Turning it on, step by step
+
+1. Azure portal → create a resource → **Trusted Signing Account** (pick a
+   region; its endpoint looks like `https://<region>.codesigning.azure.net`).
+2. In the account → **Identity validations** → New (Public, Organization or
+   Individual). Wait until it says Completed.
+3. **Certificate profiles** → Create → Public Trust, using that validation.
+4. Microsoft Entra ID → App registrations → New registration. Under
+   Certificates & secrets make a client secret. Note the tenant id, the
+   client id and the secret.
+5. In the Trusted Signing account → Access control (IAM) → add the role
+   **Trusted Signing Certificate Profile Signer** for that app registration.
+6. GitHub → the repo → Settings → Secrets and variables → Actions → add the
+   seven secrets above.
+7. Push anything under `src/` (or run the Release workflow by hand). The log
+   says "Signing with Azure Trusted Signing"; without the secrets it says
+   "No signing secrets: unsigned build" and still publishes, as before.
+
+Updates come from the public GitHub Releases of this repository
+(`publish.private: false` in package.json, and the same in the
+`app-update.yml` the workflow writes), so installed apps need no token.
+

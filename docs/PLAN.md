@@ -113,3 +113,18 @@ Order rationale: Phases 0-2 give a working wallet, tasks and schedule in the fir
 - Monthly real-money reward budget.
 - Whether to retire the MAN Android app once Discipline is trusted.
 - After approval: save a project memory note for this hub and add the new repo to the memory index.
+
+## Keeping the platform supported (recurring)
+- **Every quarter: Electron major.** Electron supports only its last three
+  majors (about 6 months each). Dependabot skips Electron majors on purpose
+  (CI here can't run the Windows app), so once a quarter bump `electron` by
+  hand on a branch, let `release.yml` build it and open it on Windows (its
+  "The app opens on Windows" step), try the island and auto-update on a real
+  PC, then merge.
+- **Node:** the repo runs on Node 22 (`.nvmrc`, `engines` in package.json, CI
+  and the release workflow). Move all four together when Node 22 leaves
+  long-term support (April 2027).
+- **Timers:** twice a year check Actions → "Coach tick" is enabled and
+  Settings → System health shows "Ben's timer" green.
+- **Backups:** once a quarter download one "Off-site backup" artifact and
+  decrypt it (docs/AI_HANDOFF.md, "Backups") to prove the passphrase works.
