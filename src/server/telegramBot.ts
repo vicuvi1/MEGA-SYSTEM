@@ -535,7 +535,18 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     }
   })
   let list = reminders
+  // "😴 30 min" and "⏸ Pause today" quiet the check-ins too, not only nudges (T1).
+  const hush = await mirror.read((db) => {
+    try {
+      const n = JSON.parse(getSetting(db as any, NUDGES_KEY) || '{}')
+      return n.pausedDay === today0 || (n.snoozeUntil && Date.parse(n.snoozeUntil) > now.getTime())
+    } catch {
+      return false
+    }
+  })
   for (const r of dueReminders(list, now)) {
+    // Plain reminders you set still ring; Ben's check-ins wait.
+    if (hush && r.kind === 'checkin') continue
     try {
       // Check-ins get sharper each time and name the week's missed promises.
       const went = await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined, { always: true })

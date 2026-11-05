@@ -16545,7 +16545,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd|m[ln])\|/.test(data)) return null;
+		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|m[ln])\|/.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -16702,7 +16702,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			onExpense?.();
 			return text;
 		}
-		if (data.startsWith("fb|")) {
+		if (data.startsWith("bf|") || data.startsWith("fb|") && data.split("|").length === 3) {
 			if (!await markSeen(key)) return null;
 			const [, ms, kind] = data.split("|");
 			const at = new Date(Number(ms)).toISOString();
@@ -16720,7 +16720,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				});
 			});
 			await answer(kind === "up" ? "👍 Noted" : kind === "long" ? "Got it: shorter" : kind === "wrong" ? "Got it: tell me what was wrong" : "Noted: I will do better");
-			const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row) => !row.some((b) => String(b.callback_data ?? "").startsWith("fb|")));
+			const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row) => !row.some((b) => /^(bf|fb)\|\d+\|/.test(String(b.callback_data ?? ""))));
 			await tg(update.__token, "editMessageReplyMarkup", {
 				chat_id: chat,
 				message_id: cq.message.message_id,
@@ -18124,19 +18124,19 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			...r.ok && r.at ? [[
 				{
 					text: "👍",
-					callback_data: `fb|${Date.parse(r.at)}|up`
+					callback_data: `bf|${Date.parse(r.at)}|up`
 				},
 				{
 					text: "👎",
-					callback_data: `fb|${Date.parse(r.at)}|down`
+					callback_data: `bf|${Date.parse(r.at)}|down`
 				},
 				{
 					text: "📏 Too long",
-					callback_data: `fb|${Date.parse(r.at)}|long`
+					callback_data: `bf|${Date.parse(r.at)}|long`
 				},
 				{
 					text: "❌ Wrong",
-					callback_data: `fb|${Date.parse(r.at)}|wrong`
+					callback_data: `bf|${Date.parse(r.at)}|wrong`
 				}
 			]] : []
 		];
@@ -20875,14 +20875,25 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			}
 		});
 		let list = reminders;
-		for (const r of dueReminders(list, now)) try {
-			if (!await send(r.kind === "checkin" ? followUpText({
-				...r,
-				text: esc(r.text)
-			}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0, { always: true })) continue;
-			list = afterSend(list, r.id, now);
-			if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
-		} catch {}
+		const hush = await mirror.read((db) => {
+			try {
+				const n = JSON.parse(getSetting(db, "coach_nudges") || "{}");
+				return n.pausedDay === today0 || n.snoozeUntil && Date.parse(n.snoozeUntil) > now.getTime();
+			} catch {
+				return false;
+			}
+		});
+		for (const r of dueReminders(list, now)) {
+			if (hush && r.kind === "checkin") continue;
+			try {
+				if (!await send(r.kind === "checkin" ? followUpText({
+					...r,
+					text: esc(r.text)
+				}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0, { always: true })) continue;
+				list = afterSend(list, r.id, now);
+				if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
+			} catch {}
+		}
 		if (list !== reminders) await mirror.write((db) => setSetting(db, REMINDERS, JSON.stringify(list)));
 		try {
 			await rhythmTick(env, now, send);

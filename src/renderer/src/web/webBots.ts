@@ -716,7 +716,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|md|sk|sr|bd|m[ln])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|m[ln])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -821,7 +821,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       return text
     }
     // 👍 / 👎 / too long / wrong on a reply: saved, and Ben adjusts.
-    if (data.startsWith('fb|')) {
+    // Feedback is "bf|ms|kind" (old messages: "fb|ms|kind"); "fb|<id>" alone is the money card's ⬅️ Back (T1).
+    if (data.startsWith('bf|') || (data.startsWith('fb|') && data.split('|').length === 3)) {
       if (!(await markSeen(key))) return null
       const [, ms, kind] = data.split('|')
       const at = new Date(Number(ms)).toISOString()
@@ -831,7 +832,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       })
       await answer(kind === 'up' ? '👍 Noted' : kind === 'long' ? 'Got it: shorter' : kind === 'wrong' ? 'Got it: tell me what was wrong' : 'Noted: I will do better')
       // Keep the other buttons, drop the feedback row (it's been answered).
-      const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row: any[]) => !row.some((b) => String(b.callback_data ?? '').startsWith('fb|')))
+      const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row: any[]) => !row.some((b) => /^(bf|fb)\|\d+\|/.test(String(b.callback_data ?? ''))))
       await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: kb } }).catch(() => null)
       return null
     }
@@ -2048,7 +2049,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       ...(telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? []),
       ...(r.at && r.undo?.some(Boolean) ? [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] : []),
       // Feedback: Ben learns what you like.
-      ...(r.ok && r.at ? [[{ text: '👍', callback_data: `fb|${Date.parse(r.at)}|up` }, { text: '👎', callback_data: `fb|${Date.parse(r.at)}|down` }, { text: '📏 Too long', callback_data: `fb|${Date.parse(r.at)}|long` }, { text: '❌ Wrong', callback_data: `fb|${Date.parse(r.at)}|wrong` }]] : [])
+      ...(r.ok && r.at ? [[{ text: '👍', callback_data: `bf|${Date.parse(r.at)}|up` }, { text: '👎', callback_data: `bf|${Date.parse(r.at)}|down` }, { text: '📏 Too long', callback_data: `bf|${Date.parse(r.at)}|long` }, { text: '❌ Wrong', callback_data: `bf|${Date.parse(r.at)}|wrong` }]] : [])
     ]
     const markup = r.keyboard ?? (rows.length ? { inline_keyboard: rows } : null)
     const widgets = r.ok && r.show?.length ? await widgetText(r.show).catch(() => '') : ''
