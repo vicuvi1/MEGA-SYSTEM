@@ -2,7 +2,8 @@
 // Telegram keys out of the page: the app logs in with its PIN, gets a
 // session, and sends its database requests here. Files starting with "_"
 // are not functions on Vercel.
-import { createHash, createHmac, scrypt, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { revokedSids } from './_devices.mjs'
 
 const DEFAULT_PIN = '2007' // only while no PIN was ever set, like the app
 const SESSION_DAYS = 30
@@ -75,8 +76,9 @@ export const sign = (secret, data) => createHmac('sha256', secret).update(data).
  * and the sign-out counter. Changing the PIN or "Sign out all devices"
  * changes the epoch, and every older session stops working.
  */
-export function makeSession(cfg, now = Date.now(), ep = '') {
-  const data = b64(JSON.stringify({ exp: now + SESSION_DAYS * 86400_000, ep }))
+export function makeSession(cfg, now = Date.now(), ep = '', sid = randomBytes(9).toString('base64url')) {
+  // sid: this device's id (A6), so one device can be signed out on its own.
+  const data = b64(JSON.stringify({ exp: now + SESSION_DAYS * 86400_000, ep, sid }))
   return `${data}.${sign(cfg.secret, data)}`
 }
 
@@ -113,7 +115,10 @@ export async function sessionOk(cfg, token, now = Date.now(), fetchImpl = fetch)
   const p = sessionSigned(cfg, token, now)
   if (!p) return false
   try {
-    return p.ep === (await liveEpoch(cfg, fetchImpl, now))
+    if (p.ep !== (await liveEpoch(cfg, fetchImpl, now))) return false
+    // A device signed out on its own (A6).
+    if (p.sid && (await revokedSids(cfg, fetchImpl, now)).has(p.sid)) return false
+    return true
   } catch {
     return false
   }

@@ -32,6 +32,7 @@ import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { addDays } from '@core/dates'
 import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
+import { DevicesPanel } from '../DevicesPanel'
 import { timeAgo, useAction } from '../ui'
 import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundSystemOracle, soundWarning } from '../sound'
 
@@ -694,6 +695,7 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
             <span className="hint small">A lost phone or an old browser? This ends their access. Changing the PIN does it too.</span>
           </div>
         )}
+        <DevicesPanel />
         {life.auth.setupPasskey && passkeySupported() && (
           <div className="row" style={{ marginTop: 8 }}>
             <button

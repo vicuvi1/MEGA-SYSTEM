@@ -359,6 +359,12 @@ export interface VerifyResult {
   detail: string
 }
 
+export interface DeviceList {
+  devices: { sid: string; label: string; created: number; lastSeen: number }[]
+  passkeys: { id: string; label: string; created: number }[]
+  current: string | null
+}
+
 /** The bridge the renderer sees as `window.life`. Every call is async. */
 export interface LifeApi {
   auth: {
@@ -369,6 +375,11 @@ export interface LifeApi {
     /** Fingerprint / face unlock (passkeys, website and installed app). */
     unlockPasskey?(): Promise<AuthStatus>
     setupPasskey?(): Promise<void>
+    /** Devices signed in and passkeys saved, with the one you're on (A6). */
+    devices?(): Promise<DeviceList>
+    /** Sign one device out (it needs the PIN again). */
+    revokeDevice?(sid: string): Promise<DeviceList>
+    removePasskey?(id: string): Promise<DeviceList>
     unlock(pin: string): Promise<AuthStatus>
     lock(): Promise<AuthStatus>
     /** This device opens without the PIN (it remembers you). */

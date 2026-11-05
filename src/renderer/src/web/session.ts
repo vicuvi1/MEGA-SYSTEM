@@ -108,3 +108,18 @@ export async function signOutOthers(): Promise<void> {
   }
   memory = body.session
 }
+
+export interface DeviceList {
+  devices: { sid: string; label: string; created: number; lastSeen: number }[]
+  passkeys: { id: string; label: string; created: number }[]
+  current: string | null
+}
+/** Your devices and passkeys; optionally sign one device out or remove a passkey first (A6). */
+export async function deviceCall(op: { revokeDevice?: string; revokePasskey?: string } = {}): Promise<DeviceList> {
+  const s = currentSession()
+  const payload = op.revokeDevice || op.revokePasskey ? { ...op, session: s } : { devices: s }
+  const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || `Could not load devices (${res.status})`)
+  return { devices: body.devices ?? [], passkeys: body.passkeys ?? [], current: body.current ?? null }
+}

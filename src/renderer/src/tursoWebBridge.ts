@@ -52,7 +52,7 @@ import { profileView } from './web/coachProfile'
 import { dismissNotif, listNotifs, readNotifs } from './web/notifications'
 import { listNotes, removeNote, saveNote, seedNotes } from './web/notes'
 import { addBlockResult, addFocusQuality } from './web/dayLog'
-import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag, signOutOthers } from './web/session'
+import { NetworkError, clearSession, currentSession, remembered, renewSession, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 
 /**
  * A direct Turso connection, only for development and tests (set turso_url
@@ -975,6 +975,14 @@ export function createTursoWebBridge(): Bridge {
       signOutOthers: async () => {
         if (!direct) await signOutOthers()
       },
+      // Devices (A6): the website and installed app only (they hold server sessions).
+      ...(direct
+        ? {}
+        : {
+            devices: () => deviceCall(),
+            revokeDevice: (sid: string) => deviceCall({ revokeDevice: sid }),
+            removePasskey: (id: string) => deviceCall({ revokePasskey: id })
+          }),
       lock: async () => {
         unlocked = false
         lockedOnPurpose = true
