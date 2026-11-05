@@ -1951,3 +1951,4 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .urge-scale button.on { background: var(--accent); color: var(--accent-ink, #111); border-color: transparent; }
 .urge-action { text-align: center; margin: 10px 0; }
 .urge-action p { margin: 4px 0 8px; }
+.rw-days { color: var(--muted); font-weight: 400; }

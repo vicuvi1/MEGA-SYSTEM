@@ -161,3 +161,21 @@ export function calculateEffortEquivalence(coins: number): EffortEquivalence {
     summaryText: `~${cleanDays} clean days or ~${workouts} workouts`
   }
 }
+
+/** Points you earn on an average day (last 30 days, days with any earning). */
+export function earnPerDay(entries: { day: string; kind: string; coins: number }[], today: string): number {
+  const from = new Date(`${today}T12:00:00Z`)
+  from.setUTCDate(from.getUTCDate() - 30)
+  const start = from.toISOString().slice(0, 10)
+  const byDay = new Map<string, number>()
+  for (const e of entries) if (e.kind === 'earn' && e.coins > 0 && e.day >= start && e.day <= today) byDay.set(e.day, (byDay.get(e.day) ?? 0) + e.coins)
+  if (byDay.size < 3) return 0
+  return Math.round([...byDay.values()].reduce((a, b) => a + b, 0) / byDay.size)
+}
+
+/** "About 3 days" of your usual earning for a price (null while there's too little history). */
+export function priceInDays(price: number, perDay: number): string | null {
+  if (!(perDay > 0) || !(price > 0)) return null
+  const d = price / perDay
+  return d < 0.75 ? 'less than a day' : d < 1.5 ? 'about a day' : `about ${Math.round(d)} days`
+}

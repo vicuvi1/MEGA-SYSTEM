@@ -1,4 +1,5 @@
 import type { UnifiedEconomyService } from './unifiedEconomy'
+import { earnPerDay } from '@core/shop'
 import { dayKey, monthKey } from '@core/dates'
 import { balance, effective, LedgerError, totalXp } from '@core/ledger'
 import { levelInfo } from '@core/levels'
@@ -80,6 +81,7 @@ export class Shop {
       balance: balance(all),
       level,
       budget: this.budget(),
+      earnPerDay: earnPerDay(all as any, day),
       monthSpent: this.monthSpent(day, undone),
       currency: getSetting(this.db, 'currency') ?? 'MDL',
       chests: unopenedChests(level, openedRefs),

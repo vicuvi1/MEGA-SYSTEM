@@ -1,6 +1,7 @@
 // Rewards: what your points buy. Guilt-free fun time and real rewards you
 // save for (pin the one you're saving toward). Points come from focus,
 // finished tasks and must-dos, week goals, and a little from habits.
+import { priceInDays } from '@core/shop'
 import { redeemReward } from '../redeem'
 import { useState } from 'react'
 import type { RewardInput, ShopState } from '@shared/api'
@@ -110,7 +111,10 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
                     ★
                   </button>
                   <b className="rw-title">{r.title}</b>
-                  <span className="rw-price">{r.price.toLocaleString()} 🪙</span>
+                  <span className="rw-price">
+                    {r.price.toLocaleString()} pts
+                    {priceInDays(r.price, state.earnPerDay ?? 0) && <small className="rw-days"> · {priceInDays(r.price, state.earnPerDay ?? 0)}</small>}
+                  </span>
                 </div>
                 {r.note && <p className="hint">{r.note}</p>}
                 <div className="rw-bar">

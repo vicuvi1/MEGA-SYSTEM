@@ -8648,6 +8648,76 @@ var ShieldService = class {
 		return true;
 	}
 };
+// src/core/shop.ts
+var TIERS = {
+	bronze: {
+		label: "Bronze",
+		minLevel: 1,
+		color: "#D59A6A"
+	},
+	silver: {
+		label: "Silver",
+		minLevel: 5,
+		color: "#C9D3E3"
+	},
+	gold: {
+		label: "Gold",
+		minLevel: 10,
+		color: "#F5C84B"
+	},
+	legendary: {
+		label: "Legendary",
+		minLevel: 20,
+		color: "#B892FF"
+	}
+};
+function isTier(t) {
+	return t in TIERS;
+}
+/** Why a reward can't be bought right now, or null if it can. */
+function redeemBlocker(c) {
+	const { reward, balance, level, monthSpent, budget } = c;
+	if (reward.archived) return "This reward is archived";
+	if (balance < reward.price) return `You need ${reward.price - balance} more points`;
+	if (budget > 0 && monthSpent + reward.realCost > budget) return `Over this month's reward budget (${budget - monthSpent} left)`;
+	return null;
+}
+function planRedeem(c) {
+	const why = redeemBlocker(c);
+	if (why) throw new LedgerError(why);
+}
+function validateReward(r) {
+	if (!r.title.trim()) throw new LedgerError("A reward needs a name");
+	if (!Number.isInteger(r.price) || r.price <= 0) throw new LedgerError("Price must be a whole number of coins above 0");
+	if (!Number.isInteger(r.realCost) || r.realCost < 0) throw new LedgerError("Real cost must be a whole number, 0 or more");
+	if (!isTier(r.tier)) throw new LedgerError("Unknown tier");
+}
+function chestRef(level) {
+	return `chest:L${level}`;
+}
+/** Levels whose chest is earned (level 2 and up) but not opened yet. */
+function unopenedChests(level, openedRefs) {
+	const opened = new Set(openedRefs);
+	const out = [];
+	for (let l = 2; l <= level; l++) if (!opened.has(chestRef(l))) out.push(l);
+	return out;
+}
+/** Bigger chests at higher levels. `rand` is 0..1. */
+function rollChest(level, rand) {
+	const min = 10 + level * 2;
+	const max = 40 + level * 5;
+	return Math.round(min + rand * (max - min));
+}
+/** Points you earn on an average day (last 30 days, days with any earning). */
+function earnPerDay(entries, today) {
+	const from = /* @__PURE__ */ new Date(`${today}T12:00:00Z`);
+	from.setUTCDate(from.getUTCDate() - 30);
+	const start = from.toISOString().slice(0, 10);
+	const byDay = /* @__PURE__ */ new Map();
+	for (const e of entries) if (e.kind === "earn" && e.coins > 0 && e.day >= start && e.day <= today) byDay.set(e.day, (byDay.get(e.day) ?? 0) + e.coins);
+	if (byDay.size < 3) return 0;
+	return Math.round([...byDay.values()].reduce((a, b) => a + b, 0) / byDay.size);
+}
 function xpToNext(level) {
 	return Math.round(80 * Math.pow(level, 1.3));
 }
@@ -9201,66 +9271,6 @@ function levelInfo(totalXp, hunterStatsInput) {
 		allRanks: RANKS
 	};
 }
-// src/core/shop.ts
-var TIERS = {
-	bronze: {
-		label: "Bronze",
-		minLevel: 1,
-		color: "#D59A6A"
-	},
-	silver: {
-		label: "Silver",
-		minLevel: 5,
-		color: "#C9D3E3"
-	},
-	gold: {
-		label: "Gold",
-		minLevel: 10,
-		color: "#F5C84B"
-	},
-	legendary: {
-		label: "Legendary",
-		minLevel: 20,
-		color: "#B892FF"
-	}
-};
-function isTier(t) {
-	return t in TIERS;
-}
-/** Why a reward can't be bought right now, or null if it can. */
-function redeemBlocker(c) {
-	const { reward, balance, level, monthSpent, budget } = c;
-	if (reward.archived) return "This reward is archived";
-	if (balance < reward.price) return `You need ${reward.price - balance} more points`;
-	if (budget > 0 && monthSpent + reward.realCost > budget) return `Over this month's reward budget (${budget - monthSpent} left)`;
-	return null;
-}
-function planRedeem(c) {
-	const why = redeemBlocker(c);
-	if (why) throw new LedgerError(why);
-}
-function validateReward(r) {
-	if (!r.title.trim()) throw new LedgerError("A reward needs a name");
-	if (!Number.isInteger(r.price) || r.price <= 0) throw new LedgerError("Price must be a whole number of coins above 0");
-	if (!Number.isInteger(r.realCost) || r.realCost < 0) throw new LedgerError("Real cost must be a whole number, 0 or more");
-	if (!isTier(r.tier)) throw new LedgerError("Unknown tier");
-}
-function chestRef(level) {
-	return `chest:L${level}`;
-}
-/** Levels whose chest is earned (level 2 and up) but not opened yet. */
-function unopenedChests(level, openedRefs) {
-	const opened = new Set(openedRefs);
-	const out = [];
-	for (let l = 2; l <= level; l++) if (!opened.has(chestRef(l))) out.push(l);
-	return out;
-}
-/** Bigger chests at higher levels. `rand` is 0..1. */
-function rollChest(level, rand) {
-	const min = 10 + level * 2;
-	const max = 40 + level * 5;
-	return Math.round(min + rand * (max - min));
-}
 // src/main/shop.ts
 var toReward = (r) => ({
 	id: r.id,
@@ -9323,6 +9333,7 @@ var Shop = class {
 			balance: balance(all),
 			level,
 			budget: this.budget(),
+			earnPerDay: earnPerDay(all, day),
 			monthSpent: this.monthSpent(day, undone),
 			currency: getSetting(this.db, "currency") ?? "MDL",
 			chests: unopenedChests(level, openedRefs),

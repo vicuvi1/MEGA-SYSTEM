@@ -54,3 +54,15 @@ describe('shop', () => {
     expect(eq.summaryText).toContain('30 workouts')
   })
 })
+
+import { earnPerDay, priceInDays } from './shop'
+describe('reward price in days (M3)', () => {
+  it('your usual day of points, and the price in days', () => {
+    const e = ['2026-11-01', '2026-11-02', '2026-11-03'].map((day) => ({ day, kind: 'earn', coins: 40 }))
+    expect(earnPerDay([...e, { day: '2026-11-03', kind: 'spend', coins: -100 }], '2026-11-05')).toBe(40)
+    expect(earnPerDay(e.slice(0, 2), '2026-11-05')).toBe(0) // too little history
+    expect(priceInDays(120, 40)).toBe('about 3 days')
+    expect(priceInDays(20, 40)).toBe('less than a day')
+    expect(priceInDays(120, 0)).toBeNull()
+  })
+})

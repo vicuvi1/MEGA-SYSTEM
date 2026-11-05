@@ -134,6 +134,8 @@ export interface ShopState {
   chests: number[]
   recent: { title: string; realCost: number; day: string; undone: boolean }[]
   economy?: EconomySummary
+  /** Your usual points a day (last 30 days), for "about 3 days" next to a price. */
+  earnPerDay?: number
 }
 
 export type RewardInput = Omit<Reward, 'id' | 'archived'> & { id?: number }
