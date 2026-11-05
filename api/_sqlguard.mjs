@@ -6,7 +6,7 @@
 // requests pass; stored or multi-statement SQL is refused.
 
 /** Server-only tables: never read or written from a page. */
-export const PROTECTED_TABLES = ['sys_auth', 'sys_login_guard', 'sys_passkeys', 'sys_passkey_chal', 'sys_devices', 'sys_gate', 'sys_push', 'sys_kv', 'sys_mcp_tokens']
+export const PROTECTED_TABLES = ['sys_auth', 'sys_login_guard', 'sys_passkeys', 'sys_passkey_chal', 'sys_devices', 'sys_gate', 'sys_push', 'sys_kv', 'sys_mcp_tokens', 'sys_mem_vec']
 const BANNED = new Set(['attach', 'detach', 'pragma', 'vacuum', 'load_extension'])
 /**
  * Tables a page may only read (LT1): the 30 daily cloud backups. A stolen

@@ -29,6 +29,7 @@ import { financeSpending } from '@core/progress'
 const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', 'life-focus-changed', 'life-week-changed', 'life-sport-changed', 'life-data-changed']
 import type { CleanChange } from '@core/todoistClean'
 import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
+import { editBlock, memoryView, pinFact, undoMemory } from './web/memoryStore'
 import { financeStateFrom, sportState, addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
 import { deskChange, deskView, type DeskOp } from './web/benDesk'
 import type { CoachMind } from '@core/coachMind'
@@ -781,6 +782,20 @@ export function createTursoWebBridge(): Bridge {
       },
       setMind: async (m: CoachMind) => {
         await (await svcP).write((s) => saveMind(s.db, m))
+      },
+      brain: {
+        view: async () => freshCopy().then(() => svcP).then((svc) => svc.read((s) => memoryView(s.db))),
+        editBlock: async (name: string, patch: { text?: string; pinned?: boolean }) =>
+          (await svcP).write((s) => {
+            editBlock(s.db, name, patch)
+            return memoryView(s.db)
+          }),
+        pinFact: async (text: string, on: boolean) =>
+          (await svcP).write((s) => {
+            pinFact(s.db, text, on)
+            return memoryView(s.db)
+          }),
+        undo: async (id: string) => (await svcP).write((s) => ({ ok: undoMemory(s.db, id), view: memoryView(s.db) }))
       },
       profile: async () => (await svcP).read((s) => loadProfile(s.db)),
       saveProfile: async (p: { about: string; goals: string[]; rules: string[] }) => (await svcP).write((s) => saveProfile(s.db, p)),

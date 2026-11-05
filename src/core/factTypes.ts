@@ -4,7 +4,8 @@
 // stale a week after its date). The weekly clean-up drops expired facts and
 // unconfirmed guesses older than 90 days.
 export type FactType = 'person' | 'exam' | 'preference' | 'goal' | 'routine' | 'other'
-export interface Fact { t: string; at: string; type?: FactType; conf?: number; until?: string | null; seen?: number }
+/** pin: you pinned it (Settings → Ben): never dropped, changed or tidied away. */
+export interface Fact { t: string; at: string; type?: FactType; conf?: number; until?: string | null; seen?: number; pin?: boolean }
 
 const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 }
 const addDays = (d: string, n: number) => {
@@ -47,12 +48,12 @@ export function toRecord(text: string, today: string, prev?: Fact): Fact {
   const type = factType(text)
   const d = type === 'exam' ? dateIn(text, today) : null
   const seen = (prev?.seen ?? (prev ? 1 : 0)) + 1
-  return { t: text, at: today, type, conf: Math.min(1, 0.6 + 0.15 * (seen - 1)), until: d ? addDays(d, 7) : prev?.until ?? null, seen }
+  return { t: text, at: today, type, conf: Math.min(1, 0.6 + 0.15 * (seen - 1)), until: d ? addDays(d, 7) : prev?.until ?? null, seen, ...(prev?.pin ? { pin: true } : {}) }
 }
 
 /** The weekly clean-up: expired facts go, and guesses never confirmed after 90 days. */
 export function cleanFacts(facts: Fact[], today: string): Fact[] {
-  return facts.filter((f) => !(f.until && f.until < today) && !((f.conf ?? 0.7) < 0.65 && f.at < addDays(today, -90)))
+  return facts.filter((f) => f.pin || !(f.until && f.until < today) && !((f.conf ?? 0.7) < 0.65 && f.at < addDays(today, -90)))
 }
 
 /** For the prompt: "[exam until 2026-12-19] Etica exam on 12 Dec". */

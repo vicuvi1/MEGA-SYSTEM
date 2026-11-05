@@ -136,6 +136,8 @@ export const SETTINGS = {
   coach_feedback: json<unknown[]>('your thumbs up / down on replies', []),
   coach_selfreview: json<Record<string, unknown> | null>("Ben's review of his own week", null),
   coach_story: json<Record<string, unknown> | null>('the story of your weeks', null),
+  coach_blocks: json<unknown[]>("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
+  coach_memory_changes: json<unknown[]>("recent changes to Ben's memory, with what was there before (undo)", []),
   coach_style: json<Record<string, unknown> | null>("Ben's tone and style", null),
   coach_adapt: json<Record<string, unknown> | null>('how Ben adapts the plan to how it went', null),
   goal_booking: json<Record<string, unknown> | null>('goal blocks booked into the calendar', null),

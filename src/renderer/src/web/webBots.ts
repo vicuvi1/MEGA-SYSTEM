@@ -31,6 +31,8 @@ import { benNote, listNotes, seedNotes } from './notes'
 import { findPluginCommand, pluginActionInText, pluginForFile, runPluginAction } from '../../../plugins'
 import { loadStory, answerLocal, type LookupData, appendLog, loadProfile, type Persona, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
+import { blocksText, keywordRecall, recallText } from '@core/benMemory'
+import { docsFrom, factChanges, addMemLog, loadBlocks, runBlockOps } from './memoryStore'
 import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus, waterToday } from './coachStatus'
@@ -94,6 +96,8 @@ export interface WebBotsDeps {
   /** Gemini, when set up: free text, voice and photos go to the coach's brain (botBrain.ts). */
   ai?: AskModel | null
   calendar?: CalendarLike | null
+  /** BR1: memory found by meaning (the server, with embeddings); without it, by keywords. */
+  recall?: ((query: string, k: number) => Promise<{ kind: string; text: string }[]>) | null
 }
 
 /** Your Google Calendar (server, when signed in): the coach reads and adds events. */
@@ -129,7 +133,7 @@ export function stripTokens<T extends Record<string, any>>(cfg: T): T {
 }
 const hasTokens = (cfg: Record<string, any>) => Object.entries(cfg ?? {}).some(([k, v]) => /Token$/.test(k) && !!v && v !== 'on-server')
 
-export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null }: WebBotsDeps) {
+export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null, recall = null }: WebBotsDeps) {
   let polling = false
   let timer: ReturnType<typeof setInterval> | null = null
   let lastPollAt: string | null = null
@@ -610,10 +614,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     dayStart.setHours(0, 0, 0, 0)
     step('Reading your day')
     // An answer from the data needs no Todoist or calendar round trip.
-    const [todoToday, upcoming, events] = preset ? [null, null, null] : await Promise.all([
+    // BR1: what he said, matched by meaning against all of Ben's memory (at most 2.5 s; else keywords).
+    const findMemory = (q: string, k: number) => (recall ? withTimeout(recall(q, k), 2_500).catch(() => null) : Promise.resolve(null))
+    const [todoToday, upcoming, events, byMeaning] = preset ? [null, null, null, null] : await Promise.all([
       todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
       todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
-      calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 8 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null)
+      calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 8 * 86400000).toISOString()).catch(() => null) : Promise.resolve(null),
+      text.trim().length >= 8 && !direct ? findMemory(text, 6) : Promise.resolve(null)
     ])
     // You wrote: open follow-up check-ins stop asking (an AI app's action isn't you answering).
     if (!direct) await mirror
@@ -635,7 +642,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         return text && !direct ? noteExcuse(db, text, svc.wallet.today()) : null
       })
       .catch(() => null)
-    const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk, blocks } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       return {
@@ -709,9 +716,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             return ''
           }
         })(),
-        look: buildLook(db, svc, finance)
+        look: buildLook(db, svc, finance),
+        blocks: blocksText(loadBlocks(db))
       }
     })
+    const recalled = byMeaning?.length ? recallText(byMeaning, notes) : ''
     // Tasks and events the coach can point at (E1, T3); grows when it asks for more.
     let allTasks: TodoTask[] = [...(direct?.tasks ?? []), ...(todoToday ?? []), ...(upcoming ?? [])].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i)
     let allEvents: CalEvent[] = events ?? []
@@ -728,7 +737,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // gets what's left of a 38 s budget, so the reply is never cut off (T6).
     const deadline = Date.now() + 38_000
     const ask = (found?: string, extraNote = '', kind = media ? 'media' : big ? 'chat-deep' : 'chat') =>
-      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind, ...(onStep && (kind === 'chat' || kind === 'chat-deep' || kind === 'lookup') ? { onDelta: (t: string) => step(`\u0001${t}`) } : {}) }), Math.max(4_000, deadline - Date.now()))
+      withTimeout(ai!(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, { refs: [made.lines, moneyLines, promises.lines].filter(Boolean).join('\n'), found, mind: [promises.stats, mind].filter(Boolean).join('\n'), mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`, style: talk.style, tone: talk.tone, feedback: talk.feedback, selfReview: talk.selfReview, notes, desk, stealth: talk.stealth, allActions: big, blocks, recalled }), { json: true, think: big, strong: isBigAsk(text) || correcting || !!media, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind, ...(onStep && (kind === 'chat' || kind === 'chat-deep' || kind === 'lookup') ? { onDelta: (t: string) => step(`\u0001${t}`) } : {}) }), Math.max(4_000, deadline - Date.now()))
     let out: BrainOut
     try {
       if (preset) out = { reply: preset.reply, actions: direct ? direct.lines : [], remember: [], chips: preset.chips, buttons: preset.buttons }
@@ -737,6 +746,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const pre = media ? [] : preLookups(text, calendarDay(dayStart)).map((n) => answerLocal(n, look)).filter((x): x is string => !!x && !/not available|give dates/.test(x))
         if (pre.length) step('Looked up your history')
         out = parseBrain(await ask(pre.length ? pre.join('\n') : undefined))
+      }
+      // "recall: …" as an action is a lookup too (BR4).
+      const recallActs = out.actions.filter((l) => /^\s*recall\s*:/i.test(l))
+      if (recallActs.length) {
+        out.actions = out.actions.filter((l) => !recallActs.includes(l))
+        out.need = [...(out.need ?? []), ...recallActs.map((l) => `recall ${l.replace(/^\s*recall\s*:\s*/i, '')}`)]
       }
       // It asked for facts it didn't have: look them up, then it answers.
       if (out.need?.length && !out.actions.length) {
@@ -749,7 +764,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             continue
           }
           const [k, from, days] = need.trim().split(/\s+/)
-          if (/^calendar$/i.test(k) && calendar && /^\d{4}-\d{2}-\d{2}$/.test(from ?? '')) {
+          if (/^recall$/i.test(k)) {
+            step('Searched my memory')
+            const q = need.trim().replace(/^recall\s*/i, '').slice(0, 300)
+            const hits = (await findMemory(q, 8)) ?? (await mirror.read((db) => keywordRecall(docsFrom(db), q, 8)).catch(() => []))
+            found.push(hits.length ? `Memory for "${q}":\n${recallText(hits)}` : `Memory for "${q}": nothing found.`)
+          } else if (/^calendar$/i.test(k) && calendar && /^\d{4}-\d{2}-\d{2}$/.test(from ?? '')) {
             step('Read your calendar')
             const s0 = new Date(`${from}T00:00:00`)
             const more = await calendar.events(s0.toISOString(), new Date(s0.getTime() + Math.min(14, Math.max(1, Number(days) || 1)) * 86400000).toISOString()).catch(() => [])
@@ -868,6 +888,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         .catch(() => [] as string[])
       done.push(...lines)
     }
+    // BR4: his notes about you (memory blocks), edited strictly; pinned ones are refused.
+    if (out.actions.some((l) => /^\s*block(add|fix|set)\s*:/i.test(l))) done.push(...(await mirror.write((db) => runBlockOps(db, out.actions)).catch(() => [] as string[])))
     if (typeof process !== 'undefined' && process.env?.BOT_DEBUG) console.log('brain actions:', out.actions, '→', acts)
     const noCal = () => done.push("⚠️ Google Calendar isn't connected (Settings in the app)")
     const fmtHM = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -1276,16 +1298,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const at = new Date().toISOString()
     await mirror
       .write((db) => {
-        saveMemory(
-          db,
-          updateMemory(loadMemory(db), {
+        const before = loadMemory(db)
+        const after = updateMemory(before, {
             facts: out.remember,
             turns: [
               { role: 'me', bot: persona, text: media ? `[${media.kind}] ${text}`.trim() : text, at },
               { role: 'coach', bot: persona, text: [out.reply, ...(done.length ? done : ['(nothing saved)'])].join(' | '), at }
             ]
           })
-        )
+        saveMemory(db, after)
+        // New facts show in Settings → Recent memory changes (with undo).
+        if (out.remember.length) addMemLog(db, factChanges(before.facts, after.facts, 'ben'))
         // /why: each thing done keeps your words that led to it and where it came from (N7).
         try {
           const prev = JSON.parse(getSetting(db as any, WHY_KEY) || '[]')

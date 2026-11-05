@@ -73,6 +73,8 @@ import { cleanHealth, mergeDay, type HealthData } from '../plugins/health/health
 import { HEALTH } from '../plugins/health'
 import { BEN_DAILY_MESSAGES, DEFAULT_TZ } from '@core/defaults'
 import { tagNudge } from '@core/chatFeed'
+import { MemoryVectors, geminiEmbedder, type Embedder } from './memoryVectors'
+import { memoryJobs } from './memoryJobs'
 
 /** What Ben already said today, by kind (each kind once a day). */
 const BEN_SENT = 'ben_sent_today'
@@ -91,6 +93,8 @@ export interface BotEnv {
   model?: AskModel
   /** Google sign-in app (GOOGLE_CLIENT_ID/SECRET + the server secret): your calendar. */
   google?: GoogleEnv | null
+  /** BR1: embeddings for Ben's memory by meaning (default: Gemini with GEMINI_API_KEY; null: off, keywords only). */
+  embed?: Embedder | null
 }
 
 /**
@@ -141,11 +145,11 @@ const todoistFetch = (env: BotEnv): typeof fetch => {
   }) as typeof fetch
 }
 
-let warm: { key: string; SQL: SqlJsStatic; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null } | null = null
+let warm: { key: string; SQL: SqlJsStatic; bots: ReturnType<typeof createWebBots>; mirror: Mirror; services: ReturnType<typeof createWebServices>; calendar: CalendarLike | null; vectors: MemoryVectors | null } | null = null
 let warmAt = 0
 
 async function botsFor(env: BotEnv) {
-  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '')
+  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '') + (env.embed === null ? '|noembed' : env.embed ? '|embed' : '')
   if (warm && warm.key === key) {
     // What the devices changed since the last message (one tiny read); not
     // again within the same few seconds (a tick calls this several times: S2).
@@ -201,8 +205,13 @@ async function botsFor(env: BotEnv) {
     : undefined
   const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, todoistFetch(env), { pickArea }) : null
   const calendar = calendarFor(env, mirror)
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar })
-  warm = { key, SQL, bots, mirror, services, calendar }
+  // BR1: Ben's memory by meaning (vectors in Turso); without a key, his keyword recall.
+  const gKey = (process.env.GEMINI_API_KEY || '').trim()
+  const embed = env.embed !== undefined ? env.embed : gKey ? geminiEmbedder(gKey) : null
+  const vectors = embed ? new MemoryVectors(new TursoHttp(env.tursoUrl, env.tursoToken), embed) : null
+  const recall = vectors ? (q: string, k: number) => vectors.search(q, k) : null
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall })
+  warm = { key, SQL, bots, mirror, services, calendar, vectors }
   warmAt = Date.now()
   return warm
 }
@@ -539,7 +548,7 @@ const sysSet = (db: TursoHttp, key: string, value: string) => db.writeAtomic([SY
 export async function runTick(env: BotEnv & { botToken: string; chatId: string; sleepBotToken?: string; timer?: boolean }, now = new Date()): Promise<string[]> {
   const tz = lifeTz(env)
 
-  const { services, mirror, calendar, bots, SQL } = await botsFor(env)
+  const { services, mirror, calendar, bots, SQL, vectors } = await botsFor(env)
   const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
   // LT2: the outside timer (GitHub Actions or a second pinger) woke Ben, not an open app.
   // Settings → System health warns when it stops, even while the app keeps Ben going.
@@ -809,6 +818,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   } catch (e) {
     console.error('plugins:', e)
   }
+
+  // BR1/BR2: Ben's memory: new pieces get embeddings (every 20 min), the nightly tidy-up (03:00–05:00).
+  const memRan = await memoryJobs({ mirror, vectors, model: env.model, claim: (key, gap) => sysClaim(healthDb, key, now.getTime(), gap), tasks: env.todoistToken ? () => createTodoistApi(env.todoistToken!, todoistFetch(env)).upcoming(30) : undefined, now })
+  if (memRan.length) note('sent', `Memory: ${memRan.join(', ')}`, undefined, 'memory')
 
   // Calendar watch (N10): a class added or cancelled today or tomorrow, checked every 10 minutes.
   if (calendar) {

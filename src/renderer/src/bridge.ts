@@ -1,5 +1,6 @@
 import type { LifeApi, UpdateStatus } from '@shared/api'
 import type { DayTemplate } from '@core/calTemplates'
+import type { MemoryView } from '@core/benMemory'
 import type { Area, TodoTask } from '@core/todoist'
 import type { ProgressReport } from '@core/progress'
 import type { Insights } from '@core/insights'
@@ -63,6 +64,13 @@ export type Bridge = LifeApi & {
     updateSporty?(): Promise<SportyView>
     scorecard?(): Promise<{ rows: WeekRow[]; verdict: 'working' | 'mixed' | 'not yet' | 'too early'; lines: string[] }>
     setMind?(m: CoachMind): Promise<void>
+    /** BR4: Ben's notes about you (memory blocks), recent memory changes, pins and undo. */
+    brain?: {
+      view(): Promise<MemoryView>
+      editBlock(name: string, patch: { text?: string; pinned?: boolean }): Promise<MemoryView>
+      pinFact(text: string, on: boolean): Promise<MemoryView>
+      undo(id: string): Promise<{ ok: boolean; view: MemoryView }>
+    }
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>
     saveProfile(p: { about: string; goals: string[]; rules: string[] }): Promise<{ about: string; goals: string[]; rules: string[] }>
     log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; mood?: string; proactive?: boolean; undo?: unknown[]; undone?: boolean[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }[]>

@@ -703,15 +703,430 @@ function toRecord(text, today, prev) {
 		type,
 		conf: Math.min(1, .6 + .15 * (seen - 1)),
 		until: d ? addDays$6(d, 7) : prev?.until ?? null,
-		seen
+		seen,
+		...prev?.pin ? { pin: true } : {}
 	};
 }
 /** The weekly clean-up: expired facts go, and guesses never confirmed after 90 days. */
 function cleanFacts(facts, today) {
-	return facts.filter((f) => !(f.until && f.until < today) && !((f.conf ?? .7) < .65 && f.at < addDays$6(today, -90)));
+	return facts.filter((f) => f.pin || !(f.until && f.until < today) && !((f.conf ?? .7) < .65 && f.at < addDays$6(today, -90)));
 }
 /** For the prompt: "[exam until 2026-12-19] Etica exam on 12 Dec". */
 var factLine = (f) => `${f.type && f.type !== "other" ? `[${f.type}${f.until ? ` until ${f.until}` : ""}] ` : ""}${f.t} (noted ${f.at}${f.seen && f.seen > 1 ? `, said ${f.seen}×` : ""})`;
+// src/core/benMemory.ts
+var BLOCK_NAMES = [
+	"About you",
+	"Goals now",
+	"How to coach you",
+	"People"
+];
+var ALIASES = {
+	about: "About you",
+	me: "About you",
+	you: "About you",
+	goals: "Goals now",
+	goal: "Goals now",
+	coach: "How to coach you",
+	coaching: "How to coach you",
+	how: "How to coach you",
+	people: "People",
+	person: "People"
+};
+var clean = (t, n) => String(t ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, n);
+/** Always the four blocks, in order, each within its cap. */
+function cleanBlocks(raw) {
+	const list = Array.isArray(raw) ? raw : [];
+	return BLOCK_NAMES.map((name) => {
+		const b = list.find((x) => x && x.name === name);
+		return {
+			name,
+			text: clean(b?.text, 600),
+			pinned: !!b?.pinned,
+			at: typeof b?.at === "string" ? b.at : ""
+		};
+	});
+}
+/** "about", "People", "how to coach you" → the block's name; null when it isn't one. */
+function blockName(raw) {
+	const t = String(raw ?? "").trim().toLowerCase().replace(/^["'[]+|["'\]]+$/g, "");
+	return BLOCK_NAMES.find((n) => n.toLowerCase() === t) ?? ALIASES[t] ?? null;
+}
+/** The blocks for Ben's prompt (empty ones too, so he knows they're there). */
+function blocksText(blocks) {
+	return blocks.map((b) => `[${b.name}] (${b.text.length}/600${b.pinned ? ", pinned by him: read only" : ""})\n${b.text || "(empty)"}`).join("\n");
+}
+/**
+* Ben's block actions, read strictly:
+* "blockadd: <block> | <text>" adds a line; "blockfix: <block> | <old> => <new>"
+* replaces text that is there word for word (empty new text removes it);
+* "blockset: <block> | <text>" rewrites the whole block (to make room).
+*/
+function readBlockOp(line) {
+	const m = /^\s*block(add|fix|set)\s*:\s*([^|]{1,40})\|([\s\S]*)$/i.exec(String(line ?? ""));
+	if (!m) return null;
+	const name = blockName(m[2]);
+	if (!name) return null;
+	const op = m[1].toLowerCase();
+	const rest = m[3];
+	if (op === "fix") {
+		const i = rest.indexOf("=>");
+		if (i < 0) return null;
+		const old = clean(rest.slice(0, i), 600);
+		if (!old) return null;
+		return {
+			op: "fix",
+			name,
+			old,
+			text: clean(rest.slice(i + 2), 600)
+		};
+	}
+	const text = clean(rest, 601);
+	if (!text || text.length > 600) return null;
+	return op === "add" ? {
+		op: "add",
+		name,
+		text
+	} : {
+		op: "set",
+		name,
+		text
+	};
+}
+var seq = 0;
+var changeId = (now) => `m${now.getTime().toString(36)}${(seq++ % 1296).toString(36).padStart(2, "0")}`;
+/** Applies one block change; pinned blocks and full blocks are refused (Ben gets a ⚠️ line). */
+function applyBlockOp(blocks, op, by, now = /* @__PURE__ */ new Date()) {
+	const list = cleanBlocks(blocks);
+	const b = list.find((x) => x.name === op.name);
+	if (b.pinned && by !== "you") return {
+		blocks: list,
+		change: null,
+		line: `⚠️ "${op.name}" is pinned: only you can change it`
+	};
+	let next;
+	if (op.op === "add") {
+		next = b.text ? `${b.text}\n${op.text}` : op.text;
+		if (b.text.toLowerCase().includes(op.text.toLowerCase())) return {
+			blocks: list,
+			change: null,
+			line: ""
+		};
+	} else if (op.op === "fix") {
+		const i = b.text.toLowerCase().indexOf(op.old.toLowerCase());
+		if (i < 0) return {
+			blocks: list,
+			change: null,
+			line: `⚠️ "${op.old.slice(0, 40)}" isn't in "${op.name}"`
+		};
+		next = (b.text.slice(0, i) + op.text + b.text.slice(i + op.old.length)).replace(/\n{2,}/g, "\n").trim();
+	} else next = op.text;
+	if (next.length > 600) return {
+		blocks: list,
+		change: null,
+		line: `⚠️ "${op.name}" is full (600 characters): rewrite it shorter first`
+	};
+	if (next === b.text) return {
+		blocks: list,
+		change: null,
+		line: ""
+	};
+	const at = now.toISOString();
+	const change = {
+		id: changeId(now),
+		at,
+		by,
+		what: "block",
+		name: op.name,
+		before: b.text,
+		after: next
+	};
+	return {
+		blocks: list.map((x) => x === b ? {
+			...x,
+			text: next,
+			at
+		} : x),
+		change,
+		line: `📝 ${by === "ben" ? "Updated my notes" : "Notes changed"}: ${op.name}`
+	};
+}
+/** Adds changes to the log (newest last, capped). */
+function logChanges(log, add) {
+	return [...Array.isArray(log) ? log.filter((c) => c && typeof c.id === "string") : [], ...add.filter((c) => !!c)].slice(-80);
+}
+var norm$2 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+/** Keeps at most `max` facts: pinned ones always stay; the weakest, oldest unpinned go first. */
+function capFacts(facts, max) {
+	if (facts.length <= max) return {
+		facts,
+		dropped: []
+	};
+	const pos = new Map(facts.map((f, i) => [f, i]));
+	const rank = (f) => (f.conf ?? .6) + Math.min(5, f.seen ?? 1) * .1 + pos.get(f) / facts.length * .5;
+	const loose = facts.filter((f) => !f.pin).sort((a, b) => rank(a) - rank(b));
+	const drop = new Set(loose.slice(0, Math.max(0, facts.length - max)));
+	return {
+		facts: facts.filter((f) => !drop.has(f)),
+		dropped: facts.filter((f) => drop.has(f))
+	};
+}
+/** The facts the tidy-up looks at: the new ones (F-numbers first) and similar old ones. */
+function tidyPrompt(fresh, similar, today) {
+	const ids = /* @__PURE__ */ new Map();
+	const line = (f) => {
+		const id = `F${ids.size + 1}`;
+		ids.set(id, f);
+		return `${id}${f.pin ? " (pinned: keep)" : ""}: ${f.t} (noted ${f.at})`;
+	};
+	const a = fresh.map(line);
+	const b = similar.filter((f) => !fresh.includes(f)).map(line);
+	return {
+		prompt: [
+			`You keep the long-term memory of a coach about one person (Victor). Today is ${today}.`,
+			"Below are facts noted today and older facts that look similar. Make the memory clean: one fact per idea, current, short, with dates.",
+			"For each problem answer one decision:",
+			"- UPDATE an old fact when a new one changes or adds to it (merge into one line, newest truth wins), then DELETE the duplicate new one.",
+			"- DELETE a fact that is a duplicate, wrong now, or a one-off log with no lasting value.",
+			"- ADD only to merge or reword two facts into one better line (then DELETE both).",
+			"- NOOP when a fact is fine as it is.",
+			"Never UPDATE or DELETE a pinned fact. Keep every date, name and number that is still true. Max 200 characters per fact.",
+			"",
+			"== New today ==",
+			a.join("\n") || "(none)",
+			"",
+			"== Similar older facts ==",
+			b.join("\n") || "(none)",
+			"",
+			"Answer ONLY with JSON: {\"decisions\": [{\"op\": \"ADD\"|\"UPDATE\"|\"DELETE\"|\"NOOP\", \"id\": \"F2\", \"text\": \"…\", \"why\": \"…\"}]} (id for UPDATE/DELETE, text for ADD/UPDATE)."
+		].join("\n"),
+		ids
+	};
+}
+/** Reads the model's decisions strictly: known ops, known ids, short text. Anything else is dropped. */
+function parseTidy(raw, ids) {
+	let j;
+	try {
+		j = JSON.parse(String(raw ?? "").match(/\{[\s\S]*\}/)?.[0] ?? "null");
+	} catch {
+		return [];
+	}
+	const list = Array.isArray(j?.decisions) ? j.decisions : Array.isArray(j) ? j : [];
+	const out = [];
+	for (const d of list.slice(0, 40)) {
+		const op = String(d?.op ?? "").toUpperCase();
+		const id = typeof d?.id === "string" ? d.id.trim().toUpperCase() : void 0;
+		const text = typeof d?.text === "string" ? clean(d.text, 200) : void 0;
+		const why = typeof d?.why === "string" ? clean(d.why, 120) : void 0;
+		if (op === "NOOP") continue;
+		if ((op === "UPDATE" || op === "DELETE") && (!id || !ids.has(id))) continue;
+		if ((op === "UPDATE" || op === "ADD") && !text) continue;
+		if (op !== "ADD" && op !== "UPDATE" && op !== "DELETE") continue;
+		out.push({
+			op,
+			...id && op !== "ADD" ? { id } : {},
+			...text && op !== "DELETE" ? { text } : {},
+			...why ? { why } : {}
+		});
+	}
+	return out;
+}
+/**
+* Applies the decisions to the facts as they are now (found by their words,
+* since the list may have changed while the model thought). Pinned facts are
+* never changed or deleted; at most one change per fact; then the cap.
+*/
+function applyTidy(facts, decisions, ids, max, now = /* @__PURE__ */ new Date()) {
+	const today = now.toISOString().slice(0, 10);
+	let list = facts.slice();
+	const changes = [];
+	const touched = /* @__PURE__ */ new Set();
+	const find = (id) => {
+		const f = id ? ids.get(id) : void 0;
+		return f ? list.findIndex((x) => norm$2(x.t) === norm$2(f.t)) : -1;
+	};
+	const log = (before, after, why) => changes.push({
+		id: changeId(now),
+		at: now.toISOString(),
+		by: "tidy",
+		what: "fact",
+		name: "fact",
+		before,
+		after,
+		...why ? { why } : {}
+	});
+	for (const d of decisions) {
+		if (d.op === "ADD") {
+			const t = d.text;
+			if (list.some((x) => norm$2(x.t) === norm$2(t))) continue;
+			list.push(toRecord(t, today));
+			log(null, t, d.why);
+			continue;
+		}
+		const i = find(d.id);
+		if (i < 0) continue;
+		const f = list[i];
+		if (f.pin || touched.has(norm$2(f.t))) continue;
+		touched.add(norm$2(f.t));
+		if (d.op === "DELETE") {
+			list.splice(i, 1);
+			log(f.t, null, d.why);
+		} else if (d.op === "UPDATE" && norm$2(d.text) !== norm$2(f.t)) {
+			const dup = list.findIndex((x, k) => k !== i && norm$2(x.t) === norm$2(d.text));
+			list[i] = {
+				...f,
+				t: d.text,
+				at: today
+			};
+			touched.add(norm$2(d.text));
+			if (dup >= 0 && !list[dup].pin) list.splice(dup, 1);
+			log(f.t, d.text, d.why);
+		}
+	}
+	const capped = capFacts(list, max);
+	list = capped.facts;
+	for (const f of capped.dropped) log(f.t, null, "memory full: the weakest, oldest fact goes");
+	return {
+		facts: list,
+		changes
+	};
+}
+/** A short, stable hash (FNV-1a, hex) of a text. */
+function textHash(t) {
+	let h = 2166136261;
+	for (let i = 0; i < t.length; i++) {
+		h ^= t.charCodeAt(i);
+		h = Math.imul(h, 16777619);
+	}
+	return (h >>> 0).toString(16).padStart(8, "0");
+}
+/** The id of a fact's piece ("fact:<hash of its words>"). */
+var factDocId = (f) => `fact:${textHash(norm$2(f.t))}`;
+var NOTE_PART = 700;
+/** Every piece of memory worth finding by meaning, at most 600 (newest kept). */
+function memoryDocs(s) {
+	const out = [];
+	const add = (kind, id, text) => {
+		const t = text.replace(/\s+/g, " ").trim();
+		if (t.length >= 4) out.push({
+			id: `${kind}:${id}`,
+			kind,
+			text: t.slice(0, 1e3)
+		});
+	};
+	for (const f of s.facts) add("fact", factDocId(f).slice(5), `${f.t} (noted ${f.at})`);
+	const m = s.mind;
+	if (m) {
+		for (const p of m.people) add("mind", `p:${textHash(p.name.toLowerCase())}`, `${p.name}: ${p.note}`);
+		for (const g of m.goals) add("mind", `g:${textHash(g.title.toLowerCase())}`, `Goal: ${g.title}${g.deadline ? ` by ${g.deadline}` : ""}${g.weekly ? `, ${g.weekly} a week` : ""}`);
+		for (const x of m.works) add("mind", `w:${textHash(norm$2(x.t))}`, `Works for him: ${x.t}`);
+		for (const x of m.fails) add("mind", `f:${textHash(norm$2(x.t))}`, `Doesn't work for him: ${x.t}`);
+		for (const x of m.patterns) add("mind", `t:${textHash(norm$2(x.t))}`, `Pattern: ${x.t}`);
+	}
+	for (const n of s.notes ?? []) {
+		const body = n.body.trim();
+		if (!body) continue;
+		const parts = [];
+		let cur = "";
+		for (const l of body.split("\n")) {
+			if (cur && cur.length + l.length > NOTE_PART) {
+				parts.push(cur);
+				cur = "";
+			}
+			cur = cur ? `${cur}\n${l}` : l;
+		}
+		if (cur) parts.push(cur);
+		parts.slice(0, 20).forEach((p, i) => add("note", `${n.id}:${i}`, `Note "${n.title}": ${p}`));
+	}
+	if (s.story?.text) add("story", s.story.week, `Story of his weeks (${s.story.week}): ${s.story.text}`);
+	if (s.log?.length) {
+		const byDay = /* @__PURE__ */ new Map();
+		for (const e of s.log) {
+			const day = String(e.at).slice(0, 10);
+			const t = String(e.text).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+			if (!t) continue;
+			byDay.set(day, [...byDay.get(day) ?? [], `${e.role === "me" ? "Victor" : "Ben"}: ${t.slice(0, e.role === "me" ? 200 : 110)}`]);
+		}
+		const days = [...byDay.keys()].sort();
+		for (const day of days.slice(0, -1)) add("chat", day, `Chat on ${day}: ${byDay.get(day).join(" · ")}`);
+	}
+	for (const t of s.tasks ?? []) add("task", t.id, `Task: ${t.content}${t.due ? ` (due ${t.due})` : ""}`);
+	for (const b of s.blocks ?? []) if (b.text) add("block", textHash(b.name), `${b.name}: ${b.text}`);
+	const seen = /* @__PURE__ */ new Map();
+	for (const d of out) seen.set(d.id, d);
+	return [...seen.values()].slice(-600);
+}
+/** What to embed (new or changed, at most `limit`) and which stored pieces are gone. */
+function planSync(docs, stored, limit = 60) {
+	const want = new Set(docs.map((d) => d.id));
+	const changed = docs.filter((d) => stored.get(d.id) !== textHash(d.text));
+	const order = {
+		fact: 0,
+		block: 0,
+		mind: 1,
+		note: 2,
+		story: 2,
+		task: 3,
+		chat: 4
+	};
+	changed.sort((a, b) => order[a.kind] - order[b.kind]);
+	return {
+		embed: changed.slice(0, limit),
+		drop: [...stored.keys()].filter((id) => !want.has(id))
+	};
+}
+var WORD$1 = /[\p{L}\p{N}]{3,}/gu;
+var STOP$2 = /* @__PURE__ */ new Set([
+	"the",
+	"and",
+	"for",
+	"that",
+	"this",
+	"with",
+	"you",
+	"are",
+	"was",
+	"have",
+	"his",
+	"him",
+	"not",
+	"but",
+	"what",
+	"all",
+	"can",
+	"out",
+	"get",
+	"has",
+	"had",
+	"how",
+	"just",
+	"now",
+	"from",
+	"about",
+	"when",
+	"will",
+	"did",
+	"does",
+	"its",
+	"too"
+]);
+var stems = (t) => new Set((t.toLowerCase().match(WORD$1) ?? []).filter((w) => !STOP$2.has(w)).map((w) => w.slice(0, 5)));
+/** The keyword fallback: pieces sharing the most words with the question (rarer words count more). */
+function keywordRecall(docs, query, k = 6) {
+	const q = stems(query);
+	if (!q.size) return [];
+	const df = /* @__PURE__ */ new Map();
+	const each = docs.map((d) => stems(d.text));
+	for (const s of each) for (const w of s) df.set(w, (df.get(w) ?? 0) + 1);
+	return docs.map((d, i) => ({
+		d,
+		s: [...q].reduce((t, w) => t + (each[i].has(w) ? Math.log(1 + docs.length / (df.get(w) ?? 1)) : 0), 0)
+	})).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, k).map((x) => x.d);
+}
+/** Recalled pieces as prompt lines ("- [note] …"), skipping what the prompt already has. */
+function recallText(hits, already = "") {
+	const have = norm$2(already);
+	return hits.filter((h) => !have.includes(norm$2(h.text).slice(0, 60))).map((h) => `- [${h.kind}] ${h.text.slice(0, 300)}`).join("\n");
+}
 // src/core/stealth.ts
 var SWAPS = [
 	[/\bporn(ography)?\b/gi, "distraction"],
@@ -1443,6 +1858,8 @@ var SETTINGS = {
 	coach_feedback: json$4("your thumbs up / down on replies", []),
 	coach_selfreview: json$4("Ben's review of his own week", null),
 	coach_story: json$4("the story of your weeks", null),
+	coach_blocks: json$4("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
+	coach_memory_changes: json$4("recent changes to Ben's memory, with what was there before (undo)", []),
 	coach_style: json$4("Ben's tone and style", null),
 	coach_adapt: json$4("how Ben adapts the plan to how it went", null),
 	goal_booking: json$4("goal blocks booked into the calendar", null),
@@ -4210,7 +4627,7 @@ var gmail_default = definePlugin({
 // src/renderer/src/web/financeInbox.ts
 var SETTING$1 = "finance_inbox_json";
 var KEEP_DAYS = 60;
-var parse = (raw, fallback) => {
+var parse$1 = (raw, fallback) => {
 	try {
 		return raw ? JSON.parse(raw) : fallback;
 	} catch {
@@ -4220,14 +4637,14 @@ var parse = (raw, fallback) => {
 /** Adds an expense to the inbox (call inside the bot's change). */
 function queueFinanceExpense(db, entry) {
 	const cutoff = entry.at - KEEP_DAYS * 864e5;
-	const list = parse(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff && e.id !== entry.id);
+	const list = parse$1(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff && e.id !== entry.id);
 	list.push(entry);
 	setSetting(db, SETTING$1, JSON.stringify(list));
 }
 /** Adds many records at once (a bank statement); returns the ids that were new. */
 function queueFinanceEntries(db, entries, now = Date.now()) {
 	const cutoff = now - KEEP_DAYS * 864e5;
-	const list = parse(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff);
+	const list = parse$1(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff);
 	const have = new Set(list.map((e) => e.id));
 	const fresh = entries.filter((e) => !have.has(e.id));
 	if (!fresh.length) return [];
@@ -4236,7 +4653,7 @@ function queueFinanceEntries(db, entries, now = Date.now()) {
 }
 /** The ids already waiting in the inbox. */
 function inboxIds(db) {
-	return new Set(parse(getSetting(db, SETTING$1), []).map((e) => e.id));
+	return new Set(parse$1(getSetting(db, SETTING$1), []).map((e) => e.id));
 }
 // src/plugins/bank/csv.ts
 /** Splits one CSV line (quotes may hold the delimiter and "" is a quote). */
@@ -5200,7 +5617,7 @@ function loadMemory(db) {
 }
 function saveMemory(db, m) {
 	setSetting(db, MEMORY, JSON.stringify({
-		facts: m.facts.slice(-80),
+		facts: capFacts(m.facts, 80).facts,
 		chat: m.chat.slice(-40)
 	}));
 }
@@ -5214,10 +5631,14 @@ function updateMemory(m, add, now = /* @__PURE__ */ new Date()) {
 		const n = norm(t);
 		const i = facts.findIndex((x) => norm(x.t) === n || norm(x.t).includes(n) || n.includes(norm(x.t)));
 		const prev = i >= 0 ? facts.splice(i, 1)[0] : void 0;
-		facts.push(toRecord(t, now.toISOString().slice(0, 10), prev));
+		facts.push(prev?.pin ? {
+			...prev,
+			at: now.toISOString().slice(0, 10),
+			seen: (prev.seen ?? 1) + 1
+		} : toRecord(t, now.toISOString().slice(0, 10), prev));
 	}
 	return {
-		facts: cleanFacts(facts, now.toISOString().slice(0, 10)).slice(-80),
+		facts: capFacts(cleanFacts(facts, now.toISOString().slice(0, 10)), 80).facts,
 		chat: [...m.chat, ...add.turns ?? []].slice(-40)
 	};
 }
@@ -5668,6 +6089,8 @@ Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
 - "person: <name> | <who they are to him, short>" when he mentions someone in his life (friend, family, teacher, partner).
 - "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
+Your notes about him (the blocks under "Your notes about him"; always in front of you, 600 characters each; pinned ones are his, read only):
+- "blockadd: <About you|Goals now|How to coach you|People> | <one short line>" adds a line. "blockfix: <block> | <exact old text> => <new text>" changes it (empty new text removes it). "blockset: <block> | <whole new text>" rewrites a full block shorter. Keep them current and tight; only lasting things.
 His notebook (Obsidian-like notes he can read and edit; you see the ones that matter below):
 - "note: <note title> | <one line>" adds a dated line under that note (a new note if none has that title). Use it for anything worth keeping in his own words of record: facts about him and people ("note: People | Maxim, lab partner, ..."), exam dates and topics ("note: Etica | exam Friday, chapters 3-5"), decisions, what you learned. Prefer an existing title. One line, specific.
 Reminders (Telegram, sent by you later):
@@ -5719,7 +6142,8 @@ function actionGroups(message, all = false) {
 var LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
 - "spending <YYYY-MM-DD> <YYYY-MM-DD> [category]" totals and top categories (or one category).
 - "focus <from> <to>", "workouts <from> <to>", "sleep <from> <to>", "tasks <from> <to>" (tasks done), "points <from> <to>".
-- "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`;
+- "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).
+- "recall <what>" searches everything you remember about him (facts, notes, old chats, tasks) by meaning.`;
 /** Splits the prompt: before it the fixed instructions (sent as the system message and cached), after it the live part. */
 var PROMPT_SPLIT = "\n<<<LIVE>>>\n";
 /** B5: Ben's "story so far" about Victor, rewritten every Sunday (about 600 characters). */
@@ -5798,6 +6222,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 	const turns = memory.chat.slice(-12);
 	const chat = turns.map((c) => `${c.role === "me" ? "Victor" : c.bot === "mega" ? "Ben" : `Coach (${c.bot})`}: ${chatGist(c)}`);
 	const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(" ")}`);
+	const recalled = (extra.recalled ?? "").split("\n").filter((l) => l && !facts.some((f) => l.includes(f.t))).join("\n");
 	return [
 		PERSONA[persona],
 		"Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks \"why\"/\"how come\" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.",
@@ -5843,8 +6268,10 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : "",
 		extra.desk ? `== What you know about how he works (use it: plan with his energy map, name repeat excuses, respect a short night) ==\n${extra.desk}` : "",
 		"",
+		extra.blocks ? `== Your notes about him (blocks you keep) ==\n${extra.blocks}` : "",
 		"== What you remember about him ==",
 		facts.length ? facts.map((f) => `- ${factLine(f)}`).join("\n") : "- nothing yet",
+		recalled ? `== Found in your memory for this message (by meaning) ==\n${recalled}` : "",
 		"",
 		"== Recent conversation ==",
 		chat.length ? chat.join("\n") : "(none)",
@@ -18865,6 +19292,79 @@ function startsNow(text) {
 	if (/\b(now|right now|acum|сейчас)\b/i.test(t)) return true;
 	return !FUTURE.test(t);
 }
+// src/renderer/src/web/memoryStore.ts
+var BLOCKS_KEY = "coach_blocks";
+var MEM_LOG_KEY = "coach_memory_changes";
+var parse = (raw) => {
+	try {
+		return JSON.parse(raw || "null");
+	} catch {
+		return null;
+	}
+};
+function loadBlocks(db) {
+	return cleanBlocks(parse(getSetting(db, BLOCKS_KEY)));
+}
+function saveBlocks(db, blocks) {
+	setSetting(db, BLOCKS_KEY, JSON.stringify(cleanBlocks(blocks)));
+}
+function loadMemLog(db) {
+	return logChanges(parse(getSetting(db, MEM_LOG_KEY)), []);
+}
+function addMemLog(db, add) {
+	if (!add.some(Boolean)) return;
+	setSetting(db, MEM_LOG_KEY, JSON.stringify(logChanges(loadMemLog(db), add)));
+}
+/** Ben's block actions from one reply, applied in order; the ✅/⚠️ lines for the chat. */
+function runBlockOps(db, actions, now = /* @__PURE__ */ new Date()) {
+	const ops = actions.map(readBlockOp).filter((x) => !!x);
+	if (!ops.length) return [];
+	let blocks = loadBlocks(db);
+	const changes = [];
+	const lines = [];
+	for (const op of ops.slice(0, 6)) {
+		const r = applyBlockOp(blocks, op, "ben", now);
+		blocks = r.blocks;
+		if (r.change) changes.push(r.change);
+		if (r.line) lines.push(r.line);
+	}
+	if (changes.length) {
+		saveBlocks(db, blocks);
+		addMemLog(db, changes);
+	}
+	return [...new Set(lines)];
+}
+/** Logs facts Ben just learned (so they show in Recent changes and can be undone). */
+function factChanges(before, after, by, now = /* @__PURE__ */ new Date()) {
+	const had = new Set(before.map((f) => f.t));
+	return after.filter((f) => !had.has(f.t)).map((f) => ({
+		id: changeId(now),
+		at: now.toISOString(),
+		by,
+		what: "fact",
+		name: "fact",
+		before: null,
+		after: f.t
+	}));
+}
+/** Every piece of memory to find by meaning, from this copy of the database. */
+function docsFrom(db, tasks = []) {
+	let notes = [];
+	try {
+		notes = listNotes(db);
+	} catch {
+		notes = [];
+	}
+	return memoryDocs({
+		facts: loadMemory(db).facts,
+		mind: loadMind(db),
+		notes,
+		story: loadStory(db),
+		log: loadLog(db),
+		tasks,
+		blocks: loadBlocks(db)
+	});
+}
 // src/core/coachNext.ts
 function nextMove(m, now = Date.now()) {
 	if (m.running) {
@@ -22191,7 +22691,7 @@ function stripTokens(cfg) {
 	return out;
 }
 var hasTokens = (cfg) => Object.entries(cfg ?? {}).some(([k, v]) => /Token$/.test(k) && !!v && v !== "on-server");
-function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null }) {
+function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist = null, ai = null, calendar = null, recall = null }) {
 	let polling = false;
 	let timer = null;
 	let lastPollAt = null;
@@ -22763,14 +23263,17 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const dayStart = /* @__PURE__ */ new Date();
 		dayStart.setHours(0, 0, 0, 0);
 		step("Reading your day");
-		const [todoToday, upcoming, events] = preset ? [
+		const findMemory = (q, k) => recall ? withTimeout(recall(q, k), 2500).catch(() => null) : Promise.resolve(null);
+		const [todoToday, upcoming, events, byMeaning] = preset ? [
+			null,
 			null,
 			null,
 			null
 		] : await Promise.all([
 			todoist ? todoist.today().catch(() => null) : Promise.resolve(null),
 			todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null),
-			calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 6912e5).toISOString()).catch(() => null) : Promise.resolve(null)
+			calendar ? calendar.events(dayStart.toISOString(), new Date(dayStart.getTime() + 6912e5).toISOString()).catch(() => null) : Promise.resolve(null),
+			text.trim().length >= 8 && !direct ? findMemory(text, 6) : Promise.resolve(null)
 		]);
 		if (!direct) await mirror.write((db) => {
 			const raw = getSetting(db, REMINDERS);
@@ -22784,7 +23287,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			} catch {}
 			return text && !direct ? noteExcuse(db, text, svc.wallet.today()) : null;
 		}).catch(() => null);
-		const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk } = await mirror.read((db) => {
+		const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk, blocks } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			return {
@@ -22865,9 +23368,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						return "";
 					}
 				})(),
-				look: buildLook(db, svc, finance)
+				look: buildLook(db, svc, finance),
+				blocks: blocksText(loadBlocks(db))
 			};
 		});
+		const recalled = byMeaning?.length ? recallText(byMeaning, notes) : "";
 		let allTasks = [
 			...direct?.tasks ?? [],
 			...todoToday ?? [],
@@ -22898,7 +23403,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			notes,
 			desk,
 			stealth: talk.stealth,
-			allActions: big
+			allActions: big,
+			blocks,
+			recalled
 		}), {
 			json: true,
 			think: big,
@@ -22924,6 +23431,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (pre.length) step("Looked up your history");
 				out = parseBrain(await ask(pre.length ? pre.join("\n") : void 0));
 			}
+			const recallActs = out.actions.filter((l) => /^\s*recall\s*:/i.test(l));
+			if (recallActs.length) {
+				out.actions = out.actions.filter((l) => !recallActs.includes(l));
+				out.need = [...out.need ?? [], ...recallActs.map((l) => `recall ${l.replace(/^\s*recall\s*:\s*/i, "")}`)];
+			}
 			if (out.need?.length && !out.actions.length) {
 				const found = [];
 				for (const need of out.need) {
@@ -22934,7 +23446,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						continue;
 					}
 					const [k, from, days] = need.trim().split(/\s+/);
-					if (/^calendar$/i.test(k) && calendar && /^\d{4}-\d{2}-\d{2}$/.test(from ?? "")) {
+					if (/^recall$/i.test(k)) {
+						step("Searched my memory");
+						const q = need.trim().replace(/^recall\s*/i, "").slice(0, 300);
+						const hits = await findMemory(q, 8) ?? await mirror.read((db) => keywordRecall(docsFrom(db), q, 8)).catch(() => []);
+						found.push(hits.length ? `Memory for "${q}":\n${recallText(hits)}` : `Memory for "${q}": nothing found.`);
+					} else if (/^calendar$/i.test(k) && calendar && /^\d{4}-\d{2}-\d{2}$/.test(from ?? "")) {
 						step("Read your calendar");
 						const s0 = /* @__PURE__ */ new Date(`${from}T00:00:00`);
 						const more = await calendar.events(s0.toISOString(), new Date(s0.getTime() + Math.min(14, Math.max(1, Number(days) || 1)) * 864e5).toISOString()).catch(() => []);
@@ -23042,6 +23559,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			}).catch(() => []);
 			done.push(...lines);
 		}
+		if (out.actions.some((l) => /^\s*block(add|fix|set)\s*:/i.test(l))) done.push(...await mirror.write((db) => runBlockOps(db, out.actions)).catch(() => []));
 		if (typeof process !== "undefined" && process.env?.BOT_DEBUG) console.log("brain actions:", out.actions, "→", acts);
 		const noCal = () => done.push("⚠️ Google Calendar isn't connected (Settings in the app)");
 		const fmtHM = (iso) => new Date(iso).toTimeString().slice(0, 5);
@@ -23546,7 +24064,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (expense) onExpense?.();
 		const at = (/* @__PURE__ */ new Date()).toISOString();
 		await mirror.write((db) => {
-			saveMemory(db, updateMemory(loadMemory(db), {
+			const before = loadMemory(db);
+			const after = updateMemory(before, {
 				facts: out.remember,
 				turns: [{
 					role: "me",
@@ -23559,7 +24078,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					text: [out.reply, ...done.length ? done : ["(nothing saved)"]].join(" | "),
 					at
 				}]
-			}));
+			});
+			saveMemory(db, after);
+			if (out.remember.length) addMemLog(db, factChanges(before.facts, after.facts, "ben"));
 			try {
 				const prev = JSON.parse(getSetting(db, "ben_why") || "[]");
 				setSetting(db, WHY_KEY, JSON.stringify(addWhy(Array.isArray(prev) ? prev : [], done, text || `[${media?.kind ?? "message"}]`, via === "telegram" ? "your Telegram message" : via === "mcp" ? "an AI app you connected" : "your message in the app", at)));
@@ -26488,6 +27009,273 @@ function nudgeInfo(text, kind) {
 	}
 	return {};
 }
+var EMBED_MODEL = "gemini-embedding-001";
+var unit = (v) => {
+	const n = Math.sqrt(v.reduce((t, x) => t + x * x, 0)) || 1;
+	return v.map((x) => x / n);
+};
+/** Gemini's batch embeddings (up to 100 texts a call), cut to 768 numbers and normalised. */
+function geminiEmbedder(key, fetchImpl = (...a) => fetch(...a)) {
+	return async (texts, task) => {
+		const out = [];
+		for (let i = 0; i < texts.length; i += 100) {
+			const part = texts.slice(i, i + 100);
+			const r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:batchEmbedContents`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-goog-api-key": key
+				},
+				signal: AbortSignal.timeout(task === "query" ? 4e3 : 15e3),
+				body: JSON.stringify({ requests: part.map((t) => ({
+					model: `models/${EMBED_MODEL}`,
+					content: { parts: [{ text: t.slice(0, 2e3) }] },
+					taskType: task === "query" ? "RETRIEVAL_QUERY" : "RETRIEVAL_DOCUMENT",
+					outputDimensionality: 768
+				})) })
+			});
+			const j = await r.json().catch(() => ({}));
+			if (!r.ok) throw new Error(`Embeddings ${r.status}: ${j?.error?.message ?? "failed"}`);
+			const list = Array.isArray(j?.embeddings) ? j.embeddings : [];
+			if (list.length !== part.length) throw new Error("Embeddings: wrong count");
+			for (const e of list) {
+				const v = Array.isArray(e?.values) ? e.values.map(Number) : [];
+				if (v.length !== 768 || v.some((x) => !Number.isFinite(x))) throw new Error("Embeddings: bad vector");
+				out.push(unit(v));
+			}
+		}
+		return out;
+	};
+}
+/** A vector as libSQL's F32 blob (little-endian float32), and back. */
+function toBlob(v) {
+	const f = new Float32Array(v);
+	return new Uint8Array(f.buffer.slice(0));
+}
+function fromBlob(b) {
+	if (!(b instanceof Uint8Array) || b.length % 4) return null;
+	return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.length));
+}
+var cosDist = (a, b) => {
+	let d = 0;
+	let x = 0;
+	let y = 0;
+	for (let i = 0; i < a.length; i++) {
+		d += a[i] * b[i];
+		x += a[i] * a[i];
+		y += b[i] * b[i];
+	}
+	return 1 - d / (Math.sqrt(x * y) || 1);
+};
+var TABLE = `CREATE TABLE IF NOT EXISTS sys_mem_vec (id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, hash TEXT NOT NULL, at TEXT NOT NULL, emb F32_BLOB(768) NOT NULL)`;
+var INDEX = "CREATE INDEX IF NOT EXISTS sys_mem_vec_idx ON sys_mem_vec (libsql_vector_idx(emb, 'metric=cosine'))";
+var MemoryVectors = class {
+	db;
+	embed;
+	ready = null;
+	constructor(db, embed) {
+		this.db = db;
+		this.embed = embed;
+	}
+	/** Makes the table (and the index when Turso has it); remembers what works. */
+	mode() {
+		return this.ready ??= (async () => {
+			await this.db.writeAtomic([{
+				sql: TABLE,
+				args: []
+			}]);
+			try {
+				await this.db.writeAtomic([{
+					sql: INDEX,
+					args: []
+				}]);
+				return "index";
+			} catch {
+				const [r] = await this.db.readMany([{
+					sql: "SELECT vector_distance_cos(vector32(?), vector32(?))",
+					args: ["[1,0]", "[0,1]"]
+				}]);
+				return r instanceof Error ? "js" : "scan";
+			}
+		})().catch((e) => {
+			this.ready = null;
+			throw e;
+		});
+	}
+	/** Embeds new and changed pieces (at most `limit` in one call), drops the ones gone. */
+	async sync(docs, limit = 60) {
+		await this.mode();
+		const [r] = await this.db.readMany([{
+			sql: "SELECT id, hash FROM sys_mem_vec",
+			args: []
+		}]);
+		if (r instanceof Error) throw r;
+		const plan = planSync(docs, new Map(r.rows.map((x) => [String(x[0]), String(x[1])])), limit);
+		const at = (/* @__PURE__ */ new Date()).toISOString();
+		const writes = [];
+		if (plan.embed.length) {
+			const vecs = await this.embed(plan.embed.map((d) => d.text), "doc");
+			plan.embed.forEach((d, i) => writes.push({
+				sql: "INSERT INTO sys_mem_vec (id, kind, text, hash, at, emb) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, text = excluded.text, hash = excluded.hash, at = excluded.at, emb = excluded.emb",
+				args: [
+					d.id,
+					d.kind,
+					d.text,
+					textHash(d.text),
+					at,
+					toBlob(vecs[i])
+				]
+			}));
+		}
+		for (let i = 0; i < plan.drop.length; i += 50) {
+			const ids = plan.drop.slice(i, i + 50);
+			writes.push({
+				sql: `DELETE FROM sys_mem_vec WHERE id IN (${ids.map(() => "?").join(",")})`,
+				args: ids
+			});
+		}
+		if (writes.length) await this.db.writeAtomic(writes);
+		return {
+			embedded: plan.embed.length,
+			dropped: plan.drop.length
+		};
+	}
+	/** The pieces of one kind already stored (as they were embedded). */
+	async stored(kind) {
+		await this.mode();
+		const [r] = await this.db.readMany([{
+			sql: "SELECT id, text FROM sys_mem_vec WHERE kind = ?",
+			args: [kind]
+		}]);
+		if (r instanceof Error) throw r;
+		return r.rows.map((x) => ({
+			id: String(x[0]),
+			kind,
+			text: String(x[1])
+		}));
+	}
+	/** The `k` pieces closest in meaning to the question (optionally only some kinds). */
+	async search(query, k = 6, kinds) {
+		const q = query.trim().slice(0, 1500);
+		if (!q) return [];
+		const [mode, [vec]] = await Promise.all([this.mode(), this.embed([q], "query")]);
+		return this.near(vec, k, kinds, mode);
+	}
+	/** Closest pieces to a vector. */
+	async near(vec, k, kinds, mode) {
+		mode ??= await this.mode();
+		const only = kinds?.length ? ` AND m.kind IN (${kinds.map(() => "?").join(",")})` : "";
+		const json = JSON.stringify(vec.map((x) => Math.round(x * 1e6) / 1e6));
+		const hit = (r) => ({
+			id: String(r[0]),
+			kind: String(r[1]),
+			text: String(r[2]),
+			dist: Number(r[3])
+		});
+		if (mode === "index") {
+			const n = kinds?.length ? k * 4 : k;
+			const [r] = await this.db.readMany([{
+				sql: `SELECT m.id, m.kind, m.text, vector_distance_cos(m.emb, vector32(?)) AS d FROM vector_top_k('sys_mem_vec_idx', vector32(?), ${n}) AS t JOIN sys_mem_vec m ON m.rowid = t.id WHERE 1${only} ORDER BY d LIMIT ${k}`,
+				args: [
+					json,
+					json,
+					...kinds ?? []
+				]
+			}]);
+			if (!(r instanceof Error)) return r.rows.map(hit);
+		}
+		if (mode !== "js") {
+			const [r] = await this.db.readMany([{
+				sql: `SELECT m.id, m.kind, m.text, vector_distance_cos(m.emb, vector32(?)) AS d FROM sys_mem_vec m WHERE 1${only} ORDER BY d LIMIT ${k}`,
+				args: [json, ...kinds ?? []]
+			}]);
+			if (!(r instanceof Error)) return r.rows.map(hit);
+		}
+		const [r] = await this.db.readMany([{
+			sql: `SELECT m.id, m.kind, m.text, m.emb FROM sys_mem_vec m WHERE 1${only}`,
+			args: [...kinds ?? []]
+		}]);
+		if (r instanceof Error) throw r;
+		return r.rows.map((x) => {
+			const v = fromBlob(x[3]);
+			return {
+				id: String(x[0]),
+				kind: String(x[1]),
+				text: String(x[2]),
+				dist: v && v.length === vec.length ? cosDist(vec, v) : 2
+			};
+		}).sort((a, b) => a.dist - b.dist).slice(0, k);
+	}
+};
+// src/server/memoryJobs.ts
+/** Runs what is due; the names of the jobs that ran. Never throws. */
+async function memoryJobs(d) {
+	const ran = [];
+	const hour = d.now.getHours();
+	try {
+		if (d.model && hour >= 3 && hour < 5 && await d.claim("mem_tidy_at", 72e6)) {
+			const r = await tidyMemory(d);
+			ran.push(`tidy:${r}`);
+		}
+	} catch (e) {
+		console.error("memory tidy:", e);
+	}
+	try {
+		if (d.vectors && await d.claim("mem_embed_at", 12e5)) {
+			const tasks = d.tasks && await d.claim("mem_tasks_at", 108e5) ? await d.tasks().catch(() => null) : null;
+			const docs = await d.mirror.read((db) => docsFrom(db, (tasks ?? []).map((t) => ({
+				id: t.id,
+				content: t.content,
+				due: t.due ?? null
+			}))));
+			const keep = tasks ? docs : docs.concat(await d.vectors.stored("task").catch(() => []));
+			const r = await d.vectors.sync(keep, 60);
+			if (r.embedded || r.dropped) ran.push(`embed:${r.embedded}/-${r.dropped}`);
+		}
+	} catch (e) {
+		console.error("memory embed:", e);
+	}
+	return ran;
+}
+/** The nightly tidy-up: 'skip' (nothing new), 'none' (nothing to change) or the number of changes. */
+async function tidyMemory(d) {
+	if (!d.model) return "skip";
+	const today = d.now.toISOString().slice(0, 10);
+	const since = addDays$5(today, -1);
+	const facts = await d.mirror.read((db) => loadMemory(db).facts);
+	const fresh = facts.filter((f) => f.at >= since && !f.pin).slice(-20);
+	if (!fresh.length) return "skip";
+	const old = facts.filter((f) => !fresh.includes(f));
+	const similar = /* @__PURE__ */ new Set();
+	const byId = new Map(old.map((f) => [factDocId(f), f]));
+	for (const f of fresh) {
+		let hits = [];
+		if (d.vectors) hits = await d.vectors.search(f.t, 5, ["fact"]).catch(() => []);
+		if (!hits.length) hits = keywordRecall(memoryDocs({ facts: old }), f.t, 4);
+		for (const h of hits) {
+			const o = byId.get(h.id);
+			if (o) similar.add(o);
+		}
+	}
+	const { prompt, ids } = tidyPrompt(fresh, [...similar].slice(0, 40), today);
+	const decisions = parseTidy(await d.model(prompt, {
+		json: true,
+		kind: "tidy"
+	}), ids);
+	if (!decisions.length) return "none";
+	const n = await d.mirror.write((db) => {
+		const m = loadMemory(db);
+		const r = applyTidy(m.facts, decisions, ids, 80, d.now);
+		if (!r.changes.length) return 0;
+		saveMemory(db, {
+			...m,
+			facts: r.facts
+		});
+		addMemLog(db, r.changes);
+		return r.changes.length;
+	});
+	return n ? String(n) : "none";
+}
 // src/core/todoistClean.ts
 var MAX_TASKS = 150;
 var norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -27143,7 +27931,7 @@ var todoistFetch = (env) => {
 var warm = null;
 var warmAt = 0;
 async function botsFor(env) {
-	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "") + "|" + (env.google ? "g" : "");
+	const key = env.tursoUrl + "|" + env.tursoToken.slice(-12) + "|" + (env.todoistToken ?? "").slice(-6) + "|" + (env.model ? "ai" : "") + "|" + (env.google ? "g" : "") + (env.embed === null ? "|noembed" : env.embed ? "|embed" : "");
 	if (warm && warm.key === key) {
 		if (Date.now() - warmAt > 3e3) {
 			await warm.mirror.refresh();
@@ -27196,6 +27984,9 @@ async function botsFor(env) {
 	} : void 0;
 	const todoist = env.todoistToken ? createTodoistApi(env.todoistToken, todoistFetch(env), { pickArea }) : null;
 	const calendar = calendarFor(env, mirror);
+	const gKey = (process.env.GEMINI_API_KEY || "").trim();
+	const embed = env.embed !== void 0 ? env.embed : gKey ? geminiEmbedder(gKey) : null;
+	const vectors = embed ? new MemoryVectors(new TursoHttp(env.tursoUrl, env.tursoToken), embed) : null;
 	warm = {
 		key,
 		SQL,
@@ -27206,11 +27997,13 @@ async function botsFor(env) {
 			server: true,
 			todoist,
 			ai: model ?? null,
-			calendar
+			calendar,
+			recall: vectors ? (q, k) => vectors.search(q, k) : null
 		}),
 		mirror,
 		services,
-		calendar
+		calendar,
+		vectors
 	};
 	warmAt = Date.now();
 	return warm;
@@ -27617,7 +28410,7 @@ var sysSet = (db, key, value) => db.writeAtomic([SYS_KV, {
 }]);
 async function runTick(env, now = /* @__PURE__ */ new Date()) {
 	const tz = lifeTz(env);
-	const { services, mirror, calendar, bots, SQL } = await botsFor(env);
+	const { services, mirror, calendar, bots, SQL, vectors } = await botsFor(env);
 	const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken);
 	if (env.timer) await beat(healthDb, "timer", true, void 0, now);
 	if (!await sysClaim(healthDb, TICK_AT, now.getTime(), 5e4)) return [];
@@ -27879,6 +28672,15 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		} catch (e) {
 			console.error("plugins:", e);
 		}
+		const memRan = await memoryJobs({
+			mirror,
+			vectors,
+			model: env.model,
+			claim: (key, gap) => sysClaim(healthDb, key, now.getTime(), gap),
+			tasks: env.todoistToken ? () => createTodoistApi(env.todoistToken, todoistFetch(env)).upcoming(30) : void 0,
+			now
+		});
+		if (memRan.length) note("sent", `Memory: ${memRan.join(", ")}`, void 0, "memory");
 		if (calendar) try {
 			if (await sysClaim(healthDb, "ben_cal_watch_at", now.getTime(), 6e5)) {
 				const end = new Date(now);

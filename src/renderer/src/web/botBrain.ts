@@ -7,6 +7,7 @@ import { parseTelegramText } from '@core/botCommands'
 // goals. Each bot is a specialist (Mega: head + training, Finance: money,
 // Waky: sleep). Pure helpers here; webBots.ts runs it.
 import { cleanFacts, dateIn, factLine, toRecord, type Fact } from '@core/factTypes'
+import { capFacts } from '@core/benMemory'
 import { STEALTH_NOTE } from '@core/stealth'
 import type { BotBridgeConfig } from '@shared/api'
 import { addDays, calendarDay } from '@core/dates'
@@ -46,7 +47,7 @@ export interface Memory {
 }
 
 const MEMORY = 'coach_memory'
-const MAX_FACTS = 80
+export const MAX_FACTS = 80
 const MAX_CHAT = 40
 
 export function loadMemory(db: any): Memory {
@@ -59,7 +60,7 @@ export function loadMemory(db: any): Memory {
 }
 
 export function saveMemory(db: any, m: Memory): void {
-  setSetting(db, MEMORY, JSON.stringify({ facts: m.facts.slice(-MAX_FACTS), chat: m.chat.slice(-MAX_CHAT) }))
+  setSetting(db, MEMORY, JSON.stringify({ facts: capFacts(m.facts, MAX_FACTS).facts, chat: m.chat.slice(-MAX_CHAT) }))
 }
 
 /** Adds facts (no near-duplicates) and conversation turns, keeping the newest. */
@@ -73,10 +74,11 @@ export function updateMemory(m: Memory, add: { facts?: string[]; turns?: Memory[
     const i = facts.findIndex((x) => norm(x.t) === n || norm(x.t).includes(n) || n.includes(norm(x.t)))
     const prev = i >= 0 ? facts.splice(i, 1)[0] : undefined
     // A typed record (person, exam, preference…), surer each time it comes up again.
-    facts.push(toRecord(t, now.toISOString().slice(0, 10), prev))
+    // A fact you pinned keeps your words; it only counts as said again.
+    facts.push(prev?.pin ? { ...prev, at: now.toISOString().slice(0, 10), seen: (prev.seen ?? 1) + 1 } : toRecord(t, now.toISOString().slice(0, 10), prev))
   }
-  // The clean-up (expired exams, old unconfirmed guesses) runs with every save.
-  return { facts: cleanFacts(facts, now.toISOString().slice(0, 10)).slice(-MAX_FACTS), chat: [...m.chat, ...(add.turns ?? [])].slice(-MAX_CHAT) }
+  // The clean-up (expired exams, old unconfirmed guesses) runs with every save; pinned facts stay.
+  return { facts: capFacts(cleanFacts(facts, now.toISOString().slice(0, 10)), MAX_FACTS).facts, chat: [...m.chat, ...(add.turns ?? [])].slice(-MAX_CHAT) }
 }
 
 /** What you tell the coach to push you on (Coach page → Goals & rules). */
@@ -594,6 +596,8 @@ Your long-term memory (use it: this is how you get better at coaching HIM):
 - "aim: <goal> | <YYYY-MM-DD or -> | <weekly target>" a goal you track with him ("aim: Pass algebra | 2026-12-15 | 6h focus"). "aimdone: <goal>" when reached or dropped.
 - "person: <name> | <who they are to him, short>" when he mentions someone in his life (friend, family, teacher, partner).
 - "works: <what>" / "fails: <what>" when you learn what helps him or doesn't ("25-min blocks before noon work"). "pattern: <what>" a pattern you see in his data.
+Your notes about him (the blocks under "Your notes about him"; always in front of you, 600 characters each; pinned ones are his, read only):
+- "blockadd: <About you|Goals now|How to coach you|People> | <one short line>" adds a line. "blockfix: <block> | <exact old text> => <new text>" changes it (empty new text removes it). "blockset: <block> | <whole new text>" rewrites a full block shorter. Keep them current and tight; only lasting things.
 His notebook (Obsidian-like notes he can read and edit; you see the ones that matter below):
 - "note: <note title> | <one line>" adds a dated line under that note (a new note if none has that title). Use it for anything worth keeping in his own words of record: facts about him and people ("note: People | Maxim, lab partner, ..."), exam dates and topics ("note: Etica | exam Friday, chapters 3-5"), decisions, what you learned. Prefer an existing title. One line, specific.
 Reminders (Telegram, sent by you later):
@@ -646,7 +650,8 @@ export function actionGroups(message: string, all = false): string {
 const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
 - "spending <YYYY-MM-DD> <YYYY-MM-DD> [category]" totals and top categories (or one category).
 - "focus <from> <to>", "workouts <from> <to>", "sleep <from> <to>", "tasks <from> <to>" (tasks done), "points <from> <to>".
-- "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).`
+- "calendar <YYYY-MM-DD> [days]" events of other days (with E-numbers). "todoist" every open task (with T-numbers).
+- "recall <what>" searches everything you remember about him (facts, notes, old chats, tasks) by meaning.`
 
 /** Splits the prompt: before it the fixed instructions (sent as the system message and cached), after it the live part. */
 export const PROMPT_SPLIT = '\n<<<LIVE>>>\n'
@@ -726,11 +731,13 @@ export function chatGist(c: { role: 'me' | 'coach'; text: string }): string {
 }
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean; allActions?: boolean } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean; allActions?: boolean; blocks?: string; recalled?: string } = {}): string {
   // Prompt diet: the last 12 turns (240 chars each) and only the facts that matter now.
   const turns = memory.chat.slice(-12)
   const chat = turns.map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${chatGist(c)}`)
   const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(' ')}`)
+  // BR1: what was found by meaning, minus the facts already listed.
+  const recalled = (extra.recalled ?? '').split('\n').filter((l) => l && !facts.some((f) => l.includes(f.t))).join('\n')
   return [
     PERSONA[persona],
     'Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks "why"/"how come" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.',
@@ -779,8 +786,10 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     extra.mind ? `== Your long-term coaching notes ==\n${extra.mind}` : '',
     extra.desk ? `== What you know about how he works (use it: plan with his energy map, name repeat excuses, respect a short night) ==\n${extra.desk}` : '',
     '',
+    extra.blocks ? `== Your notes about him (blocks you keep) ==\n${extra.blocks}` : '',
     '== What you remember about him ==',
     facts.length ? facts.map((f) => `- ${factLine(f)}`).join('\n') : '- nothing yet',
+    recalled ? `== Found in your memory for this message (by meaning) ==\n${recalled}` : '',
     '',
     '== Recent conversation ==',
     chat.length ? chat.join('\n') : '(none)',

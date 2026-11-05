@@ -3,6 +3,7 @@ import { POPULAR_MODELS } from '@core/ai'
 import { features } from '../bridge'
 import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
+import { BenNotes } from '../BenNotes'
 import type { SettingsState } from './useSettingsState'
 
 export function BenSection({ s }: { s: SettingsState }) {
@@ -10,6 +11,7 @@ export function BenSection({ s }: { s: SettingsState }) {
   return (
         <>
           {!features.aiSettings && <BrainPanel />}
+          <BenNotes />
           {onGo && (
             <section className="panel">
               <header className="panel-head">
