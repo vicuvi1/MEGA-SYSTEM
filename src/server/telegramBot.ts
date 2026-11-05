@@ -3,6 +3,7 @@
 // handled exactly like the app does (same services, same Turso transaction
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
+import { examSleepGuard, sleepRegularity } from '../core/sleepRegularity'
 import { createRequire } from 'node:module'
 import initSqlJs from 'sql.js'
 import type { SqlJsStatic } from 'sql.js'
@@ -321,6 +322,19 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
       sent.push('midday')
     }
   } else if (job === 'night') {
+    // Exam week and short on sleep: one warning before the wind-down (H10).
+    const guard = await mirror
+      .read((db) => {
+        const sl = services.services(db).sleep
+        const nights = sleepRegularity(sl.state().recentLogs).nights
+        const exams = services.services(db).focus.state().goals.map((g: any) => ({ title: g.title, deadline: g.deadline }))
+        return examSleepGuard({ today: input.today, nights, exams, bedTarget: sl.bedtimeTarget() })
+      })
+      .catch(() => null)
+    if (guard) {
+      await send(guard.text, undefined, env.sleepBotToken || env.botToken).catch(() => null)
+      sent.push('exam-sleep')
+    }
     // Only when wake-ups are slipping: one message 45 minutes before bedtime.
     const slip = wakeSlipping(input.wakes, input.today)
     if (slip) {

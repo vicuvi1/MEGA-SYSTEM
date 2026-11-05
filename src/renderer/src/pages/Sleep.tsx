@@ -328,7 +328,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
           <span className="sub">calculated from bedtimes</span>
         </div>
       </section>
-      <SleepSteady logs={summary.recentLogs} />
+      <SleepSteady logs={summary.recentLogs} bedTarget={summary.bedTarget} />
 
       <div className="cols even">
         <section className="panel">

@@ -1,6 +1,74 @@
 import { createRequire } from "node:module";
 import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+// src/core/readiness.ts
+/** Hours actually slept that night: bedtime and wake-up on the same morning's row. */
+function nightMinutes(log) {
+	if (!log?.bedTime || !log.wakeTime) return null;
+	const toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+	let m = toM(log.wakeTime) - toM(log.bedTime);
+	if (m <= 0) m += 1440;
+	return m >= 120 && m <= 960 ? m : null;
+}
+// src/core/sleepRegularity.ts
+var toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+/** Minutes around midnight-noon, so 23:30 and 00:30 are an hour apart (not 23). */
+var around = (m) => m >= 720 ? m - 1440 : m;
+var sd = (xs) => {
+	if (xs.length < 2) return 0;
+	const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+	return Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length);
+};
+var isWeekendMorning = (day) => [0, 6].includes((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay());
+function sleepRegularity(logs) {
+	const recent = [...logs].sort((a, b) => b.day.localeCompare(a.day)).slice(0, 14);
+	const beds = recent.filter((l) => l.bedTime).map((l) => around(toM(l.bedTime)));
+	const wakes = recent.filter((l) => l.wakeTime).map((l) => toM(l.wakeTime));
+	const bedSpread = beds.length >= 3 ? Math.round(sd(beds)) : null;
+	const wakeSpread = wakes.length >= 3 ? Math.round(sd(wakes)) : null;
+	const spreads = [bedSpread, wakeSpread].filter((x) => x != null);
+	const score = spreads.length ? Math.max(0, Math.min(100, Math.round(100 - spreads.reduce((a, b) => a + b, 0) / spreads.length * (50 / 60)))) : null;
+	const nights = recent.map((l) => ({
+		day: l.day,
+		minutes: nightMinutes(l)
+	})).filter((n) => n.minutes != null);
+	const mid = (l) => l.bedTime && l.wakeTime ? around(toM(l.bedTime)) + (nightMinutes(l) ?? 0) / 2 : null;
+	const wk = recent.filter((l) => !isWeekendMorning(l.day)).map(mid).filter((x) => x != null);
+	const we = recent.filter((l) => isWeekendMorning(l.day)).map(mid).filter((x) => x != null);
+	const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+	return {
+		score,
+		bedSpreadMin: bedSpread,
+		wakeSpreadMin: wakeSpread,
+		socialJetLagMin: wk.length && we.length ? Math.round(avg(we) - avg(wk)) : null,
+		nights: nights.reverse(),
+		avgMin: nights.length ? Math.round(avg(nights.map((n) => n.minutes))) : null
+	};
+}
+/**
+* In the week before an exam (a focus goal's deadline), more than `budgetMin`
+* of sleep debt over the last 7 nights (against `needMin` a night) gets one
+* warning: sleep consolidates what you studied, cramming past bedtime doesn't.
+*/
+function examSleepGuard(i) {
+	const need = i.needMin ?? 480;
+	const budget = i.budgetMin ?? 300;
+	const days = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 864e5);
+	const exam = i.exams.filter((e) => days(i.today, e.deadline) >= 0 && days(i.today, e.deadline) <= 7).sort((a, b) => a.deadline.localeCompare(b.deadline))[0];
+	if (!exam) return null;
+	const week = i.nights.filter((n) => days(n.day, i.today) >= 0 && days(n.day, i.today) < 7);
+	if (week.length < 2) return null;
+	const debt = week.reduce((t, n) => t + Math.max(0, need - n.minutes), 0);
+	if (debt <= budget) return null;
+	const left = days(i.today, exam.deadline);
+	const h = Math.round(debt / 6) / 10;
+	return {
+		examTitle: exam.title,
+		daysLeft: left,
+		debtMin: debt,
+		text: `📚 ${exam.title} ${left === 0 ? "is today" : `in ${left} day${left === 1 ? "" : "s"}`}, and you are ${h} h short on sleep this week. Tonight, bed at ${i.bedTarget} helps more than another hour of cramming: sleep is when what you studied sticks.`
+	};
+}
 // src/core/schema.ts
 var MIGRATIONS = [
 	`
@@ -19444,6 +19512,24 @@ async function runDaily(env, job) {
 			sent.push("midday");
 		}
 	} else if (job === "night") {
+		const guard = await mirror.read((db) => {
+			const sl = services.services(db).sleep;
+			const nights = sleepRegularity(sl.state().recentLogs).nights;
+			const exams = services.services(db).focus.state().goals.map((g) => ({
+				title: g.title,
+				deadline: g.deadline
+			}));
+			return examSleepGuard({
+				today: input.today,
+				nights,
+				exams,
+				bedTarget: sl.bedtimeTarget()
+			});
+		}).catch(() => null);
+		if (guard) {
+			await send(guard.text, void 0, env.sleepBotToken || env.botToken).catch(() => null);
+			sent.push("exam-sleep");
+		}
 		const slip = wakeSlipping(input.wakes, input.today);
 		if (slip) {
 			const { bed, wake } = await mirror.read((db) => {

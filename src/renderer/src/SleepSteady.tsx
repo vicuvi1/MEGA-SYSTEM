@@ -1,12 +1,21 @@
 // How steady your sleep is: a regularity score, social jet lag and the real
 // hours slept each night (bedtime and wake-up of the same night).
 import type { SleepLog } from '@core/sleep'
-import { sleepRegularity } from '@core/sleepRegularity'
+import { useEffect, useState } from 'react'
+import { examSleepGuard, sleepRegularity } from '@core/sleepRegularity'
+import { dayKey } from '@core/dates'
+import { life } from './bridge'
 
 const hm = (m: number) => `${Math.floor(m / 60)}h${m % 60 ? ` ${String(m % 60).padStart(2, '0')}` : ''}`
 
-export function SleepSteady({ logs }: { logs: SleepLog[] }) {
+export function SleepSteady({ logs, bedTarget }: { logs: SleepLog[]; bedTarget?: string }) {
   const r = sleepRegularity(logs)
+  // Exam week and short on sleep (H10): your focus goals' deadlines are the exams.
+  const [exams, setExams] = useState<{ title: string; deadline: string }[]>([])
+  useEffect(() => {
+    life.focus.state().then((f) => setExams(f.goals.map((g) => ({ title: g.title, deadline: g.deadline })))).catch(() => {})
+  }, [])
+  const guard = examSleepGuard({ today: dayKey(new Date()), nights: r.nights, exams, bedTarget: bedTarget ?? '23:00' })
   if (r.score == null && !r.nights.length) return null
   const max = Math.max(9 * 60, ...r.nights.map((n) => n.minutes))
   const lag = r.socialJetLagMin
@@ -16,6 +25,11 @@ export function SleepSteady({ logs }: { logs: SleepLog[] }) {
         <h2>How steady is your sleep?</h2>
         <span className="hint">last 2 weeks</span>
       </header>
+      {guard && (
+        <p className="ss-guard" role="alert">
+          {guard.text}
+        </p>
+      )}
       <div className="ss-nums">
         <div>
           <b>{r.score ?? '–'}</b>

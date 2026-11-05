@@ -47,3 +47,31 @@ export function sleepRegularity(logs: SleepLog[]): Regularity {
     avgMin: nights.length ? Math.round(avg(nights.map((n) => n.minutes))) : null
   }
 }
+
+// ---- Exam-week sleep guard (H10) ------------------------------------------
+export interface ExamGuard { examTitle: string; daysLeft: number; debtMin: number; text: string }
+
+/**
+ * In the week before an exam (a focus goal's deadline), more than `budgetMin`
+ * of sleep debt over the last 7 nights (against `needMin` a night) gets one
+ * warning: sleep consolidates what you studied, cramming past bedtime doesn't.
+ */
+export function examSleepGuard(i: { today: string; nights: { day: string; minutes: number }[]; exams: { title: string; deadline: string }[]; bedTarget: string; needMin?: number; budgetMin?: number }): ExamGuard | null {
+  const need = i.needMin ?? 480
+  const budget = i.budgetMin ?? 300
+  const days = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000)
+  const exam = i.exams.filter((e) => days(i.today, e.deadline) >= 0 && days(i.today, e.deadline) <= 7).sort((a, b) => a.deadline.localeCompare(b.deadline))[0]
+  if (!exam) return null
+  const week = i.nights.filter((n) => days(n.day, i.today) >= 0 && days(n.day, i.today) < 7)
+  if (week.length < 2) return null
+  const debt = week.reduce((t, n) => t + Math.max(0, need - n.minutes), 0)
+  if (debt <= budget) return null
+  const left = days(i.today, exam.deadline)
+  const h = Math.round(debt / 6) / 10
+  return {
+    examTitle: exam.title,
+    daysLeft: left,
+    debtMin: debt,
+    text: `📚 ${exam.title} ${left === 0 ? 'is today' : `in ${left} day${left === 1 ? '' : 's'}`}, and you are ${h} h short on sleep this week. Tonight, bed at ${i.bedTarget} helps more than another hour of cramming: sleep is when what you studied sticks.`
+  }
+}

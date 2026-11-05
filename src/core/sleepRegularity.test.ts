@@ -20,3 +20,17 @@ describe('sleep regularity', () => {
     expect(sleepRegularity([log('2026-11-05', null, '07:00')]).score).toBeNull()
   })
 })
+
+import { examSleepGuard } from './sleepRegularity'
+describe('exam-week sleep guard', () => {
+  const nights = ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04'].map((day) => ({ day, minutes: 330 }))
+  it('warns before an exam when sleep debt is over budget', () => {
+    const g = examSleepGuard({ today: '2026-11-05', nights, exams: [{ title: 'Etica exam', deadline: '2026-11-08' }], bedTarget: '23:00' })
+    expect(g).toMatchObject({ daysLeft: 3, debtMin: 600 })
+    expect(g!.text).toMatch(/Etica exam in 3 days.*10 h short/)
+  })
+  it('quiet without an exam soon or with enough sleep', () => {
+    expect(examSleepGuard({ today: '2026-11-05', nights, exams: [{ title: 'x', deadline: '2026-12-20' }], bedTarget: '23:00' })).toBeNull()
+    expect(examSleepGuard({ today: '2026-11-05', nights: nights.map((n) => ({ ...n, minutes: 470 })), exams: [{ title: 'x', deadline: '2026-11-06' }], bedTarget: '23:00' })).toBeNull()
+  })
+})

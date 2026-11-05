@@ -1942,3 +1942,4 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .ss-bars span { flex: 1; height: var(--h); min-height: 3px; border-radius: 4px 4px 0 0; background: var(--accent); opacity: 0.85; }
 .ss-bars span.short { background: var(--orange); }
 @media (max-width: 480px) { .ss-nums b { font-size: 18px; } }
+.ss-guard { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--orange) 16%, transparent); }
