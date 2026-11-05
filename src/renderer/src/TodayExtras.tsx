@@ -190,3 +190,66 @@ export function WeekStrip() {
     </section>
   )
 }
+
+/**
+ * Never miss twice (D4): yesterday slipped, so today starts with the small
+ * version (15 minutes of focus, 10 push-ups). Gone once done or dismissed.
+ */
+export function MissTwiceCard() {
+  const [st, setSt] = useState<CoachStatus | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const today = localDay(new Date().toISOString())
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem('ls.missTwiceHidden') === today
+    } catch {
+      return false
+    }
+  })
+  const load = () => void life.coach?.status?.().then(setSt).catch(() => {})
+  useEffect(load, [])
+  useLive(load)
+  const items = st?.missTwice ?? []
+  if (hidden || !items.length) return null
+  const run = async (id: string) => {
+    setBusy(id)
+    try {
+      if (id === 'focus') await life.focus.start('Focus', 15)
+      else await capture('10 pushups')
+      window.dispatchEvent(new CustomEvent(id === 'focus' ? 'life-focus-changed' : 'life-body-changed'))
+      load()
+    } catch {
+      /* the toast from the action says why */
+    }
+    setBusy(null)
+  }
+  return (
+    <section className="miss-twice" aria-label="Never miss twice">
+      <div>
+        <b>Never miss twice</b>
+        <small>{items.map((x) => x.missed).join(' · ')}. One day is fine; today, just the small version.</small>
+      </div>
+      <div className="row">
+        {items.map((x) => (
+          <button key={x.id} className="btn primary small" disabled={!!busy} onClick={() => void run(x.id)}>
+            {x.id === 'focus' ? '▶ ' : '💪 '}
+            {x.small}
+          </button>
+        ))}
+        <button
+          className="btn ghost small"
+          onClick={() => {
+            setHidden(true)
+            try {
+              localStorage.setItem('ls.missTwiceHidden', today)
+            } catch {
+              /* private window */
+            }
+          }}
+        >
+          Not today
+        </button>
+      </div>
+    </section>
+  )
+}

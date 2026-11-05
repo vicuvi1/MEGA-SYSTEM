@@ -10,6 +10,7 @@ import { helpLine, shownMood } from '@core/benActs'
 import { loadStyle } from './botBrain'
 import { addDays } from '@core/dates'
 import type { Services } from './webServices'
+import { neverMissTwice, type MissTwiceItem } from '@core/neverMissTwice'
 
 
 /**
@@ -44,6 +45,8 @@ export interface CoachStatus {
   /** Focus minutes the 7 days before that (to compare weeks). */
   prevWeekMin: number
   mustdos: { i: number; text: string; done: boolean }[]
+  /** Yesterday slipped: the smaller version for today (never miss twice, D4). */
+  missTwice: MissTwiceItem[]
 }
 
 const json = (db: any, key: string) => {
@@ -121,6 +124,14 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
         return { day, min: focus.filter((x) => x.day === day).reduce((t, x) => t + x.minutes, 0) }
       })
     })(),
-    mustdos: f.plan.items.map((x, i) => ({ i, text: x.text, done: x.done }))
+    mustdos: f.plan.items.map((x, i) => ({ i, text: x.text, done: x.done })),
+    missTwice: (() => {
+      try {
+        const b = s.body.state(now)
+        return neverMissTwice({ today, focus: s.progress.input(null, now, 8).focus, workoutDays: b.recentWorkouts.map((w) => w.day), restDays: b.restDays ?? [] })
+      } catch {
+        return []
+      }
+    })()
   }
 }

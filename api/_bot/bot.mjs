@@ -14743,6 +14743,30 @@ function nextMove(m, now = Date.now()) {
 		sub: m.evening ? "Tell your coach, it writes the review." : "Ask your coach for the one thing that matters now."
 	};
 }
+// src/core/neverMissTwice.ts
+var FOCUS_MIN = 15;
+function neverMissTwice(i) {
+	const y = addDays$3(i.today, -1);
+	const min = (day) => i.focus.filter((f) => f.day === day).reduce((t, f) => t + f.minutes, 0);
+	const out = [];
+	if (Array.from({ length: 7 }, (_, k) => min(addDays$3(y, -1 - k))).some((m) => m >= FOCUS_MIN) && min(y) < FOCUS_MIN && min(i.today) < FOCUS_MIN) out.push({
+		id: "focus",
+		missed: "No focus yesterday",
+		small: "15 minutes of focus"
+	});
+	const trained = (d) => i.workoutDays.includes(d) || i.restDays.includes(d);
+	if (Array.from({ length: 7 }, (_, k) => addDays$3(y, -1 - k)).some((d) => i.workoutDays.includes(d)) && !trained(y) && !trained(i.today)) out.push({
+		id: "workout",
+		missed: "No training yesterday",
+		small: "10 push-ups"
+	});
+	return out;
+}
+/** Ben's one line about it (or null). */
+function missTwiceLine(items) {
+	if (!items.length) return null;
+	return `Yesterday slipped (no ${items.map((x) => x.missed.toLowerCase().replace(/^no /, "")).join(" and ")}). One day is fine, two is a pattern. Today just do the small version: ${items.map((x) => x.small).join(" and ")}. That's all it takes to keep the chain.`;
+}
 // src/renderer/src/web/coachStatus.ts
 /**
 * Today's water and its ONE goal (N2/N4), used by every screen, the bot's
@@ -14876,7 +14900,20 @@ function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 			i,
 			text: x.text,
 			done: x.done
-		}))
+		})),
+		missTwice: (() => {
+			try {
+				const b = s.body.state(now);
+				return neverMissTwice({
+					today,
+					focus: s.progress.input(null, now, 8).focus,
+					workoutDays: b.recentWorkouts.map((w) => w.day),
+					restDays: b.restDays ?? []
+				});
+			} catch {
+				return [];
+			}
+		})()
 	};
 }
 // src/core/coachImpact.ts
@@ -21300,6 +21337,19 @@ async function deskTick(mirror, services, now, send, esc) {
 		callback_data: `md|${i + 1}`
 	}))] }).catch(() => null);
 	if (callDue(d.calls, now) && now.getDay() === 0 && h >= 20 && h < 22) await send("🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.").catch(() => null);
+	if (h >= 10 && h < 20) {
+		const line = await mirror.write((db) => {
+			if (getSetting(db, "ben_misstwice_day") === today) return null;
+			const items = coachStatus(services.services(db), now).missTwice;
+			if (!items.length) return null;
+			setSetting(db, "ben_misstwice_day", today);
+			return missTwiceLine(items);
+		}).catch(() => null);
+		if (line) await send(`🔗 ${esc(line)}`, { inline_keyboard: [[{
+			text: "▶ 15 min focus",
+			callback_data: "fo|15|Focus"
+		}]] }).catch(() => null);
+	}
 }
 /**
 * The daily cloud snapshot, made by the server so no device has to be open

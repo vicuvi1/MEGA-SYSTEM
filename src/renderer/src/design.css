@@ -2084,3 +2084,8 @@ body:has(.bb-bubble) main { padding-bottom: 96px; }
   .ta-tabs { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
   .ta-tabs > * { flex: none; }
 }
+
+/* Never miss twice (D4) */
+.miss-twice { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; margin-bottom: 12px; border-radius: 14px; background: color-mix(in srgb, var(--orange, #ff9b3d) 10%, var(--surface, transparent)); border: 1px solid color-mix(in srgb, var(--orange, #ff9b3d) 30%, transparent); }
+.miss-twice > div:first-child { display: grid; gap: 2px; min-width: 200px; flex: 1; }
+.miss-twice small { color: var(--muted); }

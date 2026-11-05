@@ -54,6 +54,8 @@ import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@co
 import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState } from '@core/rhythm'
+import { missTwiceLine } from '@core/neverMissTwice'
+import { coachStatus } from '../renderer/src/web/coachStatus'
 
 /** What Ben already said today, by kind (each kind once a day). */
 const BEN_SENT = 'ben_sent_today'
@@ -772,6 +774,17 @@ async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: s
   // Two hours after the Sunday review, not on top of it (T7).
   if (callDue(d.calls, now) && now.getDay() === 0 && h >= 20 && h < 22) {
     await send('🗓 Sunday coach call: 5 questions, 5 minutes, and next week is set. Open the Coach page → <b>Coach call</b>.').catch(() => null)
+  }
+  // 5) Never miss twice (D4): yesterday slipped → one message, once a day, from 10:00.
+  if (h >= 10 && h < 20) {
+    const line = await mirror.write((db) => {
+      if (getSetting(db as any, 'ben_misstwice_day') === today) return null
+      const items = coachStatus(services.services(db), now).missTwice
+      if (!items.length) return null
+      setSetting(db as any, 'ben_misstwice_day', today)
+      return missTwiceLine(items)
+    }).catch(() => null)
+    if (line) await send(`🔗 ${esc(line)}`, { inline_keyboard: [[{ text: '▶ 15 min focus', callback_data: 'fo|15|Focus' }]] }).catch(() => null)
   }
 }
 

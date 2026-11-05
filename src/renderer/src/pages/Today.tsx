@@ -18,7 +18,7 @@ import { useLive } from '../live'
 import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
-import { DeepWork, WeekStrip } from '../TodayExtras'
+import { DeepWork, MissTwiceCard, WeekStrip } from '../TodayExtras'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -111,6 +111,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     ),
     day: () => (
       <>
+      <MissTwiceCard />
       <CoachPlan oneApprove hideReview onChange={() => onChange()} />
       <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} />
       </>
