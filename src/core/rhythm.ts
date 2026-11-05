@@ -30,6 +30,10 @@ export interface RhythmState {
   moved?: string[]
   /** Blocks missed again after the move: Ben asked what to do (K3). */
   asked?: string[]
+  /** "Rescue my day" offered today (W1). */
+  rescued?: boolean
+  /** The honest end-of-day check-out (W6): what you say you did, never paid. */
+  checkout?: { items: string[]; marks: (null | 'k' | 'p' | 'x')[] }
   briefing?: { status: 'proposed' | 'approved'; sentAt: string; plan: DayProposal; version: number }
   evening?: { sentAt: string; score: number; top3: string[]; lesson?: string }
   water: string[]
@@ -90,7 +94,7 @@ export interface RhythmFacts {
   paused: boolean
 }
 
-export type RhythmJob = 'briefing' | 'evening' | 'weekly' | 'water' | 'training'
+export type RhythmJob = 'briefing' | 'replan' | 'evening' | 'weekly' | 'water' | 'training'
 
 /** What the coach should send now (in order). */
 export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts): RhythmJob[] {
@@ -102,6 +106,8 @@ export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts
   const auto = Math.max(toMin(prefs.autopilot ?? '07:30'), toMin(f.wakeTarget))
   const start = Math.max(toMin('06:00'), Math.min(f.wakeAt ? toMin(f.wakeAt) + 5 : toMin(f.wakeTarget) + 45, auto))
   if (!state.briefing && t >= start && t < toMin('12:00')) out.push('briefing')
+  // W8: no plan by noon → half a day left, still worth planning (until 16:00).
+  else if (!state.briefing && !f.paused && t >= Math.max(start, toMin('12:00')) && t < toMin('16:00')) out.push('replan')
   if (!f.paused && prefs.water && waterBehind(state, f)) out.push('water')
   if (!f.paused && prefs.training && !f.workoutDone && !state.training && t >= toMin('18:00') && t < toMin('21:00')) out.push('training')
   if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push('weekly')
@@ -330,7 +336,48 @@ export function reviewText(r: DayResult, score: number, lesson: string, top3: st
   ].join('\n')
 }
 
-export const REVIEW_KEYBOARD = { inline_keyboard: [[{ text: "✅ Keep as tomorrow's top 3", callback_data: 'rv|k' }, { text: '✏️ Change', callback_data: 'rv|e' }]] }
+export const REVIEW_KEYBOARD = { inline_keyboard: [[{ text: "✅ Keep as tomorrow's top 3", callback_data: 'rv|k' }, { text: '✏️ Change', callback_data: 'rv|e' }], [{ text: '☑️ Check out the day honestly', callback_data: 'rv|o' }]] }
+
+/**
+ * W5: after a short night (under 6 h) the plan gets lighter: blocks shorter
+ * (75%, at least 25 min), at most 3, and training "easy".
+ */
+export function lightenForSleep(plan: DayProposal, sleptMin: number | null): DayProposal {
+  if (sleptMin == null || sleptMin >= 360 || !plan.blocks.length) return plan
+  const h = `${Math.floor(sleptMin / 60)}h${String(sleptMin % 60).padStart(2, '0')}`
+  return {
+    ...plan,
+    headline: `Short night (${h}): a lighter day. ${plan.headline}`.slice(0, 160),
+    blocks: plan.blocks.slice(0, 3).map((b) => ({ ...b, minutes: Math.max(25, Math.round((b.minutes * 0.75) / 5) * 5) })),
+    training: plan.training ? { ...plan.training, what: /^easy/i.test(plan.training.what) ? plan.training.what : `easy: ${plan.training.what}` } : null
+  }
+}
+
+const MARK: Record<string, string> = { k: '✅', p: '½', x: '✗' }
+/** W6: the check-out list, with your marks so far. */
+export function checkoutText(items: string[], marks: (null | 'k' | 'p' | 'x')[]): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const done = marks.filter(Boolean).length === items.length
+  return [
+    '☑️ <b>Check out the day</b>: what really happened? (Goes in your journal. No points: points only come from what you logged during the day.)',
+    '',
+    ...items.map((t, i) => `${marks[i] ? MARK[marks[i]!] : '·'} ${esc(t)}`),
+    ...(done ? ['', `<b>Done:</b> ${marks.filter((m) => m === 'k').length} done, ${marks.filter((m) => m === 'p').length} partly, ${marks.filter((m) => m === 'x').length} not.`] : [])
+  ].join('\n')
+}
+export function checkoutKeyboard(items: string[], marks: (null | 'k' | 'p' | 'x')[]) {
+  return {
+    inline_keyboard: items
+      .map((t, i) => ({ t, i }))
+      .filter(({ i }) => !marks[i])
+      .slice(0, 8)
+      .map(({ t, i }) => [
+        { text: `✅ ${t.slice(0, 18)}`, callback_data: `rv|c|${i}|k` },
+        { text: '½', callback_data: `rv|c|${i}|p` },
+        { text: '✗', callback_data: `rv|c|${i}|x` }
+      ])
+  }
+}
 export const TOP3_ASK = "Tomorrow's top 3? One per line."
 
 // ---- The Sunday review -------------------------------------------------

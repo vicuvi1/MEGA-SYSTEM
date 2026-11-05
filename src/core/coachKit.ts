@@ -124,6 +124,12 @@ export interface NudgeState {
   count?: number
   /** Calendar block ids already announced today. */
   announced?: string[]
+  /** Nudges in a row that nothing followed (W3): the gap grows 45 → 90 → 120 min. */
+  ignored?: number
+  /** Per hour of the day: [nudges sent, nudges followed by something within the gap] (W9). */
+  slots?: Record<string, [number, number]>
+  /** The hour of the last nudge (to score it when the next one comes). */
+  lastHour?: number
 }
 
 export interface NudgeFacts {
@@ -138,7 +144,8 @@ export interface NudgeFacts {
   wakeLogged: boolean
 }
 
-export const NUDGE_MAX_PER_DAY = 12
+/** Fewer, better nudges (W3, W21): 8 a day at most. */
+export const NUDGE_MAX_PER_DAY = 8
 
 /**
  * "Follow up until I act": between 09:00 and 21:30, when nothing is running,
@@ -156,12 +163,44 @@ export function shouldNudge(st: NudgeState, f: NudgeFacts, now = new Date()): bo
   if (f.idleMin < 60) return false
   const count = st.day === f.today ? (st.count ?? 0) : 0
   if (count >= NUDGE_MAX_PER_DAY) return false
-  if (st.lastAt && now.getTime() - Date.parse(st.lastAt) < FOLLOW_EVERY_MIN * 60000) return false
+  if (st.lastAt && now.getTime() - Date.parse(st.lastAt) < nudgeGapMin(st) * 60000) return false
+  // W9: an hour where he almost never reacts gets no nudge (after 4+ tries there).
+  if (badHour(st, now.getHours())) return false
   return true
 }
 
-export function nudged(st: NudgeState, today: string, now = new Date()): NudgeState {
-  return { ...st, lastAt: now.toISOString(), day: today, count: (st.day === today ? (st.count ?? 0) : 0) + 1, announced: st.day === today ? st.announced : [] }
+/** W3: 45 minutes, 90 after one ignored nudge, 2 hours after two in a row. */
+export function nudgeGapMin(st: NudgeState): number {
+  const n = st.ignored ?? 0
+  return n >= 2 ? 120 : n === 1 ? 90 : FOLLOW_EVERY_MIN
+}
+
+/** W9: he reacts to under 15% of nudges at this hour (4+ sent). */
+export function badHour(st: NudgeState, hour: number): boolean {
+  const s = st.slots?.[String(hour)]
+  return !!s && s[0] >= 4 && s[1] / s[0] < 0.15
+}
+
+/**
+ * A nudge went out. `idleMin` (minutes since anything was done) scores the
+ * previous nudge: something happened since it → he reacted (reset the
+ * back-off, a point for that hour); nothing → one more ignored.
+ */
+export function nudged(st: NudgeState, today: string, now = new Date(), idleMin?: number): NudgeState {
+  const sameDay = st.day === today
+  let ignored = sameDay ? st.ignored ?? 0 : 0
+  const slots = { ...(st.slots ?? {}) }
+  if (sameDay && st.lastAt && idleMin != null) {
+    const since = (now.getTime() - Date.parse(st.lastAt)) / 60000
+    const acted = idleMin < since - 1
+    ignored = acted ? 0 : ignored + 1
+    if (st.lastHour != null) {
+      const k = String(st.lastHour)
+      const [sent, ok] = slots[k] ?? [0, 0]
+      slots[k] = [Math.min(60, sent + 1), Math.min(60, ok + (acted ? 1 : 0))]
+    }
+  }
+  return { ...st, lastAt: now.toISOString(), day: today, count: (sameDay ? (st.count ?? 0) : 0) + 1, announced: sameDay ? st.announced : [], ignored, slots, lastHour: now.getHours() }
 }
 
 /** He's saying something went wrong ("that's not money", "undo", "wrong amount", "nu e bine"). */

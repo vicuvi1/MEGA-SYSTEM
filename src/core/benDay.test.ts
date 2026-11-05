@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest'
+import { badHour, nudged, nudgeGapMin, shouldNudge, type NudgeFacts } from './coachKit'
+import { checkoutKeyboard, checkoutText, dueRhythm, lightenForSleep, DEFAULT_RHYTHM_PREFS } from './rhythm'
+import { rescueFromEvents } from './benPlans'
+
+const today = '2026-11-05'
+const at = (hm: string) => new Date(`${today}T${hm}:00`)
+
+describe("Ben's day (W1–W9)", () => {
+  it('backs off when nudges are ignored, resets when he acts (W3)', () => {
+    let st = nudged({}, today, at('10:00'))
+    expect(nudgeGapMin(st)).toBe(45)
+    st = nudged(st, today, at('11:00'), 120) // still idle since the last nudge: ignored
+    expect(st.ignored).toBe(1)
+    expect(nudgeGapMin(st)).toBe(90)
+    st = nudged(st, today, at('12:30'), 200)
+    expect(nudgeGapMin(st)).toBe(120)
+    st = nudged(st, today, at('15:00'), 20) // did something since: reacted
+    expect(st.ignored).toBe(0)
+  })
+  it('learns hours he never reacts in (W9)', () => {
+    const st = { slots: { '14': [5, 0] as [number, number] } }
+    expect(badHour(st, 14)).toBe(true)
+    expect(badHour(st, 10)).toBe(false)
+    const f: NudgeFacts = { today, time: '14:10', focusRunning: false, focusMinToday: 0, openMustDos: 2, idleMin: 120, wakeLogged: true }
+    expect(shouldNudge(st, f, at('14:10'))).toBe(false)
+    expect(shouldNudge(st, { ...f, time: '15:10' }, at('15:10'))).toBe(true)
+  })
+  it('offers a plan in the afternoon when there is none (W8)', () => {
+    const facts = { today, time: '13:00', weekday: 4, wakeAt: '07:00', wakeTarget: '07:00', waterMl: 2000, waterTarget: 2000, workoutDone: true, paused: false }
+    expect(dueRhythm({ day: today, water: [] } as any, DEFAULT_RHYTHM_PREFS, facts as any)).toContain('replan')
+    expect(dueRhythm({ day: today, water: [] } as any, DEFAULT_RHYTHM_PREFS, { ...facts, time: '16:30' } as any)).not.toContain('replan')
+  })
+  it('makes the plan lighter after a short night (W5)', () => {
+    const plan = { day: today, headline: 'Big day', mustdos: [], blocks: [1, 2, 3, 4].map((i) => ({ title: `B${i}`, start: `0${8 + i}:00`, minutes: 60 })), training: { time: '18:00', what: 'Gym' }, waterMl: 2700 }
+    const l = lightenForSleep(plan, 320)
+    expect(l.blocks).toHaveLength(3)
+    expect(l.blocks[0].minutes).toBe(45)
+    expect(l.training?.what).toBe('easy: Gym')
+    expect(l.headline).toContain('Short night (5h20)')
+    expect(lightenForSleep(plan, 450)).toBe(plan)
+  })
+  it('checks out the day honestly (W6)', () => {
+    const items = ['Lab report', 'Algebra block']
+    expect(checkoutKeyboard(items, [null, null]).inline_keyboard).toHaveLength(2)
+    expect(checkoutKeyboard(items, ['k', null]).inline_keyboard).toHaveLength(1)
+    expect(checkoutText(items, ['k', 'x'])).toContain('1 done, 0 partly, 1 not')
+    expect(checkoutText(items, ['k', 'x'])).toContain('No points')
+  })
+  it('rescues a slipping day: Ben moves his blocks, classes stay (W1)', () => {
+    const iso = (hm: string) => at(hm).toISOString()
+    const events = [
+      { id: 'a', title: 'Algebra', start: iso('09:00'), end: iso('10:30'), ours: true },
+      { id: 'c', title: 'Class', start: iso('15:00'), end: iso('17:00') },
+      { id: 'b', title: 'Lab report', start: iso('17:30'), end: iso('19:00'), ours: true }
+    ]
+    const r = rescueFromEvents(events, at('14:00').getTime(), at('22:00').getTime())
+    expect(r.moves.find((m) => m.id === 'c')?.action).toBe('keep')
+    const a = r.moves.find((m) => m.id === 'a')!
+    expect(a.action === 'move' || a.action === 'shrink').toBe(true)
+    expect(a.start! >= at('14:00').getTime()).toBe(true)
+  })
+})
+
+describe('stop or extend focus from chat (W7)', () => {
+  it('reads the actions', async () => {
+    const { readAction } = await import('../renderer/src/web/botBrain')
+    expect(readAction('stop')).toEqual({ kind: 'stopfocus' })
+    expect(readAction('extend: 5')).toEqual({ kind: 'extendfocus', minutes: 5 })
+    expect(readAction('extend: 500')).toBeNull()
+  })
+})

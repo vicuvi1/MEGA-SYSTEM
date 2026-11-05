@@ -24,7 +24,7 @@ import {
   type DayProposal,
   type DayResult,
   type RhythmPrefs,
-  type RhythmState, blocksKept, editPlan } from '@core/rhythm'
+  type RhythmState, blocksKept, editPlan, lightenForSleep } from '@core/rhythm'
 import { getSetting, setSetting } from '../../../main/settings'
 import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStory, pickFacts, saveLetter, saveMind, sportState } from './botBrain'
 import { REMINDERS, promiseLine, promiseStats } from '@core/coachKit'
@@ -38,7 +38,8 @@ import { bookBlocks, isGoalBlock, planGoal, planLine, type GoalPlan } from '@cor
 import type { Mirror } from './mirror'
 import type { AskModel, CalendarLike, TodoistLike } from './webBots'
 import type { WebServices } from './webServices'
-import { writeJournal } from './notes'
+import { benNote, writeJournal } from './notes'
+import { nightMinutes } from '@core/readiness'
 import { dayLog, dayLogLine } from './dayLog'
 
 export interface RhythmDeps {
@@ -260,7 +261,19 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const st = load(db, today)
       const water = waterToday(db, svc, now).target
       const workoutDone = (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done') || !!svc.body.state(now).restToday
-      return { today, st, water, workoutDone }
+      // W5: last night's sleep. W4: yesterday's journal (score, lesson) and Ben's notes to himself.
+      const night = db.prepare('SELECT bed_time, wake_time FROM sleep_logs WHERE day = ?').get(today) as { bed_time?: string; wake_time?: string } | undefined
+      const slept = nightMinutes({ bedTime: night?.bed_time ?? null, wakeTime: night?.wake_time ?? null } as any)
+      const yday = (() => {
+        try {
+          const j = listNotes(db as any).find((n: any) => n.title === `Journal/${addDays(today, -1)}`)
+          const self = JSON.parse(getSetting(db as any, COACH_SELFREVIEW) || 'null')
+          return [j ? String(j.body ?? '').replace(/\s+/g, ' ').slice(0, 300) : '', self?.day === addDays(today, -1) ? `Your notes: ${(self.notes ?? []).join(' / ')}` : ''].filter(Boolean).join(' ')
+        } catch {
+          return ''
+        }
+      })()
+      return { today, st, water, workoutDone, slept, yday }
     })
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
     // Goal blocks already in today's calendar are busy time; only the rest still needs a slot.
@@ -287,6 +300,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
               "You are BEN, Victor's coach. His day plan is built (times fixed). Only: name each block in a few words tied to his goal, rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
               `Plan: ${JSON.stringify({ blocks: fallback.blocks.map((b) => ({ start: b.start, minutes: b.minutes, title: b.title })), mustdos: fallback.mustdos, training: fallback.training })}`,
               plans.length ? `Goals: ${plans.map((p) => planLine(p)).join(' | ')}` : '',
+              base.yday ? `Yesterday (use it: the headline names what went well or slipped and how today fixes it, e.g. "Yesterday 2/3, focus slipped after lunch, so the hard block is first"): ${base.yday}` : '',
               'Answer ONLY with JSON: {"headline": string, "mustdos": string[], "names": string[]} (names: one per block, same order).'
             ]
               .filter(Boolean)
@@ -326,6 +340,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         plan = fallback
       }
     }
+    // A short night: a lighter plan (W5).
+    plan = lightenForSleep(plan, base.slept)
     return mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1
@@ -698,6 +714,42 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
+  /** W6: the check-out list: today's must-dos and plan blocks. */
+  async function checkoutStart(): Promise<{ items: string[]; marks: (null | 'k' | 'p' | 'x')[] }> {
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const today = svc.wallet.today()
+      const st = load(db, today)
+      const items = [...new Set([...svc.focus.plan(today).items.map((x) => x.text), ...(st.briefing?.plan.blocks ?? []).map((b) => b.title)])].slice(0, 8)
+      const checkout = st.checkout && st.checkout.items.join('|') === items.join('|') ? st.checkout : { items, marks: items.map(() => null) }
+      save(db, { ...st, checkout })
+      return checkout
+    })
+  }
+  async function checkoutMark(i: number, v: 'k' | 'p' | 'x'): Promise<{ items: string[]; marks: (null | 'k' | 'p' | 'x')[] }> {
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const today = svc.wallet.today()
+      const st = load(db, today)
+      const c = st.checkout ?? { items: [], marks: [] }
+      if (!(i >= 0 && i < c.items.length)) return c
+      const marks = c.marks.slice()
+      marks[i] = v
+      const next = { items: c.items, marks }
+      save(db, { ...st, checkout: next })
+      // All marked: one line in the journal. Never points.
+      if (marks.every(Boolean)) {
+        const sym: Record<string, string> = { k: '✅', p: '½', x: '✗' }
+        try {
+          benNote(db as any, `Journal/${today}`, `Check-out: ${c.items.map((t, k) => `${sym[marks[k]!]} ${t}`).join(' · ')}`, today)
+        } catch {
+          /* the marks are saved anyway */
+        }
+      }
+      return next
+    })
+  }
+
   /** A water nudge really went out: only then it counts against the 5 a day (K2). */
   async function markWater(): Promise<void> {
     await mirror.write((db) => {
@@ -719,7 +771,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, writeStory, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, writeStory, checkoutStart, checkoutMark, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

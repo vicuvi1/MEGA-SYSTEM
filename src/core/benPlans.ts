@@ -180,6 +180,19 @@ export interface Rescue {
  * blocks (to ~60%, at least 25 min), pack them into what's left before the
  * end of the day, and send what doesn't fit to tomorrow.
  */
+/**
+ * W1: today's calendar as rescue blocks: Ben's own blocks can shrink or move,
+ * everything else (classes, meetings) is fixed. Training blocks (💪) stay put.
+ */
+export function rescueFromEvents(events: { id: string; title: string; start: string; end: string; allDay?: boolean; ours?: boolean; declined?: boolean }[], now: number, endOfDay: number): Rescue & { blocks: DayBlock[] } {
+  const blocks: DayBlock[] = events
+    .filter((e) => !e.allDay && !e.declined && Date.parse(e.end) > now - 6 * 3600_000)
+    .map((e) => ({ id: e.id, title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), fixed: !e.ours || e.title.includes('💪') }))
+  // Missed blocks of Ben's (ended, not done) come back too, to fit them in what's left.
+  const r = rescueDay(blocks.map((b) => (b.fixed || b.end > now ? b : { ...b, must: true })), now, endOfDay)
+  return { ...r, blocks }
+}
+
 export function rescueDay(blocks: DayBlock[], now: number, endOfDay: number, opts: { shrink?: number } = {}): Rescue {
   const k = opts.shrink ?? 0.6
   // Missed must-dos come back too (they still have to happen today).

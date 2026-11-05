@@ -45,10 +45,11 @@ import { moodFace } from '@core/benKnows'
 import { benNote, listNotes, seedNotes } from './notes'
 import { loadStory, answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
-import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
+import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText, checkoutText, checkoutKeyboard } from '@core/rhythm'
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus, waterToday } from './coachStatus'
 import { nextSlot } from '@core/benActs'
+import { rescueFromEvents } from '@core/benPlans'
 import { AREA_WORDS, learnAreaWords } from '@core/areaWords'
 import { amountIn, codeFix, preLookups, quickKind, quickReply } from '@core/benQuick'
 import { createRhythm } from './rhythmBot'
@@ -720,7 +721,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|m[ln])\|/.test(data)) return null
+    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|m[ln])\|/.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -891,6 +892,21 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           await tg(update.__token, 'sendMessage', { chat_id: chat, text: ask, reply_markup: { force_reply: true, input_field_placeholder: data === 'rb|e' ? 'No gym today; lab report first' : 'One per line' } })
           return ask
         }
+        // W6: the honest check-out, item by item (journal only, never points).
+        if (data === 'rv|o') {
+          const c = await rhythm.checkoutStart()
+          await answer(c.items.length ? 'Check out' : 'Nothing to check')
+          if (!c.items.length) return null
+          await tg(update.__token, 'sendMessage', { chat_id: chat, text: checkoutText(c.items, c.marks), parse_mode: 'HTML', reply_markup: checkoutKeyboard(c.items, c.marks) })
+          return 'checkout'
+        }
+        if (data.startsWith('rv|c|')) {
+          const [, , i, v] = data.split('|')
+          const c = await rhythm.checkoutMark(Number(i), v as 'k' | 'p' | 'x')
+          await answer(v === 'k' ? 'Done' : v === 'p' ? 'Partly' : 'Not done')
+          await edit(checkoutText(c.items, c.marks), checkoutKeyboard(c.items, c.marks))
+          return 'marked'
+        }
         if (data === 'rv|k') {
           await answer('Saved for tomorrow')
           const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.`
@@ -1023,6 +1039,59 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const text = ok ? '✕ Dropped for today. Your calendar is up to date.' : 'Could not find that block anymore; it may already be gone.'
       await answer(ok ? 'Dropped' : 'Not found')
       await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
+      return text
+    }
+    // W2: a block that hasn't started → the next free time today.
+    if (data.startsWith('bx|')) {
+      if (!(await markSeen(key))) return null
+      const id = data.slice(3)
+      let text = 'Could not find that block anymore; it may already be gone.'
+      if (calendar?.move) {
+        const day = new Date()
+        const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString()
+        const evs = await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [] as CalEvent[])
+        const ev = evs.find((e) => e.id === id)
+        if (ev) {
+          const len = Math.round((Date.parse(ev.end) - Date.parse(ev.start)) / 60000)
+          const dayKey = day.toLocaleDateString('sv-SE')
+          const slot = nextSlot(evs.filter((e) => e.id !== id), dayKey, day.toTimeString().slice(0, 5), len)
+          if (slot && (await calendar.move(ev.calendarId, ev.id, new Date(`${dayKey}T${slot.start}:00`).toISOString(), new Date(`${dayKey}T${slot.end}:00`).toISOString()).then(() => true).catch(() => false))) text = `↪️ ${ev.title} → ${slot.start}–${slot.end}, your next free time.`
+          else if (!slot) text = 'No free time left today for it. Drop it, or tell me where it goes.'
+        }
+      }
+      await answer('Moved')
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
+      return text
+    }
+    // W1: "Rescue my day": the rest of today shrunk to fit (recomputed now, so it's current).
+    if (data.startsWith('rs|')) {
+      if (!(await markSeen(key))) return null
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      if (data !== 'rs|a') {
+        await answer('Kept as is')
+        return 'kept'
+      }
+      const lines: string[] = []
+      if (calendar?.move) {
+        const now = new Date()
+        const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+        const evs = await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [] as CalEvent[])
+        const end = new Date(now)
+        end.setHours(22, 0, 0, 0)
+        const r = rescueFromEvents(evs, now.getTime(), end.getTime())
+        for (const mv of r.moves) {
+          const ev = evs.find((e) => e.id === mv.id)
+          if (!ev || mv.action === 'keep') continue
+          const s = mv.action === 'tomorrow' ? Date.parse(ev.start) + 86400000 : mv.start!
+          const e = mv.action === 'tomorrow' ? Date.parse(ev.end) + 86400000 : mv.end!
+          const ok = await calendar.move(ev.calendarId, ev.id, new Date(s).toISOString(), new Date(e).toISOString()).then(() => true).catch(() => false)
+          if (ok) lines.push(mv.action === 'tomorrow' ? `➡️ ${ev.title} → tomorrow` : `${mv.action === 'shrink' ? '✂️' : '↪️'} ${ev.title} ${new Date(s).toTimeString().slice(0, 5)}–${new Date(e).toTimeString().slice(0, 5)}`)
+        }
+      }
+      const text = lines.length ? `🛟 Done. The rest of today:\n${lines.join('\n')}` : 'Nothing needed moving.'
+      await answer('Rescued')
       await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
       return text
     }
@@ -1961,6 +2030,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               svc.focus.setPlan([...p.items.map((x) => x.text), a.text])
               opNow = { k: 'mustdo', text: a.text }
               return `📝 Must-do added: ${a.text}${todoist ? ' (⭐ in Todoist)' : ''}`
+            }
+            if (a.kind === 'stopfocus') {
+              if (!svc.focus.state().running) return '⚠️ No focus timer is running'
+              const r = svc.focus.stop()
+              return `⏹ Focus logged: ${r.session.subject} · ${r.session.minutes} min${r.coins ? ` · +${r.coins} points` : ''}`
+            }
+            if (a.kind === 'extendfocus') {
+              if (!svc.focus.state().running) return '⚠️ No focus timer is running'
+              svc.focus.extend(a.minutes)
+              return `⏱ +${a.minutes} min on the timer`
             }
             if (a.kind === 'focus') {
               svc.focus.start(a.subject, a.minutes)

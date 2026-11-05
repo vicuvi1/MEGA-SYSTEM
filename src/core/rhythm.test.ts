@@ -12,7 +12,7 @@ describe('rhythm: when things are due', () => {
     expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '07:30' }))).toEqual(['briefing']) // autopilot: ready by 07:30
     expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '07:45' }))).toEqual(['briefing'])
     expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '06:40', wakeAt: '06:30' }))).toEqual(['briefing'])
-    expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '12:10', waterMl: 2000 }))).toEqual([])
+    expect(dueRhythm(s, DEFAULT_RHYTHM_PREFS, facts({ time: '12:10', waterMl: 2000 }))).toEqual(['replan']) // W8: half a day left
     const sent = { ...s, briefing: { status: 'proposed' as const, sentAt: '', plan: localProposal({ today, now: '08:00', events: [], tasks: [], top3: [], waterTarget: 2700, workoutDone: false }), version: 1 } }
     expect(dueRhythm(sent, DEFAULT_RHYTHM_PREFS, facts({ time: '09:00', waterMl: 500 }))).toEqual([])
   })

@@ -559,6 +559,7 @@ const ACT_CORE = `You can act. Put actions in "actions" (strings), only when Vic
 Logging and the day:
 - "log: <text>" to record something with the app's own parser, one item per action. Money: "<what> <amount>" with the amount LAST (shop names before it), a wallet name may follow: "pizza 120", "groceries Linella 163", "taxi 30 maib", "+500 salary". Workouts: "30 pushups", "run 5 km". Sleep: "/wake 06:40", "/bed". Discipline: "/checkin", "/oath". Body: "/weight 74.5".
 - "mustdo: <text>" a must-do for today (also starred in Todoist).
+- "stop" ends the running focus timer and logs it (he says he's done); "extend: <minutes>" adds time to it ("5 more minutes"). Only when a timer is running.
 - "focus: <minutes> <subject>" start a focus timer now: ONLY when he clearly says to start it now ("start 25 min", "go", "timer"). Otherwise never start it yourself: offer a button {"label": "▶ 25 min <subject>", "do": "focus:25:<subject>"} and let him tap. "fun: <minutes> <what>" spend points on fun.
 - "goal: <title> | <subject> | <YYYY-MM-DD> | <hours>" an exam or project with a deadline and the hours it needs (estimate honestly if he doesn't say). Then "book: <title>" plans it backward from the deadline and books its blocks in his calendar for the next 7 days (they move by themselves when he misses a day). "book: all" re-plans every goal.
 Your long-term memory (use it: this is how you get better at coaching HIM):
@@ -804,6 +805,8 @@ export type BrainAction =
   | { kind: 'log'; text: string }
   | { kind: 'mustdo'; text: string }
   | { kind: 'focus'; minutes: number; subject: string }
+  | { kind: 'stopfocus' }
+  | { kind: 'extendfocus'; minutes: number }
   | { kind: 'fun'; minutes: number; what: string }
   | { kind: 'task'; text: string }
   | { kind: 'goal'; title: string; subject: string; deadline: string; hours: number }
@@ -843,6 +846,13 @@ const MREF = /^M\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
+  // W7: "stop" (he's done) and "extend: 5" (5 more minutes) on a running timer.
+  if (/^\s*stop(focus)?\s*:?\s*$/i.test(line) || /^\s*stopfocus\s*:/i.test(line)) return { kind: 'stopfocus' }
+  const ext = /^\s*extend\s*:\s*(\d{1,3})/i.exec(line)
+  if (ext) {
+    const minutes = Number(ext[1])
+    return minutes >= 1 && minutes <= 120 ? { kind: 'extendfocus', minutes } : null
+  }
   const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()

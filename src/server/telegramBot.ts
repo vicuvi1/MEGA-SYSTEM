@@ -44,6 +44,7 @@ import { blockSubject, isFocusBlock } from '@core/dayTime'
 import { notifFromMessage, type Notif } from '@core/notify'
 import { addNotif } from '../renderer/src/web/notifications'
 import { AREA_WORDS, areaFromWords, learnAreaWords } from '@core/areaWords'
+import { rescueFromEvents } from '@core/benPlans'
 import { autoApproveDue, planWaitingText, missedBlocks, movedText, nextSlot, nudgeText } from '@core/benActs'
 import { loadStyle } from '../renderer/src/web/botBrain'
 import { deskChange, deskView, loadDesk, saveDesk } from '../renderer/src/web/benDesk'
@@ -735,6 +736,21 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       }
     }
   }
+  // W2: a block that should be running but hasn't started: one nudge about THAT block,
+  // and no "nothing done" nudge while a block is on (the plan is the nudge).
+  const blockNow = events.find((e) => isFocusBlock(e) && Date.parse(e.start) <= now.getTime() - 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
+  if (blockNow && !st.focus.running && !paused && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
+    const subject = blockSubject(blockNow.title).slice(0, 28)
+    const later = `bx|${blockNow.id}`.length <= 64 ? [{ text: '↪️ Next free time', callback_data: `bx|${blockNow.id}` }] : []
+    try {
+      if (await send(`⏰ ${time}: <b>${esc(blockNow.title)}</b> (${localIsoHM(blockNow.start)}–${localIsoHM(blockNow.end)}) hasn't started. Start now, or move it?`, { inline_keyboard: [[{ text: `▶ Start: ${subject}`, callback_data: `fo|${subject}` }, ...later], pauseRow] }, { always: true })) {
+        nudge = { ...nudged(nudge, st.today, now, st.idleMin), announced: [...(nudge.announced ?? []), `late:${blockNow.id}`] }
+        sent.push('plan-nudge')
+      }
+    } catch {
+      /* next tick */
+    }
+  }
   const openMustDos = st.focus.plan.items.filter((x) => !x.done)
   const facts: NudgeFacts = { today: st.today, time, focusRunning: !!st.focus.running, focusMinToday: st.focus.todayMin, openMustDos: openMustDos.length, idleMin: st.idleMin, wakeLogged: st.wakeLogged }
   // Never "nothing done for 1h" while he's in class or a meeting.
@@ -742,14 +758,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // Your 👎 at this time of the week became a quiet rule (N9).
   const quiet = await mirror.read((db) => quietNow(quietRules(loadFeedback(db)), now)).catch(() => null)
   if (!sent.length && !inEvent && quiet && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', `${quiet.text} (learned from your 👎)`, 'nudge')
-  if (!sent.length && !inEvent && !quiet && shouldNudge(nudge, facts, now)) {
+  if (!sent.length && !inEvent && !quiet && !blockNow && shouldNudge(nudge, facts, now)) {
     const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
     const first = openMustDos[0]?.text
     const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'
     const text = nudgeText(n, idle, first, st.focus.todayMin, st.tone)
     const subject = (first ?? 'Focus').split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
     try {
-      if (await send(text, { inline_keyboard: [[{ text: `▶ 50 min: ${subject}`, callback_data: `fo|${subject}` }], pauseRow] }, { always: true })) nudge = nudged(nudge, st.today, now)
+      if (await send(text, { inline_keyboard: [[{ text: `▶ 50 min: ${subject}`, callback_data: `fo|${subject}` }], pauseRow] }, { always: true })) nudge = nudged(nudge, st.today, now, st.idleMin)
     } catch {
       /* next tick */
     }
@@ -949,6 +965,25 @@ async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unk
     const drop = `bd|${m.event.id}`.length <= 64 ? `bd|${m.event.id}` : `bd|${(state.moved ?? []).length}`
     await send(movedText(m.event.title, slot), { inline_keyboard: [[{ text: `▶ Start now: ${subject}`, callback_data: `fo|${subject}` }, { text: '✕ Drop it', callback_data: drop }]] })
   }
+  // W1: the day is slipping (2 blocks missed, or at 15:00 under 40% of the focus planned so far):
+  // once a day, one card with the rest of today shrunk to fit.
+  if (!state.rescued && time >= '11:00' && time < '20:00') {
+    const ours = events.filter((e) => e.ours && !e.allDay && !e.title.includes('💪'))
+    const pastMin = ours.filter((e) => Date.parse(e.end) <= now.getTime()).reduce((t, e) => t + (Date.parse(e.end) - Date.parse(e.start)) / 60000, 0)
+    const behind = time >= '15:00' && pastMin >= 50 && focus.todayMin < pastMin * 0.4
+    if ((state.moved ?? []).length >= 2 || behind) {
+      const end = new Date(now)
+      end.setHours(22, 0, 0, 0)
+      const r = rescueFromEvents(events, now.getTime(), end.getTime())
+      const changes = r.moves.filter((x) => x.action !== 'keep' && ours.some((e) => e.id === x.id))
+      await mark({ rescued: true } as any)
+      if (changes.length) {
+        const t = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
+        const lines = changes.map((x) => (x.action === 'tomorrow' ? `➡️ ${x.title} → tomorrow` : `${x.action === 'shrink' ? '✂️' : '↪️'} ${x.title} ${t(x.start!)}–${t(x.end!)}`))
+        await send(`🛟 <b>Today slipped a bit.</b> Here's the rest of it, shrunk to fit (${r.freeMin} min still free):\n${lines.map(escapeHtml).join('\n')}`, { inline_keyboard: [[{ text: '✅ Do it', callback_data: 'rs|a' }, { text: 'Keep as is', callback_data: 'rs|n' }]] })
+      }
+    }
+  }
 }
 
 async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown, opts?: { always?: boolean }) => Promise<unknown>): Promise<void> {
@@ -1037,6 +1072,10 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       // Mark it first: a slow model must not make two plans.
       const { plan, version } = await bots.rhythm.propose()
       await send(proposalText(plan, { version }), PROPOSAL_KEYBOARD)
+    } else if (job === 'replan') {
+      // W8: no plan by noon: half a day left is still worth a plan.
+      const { plan, version } = await bots.rhythm.propose()
+      await send(`🕐 <b>Half a day left</b>: here's a plan for the rest of it.\n\n${proposalText(plan, { version })}`, PROPOSAL_KEYBOARD)
     } else if (job === 'water') {
       // Up to 5 a day when you're behind (K2): the cap and spacing live in waterBehind, so it's not "once a day".
       const line = await bots.rhythm.waterLine()
