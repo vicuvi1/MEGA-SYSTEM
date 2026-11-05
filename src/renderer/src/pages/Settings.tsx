@@ -8,6 +8,7 @@ function downloadBlob(content: string, mime: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+import { hasPasskeyHere, passkeySupported } from '../web/passkey'
 import { askConfirm } from '../confirmSheet'
 import { useEffect, useState } from 'react'
 import { rememberPinLength } from './LockScreen'
@@ -691,6 +692,26 @@ export function Settings({ auth, onAuth, backup, onBackup, onRestored, update, o
               Sign out all other devices
             </button>
             <span className="hint small">A lost phone or an old browser? This ends their access. Changing the PIN does it too.</span>
+          </div>
+        )}
+        {life.auth.setupPasskey && passkeySupported() && (
+          <div className="row" style={{ marginTop: 8 }}>
+            <button
+              className="btn small"
+              onClick={async () => {
+                setPinError(null)
+                setPinSuccess(null)
+                try {
+                  await life.auth.setupPasskey!()
+                  setPinSuccess('Fingerprint / face unlock is on for this device. The PIN still works too.')
+                } catch (err: any) {
+                  setPinError(err.message || 'Could not set it up')
+                }
+              }}
+            >
+              🔐 {hasPasskeyHere() ? 'Set up fingerprint / face again' : 'Unlock with fingerprint / face'}
+            </button>
+            <span className="hint small">Uses this device's fingerprint, face or Windows Hello. The server checks it; the PIN stays as a backup.</span>
           </div>
         )}
 

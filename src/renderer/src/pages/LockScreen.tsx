@@ -2,6 +2,7 @@
 // remembers your PIN's length on this device (never the PIN itself) and
 // checks as soon as you reach it, so wrong partial PINs never count as
 // failed tries. The first time on a new device, press Enter once.
+import { hasPasskeyHere } from '../web/passkey'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { AuthStatus } from '@shared/api'
@@ -92,6 +93,24 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
           </button>
         )}
         {len.current > 0 && busy && <p className="hint">Opening…</p>}
+        {life.auth.unlockPasskey && hasPasskeyHere() && (
+          <button
+            type="button"
+            className="btn ghost"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              try {
+                onUnlocked(await life.auth.unlockPasskey!())
+              } catch (err) {
+                setError((err as Error).message)
+                setBusy(false)
+              }
+            }}
+          >
+            🔐 Unlock with fingerprint / face
+          </button>
+        )}
       </motion.form>
     </div>
   )

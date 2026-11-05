@@ -366,6 +366,9 @@ export interface LifeApi {
     setPin(pin: string, currentPin?: string): Promise<AuthStatus>
     /** End every other device's session (they must enter the PIN again). */
     signOutOthers?(): Promise<void>
+    /** Fingerprint / face unlock (passkeys, website and installed app). */
+    unlockPasskey?(): Promise<AuthStatus>
+    setupPasskey?(): Promise<void>
     unlock(pin: string): Promise<AuthStatus>
     lock(): Promise<AuthStatus>
     /** This device opens without the PIN (it remembers you). */

@@ -3,6 +3,7 @@
 // the same services as the desktop on that copy, so every section behaves the
 // same as on the PC: caps, cooldowns, undo, shop, quests, streaks. Things only
 // the web has (embedded apps, Telegram polling, cloud snapshots) are here.
+import { setupPasskey, unlockWithPasskey } from './web/passkey'
 import initSqlJs from 'sql.js'
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import type { Bridge } from './bridge'
@@ -951,6 +952,19 @@ export function createTursoWebBridge(): Bridge {
         unlocked = !s.locked
         if (unlocked) lockedOnPurpose = false
         return s
+      },
+      // Fingerprint / face (M7): the server checks the passkey and gives a session like the PIN.
+      unlockPasskey: async () => {
+        if (direct) throw new Error('Passkeys work on the website and the installed app')
+        await unlockWithPasskey()
+        haveSession()
+        unlocked = true
+        lockedOnPurpose = false
+        return { pinSet: true, locked: false }
+      },
+      setupPasskey: async () => {
+        if (direct) throw new Error('Passkeys work on the website and the installed app')
+        await setupPasskey()
       },
       // A new PIN ends every session (all devices); this one logs in again with it.
       setPin: async (pin: string, current?: string) => {
