@@ -75,7 +75,7 @@ describe('web services on Turso', () => {
   it('Finance Helper days are paid once each, from the day it was connected', async () => {
     const remote = fakeTurso()
     const web = await open()
-    const today = new Date().toISOString().slice(0, 10)
+    const today = await web.read((s) => s.wallet.today())
     expect(await web.connections.syncFinance([today, today, '2020-01-01'])).toBe(1)
     expect(await web.connections.syncFinance([today])).toBe(0)
     const again = await open()
