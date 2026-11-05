@@ -653,9 +653,10 @@ export function DayFlow(props: Props) {
   const doneCount = plan.filter((p) => p.done).length + bigOpen.filter((b) => b.done).length
   // Plan items shown on their own: those without a starred Todoist task.
   const planOnly = plan.map((p, i) => ({ p, i })).filter((x) => !starred.some((t) => isPlanFor(x.p, t)))
-  // One number that matters: must-dos (starred tasks + plan items not starred).
-  const mustTotal = starred.length + planOnly.length
-  const mustDone = planOnly.filter((x) => x.p.done).length
+  // One number that matters, the same one Today's top card, the island and Ben
+  // show (N6): today's must-do list, done of total.
+  const mustTotal = plan.length
+  const mustDone = plan.filter((p) => p.done).length
   const lateCount = loose.filter((t) => t.due && t.due < today).length
   // The rest of today's tasks fold away while you have must-dos (your choice is remembered).
   const restOpen = restPref ?? true
