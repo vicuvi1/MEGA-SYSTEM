@@ -1,6 +1,7 @@
 // The desktop services (src/main/*.ts) running on the web app's copy of the
 // Turso database. Same rules as the desktop: daily caps, cooldowns, undo,
 // quests, the shop, streaks. Each change is saved to Turso before it shows.
+import { moneyDay } from '@core/moneyDays'
 import { moneyNumbers } from './benDesk'
 import { financeStateFrom } from './botBrain'
 import { queueFinanceExpense } from './financeInbox'
@@ -142,6 +143,29 @@ export function createWebServices(mirror: Mirror) {
               paid++
             } catch (e) {
               if (!(e instanceof LedgerError)) throw e
+            }
+          }
+          // No-spend and cooked-at-home days (M2), paid once the day is over, from Finance Helper's records.
+          const fin = financeStateFrom(db, typeof localStorage !== 'undefined' ? localStorage : null)
+          const txs: any[] = Array.isArray(fin?.tx) ? fin.tx : []
+          if (txs.length) {
+            const names = new Map<string, string>((fin?.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
+            const list = txs.filter((t) => t && !t.deleted && typeof t.date === 'string').map((t) => ({ date: t.date, type: t.type, category: names.get(String(t.category)) ?? String(t.category ?? ''), note: String(t.note ?? ''), amount: Number(t.amount) || 0 }))
+            const start = from > addDays(today, -7) ? from : addDays(today, -7)
+            for (let d = start; d < today; d = addDays(d, 1)) {
+              const m = moneyDay(list, d)
+              for (const [ok, rule, tag, note] of [
+                [m.noSpend, 'money.no_spend', 'nospend', 'No-spend day (Finance Helper)'],
+                [m.cooked, 'money.cooked_home', 'cooked', 'Cooked at home (Finance Helper)']
+              ] as const) {
+                if (!ok || handled.has(`fin:${tag}:${d}`)) continue
+                try {
+                  s.wallet.awardRule(rule, { day: d, ref: `fin:${tag}:${d}`, note })
+                  paid++
+                } catch (e) {
+                  if (!(e instanceof LedgerError)) throw e
+                }
+              }
             }
           }
           return paid

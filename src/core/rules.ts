@@ -25,6 +25,8 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'tasks.todoist_done', module: 'tasks', title: 'Todoist task done', coins: 8, xp: 15, dailyCap: 12, cooldownMin: 0, enabled: true },
   { id: 'money.under_budget', module: 'money', title: 'Stayed under budget', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'money.logged', module: 'money', title: 'Logged spending', coins: 3, xp: 5, dailyCap: 1, cooldownMin: 0, enabled: true },
+  { id: 'money.no_spend', module: 'money', title: 'No-spend day', coins: 8, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
+  { id: 'money.cooked_home', module: 'money', title: 'Cooked at home', coins: 5, xp: 8, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'grand_slam.all_four', module: 'general', title: '4-Pillar Grand Slam (Sovereign Day)', coins: 50, xp: 100, dailyCap: 1, cooldownMin: 0, enabled: true }
 ]
 

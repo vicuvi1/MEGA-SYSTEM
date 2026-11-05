@@ -3940,6 +3940,26 @@ var DEFAULT_RULES = [
 		enabled: true
 	},
 	{
+		id: "money.no_spend",
+		module: "money",
+		title: "No-spend day",
+		coins: 8,
+		xp: 10,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "money.cooked_home",
+		module: "money",
+		title: "Cooked at home",
+		coins: 5,
+		xp: 8,
+		dailyCap: 1,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
 		id: "grand_slam.all_four",
 		module: "general",
 		title: "4-Pillar Grand Slam (Sovereign Day)",
@@ -5584,6 +5604,22 @@ var TursoHttp = class {
 		}
 	}
 };
+// src/core/moneyDays.ts
+var BILL = /bill|rent|chirie|utilit|subscript|abonament|internet|phone|telefon|insurance|asigur|loan|credit|\btax(es)?\b|impozit/i;
+var EAT_OUT = /restaurant|cafe|café|coffee|cafea|bar\b|delivery|glovo|wolt|fast ?food|takeaway|mcdonald|kfc|pizza|burger|eat(ing)? out|lunch out|dinner out/i;
+var GROCERY = /grocer|supermarket|market|alimente|linella|kaufland|metro|fourchette|nr ?1|food shop|produse/i;
+function moneyDay(tx, day) {
+	const everyday = tx.filter((t) => t.type === "expense" && t.date.slice(0, 10) === day).filter((t) => !BILL.test(`${t.category} ${t.note ?? ""}`));
+	const eatOut = everyday.some((t) => EAT_OUT.test(`${t.category} ${t.note ?? ""}`));
+	const from = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
+	from.setUTCDate(from.getUTCDate() - 3);
+	const start = from.toISOString().slice(0, 10);
+	const groceries = tx.some((t) => t.type === "expense" && t.date.slice(0, 10) >= start && t.date.slice(0, 10) <= day && GROCERY.test(`${t.category} ${t.note ?? ""}`));
+	return {
+		noSpend: everyday.length === 0,
+		cooked: !eatOut && groceries
+	};
+}
 // src/core/experiment.ts
 var EXPERIMENTS = [
 	{
@@ -11849,6 +11885,45 @@ syncFinance: (recordDays) => write((s) => {
 					paid++;
 				} catch (e) {
 					if (!(e instanceof LedgerError)) throw e;
+				}
+			}
+			const fin = financeStateFrom(db, typeof localStorage !== "undefined" ? localStorage : null);
+			const txs = Array.isArray(fin?.tx) ? fin.tx : [];
+			if (txs.length) {
+				const names = new Map((fin?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
+				const list = txs.filter((t) => t && !t.deleted && typeof t.date === "string").map((t) => ({
+					date: t.date,
+					type: t.type,
+					category: names.get(String(t.category)) ?? String(t.category ?? ""),
+					note: String(t.note ?? ""),
+					amount: Number(t.amount) || 0
+				}));
+				const start = from > addDays$3(today, -7) ? from : addDays$3(today, -7);
+				for (let d = start; d < today; d = addDays$3(d, 1)) {
+					const m = moneyDay(list, d);
+					for (const [ok, rule, tag, note] of [[
+						m.noSpend,
+						"money.no_spend",
+						"nospend",
+						"No-spend day (Finance Helper)"
+					], [
+						m.cooked,
+						"money.cooked_home",
+						"cooked",
+						"Cooked at home (Finance Helper)"
+					]]) {
+						if (!ok || handled.has(`fin:${tag}:${d}`)) continue;
+						try {
+							s.wallet.awardRule(rule, {
+								day: d,
+								ref: `fin:${tag}:${d}`,
+								note
+							});
+							paid++;
+						} catch (e) {
+							if (!(e instanceof LedgerError)) throw e;
+						}
+					}
 				}
 			}
 			return paid;
