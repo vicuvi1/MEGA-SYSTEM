@@ -3,122 +3,55 @@
 // recorded in bot_seen_updates in the same Turso transaction as what it
 // logged, so the phone and the PC never log one message twice, and a message
 // is never marked done without its record (or the other way round).
-import { addWhy, whyText, WHY_KEY, type WhyEntry } from '@core/benWhy'
+import { addWhy, WHY_KEY } from '@core/benWhy'
 import { withTimeout } from '@core/ai'
-import type { BotBridgeConfig, BotLogEntry, FocusTask } from '@shared/api'
-import {
-  formatBalanceResponse,
-  formatCleanCheckinResponse,
-  formatExpenseResponse,
-  formatHelpMessage,
-  formatMetricResponse,
-  formatSportResponse,
-  formatSportStatusResponse,
-  formatTodayStatus,
-  formatUrgeResponse,
-  formatWorkoutResponse,
-  parseTelegramText
-} from '@core/botCommands'
+import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
+import { parseTelegramText } from '@core/botCommands'
 import { addDays, calendarDay } from '@core/dates'
-import { formatMoney } from '@core/money'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import { queueFinanceExpense } from './financeInbox'
-import { deleteMoney, editMoney, keepMoneyAsk, logMoney, moneyButton, previewMoney, recentMoney, takeMoneyAsk } from './financeBot'
+import { deleteMoney, editMoney, keepMoneyAsk, logMoney, previewMoney, recentMoney } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
-import { REASONS, hm, parsePlan, type DayPlan } from '@core/focus'
+import { hm } from '@core/focus'
 import { agendaText, freeGaps, suggestBlocks, type CalEvent } from '@core/dayTime'
-import { PLAN_ASK, eveningText, goalsText, planKeyboard, planText, weekText } from '@core/focusBot'
+import { PLAN_ASK } from '@core/focusBot'
 import { MirrorError, type Mirror } from './mirror'
 import { shownMood } from '@core/benActs'
-import { NUDGES, REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseReliability, promiseRefs, promiseStats, setOutcome, type NudgeState, type Reminder } from '@core/coachKit'
+import { REMINDERS, addReminder, answered as answeredReminders, MOOD_FACE, coachMood, isBigAsk, isCorrection, isMood, makeRefs, type Mood, promiseLine, promiseReliability, promiseRefs, promiseStats, setOutcome, type Reminder } from '@core/coachKit'
 import { findExercise, updateSport } from '../sportTrack'
 import type { Services, WebServices } from './webServices'
 import { notesForBen, readNoteOp } from '@core/notebook'
-import { askedFor, confirmButton,
-  loggedInText, readConfirm, riskOf } from '@core/benSafety'
+import { askedFor, confirmButton, loggedInText, readConfirm, riskOf } from '@core/benSafety'
 import { startsNow } from '@core/startNow'
 import { notMoney } from '@core/moneyGuess'
-import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile, saveDesk } from './benDesk'
+import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
-import { moodFace } from '@core/benKnows'
 import { benNote, listNotes, seedNotes } from './notes'
-import { findPluginCommand, pluginActionInText, pluginForFile, runPluginAction, undoPluginAction } from '../../../plugins'
-import { loadStory, answerLocal, type LookupData, appendLog, loadProfile, type Persona, RATINGS, focusRatings, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, saveLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, addFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
+import { findPluginCommand, pluginActionInText, pluginForFile, runPluginAction } from '../../../plugins'
+import { loadStory, answerLocal, type LookupData, appendLog, loadProfile, type Persona, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut } from './botBrain'
 import { applyMind, mindText, readMindOp, weekSoFar, type MindOp } from '@core/coachMind'
-import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText, checkoutText, checkoutKeyboard } from '@core/rhythm'
+import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText } from '@core/rhythm'
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus, waterToday } from './coachStatus'
 import { nextSlot } from '@core/benActs'
 import { parseSets, strengthSummary } from '@core/strength'
-import { rescueFromEvents } from '@core/benPlans'
-import { addStake, suggestStake } from '@core/benStakes'
 import { AREA_WORDS, learnAreaWords } from '@core/areaWords'
 import { amountIn, codeFix, preLookups, quickKind, quickReply } from '@core/benQuick'
 import { createRhythm } from './rhythmBot'
-import { addReps, addWater, parseWater, sharedView, sportForDay, sportToday } from '@core/sportShared'
-import { activeExercises, allDone, applyWorkoutTap, defaultSport, progression, recordWorkoutDay, removeExercise, setExercise, waterCard, workoutCard, type WorkoutLog } from '@core/sportCards'
+import { downloadFile, downloadText, esc, tg } from './bots/telegram'
+import { focusKeyboard, linkExpense, STOP_KEYBOARD, takeLink, ruleCoins } from './bots/helpers'
+import { CALLBACK_DATA, runCallback } from './bots/callbacks'
+import { runCommand, runFocus, type RunOut } from './bots/commands'
+import { undoReply as undoReplyWith } from './bots/undo'
+import type { BotContext } from './bots/context'
 
-const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
+export { focusKeyboard }
+import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
+import { defaultSport, removeExercise, setExercise, waterCard, workoutCard } from '@core/sportCards'
+
 const LOGS_KEY = 'life_bot_logs'
 const store = typeof localStorage !== 'undefined' ? localStorage : null
-
-/** Telegram's Bot API, small and with a timeout so a hung call can't stall the app. */
-async function tg(token: string, method: string, body?: unknown): Promise<any> {
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 15000)
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-      method: body ? 'POST' : 'GET',
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-      signal: ctrl.signal
-    })
-    const json = await res.json().catch(() => ({ ok: false, description: `HTTP ${res.status}` }))
-    return json
-  } finally {
-    clearTimeout(t)
-  }
-}
-
-/**
- * A voice note or photo from Telegram, as base64 for Gemini (up to 15 MB;
- * Telegram voice notes are OGG/Opus, photos JPEG).
- */
-async function downloadFile(token: string, fileId: string, kind: 'voice' | 'photo'): Promise<{ kind: 'voice' | 'photo'; mime: string; data: string } | null> {
-  try {
-    const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`)
-    const path = info?.result?.file_path
-    if (!info?.ok || !path || (info.result.file_size ?? 0) > 15_000_000) return null
-    const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`)
-    if (!res.ok) return null
-    const buf = new Uint8Array(await res.arrayBuffer())
-    let bin = ''
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000))
-    const ext = String(path).split('.').pop()?.toLowerCase()
-    const mime = kind === 'photo' ? (ext === 'png' ? 'image/png' : 'image/jpeg') : ext === 'mp3' ? 'audio/mpeg' : ext === 'm4a' ? 'audio/mp4' : 'audio/ogg'
-    return { kind, mime, data: btoa(bin) }
-  } catch {
-    return null
-  }
-}
-
-/** A small text file sent on Telegram (a bank CSV), read in memory. */
-async function downloadText(token: string, fileId: string): Promise<string | null> {
-  try {
-    const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`)
-    const path = info?.result?.file_path
-    if (!info?.ok || !path || (info.result.file_size ?? 0) > 2_000_000) return null
-    const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`)
-    if (!res.ok) return null
-    const buf = new Uint8Array(await res.arrayBuffer())
-    // Most banks export UTF-8; older ones Windows-1252/1250. Fall back when UTF-8 shows broken letters.
-    const utf = new TextDecoder('utf-8').decode(buf)
-    return utf.includes('�') ? new TextDecoder('windows-1252').decode(buf) : utf
-  } catch {
-    return null
-  }
-}
 
 /** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
 function addRepsToSportTrack(name: string, amount: number): { done: number; target: number } | null {
@@ -144,62 +77,6 @@ function addRepsInDb(db: any, name: string, amount: number): { done: number; tar
   if (!r) return null
   writeSetting(db, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
   return { done: r.exercise.done, target: r.exercise.target }
-}
-
-/** Which Life System expense a Finance Helper record from Telegram made (for Undo). */
-function linkExpense(db: any, txId: string, expenseId: number): void {
-  let links: Record<string, number> = {}
-  try {
-    links = JSON.parse(getSetting(db, 'tg_expense_links') || '{}')
-  } catch {
-    /* start over */
-  }
-  links[txId] = expenseId
-  const keys = Object.keys(links)
-  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete links[k]
-  setSetting(db, 'tg_expense_links', JSON.stringify(links))
-}
-
-function takeLink(db: any, txId: string): number | null {
-  try {
-    const links = JSON.parse(getSetting(db, 'tg_expense_links') || '{}')
-    const id = links[txId]
-    if (id == null) return null
-    delete links[txId]
-    setSetting(db, 'tg_expense_links', JSON.stringify(links))
-    return Number(id)
-  } catch {
-    return null
-  }
-}
-
-/**
- * Finance Helper's accounts, for /balance (own currency each): this device's
- * copy, else the backup Finance Helper keeps in Turso (the server has no device).
- */
-function financeAccounts(db?: any): { name: string; balanceMdl: number; currency: string }[] {
-  try {
-    const raw = store?.getItem('finance-helper.state') || (db ? getSetting(db, 'finance_backup_json') : null)
-    const st = JSON.parse(raw || 'null')
-    const accounts: any[] = st?.settings?.accounts ?? []
-    const tx: any[] = Array.isArray(st?.tx) ? st.tx : []
-    return accounts
-      .filter((a) => !a.archived)
-      .map((a) => {
-        let bal = Number(a.start) || 0
-        for (const t of tx) {
-          if (t.type === 'income' && t.account === a.id) bal += Number(t.amount) || 0
-          else if (t.type === 'expense' && t.account === a.id) bal -= Number(t.amount) || 0
-          else if (t.type === 'transfer') {
-            if (t.from === a.id) bal -= Number(t.amount) || 0
-            if (t.to === a.id) bal += Number(t.toAmount ?? t.amount) || 0
-          }
-        }
-        return { name: String(a.name), balanceMdl: Math.round(bal) / 100, currency: a.currency || st?.settings?.currency || 'MDL' }
-      })
-  } catch {
-    return []
-  }
 }
 
 export interface WebBotsDeps {
@@ -240,55 +117,7 @@ export interface TodoistLike {
   everything?(): Promise<{ tasks: TodoTask[]; areas: { key: string; name: string }[] }>
 }
 
-/** 1–5 under the wake-up message: how you slept. */
-const sleepKeyboard = (day: string) => ({ inline_keyboard: [[1, 2, 3, 4, 5].map((n) => ({ text: ['😫', '😕', '😐', '🙂', '😄'][n - 1] + ' ' + n, callback_data: `sq|${day}|${n}` }))] })
 
-/** The sleep coach's word after a rating. */
-function sleepTip(n: number, bed: string): string {
-  if (n <= 2) return `Rough night. Today: no caffeine after 15:00, and tonight lights out at <b>${bed}</b>. I'll remind you.`
-  if (n === 3) return `Okay night. Same bedtime tonight (${bed}) keeps it improving.`
-  return 'Great. Keep the same rhythm tonight.'
-}
-
-/** Under "Focus started": one tap stops and logs it. */
-const STOP_KEYBOARD = { inline_keyboard: [[{ text: '⏹ Stop & log', callback_data: 'fx|' }]] }
-
-/** "▶ 50 min: …" buttons that start a focus session (subject kept short for Telegram's 64 bytes). */
-export function focusKeyboard(subjects: string[]): any {
-  const rows = subjects
-    .filter(Boolean)
-    .slice(0, 3)
-    .map((t) => {
-      const short = t.split(/\s+/).slice(0, 4).join(' ').slice(0, 28)
-      return [{ text: `▶ 50 min: ${short}`, callback_data: `fo|${short}` }]
-    })
-  return rows.length ? { inline_keyboard: rows } : undefined
-}
-
-/** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
-function stoppedReply(r: { session: { minutes: number; subject: string }; coins: number; state: { todayMin: number }; task?: FocusTask | null }, plan: DayPlan): { reply: string; keyboard?: any } {
-  const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ''}\nToday: ${hm(r.state.todayMin)}`
-  // How did it go? (1–5): a low one asks what got in the way.
-  const rate = [1, 2, 3, 4, 5].map((n) => ({ text: ['😣', '😕', '😐', '🙂', '🔥'][n - 1], callback_data: `fq|${plan.day}|${n}|${r.session.minutes}` }))
-  const t = r.task
-  if (t?.kind === 'mustdo') {
-    const i = plan.items.findIndex((p) => !p.done && p.text === t.ref)
-    if (i >= 0) return { reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, tick it', callback_data: `pp|${plan.day}|${i}` }], rate] } }
-  }
-  if (t?.kind === 'todoist') return { reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`, keyboard: { inline_keyboard: [[{ text: '✅ Yes, done in Todoist', callback_data: `td|${t.ref}`.slice(0, 64) }], rate] } }
-  return { reply: `${head}\n\nHow did it go?`, keyboard: { inline_keyboard: [rate] } }
-}
-
-
-
-/** A rule's points right now (labels never promise a stale amount). */
-const ruleCoins = (svc: any, id: string, fallback: number): number => {
-  try {
-    return svc.wallet.rule(id).coins
-  } catch {
-    return fallback
-  }
-}
 
 /** Bot settings without any token (what may be synced, saved or shown). */
 export function stripTokens<T extends Record<string, any>>(cfg: T): T {
@@ -436,7 +265,6 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   /** One command, on the services. Returns the reply and what changed. */
   let currentDb: any = null
 
-  type RunOut = { reply: string; keyboard?: any; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' }; unknown?: boolean }
 
   /**
    * A money message, the smart way (financeBot.ts): Finance Helper's parser,
@@ -454,56 +282,6 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // The money coach's context: how often this week, the month against the limit.
     const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.today())
     return { reply: money.reply + (insight ? `\n${esc(insight)}` : '') + (res.awarded ? `\n🪙 <b>+${ruleCoins(s, 'money.logged', 3)} points</b> (first spending logged today)` : ''), keyboard: money.keyboard }
-  }
-
-  /** /focus, /stop, /plan, /fun, /week, /deadlines (focus.ts). */
-  function runFocus(s: Services, text: string): RunOut | null {
-    const m = /^\/(focus|stop|plan|fun|week|deadlines|review)(?:@\w+)?(?:\s+([\s\S]+))?$/i.exec(text.trim())
-    if (!m) return null
-    const cmd = m[1].toLowerCase()
-    const arg = (m[2] ?? '').trim()
-    const f = s.focus
-    if (cmd === 'focus') {
-      const st = f.state()
-      if (!arg) {
-        if (st.running) {
-          const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 60000)
-          return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` }
-        }
-        return { reply: `⏱ Today: <b>${hm(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` }
-      }
-      const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50)
-      const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, '').trim() || st.subjects[0] || 'Focus'
-      f.start(subject, minutes)
-      return { reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Tap Stop (or send <code>/stop</code>) when you finish.`, keyboard: STOP_KEYBOARD }
-    }
-    if (cmd === 'stop') {
-      const r = f.stop()
-      focusEnded.push({ subject: r.session.subject, minutes: r.session.minutes })
-      return stoppedReply(r, f.plan(s.wallet.today()))
-    }
-    if (cmd === 'plan') {
-      if (arg) f.setPlan(parsePlan(arg))
-      const plan = f.plan(s.wallet.today())
-      return { reply: planText(plan, arg ? '📝 <b>Plan saved</b>' : undefined), keyboard: plan.items.length ? planKeyboard(plan, false) : undefined }
-    }
-    if (cmd === 'fun') {
-      const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 0)
-      if (!minutes) return { reply: '🎮 How long? e.g. <code>/fun 30 youtube</code> (1 coin a minute)' }
-      const what = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, '').trim() || 'Fun'
-      const r = f.fun(minutes, what)
-      return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} points (left: ${r.balance})` }
-    }
-    if (cmd === 'review') {
-      if (!arg) return { reply: '📝 Send one line about today, e.g. <code>/review good focus, phone was the problem</code>' }
-      const today = s.wallet.today()
-      const cur = f.plan(today)
-      f.review(cur.review ? `${cur.review}\n${arg}` : arg, cur.reasons)
-      return { reply: '📝 <b>Saved.</b> Thanks: this is what makes next week better.' }
-    }
-    const st = f.state()
-    if (cmd === 'week') return { reply: weekText(st.week, st.goals) }
-    return { reply: goalsText(st.goals) }
   }
 
   function run(s: Services, text: string, key = ''): RunOut {
@@ -526,7 +304,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const c = waterCard(next, day, waterToday(s.db, s).target)
       return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> logged.\n\n${c.text}`, keyboard: c.keyboard }
     }
-    const viaFocus = runFocus(s, text)
+    const viaFocus = runFocus(s, text, focusEnded)
     if (viaFocus) return viaFocus
     const parsed = parseTelegramText(text)
     // "exam on 12 december", "woke up at 7 am": a number, but not money (X2).
@@ -543,192 +321,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const money = runMoney(s, text, key)
       if (money) return money
     }
-    switch (parsed.type) {
-      case 'help':
-        return { reply: formatHelpMessage() }
-      case 'why': {
-        let list: WhyEntry[] = []
-        try {
-          list = JSON.parse(getSetting(s.db as any, WHY_KEY) || '[]')
-        } catch {
-          list = []
-        }
-        return { reply: whyText(Array.isArray(list) ? list : []) }
-      }
-      case 'today': {
-        const sum = s.wallet.summary()
-        return {
-          reply: formatTodayStatus({
-            balance: sum.balance,
-            level: sum.level.level,
-            rank: sum.level.rank,
-            totalXp: sum.totalXp,
-            ritualsDone: sum.todayRules?.length ?? 0,
-            totalRituals: 5,
-            cleanStreak: s.discipline.state().current,
-            workoutStreak: s.body.state().streak,
-            tasksLeft: s.tasks.state().tasks.filter((t) => !t.done).length
-          })
-        }
-      }
-      case 'checkin': {
-        const paid = s.discipline.checkIn()
-        // The same "Day N" MAN and every screen show (dayNumber: P7).
-        const st = s.discipline.state()
-        return { reply: formatCleanCheckinResponse(st.day, paid.coins, paid.day, s.wallet.today()) }
-      }
-      case 'oath':
-        s.discipline.oath()
-        return { reply: '📜 <b>Morning Oath Affirmed!</b>\n\n<i>"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery."</i>\n\n+' + ruleCoins(s, 'discipline.oath', 3) + ' points!' }
-      case 'workout': {
-        const name = parsed.exerciseName || 'pushups'
-        const amount = parsed.exerciseAmount || 20 // like the desktop: "/pushups" alone is 20
-        const res = s.body.logWorkout({
-          title: `${name} (+${amount})`,
-          items: [{ exerciseId: name.toLowerCase(), name, amount, unit: 'reps' }],
-          note: 'Logged via Telegram'
-        })
-        return { reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0), sport: { name, amount } }
-      }
-      case 'sport': {
-        const name = parsed.exerciseName || 'Workout'
-        const amount = parsed.exerciseAmount || 1
-        const rawUnit = parsed.exerciseUnit || 'minutes'
-        // 5 km stays 5 km, 500 m stays metres (X11).
-        const unit = ['reps', 'kg', 'sets', 'km', 'm'].includes(rawUnit) ? rawUnit : 'minutes'
-        const res = s.body.logWorkout({
-          title: `${name} (${amount} ${rawUnit})`,
-          items: [{ exerciseId: name.toLowerCase().replace(/\s+/g, '_'), name, amount, unit }],
-          note: `Logged via Telegram (${amount} ${rawUnit})`
-        })
-        return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0) }
-      }
-      case 'weight': {
-        const w = parsed.metricWeight
-        if (!w || w < 30 || w > 300) return { reply: '⚠️ Send a real weight, e.g. <code>/weight 74.5</code>.' }
-        s.body.logMetric({ weight: w, note: 'Telegram' })
-        return { reply: formatMetricResponse('weight', w, 'kg', 0, 0) }
-      }
-      case 'waist': {
-        const w = parsed.metricWaist
-        if (!w || w < 40 || w > 200) return { reply: '⚠️ Send a real waist size, e.g. <code>/waist 82</code>.' }
-        s.body.logMetric({ waist: w, note: 'Telegram' })
-        return { reply: formatMetricResponse('waist', w, 'cm', 0, 0) }
-      }
-      case 'sport_status':
-      case 'pr': {
-        const st = s.body.state()
-        return { reply: formatSportStatusResponse({ streak: st.streak, totalWorkouts: st.totalWorkouts, thisWeek: st.workoutsThisWeek, latestWeight: st.latestWeight, latestWaist: st.latestWaist }) }
-      }
-      case 'expense': {
-        const cents = Math.round((parsed.expenseAmount || 0) * 100)
-        if (!(cents > 0)) return { reply: '⚠️ How much? e.g. <code>/expense 45 food lunch</code>' }
-        const cat = parsed.expenseCategory || 'other'
-        const note = parsed.expenseNote || ''
-        // "+500 salary": money in. It goes to Finance Helper only (Life
-        // System's spending log has no income), never as an expense.
-        if (cat === 'income') {
-          return {
-            reply: `💰 <b>Income noted:</b> ${formatMoney(cents, 'MDL')}${note ? ` · ${esc(note)}` : ''}\n\nAdded to Finance Helper.`,
-            expense: { amount: cents, category: 'income', note, type: 'income' as const }
-          }
-        }
-        const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : '[Telegram]', new Date(), true)
-        const cur = res.state.currency || 'MDL'
-        return {
-          reply: formatExpenseResponse(formatMoney(cents, cur), cat, note || null, formatMoney(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
-          expense: { amount: cents, category: res.expense?.category ?? cat, note }
-        }
-      }
-      case 'balance': {
-        const coins = s.wallet.summary().balance
-        const accounts = financeAccounts(currentDb)
-        const money = s.money.state()
-        return {
-          reply: formatBalanceResponse({
-            currency: 'MDL',
-            walletCoins: coins,
-            walletCoinsValueMdl: Math.round((coins / 10) * 100) / 100,
-            vaultSurplusMdl: s.economy.getEconomySummary().vaultBalance,
-            financeAccountsTotalMdl: accounts.filter((a) => a.currency === 'MDL').reduce((t, a) => t + a.balanceMdl, 0),
-            financeAccounts: accounts,
-            dailyBudgetLeftMdl: Math.max(0, money.today.remaining) / 100
-          })
-        }
-      }
-      case 'wake': {
-        // "/wake" now, "/wake 06:40" (forgot to log it), "/wake yesterday 06:30".
-        const time = parsed.args.find((a) => /^\d{1,2}[:.]\d{2}$/.test(a))?.replace('.', ':')
-        const back = parsed.args.some((a) => /^(yesterday|ieri|вчера)$/i.test(a)) ? 1 : 0
-        if (time || back) {
-          if (!time) return { reply: '⏰ What time? e.g. <code>/wake yesterday 06:30</code>' }
-          const day = addDays(s.wallet.today(), -back)
-          const res = s.sleep.setWake(day, time)
-          return { reply: `🌅 <b>Wake-up ${back ? 'for yesterday ' : ''}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.up_on_time', 10)} points</b>` : res.log.onTime ? (back ? 'On time · no points for past days.' : 'On time.') : 'Saved to your sleep history.'}` }
-        }
-        const res = s.sleep.logWake(new Date().toTimeString().slice(0, 5)) // local time (the server runs in your time zone)
-        return {
-          reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.up_on_time', 10)} points</b>` : res.log.onTime ? 'On time.' : 'Saved to your sleep history.'}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>\n\n😴 <b>How did you sleep?</b>`,
-          keyboard: sleepKeyboard(res.log.day)
-        }
-      }
-      case 'spent': {
-        // Answered from Finance Helper's records, no AI needed.
-        const today = s.wallet.today()
-        const from = parsed.period === 'week' ? addDays(today, -6) : parsed.period === 'month' ? `${today.slice(0, 8)}01` : parsed.period === 'yesterday' ? addDays(today, -1) : today
-        const to = parsed.period === 'yesterday' ? from : today
-        const line = answerLocal(`spending ${from} ${to}`, { finance: financeStateFrom(currentDb, store), input: null as any, ledger: [], sessions: [] }) ?? 'No spending data yet.'
-        const label = { today: 'Today', yesterday: 'Yesterday', week: 'The last 7 days', month: 'This month' }[parsed.period ?? 'today']
-        return { reply: `💸 <b>${label}</b>\n${esc(line.replace(/^Spending [^:]+: /, ''))}` }
-      }
-      case 'bed': {
-        // "bed 23:40" / "went to bed at 0:30": that time, else now.
-        const at = parsed.args.find((a) => /^\d{1,2}:\d{2}$/.test(a))
-        const res = s.sleep.logBed(at ?? new Date().toTimeString().slice(0, 5))
-        return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, 'sleep.bed_on_time', 5)} points</b>` : 'Saved to your sleep history.'}` }
-      }
-      case 'tasks': {
-        const open = s.tasks.state().tasks.filter((t) => !t.done).slice(0, 8)
-        return {
-          reply: open.length
-            ? `📋 <b>Open tasks</b>\n\n${open.map((t, i) => `${i + 1}. [${esc(t.category)}] <b>${esc(t.title)}</b>`).join('\n')}\n\n<i>Done one? Send</i> <code>/done 1</code>`
-            : '📋 <b>No open tasks.</b> All clear!'
-        }
-      }
-      case 'done': {
-        const open = s.tasks.state().tasks.filter((t) => !t.done)
-        const num = parsed.taskIndex ?? parseInt(parsed.args[0], 10)
-        const target = open.find((t) => t.id === num) ?? (num > 0 && num <= open.length ? open[num - 1] : undefined)
-        if (!target) return { reply: '⚠️ No task with that number. Send <code>/tasks</code> to see them.' }
-        s.tasks.complete(target.id)
-        return { reply: `✅ Done: <b>${esc(target.title)}</b>` }
-      }
-      case 'vault': {
-        const v = s.economy.getEconomySummary()
-        return {
-          reply: [
-            '🏛️ <b>Reward vault</b>',
-            '',
-            `🪙 Points: <b>${v.coinsBalance}</b> (≈ ${v.coinsRealValue} ${v.currency})`,
-            `💰 Vault: <b>${v.vaultBalance} ${v.currency}</b>`,
-            `🔥 Multiplier: ${v.multiplier.label}`,
-            v.pinnedGoal ? `🌟 Goal: ${esc(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} points)` : ''
-          ].filter(Boolean).join('\n')
-        }
-      }
-      case 'goals': {
-        const goals = s.economy.goals().filter((g: any) => !g.completed)
-        return {
-          reply: goals.length
-            ? `🎯 <b>Goals</b>\n\n${goals.map((g: any, i: number) => `${i + 1}. ${g.pinned ? '⭐ ' : ''}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} points`).join('\n')}`
-            : '🎯 No open goals. Add one in the Shop.'
-        }
-      }
-      case 'crush':
-        return { reply: formatUrgeResponse() }
-      default:
-        return { reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.`, unknown: true }
-    }
+    return runCommand(s, parsed, text, { db: currentDb })
   }
 
   /**
@@ -736,12 +329,32 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * another device got there first, the copy reloads and we skip it.
    */
   /** A tap on a button under a logged money record (account, category, undo). */
+  /** What the button handlers (bots/callbacks.ts) may use from here (LT6). */
+  const cbCtx: BotContext = {
+    mirror,
+    services,
+    todoist,
+    calendar,
+    onExpense,
+    markSeen: (key) => markSeen(key),
+    rhythm,
+    sendProposal: (token, chat, note) => sendProposal(token, chat, note),
+    handleBrain: (botId, update, cfg, text, key, media) => handleBrain(botId, update, cfg, text, key, media),
+    undoReply: (at, index) => undoReply(at, index),
+    flushFocus: () => flushFocus(),
+    focusEnded,
+    runMoneyIn: (db, text, key) => {
+      currentDb = db
+      return runMoney(services.services(db), text, key)
+    }
+  }
+
   async function handleButton(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
     const cq = update.callback_query
     const chat = String(cq?.message?.chat?.id ?? '')
     const data = String(cq?.data ?? '')
     const key = `${botId}:cb:${cq?.id}`
-    if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[ln])\|/.test(data)) return null
+    if (!cq || !CALLBACK_DATA.test(data)) return null
     const answer = (text: string) => tg(update.__token, 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null)
     if (!allowed(cfg, chat)) {
       await answer('Not allowed')
@@ -749,532 +362,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     const edit = (text: string, keyboard?: any) =>
       tg(update.__token, 'editMessageText', { chat_id: chat, message_id: cq.message.message_id, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }).catch(() => null)
-    // Water and workout cards: a tap updates the shared log and the card.
-    if (data.startsWith('wa|') || data.startsWith('wk|')) {
-      if (!(await markSeen(key))) return null
-      const show = data === 'wa|show' || data === 'wk|show'
-      const r = await mirror.write((db) => {
-        const svc = services.services(db)
-        const day = sportToday()
-        let st = sportState(db) ?? defaultSport(day)
-        const save = (x: any) => writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: x })
-        if (data.startsWith('wa|')) {
-          if (!show) {
-            st = addWater(st, Number(data.slice(3)) || 0, day)
-            save(st)
-          }
-          const c = waterCard(st, day, waterToday(db, svc).target)
-          return { ...c, toast: show ? '' : `${Number(data.slice(3)) > 0 ? '+' : ''}${data.slice(3)} ml` }
-        }
-        let extra = ''
-        let toast = ''
-        if (!show) {
-          const was = allDone(sportForDay(st, day))
-          st = applyWorkoutTap(st, day, data.slice(3))
-          save(st)
-          toast = 'Logged'
-          if (!was && allDone(st)) {
-            // Finished: it counts as today's workout (streak, points), and targets may go up.
-            const list = activeExercises(st)
-            try {
-              svc.body.logWorkout({ title: `Daily workout: ${list.map((e: any) => `${e.doneToday} ${e.name}`).join(', ')}`, items: list.map((e: any) => ({ exerciseId: String(e.id ?? e.name), name: String(e.name), amount: Number(e.doneToday) || 0, unit: e.unit === 'sec' ? 'minutes' : 'reps' })), note: 'Logged with Ben' })
-            } catch {
-              /* already logged today */
-            }
-            let log: WorkoutLog = { days: {} }
-            try {
-              log = JSON.parse(getSetting(db as any, 'ben_workouts') || '{"days":{}}')
-            } catch {
-              log = { days: {} }
-            }
-            log = recordWorkoutDay(log, st, day)
-            setSetting(db as any, 'ben_workouts', JSON.stringify(log))
-            const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st, day)
-            for (const u of ups) st = setExercise(st, day, u.name, u.to).st
-            if (ups.length) save(st)
-            const body = svc.body.state()
-            extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? '' : 's'} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `${u.to > u.from ? '📈' : '📉'} ${u.name}: ${u.from} → ${u.to} (${u.why})`)].join('\n')
-            toast = 'Workout done! 🔥'
-          }
-        }
-        return { ...workoutCard(st, day, extra), toast }
-      })
-      await answer(r.toast || 'OK')
-      if (show) await tg(update.__token, 'sendMessage', { chat_id: chat, text: r.text, parse_mode: 'HTML', reply_markup: r.keyboard }).catch(() => null)
-      else await edit(r.text, r.keyboard)
-      return r.text
-    }
-    // A reply button: "say" sends its words as your message; "book" books a goal; "plan" makes today's plan.
-    if (data.startsWith('cs|') || data.startsWith('gb|') || data === 'rb|p') {
-      if (!(await markSeen(key))) return null
-      await answer(data.startsWith('cs|') ? '…' : 'On it')
-      if (data === 'rb|p') return sendProposal(update.__token, chat)
-      if (data.startsWith('gb|')) {
-        const want = data.slice(3).toLowerCase()
-        const plans = await rhythm.goalPlans()
-        const ids = plans.filter((p) => p.title.toLowerCase().startsWith(want) || want.startsWith(p.title.toLowerCase().slice(0, want.length))).map((p) => p.goalId)
-        const r = await rhythm.bookGoals(ids.length ? ids : undefined)
-        const text = r.lines.map(esc).join('\n')
-        await tg(update.__token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML' }).catch(() => null)
-        return text
-      }
-      const said = data.slice(3)
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text: `💬 <i>${esc(readConfirm(said)?.rest ?? said)}</i>`, parse_mode: 'HTML' }).catch(() => null)
-      return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:say`)
-    }
-    // An unclear money message (X5): [Log it] logs it, [Not money] gives it to Ben.
-    if (data.startsWith('ml|') || data.startsWith('mn|')) {
-      if (!(await markSeen(key))) return null
-      const said = await mirror.write((db) => takeMoneyAsk(db as any, data.slice(3)))
-      if (!said) {
-        await answer('Already done')
-        return null
-      }
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message?.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
-      if (data.startsWith('mn|')) {
-        await answer('Asking Ben')
-        return handleBrain(botId, { __token: update.__token, update_id: update.update_id, message: { chat: { id: chat }, text: said } }, cfg, said, `${key}:nm`)
-      }
-      await answer('Logged')
-      const r = await mirror.write((db) => {
-        currentDb = db
-        return runMoney(services.services(db), said, `${key}:ml`)
-      })
-      const text = r?.reply ?? 'Could not log that: try "taxi 45".'
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', ...(r?.keyboard ? { reply_markup: r.keyboard } : {}) }).catch(() => null)
-      onExpense?.()
-      return text
-    }
-    // 👍 / 👎 / too long / wrong on a reply: saved, and Ben adjusts.
-    // Feedback is "bf|ms|kind" (old messages: "fb|ms|kind"); "fb|<id>" alone is the money card's ⬅️ Back (T1).
-    if (data.startsWith('bf|') || (data.startsWith('fb|') && data.split('|').length === 3)) {
-      if (!(await markSeen(key))) return null
-      const [, ms, kind] = data.split('|')
-      const at = new Date(Number(ms)).toISOString()
-      await mirror.write((db) => {
-        const e = loadLog(db).find((x) => x.role === 'coach' && x.at === at)
-        addFeedback(db, { at, kind: (['up', 'down', 'long', 'wrong'].includes(kind) ? kind : 'down') as Feedback['kind'], text: e?.text ?? String(cq.message?.text ?? '').slice(0, 300) })
-      })
-      await answer(kind === 'up' ? '👍 Noted' : kind === 'long' ? 'Got it: shorter' : kind === 'wrong' ? 'Got it: tell me what was wrong' : 'Noted: I will do better')
-      // Keep the other buttons, drop the feedback row (it's been answered).
-      const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row: any[]) => !row.some((b) => /^(bf|fb)\|\d+\|/.test(String(b.callback_data ?? ''))))
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: kb } }).catch(() => null)
-      return null
-    }
-    // Ben's desk from Telegram: mood (md|1-5), a stake done (sk|id), a study topic reviewed (sr|id).
-    if (data.startsWith('md|') || data.startsWith('sk|') || data.startsWith('sr|')) {
-      if (!(await markSeen(key))) return null
-      const arg = data.slice(3)
-      const line = await mirror.write((db) => {
-        const svc = services.services(db)
-        if (data.startsWith('md|')) return `${moodFace(Number(arg))} ${deskChange(svc, { op: 'mood', mood: Number(arg) })}`
-        if (data.startsWith('sk|')) {
-          const st = loadDesk(db).stakes.find((x) => x.id === arg)
-          if (!st || st.status !== 'open') return st?.status === 'lost' ? 'Too late: the points are gone.' : 'Already done.'
-          return `💎 ${deskChange(svc, { op: 'keepStake', id: arg })} "${st.text}" · your ${st.points} points are safe.`
-        }
-        return `📚 ${deskChange(svc, { op: 'reviewed', id: arg })}`
-      })
-      await answer(line.slice(0, 190))
-      await edit(`${esc(String(cq.message?.text ?? ''))}\n\n${esc(line)}`)
-      return line
-    }
-    // ↩ Undo under a coach reply: take back what it did.
-    if (data.startsWith('cu|')) {
-      if (!(await markSeen(key))) return null
-      const at = new Date(Number(data.slice(3))).toISOString()
-      const r = await undoReply(at)
-      await answer(r.ok ? 'Undone' : r.lines[0] ?? 'Nothing to undo')
-      const text = `${esc(String(cq.message?.text ?? ''))}\n\n${r.lines.map(esc).join('\n')}`
-      await edit(text)
-      return text
-    }
-    // The daily rhythm: today's plan, the evening review, the Sunday review.
-    if (/^r[bvw]\|/.test(data)) {
-      if (!(await markSeen(key))) return null
-      const msg = String(cq.message?.text ?? '')
-      try {
-        if (data === 'rb|a') {
-          await answer('Approving…')
-          const r = await rhythm.approve()
-          const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join('\n')}` : esc(r.done.join(' '))
-          await edit(text)
-          return text
-        }
-        if (data === 'rb|r') {
-          await answer('Making another plan…')
-          await edit(`${esc(msg)}\n\n🔄 <i>Making another one…</i>`)
-          return await sendProposal(update.__token, chat)
-        }
-        if (data === 'rb|e' || data === 'rv|e' || data === 'rw|e') {
-          await answer('Tell me')
-          const ask = data === 'rb|e' ? EDIT_ASK : data === 'rv|e' ? TOP3_ASK : WEEK_ASK
-          await tg(update.__token, 'sendMessage', { chat_id: chat, text: ask, reply_markup: { force_reply: true, input_field_placeholder: data === 'rb|e' ? 'No gym today; lab report first' : 'One per line' } })
-          return ask
-        }
-        // W6: the honest check-out, item by item (journal only, never points).
-        if (data === 'rv|o') {
-          const c = await rhythm.checkoutStart()
-          await answer(c.items.length ? 'Check out' : 'Nothing to check')
-          if (!c.items.length) return null
-          await tg(update.__token, 'sendMessage', { chat_id: chat, text: checkoutText(c.items, c.marks), parse_mode: 'HTML', reply_markup: checkoutKeyboard(c.items, c.marks) })
-          return 'checkout'
-        }
-        if (data.startsWith('rv|c|')) {
-          const [, , i, v] = data.split('|')
-          const c = await rhythm.checkoutMark(Number(i), v as 'k' | 'p' | 'x')
-          await answer(v === 'k' ? 'Done' : v === 'p' ? 'Partly' : 'Not done')
-          await edit(checkoutText(c.items, c.marks), checkoutKeyboard(c.items, c.marks))
-          return 'marked'
-        }
-        if (data === 'rv|k') {
-          await answer('Saved for tomorrow')
-          // W18: tomorrow's plan is drafted now, ready when you wake.
-          const draft = await rhythm.planTomorrow().catch(() => null)
-          const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.${draft?.blocks.length ? ` Tomorrow's draft is ready: ${draft.blocks.length} block${draft.blocks.length === 1 ? '' : 's'} from ${draft.blocks[0].start}.` : ''}`
-          await edit(text)
-          return text
-        }
-        if (data === 'rw|a') {
-          const line = await rhythm.applyWeekly()
-          await answer('Week planned')
-          const text = `${esc(msg)}\n\n✅ ${esc(line)}`
-          await edit(text, { inline_keyboard: [[{ text: '📅 Book the big 3 in my calendar', callback_data: 'rw|b' }]] })
-          return text
-        }
-        // W13: the big 3 as blocks: shown first, booked on "Book them".
-        if (data === 'rw|b') {
-          const list = await rhythm.bookingPreview()
-          await answer(list.length ? 'Here they are' : 'No free time found')
-          const text = list.length ? `📅 <b>The big 3 this week</b>, in your free time:\n${list.map((b) => `${new Date(`${b.day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })} ${b.start}–${b.end} ${esc(b.title)}`).join('\n')}` : 'No free time found for the big 3 this week (or they are done).'
-          await tg(update.__token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', ...(list.length ? { reply_markup: { inline_keyboard: [[{ text: '✅ Book them', callback_data: 'rw|y' }, { text: 'Not now', callback_data: 'rw|n' }]] } } : {}) })
-          return text
-        }
-        if (data === 'rw|y' || data === 'rw|n') {
-          const done = data === 'rw|y' ? await rhythm.bookWeek() : []
-          await answer(data === 'rw|y' ? `Booked ${done.length}` : 'Not booked')
-          const text = `${esc(msg)}\n\n${data === 'rw|y' ? `✅ Booked ${done.length} block${done.length === 1 ? '' : 's'}.` : 'Not booked.'}`
-          await edit(text)
-          return text
-        }
-      } catch (e) {
-        await answer((e as Error).message.slice(0, 190))
-      }
-      return null
-    }
-    // A Todoist task finished after a focus session: Todoist is a network
-    // call, so the tap is marked seen first, then Todoist, then the coins.
-    if (data.startsWith('td|')) {
-      const fresh = await mirror.write((db) => {
-        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return false
-        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
-        return true
-      })
-      if (!fresh) return null
-      const id = data.slice(3)
-      const title = /“([^”]*)”/.exec(String(cq.message?.text ?? ''))?.[1] ?? 'Todoist task'
-      try {
-        if (!todoist) throw new Error('Todoist is not connected')
-        await todoist.close(id)
-        const paid = await mirror.write((db) => payTodoist(services.services(db), [{ id, content: title }]))
-        await answer(paid ? '+8 points' : 'Done')
-        const text = `${String(cq.message?.text ?? '').split('\n\nFinished')[0]}\n\n✅ <b>Done in Todoist:</b> ${esc(title)}${paid ? ' · 🪙 +8' : ''}`
-        await edit(text)
-        return text
-      } catch (e) {
-        await answer(`Todoist: ${(e as Error).message}`.slice(0, 190))
-        return null
-      }
-    }
-    // The suggested time blocks: into Google Calendar (or not).
-    if (data.startsWith('gp|') || data.startsWith('gx|')) {
-      const sug = await mirror.write((db) => {
-        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return undefined
-        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
-        try {
-          return JSON.parse(getSetting(db as any, 'plan_suggestion') || 'null') as { day: string; blocks: { title: string; start: string; end: string }[] } | null
-        } catch {
-          return null
-        }
-      })
-      if (sug === undefined) return null
-      if (data.startsWith('gx|') || !sug || !calendar) {
-        await answer('Okay')
-        await edit(`${esc(String(cq.message?.text ?? ''))}\n\nOkay, no blocks. Start when you're ready: /focus 50`)
-        return 'no blocks'
-      }
-      let made = 0
-      for (const b of sug.blocks) {
-        const ok = await calendar.create({ title: b.title, start: new Date(`${sug.day}T${b.start}:00`).toISOString(), end: new Date(`${sug.day}T${b.end}:00`).toISOString(), description: 'Planned with your coach in Life System' }).then(() => true).catch(() => false)
-        if (ok) made++
-      }
-      await answer(made ? `${made} blocks added` : 'Calendar failed')
-      const text = `${esc(String(cq.message?.text ?? ''))}\n\n✅ ${made} block${made === 1 ? '' : 's'} in your Google Calendar. When one starts, I'll be here: /focus 50`
-      await edit(text)
-      return text
-    }
-    // How a focus session went (1–5); a low one asks what got in the way.
-    if (data.startsWith('fq|')) {
-      const [, day, n, minutes] = data.split('|')
-      const fresh = await mirror.write((db) => {
-        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return false
-        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
-        setSetting(db as any, RATINGS, JSON.stringify([...focusRatings(db), { day, rating: Number(n), minutes: Number(minutes) || 0 }].slice(-60)))
-        return true
-      })
-      if (!fresh) return null
-      const r = Number(n)
-      await answer(`${n}/5 noted`)
-      const base = esc(String(cq.message?.text ?? '').replace(/\n*(And )?[Hh]ow did it go\?\s*$/, ''))
-      const low = r <= 2
-      const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? 'Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes.' : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`
-      const keyboard = low ? { inline_keyboard: [REASONS.slice(0, 3), REASONS.slice(3)].map((row, k) => row.map((x, i) => ({ text: x, callback_data: `pr|${day}|${k * 3 + i}` }))) } : undefined
-      await edit(text, keyboard)
-      return text
-    }
-    // Coach nudges: pause them for today, or snooze 30 minutes.
-    if (data.startsWith('np|') || data.startsWith('ns|')) {
-      const pause = data.startsWith('np|')
-      await mirror.write((db) => {
-        let st: NudgeState = {}
-        try {
-          st = JSON.parse(getSetting(db as any, NUDGES) || '{}')
-        } catch {
-          st = {}
-        }
-        const now = new Date()
-        const today = services.services(db).wallet.today(now)
-        setSetting(db as any, NUDGES, JSON.stringify(pause ? { ...st, pausedDay: today } : { ...st, snoozeUntil: new Date(now.getTime() + 30 * 60000).toISOString() }))
-      })
-      const text = pause ? '⏸ Nudges paused for today. Back tomorrow.' : '😴 OK, I\'ll check again in 30 minutes.'
-      await answer(text)
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
-      return text
-    }
-    // ✕ Drop it, under a block Ben moved: off the calendar for today.
-    if (data.startsWith('bd|')) {
-      if (!(await markSeen(key))) return null
-      const arg = data.slice(3)
-      // New buttons carry the event id; older ones a position in the moved list.
-      const id = /^\d{1,3}$/.test(arg)
-        ? await mirror.read((db) => {
-            try {
-              return (JSON.parse(getSetting(db as any, 'coach_rhythm') || 'null')?.moved ?? [])[Number(arg)] as string | undefined
-            } catch {
-              return undefined
-            }
-          })
-        : arg
-      let ok = false
-      if (id && calendar?.remove) {
-        const day = new Date()
-        const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString()
-        const ev = (await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [])).find((e) => e.id === id)
-        if (ev) ok = await calendar.remove(ev.calendarId, ev.id).then(() => true).catch(() => false)
-      }
-      const text = ok ? '✕ Dropped for today. Your calendar is up to date.' : 'Could not find that block anymore; it may already be gone.'
-      await answer(ok ? 'Dropped' : 'Not found')
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
-      return text
-    }
-    // W15: a stake Ben suggested, made only now that you said yes (settles by the focus log, W16).
-    if (data.startsWith('sg|')) {
-      if (!(await markSeen(key))) return null
-      const subject = data.slice(3) || 'Focus'
-      const s = suggestStake(subject, new Date())
-      await mirror.write((db) => {
-        const d = loadDesk(db)
-        saveDesk(db, { ...d, stakes: addStake(d.stakes, s.text, s.due, s.points, new Date(), s.proof) })
-      })
-      const text = `🎯 Deal: ${s.text}. ${s.points} points on it. It settles by itself when the focus log shows the 25 minutes.`
-      await answer('Stake set')
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
-      return text
-    }
-    // W2: a block that hasn't started → the next free time today.
-    if (data.startsWith('bx|')) {
-      if (!(await markSeen(key))) return null
-      const id = data.slice(3)
-      let text = 'Could not find that block anymore; it may already be gone.'
-      if (calendar?.move) {
-        const day = new Date()
-        const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString()
-        const evs = await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [] as CalEvent[])
-        const ev = evs.find((e) => e.id === id)
-        if (ev) {
-          const len = Math.round((Date.parse(ev.end) - Date.parse(ev.start)) / 60000)
-          const dayKey = calendarDay(day)
-          const slot = nextSlot(evs.filter((e) => e.id !== id), dayKey, day.toTimeString().slice(0, 5), len)
-          if (slot && (await calendar.move(ev.calendarId, ev.id, new Date(`${dayKey}T${slot.start}:00`).toISOString(), new Date(`${dayKey}T${slot.end}:00`).toISOString()).then(() => true).catch(() => false))) text = `↪️ ${ev.title} → ${slot.start}–${slot.end}, your next free time.`
-          else if (!slot) text = 'No free time left today for it. Drop it, or tell me where it goes.'
-        }
-      }
-      await answer('Moved')
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
-      return text
-    }
-    // W1: "Rescue my day": the rest of today shrunk to fit (recomputed now, so it's current).
-    if (data.startsWith('rs|')) {
-      if (!(await markSeen(key))) return null
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
-      if (data !== 'rs|a') {
-        await answer('Kept as is')
-        return 'kept'
-      }
-      const lines: string[] = []
-      if (calendar?.move) {
-        const now = new Date()
-        const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-        const evs = await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [] as CalEvent[])
-        const end = new Date(now)
-        end.setHours(22, 0, 0, 0)
-        const r = rescueFromEvents(evs, now.getTime(), end.getTime())
-        for (const mv of r.moves) {
-          const ev = evs.find((e) => e.id === mv.id)
-          if (!ev || mv.action === 'keep') continue
-          const s = mv.action === 'tomorrow' ? Date.parse(ev.start) + 86400000 : mv.start!
-          const e = mv.action === 'tomorrow' ? Date.parse(ev.end) + 86400000 : mv.end!
-          const ok = await calendar.move(ev.calendarId, ev.id, new Date(s).toISOString(), new Date(e).toISOString()).then(() => true).catch(() => false)
-          if (ok) lines.push(mv.action === 'tomorrow' ? `➡️ ${ev.title} → tomorrow` : `${mv.action === 'shrink' ? '✂️' : '↪️'} ${ev.title} ${new Date(s).toTimeString().slice(0, 5)}–${new Date(e).toTimeString().slice(0, 5)}`)
-        }
-      }
-      const text = lines.length ? `🛟 Done. The rest of today:\n${lines.join('\n')}` : 'Nothing needed moving.'
-      await answer('Rescued')
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
-      return text
-    }
-    // A block missed twice → the same time tomorrow (K3).
-    if (data.startsWith('bt|')) {
-      if (!(await markSeen(key))) return null
-      const id = data.slice(3)
-      let ok = false
-      if (calendar?.move) {
-        const day = new Date()
-        const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString()
-        const ev = (await calendar.events(from, new Date(Date.parse(from) + 86400000).toISOString()).catch(() => [])).find((e) => e.id === id)
-        if (ev) ok = await calendar.move(ev.calendarId, ev.id, new Date(Date.parse(ev.start) + 86400000).toISOString(), new Date(Date.parse(ev.end) + 86400000).toISOString()).then(() => true).catch(() => false)
-      }
-      const text = ok ? '📅 Moved to tomorrow, same time.' : 'Could not find that block anymore; it may already be gone.'
-      await answer(ok ? 'Tomorrow' : 'Not found')
-      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
-      await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
-      return text
-    }
-    // How you slept (1–5), under the wake-up message.
-    if (data.startsWith('sq|')) {
-      const [, day, n] = data.split('|')
-      const res = await mirror.write((db) => {
-        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null
-        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
-        try {
-          const svc = services.services(db)
-          svc.sleep.setQuality(day, Number(n))
-          return { tip: sleepTip(Number(n), svc.sleep.bedtimeTarget()) }
-        } catch (e) {
-          return { tip: '', error: (e as Error).message }
-        }
-      })
-      if (!res) return null
-      await answer(res.error ?? `Sleep ${n}/5 noted`)
-      if (res.error) return null
-      // Telegram gives the message back as plain text: escape it, then add ours.
-      const text = `${esc(String(cq.message?.text ?? '').replace(/\n*😴 How did you sleep\?\s*$/, ''))}\n\n😴 Sleep: <b>${n}/5</b>. ${res.tip}`
-      await edit(text)
-      return text
-    }
-    // ▶ start a 50-minute session on a subject / ⏹ stop the running one.
-    if (data.startsWith('fo|') || data.startsWith('fx|')) {
-      const res = await mirror.write((db) => {
-        if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null
-        db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
-        const f = services.services(db).focus
-        try {
-          if (data.startsWith('fo|')) {
-            // "fo|Subject" (50 min) or "fo|25|Subject" (a coach button with its own length).
-            const m = /^fo\|(\d{1,3})\|(.*)$/.exec(data)
-            const minutes = m ? Math.min(180, Math.max(5, Number(m[1]))) : 50
-            const subject = (m ? m[2] : data.slice(3)) || 'Focus'
-            const plan = f.plan(services.services(db).wallet.today())
-            const item = plan.items.find((p) => !p.done && p.text.startsWith(subject))
-            f.start(subject, minutes, new Date(), item ? { kind: 'mustdo', ref: item.text, title: item.text } : null)
-            return { text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · ${minutes} min.\nPhone away. Tap Stop when you finish.`, keyboard: STOP_KEYBOARD, toast: 'Focus started' }
-          }
-          const r = f.stop()
-          focusEnded.push({ subject: r.session.subject, minutes: r.session.minutes })
-          const out = stoppedReply(r, f.plan(services.services(db).wallet.today()))
-          return { text: out.reply, keyboard: out.keyboard, toast: r.coins ? `+${r.coins} points` : 'Logged' }
-        } catch (e) {
-          return { text: '', keyboard: undefined, toast: (e as Error).message.slice(0, 190) }
-        }
-      })
-      if (!res) return null
-      await answer(res.toast)
-      if (!res.text) return null
-      // A start sends a new message (the coach's stays); a stop edits the timer message.
-      if (data.startsWith('fo|')) await tg(update.__token, 'sendMessage', { chat_id: chat, text: res.text, parse_mode: 'HTML', reply_markup: res.keyboard }).catch(() => null)
-      else await edit(res.text, res.keyboard)
-      await flushFocus()
-      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-focus-changed'))
-      return res.text
-    }
-    const res = await mirror.write((db) => {
-      if (db.prepare('SELECT 1 FROM bot_seen_updates WHERE key = ?').get(key)) return null
-      db.prepare('INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)').run(key, new Date().toISOString())
-      const svc = services.services(db)
-      if (data.startsWith('p')) {
-        // pp|day|i ticks a must-do; pr|day|n marks what got in the way
-        const [kind, day, n] = data.split('|')
-        return db.transaction(() => {
-          let toast = ''
-          if (kind === 'pp') {
-            const r = svc.focus.togglePlan(Number(n), new Date(), day)
-            toast = r.coins ? `+${r.coins} points` : '✓'
-          } else {
-            const reason = REASONS[Number(n)]
-            const cur = svc.focus.plan(day).reasons
-            svc.focus.review(null, cur.includes(reason) ? cur.filter((x) => x !== reason) : [...cur, reason], new Date(), day)
-            toast = 'Noted'
-          }
-          const plan = svc.focus.plan(day)
-          // From a session rating ("What got in the way?"): keep that message, note the reason.
-          if (kind === 'pr' && String(cq.message?.text ?? '').includes('What got in the way?')) {
-            const reason = REASONS[Number(n)]
-            return { text: `${esc(String(cq.message?.text ?? '').replace(/What got in the way\?[\s\S]*$/, ''))}Noted: <b>${esc(reason)}</b>. The coach will help you fix that first next time.`, keyboard: undefined, toast }
-          }
-          const evening = /Evening review|Day review/.test(String(cq.message?.text ?? ''))
-          const focusMin = svc.focus.state().todayMin
-          return { text: evening ? eveningText(plan, focusMin) : planText(plan), keyboard: planKeyboard(plan, evening), toast }
-        })()
-      }
-      return db.transaction(() => {
-        const r = moneyButton(db as any, data, svc.wallet.today())
-        // Undo removes it from Life System's spending log too.
-        const life = r && data.startsWith('fu|') ? takeLink(db, data.split('|')[1]) : null
-        if (life) {
-          try {
-            svc.money.deleteExpense(life)
-          } catch {
-            /* already deleted */
-          }
-        }
-        return r
-      })()
-    })
-    if (!res) return null
-    await answer(res.toast)
-    await tg(update.__token, 'editMessageText', {
-      chat_id: chat,
-      message_id: cq.message.message_id,
-      text: res.text,
-      parse_mode: 'HTML',
-      ...(res.keyboard ? { reply_markup: res.keyboard } : {})
-    }).catch(() => null)
-    if (data.startsWith('fu|') || data.startsWith('fa|') || data.startsWith('fk|')) onExpense?.()
-    return res.text
+    return runCallback(cbCtx, { data, chat, key, botId, cfg, update, cq, answer, edit })
   }
 
   /**
@@ -2202,125 +1290,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
    * Each line once; the log remembers what was undone.
    */
   async function undoReply(at: string, index?: number): Promise<{ ok: boolean; lines: string[] }> {
-    // BG6: the lines are marked undone first, in one write, so two taps (the
-    // app and Telegram, or two servers) can't both take the same thing back.
-    const claim = await mirror.write((db) => {
-      const log = loadLog(db)
-      const e = log.find((x) => x.role === 'coach' && x.at === at)
-      if (!e?.undo) return null
-      const ids = e.undo.map((op, k) => (op && !e.undone?.[k] && (index == null || index === k) ? k : -1)).filter((k) => k >= 0)
-      if (ids.length) {
-        const undone = e.undone ?? []
-        for (const k of ids) undone[k] = true
-        e.undone = undone
-        saveLog(db, log)
-      }
-      return { entry: e, idx: ids }
-    })
-    if (!claim) return { ok: false, lines: ['Nothing to undo there'] }
-    const { entry, idx } = claim
-    const ops = entry.undo!
-    if (!idx.length) return { ok: false, lines: ['Already undone'] }
-    const lines: string[] = []
-    const ok: number[] = []
-    for (const k of idx) {
-      const op = ops[k]!
-      try {
-        if (op.k === 'event') {
-          if (!calendar?.remove) throw new Error('Calendar not connected')
-          await calendar.remove(op.cal, op.id)
-          lines.push('↩ Block removed from your calendar')
-        } else if (op.k === 'task') {
-          if (!todoist?.remove) throw new Error('Todoist not connected')
-          await todoist.remove(op.id)
-          lines.push('↩ Todoist task removed')
-        } else {
-          const line = await mirror.write((db) => {
-            const svc = services.services(db)
-            if (op.k === 'water' || op.k === 'reps') {
-              const st = sportState(db)
-              if (!st) return '⚠️ Sport Track data is gone'
-              const day = sportToday()
-              // BG3: the checklist only holds today. A past day's water or reps
-              // are closed; taking them off today would be wrong.
-              if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`
-              if (op.k === 'water') {
-                writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: addWater(st, op.ml, day) })
-                return `↩ Water ${op.ml > 0 ? '+' : ''}${op.ml} ml`
-              }
-              const r = addReps(st, op.ex, op.amount, day)
-              if (!r) return '⚠️ Exercise not found'
-              writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
-              let gone = ''
-              if (op.workout) {
-                try {
-                  // Just this set: other sets the same day stay (P2); the last one takes the points with it.
-                  svc.body.takeBackSet(op.workout, r.exercise.name, -op.amount)
-                  gone = ' · taken out of today\'s workout'
-                } catch {
-                  /* already deleted */
-                }
-              }
-              return `↩ ${r.exercise.name} back to ${r.exercise.done}${gone}`
-            }
-            if (op.k === 'money') {
-              const what = deleteMoney(db as any, op.id)
-              const life = takeLink(db, op.id)
-              if (life) {
-                try {
-                  svc.money.deleteExpense(life)
-                } catch {
-                  /* already gone */
-                }
-              }
-              return what ? `↩ Removed: ${what}` : '⚠️ That money record is already gone'
-            }
-            if (op.k === 'remind') {
-              let list: Reminder[] = []
-              try {
-                list = readSetting(db as any, REMINDERS)
-              } catch {
-                list = []
-              }
-              writeSetting(db as any, REMINDERS, list.filter((r) => r.id !== op.id))
-              return '↩ Reminder cancelled'
-            }
-            if (op.k === 'plugin') return undoPluginAction({ db: db as any, now: new Date() }, op.plugin, op.verb, op.data)
-            if (op.k === 'mustdo') {
-              if (op.day && op.day !== svc.wallet.today()) return `⚠️ That must-do was for ${op.day}: it's gone with that day`
-              const p = svc.focus.plan(svc.wallet.today())
-              const rest = p.items.map((x) => x.text).filter((t) => t.toLowerCase() !== op.text.toLowerCase())
-              if (!rest.length) return '⚠️ It is your only must-do: tick it or replace it'
-              svc.focus.setPlan(rest)
-              return `↩ Must-do removed: ${op.text}`
-            }
-            const run = svc.focus.state().running
-            if (!run) return '⚠️ That focus timer already ended'
-            if (op.startedAt && run.startedAt !== op.startedAt) return '⚠️ That timer already ended; a newer one is running, so it stays'
-            svc.focus.cancel()
-            return '↩ Focus timer cancelled'
-          })
-          lines.push(line)
-          if (line.startsWith('⚠️')) continue
-        }
-        ok.push(k)
-      } catch (e) {
-        lines.push(`⚠️ ${(e as Error).message}`)
-      }
-    }
-    // Lines that couldn't be taken back are open again.
-    const failed = idx.filter((k) => !ok.includes(k))
-    if (failed.length)
-      await mirror.write((db) => {
-        const log = loadLog(db)
-        const e = log.find((x) => x.role === 'coach' && x.at === at)
-        if (e?.undone) {
-          for (const k of failed) e.undone[k] = false
-          saveLog(db, log)
-        }
-      })
-    if (ok.length) onExpense?.()
-    return { ok: ok.length > 0, lines }
+    return undoReplyWith({ mirror, services, calendar, todoist, onExpense }, at, index)
   }
 
   /** The mini-widgets as text for Telegram ("Focus 7 days: ▁▃▅▇▂·▄ 4.2h"). */

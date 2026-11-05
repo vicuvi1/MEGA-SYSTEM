@@ -19345,14 +19345,12 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		countPromise: (day, key) => mirror.write((db) => countPromise(db, day, key))
 	};
 }
-// src/renderer/src/web/webBots.ts
+// src/renderer/src/web/bots/telegram.ts
 var esc = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
 	">": "&gt;",
 	"&": "&amp;"
 })[c]);
-var LOGS_KEY = "life_bot_logs";
-var store = typeof localStorage !== "undefined" ? localStorage : null;
 /** Telegram's Bot API, small and with a timeout so a hung call can't stall the app. */
 async function tg(token, method, body) {
 	const ctrl = new AbortController();
@@ -19411,38 +19409,7 @@ async function downloadText(token, fileId) {
 		return null;
 	}
 }
-/** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
-function addRepsToSportTrack(name, amount) {
-	let prog = null;
-	updateSport((st) => {
-		const ex = findExercise(st, name);
-		if (!ex) return;
-		ex.doneToday = (Number(ex.doneToday) || 0) + amount;
-		prog = {
-			done: ex.doneToday,
-			target: Number(ex.target) || 0
-		};
-	});
-	return prog;
-}
-/**
-* Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
-* for the server: reps land there and every device picks them up.
-*/
-function addRepsInDb(db, name, amount) {
-	const st = sportState(db);
-	if (!st || !Array.isArray(st.exercises)) return null;
-	const r = addReps(st, name, amount, sportToday());
-	if (!r) return null;
-	writeSetting(db, "sport_tracker_json", {
-		savedAt: Date.now(),
-		data: r.st
-	});
-	return {
-		done: r.exercise.done,
-		target: r.exercise.target
-	};
-}
+// src/renderer/src/web/bots/helpers.ts
 /** Which Life System expense a Finance Helper record from Telegram made (for Undo). */
 function linkExpense(db, txId, expenseId) {
 	let links = {};
@@ -19464,34 +19431,6 @@ function takeLink(db, txId) {
 		return Number(id);
 	} catch {
 		return null;
-	}
-}
-/**
-* Finance Helper's accounts, for /balance (own currency each): this device's
-* copy, else the backup Finance Helper keeps in Turso (the server has no device).
-*/
-function financeAccounts(db) {
-	try {
-		const raw = store?.getItem("finance-helper.state") || (db ? getSetting(db, "finance_backup_json") : null);
-		const st = JSON.parse(raw || "null");
-		const accounts = st?.settings?.accounts ?? [];
-		const tx = Array.isArray(st?.tx) ? st.tx : [];
-		return accounts.filter((a) => !a.archived).map((a) => {
-			let bal = Number(a.start) || 0;
-			for (const t of tx) if (t.type === "income" && t.account === a.id) bal += Number(t.amount) || 0;
-			else if (t.type === "expense" && t.account === a.id) bal -= Number(t.amount) || 0;
-			else if (t.type === "transfer") {
-				if (t.from === a.id) bal -= Number(t.amount) || 0;
-				if (t.to === a.id) bal += Number(t.toAmount ?? t.amount) || 0;
-			}
-			return {
-				name: String(a.name),
-				balanceMdl: Math.round(bal) / 100,
-				currency: a.currency || st?.settings?.currency || "MDL"
-			};
-		});
-	} catch {
-		return [];
 	}
 }
 /** 1–5 under the wake-up message: how you slept. */
@@ -19583,6 +19522,1296 @@ var ruleCoins = (svc, id, fallback) => {
 		return fallback;
 	}
 };
+// src/renderer/src/web/bots/callbacks.ts
+/** Every callback data the bots answer (anything else isn't a bot button). */
+var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[ln])\|/;
+var CALLBACKS = [
+	{
+		prefixes: ["wa", "wk"],
+		match: (data) => data.startsWith("wa|") || data.startsWith("wk|"),
+		run: async (c, t) => {
+			const { mirror, services, markSeen } = c;
+			const { data, chat, key, update, answer, edit } = t;
+			if (!await markSeen(key)) return null;
+			const show = data === "wa|show" || data === "wk|show";
+			const r = await mirror.write((db) => {
+				const svc = services.services(db);
+				const day = sportToday();
+				let st = sportState(db) ?? defaultSport(day);
+				const save = (x) => writeSetting(db, "sport_tracker_json", {
+					savedAt: Date.now(),
+					data: x
+				});
+				if (data.startsWith("wa|")) {
+					if (!show) {
+						st = addWater(st, Number(data.slice(3)) || 0, day);
+						save(st);
+					}
+					return {
+						...waterCard(st, day, waterToday(db, svc).target),
+						toast: show ? "" : `${Number(data.slice(3)) > 0 ? "+" : ""}${data.slice(3)} ml`
+					};
+				}
+				let extra = "";
+				let toast = "";
+				if (!show) {
+					const was = allDone(sportForDay(st, day));
+					st = applyWorkoutTap(st, day, data.slice(3));
+					save(st);
+					toast = "Logged";
+					if (!was && allDone(st)) {
+						const list = activeExercises(st);
+						try {
+							svc.body.logWorkout({
+								title: `Daily workout: ${list.map((e) => `${e.doneToday} ${e.name}`).join(", ")}`,
+								items: list.map((e) => ({
+									exerciseId: String(e.id ?? e.name),
+									name: String(e.name),
+									amount: Number(e.doneToday) || 0,
+									unit: e.unit === "sec" ? "minutes" : "reps"
+								})),
+								note: "Logged with Ben"
+							});
+						} catch {}
+						let log = { days: {} };
+						try {
+							log = JSON.parse(getSetting(db, "ben_workouts") || "{\"days\":{}}");
+						} catch {
+							log = { days: {} };
+						}
+						log = recordWorkoutDay(log, st, day);
+						setSetting(db, "ben_workouts", JSON.stringify(log));
+						const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st, day);
+						for (const u of ups) st = setExercise(st, day, u.name, u.to).st;
+						if (ups.length) save(st);
+						const body = svc.body.state();
+						extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? "" : "s"} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `${u.to > u.from ? "📈" : "📉"} ${u.name}: ${u.from} → ${u.to} (${u.why})`)].join("\n");
+						toast = "Workout done! 🔥";
+					}
+				}
+				return {
+					...workoutCard(st, day, extra),
+					toast
+				};
+			});
+			await answer(r.toast || "OK");
+			if (show) await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: r.text,
+				parse_mode: "HTML",
+				reply_markup: r.keyboard
+			}).catch(() => null);
+			else await edit(r.text, r.keyboard);
+			return r.text;
+		}
+	},
+	{
+		prefixes: [
+			"cs",
+			"gb",
+			"rb"
+		],
+		match: (data) => data.startsWith("cs|") || data.startsWith("gb|") || data === "rb|p",
+		run: async (c, t) => {
+			const { markSeen, rhythm, sendProposal, handleBrain } = c;
+			const { data, chat, key, botId, cfg, update, answer } = t;
+			if (!await markSeen(key)) return null;
+			await answer(data.startsWith("cs|") ? "…" : "On it");
+			if (data === "rb|p") return sendProposal(update.__token, chat);
+			if (data.startsWith("gb|")) {
+				const want = data.slice(3).toLowerCase();
+				const ids = (await rhythm.goalPlans()).filter((p) => p.title.toLowerCase().startsWith(want) || want.startsWith(p.title.toLowerCase().slice(0, want.length))).map((p) => p.goalId);
+				const text = (await rhythm.bookGoals(ids.length ? ids : void 0)).lines.map(esc).join("\n");
+				await tg(update.__token, "sendMessage", {
+					chat_id: chat,
+					text,
+					parse_mode: "HTML"
+				}).catch(() => null);
+				return text;
+			}
+			const said = data.slice(3);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: `💬 <i>${esc(readConfirm(said)?.rest ?? said)}</i>`,
+				parse_mode: "HTML"
+			}).catch(() => null);
+			return handleBrain(botId, {
+				__token: update.__token,
+				update_id: update.update_id,
+				message: {
+					chat: { id: chat },
+					text: said
+				}
+			}, cfg, said, `${key}:say`);
+		}
+	},
+	{
+		prefixes: ["ml", "mn"],
+		match: (data) => data.startsWith("ml|") || data.startsWith("mn|"),
+		run: async (c, t) => {
+			const { mirror, onExpense, markSeen, handleBrain, runMoneyIn } = c;
+			const { data, chat, key, botId, cfg, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const said = await mirror.write((db) => takeMoneyAsk(db, data.slice(3)));
+			if (!said) {
+				await answer("Already done");
+				return null;
+			}
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message?.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			if (data.startsWith("mn|")) {
+				await answer("Asking Ben");
+				return handleBrain(botId, {
+					__token: update.__token,
+					update_id: update.update_id,
+					message: {
+						chat: { id: chat },
+						text: said
+					}
+				}, cfg, said, `${key}:nm`);
+			}
+			await answer("Logged");
+			const r = await mirror.write((db) => runMoneyIn(db, said, `${key}:ml`));
+			const text = r?.reply ?? "Could not log that: try \"taxi 45\".";
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text,
+				parse_mode: "HTML",
+				...r?.keyboard ? { reply_markup: r.keyboard } : {}
+			}).catch(() => null);
+			onExpense?.();
+			return text;
+		}
+	},
+	{
+		prefixes: ["bf", "fb"],
+		match: (data) => data.startsWith("bf|") || data.startsWith("fb|") && data.split("|").length === 3,
+		run: async (c, t) => {
+			const { mirror, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const [, ms, kind] = data.split("|");
+			const at = new Date(Number(ms)).toISOString();
+			await mirror.write((db) => {
+				const e = loadLog(db).find((x) => x.role === "coach" && x.at === at);
+				addFeedback(db, {
+					at,
+					kind: [
+						"up",
+						"down",
+						"long",
+						"wrong"
+					].includes(kind) ? kind : "down",
+					text: e?.text ?? String(cq.message?.text ?? "").slice(0, 300)
+				});
+			});
+			await answer(kind === "up" ? "👍 Noted" : kind === "long" ? "Got it: shorter" : kind === "wrong" ? "Got it: tell me what was wrong" : "Noted: I will do better");
+			const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row) => !row.some((b) => /^(bf|fb)\|\d+\|/.test(String(b.callback_data ?? ""))));
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: kb }
+			}).catch(() => null);
+			return null;
+		}
+	},
+	{
+		prefixes: [
+			"md",
+			"sk",
+			"sr"
+		],
+		match: (data) => data.startsWith("md|") || data.startsWith("sk|") || data.startsWith("sr|"),
+		run: async (c, t) => {
+			const { mirror, services, markSeen } = c;
+			const { data, key, cq, answer, edit } = t;
+			if (!await markSeen(key)) return null;
+			const arg = data.slice(3);
+			const line = await mirror.write((db) => {
+				const svc = services.services(db);
+				if (data.startsWith("md|")) return `${moodFace(Number(arg))} ${deskChange(svc, {
+					op: "mood",
+					mood: Number(arg)
+				})}`;
+				if (data.startsWith("sk|")) {
+					const st = loadDesk(db).stakes.find((x) => x.id === arg);
+					if (!st || st.status !== "open") return st?.status === "lost" ? "Too late: the points are gone." : "Already done.";
+					return `💎 ${deskChange(svc, {
+						op: "keepStake",
+						id: arg
+					})} "${st.text}" · your ${st.points} points are safe.`;
+				}
+				return `📚 ${deskChange(svc, {
+					op: "reviewed",
+					id: arg
+				})}`;
+			});
+			await answer(line.slice(0, 190));
+			await edit(`${esc(String(cq.message?.text ?? ""))}\n\n${esc(line)}`);
+			return line;
+		}
+	},
+	{
+		prefixes: ["cu"],
+		match: (data) => data.startsWith("cu|"),
+		run: async (c, t) => {
+			const { markSeen, undoReply } = c;
+			const { data, key, cq, answer, edit } = t;
+			if (!await markSeen(key)) return null;
+			const r = await undoReply(new Date(Number(data.slice(3))).toISOString());
+			await answer(r.ok ? "Undone" : r.lines[0] ?? "Nothing to undo");
+			const text = `${esc(String(cq.message?.text ?? ""))}\n\n${r.lines.map(esc).join("\n")}`;
+			await edit(text);
+			return text;
+		}
+	},
+	{
+		prefixes: [
+			"rb",
+			"rv",
+			"rw"
+		],
+		match: (data) => /^r[bvw]\|/.test(data),
+		run: async (c, t) => {
+			const { calendar, markSeen, rhythm, sendProposal } = c;
+			const { data, chat, key, update, cq, answer, edit } = t;
+			if (!await markSeen(key)) return null;
+			const msg = String(cq.message?.text ?? "");
+			try {
+				if (data === "rb|a") {
+					await answer("Approving…");
+					const r = await rhythm.approve();
+					const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join("\n")}` : esc(r.done.join(" "));
+					await edit(text);
+					return text;
+				}
+				if (data === "rb|r") {
+					await answer("Making another plan…");
+					await edit(`${esc(msg)}\n\n🔄 <i>Making another one…</i>`);
+					return await sendProposal(update.__token, chat);
+				}
+				if (data === "rb|e" || data === "rv|e" || data === "rw|e") {
+					await answer("Tell me");
+					const ask = data === "rb|e" ? EDIT_ASK : data === "rv|e" ? TOP3_ASK : WEEK_ASK;
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text: ask,
+						reply_markup: {
+							force_reply: true,
+							input_field_placeholder: data === "rb|e" ? "No gym today; lab report first" : "One per line"
+						}
+					});
+					return ask;
+				}
+				if (data === "rv|o") {
+					const c = await rhythm.checkoutStart();
+					await answer(c.items.length ? "Check out" : "Nothing to check");
+					if (!c.items.length) return null;
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text: checkoutText(c.items, c.marks),
+						parse_mode: "HTML",
+						reply_markup: checkoutKeyboard(c.items, c.marks)
+					});
+					return "checkout";
+				}
+				if (data.startsWith("rv|c|")) {
+					const [, , i, v] = data.split("|");
+					const c = await rhythm.checkoutMark(Number(i), v);
+					await answer(v === "k" ? "Done" : v === "p" ? "Partly" : "Not done");
+					await edit(checkoutText(c.items, c.marks), checkoutKeyboard(c.items, c.marks));
+					return "marked";
+				}
+				if (data === "rv|k") {
+					await answer("Saved for tomorrow");
+					const draft = await rhythm.planTomorrow().catch(() => null);
+					const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.${draft?.blocks.length ? ` Tomorrow's draft is ready: ${draft.blocks.length} block${draft.blocks.length === 1 ? "" : "s"} from ${draft.blocks[0].start}.` : ""}`;
+					await edit(text);
+					return text;
+				}
+				if (data === "rw|a") {
+					const line = await rhythm.applyWeekly();
+					await answer("Week planned");
+					const text = `${esc(msg)}\n\n✅ ${esc(line)}`;
+					await edit(text, { inline_keyboard: [[{
+						text: "📅 Book the big 3 in my calendar",
+						callback_data: "rw|b"
+					}]] });
+					return text;
+				}
+				if (data === "rw|b") {
+					const list = await rhythm.bookingPreview();
+					await answer(list.length ? "Here they are" : "No free time found");
+					const text = list.length ? `📅 <b>The big 3 this week</b>, in your free time:\n${list.map((b) => `${(/* @__PURE__ */ new Date(`${b.day}T12:00:00`)).toLocaleDateString("en-GB", { weekday: "short" })} ${b.start}–${b.end} ${esc(b.title)}`).join("\n")}` : "No free time found for the big 3 this week (or they are done).";
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text,
+						parse_mode: "HTML",
+						...list.length ? { reply_markup: { inline_keyboard: [[{
+							text: "✅ Book them",
+							callback_data: "rw|y"
+						}, {
+							text: "Not now",
+							callback_data: "rw|n"
+						}]] } } : {}
+					});
+					return text;
+				}
+				if (data === "rw|y" || data === "rw|n") {
+					const done = data === "rw|y" ? await rhythm.bookWeek() : [];
+					await answer(data === "rw|y" ? `Booked ${done.length}` : "Not booked");
+					const text = `${esc(msg)}\n\n${data === "rw|y" ? `✅ Booked ${done.length} block${done.length === 1 ? "" : "s"}.` : "Not booked."}`;
+					await edit(text);
+					return text;
+				}
+			} catch (e) {
+				await answer(e.message.slice(0, 190));
+			}
+			return null;
+		}
+	},
+	{
+		prefixes: ["td"],
+		match: (data) => data.startsWith("td|"),
+		run: async (c, t) => {
+			const { mirror, services, todoist } = c;
+			const { data, key, cq, answer, edit } = t;
+			if (!await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				return true;
+			})) return null;
+			const id = data.slice(3);
+			const title = /“([^”]*)”/.exec(String(cq.message?.text ?? ""))?.[1] ?? "Todoist task";
+			try {
+				if (!todoist) throw new Error("Todoist is not connected");
+				await todoist.close(id);
+				const paid = await mirror.write((db) => payTodoist(services.services(db), [{
+					id,
+					content: title
+				}]));
+				await answer(paid ? "+8 points" : "Done");
+				const text = `${String(cq.message?.text ?? "").split("\n\nFinished")[0]}\n\n✅ <b>Done in Todoist:</b> ${esc(title)}${paid ? " · 🪙 +8" : ""}`;
+				await edit(text);
+				return text;
+			} catch (e) {
+				await answer(`Todoist: ${e.message}`.slice(0, 190));
+				return null;
+			}
+		}
+	},
+	{
+		prefixes: ["gp", "gx"],
+		match: (data) => data.startsWith("gp|") || data.startsWith("gx|"),
+		run: async (c, t) => {
+			const { mirror, calendar } = c;
+			const { data, key, cq, answer, edit } = t;
+			const sug = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return void 0;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				try {
+					return JSON.parse(getSetting(db, "plan_suggestion") || "null");
+				} catch {
+					return null;
+				}
+			});
+			if (sug === void 0) return null;
+			if (data.startsWith("gx|") || !sug || !calendar) {
+				await answer("Okay");
+				await edit(`${esc(String(cq.message?.text ?? ""))}\n\nOkay, no blocks. Start when you're ready: /focus 50`);
+				return "no blocks";
+			}
+			let made = 0;
+			for (const b of sug.blocks) if (await calendar.create({
+				title: b.title,
+				start: (/* @__PURE__ */ new Date(`${sug.day}T${b.start}:00`)).toISOString(),
+				end: (/* @__PURE__ */ new Date(`${sug.day}T${b.end}:00`)).toISOString(),
+				description: "Planned with your coach in Life System"
+			}).then(() => true).catch(() => false)) made++;
+			await answer(made ? `${made} blocks added` : "Calendar failed");
+			const text = `${esc(String(cq.message?.text ?? ""))}\n\n✅ ${made} block${made === 1 ? "" : "s"} in your Google Calendar. When one starts, I'll be here: /focus 50`;
+			await edit(text);
+			return text;
+		}
+	},
+	{
+		prefixes: ["fq"],
+		match: (data) => data.startsWith("fq|"),
+		run: async (c, t) => {
+			const { mirror } = c;
+			const { data, key, cq, answer, edit } = t;
+			const [, day, n, minutes] = data.split("|");
+			if (!await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				setSetting(db, "focus_ratings", JSON.stringify([...focusRatings(db), {
+					day,
+					rating: Number(n),
+					minutes: Number(minutes) || 0
+				}].slice(-60)));
+				return true;
+			})) return null;
+			const r = Number(n);
+			await answer(`${n}/5 noted`);
+			const base = esc(String(cq.message?.text ?? "").replace(/\n*(And )?[Hh]ow did it go\?\s*$/, ""));
+			const low = r <= 2;
+			const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? "Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes." : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`;
+			await edit(text, low ? { inline_keyboard: [REASONS.slice(0, 3), REASONS.slice(3)].map((row, k) => row.map((x, i) => ({
+				text: x,
+				callback_data: `pr|${day}|${k * 3 + i}`
+			}))) } : void 0);
+			return text;
+		}
+	},
+	{
+		prefixes: ["np", "ns"],
+		match: (data) => data.startsWith("np|") || data.startsWith("ns|"),
+		run: async (c, t) => {
+			const { mirror, services } = c;
+			const { data, chat, update, cq, answer } = t;
+			const pause = data.startsWith("np|");
+			await mirror.write((db) => {
+				let st = {};
+				try {
+					st = JSON.parse(getSetting(db, "coach_nudges") || "{}");
+				} catch {
+					st = {};
+				}
+				const now = /* @__PURE__ */ new Date();
+				const today = services.services(db).wallet.today(now);
+				setSetting(db, NUDGES, JSON.stringify(pause ? {
+					...st,
+					pausedDay: today
+				} : {
+					...st,
+					snoozeUntil: new Date(now.getTime() + 18e5).toISOString()
+				}));
+			});
+			const text = pause ? "⏸ Nudges paused for today. Back tomorrow." : "😴 OK, I'll check again in 30 minutes.";
+			await answer(text);
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text
+			}).catch(() => null);
+			return text;
+		}
+	},
+	{
+		prefixes: ["bd"],
+		match: (data) => data.startsWith("bd|"),
+		run: async (c, t) => {
+			const { mirror, calendar, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const arg = data.slice(3);
+			const id = /^\d{1,3}$/.test(arg) ? await mirror.read((db) => {
+				try {
+					return (JSON.parse(getSetting(db, "coach_rhythm") || "null")?.moved ?? [])[Number(arg)];
+				} catch {
+					return;
+				}
+			}) : arg;
+			let ok = false;
+			if (id && calendar?.remove) {
+				const day = /* @__PURE__ */ new Date();
+				const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
+				const ev = (await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => [])).find((e) => e.id === id);
+				if (ev) ok = await calendar.remove(ev.calendarId, ev.id).then(() => true).catch(() => false);
+			}
+			const text = ok ? "✕ Dropped for today. Your calendar is up to date." : "Could not find that block anymore; it may already be gone.";
+			await answer(ok ? "Dropped" : "Not found");
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text
+			}).catch(() => null);
+			return text;
+		}
+	},
+	{
+		prefixes: ["sg"],
+		match: (data) => data.startsWith("sg|"),
+		run: async (c, t) => {
+			const { mirror, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const s = suggestStake(data.slice(3) || "Focus", /* @__PURE__ */ new Date());
+			await mirror.write((db) => {
+				const d = loadDesk(db);
+				saveDesk(db, {
+					...d,
+					stakes: addStake(d.stakes, s.text, s.due, s.points, /* @__PURE__ */ new Date(), s.proof)
+				});
+			});
+			const text = `🎯 Deal: ${s.text}. ${s.points} points on it. It settles by itself when the focus log shows the 25 minutes.`;
+			await answer("Stake set");
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text
+			}).catch(() => null);
+			return text;
+		}
+	},
+	{
+		prefixes: ["bx"],
+		match: (data) => data.startsWith("bx|"),
+		run: async (c, t) => {
+			const { calendar, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const id = data.slice(3);
+			let text = "Could not find that block anymore; it may already be gone.";
+			if (calendar?.move) {
+				const day = /* @__PURE__ */ new Date();
+				const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
+				const evs = await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => []);
+				const ev = evs.find((e) => e.id === id);
+				if (ev) {
+					const len = Math.round((Date.parse(ev.end) - Date.parse(ev.start)) / 6e4);
+					const dayKey = calendarDay(day);
+					const slot = nextSlot(evs.filter((e) => e.id !== id), dayKey, day.toTimeString().slice(0, 5), len);
+					if (slot && await calendar.move(ev.calendarId, ev.id, (/* @__PURE__ */ new Date(`${dayKey}T${slot.start}:00`)).toISOString(), (/* @__PURE__ */ new Date(`${dayKey}T${slot.end}:00`)).toISOString()).then(() => true).catch(() => false)) text = `↪️ ${ev.title} → ${slot.start}–${slot.end}, your next free time.`;
+					else if (!slot) text = "No free time left today for it. Drop it, or tell me where it goes.";
+				}
+			}
+			await answer("Moved");
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text
+			}).catch(() => null);
+			return text;
+		}
+	},
+	{
+		prefixes: ["rs"],
+		match: (data) => data.startsWith("rs|"),
+		run: async (c, t) => {
+			const { calendar, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			if (data !== "rs|a") {
+				await answer("Kept as is");
+				return "kept";
+			}
+			const lines = [];
+			if (calendar?.move) {
+				const now = /* @__PURE__ */ new Date();
+				const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+				const evs = await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => []);
+				const end = new Date(now);
+				end.setHours(22, 0, 0, 0);
+				const r = rescueFromEvents(evs, now.getTime(), end.getTime());
+				for (const mv of r.moves) {
+					const ev = evs.find((e) => e.id === mv.id);
+					if (!ev || mv.action === "keep") continue;
+					const s = mv.action === "tomorrow" ? Date.parse(ev.start) + 864e5 : mv.start;
+					const e = mv.action === "tomorrow" ? Date.parse(ev.end) + 864e5 : mv.end;
+					if (await calendar.move(ev.calendarId, ev.id, new Date(s).toISOString(), new Date(e).toISOString()).then(() => true).catch(() => false)) lines.push(mv.action === "tomorrow" ? `➡️ ${ev.title} → tomorrow` : `${mv.action === "shrink" ? "✂️" : "↪️"} ${ev.title} ${new Date(s).toTimeString().slice(0, 5)}–${new Date(e).toTimeString().slice(0, 5)}`);
+				}
+			}
+			const text = lines.length ? `🛟 Done. The rest of today:\n${lines.join("\n")}` : "Nothing needed moving.";
+			await answer("Rescued");
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text
+			}).catch(() => null);
+			return text;
+		}
+	},
+	{
+		prefixes: ["bt"],
+		match: (data) => data.startsWith("bt|"),
+		run: async (c, t) => {
+			const { calendar, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const id = data.slice(3);
+			let ok = false;
+			if (calendar?.move) {
+				const day = /* @__PURE__ */ new Date();
+				const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
+				const ev = (await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => [])).find((e) => e.id === id);
+				if (ev) ok = await calendar.move(ev.calendarId, ev.id, new Date(Date.parse(ev.start) + 864e5).toISOString(), new Date(Date.parse(ev.end) + 864e5).toISOString()).then(() => true).catch(() => false);
+			}
+			const text = ok ? "📅 Moved to tomorrow, same time." : "Could not find that block anymore; it may already be gone.";
+			await answer(ok ? "Tomorrow" : "Not found");
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text
+			}).catch(() => null);
+			return text;
+		}
+	},
+	{
+		prefixes: ["sq"],
+		match: (data) => data.startsWith("sq|"),
+		run: async (c, t) => {
+			const { mirror, services } = c;
+			const { data, key, cq, answer, edit } = t;
+			const [, day, n] = data.split("|");
+			const res = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				try {
+					const svc = services.services(db);
+					svc.sleep.setQuality(day, Number(n));
+					return { tip: sleepTip(Number(n), svc.sleep.bedtimeTarget()) };
+				} catch (e) {
+					return {
+						tip: "",
+						error: e.message
+					};
+				}
+			});
+			if (!res) return null;
+			await answer(res.error ?? `Sleep ${n}/5 noted`);
+			if (res.error) return null;
+			const text = `${esc(String(cq.message?.text ?? "").replace(/\n*😴 How did you sleep\?\s*$/, ""))}\n\n😴 Sleep: <b>${n}/5</b>. ${res.tip}`;
+			await edit(text);
+			return text;
+		}
+	},
+	{
+		prefixes: ["fo", "fx"],
+		match: (data) => data.startsWith("fo|") || data.startsWith("fx|"),
+		run: async (c, t) => {
+			const { mirror, services, flushFocus, focusEnded } = c;
+			const { data, chat, key, update, answer, edit } = t;
+			const res = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				const f = services.services(db).focus;
+				try {
+					if (data.startsWith("fo|")) {
+						const m = /^fo\|(\d{1,3})\|(.*)$/.exec(data);
+						const minutes = m ? Math.min(180, Math.max(5, Number(m[1]))) : 50;
+						const subject = (m ? m[2] : data.slice(3)) || "Focus";
+						const item = f.plan(services.services(db).wallet.today()).items.find((p) => !p.done && p.text.startsWith(subject));
+						f.start(subject, minutes, /* @__PURE__ */ new Date(), item ? {
+							kind: "mustdo",
+							ref: item.text,
+							title: item.text
+						} : null);
+						return {
+							text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · ${minutes} min.\nPhone away. Tap Stop when you finish.`,
+							keyboard: STOP_KEYBOARD,
+							toast: "Focus started"
+						};
+					}
+					const r = f.stop();
+					focusEnded.push({
+						subject: r.session.subject,
+						minutes: r.session.minutes
+					});
+					const out = stoppedReply(r, f.plan(services.services(db).wallet.today()));
+					return {
+						text: out.reply,
+						keyboard: out.keyboard,
+						toast: r.coins ? `+${r.coins} points` : "Logged"
+					};
+				} catch (e) {
+					return {
+						text: "",
+						keyboard: void 0,
+						toast: e.message.slice(0, 190)
+					};
+				}
+			});
+			if (!res) return null;
+			await answer(res.toast);
+			if (!res.text) return null;
+			if (data.startsWith("fo|")) await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: res.text,
+				parse_mode: "HTML",
+				reply_markup: res.keyboard
+			}).catch(() => null);
+			else await edit(res.text, res.keyboard);
+			await flushFocus();
+			if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-focus-changed"));
+			return res.text;
+		}
+	},
+	{
+		prefixes: [
+			"pp",
+			"pr",
+			"fa",
+			"fb",
+			"fc",
+			"fk",
+			"fu"
+		],
+		match: () => true,
+		run: async (c, t) => {
+			const { mirror, services, onExpense } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			const res = await mirror.write((db) => {
+				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
+				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
+				const svc = services.services(db);
+				if (data.startsWith("p")) {
+					const [kind, day, n] = data.split("|");
+					return db.transaction(() => {
+						let toast = "";
+						if (kind === "pp") {
+							const r = svc.focus.togglePlan(Number(n), /* @__PURE__ */ new Date(), day);
+							toast = r.coins ? `+${r.coins} points` : "✓";
+						} else {
+							const reason = REASONS[Number(n)];
+							const cur = svc.focus.plan(day).reasons;
+							svc.focus.review(null, cur.includes(reason) ? cur.filter((x) => x !== reason) : [...cur, reason], /* @__PURE__ */ new Date(), day);
+							toast = "Noted";
+						}
+						const plan = svc.focus.plan(day);
+						if (kind === "pr" && String(cq.message?.text ?? "").includes("What got in the way?")) {
+							const reason = REASONS[Number(n)];
+							return {
+								text: `${esc(String(cq.message?.text ?? "").replace(/What got in the way\?[\s\S]*$/, ""))}Noted: <b>${esc(reason)}</b>. The coach will help you fix that first next time.`,
+								keyboard: void 0,
+								toast
+							};
+						}
+						const evening = /Evening review|Day review/.test(String(cq.message?.text ?? ""));
+						const focusMin = svc.focus.state().todayMin;
+						return {
+							text: evening ? eveningText(plan, focusMin) : planText(plan),
+							keyboard: planKeyboard(plan, evening),
+							toast
+						};
+					})();
+				}
+				return db.transaction(() => {
+					const r = moneyButton(db, data, svc.wallet.today());
+					const life = r && data.startsWith("fu|") ? takeLink(db, data.split("|")[1]) : null;
+					if (life) try {
+						svc.money.deleteExpense(life);
+					} catch {}
+					return r;
+				})();
+			});
+			if (!res) return null;
+			await answer(res.toast);
+			await tg(update.__token, "editMessageText", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				text: res.text,
+				parse_mode: "HTML",
+				...res.keyboard ? { reply_markup: res.keyboard } : {}
+			}).catch(() => null);
+			if (data.startsWith("fu|") || data.startsWith("fa|") || data.startsWith("fk|")) onExpense?.();
+			return res.text;
+		}
+	}
+];
+/** Runs one tap through the table. */
+function runCallback(c, t) {
+	return CALLBACKS.find((x) => x.match(t.data)).run(c, t);
+}
+// src/renderer/src/web/bots/commands.ts
+var store$1 = typeof localStorage !== "undefined" ? localStorage : null;
+/**
+* Finance Helper's accounts, for /balance (own currency each): this device's
+* copy, else the backup Finance Helper keeps in Turso (the server has no device).
+*/
+function financeAccounts(db) {
+	try {
+		const raw = store$1?.getItem("finance-helper.state") || (db ? getSetting(db, "finance_backup_json") : null);
+		const st = JSON.parse(raw || "null");
+		const accounts = st?.settings?.accounts ?? [];
+		const tx = Array.isArray(st?.tx) ? st.tx : [];
+		return accounts.filter((a) => !a.archived).map((a) => {
+			let bal = Number(a.start) || 0;
+			for (const t of tx) if (t.type === "income" && t.account === a.id) bal += Number(t.amount) || 0;
+			else if (t.type === "expense" && t.account === a.id) bal -= Number(t.amount) || 0;
+			else if (t.type === "transfer") {
+				if (t.from === a.id) bal -= Number(t.amount) || 0;
+				if (t.to === a.id) bal += Number(t.toAmount ?? t.amount) || 0;
+			}
+			return {
+				name: String(a.name),
+				balanceMdl: Math.round(bal) / 100,
+				currency: a.currency || st?.settings?.currency || "MDL"
+			};
+		});
+	} catch {
+		return [];
+	}
+}
+/** /focus, /stop, /plan, /fun, /week, /deadlines (focus.ts). */
+function runFocus(s, text, focusEnded) {
+	const m = /^\/(focus|stop|plan|fun|week|deadlines|review)(?:@\w+)?(?:\s+([\s\S]+))?$/i.exec(text.trim());
+	if (!m) return null;
+	const cmd = m[1].toLowerCase();
+	const arg = (m[2] ?? "").trim();
+	const f = s.focus;
+	if (cmd === "focus") {
+		const st = f.state();
+		if (!arg) {
+			if (st.running) {
+				const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
+				return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
+			}
+			return { reply: `⏱ Today: <b>${hm$4(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
+		}
+		const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
+		const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
+		f.start(subject, minutes);
+		return {
+			reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Tap Stop (or send <code>/stop</code>) when you finish.`,
+			keyboard: STOP_KEYBOARD
+		};
+	}
+	if (cmd === "stop") {
+		const r = f.stop();
+		focusEnded.push({
+			subject: r.session.subject,
+			minutes: r.session.minutes
+		});
+		return stoppedReply(r, f.plan(s.wallet.today()));
+	}
+	if (cmd === "plan") {
+		if (arg) f.setPlan(parsePlan(arg));
+		const plan = f.plan(s.wallet.today());
+		return {
+			reply: planText(plan, arg ? "📝 <b>Plan saved</b>" : void 0),
+			keyboard: plan.items.length ? planKeyboard(plan, false) : void 0
+		};
+	}
+	if (cmd === "fun") {
+		const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 0);
+		if (!minutes) return { reply: "🎮 How long? e.g. <code>/fun 30 youtube</code> (1 coin a minute)" };
+		const what = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || "Fun";
+		const r = f.fun(minutes, what);
+		return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} points (left: ${r.balance})` };
+	}
+	if (cmd === "review") {
+		if (!arg) return { reply: "📝 Send one line about today, e.g. <code>/review good focus, phone was the problem</code>" };
+		const today = s.wallet.today();
+		const cur = f.plan(today);
+		f.review(cur.review ? `${cur.review}\n${arg}` : arg, cur.reasons);
+		return { reply: "📝 <b>Saved.</b> Thanks: this is what makes next week better." };
+	}
+	const st = f.state();
+	if (cmd === "week") return { reply: weekText(st.week, st.goals) };
+	return { reply: goalsText(st.goals) };
+}
+/** One parsed command. `db`: the database of this change (Finance Helper's copy for /balance and /spent). */
+function runCommand(s, parsed, text, env) {
+	const currentDb = env.db;
+	switch (parsed.type) {
+		case "help": return { reply: formatHelpMessage() };
+		case "why": {
+			let list = [];
+			try {
+				list = JSON.parse(getSetting(s.db, "ben_why") || "[]");
+			} catch {
+				list = [];
+			}
+			return { reply: whyText(Array.isArray(list) ? list : []) };
+		}
+		case "today": {
+			const sum = s.wallet.summary();
+			return { reply: formatTodayStatus({
+				balance: sum.balance,
+				level: sum.level.level,
+				rank: sum.level.rank,
+				totalXp: sum.totalXp,
+				ritualsDone: sum.todayRules?.length ?? 0,
+				totalRituals: 5,
+				cleanStreak: s.discipline.state().current,
+				workoutStreak: s.body.state().streak,
+				tasksLeft: s.tasks.state().tasks.filter((t) => !t.done).length
+			}) };
+		}
+		case "checkin": {
+			const paid = s.discipline.checkIn();
+			return { reply: formatCleanCheckinResponse(s.discipline.state().day, paid.coins, paid.day, s.wallet.today()) };
+		}
+		case "oath":
+			s.discipline.oath();
+			return { reply: "📜 <b>Morning Oath Affirmed!</b>\n\n<i>\"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery.\"</i>\n\n+" + ruleCoins(s, "discipline.oath", 3) + " points!" };
+		case "workout": {
+			const name = parsed.exerciseName || "pushups";
+			const amount = parsed.exerciseAmount || 20;
+			const res = s.body.logWorkout({
+				title: `${name} (+${amount})`,
+				items: [{
+					exerciseId: name.toLowerCase(),
+					name,
+					amount,
+					unit: "reps"
+				}],
+				note: "Logged via Telegram"
+			});
+			return {
+				reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0),
+				sport: {
+					name,
+					amount
+				}
+			};
+		}
+		case "sport": {
+			const name = parsed.exerciseName || "Workout";
+			const amount = parsed.exerciseAmount || 1;
+			const rawUnit = parsed.exerciseUnit || "minutes";
+			const unit = [
+				"reps",
+				"kg",
+				"sets",
+				"km",
+				"m"
+			].includes(rawUnit) ? rawUnit : "minutes";
+			const res = s.body.logWorkout({
+				title: `${name} (${amount} ${rawUnit})`,
+				items: [{
+					exerciseId: name.toLowerCase().replace(/\s+/g, "_"),
+					name,
+					amount,
+					unit
+				}],
+				note: `Logged via Telegram (${amount} ${rawUnit})`
+			});
+			return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0) };
+		}
+		case "weight": {
+			const w = parsed.metricWeight;
+			if (!w || w < 30 || w > 300) return { reply: "⚠️ Send a real weight, e.g. <code>/weight 74.5</code>." };
+			s.body.logMetric({
+				weight: w,
+				note: "Telegram"
+			});
+			return { reply: formatMetricResponse("weight", w, "kg", 0, 0) };
+		}
+		case "waist": {
+			const w = parsed.metricWaist;
+			if (!w || w < 40 || w > 200) return { reply: "⚠️ Send a real waist size, e.g. <code>/waist 82</code>." };
+			s.body.logMetric({
+				waist: w,
+				note: "Telegram"
+			});
+			return { reply: formatMetricResponse("waist", w, "cm", 0, 0) };
+		}
+		case "sport_status":
+		case "pr": {
+			const st = s.body.state();
+			return { reply: formatSportStatusResponse({
+				streak: st.streak,
+				totalWorkouts: st.totalWorkouts,
+				thisWeek: st.workoutsThisWeek,
+				latestWeight: st.latestWeight,
+				latestWaist: st.latestWaist
+			}) };
+		}
+		case "expense": {
+			const cents = Math.round((parsed.expenseAmount || 0) * 100);
+			if (!(cents > 0)) return { reply: "⚠️ How much? e.g. <code>/expense 45 food lunch</code>" };
+			const cat = parsed.expenseCategory || "other";
+			const note = parsed.expenseNote || "";
+			if (cat === "income") return {
+				reply: `💰 <b>Income noted:</b> ${formatMoney$1(cents, "MDL")}${note ? ` · ${esc(note)}` : ""}\n\nAdded to Finance Helper.`,
+				expense: {
+					amount: cents,
+					category: "income",
+					note,
+					type: "income"
+				}
+			};
+			const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : "[Telegram]", /* @__PURE__ */ new Date(), true);
+			const cur = res.state.currency || "MDL";
+			return {
+				reply: formatExpenseResponse(formatMoney$1(cents, cur), cat, note || null, formatMoney$1(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
+				expense: {
+					amount: cents,
+					category: res.expense?.category ?? cat,
+					note
+				}
+			};
+		}
+		case "balance": {
+			const coins = s.wallet.summary().balance;
+			const accounts = financeAccounts(currentDb);
+			const money = s.money.state();
+			return { reply: formatBalanceResponse({
+				currency: "MDL",
+				walletCoins: coins,
+				walletCoinsValueMdl: Math.round(coins / 10 * 100) / 100,
+				vaultSurplusMdl: s.economy.getEconomySummary().vaultBalance,
+				financeAccountsTotalMdl: accounts.filter((a) => a.currency === "MDL").reduce((t, a) => t + a.balanceMdl, 0),
+				financeAccounts: accounts,
+				dailyBudgetLeftMdl: Math.max(0, money.today.remaining) / 100
+			}) };
+		}
+		case "wake": {
+			const time = parsed.args.find((a) => /^\d{1,2}[:.]\d{2}$/.test(a))?.replace(".", ":");
+			const back = parsed.args.some((a) => /^(yesterday|ieri|вчера)$/i.test(a)) ? 1 : 0;
+			if (time || back) {
+				if (!time) return { reply: "⏰ What time? e.g. <code>/wake yesterday 06:30</code>" };
+				const day = addDays$5(s.wallet.today(), -back);
+				const res = s.sleep.setWake(day, time);
+				return { reply: `🌅 <b>Wake-up ${back ? "for yesterday " : ""}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, "sleep.up_on_time", 10)} points</b>` : res.log.onTime ? back ? "On time · no points for past days." : "On time." : "Saved to your sleep history."}` };
+			}
+			const res = s.sleep.logWake((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
+			return {
+				reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, "sleep.up_on_time", 10)} points</b>` : res.log.onTime ? "On time." : "Saved to your sleep history."}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>\n\n😴 <b>How did you sleep?</b>`,
+				keyboard: sleepKeyboard(res.log.day)
+			};
+		}
+		case "spent": {
+			const today = s.wallet.today();
+			const from = parsed.period === "week" ? addDays$5(today, -6) : parsed.period === "month" ? `${today.slice(0, 8)}01` : parsed.period === "yesterday" ? addDays$5(today, -1) : today;
+			const line = answerLocal(`spending ${from} ${parsed.period === "yesterday" ? from : today}`, {
+				finance: financeStateFrom(currentDb, store$1),
+				input: null,
+				ledger: [],
+				sessions: []
+			}) ?? "No spending data yet.";
+			return { reply: `💸 <b>${{
+				today: "Today",
+				yesterday: "Yesterday",
+				week: "The last 7 days",
+				month: "This month"
+			}[parsed.period ?? "today"]}</b>\n${esc(line.replace(/^Spending [^:]+: /, ""))}` };
+		}
+		case "bed": {
+			const at = parsed.args.find((a) => /^\d{1,2}:\d{2}$/.test(a));
+			const res = s.sleep.logBed(at ?? (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
+			return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, "sleep.bed_on_time", 5)} points</b>` : "Saved to your sleep history."}` };
+		}
+		case "tasks": {
+			const open = s.tasks.state().tasks.filter((t) => !t.done).slice(0, 8);
+			return { reply: open.length ? `📋 <b>Open tasks</b>\n\n${open.map((t, i) => `${i + 1}. [${esc(t.category)}] <b>${esc(t.title)}</b>`).join("\n")}\n\n<i>Done one? Send</i> <code>/done 1</code>` : "📋 <b>No open tasks.</b> All clear!" };
+		}
+		case "done": {
+			const open = s.tasks.state().tasks.filter((t) => !t.done);
+			const num = parsed.taskIndex ?? parseInt(parsed.args[0], 10);
+			const target = open.find((t) => t.id === num) ?? (num > 0 && num <= open.length ? open[num - 1] : void 0);
+			if (!target) return { reply: "⚠️ No task with that number. Send <code>/tasks</code> to see them." };
+			s.tasks.complete(target.id);
+			return { reply: `✅ Done: <b>${esc(target.title)}</b>` };
+		}
+		case "vault": {
+			const v = s.economy.getEconomySummary();
+			return { reply: [
+				"🏛️ <b>Reward vault</b>",
+				"",
+				`🪙 Points: <b>${v.coinsBalance}</b> (≈ ${v.coinsRealValue} ${v.currency})`,
+				`💰 Vault: <b>${v.vaultBalance} ${v.currency}</b>`,
+				`🔥 Multiplier: ${v.multiplier.label}`,
+				v.pinnedGoal ? `🌟 Goal: ${esc(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} points)` : ""
+			].filter(Boolean).join("\n") };
+		}
+		case "goals": {
+			const goals = s.economy.goals().filter((g) => !g.completed);
+			return { reply: goals.length ? `🎯 <b>Goals</b>\n\n${goals.map((g, i) => `${i + 1}. ${g.pinned ? "⭐ " : ""}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} points`).join("\n")}` : "🎯 No open goals. Add one in the Shop." };
+		}
+		case "crush": return { reply: formatUrgeResponse() };
+		default: return {
+			reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.`,
+			unknown: true
+		};
+	}
+}
+// src/renderer/src/web/bots/undo.ts
+/**
+* Takes back what the coach did in one reply (`at`): all of it, or one line.
+* Each line once; the log remembers what was undone.
+*/
+async function undoReply(c, at, index) {
+	const { mirror, services, calendar, todoist, onExpense } = c;
+	const claim = await mirror.write((db) => {
+		const log = loadLog(db);
+		const e = log.find((x) => x.role === "coach" && x.at === at);
+		if (!e?.undo) return null;
+		const ids = e.undo.map((op, k) => op && !e.undone?.[k] && (index == null || index === k) ? k : -1).filter((k) => k >= 0);
+		if (ids.length) {
+			const undone = e.undone ?? [];
+			for (const k of ids) undone[k] = true;
+			e.undone = undone;
+			saveLog(db, log);
+		}
+		return {
+			entry: e,
+			idx: ids
+		};
+	});
+	if (!claim) return {
+		ok: false,
+		lines: ["Nothing to undo there"]
+	};
+	const { entry, idx } = claim;
+	const ops = entry.undo;
+	if (!idx.length) return {
+		ok: false,
+		lines: ["Already undone"]
+	};
+	const lines = [];
+	const ok = [];
+	for (const k of idx) {
+		const op = ops[k];
+		try {
+			if (op.k === "event") {
+				if (!calendar?.remove) throw new Error("Calendar not connected");
+				await calendar.remove(op.cal, op.id);
+				lines.push("↩ Block removed from your calendar");
+			} else if (op.k === "task") {
+				if (!todoist?.remove) throw new Error("Todoist not connected");
+				await todoist.remove(op.id);
+				lines.push("↩ Todoist task removed");
+			} else {
+				const line = await mirror.write((db) => {
+					const svc = services.services(db);
+					if (op.k === "water" || op.k === "reps") {
+						const st = sportState(db);
+						if (!st) return "⚠️ Sport Track data is gone";
+						const day = sportToday();
+						if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`;
+						if (op.k === "water") {
+							writeSetting(db, "sport_tracker_json", {
+								savedAt: Date.now(),
+								data: addWater(st, op.ml, day)
+							});
+							return `↩ Water ${op.ml > 0 ? "+" : ""}${op.ml} ml`;
+						}
+						const r = addReps(st, op.ex, op.amount, day);
+						if (!r) return "⚠️ Exercise not found";
+						writeSetting(db, "sport_tracker_json", {
+							savedAt: Date.now(),
+							data: r.st
+						});
+						let gone = "";
+						if (op.workout) try {
+							svc.body.takeBackSet(op.workout, r.exercise.name, -op.amount);
+							gone = " · taken out of today's workout";
+						} catch {}
+						return `↩ ${r.exercise.name} back to ${r.exercise.done}${gone}`;
+					}
+					if (op.k === "money") {
+						const what = deleteMoney(db, op.id);
+						const life = takeLink(db, op.id);
+						if (life) try {
+							svc.money.deleteExpense(life);
+						} catch {}
+						return what ? `↩ Removed: ${what}` : "⚠️ That money record is already gone";
+					}
+					if (op.k === "remind") {
+						let list = [];
+						try {
+							list = readSetting(db, REMINDERS);
+						} catch {
+							list = [];
+						}
+						writeSetting(db, REMINDERS, list.filter((r) => r.id !== op.id));
+						return "↩ Reminder cancelled";
+					}
+					if (op.k === "plugin") return undoPluginAction({
+						db,
+						now: /* @__PURE__ */ new Date()
+					}, op.plugin, op.verb, op.data);
+					if (op.k === "mustdo") {
+						if (op.day && op.day !== svc.wallet.today()) return `⚠️ That must-do was for ${op.day}: it's gone with that day`;
+						const rest = svc.focus.plan(svc.wallet.today()).items.map((x) => x.text).filter((t) => t.toLowerCase() !== op.text.toLowerCase());
+						if (!rest.length) return "⚠️ It is your only must-do: tick it or replace it";
+						svc.focus.setPlan(rest);
+						return `↩ Must-do removed: ${op.text}`;
+					}
+					const run = svc.focus.state().running;
+					if (!run) return "⚠️ That focus timer already ended";
+					if (op.startedAt && run.startedAt !== op.startedAt) return "⚠️ That timer already ended; a newer one is running, so it stays";
+					svc.focus.cancel();
+					return "↩ Focus timer cancelled";
+				});
+				lines.push(line);
+				if (line.startsWith("⚠️")) continue;
+			}
+			ok.push(k);
+		} catch (e) {
+			lines.push(`⚠️ ${e.message}`);
+		}
+	}
+	const failed = idx.filter((k) => !ok.includes(k));
+	if (failed.length) await mirror.write((db) => {
+		const log = loadLog(db);
+		const e = log.find((x) => x.role === "coach" && x.at === at);
+		if (e?.undone) {
+			for (const k of failed) e.undone[k] = false;
+			saveLog(db, log);
+		}
+	});
+	if (ok.length) onExpense?.();
+	return {
+		ok: ok.length > 0,
+		lines
+	};
+}
+// src/renderer/src/web/webBots.ts
+var LOGS_KEY = "life_bot_logs";
+var store = typeof localStorage !== "undefined" ? localStorage : null;
+/** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
+function addRepsToSportTrack(name, amount) {
+	let prog = null;
+	updateSport((st) => {
+		const ex = findExercise(st, name);
+		if (!ex) return;
+		ex.doneToday = (Number(ex.doneToday) || 0) + amount;
+		prog = {
+			done: ex.doneToday,
+			target: Number(ex.target) || 0
+		};
+	});
+	return prog;
+}
+/**
+* Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
+* for the server: reps land there and every device picks them up.
+*/
+function addRepsInDb(db, name, amount) {
+	const st = sportState(db);
+	if (!st || !Array.isArray(st.exercises)) return null;
+	const r = addReps(st, name, amount, sportToday());
+	if (!r) return null;
+	writeSetting(db, "sport_tracker_json", {
+		savedAt: Date.now(),
+		data: r.st
+	});
+	return {
+		done: r.exercise.done,
+		target: r.exercise.target
+	};
+}
 /** Bot settings without any token (what may be synced, saved or shown). */
 function stripTokens(cfg) {
 	const out = {};
@@ -19778,64 +21007,6 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			keyboard: money.keyboard
 		};
 	}
-	/** /focus, /stop, /plan, /fun, /week, /deadlines (focus.ts). */
-	function runFocus(s, text) {
-		const m = /^\/(focus|stop|plan|fun|week|deadlines|review)(?:@\w+)?(?:\s+([\s\S]+))?$/i.exec(text.trim());
-		if (!m) return null;
-		const cmd = m[1].toLowerCase();
-		const arg = (m[2] ?? "").trim();
-		const f = s.focus;
-		if (cmd === "focus") {
-			const st = f.state();
-			if (!arg) {
-				if (st.running) {
-					const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
-					return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
-				}
-				return { reply: `⏱ Today: <b>${hm$4(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
-			}
-			const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
-			const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
-			f.start(subject, minutes);
-			return {
-				reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Tap Stop (or send <code>/stop</code>) when you finish.`,
-				keyboard: STOP_KEYBOARD
-			};
-		}
-		if (cmd === "stop") {
-			const r = f.stop();
-			focusEnded.push({
-				subject: r.session.subject,
-				minutes: r.session.minutes
-			});
-			return stoppedReply(r, f.plan(s.wallet.today()));
-		}
-		if (cmd === "plan") {
-			if (arg) f.setPlan(parsePlan(arg));
-			const plan = f.plan(s.wallet.today());
-			return {
-				reply: planText(plan, arg ? "📝 <b>Plan saved</b>" : void 0),
-				keyboard: plan.items.length ? planKeyboard(plan, false) : void 0
-			};
-		}
-		if (cmd === "fun") {
-			const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 0);
-			if (!minutes) return { reply: "🎮 How long? e.g. <code>/fun 30 youtube</code> (1 coin a minute)" };
-			const what = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || "Fun";
-			const r = f.fun(minutes, what);
-			return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} points (left: ${r.balance})` };
-		}
-		if (cmd === "review") {
-			if (!arg) return { reply: "📝 Send one line about today, e.g. <code>/review good focus, phone was the problem</code>" };
-			const today = s.wallet.today();
-			const cur = f.plan(today);
-			f.review(cur.review ? `${cur.review}\n${arg}` : arg, cur.reasons);
-			return { reply: "📝 <b>Saved.</b> Thanks: this is what makes next week better." };
-		}
-		const st = f.state();
-		if (cmd === "week") return { reply: weekText(st.week, st.goals) };
-		return { reply: goalsText(st.goals) };
-	}
 	function run(s, text, key = "") {
 		const cmd = /^\/(water|workout|w|gym)(?:@\w+)?$/i.exec(text.trim());
 		if (cmd) {
@@ -19865,7 +21036,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				keyboard: c.keyboard
 			};
 		}
-		const viaFocus = runFocus(s, text);
+		const viaFocus = runFocus(s, text, focusEnded);
 		if (viaFocus) return viaFocus;
 		const parsed = parseTelegramText(text);
 		if ((parsed.type === "expense" || parsed.type === "unknown") && !text.startsWith("/") && !notMoney(text)) {
@@ -19889,231 +21060,38 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			const money = runMoney(s, text, key);
 			if (money) return money;
 		}
-		switch (parsed.type) {
-			case "help": return { reply: formatHelpMessage() };
-			case "why": {
-				let list = [];
-				try {
-					list = JSON.parse(getSetting(s.db, "ben_why") || "[]");
-				} catch {
-					list = [];
-				}
-				return { reply: whyText(Array.isArray(list) ? list : []) };
-			}
-			case "today": {
-				const sum = s.wallet.summary();
-				return { reply: formatTodayStatus({
-					balance: sum.balance,
-					level: sum.level.level,
-					rank: sum.level.rank,
-					totalXp: sum.totalXp,
-					ritualsDone: sum.todayRules?.length ?? 0,
-					totalRituals: 5,
-					cleanStreak: s.discipline.state().current,
-					workoutStreak: s.body.state().streak,
-					tasksLeft: s.tasks.state().tasks.filter((t) => !t.done).length
-				}) };
-			}
-			case "checkin": {
-				const paid = s.discipline.checkIn();
-				return { reply: formatCleanCheckinResponse(s.discipline.state().day, paid.coins, paid.day, s.wallet.today()) };
-			}
-			case "oath":
-				s.discipline.oath();
-				return { reply: "📜 <b>Morning Oath Affirmed!</b>\n\n<i>\"I commit to purity, disciplined physical power, sharp financial focus, and daily relentless self-mastery.\"</i>\n\n+" + ruleCoins(s, "discipline.oath", 3) + " points!" };
-			case "workout": {
-				const name = parsed.exerciseName || "pushups";
-				const amount = parsed.exerciseAmount || 20;
-				const res = s.body.logWorkout({
-					title: `${name} (+${amount})`,
-					items: [{
-						exerciseId: name.toLowerCase(),
-						name,
-						amount,
-						unit: "reps"
-					}],
-					note: "Logged via Telegram"
-				});
-				return {
-					reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0),
-					sport: {
-						name,
-						amount
-					}
-				};
-			}
-			case "sport": {
-				const name = parsed.exerciseName || "Workout";
-				const amount = parsed.exerciseAmount || 1;
-				const rawUnit = parsed.exerciseUnit || "minutes";
-				const unit = [
-					"reps",
-					"kg",
-					"sets",
-					"km",
-					"m"
-				].includes(rawUnit) ? rawUnit : "minutes";
-				const res = s.body.logWorkout({
-					title: `${name} (${amount} ${rawUnit})`,
-					items: [{
-						exerciseId: name.toLowerCase().replace(/\s+/g, "_"),
-						name,
-						amount,
-						unit
-					}],
-					note: `Logged via Telegram (${amount} ${rawUnit})`
-				});
-				return { reply: formatSportResponse(name, amount, rawUnit, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0) };
-			}
-			case "weight": {
-				const w = parsed.metricWeight;
-				if (!w || w < 30 || w > 300) return { reply: "⚠️ Send a real weight, e.g. <code>/weight 74.5</code>." };
-				s.body.logMetric({
-					weight: w,
-					note: "Telegram"
-				});
-				return { reply: formatMetricResponse("weight", w, "kg", 0, 0) };
-			}
-			case "waist": {
-				const w = parsed.metricWaist;
-				if (!w || w < 40 || w > 200) return { reply: "⚠️ Send a real waist size, e.g. <code>/waist 82</code>." };
-				s.body.logMetric({
-					waist: w,
-					note: "Telegram"
-				});
-				return { reply: formatMetricResponse("waist", w, "cm", 0, 0) };
-			}
-			case "sport_status":
-			case "pr": {
-				const st = s.body.state();
-				return { reply: formatSportStatusResponse({
-					streak: st.streak,
-					totalWorkouts: st.totalWorkouts,
-					thisWeek: st.workoutsThisWeek,
-					latestWeight: st.latestWeight,
-					latestWaist: st.latestWaist
-				}) };
-			}
-			case "expense": {
-				const cents = Math.round((parsed.expenseAmount || 0) * 100);
-				if (!(cents > 0)) return { reply: "⚠️ How much? e.g. <code>/expense 45 food lunch</code>" };
-				const cat = parsed.expenseCategory || "other";
-				const note = parsed.expenseNote || "";
-				if (cat === "income") return {
-					reply: `💰 <b>Income noted:</b> ${formatMoney$1(cents, "MDL")}${note ? ` · ${esc(note)}` : ""}\n\nAdded to Finance Helper.`,
-					expense: {
-						amount: cents,
-						category: "income",
-						note,
-						type: "income"
-					}
-				};
-				const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : "[Telegram]", /* @__PURE__ */ new Date(), true);
-				const cur = res.state.currency || "MDL";
-				return {
-					reply: formatExpenseResponse(formatMoney$1(cents, cur), cat, note || null, formatMoney$1(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
-					expense: {
-						amount: cents,
-						category: res.expense?.category ?? cat,
-						note
-					}
-				};
-			}
-			case "balance": {
-				const coins = s.wallet.summary().balance;
-				const accounts = financeAccounts(currentDb);
-				const money = s.money.state();
-				return { reply: formatBalanceResponse({
-					currency: "MDL",
-					walletCoins: coins,
-					walletCoinsValueMdl: Math.round(coins / 10 * 100) / 100,
-					vaultSurplusMdl: s.economy.getEconomySummary().vaultBalance,
-					financeAccountsTotalMdl: accounts.filter((a) => a.currency === "MDL").reduce((t, a) => t + a.balanceMdl, 0),
-					financeAccounts: accounts,
-					dailyBudgetLeftMdl: Math.max(0, money.today.remaining) / 100
-				}) };
-			}
-			case "wake": {
-				const time = parsed.args.find((a) => /^\d{1,2}[:.]\d{2}$/.test(a))?.replace(".", ":");
-				const back = parsed.args.some((a) => /^(yesterday|ieri|вчера)$/i.test(a)) ? 1 : 0;
-				if (time || back) {
-					if (!time) return { reply: "⏰ What time? e.g. <code>/wake yesterday 06:30</code>" };
-					const day = addDays$5(s.wallet.today(), -back);
-					const res = s.sleep.setWake(day, time);
-					return { reply: `🌅 <b>Wake-up ${back ? "for yesterday " : ""}set</b>: ${res.log.wakeTime} (target ${res.log.wakeTarget})\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, "sleep.up_on_time", 10)} points</b>` : res.log.onTime ? back ? "On time · no points for past days." : "On time." : "Saved to your sleep history."}` };
-				}
-				const res = s.sleep.logWake((/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
-				return {
-					reply: `🌅 <b>Wake-up logged</b>: ${res.log.wakeTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, "sleep.up_on_time", 10)} points</b>` : res.log.onTime ? "On time." : "Saved to your sleep history."}\n<i>Woke up earlier? Send</i> <code>/wake 06:40</code>\n\n😴 <b>How did you sleep?</b>`,
-					keyboard: sleepKeyboard(res.log.day)
-				};
-			}
-			case "spent": {
-				const today = s.wallet.today();
-				const from = parsed.period === "week" ? addDays$5(today, -6) : parsed.period === "month" ? `${today.slice(0, 8)}01` : parsed.period === "yesterday" ? addDays$5(today, -1) : today;
-				const line = answerLocal(`spending ${from} ${parsed.period === "yesterday" ? from : today}`, {
-					finance: financeStateFrom(currentDb, store),
-					input: null,
-					ledger: [],
-					sessions: []
-				}) ?? "No spending data yet.";
-				return { reply: `💸 <b>${{
-					today: "Today",
-					yesterday: "Yesterday",
-					week: "The last 7 days",
-					month: "This month"
-				}[parsed.period ?? "today"]}</b>\n${esc(line.replace(/^Spending [^:]+: /, ""))}` };
-			}
-			case "bed": {
-				const at = parsed.args.find((a) => /^\d{1,2}:\d{2}$/.test(a));
-				const res = s.sleep.logBed(at ?? (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5));
-				return { reply: `🌙 <b>Bedtime logged</b>: ${res.log.bedTime}\n${res.awarded ? `🎯 On time! <b>+${ruleCoins(s, "sleep.bed_on_time", 5)} points</b>` : "Saved to your sleep history."}` };
-			}
-			case "tasks": {
-				const open = s.tasks.state().tasks.filter((t) => !t.done).slice(0, 8);
-				return { reply: open.length ? `📋 <b>Open tasks</b>\n\n${open.map((t, i) => `${i + 1}. [${esc(t.category)}] <b>${esc(t.title)}</b>`).join("\n")}\n\n<i>Done one? Send</i> <code>/done 1</code>` : "📋 <b>No open tasks.</b> All clear!" };
-			}
-			case "done": {
-				const open = s.tasks.state().tasks.filter((t) => !t.done);
-				const num = parsed.taskIndex ?? parseInt(parsed.args[0], 10);
-				const target = open.find((t) => t.id === num) ?? (num > 0 && num <= open.length ? open[num - 1] : void 0);
-				if (!target) return { reply: "⚠️ No task with that number. Send <code>/tasks</code> to see them." };
-				s.tasks.complete(target.id);
-				return { reply: `✅ Done: <b>${esc(target.title)}</b>` };
-			}
-			case "vault": {
-				const v = s.economy.getEconomySummary();
-				return { reply: [
-					"🏛️ <b>Reward vault</b>",
-					"",
-					`🪙 Points: <b>${v.coinsBalance}</b> (≈ ${v.coinsRealValue} ${v.currency})`,
-					`💰 Vault: <b>${v.vaultBalance} ${v.currency}</b>`,
-					`🔥 Multiplier: ${v.multiplier.label}`,
-					v.pinnedGoal ? `🌟 Goal: ${esc(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} points)` : ""
-				].filter(Boolean).join("\n") };
-			}
-			case "goals": {
-				const goals = s.economy.goals().filter((g) => !g.completed);
-				return { reply: goals.length ? `🎯 <b>Goals</b>\n\n${goals.map((g, i) => `${i + 1}. ${g.pinned ? "⭐ " : ""}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} points`).join("\n")}` : "🎯 No open goals. Add one in the Shop." };
-			}
-			case "crush": return { reply: formatUrgeResponse() };
-			default: return {
-				reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.`,
-				unknown: true
-			};
-		}
+		return runCommand(s, parsed, text, { db: currentDb });
 	}
 	/**
 	* Handles one message in one Turso transaction (with its "seen" mark). If
 	* another device got there first, the copy reloads and we skip it.
 	*/
 	/** A tap on a button under a logged money record (account, category, undo). */
+	/** What the button handlers (bots/callbacks.ts) may use from here (LT6). */
+	const cbCtx = {
+		mirror,
+		services,
+		todoist,
+		calendar,
+		onExpense,
+		markSeen: (key) => markSeen(key),
+		rhythm,
+		sendProposal: (token, chat, note) => sendProposal(token, chat, note),
+		handleBrain: (botId, update, cfg, text, key, media) => handleBrain(botId, update, cfg, text, key, media),
+		undoReply: (at, index) => undoReply$1(at, index),
+		flushFocus: () => flushFocus(),
+		focusEnded,
+		runMoneyIn: (db, text, key) => {
+			currentDb = db;
+			return runMoney(services.services(db), text, key);
+		}
+	};
 	async function handleButton(botId, update, cfg) {
 		const cq = update.callback_query;
 		const chat = String(cq?.message?.chat?.id ?? "");
 		const data = String(cq?.data ?? "");
 		const key = `${botId}:cb:${cq?.id}`;
-		if (!cq || !/^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[ln])\|/.test(data)) return null;
+		if (!cq || !CALLBACK_DATA.test(data)) return null;
 		const answer = (text) => tg(update.__token, "answerCallbackQuery", {
 			callback_query_id: cq.id,
 			text
@@ -20129,682 +21107,17 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			parse_mode: "HTML",
 			...keyboard ? { reply_markup: keyboard } : {}
 		}).catch(() => null);
-		if (data.startsWith("wa|") || data.startsWith("wk|")) {
-			if (!await markSeen(key)) return null;
-			const show = data === "wa|show" || data === "wk|show";
-			const r = await mirror.write((db) => {
-				const svc = services.services(db);
-				const day = sportToday();
-				let st = sportState(db) ?? defaultSport(day);
-				const save = (x) => writeSetting(db, "sport_tracker_json", {
-					savedAt: Date.now(),
-					data: x
-				});
-				if (data.startsWith("wa|")) {
-					if (!show) {
-						st = addWater(st, Number(data.slice(3)) || 0, day);
-						save(st);
-					}
-					return {
-						...waterCard(st, day, waterToday(db, svc).target),
-						toast: show ? "" : `${Number(data.slice(3)) > 0 ? "+" : ""}${data.slice(3)} ml`
-					};
-				}
-				let extra = "";
-				let toast = "";
-				if (!show) {
-					const was = allDone(sportForDay(st, day));
-					st = applyWorkoutTap(st, day, data.slice(3));
-					save(st);
-					toast = "Logged";
-					if (!was && allDone(st)) {
-						const list = activeExercises(st);
-						try {
-							svc.body.logWorkout({
-								title: `Daily workout: ${list.map((e) => `${e.doneToday} ${e.name}`).join(", ")}`,
-								items: list.map((e) => ({
-									exerciseId: String(e.id ?? e.name),
-									name: String(e.name),
-									amount: Number(e.doneToday) || 0,
-									unit: e.unit === "sec" ? "minutes" : "reps"
-								})),
-								note: "Logged with Ben"
-							});
-						} catch {}
-						let log = { days: {} };
-						try {
-							log = JSON.parse(getSetting(db, "ben_workouts") || "{\"days\":{}}");
-						} catch {
-							log = { days: {} };
-						}
-						log = recordWorkoutDay(log, st, day);
-						setSetting(db, "ben_workouts", JSON.stringify(log));
-						const ups = st.sportySettings?.autoProgression === false ? [] : progression(log, st, day);
-						for (const u of ups) st = setExercise(st, day, u.name, u.to).st;
-						if (ups.length) save(st);
-						const body = svc.body.state();
-						extra = [`🔥 Streak ${body.streak} day${body.streak === 1 ? "" : "s"} · ${body.workoutsThisWeek} this week`, ...ups.map((u) => `${u.to > u.from ? "📈" : "📉"} ${u.name}: ${u.from} → ${u.to} (${u.why})`)].join("\n");
-						toast = "Workout done! 🔥";
-					}
-				}
-				return {
-					...workoutCard(st, day, extra),
-					toast
-				};
-			});
-			await answer(r.toast || "OK");
-			if (show) await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text: r.text,
-				parse_mode: "HTML",
-				reply_markup: r.keyboard
-			}).catch(() => null);
-			else await edit(r.text, r.keyboard);
-			return r.text;
-		}
-		if (data.startsWith("cs|") || data.startsWith("gb|") || data === "rb|p") {
-			if (!await markSeen(key)) return null;
-			await answer(data.startsWith("cs|") ? "…" : "On it");
-			if (data === "rb|p") return sendProposal(update.__token, chat);
-			if (data.startsWith("gb|")) {
-				const want = data.slice(3).toLowerCase();
-				const ids = (await rhythm.goalPlans()).filter((p) => p.title.toLowerCase().startsWith(want) || want.startsWith(p.title.toLowerCase().slice(0, want.length))).map((p) => p.goalId);
-				const text = (await rhythm.bookGoals(ids.length ? ids : void 0)).lines.map(esc).join("\n");
-				await tg(update.__token, "sendMessage", {
-					chat_id: chat,
-					text,
-					parse_mode: "HTML"
-				}).catch(() => null);
-				return text;
-			}
-			const said = data.slice(3);
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text: `💬 <i>${esc(readConfirm(said)?.rest ?? said)}</i>`,
-				parse_mode: "HTML"
-			}).catch(() => null);
-			return handleBrain(botId, {
-				__token: update.__token,
-				update_id: update.update_id,
-				message: {
-					chat: { id: chat },
-					text: said
-				}
-			}, cfg, said, `${key}:say`);
-		}
-		if (data.startsWith("ml|") || data.startsWith("mn|")) {
-			if (!await markSeen(key)) return null;
-			const said = await mirror.write((db) => takeMoneyAsk(db, data.slice(3)));
-			if (!said) {
-				await answer("Already done");
-				return null;
-			}
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message?.message_id,
-				reply_markup: { inline_keyboard: [] }
-			}).catch(() => null);
-			if (data.startsWith("mn|")) {
-				await answer("Asking Ben");
-				return handleBrain(botId, {
-					__token: update.__token,
-					update_id: update.update_id,
-					message: {
-						chat: { id: chat },
-						text: said
-					}
-				}, cfg, said, `${key}:nm`);
-			}
-			await answer("Logged");
-			const r = await mirror.write((db) => {
-				currentDb = db;
-				return runMoney(services.services(db), said, `${key}:ml`);
-			});
-			const text = r?.reply ?? "Could not log that: try \"taxi 45\".";
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text,
-				parse_mode: "HTML",
-				...r?.keyboard ? { reply_markup: r.keyboard } : {}
-			}).catch(() => null);
-			onExpense?.();
-			return text;
-		}
-		if (data.startsWith("bf|") || data.startsWith("fb|") && data.split("|").length === 3) {
-			if (!await markSeen(key)) return null;
-			const [, ms, kind] = data.split("|");
-			const at = new Date(Number(ms)).toISOString();
-			await mirror.write((db) => {
-				const e = loadLog(db).find((x) => x.role === "coach" && x.at === at);
-				addFeedback(db, {
-					at,
-					kind: [
-						"up",
-						"down",
-						"long",
-						"wrong"
-					].includes(kind) ? kind : "down",
-					text: e?.text ?? String(cq.message?.text ?? "").slice(0, 300)
-				});
-			});
-			await answer(kind === "up" ? "👍 Noted" : kind === "long" ? "Got it: shorter" : kind === "wrong" ? "Got it: tell me what was wrong" : "Noted: I will do better");
-			const kb = (cq.message?.reply_markup?.inline_keyboard ?? []).filter((row) => !row.some((b) => /^(bf|fb)\|\d+\|/.test(String(b.callback_data ?? ""))));
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message.message_id,
-				reply_markup: { inline_keyboard: kb }
-			}).catch(() => null);
-			return null;
-		}
-		if (data.startsWith("md|") || data.startsWith("sk|") || data.startsWith("sr|")) {
-			if (!await markSeen(key)) return null;
-			const arg = data.slice(3);
-			const line = await mirror.write((db) => {
-				const svc = services.services(db);
-				if (data.startsWith("md|")) return `${moodFace(Number(arg))} ${deskChange(svc, {
-					op: "mood",
-					mood: Number(arg)
-				})}`;
-				if (data.startsWith("sk|")) {
-					const st = loadDesk(db).stakes.find((x) => x.id === arg);
-					if (!st || st.status !== "open") return st?.status === "lost" ? "Too late: the points are gone." : "Already done.";
-					return `💎 ${deskChange(svc, {
-						op: "keepStake",
-						id: arg
-					})} "${st.text}" · your ${st.points} points are safe.`;
-				}
-				return `📚 ${deskChange(svc, {
-					op: "reviewed",
-					id: arg
-				})}`;
-			});
-			await answer(line.slice(0, 190));
-			await edit(`${esc(String(cq.message?.text ?? ""))}\n\n${esc(line)}`);
-			return line;
-		}
-		if (data.startsWith("cu|")) {
-			if (!await markSeen(key)) return null;
-			const r = await undoReply(new Date(Number(data.slice(3))).toISOString());
-			await answer(r.ok ? "Undone" : r.lines[0] ?? "Nothing to undo");
-			const text = `${esc(String(cq.message?.text ?? ""))}\n\n${r.lines.map(esc).join("\n")}`;
-			await edit(text);
-			return text;
-		}
-		if (/^r[bvw]\|/.test(data)) {
-			if (!await markSeen(key)) return null;
-			const msg = String(cq.message?.text ?? "");
-			try {
-				if (data === "rb|a") {
-					await answer("Approving…");
-					const r = await rhythm.approve();
-					const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join("\n")}` : esc(r.done.join(" "));
-					await edit(text);
-					return text;
-				}
-				if (data === "rb|r") {
-					await answer("Making another plan…");
-					await edit(`${esc(msg)}\n\n🔄 <i>Making another one…</i>`);
-					return await sendProposal(update.__token, chat);
-				}
-				if (data === "rb|e" || data === "rv|e" || data === "rw|e") {
-					await answer("Tell me");
-					const ask = data === "rb|e" ? EDIT_ASK : data === "rv|e" ? TOP3_ASK : WEEK_ASK;
-					await tg(update.__token, "sendMessage", {
-						chat_id: chat,
-						text: ask,
-						reply_markup: {
-							force_reply: true,
-							input_field_placeholder: data === "rb|e" ? "No gym today; lab report first" : "One per line"
-						}
-					});
-					return ask;
-				}
-				if (data === "rv|o") {
-					const c = await rhythm.checkoutStart();
-					await answer(c.items.length ? "Check out" : "Nothing to check");
-					if (!c.items.length) return null;
-					await tg(update.__token, "sendMessage", {
-						chat_id: chat,
-						text: checkoutText(c.items, c.marks),
-						parse_mode: "HTML",
-						reply_markup: checkoutKeyboard(c.items, c.marks)
-					});
-					return "checkout";
-				}
-				if (data.startsWith("rv|c|")) {
-					const [, , i, v] = data.split("|");
-					const c = await rhythm.checkoutMark(Number(i), v);
-					await answer(v === "k" ? "Done" : v === "p" ? "Partly" : "Not done");
-					await edit(checkoutText(c.items, c.marks), checkoutKeyboard(c.items, c.marks));
-					return "marked";
-				}
-				if (data === "rv|k") {
-					await answer("Saved for tomorrow");
-					const draft = await rhythm.planTomorrow().catch(() => null);
-					const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.${draft?.blocks.length ? ` Tomorrow's draft is ready: ${draft.blocks.length} block${draft.blocks.length === 1 ? "" : "s"} from ${draft.blocks[0].start}.` : ""}`;
-					await edit(text);
-					return text;
-				}
-				if (data === "rw|a") {
-					const line = await rhythm.applyWeekly();
-					await answer("Week planned");
-					const text = `${esc(msg)}\n\n✅ ${esc(line)}`;
-					await edit(text, { inline_keyboard: [[{
-						text: "📅 Book the big 3 in my calendar",
-						callback_data: "rw|b"
-					}]] });
-					return text;
-				}
-				if (data === "rw|b") {
-					const list = await rhythm.bookingPreview();
-					await answer(list.length ? "Here they are" : "No free time found");
-					const text = list.length ? `📅 <b>The big 3 this week</b>, in your free time:\n${list.map((b) => `${(/* @__PURE__ */ new Date(`${b.day}T12:00:00`)).toLocaleDateString("en-GB", { weekday: "short" })} ${b.start}–${b.end} ${esc(b.title)}`).join("\n")}` : "No free time found for the big 3 this week (or they are done).";
-					await tg(update.__token, "sendMessage", {
-						chat_id: chat,
-						text,
-						parse_mode: "HTML",
-						...list.length ? { reply_markup: { inline_keyboard: [[{
-							text: "✅ Book them",
-							callback_data: "rw|y"
-						}, {
-							text: "Not now",
-							callback_data: "rw|n"
-						}]] } } : {}
-					});
-					return text;
-				}
-				if (data === "rw|y" || data === "rw|n") {
-					const done = data === "rw|y" ? await rhythm.bookWeek() : [];
-					await answer(data === "rw|y" ? `Booked ${done.length}` : "Not booked");
-					const text = `${esc(msg)}\n\n${data === "rw|y" ? `✅ Booked ${done.length} block${done.length === 1 ? "" : "s"}.` : "Not booked."}`;
-					await edit(text);
-					return text;
-				}
-			} catch (e) {
-				await answer(e.message.slice(0, 190));
-			}
-			return null;
-		}
-		if (data.startsWith("td|")) {
-			if (!await mirror.write((db) => {
-				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
-				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
-				return true;
-			})) return null;
-			const id = data.slice(3);
-			const title = /“([^”]*)”/.exec(String(cq.message?.text ?? ""))?.[1] ?? "Todoist task";
-			try {
-				if (!todoist) throw new Error("Todoist is not connected");
-				await todoist.close(id);
-				const paid = await mirror.write((db) => payTodoist(services.services(db), [{
-					id,
-					content: title
-				}]));
-				await answer(paid ? "+8 points" : "Done");
-				const text = `${String(cq.message?.text ?? "").split("\n\nFinished")[0]}\n\n✅ <b>Done in Todoist:</b> ${esc(title)}${paid ? " · 🪙 +8" : ""}`;
-				await edit(text);
-				return text;
-			} catch (e) {
-				await answer(`Todoist: ${e.message}`.slice(0, 190));
-				return null;
-			}
-		}
-		if (data.startsWith("gp|") || data.startsWith("gx|")) {
-			const sug = await mirror.write((db) => {
-				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return void 0;
-				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
-				try {
-					return JSON.parse(getSetting(db, "plan_suggestion") || "null");
-				} catch {
-					return null;
-				}
-			});
-			if (sug === void 0) return null;
-			if (data.startsWith("gx|") || !sug || !calendar) {
-				await answer("Okay");
-				await edit(`${esc(String(cq.message?.text ?? ""))}\n\nOkay, no blocks. Start when you're ready: /focus 50`);
-				return "no blocks";
-			}
-			let made = 0;
-			for (const b of sug.blocks) if (await calendar.create({
-				title: b.title,
-				start: (/* @__PURE__ */ new Date(`${sug.day}T${b.start}:00`)).toISOString(),
-				end: (/* @__PURE__ */ new Date(`${sug.day}T${b.end}:00`)).toISOString(),
-				description: "Planned with your coach in Life System"
-			}).then(() => true).catch(() => false)) made++;
-			await answer(made ? `${made} blocks added` : "Calendar failed");
-			const text = `${esc(String(cq.message?.text ?? ""))}\n\n✅ ${made} block${made === 1 ? "" : "s"} in your Google Calendar. When one starts, I'll be here: /focus 50`;
-			await edit(text);
-			return text;
-		}
-		if (data.startsWith("fq|")) {
-			const [, day, n, minutes] = data.split("|");
-			if (!await mirror.write((db) => {
-				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return false;
-				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
-				setSetting(db, "focus_ratings", JSON.stringify([...focusRatings(db), {
-					day,
-					rating: Number(n),
-					minutes: Number(minutes) || 0
-				}].slice(-60)));
-				return true;
-			})) return null;
-			const r = Number(n);
-			await answer(`${n}/5 noted`);
-			const base = esc(String(cq.message?.text ?? "").replace(/\n*(And )?[Hh]ow did it go\?\s*$/, ""));
-			const low = r <= 2;
-			const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? "Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes." : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`;
-			await edit(text, low ? { inline_keyboard: [REASONS.slice(0, 3), REASONS.slice(3)].map((row, k) => row.map((x, i) => ({
-				text: x,
-				callback_data: `pr|${day}|${k * 3 + i}`
-			}))) } : void 0);
-			return text;
-		}
-		if (data.startsWith("np|") || data.startsWith("ns|")) {
-			const pause = data.startsWith("np|");
-			await mirror.write((db) => {
-				let st = {};
-				try {
-					st = JSON.parse(getSetting(db, "coach_nudges") || "{}");
-				} catch {
-					st = {};
-				}
-				const now = /* @__PURE__ */ new Date();
-				const today = services.services(db).wallet.today(now);
-				setSetting(db, NUDGES, JSON.stringify(pause ? {
-					...st,
-					pausedDay: today
-				} : {
-					...st,
-					snoozeUntil: new Date(now.getTime() + 18e5).toISOString()
-				}));
-			});
-			const text = pause ? "⏸ Nudges paused for today. Back tomorrow." : "😴 OK, I'll check again in 30 minutes.";
-			await answer(text);
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message.message_id,
-				reply_markup: { inline_keyboard: [] }
-			}).catch(() => null);
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text
-			}).catch(() => null);
-			return text;
-		}
-		if (data.startsWith("bd|")) {
-			if (!await markSeen(key)) return null;
-			const arg = data.slice(3);
-			const id = /^\d{1,3}$/.test(arg) ? await mirror.read((db) => {
-				try {
-					return (JSON.parse(getSetting(db, "coach_rhythm") || "null")?.moved ?? [])[Number(arg)];
-				} catch {
-					return;
-				}
-			}) : arg;
-			let ok = false;
-			if (id && calendar?.remove) {
-				const day = /* @__PURE__ */ new Date();
-				const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
-				const ev = (await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => [])).find((e) => e.id === id);
-				if (ev) ok = await calendar.remove(ev.calendarId, ev.id).then(() => true).catch(() => false);
-			}
-			const text = ok ? "✕ Dropped for today. Your calendar is up to date." : "Could not find that block anymore; it may already be gone.";
-			await answer(ok ? "Dropped" : "Not found");
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message.message_id,
-				reply_markup: { inline_keyboard: [] }
-			}).catch(() => null);
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text
-			}).catch(() => null);
-			return text;
-		}
-		if (data.startsWith("sg|")) {
-			if (!await markSeen(key)) return null;
-			const s = suggestStake(data.slice(3) || "Focus", /* @__PURE__ */ new Date());
-			await mirror.write((db) => {
-				const d = loadDesk(db);
-				saveDesk(db, {
-					...d,
-					stakes: addStake(d.stakes, s.text, s.due, s.points, /* @__PURE__ */ new Date(), s.proof)
-				});
-			});
-			const text = `🎯 Deal: ${s.text}. ${s.points} points on it. It settles by itself when the focus log shows the 25 minutes.`;
-			await answer("Stake set");
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message.message_id,
-				reply_markup: { inline_keyboard: [] }
-			}).catch(() => null);
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text
-			}).catch(() => null);
-			return text;
-		}
-		if (data.startsWith("bx|")) {
-			if (!await markSeen(key)) return null;
-			const id = data.slice(3);
-			let text = "Could not find that block anymore; it may already be gone.";
-			if (calendar?.move) {
-				const day = /* @__PURE__ */ new Date();
-				const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
-				const evs = await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => []);
-				const ev = evs.find((e) => e.id === id);
-				if (ev) {
-					const len = Math.round((Date.parse(ev.end) - Date.parse(ev.start)) / 6e4);
-					const dayKey = calendarDay(day);
-					const slot = nextSlot(evs.filter((e) => e.id !== id), dayKey, day.toTimeString().slice(0, 5), len);
-					if (slot && await calendar.move(ev.calendarId, ev.id, (/* @__PURE__ */ new Date(`${dayKey}T${slot.start}:00`)).toISOString(), (/* @__PURE__ */ new Date(`${dayKey}T${slot.end}:00`)).toISOString()).then(() => true).catch(() => false)) text = `↪️ ${ev.title} → ${slot.start}–${slot.end}, your next free time.`;
-					else if (!slot) text = "No free time left today for it. Drop it, or tell me where it goes.";
-				}
-			}
-			await answer("Moved");
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message.message_id,
-				reply_markup: { inline_keyboard: [] }
-			}).catch(() => null);
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text
-			}).catch(() => null);
-			return text;
-		}
-		if (data.startsWith("rs|")) {
-			if (!await markSeen(key)) return null;
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message.message_id,
-				reply_markup: { inline_keyboard: [] }
-			}).catch(() => null);
-			if (data !== "rs|a") {
-				await answer("Kept as is");
-				return "kept";
-			}
-			const lines = [];
-			if (calendar?.move) {
-				const now = /* @__PURE__ */ new Date();
-				const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-				const evs = await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => []);
-				const end = new Date(now);
-				end.setHours(22, 0, 0, 0);
-				const r = rescueFromEvents(evs, now.getTime(), end.getTime());
-				for (const mv of r.moves) {
-					const ev = evs.find((e) => e.id === mv.id);
-					if (!ev || mv.action === "keep") continue;
-					const s = mv.action === "tomorrow" ? Date.parse(ev.start) + 864e5 : mv.start;
-					const e = mv.action === "tomorrow" ? Date.parse(ev.end) + 864e5 : mv.end;
-					if (await calendar.move(ev.calendarId, ev.id, new Date(s).toISOString(), new Date(e).toISOString()).then(() => true).catch(() => false)) lines.push(mv.action === "tomorrow" ? `➡️ ${ev.title} → tomorrow` : `${mv.action === "shrink" ? "✂️" : "↪️"} ${ev.title} ${new Date(s).toTimeString().slice(0, 5)}–${new Date(e).toTimeString().slice(0, 5)}`);
-				}
-			}
-			const text = lines.length ? `🛟 Done. The rest of today:\n${lines.join("\n")}` : "Nothing needed moving.";
-			await answer("Rescued");
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text
-			}).catch(() => null);
-			return text;
-		}
-		if (data.startsWith("bt|")) {
-			if (!await markSeen(key)) return null;
-			const id = data.slice(3);
-			let ok = false;
-			if (calendar?.move) {
-				const day = /* @__PURE__ */ new Date();
-				const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
-				const ev = (await calendar.events(from, new Date(Date.parse(from) + 864e5).toISOString()).catch(() => [])).find((e) => e.id === id);
-				if (ev) ok = await calendar.move(ev.calendarId, ev.id, new Date(Date.parse(ev.start) + 864e5).toISOString(), new Date(Date.parse(ev.end) + 864e5).toISOString()).then(() => true).catch(() => false);
-			}
-			const text = ok ? "📅 Moved to tomorrow, same time." : "Could not find that block anymore; it may already be gone.";
-			await answer(ok ? "Tomorrow" : "Not found");
-			await tg(update.__token, "editMessageReplyMarkup", {
-				chat_id: chat,
-				message_id: cq.message.message_id,
-				reply_markup: { inline_keyboard: [] }
-			}).catch(() => null);
-			await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text
-			}).catch(() => null);
-			return text;
-		}
-		if (data.startsWith("sq|")) {
-			const [, day, n] = data.split("|");
-			const res = await mirror.write((db) => {
-				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
-				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
-				try {
-					const svc = services.services(db);
-					svc.sleep.setQuality(day, Number(n));
-					return { tip: sleepTip(Number(n), svc.sleep.bedtimeTarget()) };
-				} catch (e) {
-					return {
-						tip: "",
-						error: e.message
-					};
-				}
-			});
-			if (!res) return null;
-			await answer(res.error ?? `Sleep ${n}/5 noted`);
-			if (res.error) return null;
-			const text = `${esc(String(cq.message?.text ?? "").replace(/\n*😴 How did you sleep\?\s*$/, ""))}\n\n😴 Sleep: <b>${n}/5</b>. ${res.tip}`;
-			await edit(text);
-			return text;
-		}
-		if (data.startsWith("fo|") || data.startsWith("fx|")) {
-			const res = await mirror.write((db) => {
-				if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
-				db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
-				const f = services.services(db).focus;
-				try {
-					if (data.startsWith("fo|")) {
-						const m = /^fo\|(\d{1,3})\|(.*)$/.exec(data);
-						const minutes = m ? Math.min(180, Math.max(5, Number(m[1]))) : 50;
-						const subject = (m ? m[2] : data.slice(3)) || "Focus";
-						const item = f.plan(services.services(db).wallet.today()).items.find((p) => !p.done && p.text.startsWith(subject));
-						f.start(subject, minutes, /* @__PURE__ */ new Date(), item ? {
-							kind: "mustdo",
-							ref: item.text,
-							title: item.text
-						} : null);
-						return {
-							text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · ${minutes} min.\nPhone away. Tap Stop when you finish.`,
-							keyboard: STOP_KEYBOARD,
-							toast: "Focus started"
-						};
-					}
-					const r = f.stop();
-					focusEnded.push({
-						subject: r.session.subject,
-						minutes: r.session.minutes
-					});
-					const out = stoppedReply(r, f.plan(services.services(db).wallet.today()));
-					return {
-						text: out.reply,
-						keyboard: out.keyboard,
-						toast: r.coins ? `+${r.coins} points` : "Logged"
-					};
-				} catch (e) {
-					return {
-						text: "",
-						keyboard: void 0,
-						toast: e.message.slice(0, 190)
-					};
-				}
-			});
-			if (!res) return null;
-			await answer(res.toast);
-			if (!res.text) return null;
-			if (data.startsWith("fo|")) await tg(update.__token, "sendMessage", {
-				chat_id: chat,
-				text: res.text,
-				parse_mode: "HTML",
-				reply_markup: res.keyboard
-			}).catch(() => null);
-			else await edit(res.text, res.keyboard);
-			await flushFocus();
-			if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-focus-changed"));
-			return res.text;
-		}
-		const res = await mirror.write((db) => {
-			if (db.prepare("SELECT 1 FROM bot_seen_updates WHERE key = ?").get(key)) return null;
-			db.prepare("INSERT INTO bot_seen_updates (key, ts) VALUES (?, ?)").run(key, (/* @__PURE__ */ new Date()).toISOString());
-			const svc = services.services(db);
-			if (data.startsWith("p")) {
-				const [kind, day, n] = data.split("|");
-				return db.transaction(() => {
-					let toast = "";
-					if (kind === "pp") {
-						const r = svc.focus.togglePlan(Number(n), /* @__PURE__ */ new Date(), day);
-						toast = r.coins ? `+${r.coins} points` : "✓";
-					} else {
-						const reason = REASONS[Number(n)];
-						const cur = svc.focus.plan(day).reasons;
-						svc.focus.review(null, cur.includes(reason) ? cur.filter((x) => x !== reason) : [...cur, reason], /* @__PURE__ */ new Date(), day);
-						toast = "Noted";
-					}
-					const plan = svc.focus.plan(day);
-					if (kind === "pr" && String(cq.message?.text ?? "").includes("What got in the way?")) {
-						const reason = REASONS[Number(n)];
-						return {
-							text: `${esc(String(cq.message?.text ?? "").replace(/What got in the way\?[\s\S]*$/, ""))}Noted: <b>${esc(reason)}</b>. The coach will help you fix that first next time.`,
-							keyboard: void 0,
-							toast
-						};
-					}
-					const evening = /Evening review|Day review/.test(String(cq.message?.text ?? ""));
-					const focusMin = svc.focus.state().todayMin;
-					return {
-						text: evening ? eveningText(plan, focusMin) : planText(plan),
-						keyboard: planKeyboard(plan, evening),
-						toast
-					};
-				})();
-			}
-			return db.transaction(() => {
-				const r = moneyButton(db, data, svc.wallet.today());
-				const life = r && data.startsWith("fu|") ? takeLink(db, data.split("|")[1]) : null;
-				if (life) try {
-					svc.money.deleteExpense(life);
-				} catch {}
-				return r;
-			})();
+		return runCallback(cbCtx, {
+			data,
+			chat,
+			key,
+			botId,
+			cfg,
+			update,
+			cq,
+			answer,
+			edit
 		});
-		if (!res) return null;
-		await answer(res.toast);
-		await tg(update.__token, "editMessageText", {
-			chat_id: chat,
-			message_id: cq.message.message_id,
-			text: res.text,
-			parse_mode: "HTML",
-			...res.keyboard ? { reply_markup: res.keyboard } : {}
-		}).catch(() => null);
-		if (data.startsWith("fu|") || data.startsWith("fa|") || data.startsWith("fk|")) onExpense?.();
-		return res.text;
 	}
 	/**
 	* /todo, /task …, /done N with Todoist connected. Todoist is a network call,
@@ -20980,7 +21293,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		});
 		if (!last) return null;
 		if (kind === "undo") {
-			const r = await undoReply(last.at);
+			const r = await undoReply$1(last.at);
 			return r.ok ? {
 				reply: `↩️ Undone: ${r.lines.join(" · ")}`,
 				acts: []
@@ -20990,7 +21303,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (k < 0) return null;
 		const ml = amountIn(last.done?.[k] ?? "");
 		if (!ml) return null;
-		if (!(await undoReply(last.at, k)).ok) return null;
+		if (!(await undoReply$1(last.at, k)).ok) return null;
 		const water = readAction(`water: ${ml}`);
 		return {
 			reply: `💧 Fixed: that was water, not money. Money record removed, ${ml} ml added.`,
@@ -21898,131 +22211,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	* Takes back what the coach did in one reply (`at`): all of it, or one line.
 	* Each line once; the log remembers what was undone.
 	*/
-	async function undoReply(at, index) {
-		const claim = await mirror.write((db) => {
-			const log = loadLog(db);
-			const e = log.find((x) => x.role === "coach" && x.at === at);
-			if (!e?.undo) return null;
-			const ids = e.undo.map((op, k) => op && !e.undone?.[k] && (index == null || index === k) ? k : -1).filter((k) => k >= 0);
-			if (ids.length) {
-				const undone = e.undone ?? [];
-				for (const k of ids) undone[k] = true;
-				e.undone = undone;
-				saveLog(db, log);
-			}
-			return {
-				entry: e,
-				idx: ids
-			};
-		});
-		if (!claim) return {
-			ok: false,
-			lines: ["Nothing to undo there"]
-		};
-		const { entry, idx } = claim;
-		const ops = entry.undo;
-		if (!idx.length) return {
-			ok: false,
-			lines: ["Already undone"]
-		};
-		const lines = [];
-		const ok = [];
-		for (const k of idx) {
-			const op = ops[k];
-			try {
-				if (op.k === "event") {
-					if (!calendar?.remove) throw new Error("Calendar not connected");
-					await calendar.remove(op.cal, op.id);
-					lines.push("↩ Block removed from your calendar");
-				} else if (op.k === "task") {
-					if (!todoist?.remove) throw new Error("Todoist not connected");
-					await todoist.remove(op.id);
-					lines.push("↩ Todoist task removed");
-				} else {
-					const line = await mirror.write((db) => {
-						const svc = services.services(db);
-						if (op.k === "water" || op.k === "reps") {
-							const st = sportState(db);
-							if (!st) return "⚠️ Sport Track data is gone";
-							const day = sportToday();
-							if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`;
-							if (op.k === "water") {
-								writeSetting(db, "sport_tracker_json", {
-									savedAt: Date.now(),
-									data: addWater(st, op.ml, day)
-								});
-								return `↩ Water ${op.ml > 0 ? "+" : ""}${op.ml} ml`;
-							}
-							const r = addReps(st, op.ex, op.amount, day);
-							if (!r) return "⚠️ Exercise not found";
-							writeSetting(db, "sport_tracker_json", {
-								savedAt: Date.now(),
-								data: r.st
-							});
-							let gone = "";
-							if (op.workout) try {
-								svc.body.takeBackSet(op.workout, r.exercise.name, -op.amount);
-								gone = " · taken out of today's workout";
-							} catch {}
-							return `↩ ${r.exercise.name} back to ${r.exercise.done}${gone}`;
-						}
-						if (op.k === "money") {
-							const what = deleteMoney(db, op.id);
-							const life = takeLink(db, op.id);
-							if (life) try {
-								svc.money.deleteExpense(life);
-							} catch {}
-							return what ? `↩ Removed: ${what}` : "⚠️ That money record is already gone";
-						}
-						if (op.k === "remind") {
-							let list = [];
-							try {
-								list = readSetting(db, REMINDERS);
-							} catch {
-								list = [];
-							}
-							writeSetting(db, REMINDERS, list.filter((r) => r.id !== op.id));
-							return "↩ Reminder cancelled";
-						}
-						if (op.k === "plugin") return undoPluginAction({
-							db,
-							now: /* @__PURE__ */ new Date()
-						}, op.plugin, op.verb, op.data);
-						if (op.k === "mustdo") {
-							if (op.day && op.day !== svc.wallet.today()) return `⚠️ That must-do was for ${op.day}: it's gone with that day`;
-							const rest = svc.focus.plan(svc.wallet.today()).items.map((x) => x.text).filter((t) => t.toLowerCase() !== op.text.toLowerCase());
-							if (!rest.length) return "⚠️ It is your only must-do: tick it or replace it";
-							svc.focus.setPlan(rest);
-							return `↩ Must-do removed: ${op.text}`;
-						}
-						const run = svc.focus.state().running;
-						if (!run) return "⚠️ That focus timer already ended";
-						if (op.startedAt && run.startedAt !== op.startedAt) return "⚠️ That timer already ended; a newer one is running, so it stays";
-						svc.focus.cancel();
-						return "↩ Focus timer cancelled";
-					});
-					lines.push(line);
-					if (line.startsWith("⚠️")) continue;
-				}
-				ok.push(k);
-			} catch (e) {
-				lines.push(`⚠️ ${e.message}`);
-			}
-		}
-		const failed = idx.filter((k) => !ok.includes(k));
-		if (failed.length) await mirror.write((db) => {
-			const log = loadLog(db);
-			const e = log.find((x) => x.role === "coach" && x.at === at);
-			if (e?.undone) {
-				for (const k of failed) e.undone[k] = false;
-				saveLog(db, log);
-			}
-		});
-		if (ok.length) onExpense?.();
-		return {
-			ok: ok.length > 0,
-			lines
-		};
+	async function undoReply$1(at, index) {
+		return undoReply({
+			mirror,
+			services,
+			calendar,
+			todoist,
+			onExpense
+		}, at, index);
 	}
 	/** The mini-widgets as text for Telegram ("Focus 7 days: ▁▃▅▇▂·▄ 4.2h"). */
 	async function widgetText(show) {
@@ -22413,7 +22609,7 @@ His note: ${note}`, { json: true }));
 		/** The daily rhythm (morning plan, reviews), for the tick and the app. */
 		rhythm,
 		/** Undo what the coach did in one reply (all, or one line). */
-		undoReply,
+		undoReply: undoReply$1,
 		config,
 		saveConfig: async (patch) => {
 			const next = {
