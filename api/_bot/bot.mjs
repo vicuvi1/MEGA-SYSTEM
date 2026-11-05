@@ -47,12 +47,18 @@ function parseAmountAndUnit(str, defaultUnit = "reps") {
 		amount: 1,
 		unit: defaultUnit
 	};
-	const match = str.match(/^([\d.]+)\s*([a-zA-Z]*)$/);
+	const match = str.trim().replace(/(\d),(\d)/, "$1.$2").match(/^([\d.]+)\s*([a-zA-Zа-яё]*)$/i);
 	if (match) {
 		const amount = parseFloat(match[1]) || 1;
 		let unit = (match[2] || defaultUnit).toLowerCase();
-		if (unit === "k" || unit === "km" || unit === "kms") unit = "km";
-		else if (unit === "m" || unit === "min" || unit === "mins" || unit === "minute" || unit === "minutes") unit = "minutes";
+		if (unit === "k" || unit === "km" || unit === "kms" || unit === "км") unit = "km";
+		else if (unit === "m" && (amount >= 100 || defaultUnit === "m")) unit = "m";
+		else if (unit === "meters" || unit === "metres" || unit === "meter" || unit === "metre" || unit === "м") unit = "m";
+		else if (unit === "h" || unit === "hr" || unit === "hrs" || unit === "hour" || unit === "hours" || unit === "ore" || unit === "час") return {
+			amount: Math.round(amount * 60),
+			unit: "minutes"
+		};
+		else if (unit === "m" || unit === "min" || unit === "mins" || unit === "minute" || unit === "minutes" || unit === "мин") unit = "minutes";
 		else if (unit === "sec" || unit === "secs" || unit === "s") unit = "seconds";
 		else if (unit === "kg" || unit === "kgs") unit = "kg";
 		else if (unit === "r" || unit === "rep" || unit === "reps") unit = "reps";
@@ -69,6 +75,15 @@ function parseAmountAndUnit(str, defaultUnit = "reps") {
 }
 function detectExpenseCategory(text) {
 	const t = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+	const ru = text.toLowerCase();
+	if (/(кофе|чай|обед|ужин|завтрак|еда|продукт|магазин|ресторан|пицц|шаурм|бургер|пиво|вода)/.test(ru)) return "food";
+	if (/(такси|автобус|бензин|топлив|парковк|метро|поезд|транспорт)/.test(ru)) return "transport";
+	if (/(аренд|квартир|счет|счёт|коммунал|свет|газ|интернет)/.test(ru)) return "home";
+	if (/(зал|спорт|протеин|фитнес)/.test(ru)) return "sport";
+	if (/(аптек|лекарств|врач|доктор|стоматолог|витамин)/.test(ru)) return "health";
+	if (/(кино|игр|концерт|клуб|вечеринк)/.test(ru)) return "fun";
+	if (/(одежд|обув|кроссовк|шопинг)/.test(ru)) return "clothes";
+	if (/(зарплат|доход|бонус|фриланс)/.test(ru)) return "income";
 	if (/\b(coffee|cafe|cafea|cappuccino|tea|ceai|lunch|pranz|dinner|cina|breakfast|dejun|groceries|alimente|market|magazin|lidl|kaufland|linella|supermarket|food|mancare|mcdonalds|kfc|pizza|burger|shawarma|kebab|restaurant|bar|bere|beer|snack|water|apa)\b/i.test(t)) return "food";
 	if (/\b(taxi|cab|uber|bolt|yandex|bus|troleibuz|autobuz|gas|benzina|fuel|motorina|car|auto|parking|parcare|metro|train|tren|transit|transport)\b/i.test(t)) return "transport";
 	if (/\b(rent|chirie|bills|facturi|utilitati|gaz|lumina|electricitate|net|internet|wifi|moldtelecom|orange|clean|cleaning|intretinere|home|casa)\b/i.test(t)) return "home";
@@ -152,7 +167,8 @@ function parseTelegramText(text) {
 		raw: trimmed
 	};
 	const bed = /^(?:i\s+)?(?:went\s+to\s+(?:bed|sleep)|going\s+to\s+(?:bed|sleep)|bed|sleep|m-?am\s+culcat|culcat|m[aă]\s+culc|лег(?:ла)?\s+спать)\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed);
-	if (bed && Number(bed[1]) < 24) return {
+	const bareDay = bed && !bed[2] && !/\b(at|la|в)\b/i.test(trimmed) && Number(bed[1]) >= 5 && Number(bed[1]) <= 18;
+	if (bed && Number(bed[1]) < 24 && !bareDay) return {
 		type: "bed",
 		args: [hm(bed[1], bed[2])],
 		raw: trimmed
@@ -277,7 +293,7 @@ function parseTelegramText(text) {
 	};
 	if (sportDirectShortcuts[cmd]) {
 		const spec = sportDirectShortcuts[cmd];
-		const parsed = parseAmountAndUnit(args[0], spec.defaultUnit);
+		const parsed = parseAmountAndUnit(args.slice(0, 2).join(" "), spec.defaultUnit);
 		return {
 			type: "sport",
 			args,
@@ -291,13 +307,13 @@ function parseTelegramText(text) {
 		type: "weight",
 		args,
 		raw: trimmed,
-		metricWeight: parseAmountAndUnit(args[0], "kg").amount
+		metricWeight: parseAmountAndUnit(args.slice(0, 2).join(" "), "kg").amount
 	};
 	if (cmd === "waist") return {
 		type: "waist",
 		args,
 		raw: trimmed,
-		metricWaist: parseAmountAndUnit(args[0], "cm").amount
+		metricWaist: parseAmountAndUnit(args.slice(0, 2).join(" "), "cm").amount
 	};
 	if (cmd === "pr" || cmd === "record") {
 		if (args.length === 0) return {
@@ -339,7 +355,7 @@ function parseTelegramText(text) {
 			defUnit = "km";
 		} else if (act.includes("push") || act.includes("pull") || act.includes("squat")) defUnit = "reps";
 		else if (act.includes("bench") || act.includes("deadlift")) defUnit = "kg";
-		const parsed = parseAmountAndUnit(args[1], defUnit);
+		const parsed = parseAmountAndUnit(args.slice(1, 3).join(" "), defUnit);
 		return {
 			type: "sport",
 			args,
@@ -448,11 +464,18 @@ function parseTelegramText(text) {
 		args,
 		raw: trimmed
 	};
-	if (cmd === "bed" || cmd === "sleep") return {
-		type: "bed",
-		args,
-		raw: trimmed
-	};
+	if (cmd === "bed" || cmd === "sleep") {
+		if (bareDay && !parts[0].startsWith("/")) return {
+			type: "unknown",
+			args,
+			raw: trimmed
+		};
+		return {
+			type: "bed",
+			args,
+			raw: trimmed
+		};
+	}
 	if (cmd === "crush" || cmd === "panic" || cmd === "urge") return {
 		type: "crush",
 		args,
@@ -16135,7 +16158,13 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				const name = parsed.exerciseName || "Workout";
 				const amount = parsed.exerciseAmount || 1;
 				const rawUnit = parsed.exerciseUnit || "minutes";
-				const unit = rawUnit === "reps" || rawUnit === "kg" || rawUnit === "sets" ? rawUnit : "minutes";
+				const unit = [
+					"reps",
+					"kg",
+					"sets",
+					"km",
+					"m"
+				].includes(rawUnit) ? rawUnit : "minutes";
 				const res = s.body.logWorkout({
 					title: `${name} (${amount} ${rawUnit})`,
 					items: [{

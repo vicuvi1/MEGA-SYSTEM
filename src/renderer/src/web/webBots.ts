@@ -582,7 +582,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const name = parsed.exerciseName || 'Workout'
         const amount = parsed.exerciseAmount || 1
         const rawUnit = parsed.exerciseUnit || 'minutes'
-        const unit = rawUnit === 'reps' || rawUnit === 'kg' || rawUnit === 'sets' ? rawUnit : 'minutes'
+        // 5 km stays 5 km, 500 m stays metres (X11).
+        const unit = ['reps', 'kg', 'sets', 'km', 'm'].includes(rawUnit) ? rawUnit : 'minutes'
         const res = s.body.logWorkout({
           title: `${name} (${amount} ${rawUnit})`,
           items: [{ exerciseId: name.toLowerCase().replace(/\s+/g, '_'), name, amount, unit }],

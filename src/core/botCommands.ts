@@ -43,12 +43,17 @@ export interface ParsedCommand {
 
 function parseAmountAndUnit(str: string, defaultUnit = 'reps'): { amount: number; unit: string } {
   if (!str) return { amount: 1, unit: defaultUnit }
-  const match = str.match(/^([\d.]+)\s*([a-zA-Z]*)$/)
+  // "74,5", "30 min", "500m" (X11): a comma decimal and a space before the unit are fine.
+  const match = str.trim().replace(/(\d),(\d)/, '$1.$2').match(/^([\d.]+)\s*([a-zA-Zа-яё]*)$/i)
   if (match) {
     const amount = parseFloat(match[1]) || 1
     let unit = (match[2] || defaultUnit).toLowerCase()
-    if (unit === 'k' || unit === 'km' || unit === 'kms') unit = 'km'
-    else if (unit === 'm' || unit === 'min' || unit === 'mins' || unit === 'minute' || unit === 'minutes') unit = 'minutes'
+    if (unit === 'k' || unit === 'km' || unit === 'kms' || unit === 'км') unit = 'km'
+    // "500m" is metres (a swim, a run); "30m" is minutes.
+    else if (unit === 'm' && (amount >= 100 || defaultUnit === 'm')) unit = 'm'
+    else if (unit === 'meters' || unit === 'metres' || unit === 'meter' || unit === 'metre' || unit === 'м') unit = 'm'
+    else if (unit === 'h' || unit === 'hr' || unit === 'hrs' || unit === 'hour' || unit === 'hours' || unit === 'ore' || unit === 'час') return { amount: Math.round(amount * 60), unit: 'minutes' }
+    else if (unit === 'm' || unit === 'min' || unit === 'mins' || unit === 'minute' || unit === 'minutes' || unit === 'мин') unit = 'minutes'
     else if (unit === 'sec' || unit === 'secs' || unit === 's') unit = 'seconds'
     else if (unit === 'kg' || unit === 'kgs') unit = 'kg'
     else if (unit === 'r' || unit === 'rep' || unit === 'reps') unit = 'reps'
@@ -62,6 +67,16 @@ function parseAmountAndUnit(str: string, defaultUnit = 'reps'): { amount: number
 export function detectExpenseCategory(text: string): string {
   // "benzină", "cafeá"… match their plain spelling.
   const t = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  // Russian words (X11): Cyrillic needs its own check (\b only sees Latin letters).
+  const ru = text.toLowerCase()
+  if (/(кофе|чай|обед|ужин|завтрак|еда|продукт|магазин|ресторан|пицц|шаурм|бургер|пиво|вода)/.test(ru)) return 'food'
+  if (/(такси|автобус|бензин|топлив|парковк|метро|поезд|транспорт)/.test(ru)) return 'transport'
+  if (/(аренд|квартир|счет|счёт|коммунал|свет|газ|интернет)/.test(ru)) return 'home'
+  if (/(зал|спорт|протеин|фитнес)/.test(ru)) return 'sport'
+  if (/(аптек|лекарств|врач|доктор|стоматолог|витамин)/.test(ru)) return 'health'
+  if (/(кино|игр|концерт|клуб|вечеринк)/.test(ru)) return 'fun'
+  if (/(одежд|обув|кроссовк|шопинг)/.test(ru)) return 'clothes'
+  if (/(зарплат|доход|бонус|фриланс)/.test(ru)) return 'income'
   if (/\b(coffee|cafe|cafea|cappuccino|tea|ceai|lunch|pranz|dinner|cina|breakfast|dejun|groceries|alimente|market|magazin|lidl|kaufland|linella|supermarket|food|mancare|mcdonalds|kfc|pizza|burger|shawarma|kebab|restaurant|bar|bere|beer|snack|water|apa)\b/i.test(t)) {
     return 'food'
   }
@@ -166,7 +181,9 @@ export function parseTelegramText(text: string): ParsedCommand {
   // "I am awake", "I'm up", "woke up", "m-am trezit" with no time: woke up now.
   if (/^(?:i\s+am\s+(?:awake|up)|i'?m\s+(?:awake|up)|awake|woke\s+up|just\s+woke\s+up|good\s+morning,?\s+i'?m\s+up|m-?am\s+trezit|m-?am\s+sculat|проснул[аи]?с[ья])\s*[.!]*$/i.test(trimmed)) return { type: 'wake', args: [], raw: trimmed }
   const bed = /^(?:i\s+)?(?:went\s+to\s+(?:bed|sleep)|going\s+to\s+(?:bed|sleep)|bed|sleep|m-?am\s+culcat|culcat|m[aă]\s+culc|лег(?:ла)?\s+спать)\s*(?:at|la|в)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*$/i.exec(trimmed)
-  if (bed && Number(bed[1]) < 24) return { type: 'bed', args: [hm(bed[1], bed[2])], raw: trimmed }
+  // "sleep 8" is hours slept, not bed at 08:00 (X11): a bare daytime hour needs "at" or minutes.
+  const bareDay = bed && !bed[2] && !/\b(at|la|в)\b/i.test(trimmed) && Number(bed[1]) >= 5 && Number(bed[1]) <= 18
+  if (bed && Number(bed[1]) < 24 && !bareDay) return { type: 'bed', args: [hm(bed[1], bed[2])], raw: trimmed }
   // "gym done", "workout done", "am fost la sală", "trained": a gym session.
   if (/^(?:(?:gym|sala|sală|workout|training|antrenament(?:ul)?)\s+(?:done|finished|gata|f[aă]cut)|(?:done|finished)\s+(?:gym|workout|training)|am\s+fost\s+la\s+s[aă]l[aă]|trained|i\s+trained|m-?am\s+antrenat)\s*[.!]*$/i.test(trimmed))
     return { type: 'sport', args: [], raw: trimmed, exerciseName: 'Gym Session', exerciseAmount: 60, exerciseUnit: 'minutes' }
@@ -255,7 +272,7 @@ export function parseTelegramText(text: string): ParsedCommand {
   }
   if (sportDirectShortcuts[cmd]) {
     const spec = sportDirectShortcuts[cmd]
-    const parsed = parseAmountAndUnit(args[0], spec.defaultUnit)
+    const parsed = parseAmountAndUnit(args.slice(0, 2).join(' '), spec.defaultUnit)
     return {
       type: 'sport',
       args,
@@ -268,7 +285,7 @@ export function parseTelegramText(text: string): ParsedCommand {
 
   // 3. Body metric shortcuts
   if (cmd === 'weight') {
-    const parsed = parseAmountAndUnit(args[0], 'kg')
+    const parsed = parseAmountAndUnit(args.slice(0, 2).join(' '), 'kg')
     return {
       type: 'weight',
       args,
@@ -278,7 +295,7 @@ export function parseTelegramText(text: string): ParsedCommand {
   }
 
   if (cmd === 'waist') {
-    const parsed = parseAmountAndUnit(args[0], 'cm')
+    const parsed = parseAmountAndUnit(args.slice(0, 2).join(' '), 'cm')
     return {
       type: 'waist',
       args,
@@ -319,7 +336,7 @@ export function parseTelegramText(text: string): ParsedCommand {
     else if (act.includes('push') || act.includes('pull') || act.includes('squat')) { defUnit = 'reps' }
     else if (act.includes('bench') || act.includes('deadlift')) { defUnit = 'kg' }
 
-    const parsed = parseAmountAndUnit(args[1], defUnit)
+    const parsed = parseAmountAndUnit(args.slice(1, 3).join(' '), defUnit)
     return {
       type: 'sport',
       args,
@@ -426,6 +443,8 @@ export function parseTelegramText(text: string): ParsedCommand {
   }
 
   if (cmd === 'bed' || cmd === 'sleep') {
+    // "sleep 8" (hours slept) is for Ben, not a bedtime (X11).
+    if (bareDay && !parts[0].startsWith('/')) return { type: 'unknown', args, raw: trimmed }
     return { type: 'bed', args, raw: trimmed }
   }
 

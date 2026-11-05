@@ -240,3 +240,22 @@ describe('sentences are not commands (X3)', () => {
     expect(parseTelegramText('/done with it').type).not.toBe('unknown')
   })
 })
+
+describe('units and words read right (X11)', () => {
+  it('run 30 min is minutes, swim 500m is metres, weight 74,5 works', () => {
+    expect(parseTelegramText('run 30 min')).toMatchObject({ type: 'sport', exerciseAmount: 30, exerciseUnit: 'minutes' })
+    expect(parseTelegramText('run 5km')).toMatchObject({ exerciseAmount: 5, exerciseUnit: 'km' })
+    expect(parseTelegramText('swim 500m')).toMatchObject({ exerciseAmount: 500, exerciseUnit: 'm' })
+    expect(parseTelegramText('gym 1.5 h')).toMatchObject({ exerciseAmount: 90, exerciseUnit: 'minutes' })
+    expect(parseTelegramText('weight 74,5')).toMatchObject({ type: 'weight', metricWeight: 74.5 })
+  })
+  it('sleep 8 is not bed at 08:00; bed 23:40 still is', () => {
+    expect(parseTelegramText('sleep 8').type).not.toBe('bed')
+    expect(parseTelegramText('bed 23:40')).toMatchObject({ type: 'bed', args: ['23:40'] })
+    expect(parseTelegramText('went to bed at 11')).toMatchObject({ type: 'bed' })
+  })
+  it('Russian words find their category', () => {
+    expect(detectExpenseCategory('такси')).toBe('transport')
+    expect(detectExpenseCategory('кофе с другом')).toBe('food')
+  })
+})
