@@ -26,11 +26,13 @@ export interface IslandPrefs {
   showNext: boolean
   showWater: boolean
   showPromise: boolean
+  /** AF19: dim the rest of the app while a timer runs. */
+  dim: boolean
   presets: number[]
 }
 
 const KEY = 'ls.island'
-export const DEFAULT_ISLAND: IslandPrefs = { on: true, pos: 'top', look: 'black', size: 'compact', idle: 'dot', seconds: true, tabTitle: true, chime: true, showNext: true, showWater: true, showPromise: true, presets: [25, 50, 90] }
+export const DEFAULT_ISLAND: IslandPrefs = { on: true, pos: 'top', look: 'black', size: 'compact', idle: 'dot', seconds: true, tabTitle: true, chime: true, showNext: true, showWater: true, showPromise: true, dim: true, presets: [25, 50, 90] }
 
 function loadPrefs(): IslandPrefs {
   try {
@@ -65,6 +67,7 @@ export function FocusIsland() {
   const reduce = useReducedMotion()
   const act = useAction()
   const [prefs, setPrefsState] = useState<IslandPrefs>(loadPrefs)
+  const [undimmed, setUndimmed] = useState<string | null>(null)
   const setPrefs = (p: Partial<IslandPrefs>) =>
     setPrefsState((cur) => {
       const next = { ...cur, ...p }
@@ -168,6 +171,16 @@ export function FocusIsland() {
 
   const subjects = useMemo(() => [...new Set([...(focus?.goals ?? []).map((g) => g.subject), ...(focus?.plan.items.filter((x) => !x.done).map((x) => x.text.split(/\s+/).slice(0, 3).join(' ')) ?? []), ...(focus?.subjects ?? [])])].slice(0, 6), [focus])
 
+  // AF19: while a timer runs the rest of the app dims (opacity only); a click
+  // or Esc brings it back for this session.
+  const dimOn = !!run && prefs.dim && undimmed !== run.startedAt
+  useEffect(() => {
+    if (!dimOn || !run) return
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && setUndimmed(run.startedAt)
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [dimOn, run])
+
   if (!prefs.on || !focus) return null
 
   const enter = () => {
@@ -225,6 +238,7 @@ export function FocusIsland() {
 
   return (
     <>
+      {run && prefs.dim && <div className={`focus-dim ${dimOn ? 'on' : ''}`} onClick={() => setUndimmed(run.startedAt)} title="Click to bring everything back" aria-hidden />}
       {/* The hot zone: move the mouse to the top (under the camera) and it opens. */}
       <div className={`isl-zone pos-${prefs.pos}`} onMouseEnter={enter} onMouseLeave={leave} aria-hidden />
       {(run || showIdlePill) && (
@@ -427,6 +441,7 @@ function IslandSettings({ prefs, setPrefs, onBack }: { prefs: IslandPrefs; setPr
         {check('seconds', 'Show seconds')}
         {check('tabTitle', 'Timer in the tab title')}
         {check('chime', 'Chime when time is up')}
+        {check('dim', 'Dim the rest while focusing')}
         {check('showNext', 'Next calendar block')}
         {check('showWater', 'Water')}
         {check('showPromise', 'Promise the coach is waiting on')}

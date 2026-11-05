@@ -126,15 +126,16 @@ describe('motion budget', () => {
   })
 
   it('sound: new audio contexts are made only by the sound module', () => {
-    // One shared AudioContext, owned by the sound code. DesktopIsland.tsx is
-    // its own window (no shared module there yet), so it may keep its one.
-    const allowed = new Set(['soundKit.ts', 'sound.ts', 'DesktopIsland.tsx'])
+    // One shared AudioContext per page, owned by soundKit.ts (it serves the
+    // app, the island and the embedded apps).
+    const allowed = new Set(['soundKit.ts'])
     const bad: string[] = []
     for (const f of files(join(ROOT, 'src'), /\.(ts|tsx)$/)) {
       if (/\.test\.ts$/.test(f)) continue
       const name = f.split(/[\\/]/).pop()!
       if (allowed.has(name)) continue
-      if (/new\s+(window\.)?(webkit)?AudioContext\b|new\s+AudioCtx\b/.test(readFileSync(f, 'utf8'))) bad.push(relative(ROOT, f))
+      const src = readFileSync(f, 'utf8')
+      if (/new\s+(window\.)?(webkit)?AudioContext\b|window\.(webkit)?AudioContext\b/.test(src)) bad.push(relative(ROOT, f))
     }
     expect(bad).toEqual([])
   })

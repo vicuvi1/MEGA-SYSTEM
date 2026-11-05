@@ -6,6 +6,7 @@ import { MUSCLES, parseSets, volumeZone, weeklyMuscleSets, type LiftSummary } fr
 import { dayKey } from '@core/dates'
 import { life } from './bridge'
 import { useAction } from './ui'
+import { celebrate } from './fx'
 
 function Spark({ l }: { l: LiftSummary }) {
   const pts = l.points.slice(-12)
@@ -42,6 +43,7 @@ export function StrengthCard({ state, onChange }: { state: BodyState; onChange: 
       `${parsed.name}: ${parsed.sets.length}×${parsed.sets[0].reps}${kg ? ` × ${kg} kg` : ''}`
     )
     if (r) {
+      celebrate(null, 'workout')
       onChange(r.state)
       setText('')
       window.dispatchEvent(new CustomEvent('life-body-changed'))

@@ -6,6 +6,7 @@ import { life } from './bridge'
 import { play } from './soundKit'
 import { readSport, updateSport } from './sportTrack'
 import { WATER_TARGET_ML } from '@core/defaults'
+import { celebrate } from './fx'
 
 export interface Water { ml: number; target: number }
 
@@ -25,6 +26,7 @@ export async function readWater(): Promise<Water> {
 /** Adds (or with a negative number, takes back) water in the shared log. */
 export async function addWater(ml: number): Promise<Water> {
   const r = life.coach?.water ? await life.coach.water(ml) : null
+  if (ml > 0) celebrate(null, 'water')
   const data = updateSport((d) => {
     if (d.water) d.water.currentMl = Math.max(0, r ? r.ml : (Number(d.water.currentMl) || 0) + ml)
     // A take-back is marked so the sync with other devices keeps it (N1).

@@ -10,6 +10,7 @@ import { life } from './bridge'
 import { Icon } from './Icon'
 import { soundSuccess } from './soundKit'
 import { useAction } from './ui'
+import { Tick } from './motionKit'
 
 export function useWeekPlan(): [WeekPlan | null | undefined, () => void] {
   const [p, setP] = useState<WeekPlan | null | undefined>(undefined)
@@ -198,7 +199,7 @@ export function WeekCard({ plan, report, compact, onEdit, onFocus }: { plan: Wee
         {plan.big3.map((b, i) => (
           <li key={i} className={b.done ? 'done' : ''}>
             <button className="dl-check" aria-label={b.done ? `Untick ${b.text}` : `Tick ${b.text}`} onClick={() => void toggle(i)}>
-              {b.done ? '✓' : ''}
+              {b.done ? <Tick /> : ''}
             </button>
             <span className="dl-text">{b.text}</span>
             {!b.done && onFocus && (

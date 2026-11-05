@@ -4,7 +4,7 @@
 // right, and the bell rings. Quiet hours and focus hold all of that back;
 // everything still lands in the inbox. Each device pops a notification once.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, m } from 'framer-motion'
+import { useFlip, useLeaving, useSwipeDismiss } from './toastMotion'
 import type { Notif } from '@core/notify'
 import { freshNotifs, interrupt } from '@core/notifyRules'
 import { DEFAULT_NOTIF_SETTINGS, bedtimeAlert, eventAlerts, quietNow, waterAlert, type NotifSettings } from '@core/eventAlerts'
@@ -235,34 +235,34 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
     return () => window.removeEventListener('life-notif-test', on)
   }, [deliver])
 
-  const close = (id: string) => setCards((c) => c.filter((x) => x.id !== id))
+  const { leaving, leave } = useLeaving(200)
+  const close = useCallback((id: string) => leave(id, () => setCards((c) => c.filter((x) => x.id !== id))), [leave])
+  // AF8: new cards spring in at the top, older ones glide down, swipe one away.
+  const box = useRef<HTMLDivElement>(null)
+  useFlip(box, cards)
   return (
-    <div className="nt-stack" aria-live="polite">
-      <AnimatePresence initial={false}>
-        {cards.map((n) => (
-          <Toast key={n.id} n={n} onClose={() => close(n.id)} onRun={() => (close(n.id), void runNotif(n, goRef.current))} />
-        ))}
-      </AnimatePresence>
+    <div className="nt-stack" aria-live="polite" ref={box}>
+      {cards.map((n) => (
+        <Toast key={n.id} n={n} out={leaving.has(n.id)} onClose={() => close(n.id)} onRun={() => (close(n.id), void runNotif(n, goRef.current))} />
+      ))}
     </div>
   )
 }
 
-function Toast({ n, onClose, onRun }: { n: Notif; onClose: () => void; onRun: () => void }) {
+function Toast({ n, out, onClose, onRun }: { n: Notif; out: boolean; onClose: () => void; onRun: () => void }) {
   const [paused, setPaused] = useState(false)
+  const swipe = useSwipeDismiss(onClose)
   useEffect(() => {
     if (paused) return
     const t = setTimeout(onClose, 8000)
     return () => clearTimeout(t)
   }, [paused, onClose])
   return (
-    <m.div
-      layout
-      className={`nt-card k-${n.kind}`}
+    <div
+      data-flip={n.id}
+      className={`nt-card t-in from-right ${out ? 't-out' : ''} k-${n.kind}`}
       role="status"
-      initial={{ opacity: 0, x: 60, scale: 0.92 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 80, transition: { duration: 0.2 } }}
-      transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+      {...swipe}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -291,6 +291,6 @@ function Toast({ n, onClose, onRun }: { n: Notif; onClose: () => void; onRun: ()
         ✕
       </button>
       {!paused && <i className="nt-timer" />}
-    </m.div>
+    </div>
   )
 }

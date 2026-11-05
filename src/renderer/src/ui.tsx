@@ -1,8 +1,9 @@
 import { moduleLabel } from './modules'
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
-import { AnimatePresence, m } from 'framer-motion'
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
+import { useFlip, useLeaving, useSwipeDismiss } from './toastMotion'
 import type { LedgerEntry } from '@shared/api'
 import { play } from './soundKit'
+import { useCountUp } from './motionKit'
 
 /** A toast may carry one action (e.g. Undo); it then stays a little longer. */
 export type ToastAction = { label: string; run: () => void }
@@ -11,37 +12,41 @@ const ToastCtx = createContext<(text: string, tone?: Toast['tone'], action?: Toa
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const { leaving, leave } = useLeaving()
+  const drop = useCallback((id: number) => leave(id, () => setToasts((t) => t.filter((x) => x.id !== id))), [leave])
   const push = useCallback((text: string, tone: Toast['tone'] = 'info', action?: ToastAction) => {
     const id = Date.now() + Math.random()
     // Something went wrong: a soft low thud (and a short buzz on phones).
     if (tone === 'bad') play('error')
     setToasts((t) => [...t, { id, text, tone, action }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 6500 : 3200)
-  }, [])
+    setTimeout(() => drop(id), action ? 6500 : 3200)
+  }, [drop])
+  const box = useRef<HTMLDivElement>(null)
+  useFlip(box, toasts)
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="toasts" role="status" aria-live="polite">
-        <AnimatePresence>
-          {toasts.map((t) => (
-            <m.div key={t.id} className={`toast ${t.tone} ${t.action ? 'has-action' : ''}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}>
-              {t.text}
-              {t.action && (
-                <button
-                  className="toast-act"
-                  onClick={() => {
-                    t.action!.run()
-                    setToasts((x) => x.filter((y) => y.id !== t.id))
-                  }}
-                >
-                  {t.action.label}
-                </button>
-              )}
-            </m.div>
-          ))}
-        </AnimatePresence>
+      <div className="toasts" role="status" aria-live="polite" ref={box}>
+        {toasts.map((t) => (
+          <ToastCard key={t.id} t={t} out={leaving.has(t.id)} onDismiss={() => drop(t.id)} onAct={() => (t.action!.run(), setToasts((x) => x.filter((y) => y.id !== t.id)))} />
+        ))}
       </div>
     </ToastCtx.Provider>
+  )
+}
+
+/** One toast: springs in, can be swiped away, fades out (AF8). */
+function ToastCard({ t, out, onDismiss, onAct }: { t: Toast; out: boolean; onDismiss: () => void; onAct: () => void }) {
+  const swipe = useSwipeDismiss(onDismiss)
+  return (
+    <div data-flip={t.id} className={`toast t-in ${out ? 't-out' : ''} ${t.tone} ${t.action ? 'has-action' : ''}`} {...swipe}>
+      {t.text}
+      {t.action && (
+        <button className="toast-act" onClick={onAct}>
+          {t.action.label}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -66,9 +71,11 @@ export function useAction() {
 }
 
 export function Coins({ n, sign = false }: { n: number; sign?: boolean }) {
-  const text = `${sign && n > 0 ? '+' : ''}${n.toLocaleString()}`
+  // Points count to their new value (AF7).
+  const v = Math.round(useCountUp(n))
+  const text = `${sign && v > 0 ? '+' : ''}${v.toLocaleString()}`
   return (
-    <span className={`coins ${n < 0 ? 'neg' : ''}`}>
+    <span className={`coins num ${n < 0 ? 'neg' : ''}`}>
       <span className="coin-dot" aria-hidden="true" />
       {text}
     </span>

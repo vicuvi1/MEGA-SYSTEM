@@ -14,6 +14,8 @@ import { mmss } from './planUi'
 import { useTicker } from '../useTicker'
 import { pickUrgeAction } from '@core/urgeAction'
 import { barFill } from '../motionKit'
+import { celebrate as burst } from '../fx'
+import { CountUp } from '../motionKit'
 
 interface Props {
   state: DisciplineState
@@ -97,7 +99,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
           </div>
           <div>
             <div className="streak-num">
-              {state.current}
+              <CountUp value={state.current} />
               <small>{state.current === 1 ? 'day' : 'days'}</small>
             </div>
             <div className="streak-sub">since {state.since}</div>
@@ -119,7 +121,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         </div>
         <blockquote className="quote">“{state.quote}”</blockquote>
         <div className="disc-actions">
-          <CheckInButton state={state} onCheckIn={() => run(() => life.discipline.checkIn(), 'Checked in. Another day won.')} />
+          <CheckInButton state={state} onCheckIn={() => run(() => life.discipline.checkIn(), 'Checked in. Another day won.').then((ok) => void (ok && burst(null, 'checkin')))} />
           <HoldButton done={state.oathToday} onDone={() => run(() => life.discipline.oath(), 'Oath sworn')} />
           <button className="btn urge-btn" onClick={() => onUrgeOpen(true)}>
             <Icon name="bolt" size={15} /> I feel an urge

@@ -35,6 +35,8 @@ import { type DayFlowProps, useTodoist, useHabits } from './dayflow/hooks'
 import { subjectOf, todoSubject, clock, tomorrowOf, storeGet, storeSet } from './dayflow/util'
 import { ShutDown } from './dayflow/ShutDown'
 import { AreaAdd, type TodoTab, TabList, RunningClock, useSlowTick } from './dayflow/parts'
+import { celebrate } from './fx'
+import { Tick } from './motionKit'
 
 
 type Mode = 'morning' | 'evening' | null
@@ -265,6 +267,7 @@ export function DayFlow(props: DayFlowProps) {
   const tickMustDo = async (i: number) => {
     const r = await act(() => life.focus.togglePlan(i))
     if (!r) return
+    if (r.plan.items[i]?.done) celebrate(null, 'mustdo')
     // Two notes up; the coin after them when it paid.
     play('mustDo')
     if (r.coins) setTimeout(() => play('coin'), 260)
@@ -294,6 +297,7 @@ export function DayFlow(props: DayFlowProps) {
     const linked = b && !b.done && b.todoistId ? todo?.find((x) => x.id === b.todoistId) : undefined
     if (linked) await doneTodo(linked)
     if (await act(() => life.weekPlan!.toggle(i))) {
+      if (b && !b.done) celebrate(null, 'mustdo')
       soundSuccess()
       loadWeek()
       onChange()
@@ -853,12 +857,14 @@ export function DayFlow(props: DayFlowProps) {
               type="button"
               className={`chip habit ${h.done ? 'on' : ''} ${burst === h.id ? 'burst' : ''}`}
               disabled={h.done}
-              onClick={() =>
+              onClick={(e) => {
+                const el = e.currentTarget
                 void Promise.resolve(h.run()).then(() => {
                   setBurst(h.id)
+                  celebrate(el, 'habit')
                   setTimeout(() => setBurst(null), 1200)
                 })
-              }
+              }}
               title={h.done ? `${h.label}: done` : `${h.label} · ${h.hint}`}
             >
               <span className="hc-check">{h.done ? '✓' : ''}</span>
@@ -930,7 +936,7 @@ export function DayFlow(props: DayFlowProps) {
             {planOnly.map(({ p, i }) => (
               <li key={`m${i}`} className={p.done ? 'done' : ''} data-swipe={p.done ? undefined : `must:${i}`}>
                 <button className="dl-check" aria-label={p.done ? `Untick ${p.text}` : `Tick ${p.text}`} onClick={() => void tickMustDo(i)}>
-                  {p.done ? '✓' : ''}
+                  {p.done ? <Tick /> : ''}
                 </button>
                 <span className="dl-text">{p.text}</span>
                 <span className="tt-pts">+{PLAN_ITEM_COINS} ⭐</span>
@@ -965,7 +971,7 @@ export function DayFlow(props: DayFlowProps) {
               {bigOpen.map((b) => (
                 <li key={`b${b.i}`} className={b.done ? 'done' : ''} data-swipe={b.done ? undefined : `big:${b.i}`}>
                   <button className="dl-check" aria-label={b.done ? `Untick ${b.text}` : `Tick ${b.text}`} onClick={() => void toggleBig(b.i)}>
-                    {b.done ? '✓' : ''}
+                    {b.done ? <Tick /> : ''}
                   </button>
                   <span className="dl-text">{b.text}</span>
                   <span className="tt-pts">+{BIG3_POINTS} ⭐</span>

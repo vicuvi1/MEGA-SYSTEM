@@ -7,7 +7,7 @@ import type { FocusState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
-import { barFill } from '../motionKit'
+import { barFill, useSeen } from '../motionKit'
 
 export function useFocus(): [FocusState | null, () => void, (s: FocusState) => void] {
   const [st, setSt] = useState<FocusState | null>(null)
@@ -57,6 +57,7 @@ export function FocusInsights({ onWallet }: { onWallet: () => void }) {
   const [st, , setSt] = useFocus()
   const [goal, setGoal] = useState({ title: '', subject: '', deadline: '', hours: 20 })
   const [addMin, setAddMin] = useState({ subject: '', minutes: 30 })
+  const [seenRef, seen] = useSeen<HTMLDivElement>()
   if (!st) return null
   const w = st.week
   const maxDay = Math.max(60, ...w.byDay.map((d) => d.minutes))
@@ -72,10 +73,10 @@ export function FocusInsights({ onWallet }: { onWallet: () => void }) {
         {w.totalMin === 0 ? (
           <p className="hint">No focus sessions this week yet. Tap ▶ on any task on Today.</p>
         ) : (
-          <div className="week-bars" role="img" aria-label="Focus minutes per day, last 7 days">
-            {w.byDay.map((d) => (
+          <div ref={seenRef} className={`week-bars chart-in ${seen ? 'seen' : ''}`} role="img" aria-label="Focus minutes per day, last 7 days">
+            {w.byDay.map((d, k) => (
               <div key={d.day} className="week-bar" title={`${d.day}: ${hm(d.minutes)}`}>
-                <i style={{ height: `${Math.max(2, (d.minutes / maxDay) * 100)}%` }} />
+                <i style={{ height: `${Math.max(2, (d.minutes / maxDay) * 100)}%`, animationDelay: `${k * 20}ms` }} />
                 <span>{new Date(`${d.day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'narrow', timeZone: 'UTC' })}</span>
               </div>
             ))}

@@ -139,6 +139,22 @@ bash scripts/ship.sh <message-file> # typecheck, tests, bundle, commit, push
 - Local testing: a fake Turso is in `src/renderer/src/web/fakeTurso.ts`; the bot bundle exports `coachChat`, `runTick`, `handleTelegramUpdate`, `coachRhythm`, `coachUndo`, `sportShared` for end-to-end tests with a fake model.
 - Check UI changes at desktop width (1280–1440 px) first, then phone (390 px).
 
+### Motion & sound budget
+
+The app should feel alive but stay light on the PC and the battery.
+`src/renderer/src/motionBudget.test.ts` reads every stylesheet and enforces the CSS rules.
+
+- **Animate only `transform` and `opacity`.** No keyframes on width, height, margins, `box-shadow`, `filter`, `background(-position)`. A glow, ring or flash is drawn once (a shadow or tint on `::after`) and only its opacity or scale moves (`fx-breathe`, `fx-flash`, `fx-ping` in `motion.css`). Exceptions sit in the test's `EXCEPTIONS` list with a reason (today: SVG `stroke-dashoffset` for the drawn tick and chart lines).
+- **Progress bars move by transform:** `.pbar` + `barFill(fraction)` (`motionKit.tsx`): a full-width pill slid by `translateX` inside a clipped track. Never transition `width`.
+- **No `transition: all`**: name the properties. No transitions on layout properties. No `will-change` on width/height.
+- **UI motion takes 400 ms or less** (presses, toasts, page switch, bursts, count-ups). Looping effects are for "something is live right now" only.
+- **Nothing animates while hidden:** `html.doc-hidden` pauses every CSS animation; JS motion uses `requestAnimationFrame` (stops by itself in a hidden window), never a fast `setInterval`. The desktop app window is throttled in the tray (`backgroundThrottling: true`); the desktop sends `island:tick` every 15 s so the island stays fresh.
+- **Reduce motion:** one `@media (prefers-reduced-motion: reduce)` block in `motion.css`, plus `<MotionConfig reducedMotion="user">`. JS effects check `reducedMotion()`.
+- **Framer:** the app uses `m.` components under `<LazyMotion strict>` (`MotionRoot`); its animation code loads after the first paint. No `motion.` components, no `layout`/`layoutId` in the app (that needs the big bundle): only the desktop island window uses full framer. The PIN screen uses no framer.
+- **Blur:** `backdrop-filter` blur 12 px at most, no `saturate()`.
+- **Success moments:** `celebrate(el, kind)` in `fx.ts` (one shared canvas, ~12 dots, under 400 ms). `feedback(kind)` / `onFeedback()` is the one hook for the matching sound.
+- **Sound:** one `AudioContext` per page, owned by `soundKit.ts`; making one anywhere else fails the test.
+
 ## 6. Reliability (how the system protects itself)
 
 - **Checks before shipping:** `.github/workflows/ci.yml` (tsc, vitest, bundle up to date, build, smoke test under the real CSP). Vercel's `vercel-build` runs tests + tsc, so a red commit never goes live. The Windows release (`release.yml`) runs the same smoke test and opens the app on Windows before publishing.

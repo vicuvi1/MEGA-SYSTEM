@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Area, TodoTask } from '@core/todoist'
 import { plainName } from '@core/todoist'
 import { Icon } from './Icon'
+import { Tick } from './motionKit'
 
 export const P_COLOR: Record<number, string> = { 4: '#FF5D6C', 3: '#FF9F43', 2: '#5BA8FF', 1: 'var(--faint)' }
 const P_NAME: Record<number, string> = { 4: 'P1 · urgent', 3: 'P2 · high', 2: 'P3 · medium', 1: 'P4 · none' }
@@ -116,7 +117,9 @@ export function TodayTaskRow({
       <span className="tt-grip" aria-hidden="true" title="Drag to reorder, move to another area, or onto free time">
         ⋮⋮
       </span>
-      <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={onDone} />
+      <button className="dl-check" aria-label={`Complete ${t.content}`} onClick={onDone}>
+        <Tick lazy />
+      </button>
       <div className="tt-main">
         {editing ? (
           <input

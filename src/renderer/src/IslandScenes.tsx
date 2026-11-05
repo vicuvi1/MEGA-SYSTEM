@@ -336,11 +336,19 @@ export function TypeIn({ text, speed = 18 }: { text: string; speed?: number }) {
   const off = useFeel().mode === 'off'
   const reduce = useReducedMotion() || off
   const [n, setN] = useState(reduce ? text.length : 0)
+  // AF13: frame-driven (stops in a hidden window), two letters per `speed` ms.
   useEffect(() => {
     if (reduce) return setN(text.length)
     setN(0)
-    const t = setInterval(() => setN((x) => (x >= text.length ? (clearInterval(t), x) : x + 2)), speed)
-    return () => clearInterval(t)
+    const t0 = performance.now()
+    let raf = 0
+    const step = (t: number) => {
+      const k = Math.min(text.length, Math.floor(((t - t0) / speed) * 2))
+      setN((x) => (x === k ? x : k))
+      if (k < text.length) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
   }, [text, speed, reduce])
   return (
     <>

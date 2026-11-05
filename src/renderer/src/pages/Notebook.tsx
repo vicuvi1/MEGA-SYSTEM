@@ -11,6 +11,7 @@ import { timeAgo, useToast } from '../ui'
 import { usePluginData } from '../../../plugins/usePluginData'
 import { syncVault } from '../../../plugins/notes/settings'
 import type { NotionData, VaultData } from '../../../plugins/notes/vault'
+import { Tick } from '../motionKit'
 
 type Filter = 'all' | 'me' | 'ben' | 'journal'
 
@@ -67,7 +68,7 @@ function Markdown({ body, title, open, known, onToggle }: { body: string; title?
         node: (
           <li className={`nb-task ${task[1] !== ' ' ? 'done' : ''}`}>
             <button className="dl-check" onClick={() => onToggle(n)} aria-label="Tick">
-              {task[1] !== ' ' ? '✓' : ''}
+              {task[1] !== ' ' ? <Tick /> : ''}
             </button>
             <span>{inline(task[2], open, known)}</span>
           </li>

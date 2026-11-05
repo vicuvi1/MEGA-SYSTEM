@@ -13,28 +13,10 @@ import { blockSubject, localDay } from '@core/dayTime'
 import { focusStreak, liveScore } from '@core/liveScore'
 import { runSharedNow, skipSharedNow, useSharedNow } from './nowStore'
 import { meetingNow } from '@core/dayGlance'
+import { useCountUp } from './motionKit'
 
-/** A number that counts up to its value (calm, quick). */
-export function useCountUp(value: number, ms = 700): number {
-  const [n, setN] = useState(value)
-  const from = useRef(value)
-  useEffect(() => {
-    if (typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setN(value)
-    const start = performance.now()
-    const a = from.current
-    let raf = 0
-    const tick = (t: number) => {
-      const k = Math.min(1, (t - start) / ms)
-      const e = 1 - Math.pow(1 - k, 3)
-      setN(a + (value - a) * e)
-      if (k < 1) raf = requestAnimationFrame(tick)
-      else from.current = value
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [value, ms])
-  return n
-}
+/** A number that counts up to its value (shared, AF7). */
+export { useCountUp }
 
 const greet = () => {
   const h = new Date().getHours()

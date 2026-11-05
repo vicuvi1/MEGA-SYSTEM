@@ -387,7 +387,7 @@
 @media (max-width: 900px) { .sk-cols { grid-template-columns: minmax(0, 1fr); } }
 
 /* Done: the check fills, the row fades and folds away */
-@keyframes done-pop { 0% { transform: scale(1); } 45% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes done-pop { 0% { transform: scale(0.9); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
 @keyframes row-out { to { opacity: 0; transform: translateX(14px) scale(0.98); } }
 .dl li.leaving, .ta-task.leaving { animation: row-out 0.24s ease forwards; pointer-events: none; }
 .dl li.leaving .dl-check, .ta-task.leaving .ta-check { background: var(--c, var(--accent)); border-color: var(--c, var(--accent)); animation: done-pop 0.3s ease; }
@@ -1632,12 +1632,8 @@
 .hb-ring.pulse { animation: hb-pulse .9s ease; }
 .hb-ring.all { box-shadow: 0 0 18px -2px var(--lime); }
 @keyframes hb-pulse { 30% { transform: scale(1.18); } }
-.chip.habit.burst { position: relative; animation: hb-pop .6s cubic-bezier(.3, 1.6, .5, 1); }
-.chip.habit.burst::after { content: ''; position: absolute; inset: -6px; border-radius: 999px; border: 2px solid var(--lime); animation: hb-ring .9s ease-out forwards; pointer-events: none; }
-@keyframes hb-pop { 40% { transform: scale(1.12); } }
-@keyframes hb-ring { from { opacity: 1; transform: scale(.9); } to { opacity: 0; transform: scale(1.35); } }
 .dl-bigdone { margin: 6px 0 10px; padding: 10px 14px; border-radius: 12px; font-weight: 700; color: var(--gold, #f5c451); background: color-mix(in srgb, var(--gold, #f5c451) 10%, transparent); }
-@media (prefers-reduced-motion: reduce) { .hb-ring.pulse, .chip.habit.burst, .chip.habit.burst::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hb-ring.pulse { animation: none; } }
 
 /* Today: quick capture, deep work, week strip */
 .qc { display: flex; align-items: center; gap: 10px; margin: 0 0 var(--s-4, 16px); padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.06); transition: box-shadow 0.15s; }

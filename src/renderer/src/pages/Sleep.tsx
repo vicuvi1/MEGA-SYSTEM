@@ -8,6 +8,7 @@ import { soundCoin, soundSuccess } from '../soundKit'
 import { useAction } from '../ui'
 import { ConnectCard } from './Connected'
 import { addDays } from '@core/dates'
+import { CountUp } from '../motionKit'
 
 const hm = (min: number | null) => (min == null ? '–' : `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`)
 const toMin = (t: string) => {
@@ -166,7 +167,7 @@ function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
         </div>
         <div className="stat">
           <span className="label">Wake streak</span>
-          <div className="big">{w.streak}</div>
+          <div className="big"><CountUp value={w.streak} /></div>
           <span className="sub">best {w.best}</span>
         </div>
         <div className="stat">
@@ -178,7 +179,7 @@ function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
         </div>
         <div className="stat">
           <span className="label">Average sleep</span>
-          <div className="big small-big">{hm(w.avgSleepMin)}</div>
+          <div className="big small-big">{w.avgSleepMin == null ? hm(w.avgSleepMin) : <CountUp value={w.avgSleepMin} format={(v) => hm(Math.round(v))} />}</div>
           <span className="sub">from Waky bedtimes</span>
         </div>
       </section>
@@ -312,7 +313,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
         </div>
         <div className="stat">
           <span className="label">Wake streak</span>
-          <div className="big">{summary.streak}</div>
+          <div className="big"><CountUp value={summary.streak} /></div>
           <span className="sub">best {summary.bestStreak}</span>
         </div>
         <div className="stat">
@@ -324,7 +325,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
         </div>
         <div className="stat">
           <span className="label">Average sleep</span>
-          <div className="big small-big">{hm(summary.avgSleepMin)}</div>
+          <div className="big small-big">{summary.avgSleepMin == null ? hm(summary.avgSleepMin) : <CountUp value={summary.avgSleepMin} format={(v) => hm(Math.round(v))} />}</div>
           <span className="sub">calculated from bedtimes</span>
         </div>
       </section>

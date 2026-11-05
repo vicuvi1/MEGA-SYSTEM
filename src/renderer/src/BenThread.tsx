@@ -1,7 +1,7 @@
 // Ben's chat pieces, shared by the Coach page and the floating face (U4):
 // the reply text (numbers in bold, search highlights), the buttons and live
 // cards under a reply, and the rating. One look and one behaviour everywhere.
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { life } from './bridge'
 import { useAction } from './ui'
 import type { CoachStatus } from './web/coachStatus'
@@ -12,38 +12,52 @@ import { CoachPlan } from './CoachPlan'
 /** One chat message (the Coach page's log entry). */
 export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string }
 
+// Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
+const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu
+
 /** Coach text with numbers in bold (and search hits marked); a new reply types itself out. */
 /** CL5: at most `maxBold` numbers in bold (the ones that matter come first). */
+/** AF13: the text is split and bolded once; a new reply reveals word by word
+ *  with a CSS stagger (opacity only), so typing costs no re-renders. */
 export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity }: { text: string; reveal?: boolean; highlight?: string; maxBold?: number }) {
-  const [n, setN] = useState(reveal ? 0 : text.length)
-  useEffect(() => {
-    if (!reveal || typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setN(text.length)
-    setN(0)
-    const step = Math.max(2, Math.ceil(text.length / 60))
-    const t = setInterval(() => setN((x) => (x + step >= text.length ? (clearInterval(t), text.length) : x + step)), 16)
-    return () => clearInterval(t)
-  }, [text, reveal])
-  const shown = text.slice(0, n)
+  const animate = reveal && !(typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const h = highlight.trim().toLowerCase()
-  // Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
-  const parts = shown.split(/(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu)
+  const { nodes, words } = useMemo(() => {
+    let w = 0
+    const word = (str: string, key: string): ReactNode[] =>
+      animate
+        ? str.split(/(\s+)/).map((t, j) => (!t || /^\s+$/.test(t) ? t : <span key={`${key}.${j}`} className="cx-w" style={{ ['--i' as string]: w++ }}>{t}</span>))
+        : [str]
+    const parts = text.split(NUM)
+    const out = parts.map((p, i) => {
+      const hit = h && p.toLowerCase().includes(h)
+      if (i % 2 === 1 && (i - 1) / 2 < maxBold) return <b key={i} className={`${hit ? 'hit' : ''}${animate ? ' cx-w' : ''}`} style={animate ? { ['--i' as string]: w++ } : undefined}>{p}</b>
+      if (!hit) return <Fragment key={i}>{word(p, String(i))}</Fragment>
+      const k = p.toLowerCase().indexOf(h)
+      return (
+        <span key={i}>
+          {p.slice(0, k)}
+          <mark>{p.slice(k, k + h.length)}</mark>
+          {p.slice(k + h.length)}
+        </span>
+      )
+    })
+    return { nodes: out, words: w }
+  }, [text, h, maxBold, animate])
+  // ~1.2 s for a whole reply, 12–40 ms between words.
+  const step = Math.max(12, Math.min(40, Math.round(1200 / Math.max(1, words))))
+  const total = words * step + 220
+  const [typing, setTyping] = useState(animate)
+  useEffect(() => {
+    if (!animate) return setTyping(false)
+    setTyping(true)
+    const t = setTimeout(() => setTyping(false), total)
+    return () => clearTimeout(t)
+  }, [animate, total, text])
   return (
-    <span className="cx-rich">
-      {parts.map((p, i) => {
-        const hit = h && p.toLowerCase().includes(h)
-        if (i % 2 === 1 && (i - 1) / 2 < maxBold) return <b key={i} className={hit ? 'hit' : ''}>{p}</b>
-        if (i % 2 === 1 && !hit) return p
-        if (!hit) return p
-        const k = p.toLowerCase().indexOf(h)
-        return (
-          <span key={i}>
-            {p.slice(0, k)}
-            <mark>{p.slice(k, k + h.length)}</mark>
-            {p.slice(k + h.length)}
-          </span>
-        )
-      })}
-      {n < text.length && <i className="cx-caret" />}
+    <span className={`cx-rich${animate ? ' typing' : ''}`} style={animate ? { ['--step' as string]: `${step}ms` } : undefined}>
+      {nodes}
+      {typing && <i className="cx-caret" />}
     </span>
   )
 }

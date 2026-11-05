@@ -60,9 +60,59 @@ html.vt-page .content { view-transition-name: page; }
   transition-duration: 0.08s;
 }
 
+/* ---------- Checkboxes draw their tick (AF6) ---------- */
+.fx-tick { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.fx-tick path { stroke-dasharray: 1; stroke-dashoffset: 0; animation: fx-tick-draw 0.26s ease-out 0.04s both; }
+@keyframes fx-tick-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.fx-tick.lazy { opacity: 0; }
+.fx-tick.lazy path { animation: none; }
+.leaving .fx-tick.lazy { opacity: 1; }
+.leaving .fx-tick.lazy path { animation: fx-tick-draw 0.22s ease-out both; }
+/* A row that ticks and leaves: a strike line draws across (scaleX), the row fades. */
+.dl li.leaving .dl-text, .ta-task.leaving .ta-text { position: relative; text-decoration: none; }
+.dl li.leaving .dl-text::after, .ta-task.leaving .ta-text::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 52%; height: 1.5px; border-radius: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: left center; animation: fx-strike 0.2s ease-out forwards;
+}
+@keyframes fx-strike { to { transform: scaleX(1); } }
+.dl li.done .dl-text { transition: color 0.2s, opacity 0.2s; }
+
+/* ---------- Toasts spring in and stack (AF8; toastMotion.ts) ---------- */
+.t-in { animation: t-in 0.38s var(--ease-spring) backwards; touch-action: pan-y; }
+.t-in.from-right { animation-name: t-in-right; }
+.t-in.t-out { animation: t-out 0.18s ease-in forwards; pointer-events: none; }
+.t-in.from-right.t-out { animation-name: t-out-right; }
+@keyframes t-in { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
+@keyframes t-in-right { from { opacity: 0; transform: translateX(48px) scale(0.96); } }
+@keyframes t-out { to { opacity: 0; transform: translateY(8px) scale(0.97); } }
+@keyframes t-out-right { to { opacity: 0; transform: translateX(60px); } }
+
+/* ---------- Ben's reply reveals word by word (AF13; BenThread.tsx Rich) ---------- */
+.cx-rich.typing .cx-w { animation: cx-word 0.2s ease-out both; animation-delay: calc(var(--i, 0) * var(--step, 20ms)); }
+@keyframes cx-word { from { opacity: 0; } }
+
+/* ---------- Focus mode dims the rest (AF19; FocusIsland.tsx) ----------
+   Under the focus island (z-index 121); a click or Esc brings it back. */
+.focus-dim { position: fixed; inset: 0; z-index: 118; background: var(--bg, #07090e); opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+.focus-dim.on { opacity: 0.65; pointer-events: auto; cursor: pointer; }
+
+/* ---------- Charts draw in once, when first seen (AF20; useSeen in motionKit.tsx) ----------
+   Bars grow from the bottom (scaleY) with a 20 ms stagger set inline; they
+   wait, held at their first frame, until the chart scrolls into view.
+   SVG lines that should draw in get class "draw" and pathLength="1". */
+.chart-in i, .chart-in .pg-dot { animation-duration: 0.36s !important; }
+.chart-in:not(.seen) i, .chart-in:not(.seen) .pg-dot { animation-play-state: paused; }
+.week-bars.chart-in .week-bar i { transform-origin: bottom; animation: pg-grow 0.36s var(--ease-out) both; }
+.chart-in path.draw, .chart-in polyline.draw { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.chart-in.seen path.draw, .chart-in.seen polyline.draw { animation: chart-draw 0.4s var(--ease-out) forwards; }
+@keyframes chart-draw { to { stroke-dashoffset: 0; } }
+
+/* ---------- Numbers that count (AF7) ---------- */
+.num { font-variant-numeric: tabular-nums; }
+
 /* ---------- Reduce motion (AF3): the one place for it ---------- */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   :where(.btn, .chip, .tb-icon, .icon-btn, .action, .chip-btn, .pressable, .sb-item, .sb-tool, .reward, .stat.clickable, button.card, .tb-me):where(:active) { scale: none; }
 }

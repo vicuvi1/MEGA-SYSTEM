@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { usePoints } from '../usePoints'
 import type { ConnectionsState, Expense, NativeMoneySummary } from '@shared/api'
 import { life } from '../bridge'
-import { barFill } from '../motionKit'
+import { barFill, CountUp } from '../motionKit'
 import { Icon } from '../Icon'
 import { soundCoin, soundSpend } from '../soundKit'
 import { Coins, useAction } from '../ui'
@@ -80,7 +80,7 @@ function FinanceHelperView({ f, onState }: { f: ConnectionsState['finance']; onS
         <div className="stat hero gold">
           <span className="label">Everyday spending today</span>
           <div className="big">
-            {money(f.today?.everydaySpent ?? 0)} <small>{cur}</small>
+            <CountUp value={f.today?.everydaySpent ?? 0} format={money} /> <small>{cur}</small>
           </div>
           <span className="sub">{todayLeft === null ? `Set a daily budget to earn +${pts('money.under_budget', 5)} a day` : todayLeft >= 0 ? `${money(todayLeft)} ${cur} left today` : `${money(-todayLeft)} ${cur} over today`}</span>
         </div>
@@ -207,7 +207,7 @@ function NativeMoneyView({ onWallet }: { onWallet: () => void }) {
         <div className="stat hero gold">
           <span className="label">Everyday spending today</span>
           <div className="big">
-            {money(today.everydaySpent)} <small>{cur}</small>
+            <CountUp value={today.everydaySpent} format={money} /> <small>{cur}</small>
           </div>
           <span className="sub">
             {todayLeft === null

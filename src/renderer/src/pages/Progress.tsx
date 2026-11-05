@@ -16,6 +16,7 @@ import { useLive } from '../live'
 import { GrowthSections } from './Growth'
 import { MonthReview, MoodLinksCard, PlannedVsReal, YearRecapView, saveTab, savedTab, type InsightsTab } from './Reviews'
 import { barFill } from '../motionKit'
+import { useCountUp as useCountUpShared, useSeen } from '../motionKit'
 export { YearOffer, openYear } from './Reviews'
 
 export function useProgress(): ProgressReport | null | undefined {
@@ -38,26 +39,7 @@ export function useProgress(): ProgressReport | null | undefined {
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Counts from 0 up to `to` once (ease-out), so numbers arrive with a little life. */
-function useCountUp(to: number, ms = 900): number {
-  const [v, setV] = useState(reduced() ? to : 0)
-  const from = useRef(0)
-  useEffect(() => {
-    if (reduced()) return setV(to)
-    const start = performance.now()
-    const a = from.current
-    let raf = 0
-    const step = (t: number) => {
-      const k = Math.min(1, (t - start) / ms)
-      const e = 1 - Math.pow(1 - k, 3)
-      setV(a + (to - a) * e)
-      if (k < 1) raf = requestAnimationFrame(step)
-      else from.current = to
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [to, ms])
-  return v
-}
+const useCountUp = (to: number) => useCountUpShared(to, 400, { fromZero: true })
 
 /** True one frame after mount: CSS transitions then run from their start state. */
 function useShown(): boolean {
@@ -102,15 +84,16 @@ function ScoreRing({ score, size = 132 }: { score: number; size?: number }) {
 /** The 7 days one by one: a tick per day, or a small bar for amounts. */
 function DayStrip({ m }: { m: Metric }) {
   const max = Math.max(1, ...m.days.map((d) => d.value))
+  const [seenRef, seen] = useSeen<HTMLDivElement>()
   return (
-    <div className="pg-days" role="img" aria-label={`${m.label}, last 7 days: ${m.days.map((d) => `${weekday(d.day)} ${m.dayText(d.value)}`).join(', ')}`}>
+    <div ref={seenRef} className={`pg-days chart-in ${seen ? 'seen' : ''}`} role="img" aria-label={`${m.label}, last 7 days: ${m.days.map((d) => `${weekday(d.day)} ${m.dayText(d.value)}`).join(', ')}`}>
       {m.days.map((d, k) => (
         <div key={d.day} className="pg-day" title={`${weekday(d.day)} ${d.day.slice(5)}: ${m.dayText(d.value)}`}>
           {m.daily ? (
-            <span className={`pg-dot ${d.value ? 'on' : ''}`} style={{ animationDelay: `${k * 60}ms` }} />
+            <span className={`pg-dot ${d.value ? 'on' : ''}`} style={{ animationDelay: `${k * 20}ms` }} />
           ) : (
             <span className="pg-mini-bar">
-              <i className={d.value ? 'on' : ''} style={{ height: `${d.value ? Math.max(14, (d.value / max) * 100) : 6}%`, animationDelay: `${k * 60}ms` }} />
+              <i className={d.value ? 'on' : ''} style={{ height: `${d.value ? Math.max(14, (d.value / max) * 100) : 6}%`, animationDelay: `${k * 20}ms` }} />
             </span>
           )}
           <small>{weekday(d.day)[0]}</small>
@@ -124,13 +107,14 @@ function DayStrip({ m }: { m: Metric }) {
 function WeekBars({ m }: { m: Metric }) {
   const max = Math.max(1, ...m.weeks)
   const n = m.weeks.length
+  const [seenRef, seen] = useSeen<HTMLDivElement>()
   return (
     <div className="pg-weeks">
-      <div className="pg-weeks-bars" role="img" aria-label={`${m.label}, last ${n} weeks: ${m.weeks.map((v) => m.fmt(v)).join(', ')}`}>
+      <div ref={seenRef} className={`pg-weeks-bars chart-in ${seen ? 'seen' : ''}`} role="img" aria-label={`${m.label}, last ${n} weeks: ${m.weeks.map((v) => m.fmt(v)).join(', ')}`}>
         {m.weeks.map((v, k) => (
           <div key={k} className={`pg-week ${k === n - 1 ? 'now' : ''}`} title={`${k === n - 1 ? 'Last 7 days' : `${n - 1 - k} week${n - 1 - k > 1 ? 's' : ''} before`}: ${m.fmt(v)}`}>
             {k === n - 1 && v > 0 && <em>{m.fmt(v)}</em>}
-            <i style={{ height: `${v ? Math.max(8, (v / max) * 100) : 3}%`, animationDelay: `${k * 70}ms` }} />
+            <i style={{ height: `${v ? Math.max(8, (v / max) * 100) : 3}%`, animationDelay: `${k * 20}ms` }} />
           </div>
         ))}
       </div>

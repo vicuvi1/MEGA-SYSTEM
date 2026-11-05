@@ -14,6 +14,7 @@ import { SkillPaths } from '../SkillPaths'
 import { useAction } from '../ui'
 import '../body.css'
 import { WATER_TARGET_ML } from '@core/defaults'
+import { celebrate } from '../fx'
 
 export function Body({
   state,
@@ -67,6 +68,7 @@ export function Body({
       `Logged ${amount} ${ex.unit} ${ex.name}`
     )
     if (next) {
+      celebrate(null, 'workout')
       soundCoin()
       onState(next.state)
       onWallet()
@@ -93,6 +95,7 @@ export function Body({
       'All daily routine exercises completed!'
     )
     if (next) {
+      celebrate(null, 'workout')
       soundCoin()
       onState(next.state)
       onWallet()
