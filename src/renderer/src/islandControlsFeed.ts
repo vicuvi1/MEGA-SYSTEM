@@ -157,8 +157,12 @@ async function runUndo(of: string): Promise<string> {
         const ex = findExercise(d, u.ex) ?? findExercise(d, u.name)
         if (ex) ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) - u.n)
       })
-      // Deleting the workout takes its points back too.
-      if (u.workoutId != null) await life.body.deleteWorkout(u.workoutId)
+      // Only this set comes out of the day's workout (the day's sets share one
+      // workout); the workout and its points go only when it was the last set.
+      if (u.workoutId != null) {
+        if (life.body.takeBackSet) await life.body.takeBackSet(u.workoutId, u.name, u.n)
+        else await life.body.deleteWorkout(u.workoutId)
+      }
       window.dispatchEvent(new CustomEvent('life-body-changed'))
       return `↶ Took back ${u.n} ${u.name}`
     case 'mustdo': {
