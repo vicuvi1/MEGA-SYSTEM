@@ -2,6 +2,7 @@
 // be tested): where the window goes, how big it may be, where it takes
 // clicks, which shortcuts it uses and what the Windows watcher said.
 import { isAltGrCombo, normalizeAccelerator } from '../core/islandKeys'
+import { cleanHide, cleanSpots, SHOWN, type HideState, type ScreenSpot } from '../core/islandMove'
 
 export interface Box { x: number; y: number; width: number; height: number }
 /** A clickable area as the island page reports it (CSS pixels of the page). */
@@ -88,6 +89,8 @@ export function overRects(x: number, y: number, rects: HotRect[], pad = 4): bool
 
 export const ISLAND_SHORTCUT_DEFAULT = 'Control+Shift+Space'
 export const QUIET_SHORTCUT_DEFAULT = 'Alt+Shift+Q'
+/** H1: hide / bring back. Not Ctrl+Alt+I by default: that is AltGr+I, a letter on some keyboards. */
+export const HIDE_SHORTCUT_DEFAULT = 'Alt+Shift+I'
 // Not Ctrl+Shift+N / Ctrl+Shift+B by default: those are a new private window,
 // a new folder in Explorer and the bookmarks bar.
 /** Quick picks; any real shortcut you record works too (IF9). */
@@ -121,10 +124,19 @@ export interface IslandDeskPrefs {
   hideApps: string[]
   /** Island debug is on until this time (ms), 0 = off (IC13). */
   debugUntil: number
+  /** H1: hide it / bring it back from anywhere, or '' for none. */
+  hideShortcut: string
+  /** H1: slide out of the way for a moment when the mouse rushes at it. */
+  dodge: boolean
+  /** H1: where it was on each screen (see screenKey). */
+  spots: Record<string, ScreenSpot>
+  /** H1: hidden for a while, or tucked into a dot. */
+  hidden: HideState
 }
 export const DEFAULT_DESK_PREFS: IslandDeskPrefs = {
   fullscreen: 'hide', captureShortcut: CAPTURE_SHORTCUTS[0], voiceShortcut: VOICE_SHORTCUTS[0],
-  offset: { x: 0, y: 0 }, monitor: 'fixed', perScreen: true, layouts: {}, hideApps: [], debugUntil: 0
+  offset: { x: 0, y: 0 }, monitor: 'fixed', perScreen: true, layouts: {}, hideApps: [], debugUntil: 0,
+  hideShortcut: HIDE_SHORTCUT_DEFAULT, dodge: false, spots: {}, hidden: SHOWN
 }
 
 const clampInt = (v: unknown, min: number, max: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(max, Math.max(min, v))) : d)
@@ -161,7 +173,11 @@ export function cleanDeskPrefs(p: any): IslandDeskPrefs {
     perScreen: p?.perScreen !== false,
     layouts,
     hideApps: Array.isArray(p?.hideApps) ? [...new Set(p.hideApps.map(appKey).filter(Boolean) as string[])].slice(0, 40) : [],
-    debugUntil: typeof p?.debugUntil === 'number' && Number.isFinite(p.debugUntil) && p.debugUntil > 0 ? Math.round(p.debugUntil) : 0
+    debugUntil: typeof p?.debugUntil === 'number' && Number.isFinite(p.debugUntil) && p.debugUntil > 0 ? Math.round(p.debugUntil) : 0,
+    hideShortcut: p?.hideShortcut === undefined ? d.hideShortcut : cleanKey(p.hideShortcut, d.hideShortcut),
+    dodge: p?.dodge === true,
+    spots: cleanSpots(p?.spots),
+    hidden: cleanHide(p?.hidden, Date.now())
   }
 }
 

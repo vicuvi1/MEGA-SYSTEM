@@ -3,6 +3,7 @@
 // go the window moves once, and the page plays the last bit of the way as a
 // bounce (the window itself never animates).
 import type { Box, Placement } from './islandWin'
+import { dropSpot } from '../core/islandMove'
 
 /** How close to a side edge docks it there (DIP). */
 export const DOCK_PX = 70
@@ -18,13 +19,8 @@ export const BOUNCE_MAX = 60
  * it floats where you let go.
  */
 export function dropPlacement(c: { x: number; y: number }, sb: Box): Placement {
-  if (c.x - sb.x < DOCK_PX) return 'left'
-  if (sb.x + sb.width - c.x < DOCK_PX) return 'right'
-  if (c.y - sb.y < SNAP_BAND_PX) {
-    const fx = (c.x - sb.x) / Math.max(1, sb.width)
-    return fx < 0.25 ? 'top-left' : fx > 0.75 ? 'top-right' : 'top'
-  }
-  return 'free'
+  // H1: only the top zone snaps; anywhere else (the sides too) it stays where you let go.
+  return dropSpot(c, sb)
 }
 
 /** What the ghost says while you drag. */

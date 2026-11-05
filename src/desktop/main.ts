@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
+import { islandMoveMenu } from './islandMenu'
 import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
 import { PROFILE_IDS, PROFILE_LABEL } from '../core/islandControlPrefs'
 import { createBackups } from './backups'
@@ -309,6 +310,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   const menu = () => Menu.buildFromTemplate([
     { label: 'Open Life System', click: () => showApp() },
     { label: `Show the island (${island.shortcut.replace('Control', 'Ctrl')})`, type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
+    // H1: hide it for a while or bring it back; move it with the arrow keys.
+    ...islandMoveMenu(island, () => tray.setContextMenu(menu())),
     // Quiet for a while (Q1): no reminders, only a small moon; back by itself.
     island.quietUntil()
       ? { label: `Island quiet until ${new Date(island.quietUntil()).toTimeString().slice(0, 5)} · Wake now`, click: () => { island.setQuiet(null); tray.setContextMenu(menu()) } }

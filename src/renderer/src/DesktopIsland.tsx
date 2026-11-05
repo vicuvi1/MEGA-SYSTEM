@@ -25,9 +25,11 @@ import { plainError } from '@core/islandErrors'
 import { play, playReminder } from './soundKit'
 import { useIslandSounds } from './focusSound'
 import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
-import { ActMenu, cacheSnap, cachedSnap, QuickRow, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
+import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
+import { GripHandle, MoveModeBar, ParkedDot, useIslandMove } from './IslandMoveBits'
 import './island.css'
 import './island-motion.css'
+import './island-move.css'
 import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
 import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
@@ -313,6 +315,8 @@ export function DesktopIsland() {
   const s = exp.snap
   const now = useNow(s.running ? 5000 : 15_000)
   const [place, setPlace] = useState<IslandPlacement>('top')
+  // H1: hidden / tucked into a dot / move mode / out of the way.
+  const mv = useIslandMove()
   const [prefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
   // The size setting: the desktop sends a scale and the page scales itself (its zoom stays locked).
   const [scale, setScale] = useState(1)
@@ -877,16 +881,22 @@ export function DesktopIsland() {
   // IS3: a drag needs 8 px and 120 ms held, so a small wobble while clicking is a click.
   // IS21: it always ends (pointer up anywhere, lost capture, the window losing focus).
   const dragged = useRef(false)
+  // H1: the round menu closes when you drag well past it (so holding first never blocks a move).
+  const ringClose = useRef<() => void>(() => {})
   const jx = useMotionValue(1)
   const jy = useMotionValue(1)
   const jelly = useMemo(() => makeJelly(jx, jy, () => fRef.current), [jx, jy])
   const dragProps = {
-    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>, quick?: unknown) => {
       // Every press starts clean: an old drag never eats the next click.
       dragged.current = false
       if (e.button !== 0 || !desk()?.islandDrag) return
       const hit = (e.target as HTMLElement).closest('button, input, textarea, a, select, label')
       if (hit && hit !== e.currentTarget) return
+      // H1: the grip drags at once (2 px, no hold); the rest needs 8 px and 120 ms.
+      const fast = quick === true
+      const minPx = fast ? 2 : DRAG_PX
+      const minMs = fast ? 0 : DRAG_MS
       const el = e.currentTarget
       const id = e.pointerId
       const sx = e.screenX
@@ -895,10 +905,16 @@ export function DesktopIsland() {
       let started = false
       let ended = false
       const move = (ev: PointerEvent) => {
-        if (ev.pointerId !== id || document.documentElement.classList.contains('di-ring-open')) return
+        if (ev.pointerId !== id) return
+        if (document.documentElement.classList.contains('di-ring-open')) {
+          // H1: well past the round menu means you want to move it: the menu closes and the drag starts.
+          if (Math.hypot(ev.screenX - sx, ev.screenY - sy) < RING_RADIUS + 48) return
+          ringClose.current()
+          document.documentElement.classList.remove('di-ring-open')
+        }
         // IM6: it stretches a little with the drag's speed.
         if (started) return jelly.move(ev)
-        if (Math.hypot(ev.screenX - sx, ev.screenY - sy) < DRAG_PX || performance.now() - t0 < DRAG_MS) return
+        if (Math.hypot(ev.screenX - sx, ev.screenY - sy) < minPx || performance.now() - t0 < minMs) return
         started = true
         dragged.current = true
         try { el.setPointerCapture(id) } catch { /* fine */ }
@@ -1459,7 +1475,8 @@ export function DesktopIsland() {
     if (m.act !== 'rename') tap(m.act)
   }
   // IC3: hold the pill for the round menu; slide and let go to fire.
-  const ringList = useMemo(() => ringItems(s, prefs.chips), [s, prefs.chips])
+  // H1: Move and Hide in the round menu too.
+  const ringList = useMemo(() => [...ringItems(s, prefs.chips), { id: 'ring:move', icon: '✥', label: 'Move', act: 'move' as const }, { id: 'ring:hide', icon: '🙈', label: 'Hide 1 h', act: 'hide' as const }], [s, prefs.chips])
   const ringCtl = useRing({
     on: prefs.controls.ring && !s.locked && uiRef.current.view !== 'expanded',
     items: ringList,
@@ -1470,6 +1487,8 @@ export function DesktopIsland() {
         return focusInput()
       }
       if (it.act === 'quiet') return clickAction('quiet')
+      if (it.act === 'move') return desk()?.islandMoveMode?.()
+      if (it.act === 'hide') return desk()?.islandHide?.('1h')
       tap(it.act)
     },
     toLocal: (x, y) => {
@@ -1478,6 +1497,7 @@ export function DesktopIsland() {
       return b ? { x: (x - b.left) / k, y: (y - b.top) / k } : { x, y }
     }
   })
+  ringClose.current = ringCtl.close
   // IC4: the left click fires on release (the browser's click can get lost while the pill redraws).
   const clickProps = {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
@@ -1529,8 +1549,11 @@ export function DesktopIsland() {
       {...clickProps}
       onKeyDown={(e) => (e.key === 'Enter' ? dispatch({ type: 'click' }) : e.key === 'ArrowRight' ? cycle(1) : e.key === 'ArrowLeft' ? cycle(-1) : undefined)}
       onWheel={onWheel}
-      aria-label="Open the island (drag to move it, arrows or the mouse wheel switch)"
+      // H1: a double-click tucks it into a small dot (a click on the dot brings it back).
+      onDoubleClick={(e) => { e.preventDefault(); dispatch({ type: 'close' }); desk()?.islandHide?.('dot') }}
+      aria-label="Open the island (drag to move it, double-click to tuck it away, arrows or the mouse wheel switch)"
     >
+      <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
       {s.locked ? (
         <span className="di-pill-text">🔒 Open Life System</span>
       ) : old ? (
@@ -1844,7 +1867,7 @@ export function DesktopIsland() {
     </div>
   )
   const showMoment = !!moment && !hushed && !s.locked && !old
-  const views = { compact: hushed ? moonPill : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
+  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
   const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
@@ -1933,8 +1956,8 @@ export function DesktopIsland() {
   const hidden = docHidden || !visible
   // Rings and sweeps: every frame only while the shape moves, 4 times a second otherwise, not at all hidden or tucked away.
   useEffect(() => {
-    setFrameMode(hidden || tuck !== 'none' ? 'paused' : moving ? 'fast' : 'slow')
-  }, [hidden, tuck, moving])
+    setFrameMode(hidden || tuck !== 'none' || mv.parked ? 'paused' : moving ? 'fast' : 'slow')
+  }, [hidden, tuck, moving, mv.parked])
   // IM4: the particles only in Full, never while hidden or tucked away.
   useEffect(() => {
     setParticlesAllowed(f.extras && !hidden && tuck === 'none')
@@ -2015,7 +2038,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: radius, scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2069,6 +2092,7 @@ export function DesktopIsland() {
             {menu && <ActMenu items={menu} subject={run?.subject} onPick={pickMenu} onRename={(n) => (setMenu(null), tap({ kind: 'rename', subject: n }))} onClose={() => setMenu(null)} />}
             <WheelBadge text={wheelText} />
             <SnapGhost spot={ghost} />
+            {mv.moveMode && <MoveModeBar />}
             {/* Island eyes: the eye (reading / paused / Pause button), only with the eyes on. */}
             <IslandEyesBadge near={ui.over || ui.view === 'expanded'} onLayout={() => sendHot(true)} />
             <AnimatePresence>

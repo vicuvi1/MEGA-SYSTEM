@@ -130,7 +130,7 @@ export interface RingItem {
   icon: string
   label: string
   /** A tap for the app window, or something the island does itself. */
-  act: IslandAction | 'ask' | 'quiet'
+  act: IslandAction | 'ask' | 'quiet' | 'move' | 'hide'
   disabled?: boolean
 }
 

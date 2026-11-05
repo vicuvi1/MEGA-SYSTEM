@@ -190,6 +190,23 @@ export interface DesktopApi {
   onIslandTyping?(cb: (typing: boolean) => void): void
   /** Island window: bring the app window up. */
   showApp?(page?: string): void
+  /** H1: hide it for a while, tuck it into a dot, or show it again (null). App or island window. */
+  islandHide?(choice: '1h' | 'tomorrow' | 'manual' | 'dot' | null): void
+  /** H1: Island window: hidden / a dot / shown. */
+  onIslandHideState?(cb: (h: { mode: 'shown' | 'hidden' | 'dot'; until: number }) => void): void
+  /** H1: Island window: about to hide (play the slide-out). */
+  onIslandLeaving?(cb: () => void): void
+  /** H1: start move mode (arrow keys nudge it, Enter saves, Esc puts it back). */
+  islandMoveMode?(): void
+  onIslandMoveMode?(cb: (on: boolean) => void): void
+  onIslandMoveModeEnd?(cb: (on: boolean) => void): void
+  islandNudge?(d: { x: number; y: number }): void
+  islandMoveEnd?(save: boolean): void
+  /** H1: Island window: slide out of the way for a moment (the mouse rushed at it). */
+  onIslandDodge?(cb: (on: boolean) => void): void
+  /** Island 2 (IN34–IN48): tiles' shortcuts, the dock, the clipboard tray, the file shelf. */
+  islandKit?(op: string, arg?: unknown): Promise<any>
+  onIslandKit?(cb: (ev: { type: string; [k: string]: unknown }) => void): void
 }
 
 declare global {

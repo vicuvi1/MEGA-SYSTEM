@@ -17,9 +17,9 @@ type Prefs = IslandAllPrefs
 /** An older desktop may not know the newer settings: fill them in so the page always works. */
 const norm = (r: IslandAllPrefs): Prefs => ({ ...r, ...cleanIslandPrefs(r) })
 type Patch = Partial<IslandPrefs & IslandDeskPrefs> & { place?: Placement; displayId?: number }
-type What = 'island' | 'quiet' | 'capture' | 'voice'
-type KeyField = 'shortcut' | 'quietShortcut' | 'captureShortcut' | 'voiceShortcut'
-const FIELD_WHAT: Record<KeyField, What> = { shortcut: 'island', quietShortcut: 'quiet', captureShortcut: 'capture', voiceShortcut: 'voice' }
+type What = 'island' | 'quiet' | 'capture' | 'voice' | 'hide'
+type KeyField = 'shortcut' | 'quietShortcut' | 'captureShortcut' | 'voiceShortcut' | 'hideShortcut'
+const FIELD_WHAT: Record<KeyField, What> = { shortcut: 'island', quietShortcut: 'quiet', captureShortcut: 'capture', voiceShortcut: 'voice', hideShortcut: 'hide' }
 
 /**
  * Shortcuts another app already has: asked once (islandShortcutStatus) and
@@ -400,6 +400,11 @@ export function IslandSettingsPanel() {
       <Row title="In a call or meeting" hint="When your mic or camera is on, or a meeting is in your calendar">
         {opt('callMode', 'In a call', [['hide', 'Hide it'], ['dot', 'Small dot'], ['normal', 'Leave it']])}
       </Row>
+      {p.dodge != null && (
+        <Row title="Out of the way" hint="When the mouse rushes at it, it slides up for a moment">
+          <Segmented label="Out of the way" value={p.dodge ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']] as any} onChange={(v) => void save({ dodge: v === 'on' })} />
+        </Row>
+      )}
       {p.fullscreen && (
         <Row title="Over a full-screen app" hint="A video, game or slides on the island's screen">
           <Segmented label="Over a full-screen app" value={p.fullscreen} options={[['hide', 'Hide it'], ['dot', 'Small dot'], ['show', 'Leave it']] as any} onChange={(v) => void save({ fullscreen: v as IslandDeskPrefs['fullscreen'] })} />
@@ -447,6 +452,7 @@ export function IslandSettingsPanel() {
       {keyRow('quietShortcut', 'Quiet', "Quiet for an hour, or back on (also in the tray and the island's 🌙)")}
       {p.captureShortcut != null && keyRow('captureShortcut', 'Add a task', 'A box to add a Todoist task from any app')}
       {p.voiceShortcut != null && keyRow('voiceShortcut', 'Talk to Ben', 'Press to record a voice note to Ben, press again to send it')}
+      {p.hideShortcut != null && keyRow('hideShortcut', 'Hide or bring back the island', 'The same keys hide it and bring it back (the tray can too)')}
 
       <h3 className="is-sec">Controls</h3>
       <Row title="Round menu" hint="Hold the pill for a moment: six quick actions fan out; slide to one and let go">

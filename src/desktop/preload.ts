@@ -69,6 +69,19 @@ const api: DesktopApi = {
   onIslandSnapGhost: (cb) => void ipcRenderer.on('island:snapGhost', (_e, p) => cb(['top', 'top-left', 'top-right', 'left', 'right', 'free'].includes(p) ? p : null)),
   onIslandSnapped: (cb) => void ipcRenderer.on('island:snapped', (_e, b) => cb({ dx: Number(b?.dx) || 0, dy: Number(b?.dy) || 0 })),
   islandReady: () => ipcRenderer.send('island:ready'),
+  // H1: hide / tuck into a dot, move mode, out of the way.
+  islandHide: (choice) => ipcRenderer.send('island:hide', choice ?? null),
+  onIslandHideState: (cb) => void ipcRenderer.on('island:hideState', (_e, h) => cb({ mode: h?.mode === 'hidden' || h?.mode === 'dot' ? h.mode : 'shown', until: Number(h?.until) || 0 })),
+  onIslandLeaving: (cb) => void ipcRenderer.on('island:leaving', () => cb()),
+  islandMoveMode: () => ipcRenderer.send('island:moveMode'),
+  onIslandMoveMode: (cb) => void ipcRenderer.on('island:moveMode', () => cb(true)),
+  onIslandMoveModeEnd: (cb) => void ipcRenderer.on('island:moveModeEnd', () => cb(false)),
+  islandNudge: (d) => ipcRenderer.send('island:nudge', { x: Number(d?.x) || 0, y: Number(d?.y) || 0 }),
+  islandMoveEnd: (save) => ipcRenderer.send('island:moveEnd', save === true),
+  onIslandDodge: (cb) => void ipcRenderer.on('island:dodge', (_e, on) => cb(!!on)),
+  // Island 2 (IN34–IN48): one channel for tiles' shortcuts, the dock, the clipboard tray and the file shelf.
+  islandKit: (op, arg) => ipcRenderer.invoke('islandKit', String(op), arg),
+  onIslandKit: (cb) => void ipcRenderer.on('islandKit', (_e, ev) => cb(ev)),
   showApp: (page) => ipcRenderer.send('island:showApp', page),
   // Ben on this PC (P1–P20)
   pcGetPrefs: () => ipcRenderer.invoke('pc:getPrefs'),

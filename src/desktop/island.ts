@@ -31,7 +31,8 @@ import { cleanIslandPrefs, ISLAND_ZOOM, quietUntil, type IslandPrefs } from '../
 import { applyProfile, autoProfile } from '../core/islandProfiles'
 import { typingFade } from '../core/islandCommands'
 import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
-import { cursorNear, dropPlacement, snapBounce } from './islandPlace'
+import { cursorNear, snapBounce } from './islandPlace'
+import { clampFree, dragTo, dropSpot, fitShift, hideFor, hideText, hideTick, rememberSpot, rushing, screenKey, SHOWN, toggleHide, DODGE_MS, type HideChoice, type Rect, type Sample } from '../core/islandMove'
 import {
   chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
   noteRecentApp, overRects, parseWatcherLine, placeIsland, QUNS_PRESENTATION, rateLimit, rectsToDip, rememberLayout, sampleSeconds, SHORTCUTS_VERSION,
@@ -53,7 +54,7 @@ const LEVEL = 'pop-up-menu' as const
 /** Island debug switches itself off after this long (IC13). */
 const DEBUG_MS = 30 * 60_000
 
-type Slot = 'island' | 'quiet' | 'capture' | 'voice'
+type Slot = 'island' | 'quiet' | 'capture' | 'voice' | 'hide'
 
 export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null, seconds: number) => void; onFg?: (proc: string) => void }) {
   const prefFile = join(o.dir, 'island.json')
@@ -125,7 +126,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let inWin: boolean | null = null
   /** Island debug (IC13): the last poll's timing, for the overlay. */
   const timing = { lastPoll: 0, jitter: 0, lastTick: 0, lag: 0, flips: 0 }
-  let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number; startedAt: number; lastMove: number; lx: number; ly: number; spot?: string } | null = null
+  let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number; w: number; h: number; startedAt: number; lastMove: number; lx: number; ly: number; spot?: string } | null = null
+  /** H1: move mode (arrow keys nudge it, Enter saves, Esc puts it back). */
+  let moveMode: { orig: Electron.Rectangle; place: IslandPlacement; pos: { cx: number; top: number; cy: number } } | null = null
   /** The page is listening (IS22): shortcuts pressed before that wait here. */
   let ready = false
   let pending: string[] = []
@@ -174,13 +177,52 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const base = () => islandBase(prefs)
   const sizeNow = () => islandSize(base(), cssScale() * pageZoom(), display().workArea)
 
+  // H1: the pill's part of the window (DIP) when it floats: it stays on the screen, the rest may hang off.
+  const keepBox = (width: number): Rect => {
+    const k = cssScale() * pageZoom()
+    return { x: width / 2 - 130 * k, y: 0, w: 260 * k, h: 48 * k }
+  }
+  /** H1: the panel opened near an edge: the window slides this far to show it (back to 0 when it closes). */
+  let fit = { x: 0, y: 0 }
+  // H1: the screen it was placed on last; a new one brings back that screen's own spot.
+  let spotDisplay: number | null = null
+  const loadSpot = (d: Electron.Display) => {
+    if (spotDisplay === d.id) return
+    const first = spotDisplay == null
+    spotDisplay = d.id
+    const sp = desk.spots[screenKey(d)]
+    if (!sp || (first && !desk.perScreen)) return
+    place = sp.place
+    pos = { ...sp.pos }
+    desk = { ...desk, offset: { x: 0, y: 0 } }
+    sendPlacement()
+  }
+  /** Where the window sits normally (no fit shift). */
+  const homeOf = (d: Electron.Display, width: number, height: number) => {
+    const wa = d.workArea
+    if (place === 'free') return clampFree({ x: wa.x + pos.cx * wa.width - width / 2 + desk.offset.x, y: wa.y + pos.top + desk.offset.y }, { width, height }, wa, keepBox(width))
+    return placeIsland({ wa, width, height, place, pos, offset: desk.offset, sidePillY: SIDE_PILL_Y * cssScale() * pageZoom() })
+  }
   const placeWin = () => {
-    if (!win || win.isDestroyed()) return
-    const wa = display().workArea
+    if (!win || win.isDestroyed() || drag || moveMode) return
+    const d = display()
+    loadSpot(d)
     const { width, height } = sizeNow()
-    const { x, y } = placeIsland({ wa, width, height, place, pos, offset: desk.offset, sidePillY: SIDE_PILL_Y * cssScale() * pageZoom() })
+    const home = homeOf(d, width, height)
+    const x = home.x + fit.x
+    const y = home.y + fit.y
     const b = win.getBounds()
     if (b.x !== x || b.y !== y || b.width !== width || b.height !== height) win.setBounds({ x, y, width, height })
+  }
+  /** H1: the visible parts changed (the panel opened or closed): slide just enough to show them. */
+  const refit = () => {
+    if (!win || win.isDestroyed() || drag || moveMode) return
+    const d = display()
+    const { width, height } = sizeNow()
+    const next = fitShift(homeOf(d, width, height), rectsToDip(hot, pageZoom()), d.workArea)
+    if (next.x === fit.x && next.y === fit.y) return
+    fit = next
+    placeWin()
   }
 
   // IC18: the island gets your settings with the profile in use on top (Settings keeps editing your own).
@@ -226,6 +268,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     sendPrefs()
     sendQuiet()
     sendPlacement()
+    sendHide()
     if (last) win?.webContents.send('island:state', last)
     sendVisible()
   }
@@ -354,6 +397,28 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
 
   // Drag it anywhere. Drop it on the left/right edge → docked there; at the top →
   // top; anywhere else → floating right there. The spot is remembered.
+  /** H1: the spot from where the window is now, on the screen under `c`, remembered for that screen. */
+  const keepSpot = (c: { x: number; y: number }, b: Electron.Rectangle, spot: IslandPlacement) => {
+    const d = screen.getDisplayNearestPoint(c)
+    savedDisplay = d.id
+    spotDisplay = d.id
+    // You put it on this screen yourself: following the main screen / the mouse doesn't pull it back.
+    if (desk.monitor === 'main' && d.id !== screen.getPrimaryDisplay().id) desk = { ...desk, monitor: 'fixed' }
+    if (desk.monitor === 'mouse' || desk.monitor === 'window') { followId = d.id; follow = { candidate: null, since: 0 } }
+    const wa = d.workArea
+    place = spot
+    // Where you drop it is the spot: no extra offset on top.
+    desk = { ...desk, offset: { x: 0, y: 0 } }
+    pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * cssScale() * pageZoom() - wa.y) / wa.height))
+    pos.cx = Math.min(1, Math.max(0, (b.x + b.width / 2 - wa.x) / wa.width))
+    pos.top = Math.max(0, b.y - wa.y)
+    desk = { ...desk, spots: rememberSpot(desk.spots, screenKey(d), { place, pos: { ...pos } }) }
+    fit = { x: 0, y: 0 }
+    savePrefs()
+    sendPlacement()
+  }
+  // Drag it anywhere. Dropped in the top zone of a screen → the nearest top spot;
+  // anywhere else → it stays exactly there (H1). The spot is remembered per screen.
   const endDrag = (why: 'drop' | 'stuck') => {
     if (!drag) return
     clearInterval(drag.timer)
@@ -363,20 +428,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (!win || win.isDestroyed()) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
-    const d = screen.getDisplayNearestPoint(c)
-    savedDisplay = d.id
-    const sb = d.bounds
-    const wa = d.workArea
-    // IM7: a side edge docks; near the top it snaps to the nearest top spot; elsewhere it floats.
-    place = dropPlacement(c, sb)
     win.webContents.send('island:snapGhost', null)
-    // Where you drop it is the spot: no extra offset on top.
-    desk = { ...desk, offset: { x: 0, y: 0 } }
-    pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * cssScale() * pageZoom() - wa.y) / wa.height))
-    pos.cx = Math.min(1, Math.max(0, (b.x + b.width / 2 - wa.x) / wa.width))
-    pos.top = Math.max(0, b.y - wa.y)
-    savePrefs()
-    sendPlacement()
+    keepSpot(c, b, dropSpot(c, screen.getDisplayNearestPoint(c).bounds))
     placeWin()
     // IM7: the window moved once; the page plays the last bit of the way as a bounce.
     try {
@@ -393,7 +446,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     o.onChange?.()
   }
   ipcMain.on('island:dragStart', (e) => {
-    if (!fromIsland(e) || !win || drag) return
+    if (!fromIsland(e) || !win || drag || moveMode) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
     setIgnore(false, 'dragging', true)
@@ -401,10 +454,15 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     drag = {
       offX: c.x - b.x,
       offY: c.y - b.y,
+      // H1: the size stays the same all the way (moving between screens with a
+      // different scale must not grow or shrink the window).
+      w: b.width,
+      h: b.height,
       startedAt: now,
       lastMove: now,
       lx: c.x,
       ly: c.y,
+      // H1: ~120 times a second while you drag (nothing runs otherwise), so the window keeps up with the mouse.
       timer: setInterval(() => {
         if (!drag) return
         if (!win || win.isDestroyed()) return endDrag('stuck')
@@ -414,30 +472,136 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
           drag.lx = p.x
           drag.ly = p.y
           drag.lastMove = t
-          // Only the position: the size is set once on drop (no jumps between screens).
-          win.setPosition(p.x - drag.offX, p.y - drag.offY)
+          const np = dragTo(p, { x: drag.offX, y: drag.offY })
+          win.setBounds({ x: np.x, y: np.y, width: drag.w, height: drag.h })
           // IM7: the spot it would snap to, for the ghost (only when it changes).
-          const spot = dropPlacement(p, screen.getDisplayNearestPoint(p).bounds)
+          const spot = dropSpot(p, screen.getDisplayNearestPoint(p).bounds)
           if (spot !== drag.spot) {
             drag.spot = spot
             win.webContents.send('island:snapGhost', spot)
           }
         } else if (dragStale({ now: t, lastMove: drag.lastMove, startedAt: drag.startedAt })) endDrag('stuck')
-      }, 16)
+      }, 8)
     }
   })
   ipcMain.on('island:dragEnd', (e) => { if (fromIsland(e)) endDrag('drop') })
+
+  // ---- H1: move mode: the arrow keys nudge it, Enter saves, Esc puts it back ----
+  const takeKeys = () => {
+    if (!win || win.isDestroyed()) return
+    win.setFocusable(true)
+    try { win.setSkipTaskbar(true) } catch { /* fine */ }
+    win.focus()
+    win.webContents.focus()
+  }
+  const giveKeys = () => {
+    if (!win || win.isDestroyed()) return
+    if (win.isFocused()) win.blur()
+    win.setFocusable(false)
+    try { win.setSkipTaskbar(true) } catch { /* fine */ }
+  }
+  const startMove = () => {
+    if (!enabled) return
+    if (!win || win.isDestroyed()) open()
+    if (desk.hidden.mode !== 'shown') setHide(null)
+    showWin()
+    if (!win || win.isDestroyed() || moveMode || drag) return
+    moveMode = { orig: win.getBounds(), place, pos: { ...pos } }
+    setIgnore(false, 'move mode', true)
+    takeKeys()
+    sendWhenReady('island:moveMode')
+    diag('move', 'Move mode: arrow keys nudge it, Enter saves, Esc puts it back', true)
+  }
+  const endMove = (save: boolean) => {
+    if (!moveMode || !win || win.isDestroyed()) { moveMode = null; return }
+    const m = moveMode
+    moveMode = null
+    if (save) {
+      const b = win.getBounds()
+      keepSpot({ x: b.x + b.width / 2, y: b.y + 20 }, b, 'free')
+    } else {
+      place = m.place
+      pos = m.pos
+      win.setBounds(m.orig)
+    }
+    placeWin()
+    giveKeys()
+    setIgnore(true, 'move mode ended', true)
+    win.webContents.send('island:moveModeEnd')
+    o.onChange?.()
+  }
+  ipcMain.on('island:moveMode', (e) => { if (fromIsland(e) || fromApp(e)) startMove() })
+  ipcMain.on('island:nudge', (e, d) => {
+    if (!fromIsland(e) || !moveMode || !win || win.isDestroyed()) return
+    const dx = Math.max(-200, Math.min(200, Math.round(Number(d?.x) || 0)))
+    const dy = Math.max(-200, Math.min(200, Math.round(Number(d?.y) || 0)))
+    const b = win.getBounds()
+    const wa = screen.getDisplayMatching(b).workArea
+    const np = clampFree({ x: b.x + dx, y: b.y + dy }, { width: b.width, height: b.height }, wa, keepBox(b.width))
+    win.setBounds({ ...np, width: b.width, height: b.height })
+  })
+  ipcMain.on('island:moveEnd', (e, save) => { if (fromIsland(e)) endMove(save === true) })
+
+  // ---- H1: hide it (for an hour, until tomorrow, until you bring it back) or tuck it into a dot ----
+  const sendHide = () => { if (win && !win.isDestroyed()) win.webContents.send('island:hideState', desk.hidden) }
+  function setHide(choice: HideChoice | null) {
+    desk = { ...desk, hidden: choice ? hideFor(choice, Date.now()) : SHOWN }
+    savePrefs()
+    sendHide()
+    applyVisibility()
+    diag('hide', hideText(desk.hidden, Date.now()), true)
+    o.onChange?.()
+  }
+  const toggleHidden = () => {
+    desk = { ...desk, hidden: toggleHide(desk.hidden, Date.now()) }
+    if (desk.hidden.mode === 'shown' && (!win || win.isDestroyed()) && enabled) open()
+    savePrefs()
+    sendHide()
+    applyVisibility()
+    diag('hide', hideText(desk.hidden, Date.now()), true)
+    o.onChange?.()
+  }
+  ipcMain.on('island:hide', (e, choice) => {
+    if (!fromIsland(e) && !fromApp(e)) return
+    setHide(['1h', 'tomorrow', 'manual', 'dot'].includes(choice) ? choice : null)
+  })
+  setInterval(() => {
+    const next = hideTick(desk.hidden, Date.now())
+    if (next !== desk.hidden) setHide(null)
+  }, 15_000)
+
+  // ---- H1: slides out of the way for a moment when the mouse rushes at it (a setting, off by default) ----
+  let dodgeSample: Sample | null = null
+  let dodgeT: ReturnType<typeof setTimeout> | null = null
+  const dodgeCheck = (c: { x: number; y: number }, b: Electron.Rectangle) => {
+    const now = Date.now()
+    const prev = dodgeSample
+    dodgeSample = { x: c.x, y: c.y, t: now }
+    if (!desk.dodge || dodgeT || inside || !prev || !hot[0]) return
+    const z = pageZoom()
+    const r = hot[0]
+    // Only the small pill dodges (never an open panel).
+    if (r.h * z > 90) return
+    if (!rushing(prev, dodgeSample, { x: b.x + r.x * z, y: b.y + r.y * z, w: r.w * z, h: r.h * z })) return
+    win?.webContents.send('island:dodge', true)
+    setIgnore(true, 'out of the way', true)
+    dodgeT = setTimeout(() => {
+      dodgeT = null
+      if (win && !win.isDestroyed()) win.webContents.send('island:dodge', false)
+    }, DODGE_MS)
+  }
   // IS2: the clickable areas, in CSS pixels of the page (one or more; the old single rect works too).
   ipcMain.on('island:hot', (e, r) => {
     if (!fromIsland(e)) return
     const list = hotRects(r)
     if (!list) return
     hot = list
+    refit()
     diag('hot', `Click area: ${list.map((h) => `${Math.round(h.x)},${Math.round(h.y)} ${Math.round(h.w)}×${Math.round(h.h)}`).join(' + ') || 'none'} (zoom ${pageZoom().toFixed(2)})`)
   })
   // IC1: the page says when it takes clicks (it sees every mouse move in its own pixels).
   ipcMain.on('island:takeClicks', (e, on) => {
-    if (!fromIsland(e) || !win || win.isDestroyed() || drag) return
+    if (!fromIsland(e) || !win || win.isDestroyed() || drag || moveMode) return
     if (!pageCtl) diag('ctl', 'The island page decides where it takes clicks', true)
     pageCtl = true
     inside = !!on
@@ -454,9 +618,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const t = Date.now()
     if (timing.lastPoll) timing.jitter = Math.max(timing.jitter * 0.9, Math.abs(t - timing.lastPoll - 50))
     timing.lastPoll = t
-    if (!win || win.isDestroyed() || drag || !win.isVisible()) return
+    if (!win || win.isDestroyed() || drag || moveMode || !win.isVisible()) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
+    dodgeCheck(c, b)
     if (pageCtl) {
       const nowIn = c.x >= b.x && c.x < b.x + b.width && c.y >= b.y && c.y < b.y + b.height
       if (nowIn === inWin) return
@@ -626,11 +791,23 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const fullscreenShown = () => busy.fullscreen && desk.fullscreen !== 'show'
   const sendQuiet = () => win?.webContents.send('island:quiet', { until: quietEnd, call: inCall(), fullscreen: fullscreenShown(), mic: busy.mic, meeting: busy.meeting, fullscreenMode: desk.fullscreen })
   let shownWhy = ''
+  let leaving = false
   /** Hidden over a full-screen app on its screen (if you chose "hide"), and in a call when you chose "hide". */
   const applyVisibility = () => {
     if (!win || win.isDestroyed() || !enabled) return
-    const why = busy.app ? `${busy.app} is in front (you hide it over this app)` : busy.fullscreen && desk.fullscreen === 'hide' ? 'a full-screen app' : inCall() && prefs.callMode === 'hide' ? (busy.meeting ? 'a calendar meeting' : 'a call (mic or camera on)') : ''
-    if (why) { if (win.isVisible()) win.hide() } else showWin()
+    const why = desk.hidden.mode === 'hidden' ? 'you hid it' : busy.app ? `${busy.app} is in front (you hide it over this app)` : busy.fullscreen && desk.fullscreen === 'hide' ? 'a full-screen app' : inCall() && prefs.callMode === 'hide' ? (busy.meeting ? 'a calendar meeting' : 'a call (mic or camera on)') : ''
+    // H1: it slides away first (the page plays it with transform and opacity), then the window goes.
+    if (why) {
+      if (win.isVisible() && !leaving) {
+        leaving = true
+        const w = win
+        if (ready) w.webContents.send('island:leaving')
+        setTimeout(() => {
+          leaving = false
+          if (!w.isDestroyed() && shownWhy && w.isVisible()) w.hide()
+        }, ready ? 220 : 0)
+      }
+    } else showWin()
     if (why !== shownWhy) {
       shownWhy = why
       diag('vis', why ? `Hidden: ${why}` : 'Shown', true)
@@ -818,6 +995,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   // Open / close it from anywhere.
   const toggle = () => {
     if (!enabled) return
+    // H1: hidden or tucked away: the island's shortcut brings it back too.
+    if (desk.hidden.mode !== 'shown') setHide(null)
     if (!win || win.isDestroyed()) open()
     showWin()
     sendWhenReady('island:toggle')
@@ -832,15 +1011,16 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     showWin()
     sendWhenReady(`island:${what}`)
   }
-  const bound: Record<Slot, string> = { island: '', quiet: '', capture: '', voice: '' }
+  const bound: Record<Slot, string> = { island: '', quiet: '', capture: '', voice: '', hide: '' }
   const failed = new Map<Slot, string>()
   const actions: Record<Slot, () => void> = {
     island: toggle,
     quiet: () => setQuiet(quietEnd > Date.now() ? null : 60),
     capture: () => openFor('capture'),
-    voice: () => openFor('voice')
+    voice: () => openFor('voice'),
+    hide: () => toggleHidden()
   }
-  const wanted = (slot: Slot) => (slot === 'island' ? prefs.shortcut : slot === 'quiet' ? prefs.quietShortcut : slot === 'capture' ? desk.captureShortcut : desk.voiceShortcut)
+  const wanted = (slot: Slot) => (slot === 'island' ? prefs.shortcut : slot === 'quiet' ? prefs.quietShortcut : slot === 'capture' ? desk.captureShortcut : slot === 'hide' ? desk.hideShortcut : desk.voiceShortcut)
   /** Registers a shortcut; false (and a note to Settings) when another app already uses it. */
   const bind = (slot: Slot): boolean => {
     if (bound[slot]) { try { globalShortcut.unregister(bound[slot]) } catch { /* fine */ } }
@@ -870,7 +1050,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const before = allPrefs()
     prefs = cleanIslandPrefs({ ...prefs, ...p })
     // Saved spots are the desktop's own: Settings can't overwrite them.
-    desk = cleanDeskPrefs({ ...desk, ...p, layouts: desk.layouts })
+    desk = cleanDeskPrefs({ ...desk, ...p, layouts: desk.layouts, spots: desk.spots, hidden: desk.hidden })
     // IC13: Island debug runs 30 minutes at most.
     if (desk.debugUntil) desk = { ...desk, debugUntil: Math.min(desk.debugUntil, Date.now() + DEBUG_MS) }
     if (!!desk.debugUntil !== !!before.debugUntil) diag('debug', desk.debugUntil ? 'Island debug on (30 minutes)' : 'Island debug off', true)
@@ -889,6 +1069,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (prefs.quietShortcut !== before.quietShortcut) shortcutOk = bind('quiet') && shortcutOk
     if (desk.captureShortcut !== before.captureShortcut) shortcutOk = bind('capture') && shortcutOk
     if (desk.voiceShortcut !== before.voiceShortcut) shortcutOk = bind('voice') && shortcutOk
+    if (desk.hideShortcut !== before.hideShortcut) shortcutOk = bind('hide') && shortcutOk
     savePrefs()
     sendQuiet()
     applyVisibility()
@@ -983,6 +1164,16 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     voice: () => openFor('voice'),
     restartWatcher,
     enabled: () => enabled,
+    /** H1: hidden / a dot / shown, and until when. */
+    hideState: () => desk.hidden,
+    hideLabel: () => hideText(desk.hidden, Date.now()),
+    setHide,
+    toggleHidden,
+    get hideShortcut() { return bound.hide || '' },
+    /** H1: move mode (arrow keys, Enter saves). */
+    startMove,
+    dodge: () => desk.dodge,
+    setDodge(on: boolean) { desk = { ...desk, dodge: on }; savePrefs(); sendPrefs(); o.onChange?.() },
     /** Quiet until (ms), or 0. */
     quietUntil: () => (quietEnd > Date.now() ? quietEnd : 0),
     setQuiet,
@@ -996,6 +1187,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       place = p
       if (p === 'top') pos.cx = 0.5
       desk = { ...desk, offset: { x: 0, y: 0 } }
+      fit = { x: 0, y: 0 }
+      try { const d = display(); spotDisplay = d.id; desk = { ...desk, spots: rememberSpot(desk.spots, screenKey(d), { place, pos: { ...pos } }) } } catch { /* fine */ }
       savePrefs()
       sendPlacement()
       placeWin()

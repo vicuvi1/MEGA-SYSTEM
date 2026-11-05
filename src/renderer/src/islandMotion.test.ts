@@ -48,11 +48,11 @@ describe('snap to a spot (IM7)', () => {
   it('near the top: the nearest of top left, center and right', () => {
     expect(dropPlacement({ x: 300, y: 100 }, sb)).toBe('top-left')
     expect(dropPlacement({ x: 900, y: 30 }, sb)).toBe('top')
-    expect(dropPlacement({ x: 1700, y: 150 }, sb)).toBe('top-right')
+    expect(dropPlacement({ x: 1700, y: 110 }, sb)).toBe('top-right')
   })
-  it('a side edge docks; the middle of the screen floats', () => {
-    expect(dropPlacement({ x: 20, y: 600 }, sb)).toBe('left')
-    expect(dropPlacement({ x: 1900, y: 600 }, sb)).toBe('right')
+  it('H1: the sides and the middle of the screen float where you let go', () => {
+    expect(dropPlacement({ x: 20, y: 600 }, sb)).toBe('free')
+    expect(dropPlacement({ x: 1900, y: 600 }, sb)).toBe('free')
     expect(dropPlacement({ x: 900, y: 600 }, sb)).toBe('free')
   })
   it('the bounce plays the last bit of the way, at most 60 px', () => {
