@@ -773,6 +773,70 @@ function addDays$3(day, n) {
 function monthKey$1(day) {
 	return day.slice(0, 7);
 }
+// src/core/strength.ts
+var num = (s) => Number(s.replace(",", "."));
+function parseSets(raw) {
+	const t = raw.trim().replace(/\s+/g, " ");
+	const m = /^(.+?)\s+(?:(\d+(?:[.,]\d+)?)\s*kg\s+)?(\d{1,2})\s*[x×]\s*(\d{1,3})(?:\s*(?:[x×]|@)\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?)?$/i.exec(t);
+	if (!m) return null;
+	const name = m[1].trim();
+	const kg = m[2] ? num(m[2]) : m[5] ? num(m[5]) : void 0;
+	const sets = Number(m[3]);
+	const reps = Number(m[4]);
+	if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 200 || kg != null && !(kg > 0 && kg < 1e3)) return null;
+	return {
+		name: name[0].toUpperCase() + name.slice(1),
+		sets: Array.from({ length: sets }, () => kg != null ? {
+			reps,
+			weight: kg
+		} : { reps })
+	};
+}
+var e1rm = (reps, kg) => reps >= 1 && reps <= 12 && kg > 0 ? Math.round(kg * (1 + reps / 30) * 10) / 10 : 0;
+var key$1 = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+/** Every weighted lift in the workouts, newest activity first. */
+function strengthSummary(workouts) {
+	const by = /* @__PURE__ */ new Map();
+	for (const w of [...workouts].sort((a, b) => a.day.localeCompare(b.day))) for (const it of w.items) {
+		const weighted = (it.sets ?? []).filter((s) => (s.weight ?? 0) > 0);
+		if (!weighted.length) continue;
+		const k = key$1(it.name);
+		const g = by.get(k) ?? {
+			name: it.name,
+			days: /* @__PURE__ */ new Map()
+		};
+		const d = g.days.get(w.day) ?? {
+			e: 0,
+			w: 0
+		};
+		for (const s of weighted) {
+			d.e = Math.max(d.e, e1rm(s.reps, s.weight));
+			d.w = Math.max(d.w, s.weight);
+		}
+		g.days.set(w.day, d);
+		by.set(k, g);
+	}
+	const out = [];
+	for (const g of by.values()) {
+		const days = [...g.days.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+		const last = days[days.length - 1];
+		const before = days.slice(0, -1);
+		const prevE = Math.max(0, ...before.map(([, v]) => v.e));
+		const prevW = Math.max(0, ...before.map(([, v]) => v.w));
+		out.push({
+			name: g.name,
+			points: days.map(([day, v]) => ({
+				day,
+				e1rm: v.e
+			})),
+			bestE1rm: Math.max(...days.map(([, v]) => v.e)),
+			bestWeight: Math.max(...days.map(([, v]) => v.w)),
+			lastDay: last[0],
+			newPr: before.length > 0 && (last[1].e > prevE || last[1].w > prevW)
+		});
+	}
+	return out.sort((a, b) => b.lastDay.localeCompare(a.lastDay));
+}
 function focusCoins(minutes) {
 	return Math.floor(Math.max(0, Math.floor(minutes)) / 10) * 3;
 }
@@ -1767,14 +1831,14 @@ function addWater(st, ml, today) {
 	if (ml < 0) s.water.fixedAt = Date.now();
 	return s;
 }
-var key$1 = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
+var key = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
 /** The exercise "pushups", "Push-ups" or "push up" means. */
 function findSharedExercise(s, name) {
-	const k = key$1(name).replace(/s$/, "");
+	const k = key(name).replace(/s$/, "");
 	if (!k) return null;
 	return (s.exercises ?? []).find((e) => {
-		const id = key$1(e.id).replace(/s$/, "");
-		const n = key$1(e.name).replace(/s$/, "");
+		const id = key(e.id).replace(/s$/, "");
+		const n = key(e.name).replace(/s$/, "");
 		return id === k || n === k || id.includes(k) || n.includes(k) || n.length > 3 && k.includes(n);
 	}) ?? null;
 }
@@ -2959,6 +3023,7 @@ IMPORTANT: something happens ONLY if you put an action for it. Never write "logg
 Other action groups (body and habits, money records and points, Google Calendar with E-numbers, Todoist with T-numbers) are listed under "Actions for this message" when they apply.`;
 var ACT_GROUPS = {
 	body: `Body, sleep and habits (one shared log with Sport Track and Sporty):
+- "sets: <exercise> <sets>x<reps>x<kg>" a strength workout with sets ("sets: bench 3x8x60", "sets: pullups 3x10" for body weight). Use it when he gives sets.
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
@@ -2982,7 +3047,7 @@ Points and the week:
 - "taskmove: T2 | <area name>". "done: T2". "star: T2" / "unstar: T2" (today's must-do). "deltask: T2".`
 };
 var GROUP_WORDS = {
-	body: /\b(water|drink|glass|ml|pushups?|squats?|reps?|plank|workouts?|gym|train|run|sleep|slept|wake|woke|bed|habit|oath|clean|skincare|weight|exercise|target|tired|apa|somn)\b/i,
+	body: /\d+\s*[x×]\s*\d+|\b(bench|deadlift|squat|press|pull-?ups?|dips|curls?|sets?|kg|water|drink|glass|ml|pushups?|squats?|reps?|plank|workouts?|gym|train|run|sleep|slept|wake|woke|bed|habit|oath|clean|skincare|weight|exercise|target|tired|apa|somn)\b/i,
 	money: /\d|\b(lei|mdl|spent|spend|bought|paid|pay|money|expense|budget|salary|reward|points?|shop|week|big ?3|cash|card|bani)\b|\bM\d\b/i,
 	calendar: /\b(calendar|event|block|meeting|class|lecture|exam|move|resched\w*|shift|late|plan|book|tomorrow|today|tonight|morning|afternoon|evening|free|time|at|until|before|after)\b|\bE\d\b|\d{1,2}:\d{2}/i,
 	todoist: /\b(tasks?|todo|todoist|done|finish(ed)?|due|must-?dos?|priority|star|list|deadline|homework|assignment)\b|\bT\d\b/i
@@ -3173,6 +3238,11 @@ var MREF = /^M\d{1,2}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
 	if (/^\s*stop(focus)?\s*:?\s*$/i.test(line) || /^\s*stopfocus\s*:/i.test(line)) return { kind: "stopfocus" };
+	const sm = /^\s*sets\s*:\s*(.{3,80})$/i.exec(line);
+	if (sm) return parseSets(sm[1].replace(/\s*\|\s*/g, " ")) ? {
+		kind: "sets",
+		text: sm[1].replace(/\s*\|\s*/g, " ")
+	} : null;
 	const ext = /^\s*extend\s*:\s*(\d{1,3})/i.exec(line);
 	if (ext) {
 		const minutes = Number(ext[1]);
@@ -7802,52 +7872,6 @@ function queueFinanceExpense(db, entry) {
 	const list = parse(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff && e.id !== entry.id);
 	list.push(entry);
 	setSetting(db, SETTING$1, JSON.stringify(list));
-}
-// src/core/strength.ts
-var e1rm = (reps, kg) => reps >= 1 && reps <= 12 && kg > 0 ? Math.round(kg * (1 + reps / 30) * 10) / 10 : 0;
-var key = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-/** Every weighted lift in the workouts, newest activity first. */
-function strengthSummary(workouts) {
-	const by = /* @__PURE__ */ new Map();
-	for (const w of [...workouts].sort((a, b) => a.day.localeCompare(b.day))) for (const it of w.items) {
-		const weighted = (it.sets ?? []).filter((s) => (s.weight ?? 0) > 0);
-		if (!weighted.length) continue;
-		const k = key(it.name);
-		const g = by.get(k) ?? {
-			name: it.name,
-			days: /* @__PURE__ */ new Map()
-		};
-		const d = g.days.get(w.day) ?? {
-			e: 0,
-			w: 0
-		};
-		for (const s of weighted) {
-			d.e = Math.max(d.e, e1rm(s.reps, s.weight));
-			d.w = Math.max(d.w, s.weight);
-		}
-		g.days.set(w.day, d);
-		by.set(k, g);
-	}
-	const out = [];
-	for (const g of by.values()) {
-		const days = [...g.days.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-		const last = days[days.length - 1];
-		const before = days.slice(0, -1);
-		const prevE = Math.max(0, ...before.map(([, v]) => v.e));
-		const prevW = Math.max(0, ...before.map(([, v]) => v.w));
-		out.push({
-			name: g.name,
-			points: days.map(([day, v]) => ({
-				day,
-				e1rm: v.e
-			})),
-			bestE1rm: Math.max(...days.map(([, v]) => v.e)),
-			bestWeight: Math.max(...days.map(([, v]) => v.w)),
-			lastDay: last[0],
-			newPr: before.length > 0 && (last[1].e > prevE || last[1].w > prevW)
-		});
-	}
-	return out.sort((a, b) => b.lastDay.localeCompare(a.lastDay));
 }
 // src/core/skills.ts
 var PATHS = [
@@ -19366,6 +19390,31 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								data: r.st
 							}));
 							return r.line;
+						});
+						done.push(line);
+						continue;
+					}
+					if (a.kind === "sets") {
+						const p = parseSets(a.text);
+						if (!p) continue;
+						const line = await mirror.write((db) => {
+							const svc = services.services(db);
+							const before = strengthSummary(svc.body.state().recentWorkouts ?? []).find((l) => l.name.toLowerCase() === p.name.toLowerCase());
+							const reps = p.sets.reduce((t, x) => t + x.reps, 0);
+							const r = svc.body.logWorkout({
+								title: `${p.name} ${p.sets.length}×${p.sets[0].reps}${p.sets[0].weight ? ` @ ${p.sets[0].weight} kg` : ""}`,
+								items: [{
+									exerciseId: p.name.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+									name: p.name,
+									unit: "reps",
+									amount: reps,
+									sets: p.sets
+								}],
+								note: "From Ben"
+							});
+							const w = p.sets[0].weight;
+							const vs = before && w ? w > before.bestWeight ? ` · +${Math.round((w - before.bestWeight) * 10) / 10} kg vs your best 🏅` : w === before.bestWeight ? " · same weight as your best" : ` · best is ${before.bestWeight} kg` : "";
+							return `💪 ${p.name}: ${p.sets.length}×${p.sets[0].reps}${w ? ` @ ${w} kg` : ""}${vs}${r.awarded ? " · workout counted" : ""}`;
 						});
 						done.push(line);
 						continue;

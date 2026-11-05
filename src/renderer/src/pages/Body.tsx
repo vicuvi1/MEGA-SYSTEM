@@ -220,97 +220,8 @@ export function Body({
         )}
       </div>
 
-      {/* SPORTY ROUTINE & HYDRATION DASHBOARD */}
-      <section className="sporty-routine-panel">
-        <div className="sporty-routine-header">
-          <div className="sporty-routine-title">
-            <Icon name="bolt" size={18} />
-            Today's Workout Routine (Sporty Bot Mode)
-            <span style={{ fontSize: '11px', color: '#ff6b8b', background: 'rgba(255, 107, 139, 0.15)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-              BEAST MODE
-            </span>
-          </div>
-
-          <div className="sporty-routine-controls">
-            <button
-              className={`chip-btn ${shortOnTime ? 'active' : ''}`}
-              onClick={() => setShortOnTime(!shortOnTime)}
-              style={shortOnTime ? { background: '#f97316', borderColor: '#f97316', color: '#fff' } : {}}
-            >
-              ⏱️ Short on time (50%)
-            </button>
-            <button
-              className="btn"
-              style={{ background: 'linear-gradient(135deg, #f9d423, #ff4b1f)', color: '#050811', fontWeight: 800, padding: '7px 14px', fontSize: '12px' }}
-              onClick={handleCompleteAllRoutine}
-            >
-              ⚡ Complete all (+{pts('body.workout_done', 10)} points)
-            </button>
-            {state.recentWorkouts.length > 0 && (
-              <button
-                className="btn small"
-                style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', fontSize: '11px' }}
-                onClick={handleUndoLast}
-                title="Undo last recorded set"
-              >
-                <Icon name="undo" size={12} />
-                Undo
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="sporty-routine-grid">
-          {routine.map((ex) => {
-            const target = shortOnTime ? Math.max(1, Math.round(ex.target * 0.5)) : ex.target
-            const done = doneOf(ex)
-            const actualPct = target > 0 ? Math.round((done / target) * 100) : 0
-            const isDone = done >= target
-            const isOver = done > target
-            const fillPct = Math.min(100, actualPct)
-            const unit = (!ex.unit || ex.unit === '1') ? 'reps' : ex.unit
-
-            return (
-              <div key={ex.id} className={`sporty-routine-item ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}`}>
-                <div className="sporty-item-top">
-                  <span className="sporty-item-name">
-                    {ex.name}
-                    <button
-                      className="sporty-remove"
-                      title={`Take ${ex.name} off the routine`}
-                      aria-label={`Remove ${ex.name}`}
-                      onClick={async () => {
-                        const next = await act(() => life.body.saveExercise({ ...ex, archived: true } as any), `${ex.name} taken off the routine`)
-                        if (next) onState(next)
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </span>
-                  <span className="sporty-item-progress-text">
-                    {done} / {target} {unit}{shortOnTime ? ' (50%)' : ''} {isOver ? `🔥 (${actualPct}%)` : isDone ? `✓ (${actualPct}%)` : `(${actualPct}%)`}
-                  </span>
-                </div>
-
-                <div className="sporty-item-bar-bg">
-                  <div
-                    className={`sporty-item-bar-fill ${isDone ? 'done' : ''} ${isOver ? 'overachieved' : ''}`}
-                    style={{ width: `${fillPct}%` }}
-                  />
-                </div>
-
-                <div className="sporty-item-buttons">
-                  <button className="btn-sporty-rep" onClick={() => handleQuickLog(ex, 10)}>+10</button>
-                  <button className="btn-sporty-rep" onClick={() => handleQuickLog(ex, 25)}>+25</button>
-                  <button className="btn-sporty-rep done-btn" onClick={() => handleQuickLog(ex, Math.max(1, target - done))}>
-                    ⚡ Done ({target})
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+      {/* SP6: the daily checklist and water live in Sport Track only (one routine panel, not two). */}
+      <p className="hint small">Your daily checklist, water and rest timer are in <b>Sport Track</b> (the tab at the top).</p>
 
       {/* READINESS: sleep + soreness → full / light / rest (H4) */}
       <ReadinessCard workoutDone={!!state.workoutDoneToday} />
@@ -319,47 +230,6 @@ export function Body({
       <StrengthCard state={state} onChange={(s2) => (onState(s2), onWallet())} />
       <SkillPaths state={state} />
 
-      {/* DAILY HYDRATION TRACKER */}
-      <section className="sporty-hydration-panel">
-        <div className="hydration-top">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '18px' }}>💧</span>
-            <span className="hydration-amount">{waterMl.toLocaleString()} / {waterTarget.toLocaleString()} ml</span>
-          </div>
-          <span className="hydration-glasses">
-            {(waterMl / 250).toFixed(1)} of {Math.round(waterTarget / 250)} glasses ({Math.round((waterMl / waterTarget) * 100)}%)
-          </span>
-        </div>
-
-        <div className="hydration-bar-bg">
-          <div
-            className="hydration-bar-fill"
-            style={{ width: `${Math.min(100, Math.round((waterMl / waterTarget) * 100))}%` }}
-          />
-        </div>
-
-        <div className="hydration-buttons">
-          <button className="btn-hydration" onClick={() => saveWater(waterMl + 250)}>
-            💧 +250 ml (1 glass)
-          </button>
-          <button className="btn-hydration" onClick={() => saveWater(waterMl + 500)}>
-            💧 +500 ml (bottle)
-          </button>
-          <button className="btn-hydration" onClick={() => saveWater(waterMl + 1000)}>
-            💧 +1,000 ml
-          </button>
-          <button className="btn-hydration" onClick={() => saveWater(waterMl - 250)} style={{ opacity: 0.8 }}>
-            ↩️ -250 ml (Undo)
-          </button>
-          <button
-            className="btn-hydration"
-            onClick={async () => { if (await askConfirm('Reset today\'s water intake to 0?')) saveWater(0); }}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748b', fontSize: '11px' }}
-          >
-            Reset
-          </button>
-        </div>
-      </section>
 
       <div className="cols">
         <section className="panel">

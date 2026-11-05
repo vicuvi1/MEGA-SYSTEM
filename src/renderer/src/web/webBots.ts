@@ -49,6 +49,7 @@ import { EDIT_ASK, PROPOSAL_KEYBOARD, TOP3_ASK, WEEK_ASK, proposalText, checkout
 import { sparkline, telegramKeyboard } from '@core/coachButtons'
 import { coachStatus, waterToday } from './coachStatus'
 import { nextSlot } from '@core/benActs'
+import { parseSets, strengthSummary } from '@core/strength'
 import { rescueFromEvents } from '@core/benPlans'
 import { addStake, suggestStake } from '@core/benStakes'
 import { AREA_WORDS, learnAreaWords } from '@core/areaWords'
@@ -1940,6 +1941,22 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               if (!r.line) return a.kind === 'exercise' ? `⚠️ Give "${a.name}" a daily target` : `⚠️ No exercise "${a.name}" on your list`
               setSetting(db as any, 'sport_tracker_json', JSON.stringify({ savedAt: Date.now(), data: r.st }))
               return r.line
+            })
+            done.push(line)
+            continue
+          }
+          // SP14: sets × reps × kg into the workout log, with "vs last time" for the same lift.
+          if (a.kind === 'sets') {
+            const p = parseSets(a.text)
+            if (!p) continue
+            const line = await mirror.write((db) => {
+              const svc = services.services(db)
+              const before = strengthSummary(svc.body.state().recentWorkouts ?? []).find((l) => l.name.toLowerCase() === p.name.toLowerCase())
+              const reps = p.sets.reduce((t, x) => t + x.reps, 0)
+              const r = svc.body.logWorkout({ title: `${p.name} ${p.sets.length}×${p.sets[0].reps}${p.sets[0].weight ? ` @ ${p.sets[0].weight} kg` : ''}`, items: [{ exerciseId: p.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'), name: p.name, unit: 'reps', amount: reps, sets: p.sets } as any], note: 'From Ben' })
+              const w = p.sets[0].weight
+              const vs = before && w ? (w > before.bestWeight ? ` · +${Math.round((w - before.bestWeight) * 10) / 10} kg vs your best 🏅` : w === before.bestWeight ? ' · same weight as your best' : ` · best is ${before.bestWeight} kg`) : ''
+              return `💪 ${p.name}: ${p.sets.length}×${p.sets[0].reps}${w ? ` @ ${w} kg` : ''}${vs}${r.awarded ? ' · workout counted' : ''}`
             })
             done.push(line)
             continue

@@ -1434,7 +1434,56 @@
     .pr-card:hover .pr-del, .history-item:hover .hist-del { opacity: 1; }
     .pr-form { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
     .pr-form input { flex: 1 1 160px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); color: #fff; font: inherit; }
-  </style>
+  
+    /* ---- Night 6 (SP17–SP25) ---- */
+    .rank-crest, .xp-meter-wrap, .hunter-badge { display: none !important; }
+    #week-goal-pill { cursor: pointer; font: inherit; color: inherit; background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0; text-align: inherit; }
+    #combat-power.done { color: #34d399; }
+    .st-tabs { display: flex; gap: 6px; margin: 0 0 18px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); width: fit-content; }
+    .st-tab { border: 0; background: none; color: var(--text-sub); font: inherit; font-weight: 600; padding: 8px 18px; border-radius: 10px; cursor: pointer; }
+    .st-tab.on { background: rgba(255,255,255,0.1); color: var(--text-main, #fff); }
+    .dashboard-grid[data-active] [data-tab] { display: none; }
+    .dashboard-grid[data-active="today"] [data-tab="today"], .dashboard-grid[data-active="history"] [data-tab="history"], .dashboard-grid[data-active="progress"] [data-tab="progress"] { display: block; }
+    #toast-undo { margin-left: 10px; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: inherit; border-radius: 8px; padding: 3px 10px; font: inherit; font-weight: 700; cursor: pointer; }
+    .complete-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .complete-row small { color: var(--text-muted); }
+    .complete-row input { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: inherit; font: inherit; }
+    .sleep-hint { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: rgba(129,140,248,0.12); border: 1px solid rgba(129,140,248,0.3); font-size: 13px; }
+    .sleep-hint button { margin-left: 6px; border: 1px solid rgba(255,255,255,0.25); background: transparent; color: inherit; border-radius: 8px; padding: 3px 10px; cursor: pointer; font: inherit; }
+    .btn-workout-mode { width: 100%; margin: 6px 0 12px; padding: 14px; border-radius: 14px; border: 0; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; background: linear-gradient(90deg, #a3e635, #84cc16); color: #11170a; }
+    /* SP19-ish: fewer small buttons per exercise on a phone */
+    @media (max-width: 600px) { .routine-btn-row .btn-rep[data-amount="5"], .routine-btn-row .btn-rep[data-amount="25"], .routine-btn-row .btn-rep[data-action="sub"] { display: none; } }
+    .wm { position: fixed; inset: 0; z-index: 9999; background: #0b0d10; color: #f4f4f6; display: flex; flex-direction: column; padding: max(14px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+    .wm[hidden] { display: none; }
+    .wm-top { display: flex; align-items: center; justify-content: space-between; color: #9aa1ab; font-weight: 600; }
+    .wm-x { width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: inherit; font-size: 18px; }
+    .wm-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+    .wm-name { font-size: 34px; font-weight: 800; }
+    .wm-progress { color: #9aa1ab; }
+    .wm-count { display: flex; align-items: center; gap: 22px; }
+    .wm-big { width: 72px; height: 72px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: inherit; font-size: 34px; font-weight: 700; }
+    .wm-reps { font-size: 72px; font-weight: 800; min-width: 110px; font-variant-numeric: tabular-nums; }
+    .wm-kg { display: flex; gap: 8px; align-items: center; color: #9aa1ab; }
+    .wm-kg input { width: 120px; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: inherit; font: inherit; }
+    .wm-done { width: min(420px, 100%); min-height: 64px; border-radius: 18px; border: 0; font: inherit; font-size: 20px; font-weight: 800; background: #a3e635; color: #11170a; }
+    .wm-sets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; color: #9aa1ab; font-size: 13px; }
+    .wm-sets span { padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); }
+    .wm-timer { min-height: 44px; text-align: center; font-size: 18px; }
+    .wm-timer button { margin-left: 6px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: inherit; border-radius: 10px; padding: 6px 12px; font: inherit; }
+    .wm-nav { display: flex; gap: 10px; }
+    .wm-nav button { flex: 1; min-height: 56px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: inherit; font: inherit; font-weight: 700; }
+    .chart-row { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 4px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .chart-row small { grid-column: 1; color: var(--text-muted); font-size: 12px; }
+    .chart-row .spark { grid-row: 1 / span 2; grid-column: 2; width: 220px; height: 40px; }
+    .spark polyline { fill: none; stroke: #a3e635; stroke-width: 2; }
+    .vol { margin-top: 14px; }
+    .vol-bars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 90px; margin-top: 8px; }
+    .vol-bars i { display: block; background: linear-gradient(180deg, #a3e635, #4d7c0f); border-radius: 6px 6px 2px 2px; min-height: 3px; }
+    /* SP24: the calendar on a phone */
+    @media (max-width: 600px) { .cal-grid { gap: 3px !important; } .cal-grid > * { min-height: 30px !important; font-size: 11px !important; padding: 2px !important; } .chart-row { grid-template-columns: 1fr; } .chart-row .spark { grid-row: auto; grid-column: 1; width: 100%; } .st-tabs { width: 100%; } .st-tab { flex: 1; } }
+    /* SP25 */
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
 </head>
 <body>
   <canvas id="ambient-canvas"></canvas>
@@ -1449,8 +1498,8 @@
         </div>
         <div class="profile-info">
           <h1>
-            IRON PULSE
-            <span class="hunter-badge" id="hunter-title">Recruit Athlete</span>
+            Sport Track
+            <span class="hunter-badge" id="hunter-title"></span>
           </h1>
           <div class="xp-meter-wrap">
             <div class="xp-bar-bg">
@@ -1462,12 +1511,12 @@
       </div>
 
       <div class="hud-metrics">
+        <button class="metric-pill" id="week-goal-pill" title="Tap to change your weekly goal">
+          <span class="lbl">This week</span>
+          <span class="val highlight" id="combat-power">0 of 4 sessions</span>
+        </button>
         <div class="metric-pill">
-          <span class="lbl">Combat Power</span>
-          <span class="val highlight" id="combat-power">1,420 CP</span>
-        </div>
-        <div class="metric-pill">
-          <span class="lbl">Active Streak</span>
+          <span class="lbl">Streak (rest days count)</span>
           <span class="val" id="streak-counter">0 Days</span>
         </div>
         <div class="metric-pill">
@@ -1475,23 +1524,29 @@
           <span class="val" id="total-sessions">0</span>
         </div>
         <div class="metric-pill">
-          <span class="lbl">Session Reward</span>
-          <span class="val gold">+15 🪙 / +35 XP</span>
+          <span class="lbl">Points</span>
+          <span class="val gold" id="points-today">in Life System</span>
         </div>
       </div>
     </header>
 
+    <!-- SP18: tabs instead of one long page -->
+    <nav class="st-tabs" role="tablist" aria-label="Sport Track">
+      <button class="st-tab on" data-tab="today" role="tab">Today</button>
+      <button class="st-tab" data-tab="history" role="tab">History</button>
+      <button class="st-tab" data-tab="progress" role="tab">Progress</button>
+    </nav>
     <!-- Main Dashboard Split -->
-    <div class="dashboard-grid">
+    <div class="dashboard-grid" data-active="today">
       <!-- Left Column: Workout Routine & Session Logging -->
       <div style="display: flex; flex-direction: column; gap: 24px;">
 
         <!-- 1. SPORTY BOT: TODAY'S WORKOUT ROUTINE CARD -->
-        <section class="glass-card today-routine-card" id="routine-section">
+        <section class="glass-card today-routine-card" id="routine-section" data-tab="today">
           <div class="card-header">
             <h2 class="card-title">
               <span class="icon">📋</span>
-              Today's Workout Routine (Sporty Bot Mode)
+              Today's routine
             </h2>
             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
               <span id="routine-status-badge" style="display: none; font-size: 11px; color: #10B981; font-weight: 800; background: rgba(16, 185, 129, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.4); align-items: center; gap: 4px;">
@@ -1525,6 +1580,10 @@
             </div>
           </div>
 
+          <!-- SP11: a lighter day after a short night (a suggestion) -->
+          <div class="sleep-hint" id="sleep-hint" hidden></div>
+          <!-- SP17: workout mode for the phone -->
+          <button class="btn-workout-mode" id="btn-workout-mode">▶ Workout mode</button>
           <!-- Exercise Checklist Injected via JS -->
           <div class="routine-list" id="routine-list">
             <!-- Injected via JS -->
@@ -1532,19 +1591,20 @@
 
           <!-- Complete All & Shortcuts Footer -->
           <button class="btn-complete-all" id="btn-complete-all">
-            <span>⚡ COMPLETE ALL EXERCISES (+15 🪙 / +35 XP)</span>
+            <span>✓ I did all of these…</span>
           </button>
 
           <div class="routine-shortcuts">
             <button class="routine-shortcut-btn" id="shortcut-rest-60">⏱️ Rest 60s</button>
             <button class="routine-shortcut-btn" id="shortcut-rest-90">⏱️ Rest 90s</button>
-            <button class="routine-shortcut-btn" id="btn-reset-routine-today">🔄 Reset Today</button>
+            <button class="routine-shortcut-btn" id="btn-reset-routine-today">🔄 Reset today</button>
+            <button class="routine-shortcut-btn" id="btn-rest-day" title="A planned rest day keeps your streak">😌 Rest day</button>
             <button class="routine-shortcut-btn" id="btn-quick-add-modal" style="color: var(--cyan-neon);">➕ Add Exercise</button>
           </div>
         </section>
 
         <!-- 2. Freeform Athletic Session Logger -->
-        <section class="glass-card">
+        <section class="glass-card" data-tab="history">
           <div class="card-header">
             <h2 class="card-title">
               <span class="icon">⚔️</span>
@@ -1609,7 +1669,7 @@
         </section>
 
         <!-- Training calendar: every day colored by how much you did -->
-        <section class="glass-card" id="cal-section">
+        <section class="glass-card" id="cal-section" data-tab="history">
           <div class="card-header">
             <h2 class="card-title">
               <span class="icon">📅</span>
@@ -1628,11 +1688,11 @@
         </section>
 
         <!-- 3. Personal Records (PR) Hall of Fame -->
-        <section class="glass-card">
+        <section class="glass-card" data-tab="progress">
           <div class="card-header">
             <h2 class="card-title">
               <span class="icon">🏆</span>
-              Personal Records (PR) Hall of Fame
+              Personal records
             </h2>
             <button class="preset-btn" id="btn-add-pr" style="color: var(--gold-neon); border-color: rgba(249, 212, 35, 0.4);">
               + Update PR
@@ -1644,8 +1704,14 @@
           </div>
         </section>
 
+        <!-- SP22: progress charts -->
+        <section class="glass-card" data-tab="progress" id="charts-section">
+          <div class="card-header"><h2 class="card-title"><span class="icon">📈</span> Progress</h2></div>
+          <div id="charts"></div>
+        </section>
+
         <!-- 4. Workout Activity History -->
-        <section class="glass-card">
+        <section class="glass-card" data-tab="history">
           <div class="card-header">
             <h2 class="card-title">
               <span class="icon">📜</span>
@@ -1664,7 +1730,7 @@
       <div style="display: flex; flex-direction: column; gap: 24px;">
 
         <!-- 1. SPORTY HYDRATION TRACKER -->
-        <section class="glass-card hydration-card" id="hydration-card">
+        <section class="glass-card hydration-card" id="hydration-card" data-tab="today">
           <div class="card-header" style="margin-bottom: 0;">
             <h2 class="card-title">
               <span class="icon">💧</span>
@@ -1702,7 +1768,7 @@
         </section>
 
         <!-- 2. Rest Interval Timer Card -->
-        <section class="glass-card rest-timer-box" id="rest-timer-section">
+        <section class="glass-card rest-timer-box" id="rest-timer-section" data-tab="today">
           <div class="card-header" style="width: 100%; margin-bottom: 0;">
             <h2 class="card-title">
               <span class="icon">⏱️</span>
@@ -1737,31 +1803,22 @@
         </section>
 
         <!-- 3. Telegram Sport Bot Assistant Card -->
-        <section class="telegram-guide-card">
+        <section class="telegram-guide-card" data-tab="progress">
           <div class="telegram-guide-header">
             <div class="tg-logo">✈️</div>
             <div>
-              <h3>Telegram Sport Bot</h3>
-              <p style="font-size: 11px; color: var(--text-sub);">Track sport directly from your phone</p>
+              <h3>Tell Ben on Telegram</h3>
+              <p style="font-size: 11px; color: var(--text-sub);">Plain words: Ben logs it here and in Life System.</p>
             </div>
           </div>
-          <p style="font-size: 11px; color: var(--text-sub); line-height: 1.5;">
-            Send commands to your connected Telegram Bot to log reps, weights, running distances, or body metrics anytime:
-          </p>
           <div class="tg-command-chips">
-            <span class="tg-chip" data-cmd="/sport run 5km">/sport run 5km</span>
-            <span class="tg-chip" data-cmd="/pushups 50">/pushups 50</span>
-            <span class="tg-chip" data-cmd="/pullups 20">/pullups 20</span>
-            <span class="tg-chip" data-cmd="/football 90m">/football 90m</span>
-            <span class="tg-chip" data-cmd="/boxing 45m">/boxing 45m</span>
-            <span class="tg-chip" data-cmd="/bench 80kg">/bench 80kg</span>
-            <span class="tg-chip" data-cmd="/weight 74.5">/weight 74.5</span>
-            <span class="tg-chip" data-cmd="/waist 82">/waist 82</span>
-            <span class="tg-chip" data-cmd="/sport status">/sport status</span>
+            <span class="tg-chip" data-cmd="pushups 50">pushups 50</span>
+            <span class="tg-chip" data-cmd="bench 3x8x60">bench 3x8x60</span>
+            <span class="tg-chip" data-cmd="ran 5 km">ran 5 km</span>
+            <span class="tg-chip" data-cmd="water 500">water 500</span>
+            <span class="tg-chip" data-cmd="weight 74.5">weight 74.5</span>
           </div>
-          <span style="font-size: 10px; color: var(--cyan-neon); cursor: pointer;" id="tg-copy-hint">
-            Tap any command to copy
-          </span>
+          <span style="font-size: 10px; color: var(--cyan-neon); cursor: pointer;" id="tg-copy-hint">Tap one to copy</span>
         </section>
       </div>
     </div>
@@ -1893,7 +1950,25 @@
   <!-- Toast Notification -->
   <div id="toast">
     <span style="font-size: 16px;">⚡</span>
-    <span id="toast-text">Workout Saved! +15 Coins Awarded</span>
+    <span id="toast-text"></span>
+    <button id="toast-undo" type="button" hidden>Undo</button>
+  </div>
+
+  <!-- SP2: "I did all of these" asks first, with numbers you can change -->
+  <div class="sport-modal-backdrop" id="modal-complete">
+    <div class="sport-modal-dialog">
+      <div class="modal-head"><h3><span>✓</span> <span id="complete-title">Did you do all of these?</span></h3><button class="btn-close-modal" id="btn-close-complete">✕</button></div>
+      <p style="font-size: 12px; color: var(--text-sub); margin: 0 0 10px;">Change any number to what you really did. Only that gets logged.</p>
+      <form id="complete-form"><div id="complete-list"></div><button class="btn-complete-all" style="margin-top: 12px;">Log it</button></form>
+    </div>
+  </div>
+
+  <!-- SP17: workout mode (one exercise at a time, big buttons, the rest timer under them) -->
+  <div class="wm" id="workout-mode" hidden>
+    <div class="wm-top"><button id="wm-close" class="wm-x" aria-label="Close workout mode">✕</button><span id="wm-step"></span><span id="wm-left"></span></div>
+    <div class="wm-body" id="wm-body"></div>
+    <div class="wm-timer" id="wm-timer"></div>
+    <div class="wm-nav"><button id="wm-prev">‹ Previous</button><button id="wm-next">Next ›</button></div>
   </div>
 
   <script>
@@ -1978,6 +2053,8 @@
     }));
 
     function animateParticles() {
+      // SP20/SP25: no floating particles (calmer, and easier on the battery).
+      if (true) { canvas.style.display = 'none'; return; }
       ctx.clearRect(0, 0, width, height);
       particles.forEach(p => {
         p.y += p.speedY;
@@ -2018,6 +2095,8 @@
     /** Days in a row with a workout, ending today (or yesterday, if today isn't done yet). */
     function computeStreak(history) {
       const days = new Set(history.map(entryDay).filter(Boolean));
+      // SP4: a planned rest day (or a shield) from Life System counts, not a break.
+      try { for (const d of (JSON.parse(localStorage.getItem('life_body') || 'null')?.restDays || [])) days.add(d); } catch (e) {}
       for (const [d, m] of Object.entries((typeof state !== 'undefined' && state.days) || {})) if (Object.values(m).some(v => v > 0)) days.add(d);
       let cur = days.has(localDay()) ? localDay() : shiftDay(localDay(), -1);
       let n = 0;
@@ -2193,11 +2272,17 @@
         iconEl.textContent = '🤝';
       }
 
+      labelEl.textContent = 'COACH';
+      iconEl.textContent = '🧭';
       if (customQuote) {
         textEl.textContent = customQuote;
       } else {
-        const pool = COACH_QUOTES[persona] || COACH_QUOTES.beast;
-        textEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+        // SP21: a short line about what's left today.
+        const left = state.exercises.filter((e) => e.active && (e.doneToday || 0) < getEffectiveTarget(e));
+        textEl.textContent = !state.exercises.some((e) => e.active) ? 'Add an exercise to start your routine.'
+          : !left.length ? 'All done today. Drink some water and rest well.'
+          : left.length === 1 ? `One left: ${getEffectiveTarget(left[0]) - (left[0].doneToday || 0)} ${left[0].name}.`
+          : `${left.length} left: ${left.slice(0, 3).map((e) => `${getEffectiveTarget(e) - (e.doneToday || 0)} ${e.name}`).join(', ')}.`;
       }
     }
 
@@ -2230,7 +2315,13 @@
 
       document.getElementById('rank-grade').textContent = rank;
       document.getElementById('hunter-title').textContent = title;
-      document.getElementById('combat-power').textContent = cp.toLocaleString() + ' CP';
+      // SP15: a weekly goal, not daily pressure.
+      const goal = state.sportySettings.weeklyGoal || 4;
+      const monday = shiftDay(localDay(), -((new Date().getDay() + 6) % 7));
+      const weekDays = new Set(state.history.map(entryDay).filter((d) => d && d >= monday));
+      for (const [d, m] of Object.entries(state.days || {})) if (d >= monday && Object.values(m).some((v) => v > 0)) weekDays.add(d);
+      document.getElementById('combat-power').textContent = `${weekDays.size} of ${goal} sessions`;
+      document.getElementById('combat-power').classList.toggle('done', weekDays.size >= goal);
       document.getElementById('streak-counter').textContent = state.streak + (state.streak === 1 ? ' Day' : ' Days');
       document.getElementById('total-sessions').textContent = totalSessions;
 
@@ -2402,7 +2493,7 @@
         saveState(state);
         renderTodayRoutine();
         showToast(`🎯 ${ex.name} Completed (${target} ${ex.unit})!`);
-        updateCoachQuote(`"Superb execution on ${ex.name}! Keep that violent momentum!"`);
+        updateCoachQuote();
         checkAllCompleted();
       } else if (action === 'edit-target') {
         audio.playClick();
@@ -2419,16 +2510,18 @@
       // so it counts in your history, your streak and Life System.
       if (allDone && state.routineDay !== localDay()) {
         logRoutine(false);
-        updateCoachQuote('"ALL ROUTINES CRUSHED! The System recognizes your supreme mastery today!"');
+        updateCoachQuote();
       }
     }
 
     /** Saves the day's routine (or an extra round) as a session and tells Life System. */
     function logRoutine(extra) {
       const active = state.exercises.filter(e => e.active);
-      const summaryText = active.map(e => `${e.doneToday || getEffectiveTarget(e)} ${e.name}`).join(', ');
-      const earnedCoins = extra ? 10 : 15;
-      const earnedXp = extra ? 25 : 35;
+      const summaryText = active.filter((e) => (e.doneToday || 0) > 0).map(e => `${e.doneToday} ${e.name}`).join(', ');
+      const earnedCoins = 0;
+      const earnedXp = 0;
+      // The sets you logged today (workout mode) go along, so records and Life System see them.
+      const setsToday = (state.sets && state.sets[localDay()]) || {};
       const record = {
         id: Date.now(),
         day: localDay(),
@@ -2440,7 +2533,7 @@
         xp: earnedXp,
         date: new Date().toLocaleDateString(),
         // What Life System logs as the workout (Body, streak, points).
-        items: active.map(e => ({ exerciseId: e.id, name: e.name, unit: (e.unit && String(e.unit).trim() !== '1') ? String(e.unit).trim() : 'reps', amount: Math.max(1, Number(e.doneToday || getEffectiveTarget(e)) || 1) }))
+        items: active.filter((e) => (e.doneToday || 0) > 0).map(e => ({ exerciseId: e.id, name: e.name, unit: (e.unit && String(e.unit).trim() !== '1') ? String(e.unit).trim() : 'reps', amount: Math.max(1, Number(e.doneToday) || 1), ...(setsToday[e.id] ? { sets: setsToday[e.id].map((x) => ({ reps: x.reps, weight: x.kg || 0 })) } : {}) }))
       };
       state.history.unshift(record);
       state.xp += earnedXp;
@@ -2452,42 +2545,62 @@
           if (state.sportySettings.progressionStreak >= 3) {
             state.sportySettings.progressionStreak = 0;
             state.exercises.forEach(ex => { ex.target = Math.max(ex.target + 1, Math.round(ex.target * 1.05)); });
-            showToast('🔥 AUTO-PROGRESSION! All targets +5%. Next tier reached!');
+            showToast('📈 3 full days in a row: targets up 5%.');
           } else {
-            showToast(`🏆 Routine done! ${state.sportySettings.progressionStreak}/3 to the next +5% (+${earnedCoins} 🪙, +${earnedXp} XP)`);
+            showToast(`✓ Routine logged. ${state.sportySettings.progressionStreak}/3 days to the next step up.`);
           }
         } else {
-          showToast(`🏆 Daily routine done! +${earnedCoins} coins, +${earnedXp} XP`);
+          showToast('✓ Routine logged.');
         }
       } else {
-        showToast(`💥 Extra round logged! (+${earnedCoins} 🪙, +${earnedXp} XP)`);
+        showToast('✓ Extra round logged.');
       }
-      audio.playLevelUp();
+      audio.playChime();
       saveState(state);
       updateHunterStats();
       renderTodayRoutine();
       renderHistory();
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'SPORT_WORKOUT_LOGGED', workout: record }, '*');
+        window.parent.postMessage({ type: 'SPORT_WORKOUT_LOGGED', workout: record }, location.origin);
       }
     }
 
     // --- Complete All Button (Supports Multiple Click Extra Rounds) ---
     document.getElementById('btn-complete-all').addEventListener('click', () => {
-      audio.playChime();
+      audio.playClick();
       const active = state.exercises.filter(e => e.active);
-      if (active.length === 0) {
-        showToast('No active exercises in routine!');
-        return;
-      }
-      // Already logged today: one more full round on top. Otherwise: fill every
-      // exercise up to its target (keeping extra reps) and log the day's routine.
+      if (active.length === 0) return showToast('No exercises in your routine yet.');
       const extra = state.routineDay === localDay();
-      active.forEach(ex => {
-        ex.doneToday = extra ? (ex.doneToday || 0) + getEffectiveTarget(ex) : Math.max(ex.doneToday || 0, getEffectiveTarget(ex));
+      document.getElementById('complete-title').textContent = extra ? 'Log another round: what did you do?' : 'Did you do all of these?';
+      // First time today: what's still missing to reach each target. Another round: you type it.
+      document.getElementById('complete-list').innerHTML = active.map((e) => {
+        const left = Math.max(0, getEffectiveTarget(e) - (e.doneToday || 0));
+        return `<label class="complete-row"><span>${esc(e.name)} <small>${e.doneToday || 0} done</small></span><input type="number" min="0" max="5000" inputmode="numeric" data-ex="${esc(e.id)}" value="${extra ? '' : left}" placeholder="0"> <small>${esc(e.unit || 'reps')}</small></label>`;
+      }).join('');
+      document.getElementById('modal-complete').classList.add('open');
+      document.getElementById('modal-complete').dataset.extra = extra ? '1' : '';
+    });
+    document.getElementById('btn-close-complete').addEventListener('click', () => document.getElementById('modal-complete').classList.remove('open'));
+    document.getElementById('complete-form').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const extra = !!document.getElementById('modal-complete').dataset.extra;
+      let added = 0;
+      document.querySelectorAll('#complete-list input').forEach((inp) => {
+        const n = Math.max(0, Math.min(5000, parseInt(inp.value, 10) || 0));
+        const ex = state.exercises.find((x) => x.id === inp.dataset.ex);
+        if (ex && n) { ex.doneToday = (ex.doneToday || 0) + n; added += n; }
       });
-      logRoutine(extra);
-      updateCoachQuote(extra ? '"UNSTOPPABLE BEAST! Stacking extra rounds on top of victory!"' : '"EVERY ROUTINE CONQUERED! Outstanding work, Hunter. Rest and re-hydrate!"');
+      document.getElementById('modal-complete').classList.remove('open');
+      if (!added) return showToast('Nothing logged.');
+      saveState(state);
+      renderCalendar();
+      if (extra) logRoutine(true);
+      else {
+        const allDone = state.exercises.filter((e) => e.active).every((e) => (e.doneToday || 0) >= getEffectiveTarget(e));
+        if (allDone) logRoutine(false);
+        else { renderTodayRoutine(); showToast(`✓ +${added} logged`); }
+      }
+      updateCoachQuote();
     });
 
     // --- Short on Time Toggle ---
@@ -2498,7 +2611,7 @@
       renderTodayRoutine();
       if (state.sportySettings.shortOnTime) {
         showToast('⏱️ Short on time (50%) ACTIVE! Targets halved for quick workout.');
-        updateCoachQuote('"Short on time? Zero excuses. Cut the rest and explode with 50% target intensity!"');
+        updateCoachQuote();
       } else {
         showToast('Full workout routine restored (100% targets).');
         updateCoachQuote();
@@ -2507,13 +2620,16 @@
 
     // --- Reset Today's Count ---
     document.getElementById('btn-reset-routine-today').addEventListener('click', () => {
-      if (confirm("Reset today's recorded workout progress to 0?")) {
-        audio.playClick();
-        state.exercises.forEach(e => { e.doneToday = 0; });
+      const before = state.exercises.map((e) => [e.id, e.doneToday || 0]);
+      audio.playClick();
+      state.exercises.forEach(e => { e.doneToday = 0; });
+      saveState(state);
+      renderTodayRoutine();
+      undoToast("Today's counts reset.", () => {
+        for (const [id, n] of before) { const e = state.exercises.find((x) => x.id === id); if (e) e.doneToday = n; }
         saveState(state);
         renderTodayRoutine();
-        showToast("Today's workout progress reset to 0.");
-      }
+      });
     });
 
     // --- Rest Timer Shortcuts from Routine ---
@@ -2642,13 +2758,19 @@
         audio.playClick();
         openEditInline(ex.id);
       } else if (action === 'delete') {
-        if (confirm(`Delete "${ex.name}" from your workout catalog?`)) {
+        {
           audio.playClick();
+          const at = state.exercises.indexOf(ex);
           state.exercises = state.exercises.filter(x => x.id !== ex.id);
           saveState(state);
           renderCatalogList();
           renderTodayRoutine();
-          showToast(`Deleted ${ex.name}.`);
+          undoToast(`Deleted ${ex.name}.`, () => {
+            state.exercises.splice(at, 0, ex);
+            saveState(state);
+            renderCatalogList();
+            renderTodayRoutine();
+          });
         }
       }
     });
@@ -2863,10 +2985,7 @@
               <div class="hist-sub">${[h.amount, h.duration, relDay(entryDay(h)) || h.date].filter(Boolean).map(esc).join(' · ')}</div>
             </div>
           </div>
-          <div class="hist-reward">
-            <span>+${esc(h.coins)} 🪙</span>
-            <span style="color: var(--cyan-neon);">+${esc(h.xp)} XP</span>
-          </div>
+          <div class="hist-reward">${h.paid != null ? `<span>${h.paid ? `+${esc(h.paid)} ⭐` : 'already counted today'}</span>` : ''}</div>
           <button class="hist-del" title="Delete this session (a mistake)" data-del="${esc(h.id)}">🗑</button>
         </div>
       `).join('');
@@ -2876,7 +2995,8 @@
       const id = e.target.closest('[data-del]')?.dataset.del;
       if (!id) return;
       const h = state.history.find(x => String(x.id) === id);
-      if (!h || !confirm(`Delete “${h.title}” from your history?`)) return;
+      if (!h) return;
+      const at = state.history.indexOf(h);
       state.history = state.history.filter(x => x !== h);
       state.xp = Math.max(0, state.xp - (Number(h.xp) || 0));
       if (entryDay(h) === localDay() && /^Daily routine/.test(h.title || '')) state.routineDay = null;
@@ -2884,7 +3004,12 @@
       updateHunterStats();
       renderHistory();
       renderTodayRoutine();
-      showToast('Session deleted here (Life System keeps the coins it gave).');
+      undoToast('Session deleted here. Life System keeps its workout log.', () => {
+        state.history.splice(at, 0, h);
+        saveState(state);
+        updateHunterStats();
+        renderHistory();
+      });
     });
 
     // --- Category Selector ---
@@ -3012,6 +3137,7 @@
           startBtn.textContent = 'START REST';
           statusEl.textContent = 'REST OVER!';
           audio.playChime();
+          try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
           showToast('🔔 Rest Interval Complete! Next Set!');
           return;
         }
@@ -3082,21 +3208,21 @@
         } else {
           state.prs.unshift({ id: 'pr_' + Date.now(), title: ex, value: val, day: localDay() });
         }
-        state.xp += 50;
         saveState(state);
         f.remove();
         renderPRs();
-        updateHunterStats();
         audio.playLevelUp();
-        showToast(`🏆 New PR for ${ex}! +50 XP`);
+        showToast(`🏆 New record for ${ex}`);
       });
     });
     document.getElementById('pr-container').addEventListener('click', (e) => {
       const id = e.target.closest('[data-del]')?.dataset.del;
-      if (!id || !confirm('Delete this record?')) return;
+      if (!id) return;
+      const old = state.prs.slice();
       state.prs = state.prs.filter(p => p.id !== id);
       saveState(state);
       renderPRs();
+      undoToast('Record deleted.', () => { state.prs = old; saveState(state); renderPRs(); });
     });
 
     // Telegram Command Copy Helper
@@ -3270,6 +3396,234 @@
     renderPRs();
     renderHistory();
     updateTimerUI();
+  </script>
+  <script>
+    // ---- Night 6: Sport Track (SP1–SP25) ----
+    const lifeBody = () => { try { return JSON.parse(localStorage.getItem('life_body') || 'null'); } catch (e) { return null; } };
+    const toastBtn = document.getElementById('toast-undo');
+    let undoFn = null;
+    let undoTimer = null;
+    /** SP3: do it now, offer Undo for 5 seconds. */
+    function undoToast(text, fn) {
+      undoFn = fn;
+      document.getElementById('toast-text').textContent = text;
+      toastBtn.hidden = false;
+      const t = document.getElementById('toast');
+      t.classList.add('show');
+      clearTimeout(undoTimer);
+      undoTimer = setTimeout(() => { t.classList.remove('show'); toastBtn.hidden = true; undoFn = null; }, 5000);
+    }
+    toastBtn.addEventListener('click', () => {
+      const f = undoFn;
+      undoFn = null;
+      toastBtn.hidden = true;
+      document.getElementById('toast').classList.remove('show');
+      if (f) { f(); showToast('Undone'); }
+    });
+    const plainToast = showToast;
+    showToast = (text) => { toastBtn.hidden = true; undoFn = null; plainToast(text); };
+
+    // SP1: what Life System really paid for a logged routine comes back here.
+    window.addEventListener('message', (e) => {
+      if (e.origin !== location.origin || !e.data || e.data.type !== 'LIFE_SPORT_RESULT') return;
+      const { awarded, coins } = e.data;
+      const h = state.history[0];
+      if (h && h.paid == null) { h.paid = awarded ? coins : 0; saveState(state); renderHistory(); }
+      document.getElementById('points-today').textContent = awarded ? `+${coins} today` : 'counted today';
+      showToast(awarded ? `⭐ +${coins} points in Life System` : 'Workout already counted in Life System today');
+    });
+
+    // SP18: tabs
+    document.querySelectorAll('.st-tab').forEach((b) => b.addEventListener('click', () => {
+      document.querySelectorAll('.st-tab').forEach((x) => x.classList.toggle('on', x === b));
+      document.querySelector('.dashboard-grid').dataset.active = b.dataset.tab;
+      if (b.dataset.tab === 'progress') renderCharts();
+      try { localStorage.setItem('st_tab', b.dataset.tab); } catch (e) {}
+    }));
+    try { const t = localStorage.getItem('st_tab'); if (t) document.querySelector(`.st-tab[data-tab="${t}"]`)?.click(); } catch (e) {}
+
+    // SP15: tap the weekly pill to set your goal.
+    document.getElementById('week-goal-pill').addEventListener('click', () => {
+      const v = parseInt(prompt('Sessions a week you aim for:', String(state.sportySettings.weeklyGoal || 4)), 10);
+      if (!(v >= 1 && v <= 14)) return;
+      state.sportySettings.weeklyGoal = v;
+      saveState(state);
+      updateHunterStats();
+    });
+
+    // SP4: a planned rest day (Life System keeps the streak with it).
+    document.getElementById('btn-rest-day').addEventListener('click', () => {
+      window.parent?.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_REST', payload: { day: localDay() } }, location.origin);
+      const b = lifeBody() || {};
+      b.restDays = [...new Set([...(b.restDays || []), localDay()])];
+      try { localStorage.setItem('life_body', JSON.stringify(b)); } catch (e) {}
+      updateHunterStats();
+      showToast('😌 Rest day: your streak is safe.');
+    });
+
+    // SP11: after a short night, suggest a lighter day (70%); your call.
+    const lightKey = 'st_light_' + localDay();
+    const origTarget = getEffectiveTarget;
+    getEffectiveTarget = (ex) => (localStorage.getItem(lightKey) === 'on' && !state.sportySettings.shortOnTime ? Math.max(1, Math.round(ex.target * 0.7)) : origTarget(ex));
+    function renderSleepHint() {
+      const el = document.getElementById('sleep-hint');
+      const b = lifeBody();
+      const m = b && b.sleptMin;
+      const state0 = localStorage.getItem(lightKey);
+      if (!m || m >= 360 || state0 === 'no') { el.hidden = true; return; }
+      el.hidden = false;
+      const h = `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
+      el.innerHTML = state0 === 'on'
+        ? `😴 Lighter day: 70% targets after ${h} of sleep. <button data-light="off">Full targets</button>`
+        : `😴 You slept ${h}. Lighter day: 70% targets, no record attempts? <button data-light="on">Yes, lighter</button> <button data-light="no">No, full</button>`;
+    }
+    document.getElementById('sleep-hint').addEventListener('click', (e) => {
+      const v = e.target.closest('[data-light]')?.dataset.light;
+      if (!v) return;
+      try { localStorage.setItem(lightKey, v === 'off' ? 'no' : v); } catch (err) {}
+      renderSleepHint();
+      renderTodayRoutine();
+      updateCoachQuote();
+    });
+
+    // ---- SP17: workout mode, SP16: a rest timer that runs by itself, SP9: automatic records ----
+    let wm = { i: 0, reps: 10, kg: 0, lock: null, restEnds: 0, tick: null };
+    const activeEx = () => state.exercises.filter((e) => e.active);
+    const bestOf = (id) => (state.best || {})[id] || null;
+    function setsFor(id) { state.sets = state.sets || {}; const d = (state.sets[localDay()] = state.sets[localDay()] || {}); return (d[id] = d[id] || []); }
+    function renderWM() {
+      const list = activeEx();
+      if (!list.length) { closeWM(); return; }
+      wm.i = Math.max(0, Math.min(list.length - 1, wm.i));
+      const ex = list[wm.i];
+      const done = ex.doneToday || 0;
+      const target = getEffectiveTarget(ex);
+      const sets = setsFor(ex.id);
+      const best = bestOf(ex.id);
+      document.getElementById('wm-step').textContent = `${wm.i + 1} / ${list.length}`;
+      document.getElementById('wm-left').textContent = done >= target ? '✓ done' : `${target - done} left`;
+      document.getElementById('wm-body').innerHTML = `
+        <div class="wm-name">${esc(ex.name)}</div>
+        <div class="wm-progress">${done} / ${target} ${esc(ex.unit || 'reps')} · set ${sets.length + 1}${best ? ` · best ${best.label}` : ''}</div>
+        <div class="wm-count"><button class="wm-big" data-d="-1">−</button><span class="wm-reps">${wm.reps}</span><button class="wm-big" data-d="1">+</button></div>
+        <label class="wm-kg">kg (optional) <input id="wm-kg" type="number" step="0.5" min="0" max="500" inputmode="decimal" value="${wm.kg || ''}" placeholder="body weight"></label>
+        <button class="wm-done" id="wm-set">✓ Set done</button>
+        ${sets.length ? `<div class="wm-sets">${sets.map((x, k) => `<span>${k + 1}: ${x.reps}${x.kg ? ` × ${x.kg} kg` : ''}</span>`).join('')}</div>` : ''}`;
+    }
+    function openWM() {
+      const list = activeEx();
+      if (!list.length) return showToast('Add an exercise first.');
+      wm.i = Math.max(0, list.findIndex((e) => (e.doneToday || 0) < getEffectiveTarget(e)));
+      const ex = list[wm.i];
+      wm.reps = Math.max(1, Math.min(50, Math.round((getEffectiveTarget(ex) - (ex.doneToday || 0)) / 3) || 10));
+      document.getElementById('workout-mode').hidden = false;
+      // Keep the screen on during the workout.
+      try { navigator.wakeLock?.request('screen').then((l) => (wm.lock = l)).catch(() => {}); } catch (e) {}
+      renderWM();
+    }
+    function closeWM() {
+      document.getElementById('workout-mode').hidden = true;
+      try { wm.lock?.release(); } catch (e) {}
+      wm.lock = null;
+      clearInterval(wm.tick);
+      renderTodayRoutine();
+      checkAllCompleted();
+      updateCoachQuote();
+    }
+    function restTimer(sec) {
+      wm.restEnds = Date.now() + sec * 1000;
+      clearInterval(wm.tick);
+      const el = document.getElementById('wm-timer');
+      const draw = () => {
+        const left = Math.max(0, Math.ceil((wm.restEnds - Date.now()) / 1000));
+        el.innerHTML = left ? `Rest <b>${left}s</b> <button data-rest="15">+15s</button> <button data-rest="0">Skip</button>` : 'Rest over: next set 💪';
+        if (!left) {
+          clearInterval(wm.tick);
+          try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
+          audio.playChime();
+        }
+      };
+      draw();
+      wm.tick = setInterval(draw, 500);
+    }
+    document.getElementById('btn-workout-mode').addEventListener('click', openWM);
+    document.getElementById('wm-close').addEventListener('click', closeWM);
+    document.getElementById('wm-prev').addEventListener('click', () => { wm.i--; renderWM(); });
+    document.getElementById('wm-next').addEventListener('click', () => { wm.i++; renderWM(); });
+    document.getElementById('workout-mode').addEventListener('click', (e) => {
+      const d = e.target.closest('[data-d]')?.dataset.d;
+      if (d) { wm.reps = Math.max(1, Math.min(500, wm.reps + Number(d))); renderWM(); return; }
+      const r = e.target.closest('[data-rest]')?.dataset.rest;
+      if (r != null) { if (r === '0') { wm.restEnds = 0; clearInterval(wm.tick); document.getElementById('wm-timer').textContent = ''; } else wm.restEnds += 15000; return; }
+      if (e.target.closest('#wm-set')) {
+        const ex = activeEx()[wm.i];
+        wm.kg = Number(document.getElementById('wm-kg').value) || 0;
+        setsFor(ex.id).push({ reps: wm.reps, kg: wm.kg });
+        ex.doneToday = (ex.doneToday || 0) + wm.reps;
+        // SP9: a record, the moment you beat your best (weight × reps, or reps in one set). No extra points.
+        const score = wm.kg ? wm.kg * (1 + wm.reps / 30) : wm.reps;
+        const prev = bestOf(ex.id);
+        state.best = state.best || {};
+        if (!prev || score > prev.score + 0.01) {
+          const label = wm.kg ? `${wm.kg} kg × ${wm.reps}` : `${wm.reps} in one set`;
+          state.best[ex.id] = { score, label, day: localDay() };
+          if (prev) {
+            const old = state.prs.find((p) => p.auto === ex.id);
+            if (old) { old.value = label; old.day = localDay(); } else state.prs.unshift({ id: 'auto_' + ex.id, auto: ex.id, title: ex.name, value: label, day: localDay() });
+            audio.playLevelUp();
+            showToast(`🏅 New record: ${ex.name} ${label}`);
+            renderPRs();
+          }
+        }
+        try { navigator.vibrate && navigator.vibrate(25); } catch (err) {}
+        saveState(state);
+        restTimer(ex.restSec || 90);
+        if ((ex.doneToday || 0) >= getEffectiveTarget(ex) && wm.i < activeEx().length - 1) { wm.i++; showToast(`✓ ${ex.name} done`); }
+        renderWM();
+      }
+    });
+    // Swipe between exercises on a phone.
+    let sx = null;
+    document.getElementById('workout-mode').addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; }, { passive: true });
+    document.getElementById('workout-mode').addEventListener('touchend', (e) => {
+      if (sx == null) return;
+      const dx = e.changedTouches[0].clientX - sx;
+      sx = null;
+      if (Math.abs(dx) > 70) { wm.i += dx < 0 ? 1 : -1; renderWM(); }
+    });
+
+    // ---- SP22: progress charts (per exercise, last 30 days; weekly volume, 8 weeks) ----
+    function renderCharts() {
+      const el = document.getElementById('charts');
+      const days = state.days || {};
+      const dayList = Array.from({ length: 30 }, (_, k) => shiftDay(localDay(), k - 29));
+      const ex = state.exercises.filter((e) => dayList.some((d) => (days[d] || {})[e.id] > 0));
+      const spark = (vals) => {
+        const max = Math.max(1, ...vals);
+        const W = 220, H = 40;
+        const pts = vals.map((v, k) => `${(k * W) / (vals.length - 1)},${H - (v / max) * (H - 4) - 2}`).join(' ');
+        return `<svg viewBox="0 0 ${W} ${H}" class="spark"><polyline points="${pts}"/></svg>`;
+      };
+      const weeks = Array.from({ length: 8 }, (_, k) => {
+        const mon = shiftDay(localDay(), -((new Date().getDay() + 6) % 7) - (7 - k - 1) * 7);
+        let sum = 0;
+        for (let d = 0; d < 7; d++) for (const v of Object.values(days[shiftDay(mon, d)] || {})) sum += Number(v) || 0;
+        return { mon, sum };
+      });
+      const wmax = Math.max(1, ...weeks.map((w) => w.sum));
+      el.innerHTML = (ex.length ? ex.map((e) => {
+        const vals = dayList.map((d) => (days[d] || {})[e.id] || 0);
+        const best = bestOf(e.id);
+        return `<div class="chart-row"><b>${esc(e.name)}</b><small>${vals.reduce((a, b) => a + b, 0)} in 30 days${best ? ` · best ${best.label}` : ''}</small>${spark(vals)}</div>`;
+      }).join('') : '<p class="empty-note">Log a few days and your progress shows here.</p>')
+        + `<div class="vol"><b>Weekly volume</b><div class="vol-bars">${weeks.map((w) => `<i style="height:${Math.round((w.sum / wmax) * 100)}%" title="Week of ${w.mon}: ${w.sum}"></i>`).join('')}</div></div>`;
+    }
+
+    // Draw what's new on load and when Life System sends news.
+    renderSleepHint();
+    renderTodayRoutine();
+    updateCoachQuote();
+    window.addEventListener('storage', (e) => { if (e.key === 'life_body') { renderSleepHint(); updateHunterStats(); } });
   </script>
 </body>
 </html>

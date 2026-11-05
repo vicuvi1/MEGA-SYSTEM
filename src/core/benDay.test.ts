@@ -110,3 +110,12 @@ describe("Ben's bedtime message with your numbers (WK16)", () => {
     expect(bedtimeNudge({ bedTarget: '23:00', wakeTarget: '07:00', debtMin: 20, nights: 6, firstEvent: { title: 'Gym', time: '18:00' }, slipping: null, first: null })).toBeNull()
   })
 })
+
+describe('Ben logs sets (SP14)', () => {
+  it('reads "sets: bench 3x8x60" and sends the body action rules for it', async () => {
+    const { readAction, actionGroups } = await import('../renderer/src/web/botBrain')
+    expect(readAction('sets: bench 3x8x60')).toEqual({ kind: 'sets', text: 'bench 3x8x60' })
+    expect(readAction('sets: nonsense')).toBeNull()
+    expect(actionGroups('bench 3x8x60')).toContain('"sets: ')
+  })
+})

@@ -10,6 +10,7 @@ import { cleanFacts, dateIn, factLine, toRecord, type Fact } from '@core/factTyp
 import { STEALTH_NOTE } from '@core/stealth'
 import type { BotBridgeConfig } from '@shared/api'
 import { addDays } from '@core/dates'
+import { parseSets } from '@core/strength'
 import { hm } from '@core/focus'
 import { progressReport } from '@core/progress'
 import { activePlan } from '@core/weekPlan'
@@ -580,6 +581,7 @@ IMPORTANT: something happens ONLY if you put an action for it. Never write "logg
 Other action groups (body and habits, money records and points, Google Calendar with E-numbers, Todoist with T-numbers) are listed under "Actions for this message" when they apply.`
 const ACT_GROUPS: Record<'body' | 'money' | 'calendar' | 'todoist', string> = {
   body: `Body, sleep and habits (one shared log with Sport Track and Sporty):
+- "sets: <exercise> <sets>x<reps>x<kg>" a strength workout with sets ("sets: bench 3x8x60", "sets: pullups 3x10" for body weight). Use it when he gives sets.
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
@@ -603,7 +605,7 @@ Points and the week:
 - "taskmove: T2 | <area name>". "done: T2". "star: T2" / "unstar: T2" (today's must-do). "deltask: T2".`
 }
 const GROUP_WORDS: Record<keyof typeof ACT_GROUPS, RegExp> = {
-  body: /\b(water|drink|glass|ml|pushups?|squats?|reps?|plank|workouts?|gym|train|run|sleep|slept|wake|woke|bed|habit|oath|clean|skincare|weight|exercise|target|tired|apa|somn)\b/i,
+  body: /\d+\s*[x×]\s*\d+|\b(bench|deadlift|squat|press|pull-?ups?|dips|curls?|sets?|kg|water|drink|glass|ml|pushups?|squats?|reps?|plank|workouts?|gym|train|run|sleep|slept|wake|woke|bed|habit|oath|clean|skincare|weight|exercise|target|tired|apa|somn)\b/i,
   money: /\d|\b(lei|mdl|spent|spend|bought|paid|pay|money|expense|budget|salary|reward|points?|shop|week|big ?3|cash|card|bani)\b|\bM\d\b/i,
   calendar: /\b(calendar|event|block|meeting|class|lecture|exam|move|resched\w*|shift|late|plan|book|tomorrow|today|tonight|morning|afternoon|evening|free|time|at|until|before|after)\b|\bE\d\b|\d{1,2}:\d{2}/i,
   todoist: /\b(tasks?|todo|todoist|done|finish(ed)?|due|must-?dos?|priority|star|list|deadline|homework|assignment)\b|\bT\d\b/i
@@ -806,6 +808,7 @@ export type BrainAction =
   | { kind: 'mustdo'; text: string }
   | { kind: 'focus'; minutes: number; subject: string }
   | { kind: 'stopfocus' }
+  | { kind: 'sets'; text: string }
   | { kind: 'extendfocus'; minutes: number }
   | { kind: 'fun'; minutes: number; what: string }
   | { kind: 'task'; text: string }
@@ -848,6 +851,9 @@ const MREF = /^M\d{1,2}$/i
 export function readAction(line: string): BrainAction | null {
   // W7: "stop" (he's done) and "extend: 5" (5 more minutes) on a running timer.
   if (/^\s*stop(focus)?\s*:?\s*$/i.test(line) || /^\s*stopfocus\s*:/i.test(line)) return { kind: 'stopfocus' }
+  // SP14: "sets: bench 3x8x60" (sets × reps × kg), also "pullups 3x10".
+  const sm = /^\s*sets\s*:\s*(.{3,80})$/i.exec(line)
+  if (sm) return parseSets(sm[1].replace(/\s*\|\s*/g, ' ')) ? { kind: 'sets', text: sm[1].replace(/\s*\|\s*/g, ' ') } : null
   const ext = /^\s*extend\s*:\s*(\d{1,3})/i.exec(line)
   if (ext) {
     const minutes = Number(ext[1])

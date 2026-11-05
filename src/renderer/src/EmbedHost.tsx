@@ -54,12 +54,22 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         try {
           const name = String(data.workout?.name || data.workout?.title || 'Workout completed').slice(0, 120)
           // logWorkout pays "Workout done" itself (capped); a second award paid twice.
-          await life.body.logWorkout({ title: name, items: sportItems(data.workout), note: 'Sport Track' })
+          const r = await life.body.logWorkout({ title: name, items: sportItems(data.workout), note: 'Sport Track' })
           window.dispatchEvent(new CustomEvent('life-body-changed'))
           window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+          // SP1: Sport Track shows what was really paid (or "already counted today").
+          const coins = (await life.rules.list().catch(() => [])).find((x: any) => x.id === 'body.workout_done')?.coins ?? 0
+          ;(e.source as Window | null)?.postMessage({ type: 'LIFE_SPORT_RESULT', awarded: !!r.awarded, coins: r.awarded ? coins : 0 }, window.location.origin)
         } catch (err) {
           console.error('[EmbedHost Sport] award error:', err)
         }
+      }
+
+      // SP4: a planned rest day from Sport Track keeps the workout streak.
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_REST') {
+        const day = typeof data.payload?.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.payload.day) ? data.payload.day : null
+        await life.body.setRest?.(day, true).catch(() => null)
+        window.dispatchEvent(new CustomEvent('life-body-changed'))
       }
 
       // Waky checked you in: the Sleep section logs the wake-up and pays
@@ -285,6 +295,43 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     return () => {
       el.removeEventListener(ev, apply)
       mo.disconnect()
+    }
+  }, [appKey])
+
+  // SP4 + SP11: Sport Track gets your rest days and last night's sleep (localStorage 'life_body').
+  useEffect(() => {
+    if (appKey !== 'sport') return
+    const el = ref.current as any
+    if (!el) return
+    let gone = false
+    const push = async () => {
+      try {
+        const [body, sleep] = await Promise.all([life.body.state(), life.sleep.state().catch(() => null)])
+        const t = sleep?.todayLog
+        const toM = (x: string) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3, 5))
+        const slept = t?.bedTime && t.wakeTime ? (toM(t.wakeTime) - toM(t.bedTime) + 1440) % 1440 : null
+        const data = JSON.stringify({ restDays: (body as any).restDays ?? [], sleptMin: slept && slept >= 120 && slept <= 960 ? slept : null, at: Date.now() })
+        if (gone) return
+        try {
+          localStorage.setItem('life_body', data)
+        } catch {
+          /* private window */
+        }
+        void runIn(el, `localStorage.setItem('life_body', ${JSON.stringify(data)})`).catch(() => null)
+      } catch {
+        /* not unlocked yet */
+      }
+    }
+    void push()
+    const ev = typeof el.insertCSS === 'function' ? 'dom-ready' : 'load'
+    el.addEventListener(ev, push)
+    window.addEventListener('life-body-changed', push)
+    window.addEventListener('life-sleep-changed', push)
+    return () => {
+      gone = true
+      el.removeEventListener(ev, push)
+      window.removeEventListener('life-body-changed', push)
+      window.removeEventListener('life-sleep-changed', push)
     }
   }, [appKey])
 
