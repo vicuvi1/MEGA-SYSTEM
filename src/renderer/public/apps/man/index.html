@@ -2475,6 +2475,34 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
 
     <!-- SCRIPT ENGINE -->
     <script>
+        // Life System bridge (typed messages, both ways). Out: lifeBridge(action,
+        // payload) posts {type:'LIFE_SYSTEM_BRIDGE', action, payload} to Life System
+        // (website) and logs the same line for the desktop's listener. In:
+        // Life System calls window.__lifeHost({action, ...}) or posts
+        // {type:'LIFE_HOST', ...}; nothing else is run inside MAN.
+        function lifeBridge(action, payload) {
+            try { console.log("LIFE_SYSTEM_BRIDGE:" + action + ":" + JSON.stringify(payload || {})); } catch (e) {}
+            try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: action, payload: payload || {} }, location.origin); } catch (e) {}
+        }
+        window.__lifeHost = function (msg) {
+            if (!msg || typeof msg !== 'object') return null;
+            try {
+                if (msg.action === 'state') return window.getManCheckinState ? window.getManCheckinState() : null;
+                if (msg.action === 'checkin' && typeof msg.today === 'string') return window.syncFromLifeSystemCheckin && window.syncFromLifeSystemCheckin(msg.today, Number(msg.streak) || 0);
+                if (msg.action === 'oath' && typeof msg.today === 'string') return window.syncFromLifeSystemOath && window.syncFromLifeSystemOath(msg.today);
+                if (msg.action === 'set-streak' && typeof appData !== 'undefined') {
+                    var n = Math.max(0, Math.floor(Number(msg.streak) || 0));
+                    if (appData.streakDays !== n) { appData.streakDays = n; appData.longestStreak = Math.max(appData.longestStreak || 0, n); saveData(); refreshUI(); }
+                }
+            } catch (e) { console.error('__lifeHost', e); }
+            return null;
+        };
+        window.addEventListener('message', function (e) {
+            if (e.origin !== location.origin || !e.data || e.data.type !== 'LIFE_HOST') return;
+            window.__lifeHost(e.data);
+        });
+    </script>
+    <script>
         // -------------------------------------------------------------
         // 1. PROCEDURAL CINEMATIC SPARTAN MUSIC & SOUND ENGINE
         // -------------------------------------------------------------
@@ -3408,7 +3436,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
 
                 try {
 
-                    console.log("LIFE_SYSTEM_BRIDGE:MAN_CHECKIN:" + JSON.stringify({
+                    lifeBridge("MAN_CHECKIN", ({
 
                         today: today,
 
@@ -3474,7 +3502,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                     
                     // Notify Life System host of sworn oath
                     try {
-                        console.log("LIFE_SYSTEM_BRIDGE:MAN_OATH:" + JSON.stringify({
+                        lifeBridge("MAN_OATH", ({
                             today: today,
                             oathsSwornCount: appData.oathsSwornCount
                         }));
@@ -4615,7 +4643,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             setRandomQuote();
             updateEmpireTeaser();
             try {
-                console.log("LIFE_SYSTEM_BRIDGE:MAN_INIT:" + JSON.stringify({
+                lifeBridge("MAN_INIT", ({
                     today: getTodayString(),
                     lastCheckin: appData.lastCheckin,
                     streakDays: appData.streakDays,
@@ -4833,7 +4861,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
             showToast(`⚡ Spartan streak updated to Day ${num}!`);
 
             try {
-                console.log("LIFE_SYSTEM_BRIDGE:MAN_SET_STREAK:" + JSON.stringify({ streakDays: num }));
+                lifeBridge("MAN_SET_STREAK", ({ streakDays: num }));
                 window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_SET_STREAK', payload: { streakDays: num } }, '*');
             } catch (e) {}
         }
@@ -4902,7 +4930,7 @@ Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -Serv
                 showToast("🛡️ Streak reset to Day 0. Your greatest comeback begins now, warrior!");
 
                 try {
-                    console.log("LIFE_SYSTEM_BRIDGE:MAN_RESET:" + JSON.stringify({ today: getTodayString() }));
+                    lifeBridge("MAN_RESET", ({ today: getTodayString() }));
                     window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'MAN_RESET', payload: { today: getTodayString() } }, '*');
                 } catch (e) {}
             } catch (err) {

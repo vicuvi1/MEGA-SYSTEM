@@ -17,6 +17,7 @@ const MAN_FIT_CSS = `
 `
 import { addDays } from '@core/dates'
 import { embedThemeCss, readTokens } from '@core/embedTheme'
+import { hostCall, parseBridgeLine, parseBridgeMessage } from '@core/embedBridge'
 import { Icon } from './Icon'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
@@ -250,10 +251,10 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       try {
         const d = await life.discipline.state()
         if (d.checkedInToday) {
-          runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(d.today)}, ${manDay(d)})`).catch(() => {})
+          runIn(el, hostCall({ action: 'checkin', today: d.today, streak: manDay(d) })).catch(() => {})
         }
         if (d.oathToday) {
-          runIn(el, `window.syncFromLifeSystemOath?.(${JSON.stringify(d.today)})`).catch(() => {})
+          runIn(el, hostCall({ action: 'oath', today: d.today })).catch(() => {})
         }
         void pushStreak()
       } catch (err) {
@@ -267,7 +268,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         const today = d.today
         let data = manData
         if (!data) {
-          data = await runIn(el, 'window.getManCheckinState ? window.getManCheckinState() : null').catch(() => null)
+          data = await runIn(el, hostCall({ action: 'state' })).catch(() => null)
         }
         if (!data) return
 
@@ -282,7 +283,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'checkin', ...data } }))
         } else if (d.checkedInToday && data.lastCheckin !== today) {
           // 2. If Life System is checked in today, but MAN is not
-          await runIn(el, `window.syncFromLifeSystemCheckin?.(${JSON.stringify(today)}, ${manDay(d)})`).catch(() => {})
+          await runIn(el, hostCall({ action: 'checkin', today, streak: manDay(d) })).catch(() => {})
         }
 
         // Oath reconciliation
@@ -290,7 +291,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
           await life.discipline.oath()
           window.dispatchEvent(new CustomEvent('life-discipline-synced', { detail: { action: 'oath' } }))
         } else if (d.oathToday && data.lastOathDate !== today) {
-          await runIn(el, `window.syncFromLifeSystemOath?.(${JSON.stringify(today)})`).catch(() => {})
+          await runIn(el, hostCall({ action: 'oath', today })).catch(() => {})
         }
       } catch (err) {
         console.error('[EmbedHost MAN] Reconcile error:', err)
@@ -339,52 +340,16 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       }
     }
 
+    // Desktop webview: MAN's typed messages arrive as console lines.
     const onConsole = (e: any) => {
-      const msg: string = e.message || ''
-      if (!msg.startsWith('LIFE_SYSTEM_BRIDGE:')) return
-
-      if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_CHECKIN:')) {
-        try {
-          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_CHECKIN:'.length))
-          handleManAction('MAN_CHECKIN', payload)
-        } catch (err) {
-          console.error('[EmbedHost MAN] Error parsing checkin:', err)
-        }
-      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_OATH:')) {
-        handleManAction('MAN_OATH', {})
-      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_RESET:')) {
-        try {
-          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_RESET:'.length))
-          handleManAction('MAN_RESET', payload)
-        } catch {
-          handleManAction('MAN_RESET', {})
-        }
-      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_SET_STREAK:')) {
-        try {
-          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_SET_STREAK:'.length))
-          handleManAction('MAN_SET_STREAK', payload)
-        } catch {}
-      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_DIARY:')) {
-        try {
-          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_DIARY:'.length))
-          handleManAction('MAN_DIARY', payload)
-        } catch {}
-      } else if (msg.startsWith('LIFE_SYSTEM_BRIDGE:MAN_INIT:')) {
-        try {
-          const payload = JSON.parse(msg.slice('LIFE_SYSTEM_BRIDGE:MAN_INIT:'.length))
-          handleManAction('MAN_INIT', payload)
-        } catch (err) {
-          console.error('[EmbedHost MAN] Error parsing init:', err)
-        }
-      }
+      const m = parseBridgeLine(e.message || '')
+      if (m && m.action.startsWith('MAN_')) handleManAction(m.action, m.payload)
     }
 
     const onWindowMessage = (e: MessageEvent) => {
-      const data = e.data
-      if (!data || typeof data !== 'object') return
-      if (data.type === 'LIFE_SYSTEM_BRIDGE') {
-        handleManAction(data.action, data.payload)
-      }
+      // Typed, and only from our own embedded apps (core/embedBridge.ts).
+      const m = parseBridgeMessage(e.data, e.origin, window.location.origin)
+      if (m && m.action.startsWith('MAN_')) handleManAction(m.action, m.payload)
     }
 
     // Life System's streak is the only one: MAN always shows it (also before
@@ -394,7 +359,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         const d = await life.discipline.state()
         if (!d.setup) return
         const n = manDay(d)
-        await runIn(el, `(function(){ if (typeof appData === 'undefined') return; var n = ${n}; if (appData.streakDays !== n) { appData.streakDays = n; appData.longestStreak = Math.max(appData.longestStreak || 0, n); try { saveData(); refreshUI(); } catch (e) {} } })()`).catch(() => {})
+        await runIn(el, hostCall({ action: 'set-streak', streak: n })).catch(() => {})
       } catch {
         /* not loaded yet */
       }
@@ -410,11 +375,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       if (!w || !d0 || d0.URL === 'about:blank' || d0.documentElement.hasAttribute('data-life-hooked')) return
       try {
         d0.documentElement.setAttribute('data-life-hooked', '')
-        const log = w.console.log.bind(w.console)
-        w.console.log = (...args: unknown[]) => {
-          log(...args)
-          if (typeof args[0] === 'string' && args[0].startsWith('LIFE_SYSTEM_BRIDGE:')) onConsole({ message: args[0] })
-        }
+        // MAN posts its check-ins and oaths as typed messages now (no console patching).
         const doc = w.document
         // MAN's urge crusher: counted in Life System too (time + what set it off).
         doc.getElementById('btn-open-urge')?.addEventListener('click', () => void life.discipline.startUrge().catch(() => {}))
