@@ -1634,8 +1634,9 @@ try {
       await pg.waitForFunction((n) => document.querySelector('.st-head h1')?.textContent === n, name, { timeout: 5000 })
       await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${ids[0]}"]`, { timeout: 8000 })
       const sizes = []
-      // (the Telegram bots card and the Today screen card are one long card each)
-      const oneCard = { 'connections.telegram': 3.8, 'look.today': 2.4 }
+      // (the Telegram bots card, the Today screen card and the widget gallery are one long card each;
+      // the gallery grows with every widget and measures a bit taller on the Windows runner's fonts)
+      const oneCard = { 'connections.telegram': 3.8, 'look.today': 2.4, 'widgets.gallery': 2.4 }
       for (const id of ids) {
         if (!(await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${id}"]`, { timeout: 8000 }).catch(() => null))) {
           const heads = await pg.evaluate(() => [...document.querySelectorAll('.st-grid-tabs > *')].map((e) => (e.querySelector('h2, h3')?.textContent ?? '').trim().slice(0, 24)))
