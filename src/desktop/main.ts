@@ -17,6 +17,7 @@ import { createVault } from './vault'
 import { createPc } from './pc'
 import { registerPcExtras } from './pc/index'
 import { registerSysmon } from './sysmon/index'
+import { registerAutomations } from './automations'
 import { createEyes } from './eyes'
 import { createMeetings } from './meetings'
 import { setupVoice } from './voice'
@@ -318,6 +319,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   await registerPcExtras({ dir, win, origin }).catch(() => {})
   // Island pages: System (CPU, memory, apps…) and AI usage (off until switched on).
   await registerSysmon({ dir, origin }).catch(() => {})
+  // Automation hub: local webhooks / n8n (safeStorage), scripts, workspaces, sensors (only those in use).
+  await registerAutomations({ dir, win, origin }).catch(() => {})
   eyes.attach(win, () => refreshTray(), () => pc.prefs().goalWords ?? [])
   let pcPrefsNow = pc.prefs()
   pcAction = (a) => {

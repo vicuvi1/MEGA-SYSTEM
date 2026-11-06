@@ -66,6 +66,7 @@ import { todayMode } from '../renderer/src/web/extrasContext'
 import { coachStatus } from '../renderer/src/web/coachStatus'
 import { handleMcp, type McpCtx, type McpLife } from './mcp'
 import { extToolsFor, hookFacts, hooksTick, loadAuto, ntfyAlso, type AutoConf } from './automation'
+import { flowFailTick, flowToolsFor, mergeTools } from './flows'
 import { inboundCall } from '@core/automation'
 import { localMinute as localMinuteOf } from '@core/dailyClock'
 import { NOTIF_SETTINGS_KEY, cleanNotifSettings, eventAlerts, quietNow as quietNowSet } from '@core/eventAlerts'
@@ -224,7 +225,7 @@ async function botsFor(env: BotEnv) {
   const vectors = embed ? new MemoryVectors(new TursoHttp(env.tursoUrl, env.tursoToken), embed) : null
   const recall = vectors ? (q: string, k: number) => vectors.search(q, k) : null
   // AU10: the tools from your own MCP servers that you allowed (Settings → PC & automation).
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: extToolsFor(env) })
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)) })
   warm = { key, SQL, bots, mirror, services, calendar, vectors }
   warmAt = Date.now()
   return warm
@@ -1007,6 +1008,12 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   } catch (e) {
     console.error('wind-down:', e)
   }
+  // AH7: failed n8n flows tell you on Telegram (and ntfy), each once, every 10 minutes at most.
+  try {
+    for (const t of await flowFailTick(healthDb, now)) if (await send(t, undefined, { always: true }).catch(() => false)) sent.push(t)
+  } catch (e) {
+    console.error('flows:', (e as Error).message)
+  }
   return sent
   }
 }
@@ -1649,6 +1656,7 @@ export { handleMcp, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, NEEDS_WR
  * own executor, so points, undo and the coach log match Ben exactly.
  */
 export { automationOp } from './automation'
+export { flowsOp } from './flows'
 
 /**
  * AU9: the one door in for n8n and other flows: {action: add_task | note |

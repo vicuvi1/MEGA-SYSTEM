@@ -110,6 +110,9 @@ const api: DesktopApi = {
   // Island pages: System and AI usage (one channel), and their settings changing.
   sysmon: (op, arg) => ipcRenderer.invoke('sysmon', op, arg),
   onSysmonPrefs: (cb) => void ipcRenderer.on('sysmon:prefs', (_e, p) => cb(p)),
+  // Automation hub (AH1–AH22): one channel, and the sensors' events.
+  auto: (op, arg) => ipcRenderer.invoke('auto', String(op), arg),
+  onAuto: (cb) => void ipcRenderer.on('auto:event', (_e, ev) => cb(ev)),
   onLock: (cb) => void ipcRenderer.on('desktop:lock', (_e, l) => cb(l)),
   onJump: (cb) => void ipcRenderer.on('desktop:jump', (_e, a) => cb(String(a))),
   onIslandCapture: (cb) => void ipcRenderer.on('island:capture', () => cb()),

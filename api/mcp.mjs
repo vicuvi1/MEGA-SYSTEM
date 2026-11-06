@@ -14,12 +14,15 @@
 //   POST /api/mcp?op=automation (Authorization: Bearer <app session>)
 //        Settings → PC & automation: ntfy, webhooks, MCP servers for Ben (AU8–AU10).
 //        Kept in sys_kv; tokens, topics and full addresses never come back.
+//   POST /api/mcp?op=flows (Authorization: Bearer <app session>)
+//        Automation hub (AH1–AH9): cloud webhooks and n8n kept in sys_kv (only a
+//        name and the last 4 characters come back), runs through safeFetch.
 //   POST /api/hook (→ /api/mcp?op=hook)  (Authorization: Bearer <personal token, read and write>)
 //        n8n and other flows: {action: "add_task"|"note"|"ask_ben"|"log_habit", text, title, habit} (AU9).
 // Tool results are never logged.
 import { bearer, botDefaults, checkPin, clientIp, config, gate, readBody, requireSession, send } from './_lib.mjs'
 import { authorizePage, authorizeRequest, createToken, exchangeCode, listTokens, makeCode, rateOk, registerClient, resourceMeta, revokeToken, serverMeta, tokenAuth } from './_mcpauth.mjs'
-import { automationOp, hookIn, mcpCall } from './_bot/bot.mjs'
+import { automationOp, flowsOp, hookIn, mcpCall } from './_bot/bot.mjs'
 import { deadlineIn, modelUntil } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
@@ -176,6 +179,24 @@ async function automation(req, res, cfg) {
   }
 }
 
+/** Automation hub (your app session): webhooks, runs, n8n (AH1, AH6, AH9). */
+async function flows(req, res, cfg) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
+  if (!(await requireSession(res, cfg, bearer(req)))) return
+  let body
+  try {
+    body = await readBody(req)
+  } catch {
+    return send(res, 400, { error: 'Bad request' })
+  }
+  try {
+    const telegram = { token: process.env.MEGA_BOT_TOKEN || '', chat: process.env.TELEGRAM_CHAT_ID || '' }
+    return send(res, 200, await flowsOp({ tursoUrl: cfg.url, tursoToken: cfg.token, telegram }, body))
+  } catch (e) {
+    return send(res, e.status || 503, { error: e.status ? e.message : 'Database not reachable: try again in a moment' })
+  }
+}
+
 /** AU9: the one door in for n8n (a personal token with read and write). */
 async function hook(req, res, cfg) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
@@ -224,6 +245,7 @@ export default async function handler(req, res) {
   if (url.searchParams.get('op') === 'tokens') return tokens(req, res, cfg)
   if (url.searchParams.get('op') === 'automation') return automation(req, res, cfg)
   if (url.searchParams.get('op') === 'hook') return hook(req, res, cfg)
+  if (url.searchParams.get('op') === 'flows') return flows(req, res, cfg)
 
   // ---- MCP itself ----
   if (req.method !== 'POST') {

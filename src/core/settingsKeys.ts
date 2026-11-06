@@ -205,6 +205,9 @@ export const SETTINGS = {
   // ---- PC & automation (AU2, AU7) ----
   pc_asks: json<unknown>("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
   pc_last_hour: json<unknown>('the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)', null),
+  // ---- Automation hub (AH1–AH22) ----
+  automations: json<unknown>('your automations: "When X, do Y", island buttons, Ben may run (src/core/automations.ts); never an address or key', null),
+  auto_asks: json<unknown>("Ben's asks to run one of your automations (Allow / Deny on the island)", null),
   // ---- plugins ----
   plugins_on: json<Record<string, boolean>>('which plugins are switched on', {}),
   plugins_status: json<Record<string, unknown>>("how each plugin's last job went", {}),

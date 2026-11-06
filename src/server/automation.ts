@@ -70,7 +70,7 @@ export async function safeFetch(url: string, init: RequestInit, timeoutMs: numbe
 const defaultResolve = async (h: string) => (await lookup(h, { all: true })).map((a) => a.address)
 
 /** The answer's text, at most `max` bytes (the rest is never read). */
-async function readCapped(res: Response, max = 256 * 1024): Promise<string> {
+export async function readCapped(res: Response, max = 256 * 1024): Promise<string> {
   const reader = res.body?.getReader?.()
   if (!reader) return (await res.text()).slice(0, max)
   const chunks: Uint8Array[] = []
