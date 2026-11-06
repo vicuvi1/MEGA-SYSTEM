@@ -131,6 +131,9 @@ describe('Ben quality: show, act, confirm', () => {
   })
 
   it('a calendar rename can be undone; a move can be undone too', async () => {
+    // A fixed morning: late in the evening the blocks are over and Ben (rightly) won't move them.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 6, 7, 30))
     const s = stub(() => ({ reply: 'x' }))
     const { bots, log } = await evalWorld(SQL, s.model)
     const r = await bots.think('rename the gym block to football', 'q:rename')
@@ -138,6 +141,7 @@ describe('Ben quality: show, act, confirm', () => {
     expect(s.prompts.length).toBe(0)
     await bots.undoReply(r.at!)
     expect(log).toContain('calendar.update g3 title=Gym')
+    vi.setSystemTime(new Date(2026, 10, 6, 7, 31)) // its own moment, so Undo finds this reply
     const m = await bots.think('move the reading block to 22', 'q:move')
     expect(m.done[0]).toMatch(/Moved: Reading/)
     await bots.undoReply(m.at!)
