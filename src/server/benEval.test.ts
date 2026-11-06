@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
 import { runBenEval } from './benEval'
 
@@ -8,6 +8,14 @@ let SQL: SqlJsStatic
 beforeAll(async () => {
   SQL = await initSqlJs({ locateFile: (f: string) => require.resolve(`sql.js/dist/${f}`) })
 })
+
+// The cases use calendar blocks at 09:00 and 14:00: run them on a morning clock so a
+// block that has already ended (Ben skips those) doesn't change the answer.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 10, 6, 7, 30))
+})
+afterAll(() => vi.useRealTimers())
 
 describe("Ben's test harness", () => {
   it('runs every case on throwaway data and judges what Ben did', async () => {

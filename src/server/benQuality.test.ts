@@ -142,6 +142,9 @@ describe('Ben quality: show, act, confirm', () => {
   })
 
   it('two deep blocks: chips, then "first one" acts; the reply is in his language', async () => {
+    // A morning clock: once the 09:00 block has ended Ben (rightly) offers only the 14:00 one.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 6, 7, 30))
     const s = stub(() => ({ reply: 'x' }))
     const { bots, log } = await evalWorld(SQL, s.model, { extraEvents: [{ title: 'Deep block 2', h: 14 }] })
     const ask = await bots.think('schimbă deep blocul în app', 'q:ro1')
