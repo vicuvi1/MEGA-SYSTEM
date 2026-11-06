@@ -17,6 +17,7 @@ import { GrowthSections } from './Growth'
 import { MonthReview, MoodLinksCard, PlannedVsReal, YearRecapView, saveTab, savedTab, type InsightsTab } from './Reviews'
 import { barFill } from '../motionKit'
 import { PageTabs, TabPanel, usePageTab, type PageTab } from '../PageTabs'
+import './insights.css'
 import { useSeen } from '../motionKit'
 export { YearOffer, openYear } from './Reviews'
 import { ScoreRing, useCountUp, useProgress, useShown, weekday } from './ProgressCard'
@@ -297,8 +298,10 @@ function WeekInsights({ r }: { r: ReturnType<typeof useProgress> }) {
   const worst = r.metrics.filter((m) => m.trend === 'worse')
   const active = plan ? activePlan(plan, r.to) : null
   const planNow = plan !== undefined && (editing || shouldPlan(plan, r.to))
+  // Wide screens: the score and your week plan on the left, planned vs real and
+  // mood on the right (insights.css); narrow screens: one column, as before.
   return (
-    <>
+    <div className="pg-wk">
       <section className="panel pg-hero">
         <ScoreRing score={r.score} />
         <div className="pg-hero-text">
@@ -317,10 +320,10 @@ function WeekInsights({ r }: { r: ReturnType<typeof useProgress> }) {
       {/* The score first, then planning the week (V6). */}
       {planNow && <WeekPlanner report={r} plan={plan ?? null} today={r.to} onDone={() => setEditing(false)} />}
       {!planNow && active && <WeekCard plan={active} report={r} onEdit={() => setEditing(true)} />}
-      <div className="rv-pair">
+      <div className="rv-pair pg-wk-side">
         <PlannedVsReal />
         <MoodLinksCard />
       </div>
-    </>
+    </div>
   )
 }

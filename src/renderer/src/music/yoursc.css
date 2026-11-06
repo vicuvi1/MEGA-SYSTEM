@@ -34,12 +34,37 @@
 
 /* ---- the Music page's tabs and the signed-in tab ---- */
 .mup-tabs { display: flex; gap: 6px; }
-.ysw { display: flex; flex-direction: column; gap: 10px; }
-.ysw-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ysw-zoom { display: inline-flex; align-items: center; gap: 4px; }
-.ysw-zoom small { min-width: 38px; text-align: center; color: var(--mu-sub); font-size: 12px; }
-.ysw-now { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--mu-sub); font-size: 12.5px; }
-.ysw-box { position: relative; display: grid; place-items: center; height: calc(100vh - 190px); min-height: 360px; border-radius: 14px; overflow: hidden; background: #121212; border: 1px solid var(--mu-line); color: var(--mu-sub); }
+/* The signed-in tab uses the page's full width (shell.css) and reaches down to the bottom. */
+.mup.mup-web { gap: 12px; }
+:root .content:has(> .mup-web), :root .content.has-bb:has(> .mup-web) { padding-bottom: 0; }
+.ysw { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ysw-bar { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 6px; border: 1px solid var(--border, var(--mu-line)); border-radius: 999px; background: var(--surface, transparent); }
+.ysw-nav { display: inline-flex; align-items: center; gap: 2px; }
+.ysw-ic { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--mu-sub); cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
+.ysw-ic:hover, .ysw-ic[aria-expanded='true'] { background: var(--mu-chip); color: var(--mu-fg); }
+.ysw-ic:focus-visible, .ysw-zoom button:focus-visible, .ysw-state:focus-visible { outline: 2px solid rgb(var(--mu-rgb) / 0.7); outline-offset: 1px; }
+.ysw-state { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--mu-chip); color: var(--mu-sub); font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.ysw-state i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+.ysw-state.on { color: var(--mu-fg); }
+.ysw-state.on i { background: #3ecf8e; opacity: 1; }
+button.ysw-state { cursor: pointer; color: #ff7a3d; }
+button.ysw-state:hover { background: rgb(255 85 0 / 0.14); }
+.ysw-now { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--mu-sub); font-size: 13px; }
+.ysw-now b { color: var(--mu-fg); font-weight: 600; }
+.ysw-zoom { display: inline-flex; align-items: center; height: 30px; padding: 0 2px; border-radius: 999px; background: var(--mu-chip); }
+.ysw-zoom button { height: 26px; min-width: 26px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--mu-sub); font-family: inherit; font-size: 16px; font-weight: 600; line-height: 1; cursor: pointer; }
+.ysw-zoom button:hover:not(:disabled) { color: var(--mu-fg); background: rgb(var(--ink, 255 255 255) / 0.08); }
+.ysw-zoom button:disabled { opacity: 0.35; cursor: default; }
+.ysw-zoom .ysw-pct { min-width: 46px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ysw-more { position: relative; }
+.ysw-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 250px; padding: 6px; border: 1px solid var(--border, var(--mu-line)); border-radius: 14px; background: var(--surface, #16181d); box-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.6); }
+.ysw-menu button { display: grid; gap: 2px; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--mu-fg); font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1.3; text-align: left; cursor: pointer; }
+.ysw-menu button:hover { background: var(--mu-chip); }
+.ysw-menu button.warn { color: #ff6b5a; }
+.ysw-menu small { color: var(--mu-sub); font-weight: 400; font-size: 11.5px; }
+/* The SoundCloud view sits exactly over this box (inside its 1px border). */
+.ysw-box { position: relative; display: grid; place-items: center; height: calc(100vh - 190px); min-height: 320px; border-radius: var(--radius, 14px); overflow: hidden; background: #121212; border: 1px solid var(--border, var(--mu-line)); color: rgb(255 255 255 / 0.6); }
+.ysw-box p { margin: 0; font-size: 13px; }
 .ysw-intro { max-width: 720px; }
 .ysw-intro p, .ysw-intro li { color: var(--mu-sub); line-height: 1.5; font-size: 13.5px; }
 .ysw-intro ul { margin: 8px 0 14px; padding-left: 18px; }

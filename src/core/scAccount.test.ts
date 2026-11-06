@@ -85,8 +85,8 @@ describe('signed in: where the view may go', () => {
     expect(scWebPollMs({ playing: false, visible: false })).toBe(5000)
   })
   it('zoom and bounds stay sensible', () => {
-    expect(cleanZoom('x')).toBe(0.8)
-    expect(cleanZoom(3)).toBe(1.25)
+    expect(cleanZoom('x')).toBe(1)
+    expect(cleanZoom(3)).toBe(1.5)
     expect(cleanZoom(0.72)).toBe(0.7)
     expect(viewBounds({ x: 10.4, y: 80, width: 900, height: 600 })).toEqual({ x: 10, y: 80, width: 900, height: 600 })
     expect(viewBounds({ x: 0, y: 0, width: 20, height: 600 })).toBeNull()
@@ -123,7 +123,7 @@ describe('signed in: now playing', () => {
   it('the state from the desktop is checked again', () => {
     expect(cleanScWebState(null)).toEqual(SCWEB_OFF)
     const s = cleanScWebState({ on: true, signedIn: true, live: true, visible: 'yes', zoom: 9, now: { title: 'Song', artist: 'A', playing: true, pos: 1000, dur: 5000, url: 'https://soundcloud.com/a/song', artwork: 'https://i1.sndcdn.com/x-t500x500.jpg', liked: false }, mixes: [{ url: '/discover/sets/personalized-tracks::example:1', title: 'Mix 1' }], at: 5 })
-    expect(s).toMatchObject({ on: true, signedIn: true, live: true, visible: false, zoom: 1.25, at: 5 })
+    expect(s).toMatchObject({ on: true, signedIn: true, live: true, visible: false, zoom: 1.5, at: 5 })
     expect(s.now).toEqual({ title: 'Song', artist: 'A', artwork: 'https://i1.sndcdn.com/x-t500x500.jpg', playing: true, pos: 1000, dur: 5000, url: 'https://soundcloud.com/a/song', liked: false })
     expect(s.mixes).toHaveLength(1)
   })

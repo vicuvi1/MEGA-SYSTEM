@@ -84,12 +84,15 @@
 .sidebar { scrollbar-width: none; }
 .sidebar::-webkit-scrollbar { display: none; }
 
-/* The header lines up with the centered content below it. */
-/* The header lines up with the page below it (same width as its column). */
-.main { --page-max: 1440px; }
-.main:has(.content > .pg), .main:has(.content > .sk-page) { --page-max: 1280px; }
-.topbar:not(.compact) { padding-inline: max(28px, calc((100% - var(--page-max)) / 2)); }
-@media (min-width: 1700px) { .main { --page-max: 1760px; } .main:has(.content > .pg), .main:has(.content > .sk-page) { --page-max: 1600px; } }
+/* One width for every page: it fills the content area (with the content's side
+   padding) up to 2200px on very wide screens, then stays centred. The header
+   uses the same width, so the page title lines up with the page's left edge.
+   Settings keeps its narrower two-column layout (forms read better short),
+   and its header follows it. */
+.main { --page-max: 2200px; }
+.main:has(.content > .settings .st) { --page-max: 1240px; }
+.topbar:not(.compact) { padding-inline: max(var(--s-6, 24px), calc((100% - var(--page-max)) / 2)); }
+.content > :is(.pg, .sk-page, .td2, .today.cmd, .gx, .mup, .rx, .mh, .ta, .cal, .nb, .sleep, .discipline, .body-page, .bot-center-page) { max-width: var(--page-max); margin-inline: auto; }
 
 /* Daily Rituals */
 .rituals-panel { margin-top: 14px; }

@@ -20,6 +20,7 @@ import {
   cleanMixTiles, cleanZoom, likeResult, mapNowPlaying, mixUrl, NO_NOW, SCWEB_HOME, SCWEB_PARTITION, SCWEB_SIGNIN, SCWEB_ZOOM, scWebPollMs, scWebRoute, viewBounds,
   type MixTile, type ScWebState
 } from '../core/scAccount'
+import { savedZoom, toWindowBounds } from '../core/scBounds'
 
 /** Reads what's playing. Defensive: any missing piece is just left empty. */
 const NOW_JS = `(() => { try {
@@ -89,13 +90,16 @@ type Op = 'toggle' | 'play' | 'pause' | 'next' | 'prev'
 export function createScWeb(o: { dir: string; origin: string; appWindow: BrowserWindow }) {
   const file = join(o.dir, 'soundcloud-signin.json')
   let st: ScWebState = { on: false, signedIn: false, live: false, visible: false, zoom: SCWEB_ZOOM, now: NO_NOW, mixes: [], at: 0 }
+  // zoomSet: you picked the zoom yourself (else the old 80 % default moves to 100 %).
+  let zoomSet = false
   const loaded = readFile(file, 'utf8')
     .then((t) => {
       const j = JSON.parse(t)
-      st = { ...st, on: j?.on === true, zoom: cleanZoom(j?.zoom), mixes: cleanMixTiles(j?.mixes) }
+      zoomSet = j?.zoomSet === true
+      st = { ...st, on: j?.on === true, zoom: savedZoom(j, cleanZoom), mixes: cleanMixTiles(j?.mixes) }
     })
     .catch(() => {})
-  const save = () => void writeFile(file, JSON.stringify({ on: st.on, zoom: st.zoom, mixes: st.mixes })).catch(() => {})
+  const save = () => void writeFile(file, JSON.stringify({ on: st.on, zoom: st.zoom, zoomSet, mixes: st.mixes })).catch(() => {})
 
   let view: WebContentsView | null = null
   let ses: Session | null = null
@@ -294,13 +298,21 @@ export function createScWeb(o: { dir: string; origin: string; appWindow: Browser
     return true
   }
 
-  function show(r: unknown) {
+  function show(r: any) {
     const b = viewBounds(r)
     if (!b || o.appWindow.isDestroyed()) return false
     const v = ensure()
+    // The page sends CSS pixels; the view is placed in window pixels, which
+    // already include Windows' display scaling: only the app's zoom is added.
     const k = o.appWindow.webContents.getZoomFactor() || 1
+    const x = Number(r.x), y = Number(r.y)
     if (!o.appWindow.contentView.children.includes(v)) o.appWindow.contentView.addChildView(v)
-    v.setBounds({ x: Math.round(b.x * k), y: Math.round(b.y * k), width: Math.round(b.width * k), height: Math.round(b.height * k) })
+    v.setBounds(toWindowBounds({ left: x, top: y, right: x + Number(r.width), bottom: y + Number(r.height) }, k))
+    try {
+      v.setBorderRadius(Math.round(13 * k)) // the box's rounded corners (14 px less its border)
+    } catch {
+      /* an older Electron: square corners */
+    }
     if (!st.visible) {
       set({ visible: true })
       schedule(200)
@@ -352,8 +364,15 @@ export function createScWeb(o: { dir: string; origin: string; appWindow: Browser
       case 'back':
         if (view?.webContents.navigationHistory.canGoBack()) view.webContents.navigationHistory.goBack()
         return true
+      case 'forward':
+        if (view?.webContents.navigationHistory.canGoForward()) view.webContents.navigationHistory.goForward()
+        return true
+      case 'reload':
+        view?.webContents.reload()
+        return true
       case 'zoom':
         set({ zoom: cleanZoom(arg) })
+        zoomSet = true
         save()
         try {
           view?.webContents.setZoomFactor(st.zoom)

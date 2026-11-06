@@ -1,0 +1,25 @@
+/* Insights: use the width on wide screens, no tall boxes with nothing in them. */
+
+/* Week: the score and the week plan on the left, planned vs real and mood on the
+   right when the page is wide enough; one column otherwise. */
+.pg .ptab-panel[data-tabpanel='week'] { container-type: inline-size; }
+.pg-wk { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-4, 16px); align-items: start; }
+.pg-wk > * { margin: 0; min-width: 0; }
+.pg-wk > .pg-wk-side { margin: 0; }
+@container (min-width: 1100px) {
+  .pg-wk { grid-template-columns: minmax(0, 1.75fr) minmax(360px, 1fr); }
+  .pg-wk > :not(.pg-wk-side) { grid-column: 1; }
+  .pg-wk > .pg-wk-side { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: var(--s-4, 16px); position: sticky; top: 8px; }
+}
+
+/* Mood, before there are enough check-ins: a short card with a progress line. */
+.rv-mood-empty { gap: 8px; }
+.rv-meter { display: block; height: 6px; border-radius: 999px; background: rgb(var(--ink, 255 255 255) / 0.08); overflow: hidden; }
+.rv-meter i { display: block; height: 100%; border-radius: inherit; background: var(--lime, #c8f135); }
+
+/* Areas: the label keeps to one line; the "vs last week" chip goes under it when the card is narrow. */
+.pg-grid-tab .pg-top { flex-wrap: wrap; row-gap: 4px; }
+.pg-grid-tab .pg-label { white-space: nowrap; }
+
+/* Focus: the two cards keep their own height. */
+.pg .ptab-panel[data-tabpanel='focus'] .ins-two { align-items: start; }

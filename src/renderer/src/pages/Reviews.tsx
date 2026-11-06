@@ -107,6 +107,23 @@ export function MoodLinksCard() {
     life.extras?.moods().then(setV).catch(() => {})
   }, [])
   if (!v) return null
+  // Not enough check-ins yet: a short card with how far along you are, not a tall empty box.
+  if (!v.links.length && v.days < v.need) {
+    return (
+      <section className="panel rv-card rv-mood-empty" aria-label="Mood, sleep and training">
+        <header className="rv-head">
+          <h3>What lifts your mood</h3>
+          <small className="hint">
+            {v.days} of {v.need} check-ins
+          </small>
+        </header>
+        <span className="rv-meter" aria-hidden="true">
+          <i style={{ width: `${Math.min(100, (v.days / Math.max(1, v.need)) * 100)}%` }} />
+        </span>
+        <p className="hint small">Rate your mood with Ben (Coach → Today). After {v.need} days this shows what goes with a better mood: sleep, training or spending.</p>
+      </section>
+    )
+  }
   return (
     <section className="panel rv-card" aria-label="Mood, sleep and training">
       <header className="rv-head">

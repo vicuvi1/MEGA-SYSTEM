@@ -16,6 +16,7 @@ import { Eq, MuIcon, type Press } from './MusicUi'
 import { uiTick } from './engine'
 import { useStationArt } from './hooks'
 import { hasScWeb, scWebOp, useScWeb } from './scWeb'
+import { boundsKey, clip, covered, fillHeight, type Rect } from '@core/scBounds'
 import './yoursc.css'
 
 // ---- your public playlists (asked from the embed player, cached a day) ----
@@ -279,42 +280,115 @@ export function LikeButton({ press, id }: { press: Press; id: string }) {
   )
 }
 
+/** What of ours can lie over the page: the view would hide it, so it steps aside while one shows over its box. */
+const OVERLAYS = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], .nt-stack > *, .nv-bar, [role="menu"], [role="listbox"], .palette-back, .quick-command-backdrop, .toasts > *, .zoom-toast, .sheet'
+function overlayRects(): Rect[] {
+  const out: Rect[] = []
+  document.querySelectorAll<HTMLElement>(OVERLAYS).forEach((el) => {
+    const r = el.getBoundingClientRect()
+    if (r.width < 2 || r.height < 2) return
+    const cs = getComputedStyle(el)
+    if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return
+    out.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
+  })
+  return out
+}
+
+const NAV_ICON: Record<'back' | 'forward' | 'home' | 'reload' | 'more', string> = {
+  back: 'M15 5l-7 7 7 7',
+  forward: 'M9 5l7 7-7 7',
+  home: 'M4 11.5 12 5l8 6.5M6.5 10v9h11v-9',
+  reload: 'M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4',
+  more: 'M6 12h.01M12 12h.01M18 12h.01'
+}
+const NavIcon = ({ d }: { d: keyof typeof NAV_ICON }) => (
+  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={d === 'more' ? 3 : 1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={NAV_ICON[d]} />
+  </svg>
+)
+
 /**
  * The Music page's "Your SoundCloud" tab (desktop): SoundCloud's real home
- * page in its own isolated view, placed over this panel. Leaving the tab
- * only hides it, so the music goes on.
+ * page in its own isolated view, placed over this panel's box. The box fills
+ * the page down to the bottom of the window, and the view follows it when the
+ * window, the zoom or the sidebar changes. It steps aside while one of our
+ * menus, dialogs, the search box or a toast lies over it. Leaving the tab only
+ * hides it, so the music goes on.
  */
 export function ScWebPanel() {
   const w = useScWeb()
   const box = useRef<HTMLDivElement>(null)
   const on = !!w?.on
   const [sure, setSure] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const [aside, setAside] = useState(false)
+  const [height, setHeight] = useState(0)
+  const menuRef = useRef(menu)
+  menuRef.current = menu
   useEffect(() => {
     if (!sure) return
     const t = window.setTimeout(() => setSure(false), 4000)
     return () => clearTimeout(t)
   }, [sure])
   useEffect(() => {
+    if (!menu) return
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element)?.closest?.('.ysw-more')) (setMenu(false), setSure(false))
+    }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', close)
+    }
+  }, [menu])
+  useEffect(() => {
     const el = box.current
     if (!on || !el) return
     let raf = 0
-    const send = () => {
+    let last = ''
+    const content = el.closest('.content')
+    const area = (): Rect => {
+      const c = content?.getBoundingClientRect()
+      return c ? { left: c.left, top: c.top, right: c.right, bottom: c.bottom } : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+    }
+    const check = () => {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         const r = el.getBoundingClientRect()
-        void scWebOp('show', { x: r.left, y: r.top, width: r.width, height: r.height })
+        // The box reaches down to the window's bottom (less a small margin).
+        const h = fillHeight({ viewport: window.innerHeight, top: r.top + (content?.scrollTop ?? 0), margin: 16, min: 320 })
+        setHeight((old) => (Math.abs(old - h) > 1 ? h : old))
+        // Inside the box's border, so the border and its rounded corners show around the view.
+        const bl = el.clientLeft, bt = el.clientTop
+        const seen = clip({ left: r.left + bl, top: r.top + bt, right: r.right - bl, bottom: r.bottom - bt }, area())
+        const over = menuRef.current || covered(seen, overlayRects())
+        const hidden = over || seen.right - seen.left < 80 || seen.bottom - seen.top < 80
+        setAside(over)
+        const key = boundsKey(seen, window.devicePixelRatio, hidden)
+        if (key === last) return
+        last = key
+        void scWebOp(hidden ? 'hide' : 'show', hidden ? undefined : { x: seen.left, y: seen.top, width: seen.right - seen.left, height: seen.bottom - seen.top })
       })
     }
-    send()
-    const ro = new ResizeObserver(send)
+    check()
+    const ro = new ResizeObserver(check)
     ro.observe(el)
-    window.addEventListener('resize', send)
-    window.addEventListener('scroll', send, true)
+    if (content) ro.observe(content)
+    // A menu or dialog opening anywhere on the page: look again.
+    const mo = new MutationObserver(check)
+    mo.observe(document.body, { childList: true, subtree: true })
+    // Things that move the box without resizing it (the sidebar sliding): a light check a few times a second.
+    const tick = window.setInterval(check, 250)
+    window.addEventListener('resize', check)
+    window.addEventListener('scroll', check, true)
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
-      window.removeEventListener('resize', send)
-      window.removeEventListener('scroll', send, true)
+      mo.disconnect()
+      clearInterval(tick)
+      window.removeEventListener('resize', check)
+      window.removeEventListener('scroll', check, true)
       void scWebOp('hide')
     }
   }, [on])
@@ -333,22 +407,60 @@ export function ScWebPanel() {
       </section>
     )
   }
+  const pct = Math.round(w.zoom * 100)
   const zoom = (d: number) => void scWebOp('zoom', Math.round((w.zoom + d) * 100) / 100)
+  const nav = (op: 'back' | 'forward' | 'home' | 'reload', label: string) => (
+    <button className="ysw-ic" aria-label={label} title={label} onClick={() => void scWebOp(op)}>
+      <NavIcon d={op} />
+    </button>
+  )
   return (
     <section className="ysw" aria-label="Your SoundCloud">
       <div className="ysw-bar">
-        <button className="mu-chip" onClick={() => void scWebOp('back')} title="Back">‹ Back</button>
-        <button className="mu-chip" onClick={() => void scWebOp('home')} title="Your SoundCloud home">Home</button>
-        <span className="ysw-zoom">
-          <button className="mu-ic sm" aria-label="Smaller" onClick={() => zoom(-0.05)}>−</button>
-          <small>{Math.round(w.zoom * 100)}%</small>
-          <button className="mu-ic sm" aria-label="Bigger" onClick={() => zoom(0.05)}>+</button>
+        <div className="ysw-nav" role="group" aria-label="Move around SoundCloud">
+          {nav('back', 'Back')}
+          {nav('forward', 'Forward')}
+          {nav('home', 'Your SoundCloud home')}
+          {nav('reload', 'Reload the page')}
+        </div>
+        {w.signedIn ? (
+          <span className="ysw-state on" title="You're signed in to SoundCloud in this app">
+            <i aria-hidden /> Signed in
+          </span>
+        ) : (
+          <button className="ysw-state" title="Open SoundCloud's sign-in page below" onClick={() => void scWebOp('signIn')}>
+            <i aria-hidden /> Not signed in · Sign in
+          </button>
+        )}
+        <span className="ysw-now" title={w.now.title ? `${w.now.title}${w.now.artist ? ` · ${w.now.artist}` : ''}` : undefined}>
+          {w.now.title ? (
+            <>
+              <span aria-hidden>{w.now.playing ? '♪' : '❚❚'}</span> <b>{w.now.title}</b>
+              {w.now.artist ? ` · ${w.now.artist}` : ''}
+            </>
+          ) : null}
         </span>
-        <span className="ysw-now">{w.now.title ? `${w.now.playing ? '♪' : '⏸'} ${w.now.title}${w.now.artist ? ` · ${w.now.artist}` : ''}` : w.signedIn ? 'Signed in' : 'Sign in on the page below'}</span>
-        <button className={`mu-chip ${sure ? 'on' : ''}`} title="Sign out and clear everything SoundCloud saved on this PC" onClick={() => (sure ? (setSure(false), void scWebOp('signOut')) : setSure(true))}>{sure ? 'Tap again to sign out' : 'Sign out'}</button>
+        <span className="ysw-zoom" role="group" aria-label="Page size">
+          <button aria-label="Smaller" title="Smaller" disabled={w.zoom <= 0.5} onClick={() => zoom(-0.05)}>−</button>
+          <button className="ysw-pct" title="Back to 100 %" onClick={() => void scWebOp('zoom', 1)}>{pct}%</button>
+          <button aria-label="Bigger" title="Bigger" disabled={w.zoom >= 1.5} onClick={() => zoom(0.05)}>+</button>
+        </span>
+        <span className="ysw-more">
+          <button className="ysw-ic" aria-label="More" title="More" aria-haspopup="menu" aria-expanded={menu} onClick={() => (setMenu((m) => !m), setSure(false))}>
+            <NavIcon d="more" />
+          </button>
+          {menu && (
+            <div className="ysw-menu" role="menu">
+              <button role="menuitem" className={sure ? 'warn' : ''} onClick={() => (sure ? (setSure(false), setMenu(false), void scWebOp('signOut')) : setSure(true))}>
+                {sure ? 'Press again to sign out' : 'Sign out of SoundCloud'}
+                <small>Clears everything SoundCloud saved on this PC</small>
+              </button>
+            </div>
+          )}
+        </span>
       </div>
-      <div ref={box} className="ysw-box">
-        <p>Loading SoundCloud…</p>
+      <div ref={box} className="ysw-box" style={height ? { height } : undefined} data-aside={aside || undefined}>
+        <p>{aside ? 'SoundCloud steps aside while a menu or window is open.' : 'Loading SoundCloud…'}</p>
       </div>
     </section>
   )

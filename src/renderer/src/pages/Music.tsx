@@ -83,7 +83,7 @@ export function Music() {
   const tabs = <PageTabs page="music" label="Music views" tabs={tabList} value={tab} onChange={setTab} />
   if (tab === 'web') {
     return (
-      <div className="mup mu" style={tintStyle(tint.rgb, s)}>
+      <div className="mup mu mup-web" style={tintStyle(tint.rgb, s)}>
         {tabs}
         <ScWebPanel />
       </div>

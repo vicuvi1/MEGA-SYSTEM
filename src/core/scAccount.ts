@@ -97,11 +97,11 @@ export function scWebRoute(url: unknown): 'in' | 'signin' | 'out' | 'block' {
 /** How often to read what's playing: every second while it plays or you look at it, else every 5 s. */
 export const scWebPollMs = (o: { playing: boolean; visible: boolean }) => (o.playing || o.visible ? 1000 : 5000)
 
-/** The view's zoom (compact by default). */
-export const SCWEB_ZOOM = 0.8
+/** The view's zoom (100 % by default; − and + go from 50 % to 150 %). */
+export const SCWEB_ZOOM = 1
 export const cleanZoom = (z: unknown) => {
   const n = Number(z)
-  return Number.isFinite(n) && n > 0 ? Math.round(Math.max(0.5, Math.min(1.25, n)) * 20) / 20 : SCWEB_ZOOM
+  return Number.isFinite(n) && n > 0 ? Math.round(Math.max(0.5, Math.min(1.5, n)) * 20) / 20 : SCWEB_ZOOM
 }
 
 /** The panel's place on the window (CSS pixels from the page) → the view's bounds, or null if too small. */
