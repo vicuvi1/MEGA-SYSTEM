@@ -42,7 +42,7 @@ import { DayHero, Palette, PowerRow, useRipples, type HeroStat, type PowerTile }
 import { registeredPages } from './widgets/islandPages'
 import { useMusicPage } from './IslandMusicTab'
 import { IslandPager, useScriptClock } from './widgets/island'
-import { IslandClock, IslandIndicator, lookRootClasses, notchRadius, showBar, useIslandLook } from './widgets/islandLook'
+import { IslandClock, IslandIndicator, lookRootClasses, nextClockZone, notchRadius, showBar, useIslandLook, WorldClockRow } from './widgets/islandLook'
 import './sysmon/register'
 import './IslandGoals'
 import { SysPill } from './sysmon/SysPill'
@@ -1909,10 +1909,14 @@ export function DesktopIsland() {
           </>
         )
       case 'time':
-        return <IslandClock kind={look.clock === 'off' ? 'simple' : look.clock} color={look.clockColor || undefined} />
+        return <IslandClock kind={look.clock === 'off' ? 'simple' : look.clock} color={look.clockColor || undefined} zones={look.zones} back={look.zoneBack} onTap={holdHover} />
       default:
         return null
     }
+  }
+  // A tap on the clock (next time zone) counts as fresh hover: the pill doesn't turn into the peek while you tap.
+  function holdHover() {
+    if (uiRef.current.over && uiRef.current.view === 'compact') dispatch({ type: 'hover', on: true })
   }
   // The small extra: an icon or a number, never a placeholder; its tooltip says what it means.
   const restMini = (r: RestItem) => {
@@ -1922,7 +1926,7 @@ export function DesktopIsland() {
     if (r.kind === 'captions') return <i className="rest-dot rec" />
     if (r.kind === 'alert') return <i className="rest-dot" />
     if (r.kind === 'winddown') return <b className="rest-num moon">{r.time}</b>
-    if (r.kind === 'clock') return <IslandClock kind={look.clock} color={look.clockColor || undefined} />
+    if (r.kind === 'clock') return <IslandClock kind={look.clock} color={look.clockColor || undefined} zones={look.zones} back={look.zoneBack} onTap={holdHover} />
     return null
   }
   const restLabel = s.locked ? 'Open Life System' : picked ? `${picked.text} ${picked.sub}` : restMain.tip
@@ -1962,7 +1966,8 @@ export function DesktopIsland() {
       title={restLabel}
       {...dragProps}
       {...clickProps}
-      onKeyDown={(e) => (e.key === 'Enter' ? dispatch({ type: 'click' }) : e.key === 'ArrowRight' ? cycle(1) : e.key === 'ArrowLeft' ? cycle(-1) : undefined)}
+      // T: the clock's next time zone (when you set some in Settings → Widgets → Island look).
+      onKeyDown={(e) => (e.key === 'Enter' ? dispatch({ type: 'click' }) : e.key === 'ArrowRight' ? cycle(1) : e.key === 'ArrowLeft' ? cycle(-1) : (e.key === 't' || e.key === 'T') && look.zones.length ? nextClockZone(look.zones.length, look.zoneBack) : undefined)}
       onWheel={onWheel}
       // H1: a double-click tucks it into a small dot (a click on the dot brings it back).
       onDoubleClick={(e) => { e.preventDefault(); dispatch({ type: 'close' }); desk()?.islandHide?.('dot') }}
@@ -2389,6 +2394,8 @@ export function DesktopIsland() {
           )}
           {/* AU1: what's playing (only with that switch on in PC & automation). */}
           <IslandMedia />
+          {/* Your other time zones, one time each (Settings → Widgets → Island look). */}
+          <WorldClockRow zones={look.zones} />
           <div className="di-chips">
             {prefs.chips.water.map((ml) => (
               <button key={`w${ml}`} {...tp(`chip:w${ml}`, (t) => (tap({ kind: 'water', ml }), bump(t.el, f)))}>💧 +{ml} ml</button>

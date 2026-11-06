@@ -6,6 +6,7 @@ import { cleanConfig, type WidgetManifest } from './manifest'
 import { cleanPagesPrefs, isPageId, type PagesPrefs } from './pages'
 import { cleanScripts, type UserScript } from './scripts'
 import { REST_IDLE, type RestIdle } from '../islandRest'
+import { cleanZones, type ClockZone } from '../worldClock'
 
 export interface InstalledWidget {
   id: string
@@ -44,8 +45,12 @@ export interface IslandLookPrefs {
   hoverOpen: boolean
   /** What the closed island shows when nothing is happening (core/islandRest.ts). */
   rest: RestIdle
+  /** Other time zones: a tap on the clock shows the next one (core/worldClock.ts). Empty: only your time. */
+  zones: ClockZone[]
+  /** Go back to your own time 30 s after showing another zone. */
+  zoneBack: boolean
 }
-export const DEFAULT_LOOK: IslandLookPrefs = { style: 'notch', maxBar: true, clock: 'off', clockColor: '', theme: 'dark', hoverOpen: false, rest: 'next' }
+export const DEFAULT_LOOK: IslandLookPrefs = { style: 'notch', maxBar: true, clock: 'off', clockColor: '', theme: 'dark', hoverOpen: false, rest: 'next', zones: [], zoneBack: true }
 
 /** PL8: island settings that follow you to every PC (the rest of the island's settings stay on each PC). */
 export interface SyncedLayout {
@@ -77,7 +82,9 @@ export function cleanLook(v: any, fallbackStyle: IslandStyle = 'notch'): IslandL
     clockColor: typeof v?.clockColor === 'string' && COLOR.test(v.clockColor) ? v.clockColor.toLowerCase() : '',
     theme: ISLAND_THEMES.includes(v?.theme) ? v.theme : 'dark',
     hoverOpen: v?.hoverOpen === true,
-    rest: REST_IDLE.includes(v?.rest) ? v.rest : 'next'
+    rest: REST_IDLE.includes(v?.rest) ? v.rest : 'next',
+    zones: cleanZones(v?.zones),
+    zoneBack: v?.zoneBack !== false
   }
 }
 

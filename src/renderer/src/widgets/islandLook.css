@@ -64,3 +64,29 @@
 :root .di.th-cyberpunk .di-shade { box-shadow: 0 10px 32px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 240 255 / 0.5), 0 0 22px -4px rgb(255 42 109 / 0.55); }
 :root .di.th-light .di-sky, :root .di.th-ghlight .di-sky { display: none; }
 :root .di.th-light .di-pill-text, :root .di.th-ghlight .di-pill-text { color: rgb(var(--ink) / 0.9); }
+
+/* Other time zones on the clock (core/worldClock.ts): a tap shows the next zone. */
+:root .di .di-pill .di-wclock { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; padding: 2px 5px; margin-block: -2px; border-radius: 7px; cursor: pointer; outline: none; transition: background-color 0.2s ease; }
+:root .di .di-pill .di-wclock .di-clock { margin-left: 0; }
+:root .di .di-pill .di-wclock:hover { background: rgb(255 255 255 / 0.07); }
+:root .di .di-pill .di-wclock:focus-visible { box-shadow: 0 0 0 1.5px var(--acc-text, #d4ff3f); }
+/* Not your time: a soft tint, so it never reads as the local clock. */
+:root .di .di-pill .di-wclock.is-away { background: color-mix(in srgb, var(--acc-text, #d4ff3f) 14%, transparent); }
+.di-wclock-tag { display: inline-flex; align-items: baseline; gap: 3px; font-size: 10.5px; font-weight: 650; letter-spacing: 0.02em; line-height: 1; color: var(--acc-text, #d4ff3f); white-space: nowrap; animation: di-wtag-in 0.24s ease-out both; }
+.di-wclock-tag b { font-size: 9.5px; font-weight: 700; padding: 1px 3px; border-radius: 4px; background: color-mix(in srgb, var(--acc-text, #d4ff3f) 22%, transparent); }
+/* While the list of zones shows, it has the pill to itself (a little wider, the small extra steps aside). */
+:root .di .di-pill:has(.di-wclock-all) { max-width: 600px; }
+:root .di .di-pill:has(.di-wclock-all) .rest-secondary { display: none; }
+:root .di .di-pill .di-wclock:has(.di-wclock-all) { flex: 0 1 auto; min-width: 0; }
+.di-wclock-all { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 500; color: var(--sub, rgb(255 255 255 / 0.6)); white-space: nowrap; font-variant-numeric: tabular-nums; animation: di-wtag-in 0.2s ease-out both; }
+.di-wflip { animation: di-wflip 0.34s cubic-bezier(0.2, 0.8, 0.2, 1.1) both; transform-origin: 50% 50%; }
+@keyframes di-wflip { from { transform: perspective(60px) rotateX(-80deg); opacity: 0.2; } to { transform: none; opacity: 1; } }
+@keyframes di-wtag-in { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+
+/* The panel's world clock: one time per zone. */
+.di-world { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.di-world-z { display: inline-flex; flex-direction: column; gap: 1px; padding: 5px 9px; border-radius: 10px; background: rgb(255 255 255 / 0.05); border: 1px solid var(--line, rgb(255 255 255 / 0.1)); min-width: 54px; }
+.di-world-z small { font-size: 10px; color: var(--sub, rgb(255 255 255 / 0.56)); white-space: nowrap; }
+.di-world-z b { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--fg); }
+.di-world-z b i { font-style: normal; font-size: 9.5px; margin-left: 3px; color: var(--acc-text, #d4ff3f); vertical-align: 2px; }
+.di-world-z.here { border-color: color-mix(in srgb, var(--acc-text, #d4ff3f) 40%, transparent); }

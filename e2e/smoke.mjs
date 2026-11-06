@@ -1361,6 +1361,117 @@ try {
     }
     await ip.context().close()
   })
+  // World clock: two zones in the island look; a tap on the clock shows the next one (no panel), with a
+  // label and a day marker; T on the pill does the same; it goes back to your time after 30 s; the panel
+  // lists them all. The page is in Tokyo at 08:30, so New York and London are still on yesterday.
+  await step('Desktop island world clock: tap the clock for the next time zone, no panel, back to your time', async () => {
+    const shots = process.env.WORLDCLOCK_SHOTS
+    const ctx = await browser.newContext({ viewport: { width: 640, height: 900 }, timezoneId: 'Asia/Tokyo' })
+    const day = new Date(fakeNow())
+    await ctx.clock.setSystemTime(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 23, 30))
+    const ip = await ctx.newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const snap = {
+        at: Date.now(), locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [], water: { ml: 1200, target: 2500 }, reps: [], alert: null,
+        widgets: { installed: [], look: { rest: 'time', clock: 'simple', zones: [{ tz: 'America/New_York', label: 'NYC' }, { tz: 'Europe/London', label: '' }, { tz: 'Not/AZone', label: 'x' }] } }
+      }
+      window.__island = { actions: [], snap, send: (name, v) => cbs[name]?.(v) }
+      window.desktop = new Proxy({
+        islandAction: (a) => { window.__island.actions.push(a); if (a.id) setTimeout(() => cbs.ack?.({ id: a.id, ok: true, tookMs: 5 }), 50) },
+        islandHot: () => {}, islandTakeClicks: () => {},
+        onIslandAck: on('ack'),
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill.di-rest .di-wclock', { timeout: 15000 })
+    // Opens on a click only (the mouse resting on it doesn't grow it into the peek between taps).
+    await ip.evaluate(() => window.__island.send('prefs', { size: 'normal', opacity: 1, look: 'black', mode: 'balanced', openOn: 'click' }))
+    const tag = () => ip.evaluate(() => document.querySelector('.di-pill .di-wclock-tag')?.textContent ?? '')
+    const noPanel = async (when) => {
+      await ip.waitForTimeout(350)
+      if (await ip.$('.di-panel')) throw new Error(`the panel opened ${when}`)
+    }
+    if (await tag()) throw new Error('a zone label before any tap')
+    if (shots) {
+      await ip.mouse.move(600, 880)
+      await ip.waitForTimeout(500)
+      await ip.locator('.di-shape').screenshot({ path: `${shots}/pill-local.png` })
+    }
+    // Tap: New York, a day behind; the panel stays shut.
+    await ip.click('.di-wclock')
+    await ip.waitForFunction(() => /NYC/.test(document.querySelector('.di-pill .di-wclock-tag')?.textContent ?? ''), null, { timeout: 3000 })
+    if (!(await tag()).includes('−1')) throw new Error(`no day marker for New York: "${await tag()}"`)
+    await noPanel('on the first tap')
+    if (shots) {
+      await ip.mouse.move(600, 880)
+      await ip.waitForTimeout(500)
+      await ip.locator('.di-shape').screenshot({ path: `${shots}/pill-nyc-minus-day.png` })
+    }
+    // Tap again: London (no label set: the city's name); the made-up zone was dropped. Then your time.
+    await ip.click('.di-wclock')
+    await ip.waitForFunction(() => /London/.test(document.querySelector('.di-pill .di-wclock-tag')?.textContent ?? ''), null, { timeout: 3000 })
+    await noPanel('on the second tap')
+    await ip.click('.di-wclock')
+    await ip.waitForFunction(() => !document.querySelector('.di-pill .di-wclock-tag'), null, { timeout: 3000 })
+    await noPanel('on the third tap')
+    // Resting the mouse on it lists every zone.
+    // (the pill can shift a little as the mouse comes onto it, so it goes to the clock twice)
+    await ip.mouse.move(600, 880)
+    await ip.hover('.di-wclock')
+    await ip.waitForTimeout(300)
+    await ip.hover('.di-wclock')
+    await ip.waitForSelector('.di-wclock-all', { timeout: 3000 })
+    const all = await ip.locator('.di-wclock-all').innerText()
+    if (!/^Local \d\d:\d\d · NYC \d\d:\d\d −1 · London \d\d:\d\d −1$/.test(all)) throw new Error(`the list of zones says "${all}"`)
+    if (shots) await ip.locator('.di-shape').screenshot({ path: `${shots}/pill-tooltip.png` })
+    await ip.mouse.move(600, 880)
+    // The panel: one time per zone, yours first.
+    await ip.focus('.di-pill')
+    await ip.keyboard.press('Enter')
+    await ip.waitForSelector('.di-panel .di-world', { timeout: 5000 })
+    const row = await ip.$$eval('.di-world-z small', (e) => e.map((x) => x.textContent))
+    if (row.join(',') !== 'Local,NYC,London') throw new Error(`the world clock row has ${row.join(', ')}`)
+    if (shots) {
+      await ip.waitForTimeout(900)
+      await ip.locator('.di-world').screenshot({ path: `${shots}/panel-world-row.png` })
+    }
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    // T on the pill: the next zone too; after 30 s it goes back to your time.
+    await ip.focus('.di-pill')
+    await ip.keyboard.press('t')
+    await ip.waitForFunction(() => /NYC/.test(document.querySelector('.di-pill .di-wclock-tag')?.textContent ?? ''), null, { timeout: 3000 })
+    await ctx.clock.fastForward(31_000)
+    await ip.waitForFunction(() => !document.querySelector('.di-pill .di-wclock-tag'), null, { timeout: 3000 })
+    await ctx.close()
+    // Settings → Widgets → Island look: find a zone, add it, then take it out again.
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Widgets' }).first().click()
+    await pg.waitForSelector('.st-tabs .ptabs [data-tab="look"]', { timeout: 8000 })
+    await pg.click('.st-tabs .ptabs [data-tab="look"]')
+    await pg.waitForSelector('.wg-zone-search', { timeout: 5000 })
+    await pg.fill('.wg-zone-search', 'tokyo')
+    await pg.click('.wg-zone-hits button:has-text("Tokyo")')
+    await pg.waitForSelector('.wg-zone:not(.here) >> text=Tokyo', { timeout: 3000 })
+    await pg.fill('.wg-zone-label', 'Office')
+    await pg.keyboard.press('Enter')
+    await pg.fill('.wg-zone-search', 'new y')
+    await pg.waitForSelector('.wg-zone-hits button:has-text("New York")', { timeout: 3000 })
+    if (shots) await pg.locator('.wg-zones-row').screenshot({ path: `${shots}/settings-zone-picker.png` })
+    await pg.fill('.wg-zone-search', '')
+    await pg.click('.wg-zone button[aria-label="Remove Tokyo"]')
+    await pg.waitForSelector('.wg-zone:not(.here)', { state: 'detached', timeout: 3000 })
+    // Leave Widgets on its first tab (the page remembers the last one).
+    await pg.click('.st-tabs .ptabs [data-tab="gallery"]')
+  })
   // Island 2: a move break you pick and count (−/+), logged with ↶ Undo; an eye break counts down on the pill.
   await step('Desktop island nudges: pick the count, log it, undo it, the eye break countdown', async () => {
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()

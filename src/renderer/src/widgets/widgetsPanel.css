@@ -30,3 +30,21 @@
 .wg-theme.th-dracula { --sw-bg: #282a36; --sw-acc: #bd93f9; }
 .wg-theme.th-nightowl { --sw-bg: #011627; --sw-acc: #82aaff; }
 .wg-theme.th-cyberpunk { --sw-bg: #0a0612; --sw-acc: #fcee0a; }
+
+/* Clock time zones (ClockZones.tsx) */
+.wg-zones-row { align-items: flex-start; flex-wrap: wrap; }
+.wg-zones { display: flex; flex-direction: column; gap: 8px; flex: 1 1 340px; min-width: 0; }
+.wg-zone-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wg-zone { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 10px; }
+.wg-zone.here { border-style: dashed; }
+.wg-zone-name { display: flex; flex-direction: column; flex: 1 1 140px; min-width: 0; }
+.wg-zone-name small, .wg-zone-fixed { color: var(--muted, #8a8f98); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wg-zone-label { width: 96px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; font-size: 12.5px; }
+.wg-zone-btns { display: inline-flex; gap: 4px; }
+.wg-zone-pick { position: relative; }
+.wg-zone-search { width: 100%; box-sizing: border-box; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; font-size: 13px; }
+.wg-zone-hits { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
+.wg-zone-hits button { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.wg-zone-hits button:hover, .wg-zone-hits button:focus-visible { background: rgb(127 127 127 / 0.14); }
+.wg-zone-hits small, .wg-zone-none small { color: var(--muted, #8a8f98); }
+.wg-zone-none { padding: 6px 8px; }

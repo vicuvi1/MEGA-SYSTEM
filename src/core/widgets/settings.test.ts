@@ -23,6 +23,12 @@ describe('widget settings (PL2, PL8)', () => {
     expect(s.look).toMatchObject({ style: 'notch', theme: 'dracula', clockColor: '' })
     expect(cleanLook(null, 'capsule').style).toBe('capsule')
   })
+  it('clock time zones: none by default, invalid ones dropped, going back on unless switched off', () => {
+    expect(cleanLook(null)).toMatchObject({ zones: [], zoneBack: true })
+    const l = cleanLook({ zones: [{ tz: 'America/New_York', label: 'NYC' }, { tz: 'Not/AZone', label: 'x' }, 'Asia/Tokyo'], zoneBack: false })
+    expect(l.zones).toEqual([{ tz: 'America/New_York', label: 'NYC' }, { tz: 'Asia/Tokyo', label: '' }])
+    expect(l.zoneBack).toBe(false)
+  })
   it('layout: the first time on a PC takes the synced one; a change here is pushed; a change elsewhere is applied', () => {
     const order = [{ id: 'timer', on: true }, { id: 'rain', on: true }]
     const other = [{ id: 'rain', on: true }, { id: 'timer', on: false }]

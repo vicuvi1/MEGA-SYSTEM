@@ -17,6 +17,7 @@ import { useAction } from '../ui'
 import { play } from '../soundKit'
 import { GALLERY, MANIFESTS, screenshotOf } from './registry'
 import { WidgetFrame } from './WidgetFrame'
+import { ClockZones } from './ClockZones'
 import { readWidgets, saveWidgets } from './widgetsFeed'
 import './widgets.css'
 import './widgetsPanel.css'
@@ -322,6 +323,12 @@ function LookSection({ s, save }: { s: WidgetsSetting; save: (n: WidgetsSetting)
         <Segmented label="Clock" value={l.clock} options={CLOCK_STYLES.map((x) => [x, CLOCK_LABEL[x]] as [typeof x, string])} onChange={(clock) => set({ clock })} />
         {l.clock !== 'off' && <input type="color" aria-label="Clock colour" value={l.clockColor || '#f5f5f6'} onChange={(e) => set({ clockColor: e.target.value })} />}
       </Row>
+      <ClockZones zones={l.zones} onChange={(zones) => set({ zones })} />
+      {l.zones.length > 0 && (
+        <Row title="Go back to my time after 30 s" hint="Off: the clock stays on the zone you tapped to until you tap again">
+          <Switch label="Go back to my time after 30 s" on={l.zoneBack} onChange={(zoneBack) => set({ zoneBack })} />
+        </Row>
+      )}
       <Row title="Theme">
         <div className="wg-themes" role="radiogroup" aria-label="Island theme">
           {ISLAND_THEMES.map((t) => (

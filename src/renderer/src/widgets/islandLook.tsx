@@ -4,10 +4,13 @@
 // pill (Simple, Seven-segment, Serif, your colour) and eight themes. All
 // from the synced setting (Settings → Widgets → Island look), so every PC
 // looks the same. Light: the clock redraws once a minute; nothing loops.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { IslandSnapshot } from '@core/islandModel'
 import { cleanLook, type ClockStyle, type IslandLookPrefs } from '@core/widgets/settings'
+import { dayMark, dayOffset, dayWords, nextZoneIndex, worldLine, ZONE_BACK_MS, zoneName, zoneTime, type ClockZone } from '@core/worldClock'
 import { onFrame, ringColor, useFeel } from '../islandFeel'
+import { Roll } from '../IslandScenes'
+import { tp } from '../islandTap'
 import './islandLook.css'
 
 export function useIslandLook(s: IslandSnapshot): IslandLookPrefs {
@@ -131,21 +134,128 @@ function Digit({ d }: { d: string }) {
   )
 }
 
-/** The pill's clock. */
-export function IslandClock({ kind, color }: { kind: ClockStyle; color?: string }) {
+// ---- Other time zones: which one the clock shows now (0 = your time), shared by every clock on the island ----
+let zoneIdx = 0
+let backT = 0
+const zoneSubs = new Set<() => void>()
+const setZoneIdx = (i: number) => {
+  if (i === zoneIdx) return
+  zoneIdx = i
+  for (const f of zoneSubs) f()
+}
+const subZone = (f: () => void) => (zoneSubs.add(f), () => void zoneSubs.delete(f))
+const getZone = () => zoneIdx
+/** The clock shows the next zone (your time → zone 1 → … → your time). `back`: your time again after 30 s. */
+export function nextClockZone(count: number, back: boolean): void {
+  clearTimeout(backT)
+  setZoneIdx(nextZoneIndex(zoneIdx, count))
+  if (back && zoneIdx !== 0) backT = window.setTimeout(() => setZoneIdx(0), ZONE_BACK_MS)
+}
+/** Which zone the clock shows: null for your own time. */
+function useClockZone(zones: ClockZone[]): ClockZone | null {
+  const i = useSyncExternalStore(subZone, getZone, getZone)
+  return i > 0 && i <= zones.length ? zones[i - 1] : null
+}
+
+function SegClock({ hm, style, flip = '' }: { hm: string; style?: React.CSSProperties; flip?: string }) {
+  return (
+    // A new zone flips in (CSS; none with less motion); the minute just redraws.
+    <span key={flip} className={`di-clock seg ${flip ? 'di-wflip' : ''}`} style={style} aria-label={hm}>
+      <Digit d={hm[0]} />
+      <Digit d={hm[1]} />
+      <i className="di-seg-colon" />
+      <Digit d={hm[3]} />
+      <Digit d={hm[4]} />
+    </span>
+  )
+}
+
+/**
+ * The pill's clock. With other time zones set, a tap shows the next one (the
+ * panel doesn't open), a small tag says which and the day when it differs,
+ * and resting the mouse on it lists every zone.
+ */
+export function IslandClock({ kind, color, zones = [], back = true, onTap }: { kind: ClockStyle; color?: string; zones?: ClockZone[]; back?: boolean; onTap?: () => void }) {
   const d = useMinute()
+  const zone = useClockZone(zones)
+  const [all, setAll] = useState(false)
+  const hoverT = useRef(0)
+  useEffect(() => () => clearTimeout(hoverT.current), [])
   if (kind === 'off') return null
-  const hm = `${two(d.getHours())}:${two(d.getMinutes())}`
+  const hm = zone ? zoneTime(d, zone.tz) : `${two(d.getHours())}:${two(d.getMinutes())}`
   const style = color ? ({ ['--clock' as string]: color } as React.CSSProperties) : undefined
-  if (kind === 'segment')
-    return (
-      <span className="di-clock seg" style={style} aria-label={hm}>
-        <Digit d={hm[0]} />
-        <Digit d={hm[1]} />
-        <i className="di-seg-colon" />
-        <Digit d={hm[3]} />
-        <Digit d={hm[4]} />
+  if (!zones.length) return kind === 'segment' ? <SegClock hm={hm} style={style} /> : <span className={`di-clock ${kind}`} style={style}>{hm}</span>
+  const off = zone ? dayOffset(d, zone.tz) : 0
+  const mark = dayMark(off)
+  const line = worldLine(d, zones)
+  const step = () => {
+    // Tapping through zones: the list of all of them steps aside until the mouse comes back.
+    clearTimeout(hoverT.current)
+    setAll(false)
+    nextClockZone(zones.length, back)
+    onTap?.()
+  }
+  return (
+    <span
+      className={`di-wclock ${zone ? 'is-away' : ''}`}
+      style={style}
+      role="button"
+      tabIndex={0}
+      // Empty: the pill's own tooltip doesn't cover the list of zones.
+      title=""
+      aria-label={`${zone ? `${zoneName(zone)} ${hm}${off ? `, ${dayWords(off)}` : ''}` : `Your time ${hm}`}. ${line}. Tap for the next time zone`}
+      {...tp('clock:zone', step)}
+      // Two quick taps are two zones, not the pill's double-click (which tucks the island away).
+      onDoubleClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        e.stopPropagation()
+        step()
+      }}
+      onPointerEnter={() => {
+        clearTimeout(hoverT.current)
+        hoverT.current = window.setTimeout(() => setAll(true), 600)
+      }}
+      onPointerLeave={() => {
+        clearTimeout(hoverT.current)
+        setAll(false)
+      }}
+    >
+      {kind === 'segment' ? <SegClock hm={hm} flip={zone?.tz ?? 'local'} /> : <Roll className={`di-clock ${kind}`} text={hm} />}
+      {zone && (
+        <span className="di-wclock-tag" key={zone.tz}>
+          {zoneName(zone)}
+          {mark && <b aria-hidden>{mark}</b>}
+        </span>
+      )}
+      {all && <span className="di-wclock-all" role="tooltip" title={line}>{line}</span>}
+    </span>
+  )
+}
+
+/** The panel's world clock: one time per zone, your time first. */
+export function WorldClockRow({ zones }: { zones: ClockZone[] }) {
+  const d = useMinute()
+  if (!zones.length) return null
+  return (
+    <section className="di-world" aria-label="World clock">
+      <span className="di-world-z here">
+        <small>Local</small>
+        <b>{zoneTime(d)}</b>
       </span>
-    )
-  return <span className={`di-clock ${kind}`} style={style}>{hm}</span>
+      {zones.map((z) => {
+        const off = dayOffset(d, z.tz)
+        return (
+          <span key={z.tz} className="di-world-z" title={z.tz.replace(/_/g, ' ')}>
+            <small>{zoneName(z)}</small>
+            <b>
+              {zoneTime(d, z.tz)}
+              {off !== 0 && <i title={dayWords(off)}>{dayMark(off)}</i>}
+            </b>
+          </span>
+        )
+      })}
+    </section>
+  )
 }
