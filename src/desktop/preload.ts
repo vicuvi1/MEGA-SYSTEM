@@ -55,6 +55,7 @@ const api: DesktopApi = {
   onIslandDebug: (cb) => void ipcRenderer.on('island:debug', (_e, d) => cb(d)),
   islandCopy: (text) => ipcRenderer.send('island:copy', String(text ?? '')),
   islandCall: (inCall) => ipcRenderer.send('island:call', { inCall: !!inCall }),
+  islandBar: (on) => ipcRenderer.send('island:bar', !!on),
   islandLog: (line) => ipcRenderer.send('island:log', String(line ?? '')),
   islandGetLog: () => ipcRenderer.invoke('island:getLog'),
   onIslandDiag: (cb) => void ipcRenderer.on('island:diag', (_e, d) => cb(d)),

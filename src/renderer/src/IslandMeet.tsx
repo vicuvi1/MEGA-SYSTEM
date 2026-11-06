@@ -33,7 +33,7 @@ const setNoticeOff = () => {
 
 type Replies = { phase: 'reading' | 'asking' | 'ready'; app: string; message: string; list: string[]; confirm: number | null }
 
-export function IslandMeet({ inCall, title, near, onLayout }: { inCall: boolean; title: string | null; near: boolean; onLayout: () => void }) {
+export function IslandMeet({ inCall, title, near, onLayout, onCaptioning }: { inCall: boolean; title: string | null; near: boolean; onLayout: () => void; /** Captions on or off (the thin Indicator shows a red dot). */ onCaptioning?: (on: boolean) => void }) {
   const meet = window.desktop?.meetings
   const [s, setS] = useState<(MeetState & { private?: boolean }) | null>(null)
   const [priv, setPriv] = useState(false)
@@ -60,6 +60,11 @@ export function IslandMeet({ inCall, title, near, onLayout }: { inCall: boolean;
     return () => clearTimeout(t)
   }, [said])
   const captioning = !!s?.captioning
+  const captioningRef = useRef(onCaptioning)
+  captioningRef.current = onCaptioning
+  useEffect(() => {
+    captioningRef.current?.(captioning)
+  }, [captioning])
   const held = !captioning && (s?.words ?? 0) > 0
   const canCaption = inCall && !!s?.windows && !!s.live && !priv
   const showCall = !!s && (captioning || held || (near && inCall && !priv && !!s.windows))

@@ -39,7 +39,7 @@ import { DayHero, Palette, PowerRow, useRipples, type HeroStat, type PowerTile }
 import { registeredPages } from './widgets/islandPages'
 import { useMusicPage } from './IslandMusicTab'
 import { IslandPager, useScriptClock } from './widgets/island'
-import { IslandBar, IslandClock, lookRootClasses, notchRadius, showBar, useIslandLook } from './widgets/islandLook'
+import { IslandClock, IslandIndicator, lookRootClasses, notchRadius, showBar, useIslandLook } from './widgets/islandLook'
 import './sysmon/register'
 import './IslandGoals'
 import { SysPill } from './sysmon/SysPill'
@@ -535,6 +535,12 @@ export function DesktopIsland() {
   const inCall = !!s.call || q.call
   // The thin bar: a window is maximized on this screen (or you picked the bar).
   const bar = showBar(look, !!q.maximized)
+  // The desktop puts the window top-centre, flush with the top, while the bar look is on.
+  useEffect(() => {
+    desk()?.islandBar?.(bar)
+  }, [bar])
+  // Captions running (from the meeting strip): a red dot on the Indicator.
+  const [captioning, setCaptioning] = useState(false)
   // Hover to open (BrimDeck-style, a switch in Settings → Widgets → Island look): the peek grows into the panel; moving away or Esc closes it.
   useEffect(() => {
     if (look.hoverOpen && ui.view === 'peek' && ui.over && !ui.byAlert && !s.locked) dispatch({ type: 'click' })
@@ -2203,7 +2209,15 @@ export function DesktopIsland() {
     </div>
   )
   const showMoment = !!moment && !hushed && !s.locked && !old
-  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : bar && !ui.over && !s.alert ? <IslandBar {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
+  // The thin Indicator: one capsule on the top edge; the timer, music, captions and alerts live inside it.
+  const barNow = bar && !ui.over && ui.view === 'compact' && !mv.parked && !hushed
+  const indInfo = {
+    fill: run ? { from: run.startedAt, to: run.endsAt, freeze: run.pausedAt ?? null } : s.now ? { from: s.now.start, to: s.now.end, soft: true } : null,
+    music: !!sc.playing,
+    rec: captioning,
+    alert: s.alert?.id ?? null
+  }
+  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
   const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
@@ -2221,7 +2235,8 @@ export function DesktopIsland() {
   const anchorRef = useRef(anchor)
   anchorRef.current = anchor
   const clip = useMotionValue('none')
-  const notchOn = look.style === 'notch' && (place === 'top' || place.startsWith('top')) && !bar
+  // The bar look hugs the top edge too: square top corners, round bottom ones (the Indicator, its pill and panel).
+  const notchOn = bar || (look.style === 'notch' && (place === 'top' || place.startsWith('top')))
   const notchRef = useRef(notchOn)
   notchRef.current = notchOn
   useLayoutEffect(() => drawClipRef.current(), [notchOn])
@@ -2361,7 +2376,7 @@ export function DesktopIsland() {
   }
   const benUnread = s.ben.unread > 0 && !hushed && !s.locked
   const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
-  const edgeOk = ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old && !showMoment
+  const edgeOk = !barNow && ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old && !showMoment
   // IM2: while a timer runs the whole outline fills (with a glowing head) instead of the bottom line.
   const sweep = edgeOk && !run && s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null
   const border = edgeOk && run && !moving ? <LiquidBorder from={run.startedAt} to={run.endsAt} freeze={run.pausedAt} w={box.w} h={box.h} r={radius} /> : null
@@ -2387,7 +2402,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, bar && !ui.over)} ${sc.playing ? 'has-music' : ''}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2446,7 +2461,7 @@ export function DesktopIsland() {
             {/* Island eyes: the eye (reading / paused / Pause button), only with the eyes on. */}
             <IslandEyesBadge near={ui.over || ui.view === 'expanded'} onLayout={() => sendHot(true)} />
             {/* Meetings: Caption in a call, the caption strip, Help me reply (MT1–MT3, AI17). */}
-            <IslandMeet inCall={inCall} title={s.call?.title ?? null} near={ui.over || ui.view !== 'compact'} onLayout={() => sendHot(true)} />
+            <IslandMeet inCall={inCall} title={s.call?.title ?? null} near={ui.over || ui.view !== 'compact'} onLayout={() => sendHot(true)} onCaptioning={setCaptioning} />
             <AnimatePresence>
               {toast && (
                 <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)} onAnimationComplete={() => sendHot(true)}>

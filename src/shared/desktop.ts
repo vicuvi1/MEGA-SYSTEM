@@ -177,6 +177,8 @@ export interface DesktopApi {
   islandCopy?(text: string): void
   /** Island window: a calendar meeting is going on now (hides the island when "in a call: hide"). */
   islandCall?(inCall: boolean): void
+  /** Island window: the thin Indicator is on (the desktop puts the window top-centre, flush with the top). */
+  islandBar?(on: boolean): void
   /** Island window: a line for the island log. */
   islandLog?(line: string): void
   /** Island window: a line from the desktop side for the island log (hover, click-through, zoom, why it hid). */

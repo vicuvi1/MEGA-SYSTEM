@@ -18,6 +18,8 @@ await new Promise((ok, no) => {
 
 const fails = []
 const step = async (name, fn) => {
+  // SMOKE_ONLY=<words>: run only the steps whose name has them (handy while working on one part).
+  if (process.env.SMOKE_ONLY && !name.includes(process.env.SMOKE_ONLY)) return
   try {
     await fn()
     console.log(`✓ ${name}`)
@@ -700,6 +702,97 @@ try {
     if (addedSays !== 'added') throw new Error(`the confirmed note was not added: ${addedSays}`)
     if (!(await ip.evaluate(() => window.__island.actions.some((a) => a.kind === 'widget' && a.op === 'addNote' && a.widget === 'pomodoro')))) throw new Error('no addNote action')
     await ip.context().close()
+  })
+  // The thin Indicator (a window is maximized): ONE small capsule on the top edge. The timer fills it,
+  // music adds an equalizer, nothing else is drawn as a second line; hover grows it into the pill.
+  await step('Island Indicator: one bar while a window is maximized, the timer fills it, music shows, hover opens the pill', async () => {
+    const shots = process.env.INDICATOR_SHOTS
+    for (const theme of ['dark', 'light']) {
+      const ctx = await browser.newContext({ viewport: { width: 640, height: 220 }, deviceScaleFactor: 2, colorScheme: theme })
+      const ip = await ctx.newPage()
+      ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+      // The SoundCloud player frame never loads here; a stand-in widget says "playing".
+      await ip.route(/soundcloud\.com/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>player</title>' }))
+      await ip.addInitScript((theme) => {
+        const cbs = {}
+        const on = (name) => (cb) => { cbs[name] = cb }
+        const now = Date.now()
+        const snap = {
+          at: now, locked: false,
+          ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+          running: null, now: { title: 'Read chapter 3', start: now - 20 * 60_000, end: now + 40 * 60_000, kind: 'focus' }, next: null, mustdos: [], water: { ml: 750, target: 2000 }, reps: [], alert: null,
+          widgets: { installed: [], look: { style: 'notch', theme } }
+        }
+        let fire = {}
+        window.SC = { Widget: Object.assign(() => ({
+          bind: (ev, fn) => { fire[ev] = fn; if (ev === 'ready') setTimeout(fn, 20) },
+          play: () => setTimeout(() => fire.play?.(), 10), pause: () => fire.pause?.(), setVolume: () => {}, load: () => {},
+          getCurrentSound: (cb) => cb({ title: 'Made-up track', permalink_url: 'https://soundcloud.com/someone/a-track', user: { username: 'Someone' }, duration: 180000 }),
+          getCurrentSoundIndex: (cb) => cb(0), getSounds: (cb) => cb([])
+        }), { Events: { READY: 'ready', PLAY: 'play', PAUSE: 'pause', FINISH: 'finish', ERROR: 'error', PLAY_PROGRESS: 'progress', SEEK: 'seek' } }) }
+        window.__island = { send: (name, v) => cbs[name]?.(v), snap, bar: [] }
+        window.desktop = new Proxy({
+          islandHot: () => {}, islandTakeClicks: () => {}, islandAction: () => {},
+          islandBar: (on) => window.__island.bar.push(on),
+          onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+          onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+        }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+      }, theme)
+      await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+      await ip.waitForSelector('.di .di-pill', { timeout: 15000 })
+      // Every visible thing that could read as a bar or a line on the top edge.
+      const bars = () => ip.$$eval('.di-ind, .di-bar, .di-sweep, .di-border, .di-dots, .di-pill, .di-beside > *', (els) => els.filter((e) => {
+        const r = e.getBoundingClientRect()
+        const cs = getComputedStyle(e)
+        return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05
+      }).map((e) => e.className.baseVal ?? e.className))
+      const one = async (what) => {
+        await ip.mouse.move(600, 200)
+        await ip.waitForSelector('.di.is-bar:not(.moving) .di-ind', { timeout: 6000 })
+        await ip.waitForTimeout(300)
+        const list = await bars()
+        if (list.length !== 1 || !/di-ind/.test(list[0])) throw new Error(`${theme}, ${what}: the Indicator should be one bar, saw ${JSON.stringify(list)}`)
+        const box = await ip.evaluate(() => {
+          const r = document.querySelector('.di-ind').getBoundingClientRect()
+          return { top: Math.min(r.top, document.querySelector('.di-shape').getBoundingClientRect().top), h: r.height, w: r.width, mid: r.left + r.width / 2 }
+        })
+        if (box.top !== 0) throw new Error(`${theme}, ${what}: the Indicator is ${box.top}px below the top edge`)
+        if (box.h < 6 || box.h > 8 || box.w < 120 || box.w > 160) throw new Error(`${theme}, ${what}: the Indicator is ${box.w}×${box.h}`)
+        if (Math.abs(box.mid - 320) > 1) throw new Error(`${theme}, ${what}: the Indicator is not centred (${box.mid})`)
+      }
+      // Screenshots: a desktop-like backdrop behind the see-through window (only when asked for).
+      if (shots) await ip.addStyleTag({ content: `body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: ${theme === 'dark' ? 'linear-gradient(#20242e, #11131a)' : 'linear-gradient(#f3f5f9, #dde2ea)'}; }` })
+      const shot = (name) => shots ? ip.screenshot({ path: `${shots}/${name}-${theme}.png`, clip: name.endsWith('hover') ? { x: 20, y: 0, width: 600, height: 90 } : { x: 170, y: 0, width: 300, height: 48 } }) : null
+      // A window is maximized: the island turns into the Indicator and tells the desktop (top centre).
+      await ip.evaluate(() => window.__island.send('quiet', { until: 0, call: false, fullscreen: false, maximized: true }))
+      await one('idle')
+      if (!(await ip.evaluate(() => window.__island.bar.at(-1) === true))) throw new Error('the desktop was not told the bar is on')
+      await shot('indicator-idle')
+      // A timer: the capsule itself fills (one fill, no outline, no bottom line).
+      await ip.evaluate(() => { const n = Date.now(); window.__island.snap = { ...window.__island.snap, at: n, running: { subject: 'Deep work', startedAt: n - 15 * 60_000, endsAt: n + 10 * 60_000, pausedAt: null } }; window.__island.send('state', window.__island.snap) })
+      await one('timer')
+      const fill = await ip.$eval('.di-ind-fill', (e) => e.style.transform)
+      if (!/scaleX\(0\.[56]/.test(fill)) throw new Error(`${theme}: the timer fill is ${fill}`)
+      await shot('indicator-timer')
+      // Music: a tiny equalizer inside the same capsule.
+      await ip.evaluate(() => new BroadcastChannel('life-music').postMessage({ t: 'cmd', c: { op: 'play', station: { id: 'x', name: 'Lofi', url: 'https://soundcloud.com/someone/sets/lofi' } } }))
+      await ip.waitForSelector('.di-ind .di-ind-eq', { timeout: 5000 })
+      await one('music')
+      await shot('indicator-music')
+      // Hover: it grows into the pill (flush with the top), and goes back when the mouse leaves.
+      await ip.mouse.move(320, 3)
+      await ip.waitForSelector('.di.in-bar:not(.is-bar) .di-pill', { timeout: 4000 })
+      await ip.waitForTimeout(700)
+      const pill = await ip.$eval('.di-shape', (e) => e.getBoundingClientRect().top)
+      if (pill !== 0) throw new Error(`${theme}: the opened pill is ${pill}px below the top edge`)
+      await shot('indicator-hover')
+      await one('after hover')
+      // The window is no longer maximized: back to the normal island; the desktop is told.
+      await ip.evaluate(() => window.__island.send('quiet', { until: 0, call: false, fullscreen: false, maximized: false }))
+      await ip.waitForSelector('.di:not(.in-bar) .di-pill', { timeout: 4000 })
+      if (!(await ip.evaluate(() => window.__island.bar.at(-1) === false))) throw new Error('the desktop was not told the bar is off')
+      await ctx.close()
+    }
   })
   await step('Settings → Widgets: the gallery runs the four widgets in their boxes and Install asks for permissions', async () => {
     await open('settings')

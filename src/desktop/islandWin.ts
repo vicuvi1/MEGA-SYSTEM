@@ -52,6 +52,16 @@ export function placeIsland(o: { wa: Box; width: number; height: number; place: 
   return { x: clampX(wa.x + o.pos.cx * wa.width - width / 2), y: clampY(o.place === 'free' ? wa.y + o.pos.top : wa.y) }
 }
 
+/**
+ * The thin "Indicator" (a window is maximized, or you picked the bar): always
+ * flush with the top of the work area and centred on the island's screen,
+ * whatever spot you dragged the island to. DIP in, whole DIP out (Electron
+ * turns them into real pixels for that screen's scaling).
+ */
+export function barSpot(wa: Box, width: number): { x: number; y: number } {
+  return { x: Math.round(wa.x + (wa.width - width) / 2), y: Math.round(wa.y) }
+}
+
 const finite = (...n: unknown[]) => n.every((v) => typeof v === 'number' && Number.isFinite(v))
 
 /**

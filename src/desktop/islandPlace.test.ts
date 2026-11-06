@@ -1,7 +1,7 @@
 // The island's placement, screens and per-PC settings (IF1, IF2, IF3, IF6, IP5).
 import { describe, expect, it } from 'vitest'
 import {
-  chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, followTick, hideOverApp, islandBase, isPlacement, noteRecentApp, parseWatcherLine, placeIsland,
+  barSpot, chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, followTick, hideOverApp, islandBase, isPlacement, noteRecentApp, parseWatcherLine, placeIsland,
   rememberLayout, LAYOUTS_MAX, type IslandLayout
 } from './islandWin'
 
@@ -125,5 +125,15 @@ describe('PC-only settings', () => {
     expect(cleanDeskPrefs({ debugUntil: 'soon' }).debugUntil).toBe(0)
     expect(cleanDeskPrefs({ debugUntil: -5 }).debugUntil).toBe(0)
     expect(cleanDeskPrefs({ debugUntil: 1_800_000.4 }).debugUntil).toBe(1_800_000)
+  })
+})
+
+describe('the thin Indicator spot', () => {
+  it('sits flush with the top of the work area and centred, whatever the scaling', () => {
+    expect(barSpot({ x: 0, y: 0, width: 1920, height: 1040 }, 500)).toEqual({ x: 710, y: 0 })
+    // 125 % on a 1920 px screen: 1536 DIP wide; a second screen to the right with a top taskbar.
+    expect(barSpot({ x: 1536, y: 38, width: 1536, height: 826 }, 625)).toEqual({ x: 1992, y: 38 })
+    // 150 %: odd sizes still land on whole DIP.
+    expect(barSpot({ x: -1280, y: 0, width: 1280, height: 680 }, 751)).toEqual({ x: -1015, y: 0 })
   })
 })

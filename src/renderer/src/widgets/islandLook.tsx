@@ -4,9 +4,10 @@
 // pill (Simple, Seven-segment, Serif, your colour) and eight themes. All
 // from the synced setting (Settings → Widgets → Island look), so every PC
 // looks the same. Light: the clock redraws once a minute; nothing loops.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { IslandSnapshot } from '@core/islandModel'
 import { cleanLook, type ClockStyle, type IslandLookPrefs } from '@core/widgets/settings'
+import { onFrame, ringColor, useFeel } from '../islandFeel'
 import './islandLook.css'
 
 export function useIslandLook(s: IslandSnapshot): IslandLookPrefs {
@@ -17,20 +18,88 @@ export function useIslandLook(s: IslandSnapshot): IslandLookPrefs {
 /** Is the thin bar showing now (style "indicator", or a maximized window with that switch on)? */
 export const showBar = (look: IslandLookPrefs, maximized: boolean) => look.style === 'indicator' || (look.maxBar && maximized)
 
-/** The classes for the island's root. The notch only fits at the top of the screen. */
-export function lookRootClasses(look: IslandLookPrefs, place: string, bar: boolean): string {
+/**
+ * The classes for the island's root. The notch only fits at the top of the screen.
+ * `inBar`: the thin-bar context (the shape hugs the top edge, also while it is open);
+ * `bar`: the Indicator itself is showing (no hover, no panel).
+ */
+export function lookRootClasses(look: IslandLookPrefs, place: string, bar: boolean, inBar = bar): string {
   const top = place === 'top' || place.startsWith('top')
-  return [`th-${look.theme}`, look.style === 'notch' && top ? 'style-notch' : `style-${look.style === 'notch' ? 'capsule' : look.style}`, bar ? 'is-bar' : ''].filter(Boolean).join(' ')
+  return [`th-${look.theme}`, look.style === 'notch' && top ? 'style-notch' : `style-${look.style === 'notch' ? 'capsule' : look.style}`, inBar ? 'in-bar' : '', bar ? 'is-bar' : ''].filter(Boolean).join(' ')
 }
 
 /** CSS radius for the shape: square top corners for the notch. */
 export const notchRadius = (on: boolean, r: number): string | number => (on ? `0px 0px ${r}px ${r}px` : r)
 
-/** The thin bar (it opens like the pill: hover or click). */
-export function IslandBar(props: React.HTMLAttributes<HTMLDivElement>) {
+/** What the thin Indicator shows, folded into its one shape. */
+export interface IndicatorInfo {
+  /** A timer (strong fill) or the current block (faint fill): the capsule fills left to right. */
+  fill: { from: number; to: number; freeze?: number | null; soft?: boolean } | null
+  /** Music is playing: a tiny equalizer at the left end. */
+  music: boolean
+  /** Captions are running: a red dot at the right end. */
+  rec: boolean
+  /** Something new (its id): one short accent pulse. */
+  alert: string | null
+}
+
+/** The capsule filling up: one transform on one element (no second line). Amber in the last 5 minutes. */
+function IndicatorFill({ from, to, freeze = null, soft = false }: NonNullable<IndicatorInfo['fill']>) {
+  const f = useFeel()
+  const el = useRef<HTMLElement>(null)
+  useEffect(() => {
+    let last = -1
+    let lastColor = '-'
+    const draw = (t0: number) => {
+      const t = freeze ?? t0
+      const node = el.current
+      if (!node) return
+      const pct = Math.min(1, Math.max(0, (t - from) / Math.max(1, to - from)))
+      if (Math.abs(pct - last) >= 0.0005) {
+        node.style.transform = `scaleX(${pct.toFixed(4)})`
+        last = pct
+      }
+      const color = soft ? '' : (ringColor(to - t) ?? '')
+      if (color !== lastColor) {
+        node.style.background = color
+        lastColor = color
+      }
+    }
+    if (f.mode === 'off') {
+      draw(Date.now())
+      const i = window.setInterval(() => draw(Date.now()), 1000)
+      return () => clearInterval(i)
+    }
+    return onFrame(draw)
+  }, [from, to, freeze, soft, f])
+  return <i ref={el} className={`di-ind-fill ${soft ? 'soft' : ''}`} aria-hidden />
+}
+
+/**
+ * The thin Indicator (a window is maximized, or you picked the bar): ONE small
+ * capsule on the top edge. A timer fills it, music adds a 3-bar equalizer, captions
+ * a red dot, something new one accent pulse. Hover grows it into the pill; click opens.
+ */
+export function IslandIndicator({ info, ...props }: { info: IndicatorInfo } & React.HTMLAttributes<HTMLDivElement>) {
+  const says = [info.fill && !info.fill.soft ? 'a timer is running' : '', info.music ? 'music is playing' : '', info.rec ? 'captioning' : '', info.alert ? 'something new' : ''].filter(Boolean).join(', ')
   return (
-    <div className="di-bar" role="button" tabIndex={0} aria-label="The island (a window is maximized): hover or click to open" {...props}>
-      <i />
+    <div
+      className={`di-ind ${info.fill && !info.fill.soft ? 'has-fill' : ''} ${info.music ? 'has-eq' : ''} ${info.rec ? 'has-rec' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`The island${says ? ` (${says})` : ''}: hover or click to open`}
+      {...props}
+    >
+      {info.fill && <IndicatorFill {...info.fill} />}
+      {info.music && (
+        <span className="di-ind-eq" aria-hidden>
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
+      {info.rec && <span className="di-ind-rec" aria-hidden />}
+      {info.alert && <span key={info.alert} className="di-ind-ping" aria-hidden />}
     </div>
   )
 }

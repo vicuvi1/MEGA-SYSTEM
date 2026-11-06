@@ -34,7 +34,7 @@ import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs
 import { cursorNear, snapBounce } from './islandPlace'
 import { clampFree, PANEL_MAX, resizePanel, dragTo, dropSpot, fitShift, hideFor, hideText, hideTick, rememberSpot, rushing, screenKey, SHOWN, toggleHide, DODGE_MS, type HideChoice, type Rect, type Sample } from '../core/islandMove'
 import {
-  chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
+  barSpot, chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
   noteRecentApp, overRects, parseWatcherLine, placeIsland, QUNS_PRESENTATION, rateLimit, rectsToDip, rememberLayout, sampleSeconds, SHORTCUTS_VERSION,
   type HotRect, type IslandDeskPrefs, type IslandLayout, type MonitorMode
 } from './islandWin'
@@ -195,6 +195,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   }
   /** H1: the panel opened near an edge: the window slides this far to show it (back to 0 when it closes). */
   let fit = { x: 0, y: 0 }
+  // The page shows the thin Indicator (a window is maximized, or you picked the bar): the window sits top-centre.
+  let barOn = false
   // H1: the screen it was placed on last; a new one brings back that screen's own spot.
   let spotDisplay: number | null = null
   const loadSpot = (d: Electron.Display) => {
@@ -211,6 +213,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   /** Where the window sits normally (no fit shift). */
   const homeOf = (d: Electron.Display, width: number, height: number) => {
     const wa = d.workArea
+    // The thin Indicator: flush with the top, centred on this screen (any spot, any scaling).
+    if (barOn) return barSpot(wa, width)
     if (place === 'free') return clampFree({ x: wa.x + pos.cx * wa.width - width / 2 + desk.offset.x, y: wa.y + pos.top + desk.offset.y }, { width, height }, wa, keepBox(width))
     return placeIsland({ wa, width, height, place, pos, offset: desk.offset, sidePillY: SIDE_PILL_Y * cssScale() * pageZoom() })
   }
@@ -220,14 +224,14 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     loadSpot(d)
     const { width, height } = sizeNow()
     const home = homeOf(d, width, height)
-    const x = home.x + fit.x
-    const y = home.y + fit.y
+    const x = home.x + (barOn ? 0 : fit.x)
+    const y = home.y + (barOn ? 0 : fit.y)
     const b = win.getBounds()
     if (b.x !== x || b.y !== y || b.width !== width || b.height !== height) win.setBounds({ x, y, width, height })
   }
   /** H1: the visible parts changed (the panel opened or closed): slide just enough to show them. */
   const refit = () => {
-    if (!win || win.isDestroyed() || drag || moveMode) return
+    if (!win || win.isDestroyed() || drag || moveMode || barOn) return
     const d = display()
     const { width, height } = sizeNow()
     const next = fitShift(homeOf(d, width, height), rectsToDip(hot, pageZoom()), d.workArea)
@@ -261,7 +265,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   }
   /** Shown or hidden: the page pauses its animations while hidden (IC10). */
   const sendVisible = () => { if (win && !win.isDestroyed() && ready) win.webContents.send('island:visible', win.isVisible()) }
-  const sendPlacement = () => win?.webContents.send('island:placement', place)
+  const sendPlacement = () => win?.webContents.send('island:placement', barOn ? 'top' : place)
   const onTop = () => {
     if (!win || win.isDestroyed()) return
     try { win.setAlwaysOnTop(true, LEVEL) } catch { /* fine */ }
@@ -873,6 +877,15 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     diag('meeting', on ? 'A calendar meeting started' : 'The calendar meeting ended', true)
     sendQuiet()
     applyVisibility()
+  })
+  ipcMain.on('island:bar', (e, on) => {
+    if (!fromIsland(e)) return
+    const next = !!on
+    if (next === barOn) return
+    barOn = next
+    diag('look', next ? 'Thin bar on: top centre of the screen' : 'Thin bar off: back to its spot')
+    sendPlacement()
+    placeWin()
   })
   // IS23: lines from the island page go in the same log.
   ipcMain.on('island:log', (e, line) => {
