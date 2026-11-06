@@ -210,6 +210,7 @@ npm run smoke                       # the real app on fake data (e2e/smoke.mjs +
 bash scripts/ship.sh <message-file> # typecheck, tests, bundle, commit, push
 ```
 
+- The smoke test runs on a fixed clock: today at 08:30 local time, in the browser and the fake server (`E2E_NOW=14:00 npm run smoke` tries another time). A step that needs a certain hour sets it itself (`atTime` in `e2e/smoke.mjs`); never hand a page the real `Date.now()` from the test (use `fakeNow()`). Unit tests that depend on the hour pin it with `vi.useFakeTimers({ toFake: ['Date'] })` + `vi.setSystemTime(...)`.
 - Only push to `main` when typecheck and **all** tests pass. A push deploys straight to production.
 - After pushing, check the Vercel deployment is READY, then `/api/cron?job=tick` should return `{"ok":true,…}`.
 - Commit with the owner's git identity as configured on the machine (never write a personal email into the repo). Before pushing: `git fetch origin main && git rebase origin/main`. Never force-push.

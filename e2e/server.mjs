@@ -8,6 +8,23 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 
+// E2E_NOW=<ms since 1970>: this server lives at that moment (the clock keeps
+// ticking from there), so the made-up day and every server "now" match the
+// browser's fixed clock in e2e/smoke.mjs, whatever the real time of day is.
+if (process.env.E2E_NOW) {
+  const RealDate = Date
+  const shift = Number(process.env.E2E_NOW) - RealDate.now()
+  if (!Number.isFinite(shift)) throw new Error('E2E_NOW must be a time in milliseconds')
+  globalThis.Date = class extends RealDate {
+    constructor(...a) {
+      if (a.length) super(...a)
+      else super(RealDate.now() + shift)
+    }
+    static now() {
+      return RealDate.now() + shift
+    }
+  }
+}
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const port = Number(process.argv[2] || process.env.E2E_PORT || 5299)
 const require = createRequire(join(repo, 'package.json'))

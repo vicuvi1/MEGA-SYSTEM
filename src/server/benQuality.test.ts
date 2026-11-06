@@ -104,6 +104,9 @@ describe('Ben quality: show, act, confirm', () => {
   })
 
   it('"show me my day" and "what are my tasks": the day and task cards carry the real items', async () => {
+    // A fixed afternoon, so the whole made-up day is "today" whatever the real hour is.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 6, 14, 0))
     const s = stub(() => ({ reply: 'Here.' }))
     const { bots } = await evalWorld(SQL, s.model)
     const day = await bots.think('show me my day', 'q:day')

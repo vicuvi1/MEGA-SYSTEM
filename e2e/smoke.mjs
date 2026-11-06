@@ -10,7 +10,34 @@ import { chromium } from 'playwright'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const port = 5299 + Math.floor(Math.random() * 500)
-const server = spawn(process.execPath, [join(repo, 'e2e/server.mjs'), String(port)], { stdio: ['ignore', 'pipe', 'inherit'] })
+// A fixed clock, so the smoke never depends on the real time of day: today at
+// 08:30 local time (E2E_NOW=HH:MM picks another time today, or a full date-time).
+// The browser and the made-up server both start there; the clock keeps ticking.
+const clockAt = (() => {
+  const v = process.env.E2E_NOW || '08:30'
+  const hm = /^(\d\d?):(\d\d)$/.exec(v)
+  if (!hm) {
+    const t = new Date(v).getTime()
+    if (!Number.isFinite(t)) throw new Error(`E2E_NOW: can't read "${v}"`)
+    return t
+  }
+  const d = new Date()
+  d.setHours(Number(hm[1]), Number(hm[2]), 0, 0)
+  return d.getTime()
+})()
+const startedAt = Date.now()
+// "Now" on the fixed clock (it started at clockAt and keeps going). Use this,
+// never Date.now(), for any time the smoke hands to a page.
+const fakeNow = () => clockAt + (Date.now() - startedAt)
+// HH:MM on the fixed clock's date (local time).
+const todayAt = (hm) => {
+  const [h, m] = hm.split(':').map(Number)
+  const d = new Date(fakeNow())
+  d.setHours(h, m, 0, 0)
+  return d.getTime()
+}
+console.log(`clock: ${new Date(clockAt).toString()}`)
+const server = spawn(process.execPath, [join(repo, 'e2e/server.mjs'), String(port)], { stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, E2E_NOW: String(clockAt) } })
 await new Promise((ok, no) => {
   server.stdout.on('data', (d) => String(d).includes('e2e server') && ok())
   setTimeout(() => no(new Error('e2e server did not start')), 15000)
@@ -19,7 +46,8 @@ await new Promise((ok, no) => {
 const fails = []
 const step = async (name, fn) => {
   // SMOKE_ONLY=<words>: run only the steps whose name has them (handy while working on one part).
-  if (process.env.SMOKE_ONLY && !name.includes(process.env.SMOKE_ONLY)) return
+  // The sign-in step always runs: every other step needs it.
+  if (process.env.SMOKE_ONLY && !name.includes(process.env.SMOKE_ONLY) && !name.startsWith('opens and signs in')) return
   try {
     await fn()
     console.log(`✓ ${name}`)
@@ -29,6 +57,27 @@ const step = async (name, fn) => {
   }
 }
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {})
+// Every page runs on the fixed clock. install() keeps timers and animations
+// running in real time; only the date and time of day are moved.
+{
+  const newContext = browser.newContext.bind(browser)
+  browser.newContext = async (opts) => {
+    const ctx = await newContext(opts)
+    await ctx.clock.install({ time: fakeNow() })
+    // No slide-in reminder cards (water behind, an event soon, bedtime): they
+    // come at some hours only and would sit on top of what a step clicks. Nothing
+    // here checks them; the bell and the inbox still get every notification.
+    await ctx.addInitScript(() => {
+      try {
+        const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
+        if (p.notif?.popups !== false) localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
+      } catch {
+        /* no storage on this page */
+      }
+    })
+    return ctx
+  }
+}
 const pg = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
 const errors = []
 pg.on('pageerror', (e) => errors.push(e.message))
@@ -76,6 +125,28 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+  // A step that needs a certain time of day sets it here (HH:MM today, local):
+  // the page reloads at that time (nothing kept from the run's own clock), and
+  // the run's clock comes back afterwards, pass or fail.
+  const reloadApp = async () => {
+    await pg.reload()
+    await pg.waitForSelector('.td2, main.content, input', { timeout: 20000 })
+    if (!(await pg.$('main.content'))) {
+      await pg.fill('input', '1234')
+      await pg.keyboard.press('Enter')
+      await pg.waitForSelector('main.content', { timeout: 20000 })
+    }
+  }
+  const atTime = async (hm, fn) => {
+    await pg.context().clock.setSystemTime(todayAt(hm))
+    await reloadApp()
+    try {
+      return await fn()
+    } finally {
+      await pg.context().clock.setSystemTime(fakeNow())
+      await reloadApp()
+    }
+  }
 
   // The teacher's review: Today was one long scroll. Now a switch (Now · Plan · Tasks · Body · Week):
   // each tab about one laptop screen (1280×720, 150 % on a 1080p screen), the last tab remembered,
@@ -219,7 +290,8 @@ try {
     if (after.x + after.width > main.x + 1) throw new Error(`the sidebar covers the page (${Math.round(after.x + after.width)} > ${Math.round(main.x)})`)
   })
   // Night 7: Ben's chat folds his automatic messages and shows cards and the Now card.
-  await step("Coach: Ben's chat with folded updates and cards", async () => {
+  // Ben offers "See the plan" for a plan waiting for approval only before 18:00, so this runs at 10:00.
+  await step("Coach: Ben's chat with folded updates and cards", () => atTime('10:00', async () => {
     await open('coach')
     await pg.waitForSelector('.cf-col .cf-row', { timeout: 15000 })
     // Coach fix: Ben's automatic updates are folded away until you ask for them in the ⋯ menu.
@@ -313,7 +385,7 @@ try {
     if (!/Rename Deep block 1/.test(await pg.inputValue('.cf-input textarea'))) throw new Error('↑ did not bring back the last message')
     await pg.keyboard.press('Escape')
     if (await pg.inputValue('.cf-input textarea')) throw new Error('Escape did not clear the edit')
-  })
+  }))
   // Coach fix: Ben's words flow as normal text (no box per word), during and after the reveal;
   // a reply that didn't come in time shows a friendly line with Try again, never the raw error.
   await step('Coach: a reply reads as flowing text and a failed one offers Try again', async () => {
@@ -325,7 +397,7 @@ try {
       if (b.op || !b.text) return r.fallback()
       const body = fail
         ? JSON.stringify({ ok: false, retry: true, reply: "Sorry, I couldn't finish that answer in time.", done: [] })
-        : JSON.stringify({ ok: true, reply: 'Yesterday went fine: lab intro done and 75 min of focus. Algebra slipped, so it goes first today at 09:00.', done: [], at: new Date().toISOString(), buttons: [{ label: '▶ 25 min Algebra', do: 'focus:25:Algebra' }] })
+        : JSON.stringify({ ok: true, reply: 'Yesterday went fine: lab intro done and 75 min of focus. Algebra slipped, so it goes first today at 09:00.', done: [], at: new Date(fakeNow()).toISOString(), buttons: [{ label: '▶ 25 min Algebra', do: 'focus:25:Algebra' }] })
       await r.fulfill({ status: 200, headers: { 'Content-Type': 'application/x-ndjson' }, body: `${JSON.stringify({ step: 'Read yesterday' })}\n${body}\n` })
     })
     const words = () =>
@@ -1050,8 +1122,8 @@ try {
     await ip.evaluate(() => window.__setSnap({ windDown: null, sleep: null, ben: { ...window.__island.snap.ben, busy: true, steps: ['reading your day'] } }))
     await ip.waitForSelector('.di-pill.kind-think .di-think', { timeout: 3000 })
     // IC15: a timer, a meeting in 5 minutes and Ben's message: the other two stack beside the pill.
-    const t = Date.now()
-    await ip.evaluate((t) => window.__setSnap({ running: { subject: 'Essay', startedAt: t - 60_000, endsAt: t + 600_000 }, next: { title: 'Dentist', start: t + 5 * 60_000, end: t + 3600_000 }, ben: { ...window.__island.snap.ben, busy: false, unread: 1 } }), t)
+    // Times from the page's own (fixed) clock, never the real one.
+    await ip.evaluate(() => { const t = Date.now(); window.__setSnap({ running: { subject: 'Essay', startedAt: t - 60_000, endsAt: t + 600_000 }, next: { title: 'Dentist', start: t + 5 * 60_000, end: t + 3600_000 }, ben: { ...window.__island.snap.ben, busy: false, unread: 1 } }) })
     // At rest the pill holds them (one main thing, one small extra); the stack fans out on hover.
     await ip.waitForSelector('.di-rest .rest-secondary', { timeout: 3000 })
     await ip.evaluate(() => window.__island.send('hover', true))
@@ -1351,6 +1423,8 @@ try {
   await step('Resting island: at most 2 items, no empty placeholders, no stray lines (notch and capsule, dark and light)', async () => {
     for (const style of ['notch', 'capsule']) for (const theme of ['dark', 'light']) {
       const ctx = await browser.newContext({ viewport: { width: 640, height: 220 }, colorScheme: theme })
+      // The made-up class starts later today, so this needs an afternoon (not the last minutes before midnight).
+      await ctx.clock.setSystemTime(todayAt('15:00'))
       const ip = await ctx.newPage()
       ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
       await ip.addInitScript(([style, theme]) => {
@@ -1415,8 +1489,7 @@ try {
       await ip.evaluate(() => window.__setSnap({ ben: { ...window.__island.snap.ben, unread: 1 } }))
       await check('a new message', 'alert')
       if ((await ip.getAttribute('.di-rest .rest-primary', 'class')).includes('alert') && !/new message/.test(await ip.getAttribute('.di-pill.di-rest', 'title'))) throw new Error('the message dot says nothing')
-      const t = Date.now()
-      await ip.evaluate((t) => window.__setSnap({ running: { subject: 'Made-up focus', startedAt: t - 60_000, endsAt: t + 600_000 }, next: { title: 'Made-up class', start: t + 8 * 60_000, end: t + 3600_000 } }), t)
+      await ip.evaluate(() => { const t = Date.now(); window.__setSnap({ running: { subject: 'Made-up focus', startedAt: t - 60_000, endsAt: t + 600_000 }, next: { title: 'Made-up class', start: t + 8 * 60_000, end: t + 3600_000 } }) })
       await check('a timer, an event soon and a message', 'timer')
       await ip.evaluate(() => window.__setSnap({ running: null, ben: { ...window.__island.snap.ben, unread: 0 }, next: null }))
       await check('nothing left today', 'time')
@@ -1524,7 +1597,8 @@ try {
     await pg.locator('.wg-ask').getByRole('button', { name: 'Cancel' }).click()
   })
   // The same switch on every long page: each tab about one laptop screen.
-  await step('Long pages: Insights, Goals, Money, Discipline, Music, Rewards and long Settings sections fit by tabs', async () => {
+  // Run at 10:00: how long Insights → Week is depends on what's left of today's calendar.
+  await step('Long pages: Insights, Goals, Money, Discipline, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {
     await pg.setViewportSize({ width: 1280, height: 720 })
     const report = []
     const pages = [
@@ -1574,7 +1648,7 @@ try {
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
     console.log(`  ${report.join('\n  ')}`)
-  })
+  }))
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

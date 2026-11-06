@@ -15,7 +15,7 @@ let SQL: SqlJsStatic
 beforeAll(async () => {
   SQL = await initSqlJs({ locateFile: (f: string) => require.resolve(`sql.js/dist/${f}`) })
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => (vi.unstubAllGlobals(), vi.useRealTimers()))
 
 async function web() {
   const remote = new SQL.Database()
@@ -55,6 +55,9 @@ describe('focus, plans and goals (pure)', () => {
 
 describe('focus, plans and goals (saved in Turso)', () => {
   it('start, stop: minutes logged once, coins paid, timer cleared', async () => {
+    // A fixed midday: a block that crosses 04:00 (when the app day turns) would count on the next day.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 6, 12, 0))
     const { remote, mirror, w } = await web()
     const t0 = new Date()
     await mirror.write((db) => w.services(db).focus.start('Math', 50, t0))

@@ -19,7 +19,7 @@ let SQL: SqlJsStatic
 beforeAll(async () => {
   SQL = await initSqlJs({ locateFile: (f: string) => require.resolve(`sql.js/dist/${f}`) })
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => (vi.unstubAllGlobals(), vi.useRealTimers()))
 
 let n = 0
 function world() {
@@ -87,9 +87,12 @@ describe('MCP: tools on made-up data', () => {
   })
 
   it('every read tool, resource and prompt answers, and none reaches a sys_ table the app protects', async () => {
+    // A fixed midday, so "spent today" never depends on the real hour (the app day turns at 04:00).
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 5, 12, 0))
     const { env, sqls, q } = world()
     q("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES ('n1', 'Exams', '# Exams\n- Made-up exam on Friday, chapters 3-5', 'me', 0, '2026-11-01T10:00:00Z', '2026-11-01T10:00:00Z')")
-    q(`INSERT INTO settings (key, value) VALUES ('app_sync_finance', '${JSON.stringify({ data: { settings: { currency: 'MDL', categories: [{ id: 'c1', name: 'Food' }] }, tx: [{ id: 't1', type: 'expense', amount: 12000, category: 'c1', date: new Date().toISOString().slice(0, 10), note: 'made-up pizza' }] } })}')`)
+    q(`INSERT INTO settings (key, value) VALUES ('app_sync_finance', '${JSON.stringify({ data: { settings: { currency: 'MDL', categories: [{ id: 'c1', name: 'Food' }] }, tx: [{ id: 't1', type: 'expense', amount: 12000, category: 'c1', date: '2026-11-05', note: 'made-up pizza' }] } })}')`)
     await call(env, 'read', 'ping') // the copy loads first
     const before = sqls.length
     const reads = TOOLS.filter((t) => !t.write)
