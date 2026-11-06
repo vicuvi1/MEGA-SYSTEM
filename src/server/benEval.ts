@@ -2,7 +2,8 @@
 // database per case, made-up calendar blocks and Todoist tasks that only
 // record what Ben does. Your real data is never touched.
 import type { SqlJsStatic } from 'sql.js'
-import { EVAL_CASES, judge, type EvalResult } from '@core/benEval'
+import { EVAL_CASES, judge, type EvalCase, type EvalResult } from '@core/benEval'
+import { RHYTHM } from '@core/rhythm'
 import { MIGRATIONS } from '@core/schema'
 import type { CalEvent } from '@core/dayTime'
 import type { TodoTask } from '@core/todoist'
@@ -13,8 +14,12 @@ import { createWebBots, type AskModel } from '../renderer/src/web/webBots'
 import { createWebServices } from '../renderer/src/web/webServices'
 import { setSetting } from '../main/settings'
 
-async function runOne(SQL: SqlJsStatic, model: AskModel, c: (typeof EVAL_CASES)[number]): Promise<EvalResult> {
-  const t0 = Date.now()
+/**
+ * A throwaway world for one case: a fresh fake database, made-up calendar
+ * blocks and Todoist tasks that only record what Ben does (`log`), and Ben.
+ * Exported for the stub-model tests (benQuality.test.ts).
+ */
+export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalCase, 'facts' | 'chat' | 'extraEvents' | 'plan'> = {}) {
   const log: string[] = []
   const remote = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
@@ -31,7 +36,8 @@ async function runOne(SQL: SqlJsStatic, model: AskModel, c: (typeof EVAL_CASES)[
     { id: 'g1', calendarId: 'cal', title: 'Deep block', start: at(9), end: at(10), allDay: false },
     { id: 'g2', calendarId: 'cal', title: 'Lab: Programming', start: at(13, 30), end: at(15), allDay: false },
     { id: 'g3', calendarId: 'cal', title: 'Gym', start: at(19), end: at(20), allDay: false },
-    { id: 'g4', calendarId: 'cal', title: 'Reading', start: at(21), end: at(21, 30), allDay: false }
+    { id: 'g4', calendarId: 'cal', title: 'Reading', start: at(21), end: at(21, 30), allDay: false },
+    ...(c.extraEvents ?? []).map((e, i) => ({ id: `x${i + 1}`, calendarId: 'cal', title: e.title, start: at(e.h, e.m ?? 0), end: at(e.h + 1, e.m ?? 0), allDay: false }))
   ]
   const task = (id: string, content: string): TodoTask => ({ id, content, priority: 1, due: today, dueTime: null, project: 'Inbox', recurring: false }) as TodoTask
   const tasks = [task('t1', 'etica'), task('t2', 'sport'), task('t3', 'laborator 4 PC')]
@@ -42,6 +48,7 @@ async function runOne(SQL: SqlJsStatic, model: AskModel, c: (typeof EVAL_CASES)[
       return { ...e, id: 'new', calendarId: 'cal', allDay: false } as CalEvent
     },
     move: async (_cal: string, id: string, start: string, end: string) => void log.push(`calendar.move ${id} ${localIso(start)} → ${localIso(end)}`),
+    update: async (_cal: string, id: string, patch: { title?: string }) => void log.push(`calendar.update ${id} title=${patch.title ?? ''}`),
     remove: async (_cal: string, id: string) => void log.push(`calendar.remove ${id}`)
   }
   const todoist = {
@@ -54,11 +61,30 @@ async function runOne(SQL: SqlJsStatic, model: AskModel, c: (typeof EVAL_CASES)[
     move: async (id: string, area: string) => void log.push(`todoist.move ${id} ${area}`),
     remove: async (id: string) => void log.push(`todoist.remove ${id}`)
   }
-  if (c.facts?.length) await mirror.write((db) => setSetting(db as any, 'coach_memory', JSON.stringify({ facts: c.facts!.map((t) => ({ t, at: today })), chat: [] })))
+  if (c.facts?.length || c.chat?.length) {
+    const t = new Date(Date.now() - 3600_000).toISOString()
+    await mirror.write((db) => setSetting(db as any, 'coach_memory', JSON.stringify({ facts: (c.facts ?? []).map((f) => ({ t: f, at: today })), chat: (c.chat ?? []).map((x) => ({ role: x.role, bot: 'mega', text: x.text, at: t })) })))
+  }
+  // BQ2: a plan Ben proposed this morning that waits for an OK.
+  if (c.plan) await mirror.write((db) => setSetting(db as any, RHYTHM, JSON.stringify({ day: today, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, plan: { day: today, headline: 'Lab first, then the gym', mustdos: ['laborator 4 PC'], blocks: [{ title: 'Lab report', start: '10:00', minutes: 90 }, { title: 'Study algebra', start: '16:00', minutes: 50 }], training: null, waterMl: 2500 } } })))
   const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model })
+  return { bots, log, mirror, services, today }
+}
+
+/** What a reply did, as lines the checks read: calls made, ✅ lines, the reply, cards, chips, buttons. */
+export function traceOf(log: string[], r: { done: string[]; reply: string; show?: string[]; chips?: string[]; buttons?: { label: string; do: string }[] }): string {
+  return [...log, ...r.done, `REPLY: ${r.reply.replace(/\s+/g, ' ')}`, r.show?.length ? `SHOW: ${r.show.join(', ')}` : '', r.chips?.length ? `CHIPS: ${r.chips.join(' | ')}` : '', r.buttons?.length ? `BUTTONS: ${r.buttons.map((b) => b.do).join(', ')}` : ''].filter(Boolean).join('\n')
+}
+
+async function runOne(SQL: SqlJsStatic, model: AskModel, c: (typeof EVAL_CASES)[number]): Promise<EvalResult> {
+  const t0 = Date.now()
+  const { bots, log } = await evalWorld(SQL, model, c)
   try {
+    // A case can start with an earlier message ("change the deep block…", then "first one").
+    if (c.before) await bots.think(c.before, `eval:${c.id}:before`)
+    log.length = 0
     const r = await bots.think(c.say, `eval:${c.id}`)
-    const trace = [...log, ...r.done, `REPLY: ${r.reply.replace(/\s+/g, ' ')}`].join('\n')
+    const trace = traceOf(log, r)
     return { id: c.id, say: c.say, want: c.want, ok: r.ok && judge(c, trace), trace, ms: Date.now() - t0 }
   } catch (e) {
     return { id: c.id, say: c.say, want: c.want, ok: false, trace: log.join('\n'), ms: Date.now() - t0, error: (e as Error).message }

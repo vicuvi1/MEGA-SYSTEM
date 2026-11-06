@@ -354,7 +354,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       )
       readAloud.end(r.reply)
       play('tick')
-      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, fresh: !streamed, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
+      setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, cards: r.cards, fresh: !streamed, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       // One face for Ben (K6): the header shows the mood of his latest reply.
       if (r.mood && MOOD_FACE[r.mood as Mood]) setStatus((s) => (s ? { ...s, mood: r.mood as any, face: MOOD_FACE[r.mood as Mood] } : s))
       if (r.done.length) onWallet()

@@ -14,7 +14,25 @@ export interface EvalCase {
   never?: RegExp[]
   /** Facts Ben already remembers before the message (B21: does he use his memory?). */
   facts?: string[]
+  /** BQ: the conversation so far (oldest first), e.g. Ben already lectured about sleep. */
+  chat?: { role: 'me' | 'coach'; text: string }[]
+  /** BQ: a message sent first (the case then checks the answer to `say`). */
+  before?: string
+  /** BQ: more made-up blocks today (h = start hour, one hour long). */
+  extraEvents?: { title: string; h: number; m?: number }[]
+  /** BQ: today's plan is proposed and waits for his OK. */
+  plan?: boolean
 }
+
+/** Made-up earlier replies where Ben kept lecturing about sleep (BQ1). */
+const LECTURES: { role: 'me' | 'coach'; text: string }[] = [
+  { role: 'me', text: 'slept 4h, gonna push through' },
+  { role: 'coach', text: "😤 Look, Victor, you can't build a company on 4 hours of sleep." },
+  { role: 'me', text: 'ok ok. what should i eat' },
+  { role: 'coach', text: '😤 Look, Victor, eat something real, and sleep tonight, seriously.' },
+  { role: 'me', text: 'fine. is the gym still on?' },
+  { role: 'coach', text: '😤 Look, Victor, gym yes, but a tired body needs sleep first.' }
+]
 
 export const EVAL_CASES: EvalCase[] = [
   { id: 'spend', say: 'spent 50 lei on lunch', want: 'logs a 50 lei expense', must: [/Logged:[^\n]*50/i] },
@@ -45,7 +63,17 @@ export const EVAL_CASES: EvalCase[] = [
   // B21: is a cheaper model still smart? It must use what Ben remembers and the real numbers.
   { id: 'memory', say: 'what should I focus on today?', want: 'uses what Ben remembers (the Etica exam on Friday)', must: [/REPLY:[^\n]*(etica|exam|chapter)/i], never: [/calendar\.remove|todoist\.(close|remove)/i], facts: ['Etica exam on Friday, chapters 3 to 5', 'Studies best before noon in 25-minute blocks'] },
   { id: 'memory-person', say: 'should I call my sister tonight?', want: 'knows his sister is Ana', must: [/REPLY:[^\n]*\bAna\b/i], facts: ['His sister is Ana, she is 15'] },
-  { id: 'real-count', say: 'how many calendar blocks do I have today?', want: 'answers with the real number of blocks (4)', must: [/REPLY:[^\n]*\b(4|four)\b/i], never: [/calendar\.(create|move|remove)/i] }
+  { id: 'real-count', say: 'how many calendar blocks do I have today?', want: 'answers with the real number of blocks (4)', must: [/REPLY:[^\n]*\b(4|four)\b/i], never: [/calendar\.(create|move|remove)/i] },
+  // BQ: answers what was asked, shows instead of telling, acts then confirms, reads messy input.
+  { id: 'no-repeat', say: 'ok and how do i split the lab report into parts?', want: 'answers about the lab report; no sleep lecture again, no "Look, Victor"', must: [/REPLY:[^\n]*\b(lab|report|part|section|intro)/i], never: [/REPLY:[^\n]*\b(sleep|slept|bed)\b/i, /REPLY:\s*\S*\s*Look,/i], chat: LECTURES },
+  { id: 'show-plan', say: 'how can i aporve the paln if i dont see it haha', want: 'shows the plan card with Approve and Change', must: [/SHOW:[^\n]*plan/, /BUTTONS:[^\n]*approve/, /BUTTONS:[^\n]*change/], never: [/calendar\.(create|move|remove|update)/i], plan: true },
+  { id: 'rename-one', say: 'rename the gym block to football', want: 'renames the only Gym block now and says so with the real result', must: [/calendar\.update g3 title=Football/, /Renamed: Gym \(19:00–20:00\) → Football/] },
+  { id: 'rename-ambiguous', say: 'please chagne the deep block to devolopin my app', want: 'two deep blocks: asks with chips naming each (with times), changes nothing yet', must: [/CHIPS:[^\n]*Deep block · 09:00[^\n]*Deep block 2 · 14:00/], never: [/calendar\.(update|move)/], extraEvents: [{ title: 'Deep block 2', h: 14 }] },
+  { id: 'rename-pick', before: 'please chagne the deep block to devolopin my app', say: 'first one', want: 'the chip answer renames the first deep block', must: [/calendar\.update g1 title=Developing my app/, /Renamed: Deep block/], extraEvents: [{ title: 'Deep block 2', h: 14 }] },
+  { id: 'typo-move', say: 'pls mvoe my deep blcok to 11', want: 'reads the typos and moves the Deep block to 11:00', must: [/calendar\.move g1 [^\n]*T11:00/] },
+  { id: 'ro-rename', say: 'schimbă blocul gym în fotbal', want: 'Romanian: renames the Gym block to Fotbal', must: [/calendar\.update g3 title=Fotbal/] },
+  { id: 'ru-rename', say: 'переименуй блок gym в футбол', want: 'Russian: renames the Gym block to Футбол', must: [/calendar\.update g3 title=Футбол/] },
+  { id: 'ru-spend', say: 'потратил 80 лей на такси', want: 'understands Russian: logs an 80 lei taxi', must: [/Logged:[^\n]*80/i] }
 ]
 
 export interface EvalResult {

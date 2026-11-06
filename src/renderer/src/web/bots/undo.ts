@@ -7,6 +7,8 @@ import { undoPluginAction } from '../../../../plugins'
 import { loadLog, saveLog, sportState } from '../botBrain'
 import { deleteMoney } from '../financeBot'
 import { takeLink } from './helpers'
+import { RHYTHM, rhythmFor } from '@core/rhythm'
+import { editPlanBlock } from '@core/benTalk'
 import type { BotContext } from './context'
 
 export type UndoDeps = Pick<BotContext, 'mirror' | 'services' | 'calendar' | 'todoist' | 'onExpense'>
@@ -45,6 +47,16 @@ export async function undoReply(c: UndoDeps, at: string, index?: number): Promis
         if (!calendar?.remove) throw new Error('Calendar not connected')
         await calendar.remove(op.cal, op.id)
         lines.push('↩ Block removed from your calendar')
+      } else if (op.k === 'eventedit') {
+        if (op.title != null) {
+          if (!calendar?.update) throw new Error('Calendar not connected')
+          await calendar.update(op.cal, op.id, { title: op.title })
+          lines.push(`↩ Back to "${op.title}"`)
+        } else if (op.start && op.end) {
+          if (!calendar?.move) throw new Error('Calendar not connected')
+          await calendar.move(op.cal, op.id, op.start, op.end)
+          lines.push(`↩ Block back at ${new Date(op.start).toTimeString().slice(0, 5)}`)
+        }
       } else if (op.k === 'task') {
         if (!todoist?.remove) throw new Error('Todoist not connected')
         await todoist.remove(op.id)
@@ -99,6 +111,19 @@ export async function undoReply(c: UndoDeps, at: string, index?: number): Promis
             }
             writeSetting(db as any, REMINDERS, list.filter((r) => r.id !== op.id))
             return '↩ Reminder cancelled'
+          }
+          if (op.k === 'planblock') {
+            const st = rhythmFor(readSetting(db as any, RHYTHM), svc.wallet.today())
+            if (st.day !== op.day || !st.briefing) return '⚠️ That plan is gone'
+            const blocks = st.briefing.plan.blocks
+            // A moved block may sit elsewhere in the list now: find it by what it became.
+            const byNow = op.cur ? blocks.findIndex((b) => b.title === op.cur!.title && b.start === op.cur!.start) : -1
+            const at = byNow >= 0 ? byNow : op.index < blocks.length ? op.index : -1
+            if (at < 0) return '⚠️ That plan block is gone'
+            const r = editPlanBlock(st, at, { title: op.title, start: op.start })
+            if (!r.state) return `⚠️ ${r.error}`
+            writeSetting(db as any, RHYTHM, r.state as any)
+            return `↩ Plan block back to ${op.title} at ${op.start}`
           }
           if (op.k === 'plugin') return undoPluginAction({ db: db as any, now: new Date() }, op.plugin, op.verb, op.data)
           if (op.k === 'mustdo') {

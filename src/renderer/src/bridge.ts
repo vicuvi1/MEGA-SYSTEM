@@ -43,7 +43,7 @@ export type Bridge = LifeApi & {
   coach?: {
     /** Rules only (no AI): the island's command bar. */
     quick?(text: string): Promise<{ ok: boolean; reply: string } | { unknown: true }>
-    chat(text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }>
+    chat(text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards }>
     undo?(at: string, index?: number): Promise<{ ok: boolean; lines: string[] }>
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
@@ -77,7 +77,7 @@ export type Bridge = LifeApi & {
     }
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>
     saveProfile(p: { about: string; goals: string[]; rules: string[] }): Promise<{ about: string; goals: string[]; rules: string[] }>
-    log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; mood?: string; proactive?: boolean; undo?: unknown[]; undone?: boolean[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] }[]>
+    log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; mood?: string; proactive?: boolean; undo?: unknown[]; undone?: boolean[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards }[]>
     model(): Promise<string | null>
   }
   /** Google Calendar through the server (sign in once in Settings). */

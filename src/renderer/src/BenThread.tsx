@@ -5,13 +5,13 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { life } from './bridge'
 import { useAction } from './ui'
 import type { CoachStatus } from './web/coachStatus'
-import { readDo } from '@core/coachButtons'
+import { readDo, type ReplyCards } from '@core/coachButtons'
 import type { NudgeInfo, NudgeKind } from '@core/chatFeed'
 import { CoachPlan } from './CoachPlan'
 import { parseRich, type Inline } from '@core/richText'
 
 /** One chat message (the Coach page's log entry). */
-export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string }
+export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string }
 
 // Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
 const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu
@@ -110,9 +110,10 @@ export function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: 
       ok = r
       if (r?.lines?.length) await act(async () => r, r.lines.join(' · '))
     } else if (d.k === 'say') onSay(d.text)
+    else if (d.k === 'change') onOpen('plan')
     else if (d.k === 'workout' || d.k === 'water') window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'body' }))
     else onOpen(d.tab)
-    if (ok && d.k !== 'open' && d.k !== 'workout' && d.k !== 'water') setUsed((u) => ({ ...u, [k]: true }))
+    if (ok && d.k !== 'open' && d.k !== 'change' && d.k !== 'workout' && d.k !== 'water') setUsed((u) => ({ ...u, [k]: true }))
     if (ok) onDone()
   }
   const tick = async (i: number) => {
@@ -194,6 +195,41 @@ export function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: 
             return (
               <div key={w} className="cx-w cx-w-plan">
                 <CoachPlan onChange={onDone} />
+              </div>
+            )
+          // BQ2: the day and the task list, as they were when Ben answered (data saved with the reply).
+          if (w === 'day')
+            return (
+              <div key={w} className="cx-w cx-w-day">
+                <small>Your day</small>
+                {m.cards?.day?.length ? (
+                  m.cards.day.map((e, k) => (
+                    <div key={k} className="cx-w-row">
+                      <em>
+                        {e.start}–{e.end}
+                      </em>{' '}
+                      <span>{e.title}</span>
+                    </div>
+                  ))
+                ) : (
+                  <span className="hint small">Nothing in your calendar today.</span>
+                )}
+              </div>
+            )
+          if (w === 'tasks')
+            return (
+              <div key={w} className="cx-w cx-w-tasks">
+                <small>Tasks</small>
+                {m.cards?.tasks?.length ? (
+                  m.cards.tasks.map((t, k) => (
+                    <div key={k} className={`cx-w-row ${t.late ? 'bad' : ''}`}>
+                      <span>{t.text}</span>
+                      {t.late && <em> late</em>}
+                    </div>
+                  ))
+                ) : (
+                  <span className="hint small">No tasks for today.</span>
+                )}
               </div>
             )
           if (w === 'promises')

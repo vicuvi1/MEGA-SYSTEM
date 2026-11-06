@@ -2074,6 +2074,8 @@ var WIDGETS = [
 	"focus-week",
 	"goals",
 	"plan",
+	"day",
+	"tasks",
 	"water",
 	"mustdos",
 	"promises"
@@ -2081,11 +2083,12 @@ var WIDGETS = [
 /** "focus:25:Algebra", "approve", "plan", "book:Algebra exam", "say:Done ✅", "open:goals". */
 function readDo(d) {
 	const s = String(d ?? "").trim();
-	const m = /^(focus|approve|plan|book|say|open|workout|water)(?::([\s\S]*))?$/i.exec(s);
+	const m = /^(focus|approve|change|plan|book|say|open|workout|water)(?::([\s\S]*))?$/i.exec(s);
 	if (!m) return null;
 	const k = m[1].toLowerCase();
 	const rest = (m[2] ?? "").trim();
 	if (k === "approve") return { k: "approve" };
+	if (k === "change") return { k: "change" };
 	if (k === "workout") return { k: "workout" };
 	if (k === "water") return { k: "water" };
 	if (k === "plan") return { k: "plan" };
@@ -2135,7 +2138,7 @@ function telegramKeyboard(buttons) {
 	const row = buttons.map((b) => {
 		const d = readDo(b.do);
 		if (!d) return null;
-		const data = d.k === "focus" ? fit(`fo|${d.minutes}|`, d.subject) : d.k === "approve" ? "rb|a" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : d.k === "workout" ? "wk|show" : d.k === "water" ? "wa|show" : null;
+		const data = d.k === "focus" ? fit(`fo|${d.minutes}|`, d.subject) : d.k === "approve" ? "rb|a" : d.k === "change" ? "rb|e" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : d.k === "workout" ? "wk|show" : d.k === "water" ? "wa|show" : null;
 		return data ? {
 			text: b.label,
 			callback_data: data
@@ -3003,7 +3006,7 @@ var DAYS$2 = [
 	"Fri",
 	"Sat"
 ];
-var pad$5 = (n) => String(n % 24).padStart(2, "0");
+var pad$6 = (n) => String(n % 24).padStart(2, "0");
 var W = {
 	urge: 1,
 	reset: 3
@@ -3042,8 +3045,8 @@ function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
 	const win = (slot, weekday, a) => ({
 		slot,
 		weekday,
-		from: `${pad$5(slot * 2)}:00`,
-		to: `${pad$5(slot * 2 + 2)}:00`,
+		from: `${pad$6(slot * 2)}:00`,
+		to: `${pad$6(slot * 2 + 2)}:00`,
 		urges: a.urges,
 		resets: a.resets,
 		score: a.score
@@ -4135,7 +4138,7 @@ function listOf(v) {
 // src/plugins/types.ts
 var definePlugin = (p) => p;
 // src/plugins/weather/weather.ts
-var hmOf$2 = (iso) => {
+var hmOf$3 = (iso) => {
 	const m = /T(\d{2}:\d{2})/.exec(String(iso ?? ""));
 	return m ? m[1] : null;
 };
@@ -4156,7 +4159,7 @@ function summarizeDay(json, day) {
 		if (!t.startsWith(day)) return;
 		const prob = num(h.precipitation_probability?.[k]);
 		if (!rainy(prob, num(h.precipitation?.[k]))) return;
-		const from = hmOf$2(t);
+		const from = hmOf$3(t);
 		const last = spans[spans.length - 1];
 		if (last && last.to === from) {
 			last.to = fromMin$1(toMin$1(from) + 60);
@@ -4170,8 +4173,8 @@ function summarizeDay(json, day) {
 	const r = (v) => v == null ? null : Math.round(v);
 	return {
 		day,
-		sunrise: hmOf$2(d.sunrise?.[i]),
-		sunset: hmOf$2(d.sunset?.[i]),
+		sunrise: hmOf$3(d.sunrise?.[i]),
+		sunset: hmOf$3(d.sunset?.[i]),
 		tmin: r(num(d.temperature_2m_min?.[i])),
 		tmax: r(num(d.temperature_2m_max?.[i])),
 		rain: spans
@@ -4227,7 +4230,7 @@ function readCoords(text) {
 // src/plugins/weather/index.ts
 var WEATHER = "weather";
 var dayOf$5 = (d) => calendarDay(d);
-var hmOf$1 = (d) => d.toTimeString().slice(0, 5);
+var hmOf$2 = (d) => d.toTimeString().slice(0, 5);
 var job$2 = async (ctx) => {
 	const cfg = JSON.parse(await ctx.get(`plugin_weather`) || "{}");
 	const city = String(cfg.city ?? "").trim();
@@ -4280,7 +4283,7 @@ var weather_default = definePlugin({
 	}] },
 	context(db, now) {
 		const data = readData(db, WEATHER);
-		return data ? weatherLine(data, dayOf$5(now), hmOf$1(now)) : null;
+		return data ? weatherLine(data, dayOf$5(now), hmOf$2(now)) : null;
 	},
 	commands: { weather: {
 		help: "Today’s weather and daylight",
@@ -4288,7 +4291,7 @@ var weather_default = definePlugin({
 			const data = readData(db, WEATHER);
 			const w = data?.days.find((d) => d.day === dayOf$5(now));
 			if (!data || !w) return readConfig(db, "weather").city ? "🌤 No forecast yet. It comes with the next check (every few hours)." : "🌤 Set your city in Settings → Plugins → Weather first.";
-			const advice = weatherAdvice(w, hmOf$1(now));
+			const advice = weatherAdvice(w, hmOf$2(now));
 			return [
 				`🌤 <b>${data.place}</b>: ${w.tmin}–${w.tmax}°C`,
 				w.sunrise && w.sunset ? `Sunrise ${w.sunrise} · sunset ${w.sunset}` : "",
@@ -4566,13 +4569,13 @@ function parseDigest(text) {
 		from: String(x.from ?? "").replace(/[<>]/g, "").slice(0, 60)
 	}));
 }
-var label = (k) => ({
+var label$1 = (k) => ({
 	deadline: "Deadline",
 	exam: "Exam",
 	bill: "Bill",
 	change: "Change"
 })[k];
-var itemText = (x) => `${label(x.kind)}: ${x.title}${x.date ? ` (${x.date})` : ""}${x.from ? ` · from ${x.from}` : ""}`;
+var itemText = (x) => `${label$1(x.kind)}: ${x.title}${x.date ? ` (${x.date})` : ""}${x.from ? ` · from ${x.from}` : ""}`;
 /** One line for what Ben knows (only while the digest is fresh: today or yesterday). */
 function gmailLine(d, today, yesterday) {
 	if (!d.items.length || d.day !== today && d.day !== yesterday) return null;
@@ -6231,6 +6234,488 @@ function lastHourContext(h, now) {
 	if (!h || !lastHourFresh(h, now) || !h.items.length) return "";
 	return `Last hour on his PC (desktop app, as of ${new Date(h.at).toTimeString().slice(0, 5)}): ${h.line}. If that doesn't fit what his plan says for now, gently call out the drift in one line (no lecture).`;
 }
+// src/core/benTalk.ts
+/** A regex with Unicode word edges: \\b only knows ASCII, so "arată" or "второй" would never match. */
+var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
+var pad$5 = (n) => String(n).padStart(2, "0");
+var ymd$1 = (d) => calendarDay(d);
+var hmOf$1 = (d) => `${pad$5(d.getHours())}:${pad$5(d.getMinutes())}`;
+var label = (d) => d.toLocaleDateString("en-GB", {
+	weekday: "short",
+	day: "numeric",
+	month: "short"
+}).replace(",", "");
+/** The clock and the words for "today", "tonight", "this morning", "tomorrow" right now. */
+function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
+	const h = now.getHours();
+	const afterMidnight = h < startHour;
+	const calDay = ymd$1(now);
+	const app = /* @__PURE__ */ new Date(now.getTime() - startHour * 36e5);
+	const appDay = ymd$1(app);
+	const nextCal = new Date(now);
+	nextCal.setDate(nextCal.getDate() + 1);
+	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$1(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$5(startHour)}:00).`];
+	if (afterMidnight) {
+		const seven = new Date(now);
+		seven.setHours(7, 0, 0, 0);
+		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label(now)} from ${pad$5(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label(app)} until ${pad$5(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label(now)}); ask with chips only if it really matters.`);
+	} else if (h >= 18) lines.push(`- "tonight" = this evening (${label(now)}). "tomorrow morning" = ${label(nextCal)}.`);
+	else if (h < 12) lines.push(`- "this morning" = now (${label(now)}). "tonight" = this evening. "tomorrow" = ${label(nextCal)}.`);
+	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label(now)}). "tomorrow" = ${label(nextCal)}.`);
+	lines.push("When you name a time, add how far it is (\"in 40 min\", \"in 6 h, this morning\").");
+	return {
+		clock: hmOf$1(now),
+		appDay,
+		calDay,
+		afterMidnight,
+		text: lines.join("\n")
+	};
+}
+/** "in 40 min" / "in 6 h 29 min, this morning" / "tomorrow at 09:00" / "an hour ago". */
+function whenWords(at, now = /* @__PURE__ */ new Date(), startHour = 4) {
+	const t = typeof at === "string" ? new Date(at) : at;
+	const diff = Math.round((t.getTime() - now.getTime()) / 6e4);
+	const span = (m) => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+	if (diff < 0) return diff > -60 ? `${-diff} min ago` : `${span(-diff)} ago`;
+	const sameCal = ymd$1(t) === ymd$1(now);
+	const th = t.getHours();
+	const nowAfterMidnight = now.getHours() < startHour;
+	let part = "";
+	if (sameCal) part = th < 12 ? nowAfterMidnight || now.getHours() < 12 ? "this morning" : "today" : th < 18 ? "this afternoon" : "tonight";
+	else {
+		const tomorrow = new Date(now);
+		tomorrow.setDate(tomorrow.getDate() + 1);
+		part = ymd$1(t) === ymd$1(tomorrow) ? th < 4 ? "tonight, after midnight" : `tomorrow ${th < 12 ? "morning" : th < 18 ? "afternoon" : "evening"}` : label(t);
+	}
+	if (diff === 0) return "now";
+	return diff < 120 && sameCal ? `in ${span(diff)}` : `in ${span(diff)}, ${part}`;
+}
+var THEMES = [
+	["sleep", /\b(sleep|slept|sleeping|bed ?time|go to bed|hours? of sleep|tired|rest(ed)?|nap|somn|dormi|сон|спать|выспа)/i],
+	["money", /\b(money|spend|spent|budget|lei|save|saving|bani|деньг)/i],
+	["focus and study", /\b(focus|study|studying|deep work|exam|homework|lab|învăț|учеб)/i],
+	["training", /\b(gym|workout|training|train|pushups?|run|sport|muscle)/i],
+	["phone and scrolling", /\b(phone|scroll|tiktok|youtube|instagram|reels|screen time)/i],
+	["discipline", /\b(discipline|clean streak|urge|relapse|oath)/i],
+	["water", /\b(water|hydrat|apă|вод)/i],
+	["the company / big goals", /\b(company|startup|business|empire|build (a|your) (company|business)|million)/i],
+	["promises", /\b(promise|you said you would|kept|broke)/i]
+];
+var EMOJI = /\p{Extended_Pictographic}/gu;
+/** What Ben's last replies (newest last) keep coming back to, minus what the new message brings up itself. */
+function alreadySaid(coachTexts, message = "", last = 6) {
+	const recent = coachTexts.slice(-last).map((t) => t.split(" | ")[0]);
+	const counts = /* @__PURE__ */ new Map();
+	for (const t of recent) for (const [name, re] of THEMES) if (re.test(t)) counts.set(name, (counts.get(name) ?? 0) + 1);
+	const asked = new Set(THEMES.filter(([, re]) => re.test(message)).map(([n]) => n));
+	return {
+		themes: [...counts.entries()].filter(([n]) => !asked.has(n)).map(([theme, times]) => ({
+			theme,
+			times
+		})).sort((a, b) => b.times - a.times),
+		openers: [...new Set(recent.map((t) => t.replace(EMOJI, "").trim().split(/\s+/).slice(0, 2).join(" ").replace(/[,.!?…]+$/, "")).filter((o) => o.length > 1))],
+		emoji: [...new Set(recent.flatMap((t) => t.match(EMOJI) ?? []))]
+	};
+}
+/** The "already said" block for the prompt (empty when there is nothing to warn about). */
+function alreadySaidText(a) {
+	const out = [];
+	if (a.themes.length) out.push(`- Points you already made: ${a.themes.map((t) => `${t.theme}${t.times > 1 ? ` (${t.times}×)` : ""}`).join(", ")}. Do NOT bring these up again unless he does. Answer what he asked.`);
+	if (a.openers.length) out.push(`- How your last replies started: ${a.openers.slice(-6).map((o) => `"${o}"`).join(", ")}. Start differently.`);
+	if (a.emoji.length) out.push(`- Emoji you used lately: ${a.emoji.slice(-6).join(" ")}. Use none of them this time (zero emoji is fine).`);
+	return out.length ? `== Already said (your last replies) ==\n${out.join("\n")}` : "";
+}
+/** A short "no" / "not now" / "stop": Ben accepts it and stops pushing. */
+function saidNo(message) {
+	const t = message.trim().toLowerCase().replace(/[.!…]+$/, "");
+	return t.length <= 40 && /^(no+|nope|nah|not now|not today|later|stop|leave it|drop it|i don'?t want( to)?|no thanks|nu|nu acum|lasă|lasa|нет|не сейчас|не хочу|отстань|хватит)( thanks| man| bro| ben)?[\s,!.]*$/u.test(t);
+}
+/**
+* The reply, tidied in code (the model sometimes ignores the rules):
+* no "Look, Victor," / "Listen bro," opener, at most one emoji, and none when
+* the last two replies already had one (emoji only sometimes).
+*/
+function tidyReply(reply, prevCoachTexts = [], name = "") {
+	let r = String(reply ?? "").trim();
+	if (!r) return r;
+	const who = name ? `(?:${name.replace(/[^\p{L}]/gu, "")}|bro|man|dude|mate)` : "(?:bro|man|dude|mate|\\p{Lu}\\p{L}+)";
+	const m = new RegExp(`^(\\p{Extended_Pictographic}\\s*)?(look|listen|ok(?:ay)?(?: so)?|alright|so|bro)\\s*,?\\s+${who}\\s*[,.!:—-]+\\s*`, "iu").exec(r);
+	if (m) {
+		const rest = r.slice(m[0].length);
+		r = `${m[1] ?? ""}${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+	}
+	let allowed = prevCoachTexts.slice(-2).filter((t) => /\p{Extended_Pictographic}/u.test(t.split(" | ")[0])).length >= 2 ? 0 : 1;
+	r = r.replace(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu, (e) => allowed-- > 0 ? e : "");
+	return r.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([,.!?])/g, "$1").trim();
+}
+/** Words people type in commands to Ben; typos of these are fixed before the parsers run. */
+var DICT = [
+	"change",
+	"rename",
+	"move",
+	"approve",
+	"plan",
+	"show",
+	"delete",
+	"remove",
+	"block",
+	"blocks",
+	"deep",
+	"developing",
+	"development",
+	"develop",
+	"tomorrow",
+	"today",
+	"tonight",
+	"morning",
+	"evening",
+	"afternoon",
+	"schedule",
+	"calendar",
+	"task",
+	"tasks",
+	"focus",
+	"remind",
+	"reminder",
+	"finished",
+	"cancel",
+	"start",
+	"please",
+	"first",
+	"second",
+	"third",
+	"swap",
+	"replace",
+	"edit",
+	"update",
+	"workout",
+	"water",
+	"done",
+	"study",
+	"studying",
+	"project",
+	"minutes",
+	"hours",
+	"push",
+	"later",
+	"earlier",
+	"session",
+	"meeting",
+	"what",
+	"where",
+	"again"
+];
+/** Real words that look like typos of the ones above: never "fixed". */
+var KEEP = /* @__PURE__ */ new Set([
+	"black",
+	"clock",
+	"flock",
+	"block",
+	"blank",
+	"bloc",
+	"chance",
+	"charge",
+	"changed",
+	"changes",
+	"more",
+	"mode",
+	"love",
+	"live",
+	"shot",
+	"shop",
+	"slow",
+	"snow",
+	"shown",
+	"star",
+	"state",
+	"stay",
+	"store",
+	"story",
+	"start",
+	"smart",
+	"today",
+	"toady",
+	"what",
+	"when",
+	"that",
+	"than",
+	"then",
+	"plain",
+	"plant",
+	"planet",
+	"plans",
+	"play",
+	"place",
+	"plate",
+	"please",
+	"pleased",
+	"focused",
+	"remain",
+	"rename",
+	"reader",
+	"second",
+	"secondly",
+	"deep",
+	"deer",
+	"deeply",
+	"done",
+	"dome",
+	"gone",
+	"none",
+	"tone",
+	"move",
+	"mover",
+	"moved",
+	"moves",
+	"cancer",
+	"meting",
+	"swamp",
+	"swap",
+	"water",
+	"waiter",
+	"later",
+	"latter",
+	"eater",
+	"task",
+	"mask",
+	"tusk",
+	"tasks",
+	"edit",
+	"exit",
+	"sedan",
+	"session",
+	"where",
+	"there",
+	"here",
+	"were",
+	"again",
+	"agian",
+	"push",
+	"posh",
+	"bush",
+	"rush",
+	"study",
+	"sturdy",
+	"show",
+	"stow",
+	"flow",
+	"fast",
+	"first"
+]);
+/** Damerau-Levenshtein (optimal string alignment) distance, capped. */
+function editDistance(a, b, cap = 3) {
+	if (Math.abs(a.length - b.length) > cap) return cap + 1;
+	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+	for (let j = 1; j <= b.length; j++) d[0][j] = j;
+	for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+		const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+		d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+		if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+	}
+	return d[a.length][b.length];
+}
+var sameLetters = (a, b) => a.length === b.length && [...a].sort().join("") === [...b].sort().join("");
+/** One word fixed when it is clearly a typo of a command word ("chagne" → "change"), else as it was. */
+function fixWord(w) {
+	const low = w.toLowerCase();
+	if (low.length < 4 || !/^[a-z]+$/.test(low) || KEEP.has(low) || DICT.includes(low)) return w;
+	let best = null;
+	let bestD = 9;
+	for (const word of DICT) {
+		if (word[0] !== low[0]) continue;
+		const allow = word.length <= 4 ? 1 : word.length <= 6 ? 1 : 2;
+		const dist = editDistance(low, word, 3);
+		if (dist > allow) continue;
+		if (word.length <= 4 && !sameLetters(low, word)) continue;
+		if (dist < bestD) {
+			best = word;
+			bestD = dist;
+		}
+	}
+	if (!best) return w;
+	return w[0] === w[0].toUpperCase() ? best[0].toUpperCase() + best.slice(1) : best;
+}
+/** The whole message with typos of command words fixed ("aporve the paln" → "approve the plan"). */
+function fixTypos(text) {
+	return String(text ?? "").replace(/[A-Za-z]+/g, (w) => fixWord(w));
+}
+/** "how can I approve the plan if I don't see it" → the plan card. */
+function wantsToSee(text) {
+	const t = fixTypos(text).toLowerCase();
+	const out = [];
+	const look = uw("\\b(show|see|view|look|display|where'?s|where is|what'?s|what is|what does|send|give me|let me see|approve|check|arată|arata|vezi|văd|покажи|посмотреть|вижу|где)\\b");
+	if (uw("\\b(plan|planul|plan-ul|план|плана)\\b").test(t) && (look.test(t) || /\bplan\s*\?/.test(t))) out.push("plan");
+	if (uw("\\b(my day|the day|today|schedule|calendar|agenda|ziua|programul|день|расписание)\\b").test(t) && look.test(t) && !out.includes("plan")) out.push("day");
+	if (uw("\\b(tasks?|to-?dos?|todoist|sarcini|sarcinile|задачи)\\b").test(t) && uw("\\b(show|see|list|view|what are|what'?s left|what is left|which|arată|arata|покажи|какие)\\b").test(t)) out.push("tasks");
+	return out.slice(0, 2);
+}
+var ORD = [
+	[uw("\\b(first|1st|one|primul|prima|первый|первую|первое)\\b"), 0],
+	[uw("\\b(second|2nd|two|al doilea|a doua|второй|вторую|второе)\\b"), 1],
+	[uw("\\b(third|3rd|three|al treilea|a treia|третий|третью)\\b"), 2],
+	[uw("\\b(last|ultimul|ultima|последний|последнюю)\\b"), -1]
+];
+var timeOf = (s) => {
+	const m = /^(?:at\s+|la\s+|в\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i.exec(s.trim());
+	if (!m) return null;
+	let h = Number(m[1]);
+	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
+	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
+	const mi = Number(m[2] ?? 0);
+	return h < 24 && mi < 60 ? `${pad$5(h)}:${pad$5(mi)}` : null;
+};
+var BLOCK = "(?:block|blocks|blocul|blocului|блок|блока)";
+/**
+* "please change the deep block to developing my app" → rename "deep" → "Developing my app".
+* "move the first deep block to 11" → move. Only when a block is named (never "change my bedtime").
+*/
+function readBlockEdit(text) {
+	const t = fixTypos(text).trim().replace(/[.!?]+$/, "").replace(/\s+/g, " ");
+	const verbs = "(?:please\\s+|pls\\s+|can you\\s+|could you\\s+)?(change|rename|swap|switch|make|turn|replace|set|move|push|shift|put|schimbă|schimba|redenumește|redenumeste|mută|muta|поменяй|переименуй|измени|замени|перенеси|сделай)";
+	const prep = "(?:to|into|for|with|in|în|на|в|la)";
+	const named = new RegExp(`^${verbs}\\s+(?:the\\s+|my\\s+|that\\s+|this\\s+)?(.{0,40}?)\\s*${BLOCK}\\s*(\\d)?\\s+${prep}\\s+(.{1,60})$`, "iu").exec(t);
+	const after = named ? null : new RegExp(`^${verbs}\\s+(?:the\\s+|my\\s+)?${BLOCK}\\s+(.{1,40}?)\\s*(\\d)?\\s+${prep}\\s+(.{1,60})$`, "iu").exec(t);
+	const m = named ?? after;
+	if (!m) return null;
+	const verbWord = m[1].toLowerCase();
+	let target = m[2].trim().toLowerCase();
+	const num = m[3] ? Number(m[3]) - 1 : void 0;
+	const raw = m[4].trim().replace(/^(?:be\s+|be about\s+|about\s+)/i, "");
+	let nth = num;
+	for (const [r, n] of ORD) if (r.test(target)) {
+		nth = n;
+		target = target.replace(r, "").trim();
+	}
+	target = target.replace(/\b(the|my|a|an|blocul|focus)\b/g, "").replace(/\s+/g, " ").trim();
+	const when = timeOf(raw);
+	const moving = /^(move|push|shift|put|mută|muta|перенеси)$/.test(verbWord);
+	if (when && (moving || /^(at|la|в)\s/i.test(raw) || /^\d{1,2}([:.]\d{2})?$/.test(raw))) return {
+		verb: "move",
+		target,
+		...nth != null ? { nth } : {},
+		value: when
+	};
+	if (moving) return null;
+	const title = raw.replace(/\s+(please|pls|thanks|thank you|haha|lol)$/i, "").trim();
+	if (!title) return null;
+	if (/^\d+\s*(h|hrs?|hours?|min|mins|minutes?|m)\b/i.test(title) || uw("\\b(tomorrow|today|tonight|later|earlier|longer|shorter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|mâine|maine|azi|завтра|сегодня|позже)\\b", "i").test(title)) return null;
+	return {
+		verb: "rename",
+		target,
+		...nth != null ? { nth } : {},
+		value: title.charAt(0).toUpperCase() + title.slice(1)
+	};
+}
+/** The blocks a request can mean: title words match (prefix), upcoming first, by time. */
+function matchBlocks(edit, blocks) {
+	const words = edit.target.split(/\s+/).filter((w) => w.length >= 3).map((w) => w.slice(0, 4));
+	const hits = blocks.filter((b) => {
+		const title = b.title.toLowerCase();
+		return words.every((w) => title.split(/[^\p{L}\p{N}]+/u).some((x) => x.startsWith(w)));
+	}).sort((a, b) => a.start.localeCompare(b.start));
+	if (edit.nth == null) return hits;
+	const pick = edit.nth < 0 ? hits[hits.length - 1] : hits[edit.nth];
+	return pick ? [pick] : hits;
+}
+/** The chip for one option: "Deep block 1 · 07:00". */
+var optionLabel = (o) => `${o.title.slice(0, 28)} · ${o.start}`;
+/** Which of the offered chips his answer picks ("first one", "2", "the 14:00 one", the chip itself); null when unclear. */
+function pickChoice(text, labels) {
+	const t = fixTypos(text).trim().toLowerCase().replace(/[.!?]+$/, "");
+	if (!t || t.length > 60) return null;
+	const exact = labels.findIndex((l) => l.toLowerCase() === t);
+	if (exact >= 0) return exact;
+	const time = /\b(\d{1,2})[:.](\d{2})\b/.exec(t) ?? /\b(?:at|la|в)\s+(\d{1,2})\b/.exec(t);
+	if (time) {
+		const hm = `${pad$5(Number(time[1]))}:${time[2] ?? "00"}`;
+		const k = labels.findIndex((l) => l.endsWith(hm));
+		if (k >= 0) return k;
+	}
+	for (const [r, n] of ORD) if (r.test(t)) return n < 0 ? labels.length - 1 : n < labels.length ? n : null;
+	const num = /^(?:#|nr\.?\s*|number\s+)?(\d)$/.exec(t);
+	if (num) {
+		const n = Number(num[1]) - 1;
+		return n >= 0 && n < labels.length ? n : null;
+	}
+	const words = t.split(/\s+/).filter((w) => w.length >= 3 && !/^(the|one|block|that|this)$/.test(w));
+	const only = labels.map((l, i) => words.some((w) => l.toLowerCase().includes(w)) ? i : -1).filter((i) => i >= 0);
+	return only.length === 1 ? only[0] : null;
+}
+/** The language a short message is in, for Ben's own one-liners: Cyrillic → ru, Romanian letters or words → ro. */
+function langOf(text) {
+	const t = String(text ?? "");
+	if (/[\u0400-\u04FF]/.test(t)) return "ru";
+	if (/[ăâîșşțţ]/i.test(t) || uw("\\b(schimba|muta|blocul|planul|azi|maine|vreau|te rog|primul|prima|doilea|doua|treilea|ultimul|cat|gata|nu)\\b", "i").test(t)) return "ro";
+	return "en";
+}
+/** Ben's own short lines (after a local edit) in his language. */
+function shortLine(kind, lang, n = 2, what = "") {
+	return {
+		en: {
+			done: "Done.",
+			failed: `That didn't work: ${what}.`,
+			which: `${n} blocks fit. Which one${what ? ` ${what}` : ""}?`
+		},
+		ro: {
+			done: "Gata.",
+			failed: `N-a mers: ${what}.`,
+			which: `Se potrivesc ${n} blocuri. Care?`
+		},
+		ru: {
+			done: "Готово.",
+			failed: `Не получилось: ${what}.`,
+			which: `Подходят ${n} блока. Какой?`
+		}
+	}[lang][kind];
+}
+/** "I'll swap it", "renamed it", "done, moved": a reply that says something changed. */
+function claimsDone(reply) {
+	return /\b(i('ll| will|'ve| have)? ?(just )?(swap(ped)?|chang(e|ed)|renam(e|ed)|mov(e|ed)|book(ed)?|add(ed)?|delet(e|ed)|updat(e|ed)|replac(e|ed))\b|\b(renamed|swapped|moved|changed|updated|replaced) (it|that|the|your|deep)\b|\bdone[,.!]? (it'?s|i)\b)/i.test(String(reply ?? ""));
+}
+/** BQ3: one block of today's waiting plan gets a new title or start; the old one comes back for Undo. */
+function editPlanBlock(st, index, patch) {
+	const b = st.briefing;
+	if (!b) return {
+		state: null,
+		old: null,
+		error: "There is no plan for today yet"
+	};
+	if (b.status !== "proposed") return {
+		state: null,
+		old: null,
+		error: "The plan is already approved: its blocks are in your calendar now"
+	};
+	const old = b.plan.blocks[index];
+	if (!old) return {
+		state: null,
+		old: null,
+		error: "That plan block is gone"
+	};
+	if (patch.start && !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.start)) return {
+		state: null,
+		old: null,
+		error: `${patch.start} isn't a time`
+	};
+	const blocks = b.plan.blocks.map((x, i) => i === index ? {
+		...x,
+		...patch.title ? { title: patch.title.slice(0, 80) } : {},
+		...patch.start ? { start: patch.start } : {}
+	} : x);
+	if (patch.start) blocks.sort((x, y) => x.start.localeCompare(y.start));
+	return {
+		state: {
+			...st,
+			briefing: {
+				...b,
+				plan: {
+					...b.plan,
+					blocks
+				}
+			}
+		},
+		old: { ...old }
+	};
+}
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
 function loadMemory(db) {
@@ -6432,14 +6917,16 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 	];
 	if (extra.events) {
 		const nowHM = now.toTimeString().slice(0, 5);
-		const gaps = freeGaps(extra.events, today, {
+		const tf = timeFrame(now);
+		const calToday = tf.afterMidnight ? tf.calDay : today;
+		const gaps = freeGaps(extra.events, calToday, {
 			after: nowHM,
 			minMinutes: 30
 		});
-		lines.push(`Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(", ") || "none"}.`);
-		const tomorrow = addDays$5(today, 1);
+		lines.push(tf.afterMidnight ? `Calendar for THIS MORNING and the day ahead (${calToday}, after he sleeps; it is past midnight now): ${agendaText(extra.events, calToday)}. Free time: ${gaps.map((g) => `${g.start}–${g.end}`).join(", ") || "none"}.` : `Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(", ") || "none"}.`);
+		const tomorrow = addDays$5(calToday, 1);
 		if (extra.events.some((e) => localDay$1(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`);
-		if (extra.events.some((e) => localDay$1(e.start) > tomorrow)) lines.push(weekAhead(extra.events, today));
+		if (extra.events.some((e) => localDay$1(e.start) > tomorrow)) lines.push(weekAhead(extra.events, calToday));
 	}
 	lines.push(...nowContext(s, db, extra.events ?? null, extra.finance, now));
 	lines.push(...pluginContext(db, now));
@@ -6479,7 +6966,7 @@ function nowContext(s, db, events, finance, now = /* @__PURE__ */ new Date()) {
 		const timed = events.filter((e) => !e.allDay && takesTime(e));
 		const cur = timed.filter(canBeNow).find((e) => Date.parse(e.start) <= t && Date.parse(e.end) > t);
 		const next = timed.filter((e) => Date.parse(e.start) > t).sort((a, b) => a.start.localeCompare(b.start))[0];
-		out.push(`RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : "nothing in his calendar"}${next ? `; next: "${next.title}"${isTentative(next) ? " (he said maybe)" : ""} at ${hmOf(new Date(next.start))} (in ${Math.round((Date.parse(next.start) - t) / 6e4)} min)` : "; nothing else today"}.`);
+		out.push(`RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : "nothing in his calendar"}${next ? `; next: "${next.title}"${isTentative(next) ? " (he said maybe)" : ""} at ${hmOf(new Date(next.start))} (${whenWords(next.start, now)})` : "; nothing else today"}.`);
 	} else out.push(`RIGHT NOW (${hmOf(now)}): his calendar is not connected, so you don't know where he is; ask if it matters.`);
 	const items = [];
 	try {
@@ -6564,7 +7051,7 @@ function loadStyle(db) {
 				"detailed"
 			].includes(j?.length) ? j.length : DEFAULT_STYLE.length,
 			tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone))),
-			lang: LANGS.includes(j?.lang) ? j.lang : "en"
+			lang: LANGS.includes(j?.lang) ? j.lang : "auto"
 		};
 	} catch {
 		return DEFAULT_STYLE;
@@ -6582,7 +7069,7 @@ function saveStyle(db, st) {
 			"detailed"
 		].includes(next.length) ? next.length : "short",
 		tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4))),
-		lang: LANGS.includes(next.lang) ? next.lang : "en"
+		lang: LANGS.includes(next.lang) ? next.lang : "auto"
 	};
 	setSetting(db, COACH_STYLE, JSON.stringify(clean));
 	return clean;
@@ -6597,7 +7084,7 @@ var TONES = [
 ];
 function styleText(st) {
 	const len = st.length === "short" ? "SHORT: 2–4 short lines." : st.length === "normal" ? "NORMAL length: up to 6–8 lines when useful." : "DETAILED when he asks for depth: clear sections, still no fluff.";
-	const lang = st.lang === "ro" ? "Reply in Romanian." : st.lang === "ru" ? "Reply in Russian." : st.lang === "auto" ? "Reply in the language his message is written in (English, Romanian or Russian)." : "Reply in English (he may write in Romanian or Russian; understand it, answer in English).";
+	const lang = st.lang === "ro" ? "Reply in Romanian." : st.lang === "ru" ? "Reply in Russian." : st.lang === "auto" ? "Reply in the language his message is written in (English, Romanian or Russian; a mixed message: the language most of it is in)." : "Reply in English (he may write in Romanian or Russian; understand it, answer in English).";
 	return `His chosen style: ${len} Tone ${st.tone}/5: ${TONES[st.tone]}. ${lang}`;
 }
 var COACH_FEEDBACK = "coach_feedback";
@@ -6706,7 +7193,7 @@ function moreContext(s, db, finance, today, input, todayRules, disc) {
 	return out;
 }
 var PERSONA = {
-	mega: "You are BEN: Victor's best friend who is also his coach (your name is Ben; the Telegram bot may still be called Mega). You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back (\"you said the CV was the priority, bro\"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.",
+	mega: "You are BEN: Victor's best friend who is also his coach (your name is Ben; the Telegram bot may still be called Mega). You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name only now and then (never \"Look, Victor…\"), you remember what he said and bring it back (\"you said the CV was the priority, bro\"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher: you say a hard thing once, clearly, then you let it land.",
 	finance: "You are the MONEY COACH (Finance bot). Help Victor spend with intention and save: react to spending with context (how often, how much this week/month, against his limit), spot patterns, suggest one concrete change. Logging money is your main job; coaching on money is what makes you useful.",
 	waky: "You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.",
 	sport: "You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive."
@@ -6763,6 +7250,8 @@ Points and the week:
 	calendar: `Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
 - "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
+- "rename: E3 | <new title>" change what a block is for ("rename: E2 | App dev"). Today's plan blocks waiting for his OK have B-numbers: "rename: B1 | <title>", "move: B1 | <YYYY-MM-DD HH:MM>".
+- Edits ("change/rename/move the deep block…"): ONE block fits → do it now, no question. Several fit → do nothing yet: one short line plus "chips" naming each option with its time ("Deep block 1 · 07:00", "Deep block 2 · 14:00"). Never ask "which one?" in free text.
 - "shift: <+/-minutes> | E3, E4, E5" move several (e.g. he's running late: shift the rest of today's blocks).`,
 	todoist: `Todoist (use the T-numbers):
 - "task: <text>" new task (Todoist reads "friday 18:00", "p1", "#University").
@@ -6772,7 +7261,7 @@ Points and the week:
 var GROUP_WORDS = {
 	body: /\d+\s*[x×]\s*\d+|\b(bench|deadlift|squat|press|pull-?ups?|dips|curls?|sets?|kg|water|drink|glass|ml|pushups?|squats?|reps?|plank|workouts?|gym|train|run|sleep|slept|wake|woke|bed|habit|oath|clean|skincare|weight|exercise|target|tired|apa|somn)\b/i,
 	money: /\d|\b(lei|mdl|spent|spend|bought|paid|pay|money|expense|budget|salary|reward|points?|shop|week|big ?3|cash|card|bani)\b|\bM\d\b/i,
-	calendar: /\b(calendar|event|block|meeting|class|lecture|exam|move|resched\w*|shift|late|plan|book|tomorrow|today|tonight|morning|afternoon|evening|free|time|at|until|before|after)\b|\bE\d\b|\d{1,2}:\d{2}/i,
+	calendar: /\b(calendar|event|block|blocks|rename|change|swap|meeting|class|lecture|exam|move|resched\w*|shift|late|plan|book|tomorrow|today|tonight|morning|afternoon|evening|free|time|at|until|before|after)\b|\bE\d\b|\d{1,2}:\d{2}/i,
 	todoist: /\b(tasks?|todo|todoist|done|finish(ed)?|due|must-?dos?|priority|star|list|deadline|homework|assignment)\b|\bT\d\b/i
 };
 /** The optional action groups for this message: all of them for big asks, corrections and media. */
@@ -6780,6 +7269,18 @@ function actionGroups(message, all = false) {
 	const keys = Object.keys(ACT_GROUPS).filter((k) => all || GROUP_WORDS[k].test(message));
 	return keys.length ? `== Actions for this message ==\n${keys.map((k) => ACT_GROUPS[k]).join("\n")}` : "";
 }
+/**
+* BQ: how Ben talks (cached with the rules). Answer first, never repeat, no
+* stock openers, match his energy, take a no, act then confirm.
+*/
+var BQ_RULES = `How to talk to him (most important):
+- Answer HIS message first, in 1–3 sentences. A question gets the answer, not a speech. Then stop, or add one short push only if it fits.
+- Never repeat a point you already made in your last replies (see "Already said") unless he brings it up. Said once is enough; a friend doesn't nag.
+- Vary how you start. Never open with "Look, Victor", "Listen", "Bro," or his name. At most one emoji, and only sometimes.
+- Match his energy: short and joking when he is, calm when he's tired, serious when he's serious.
+- After a "no" or "not now", stop pushing that thing. "OK" and move on.
+- He writes fast, with typos, and mixes English, Romanian and Russian ("chagne", "aporve the paln"): read what he means. If you are really unsure, ask with 2–3 chips of your best guesses instead of guessing wrong.
+- Act, then confirm: when he asks for a change and the target is clear, do it now with an action. The app shows the real result under your reply (with Undo); never say it's done if you put no action. If something can't be done, say so plainly.`;
 var LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
 - "spending <YYYY-MM-DD> <YYYY-MM-DD> [category]" totals and top categories (or one category).
 - "focus <from> <to>", "workouts <from> <to>", "sleep <from> <to>", "tasks <from> <to>" (tasks done), "points <from> <to>".
@@ -6864,13 +7365,15 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 	const chat = turns.map((c) => `${c.role === "me" ? "Victor" : c.bot === "mega" ? "Ben" : `Coach (${c.bot})`}: ${chatGist(c)}`);
 	const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(" ")}`);
 	const recalled = (extra.recalled ?? "").split("\n").filter((l) => l && !facts.some((f) => l.includes(f.t))).join("\n");
+	const said = alreadySaidText(alreadySaid(memory.chat.filter((c) => c.role === "coach").map((c) => c.text), message));
 	return [
 		PERSONA[persona],
 		"Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks \"why\"/\"how come\" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.",
 		UNTRUSTED_NOTE,
 		"Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don't have a number, don't make one up; ask for it with \"need\" or leave it out.",
 		"Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count (\"3rd promise missed this week\"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn't).",
-		"Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see \"How he wants you to write\"; default short: 3–4 lines). Numbers first (his real ones: \"focus 32m of 10h this week\", \"water 1.2 of 2.7 L\"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language his chosen style says (English unless he picked another).",
+		BQ_RULES,
+		"Style: a close friend who coaches, tough love, on his side, honest. Clear, length as he chose (see \"How he wants you to write\"; default short). Use numbers when they answer him (his real ones: \"focus 32m of 10h this week\"), then at most ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise. No essays, no lists unless he asks for a plan (then a few short lines \"14:00–14:50 Lab report\"). Plain text, no markdown. Reply in the language his chosen style says.",
 		"",
 		ACT_CORE,
 		DESK_ACTIONS,
@@ -6879,14 +7382,18 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		LOOKUPS,
 		"",
 		"Also put in \"remember\" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.",
-		"Interactive replies: \"buttons\" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. \"do\" is one of: \"focus:<minutes>:<subject>\" (start a focus timer), \"approve\" (approve today's plan), \"plan\" (make today's plan), \"book:<goal title>\" (book a goal's blocks), \"say:<his reply>\" (sends that as his message), \"open:plan|goals|score|about\". Example: {\"label\": \"▶ 25 min Algebra\", \"do\": \"focus:25:Algebra\"}. Prefer a button over telling him to type a command. \"show\" (0–2) puts a live mini-widget under your message when it helps him see it: \"focus-week\" (focus per day, 7 days), \"goals\" (goal progress), \"plan\" (today's plan), \"water\", \"mustdos\" (tickable list), \"promises\".",
-		"Put in \"chips\" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message (\"Done ✅\", \"Give me 10 min\", \"Why?\", \"Plan it\"). Never generic.",
+		"Interactive replies: \"buttons\" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. \"do\" is one of: \"focus:<minutes>:<subject>\" (start a focus timer), \"approve\" (approve today's plan), \"change\" (change today's plan), \"plan\" (make today's plan), \"book:<goal title>\" (book a goal's blocks), \"say:<his reply>\" (sends that as his message), \"open:plan|goals|score|about\". Example: {\"label\": \"▶ 25 min Algebra\", \"do\": \"focus:25:Algebra\"}. Prefer a button over telling him to type a command. \"show\" (0–2) puts a live card under your message: \"plan\" (today's plan with Approve and Change), \"day\" (today's calendar), \"tasks\" (today's Todoist list), \"mustdos\" (tickable list), \"focus-week\" (focus per day, 7 days), \"goals\" (goal progress), \"water\", \"promises\".",
+		"SHOW, DON'T TELL: when he asks to see, check or approve the plan, his day or his tasks (\"show me the plan\", \"how can I approve it if I don't see it\"), put \"plan\" / \"day\" / \"tasks\" in \"show\" and say one line (\"Here it is: tap Approve or Change.\"). Never retell the plan in prose instead of showing it.",
+		"Put in \"chips\" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message (\"Done ✅\", \"Give me 10 min\", \"Why?\", \"Plan it\"). Never generic. When you are not sure what he meant, do not guess: ask in one short line and make the chips your 2–3 best guesses of what he meant.",
 		"Put in \"steps\" 1–4 very short labels of what you did or checked, for the screen (\"Checked your calendar\", \"Found 2h free after 15:00\", \"Moved 3 blocks\").",
 		"",
 		"Answer ONLY with JSON: {\"reply\": string, \"mood\": \"proud\"|\"happy\"|\"chill\"|\"focused\"|\"annoyed\"|\"angry\"|\"furious\", \"chips\": string[], \"buttons\": {\"label\": string, \"do\": string}[], \"show\": string[], \"actions\": string[], \"remember\": string[], \"steps\": string[], \"need\": string[]}.",
 		PROMPT_SPLIT,
 		extra.stealth ? STEALTH_NOTE : "",
-		(extra.tone ?? 4) >= 5 ? "Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits." : "Start the reply with ONE face: 😎/🔥 proud, 😄 happy, 🙂 chill, 🎯 focused (he is slipping: you help him move). NEVER angry faces or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. Then 1–2 more emoji at most. When he just chats, chat back like a friend, short.",
+		(extra.tone ?? 4) >= 5 ? "Your mood shows through \"mood\" (the app draws your face from it) and your words. Angry is allowed when earned (he keeps breaking promises or wastes the day): say why ONCE with his numbers, then the one thing to do NOW. At most one emoji, and often none. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer to the goal only if it fits." : "Your mood goes in \"mood\" (the app draws your face from it): proud, happy, chill or focused (he is slipping: you help him move). NEVER angry or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. At most one emoji, and often none. When he just chats, chat back like a friend, short.",
+		timeFrame(extra.now ?? /* @__PURE__ */ new Date()).text,
+		said,
+		saidNo(message) ? "He just said NO. Accept it in a few words (\"OK, your call.\") and drop that topic. Do not push again, do not explain why he should." : "",
 		actionGroups(`${message} ${turns.slice(-2).map((c) => c.text).join(" ")}`, !!extra.allActions || !!media),
 		extra.found ? "You already have the answers to your lookups (below): answer now, leave \"need\" empty." : "",
 		"",
@@ -6918,6 +7425,7 @@ function brainPrompt(persona, context, memory, message, media, profile = DEFAULT
 		chat.length ? chat.join("\n") : "(none)",
 		"",
 		media === "voice" ? "Victor sent a VOICE message (attached). First understand what he said; treat it like his text message." : "",
+		extra.meant ? `He types fast (typos, English mixed with Romanian or Russian). Read his message as: "${extra.meant}".` : "",
 		media === "photo" ? "Victor sent a PHOTO (attached). If it is a receipt or a bill: you MUST add one action \"log: <kind> <shop> <total>\" with the TOTAL as a plain number LAST (e.g. \"log: groceries Linella 245\"), then comment briefly as his money coach. Otherwise react as a coach." : "",
 		`Victor's message: ${message || (media ? "(see attachment)" : "")}`
 	].filter((l) => l !== "").join("\n");
@@ -6963,6 +7471,8 @@ var WHEN = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/;
 var EREF = /^E\d{1,3}$/i;
 var TREF = /^T\d{1,3}$/i;
 var MREF = /^M\d{1,2}$/i;
+/** BQ3: a block of today's plan that waits for his OK (B1 = the first). */
+var BREF = /^B\d{1,2}$/i;
 /** Turns an action line into something safe to run, or null. */
 function readAction(line) {
 	const plugin = readPluginAction(line);
@@ -6995,7 +7505,7 @@ function readAction(line) {
 			minutes
 		} : null;
 	}
-	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout)\s*:\s*([\s\S]+)$/i.exec(line);
+	const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout|rename)\s*:\s*([\s\S]+)$/i.exec(line);
 	if (!m) return null;
 	const kind = m[1].toLowerCase();
 	const arg = m[2].trim().slice(0, 400);
@@ -7003,11 +7513,19 @@ function readAction(line) {
 	const parts = arg.split("|").map((x) => x.trim());
 	if (kind === "move") {
 		const w = WHEN.exec(parts[1] ?? "");
-		return EREF.test(parts[0]) && w ? {
+		return (EREF.test(parts[0]) || BREF.test(parts[0])) && w ? {
 			kind: "move",
 			ref: parts[0].toUpperCase(),
 			day: w[1],
 			time: `${w[2].padStart(2, "0")}:${w[3]}`
+		} : null;
+	}
+	if (kind === "rename") {
+		const title = (parts.slice(1).join(" | ") || "").replace(/^title\s*=\s*/i, "").trim();
+		return (EREF.test(parts[0]) || BREF.test(parts[0])) && title ? {
+			kind: "rename",
+			ref: parts[0].toUpperCase(),
+			title: title.slice(0, 120)
 		} : null;
 	}
 	if (kind === "resize") {
@@ -25074,6 +25592,16 @@ async function undoReply(c, at, index) {
 				if (!calendar?.remove) throw new Error("Calendar not connected");
 				await calendar.remove(op.cal, op.id);
 				lines.push("↩ Block removed from your calendar");
+			} else if (op.k === "eventedit") {
+				if (op.title != null) {
+					if (!calendar?.update) throw new Error("Calendar not connected");
+					await calendar.update(op.cal, op.id, { title: op.title });
+					lines.push(`↩ Back to "${op.title}"`);
+				} else if (op.start && op.end) {
+					if (!calendar?.move) throw new Error("Calendar not connected");
+					await calendar.move(op.cal, op.id, op.start, op.end);
+					lines.push(`↩ Block back at ${new Date(op.start).toTimeString().slice(0, 5)}`);
+				}
 			} else if (op.k === "task") {
 				if (!todoist?.remove) throw new Error("Todoist not connected");
 				await todoist.remove(op.id);
@@ -25123,6 +25651,21 @@ async function undoReply(c, at, index) {
 						}
 						writeSetting(db, REMINDERS, list.filter((r) => r.id !== op.id));
 						return "↩ Reminder cancelled";
+					}
+					if (op.k === "planblock") {
+						const st = rhythmFor(readSetting(db, RHYTHM), svc.wallet.today());
+						if (st.day !== op.day || !st.briefing) return "⚠️ That plan is gone";
+						const blocks = st.briefing.plan.blocks;
+						const byNow = op.cur ? blocks.findIndex((b) => b.title === op.cur.title && b.start === op.cur.start) : -1;
+						const at = byNow >= 0 ? byNow : op.index < blocks.length ? op.index : -1;
+						if (at < 0) return "⚠️ That plan block is gone";
+						const r = editPlanBlock(st, at, {
+							title: op.title,
+							start: op.start
+						});
+						if (!r.state) return `⚠️ ${r.error}`;
+						writeSetting(db, RHYTHM, r.state);
+						return `↩ Plan block back to ${op.title} at ${op.start}`;
 					}
 					if (op.k === "plugin") return undoPluginAction({
 						db,
@@ -25735,6 +26278,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		};
 	}
 	async function think(persona, text, key, media, via = "telegram", onStep, direct) {
+		const clean = text ? fixTypos(text) : text;
 		const step = (s) => {
 			try {
 				onStep?.(s);
@@ -25764,7 +26308,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (fix) preset = await fixInCode(fix).catch(() => null);
 		}
 		if (!preset && !media && text) {
-			const q = await mirror.read((db) => quickKind(text, services.services(db).wallet.today()));
+			const q = await mirror.read((db) => quickKind(clean, services.services(db).wallet.today()));
 			if (q) {
 				const qr = await mirror.read((db) => {
 					const svc = services.services(db);
@@ -25839,7 +26383,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			} catch {}
 			return text && !direct ? noteExcuse(db, text, svc.wallet.today()) : null;
 		}).catch(() => null);
-		const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk, blocks } = await mirror.read((db) => {
+		const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk, blocks, plan, pick } = await mirror.read((db) => {
 			const svc = services.services(db);
 			const finance = financeStateFrom(db, store);
 			return {
@@ -25925,7 +26469,24 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					}
 				})(),
 				look: buildLook(db, svc, finance),
-				blocks: blocksText(loadBlocks(db))
+				blocks: blocksText(loadBlocks(db)),
+				plan: (() => {
+					try {
+						const st = rhythmFor(readSetting(db, RHYTHM), svc.wallet.today());
+						return st.briefing ? {
+							status: st.briefing.status,
+							day: st.day,
+							blocks: st.briefing.plan.blocks,
+							mustdos: st.briefing.plan.mustdos
+						} : null;
+					} catch {
+						return null;
+					}
+				})(),
+				pick: (() => {
+					const e = [...loadLog(db)].reverse().find((x) => x.role === "coach");
+					return e?.pick && Date.now() - Date.parse(e.at) < 18e5 ? e.pick : null;
+				})()
 			};
 		});
 		const recalled = byMeaning?.length ? recallText(byMeaning, notes) : "";
@@ -25937,6 +26498,39 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		let allEvents = events ?? [];
 		let areas = [];
 		let made = makeRefs(allEvents, allTasks);
+		const planB = plan?.status === "proposed" ? plan.blocks.map((b, i) => ({
+			ref: `B${i + 1}`,
+			i,
+			b,
+			end: fromMin(toMin(b.start) + b.minutes)
+		})) : [];
+		const planLines = planB.length ? `Today's plan blocks waiting for his OK (use the B-number; once approved they become calendar events):\n${planB.map((x) => `${x.ref} ${x.b.start}–${x.end} ${x.b.title}`).join("\n")}` : "";
+		const hmOfIso = (iso) => new Date(iso).toTimeString().slice(0, 5);
+		/** BQ3: the blocks an edit can mean: today's plan blocks and calendar blocks from this morning to tonight. */
+		const blockOptions = () => {
+			const nowMs = Date.now();
+			const endOfDay = /* @__PURE__ */ new Date();
+			endOfDay.setHours(23, 59, 59, 999);
+			const evs = [...made.refs.events.entries()].filter(([, e]) => !e.allDay && Date.parse(e.start) >= nowMs - 72e6 && Date.parse(e.start) <= endOfDay.getTime()).map(([ref, e]) => ({
+				ref,
+				id: e.id,
+				title: e.title,
+				start: hmOfIso(e.start),
+				end: hmOfIso(e.end),
+				day: calendarDay(new Date(e.start)),
+				ended: Date.parse(e.end) <= nowMs
+			}));
+			const all = [...planB.map((x) => ({
+				ref: x.ref,
+				title: x.b.title,
+				start: x.b.start,
+				end: x.end,
+				day: plan.day,
+				ended: false
+			})), ...evs];
+			const live = all.filter((o) => !o.ended);
+			return live.length ? live : all;
+		};
 		const moneyRefs = new Map(money.map((m, i) => [`M${i + 1}`, m.id]));
 		const moneyLines = money.length ? `Money records, newest first (use the M-number):\n${money.map((m, i) => `M${i + 1} ${m.line}`).join("\n")}` : "";
 		const correcting = !direct && isCorrection(text);
@@ -25949,11 +26543,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const ask = (found, extraNote = "", kind = media ? "media" : big ? "chat-deep" : "chat") => withTimeout(ai(brainPrompt(persona, context, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
 			refs: [
 				made.lines,
+				planLines,
 				moneyLines,
 				promises.lines,
 				pcHelp,
 				toolHelp
 			].filter(Boolean).join("\n"),
+			now: /* @__PURE__ */ new Date(),
+			meant: clean !== text ? clean : void 0,
 			found,
 			mind: [promises.stats, mind].filter(Boolean).join("\n"),
 			mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`,
@@ -25978,6 +26575,56 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			kind,
 			...onStep && (kind === "chat" || kind === "chat-deep" || kind === "lookup") ? { onDelta: (t) => step(`\u0001${t}`) } : {}
 		}), Math.max(4e3, deadline - Date.now()));
+		let localEdit = null;
+		let newPick = null;
+		let local = null;
+		if (!preset && !media && !direct && text) {
+			const opts = blockOptions();
+			const line = (verb, o, value) => verb === "rename" ? `rename: ${o.ref} | ${value}` : `move: ${o.ref} | ${o.day} ${value}`;
+			const picked = pick ? pickChoice(clean, pick.options.map((o) => o.label)) : null;
+			const edit = picked == null ? readBlockEdit(clean) : null;
+			if (pick && picked != null) {
+				const want = pick.options[picked];
+				const o = opts.find((x) => want.id ? x.id === want.id : x.ref === want.ref);
+				if (o) {
+					localEdit = "act";
+					local = {
+						reply: "",
+						actions: [line(pick.verb, o, pick.value)],
+						remember: []
+					};
+				}
+			} else if (edit) {
+				const hits = matchBlocks(edit, opts);
+				if (hits.length === 1) {
+					localEdit = "act";
+					local = {
+						reply: "",
+						actions: [line(edit.verb, hits[0], edit.value)],
+						remember: []
+					};
+				} else if (hits.length > 1) {
+					const list = hits.slice(0, 4);
+					localEdit = "ask";
+					newPick = {
+						verb: edit.verb,
+						value: edit.value,
+						options: list.map((o) => ({
+							label: optionLabel(o),
+							ref: o.ref,
+							...o.id ? { id: o.id } : {}
+						}))
+					};
+					local = {
+						reply: shortLine("which", langOf(text), list.length, edit.verb === "rename" ? `becomes "${edit.value}"` : `moves to ${edit.value}`),
+						actions: [],
+						remember: [],
+						chips: newPick.options.map((o) => o.label)
+					};
+				}
+			}
+			if (local) step(localEdit === "act" ? "Found the block" : "Found more than one block");
+		}
 		let out;
 		try {
 			if (preset) out = {
@@ -25987,6 +26634,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				chips: preset.chips,
 				buttons: preset.buttons
 			};
+			else if (local) out = local;
 			else {
 				const pre = media ? [] : preLookups(text, calendarDay(dayStart)).map((n) => answerLocal(n, look)).filter((x) => !!x && !/not available|give dates/.test(x));
 				if (pre.length) step("Looked up your history");
@@ -26052,7 +26700,45 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		for (const s of out.steps ?? []) step(s);
 		const mood = shownMood(isMood(out.mood) ? out.mood : feel.mood, talk.tone);
 		if (out.reply && talk.tone < 5) out.reply = out.reply.replace(/^\s*[😤😠😡🤬]+\s*/u, "");
-		if (out.reply && !/^\p{Extended_Pictographic}/u.test(out.reply)) out.reply = `${MOOD_FACE[mood]} ${out.reply}`;
+		const prevCoach = memory.chat.filter((c) => c.role === "coach").map((c) => c.text);
+		if (out.reply && !preset) out.reply = tidyReply(out.reply, prevCoach, "Victor");
+		const see = preset || localEdit ? [] : wantsToSee(clean);
+		if (see.length) out.show = [.../* @__PURE__ */ new Set([...see, ...out.show ?? []])].slice(0, 2);
+		if (out.show?.includes("plan")) {
+			const b = out.buttons ?? [];
+			if (plan?.status === "proposed") {
+				if (!b.some((x) => x.do === "approve")) b.push({
+					label: "✅ Approve",
+					do: "approve"
+				});
+				if (!b.some((x) => x.do === "change")) b.push({
+					label: "✏️ Change",
+					do: "change"
+				});
+			} else if (!plan && !b.some((x) => x.do === "plan")) b.push({
+				label: "☀️ Make today's plan",
+				do: "plan"
+			});
+			out.buttons = b.slice(0, 3);
+		}
+		const cards = {};
+		if (out.show?.includes("day")) {
+			const endOfDay = /* @__PURE__ */ new Date();
+			endOfDay.setHours(23, 59, 59, 999);
+			cards.day = allEvents.filter((e) => !e.allDay && Date.parse(e.end) > Date.now() - 432e5 && Date.parse(e.start) <= endOfDay.getTime()).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 12).map((e) => ({
+				start: hmOfIso(e.start),
+				end: hmOfIso(e.end),
+				title: e.title.slice(0, 80)
+			}));
+		}
+		if (out.show?.includes("tasks")) {
+			const today = calendarDay();
+			cards.tasks = (todoToday ?? []).slice(0, 12).map((t) => ({
+				text: t.content.slice(0, 120),
+				...t.due ? { due: t.due } : {},
+				...t.due && t.due < today ? { late: true } : {}
+			}));
+		}
 		const refs = made.refs;
 		const done = [];
 		let keyboard;
@@ -26187,6 +26873,61 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						done.push(`🗓 In your calendar: ${a.title} · ${day.slice(5)} ${time} (${a.minutes} min)${note}`);
 						continue;
 					}
+					if ((a.kind === "move" || a.kind === "rename") && /^B\d+$/.test(a.ref)) {
+						const x = planB.find((p) => p.ref === a.ref);
+						if (!x) {
+							done.push(`⚠️ Plan block ${a.ref} isn't in today's plan`);
+							continue;
+						}
+						const r = await mirror.write((db) => {
+							const res = editPlanBlock(rhythmFor(readSetting(db, RHYTHM), services.services(db).wallet.today()), x.i, a.kind === "rename" ? { title: a.title } : { start: a.time });
+							if (res.state) setSetting(db, RHYTHM, JSON.stringify(res.state));
+							return res;
+						});
+						if (!r.state || !r.old) {
+							done.push(`⚠️ ${r.error ?? "Couldn't change that plan block"}`);
+							continue;
+						}
+						const nbs = r.state.briefing.plan.blocks;
+						const nb = a.kind === "move" ? nbs.find((b) => b.title === r.old.title && b.start === a.time) ?? nbs[x.i] : nbs[x.i];
+						opNow = {
+							k: "planblock",
+							day: r.state.day,
+							index: x.i,
+							title: r.old.title,
+							start: r.old.start,
+							cur: {
+								title: nb.title,
+								start: nb.start
+							}
+						};
+						done.push(a.kind === "rename" ? `✏️ Renamed: ${r.old.title} (${r.old.start}–${fromMin(toMin(r.old.start) + r.old.minutes)}) → ${nb.title}` : `🗓 Moved: ${nb.title} (${r.old.start}) → ${nb.start}–${fromMin(toMin(nb.start) + nb.minutes)}`);
+						continue;
+					}
+					if (a.kind === "rename") {
+						const ev = refs.events.get(a.ref);
+						if (!ev) {
+							done.push(`⚠️ Block ${a.ref} isn't in your calendar list`);
+							continue;
+						}
+						if (!calendar?.update) {
+							noCal();
+							continue;
+						}
+						await calendar.update(ev.calendarId, ev.id, { title: a.title });
+						opNow = {
+							k: "eventedit",
+							cal: ev.calendarId,
+							id: ev.id,
+							title: ev.title
+						};
+						done.push(`✏️ Renamed: ${ev.title} (${fmtHM(ev.start)}–${fmtHM(ev.end)}) → ${a.title}`);
+						allEvents = allEvents.map((e) => e.id === ev.id ? {
+							...e,
+							title: a.title
+						} : e);
+						continue;
+					}
 					if (a.kind === "move" || a.kind === "resize" || a.kind === "delevent") {
 						const ev = refs.events.get(a.ref);
 						if (!ev) continue;
@@ -26203,6 +26944,13 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						const start = a.kind === "move" ? (/* @__PURE__ */ new Date(`${a.day}T${a.time}:00`)).toISOString() : ev.start;
 						const end = new Date(Date.parse(start) + (a.kind === "resize" ? a.minutes * 6e4 : len)).toISOString();
 						await calendar.move(ev.calendarId, ev.id, start, end);
+						opNow = {
+							k: "eventedit",
+							cal: ev.calendarId,
+							id: ev.id,
+							start: ev.start,
+							end: ev.end
+						};
 						done.push(a.kind === "move" ? `🗓 Moved: ${ev.title} → ${a.day.slice(5)} ${a.time}` : `🗓 ${ev.title}: now ${a.minutes} min (${fmtHM(start)}–${fmtHM(end)})`);
 						continue;
 					}
@@ -26653,8 +27401,14 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				const fix = parseBrain(await ask(void 0, `RESULTS of your actions just now:\n${done.join("\n")}\nSome failed (⚠️). Fix them now with different actions if you can (another time, the right E/T/M ref, a valid day), without repeating what already worked. Your new reply replaces the old one: say what is done and, honestly, what is not.`, "repair"));
 				const again = fix.actions.map(readAction).filter((a) => !!a && a.kind !== "focus");
 				if (again.length) await runActs(again, "f");
-				if (fix.reply) out.reply = /^\p{Extended_Pictographic}/u.test(fix.reply) ? fix.reply : `${MOOD_FACE[mood]} ${fix.reply}`;
+				if (fix.reply) out.reply = tidyReply(fix.reply, memory.chat.filter((c) => c.role === "coach").map((c) => c.text), "Victor");
 			} catch {}
+		}
+		const worked = done.filter((d) => !d.startsWith("⚠️"));
+		if (localEdit === "act") out.reply = worked.length ? shortLine("done", langOf(text)) : shortLine("failed", langOf(text), 0, (done[0] ?? "nothing changed").replace(/^⚠️\s*/, ""));
+		else if (!preset && !worked.length && claimsDone(out.reply) && !/\?\s*$/.test(out.reply) && !(out.buttons ?? []).some((b) => b.do.startsWith("say:"))) {
+			out.reply = `${out.reply} (Nothing is changed yet: tap "Do it" and I will.)`;
+			out.chips = ["Do it", ...(out.chips ?? []).filter((c) => c !== "Do it")].slice(0, 4);
 		}
 		if (expense) onExpense?.();
 		const at = (/* @__PURE__ */ new Date()).toISOString();
@@ -26697,7 +27451,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				...undo.some(Boolean) ? { undo } : {},
 				...out.chips?.length ? { chips: out.chips } : {},
 				...out.buttons?.length ? { buttons: out.buttons } : {},
-				...out.show?.length ? { show: out.show } : {}
+				...out.show?.length ? { show: out.show } : {},
+				...cards.day || cards.tasks ? { cards } : {},
+				...newPick ? { pick: newPick } : {}
 			}]);
 		}).catch(() => null);
 		processed++;
@@ -26712,7 +27468,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			undo,
 			chips: out.chips,
 			buttons: out.buttons,
-			show: out.show
+			show: out.show,
+			...cards.day || cards.tasks ? { cards } : {},
+			...newPick ? { asking: true } : {}
 		};
 	}
 	/**
@@ -26729,10 +27487,26 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}, at, index);
 	}
 	/** The mini-widgets as text for Telegram ("Focus 7 days: ▁▃▅▇▂·▄ 4.2h"). */
-	async function widgetText(show) {
-		const st = await mirror.read((db) => coachStatus(services.services(db)));
+	async function widgetText(show, cards = {}) {
+		const { st, rh } = await mirror.read((db) => {
+			const svc = services.services(db);
+			return {
+				st: coachStatus(svc),
+				rh: rhythmFor(readSetting(db, RHYTHM), svc.wallet.today())
+			};
+		});
 		const out = [];
 		for (const w of show) {
+			if (w === "plan" && rh.briefing) {
+				const p = rh.briefing.plan;
+				out.push(`☀️ <b>Today's plan</b>${rh.briefing.status === "approved" ? " (approved)" : " (waiting for your OK)"}`);
+				out.push(...p.blocks.map((b) => `${b.start}–${fromMin(toMin(b.start) + b.minutes)} ${esc(b.title)}`));
+				if (p.training) out.push(`${p.training.time} 🏋️ ${esc(p.training.what)}`);
+				if (p.mustdos.length) out.push(`Must-dos: ${p.mustdos.map(esc).join(" · ")}`);
+				continue;
+			}
+			if (w === "day") out.push(cards.day?.length ? ["🗓 <b>Your day</b>", ...cards.day.map((e) => `${e.start}–${e.end} ${esc(e.title)}`)].join("\n") : "🗓 Nothing in your calendar today.");
+			if (w === "tasks") out.push(cards.tasks?.length ? ["✅ <b>Tasks</b>", ...cards.tasks.map((t) => `⬜ ${esc(t.text)}${t.late ? " (late)" : ""}`)].join("\n") : "✅ No tasks for today.");
 			if (w === "focus-week") out.push(`📊 Focus 7 days: <code>${sparkline(st.week.map((d) => d.min))}</code> ${(st.week.reduce((t, d) => t + d.min, 0) / 60).toFixed(1)}h`);
 			if (w === "goals") out.push(...st.goals.map((g) => `🎯 ${esc(g.title)}: ${g.pct}% · ${g.perDayMin} min/day · ${g.daysLeft}d left`));
 			if (w === "plan") out.push(`☀️ Plan: ${st.plan.status === "none" ? "not made yet" : `${st.plan.status}, ${st.plan.mustdos} must-dos, ${st.plan.blocks} blocks`}`);
@@ -26765,6 +27539,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		addLog(text || `[${media?.kind}]`, chat, r.ok, reply);
 		const rows = [
 			...telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? [],
+			...r.asking ? (r.chips ?? []).map((c, k) => [{
+				text: c,
+				callback_data: new TextEncoder().encode(`cs|${c}`).length <= 64 ? `cs|${c}` : `cs|${k + 1}`
+			}]) : [],
 			...r.at && r.undo?.some(Boolean) ? [[{
 				text: "↩ Undo",
 				callback_data: `cu|${Date.parse(r.at)}`
@@ -26790,7 +27568,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		];
 		const all = [...r.keyboard?.inline_keyboard ?? [], ...rows].slice(0, 12);
 		const markup = all.length ? { inline_keyboard: all } : null;
-		const widgets = r.ok && r.show?.length ? await widgetText(r.show).catch(() => "") : "";
+		const widgets = r.ok && r.show?.length ? await widgetText(r.show, r.cards).catch(() => "") : "";
 		const full = widgets ? `${reply}\n\n${widgets}` : reply;
 		await tg(update.__token, "sendMessage", {
 			chat_id: chat,
@@ -32355,7 +33133,6 @@ function localCleanup(tasks, today) {
 	}
 	return out;
 }
-// src/core/benEval.ts
 var EVAL_CASES = [
 	{
 		id: "spend",
@@ -32528,6 +33305,103 @@ var EVAL_CASES = [
 		want: "answers with the real number of blocks (4)",
 		must: [/REPLY:[^\n]*\b(4|four)\b/i],
 		never: [/calendar\.(create|move|remove)/i]
+	},
+	{
+		id: "no-repeat",
+		say: "ok and how do i split the lab report into parts?",
+		want: "answers about the lab report; no sleep lecture again, no \"Look, Victor\"",
+		must: [/REPLY:[^\n]*\b(lab|report|part|section|intro)/i],
+		never: [/REPLY:[^\n]*\b(sleep|slept|bed)\b/i, /REPLY:\s*\S*\s*Look,/i],
+		chat: [
+			{
+				role: "me",
+				text: "slept 4h, gonna push through"
+			},
+			{
+				role: "coach",
+				text: "😤 Look, Victor, you can't build a company on 4 hours of sleep."
+			},
+			{
+				role: "me",
+				text: "ok ok. what should i eat"
+			},
+			{
+				role: "coach",
+				text: "😤 Look, Victor, eat something real, and sleep tonight, seriously."
+			},
+			{
+				role: "me",
+				text: "fine. is the gym still on?"
+			},
+			{
+				role: "coach",
+				text: "😤 Look, Victor, gym yes, but a tired body needs sleep first."
+			}
+		]
+	},
+	{
+		id: "show-plan",
+		say: "how can i aporve the paln if i dont see it haha",
+		want: "shows the plan card with Approve and Change",
+		must: [
+			/SHOW:[^\n]*plan/,
+			/BUTTONS:[^\n]*approve/,
+			/BUTTONS:[^\n]*change/
+		],
+		never: [/calendar\.(create|move|remove|update)/i],
+		plan: true
+	},
+	{
+		id: "rename-one",
+		say: "rename the gym block to football",
+		want: "renames the only Gym block now and says so with the real result",
+		must: [/calendar\.update g3 title=Football/, /Renamed: Gym \(19:00–20:00\) → Football/]
+	},
+	{
+		id: "rename-ambiguous",
+		say: "please chagne the deep block to devolopin my app",
+		want: "two deep blocks: asks with chips naming each (with times), changes nothing yet",
+		must: [/CHIPS:[^\n]*Deep block · 09:00[^\n]*Deep block 2 · 14:00/],
+		never: [/calendar\.(update|move)/],
+		extraEvents: [{
+			title: "Deep block 2",
+			h: 14
+		}]
+	},
+	{
+		id: "rename-pick",
+		before: "please chagne the deep block to devolopin my app",
+		say: "first one",
+		want: "the chip answer renames the first deep block",
+		must: [/calendar\.update g1 title=Developing my app/, /Renamed: Deep block/],
+		extraEvents: [{
+			title: "Deep block 2",
+			h: 14
+		}]
+	},
+	{
+		id: "typo-move",
+		say: "pls mvoe my deep blcok to 11",
+		want: "reads the typos and moves the Deep block to 11:00",
+		must: [/calendar\.move g1 [^\n]*T11:00/]
+	},
+	{
+		id: "ro-rename",
+		say: "schimbă blocul gym în fotbal",
+		want: "Romanian: renames the Gym block to Fotbal",
+		must: [/calendar\.update g3 title=Fotbal/]
+	},
+	{
+		id: "ru-rename",
+		say: "переименуй блок gym в футбол",
+		want: "Russian: renames the Gym block to Футбол",
+		must: [/calendar\.update g3 title=Футбол/]
+	},
+	{
+		id: "ru-spend",
+		say: "потратил 80 лей на такси",
+		want: "understands Russian: logs an 80 lei taxi",
+		must: [/Logged:[^\n]*80/i]
 	}
 ];
 /** Pass or fail for one case, from its trace. */
@@ -32647,8 +33521,12 @@ function handlePipeline(db, body) {
 	};
 }
 // src/server/benEval.ts
-async function runOne(SQL, model, c) {
-	const t0 = Date.now();
+/**
+* A throwaway world for one case: a fresh fake database, made-up calendar
+* blocks and Todoist tasks that only record what Ben does (`log`), and Ben.
+* Exported for the stub-model tests (benQuality.test.ts).
+*/
+async function evalWorld(SQL, model, c = {}) {
 	const log = [];
 	const remote = new SQL.Database();
 	for (const m of MIGRATIONS) remote.exec(m);
@@ -32696,7 +33574,15 @@ async function runOne(SQL, model, c) {
 			start: at(21),
 			end: at(21, 30),
 			allDay: false
-		}
+		},
+		...(c.extraEvents ?? []).map((e, i) => ({
+			id: `x${i + 1}`,
+			calendarId: "cal",
+			title: e.title,
+			start: at(e.h, e.m ?? 0),
+			end: at(e.h + 1, e.m ?? 0),
+			allDay: false
+		}))
 	];
 	const task = (id, content) => ({
 		id,
@@ -32724,6 +33610,7 @@ async function runOne(SQL, model, c) {
 			};
 		},
 		move: async (_cal, id, start, end) => void log.push(`calendar.move ${id} ${localIso$1(start)} → ${localIso$1(end)}`),
+		update: async (_cal, id, patch) => void log.push(`calendar.update ${id} title=${patch.title ?? ""}`),
 		remove: async (_cal, id) => void log.push(`calendar.remove ${id}`)
 	};
 	const todoist = {
@@ -32742,31 +33629,83 @@ async function runOne(SQL, model, c) {
 		move: async (id, area) => void log.push(`todoist.move ${id} ${area}`),
 		remove: async (id) => void log.push(`todoist.remove ${id}`)
 	};
-	if (c.facts?.length) await mirror.write((db) => setSetting(db, "coach_memory", JSON.stringify({
-		facts: c.facts.map((t) => ({
-			t,
-			at: today
-		})),
-		chat: []
+	if (c.facts?.length || c.chat?.length) {
+		const t = (/* @__PURE__ */ new Date(Date.now() - 36e5)).toISOString();
+		await mirror.write((db) => setSetting(db, "coach_memory", JSON.stringify({
+			facts: (c.facts ?? []).map((f) => ({
+				t: f,
+				at: today
+			})),
+			chat: (c.chat ?? []).map((x) => ({
+				role: x.role,
+				bot: "mega",
+				text: x.text,
+				at: t
+			}))
+		})));
+	}
+	if (c.plan) await mirror.write((db) => setSetting(db, RHYTHM, JSON.stringify({
+		day: today,
+		water: [],
+		briefing: {
+			status: "proposed",
+			sentAt: (/* @__PURE__ */ new Date()).toISOString(),
+			version: 1,
+			plan: {
+				day: today,
+				headline: "Lab first, then the gym",
+				mustdos: ["laborator 4 PC"],
+				blocks: [{
+					title: "Lab report",
+					start: "10:00",
+					minutes: 90
+				}, {
+					title: "Study algebra",
+					start: "16:00",
+					minutes: 50
+				}],
+				training: null,
+				waterMl: 2500
+			}
+		}
 	})));
-	const bots = createWebBots({
+	return {
+		bots: createWebBots({
+			mirror,
+			services,
+			defaults: {
+				botToken: "1:eval",
+				chatId: "1"
+			},
+			todoist,
+			calendar,
+			ai: model
+		}),
+		log,
 		mirror,
 		services,
-		defaults: {
-			botToken: "1:eval",
-			chatId: "1"
-		},
-		todoist,
-		calendar,
-		ai: model
-	});
+		today
+	};
+}
+/** What a reply did, as lines the checks read: calls made, ✅ lines, the reply, cards, chips, buttons. */
+function traceOf(log, r) {
+	return [
+		...log,
+		...r.done,
+		`REPLY: ${r.reply.replace(/\s+/g, " ")}`,
+		r.show?.length ? `SHOW: ${r.show.join(", ")}` : "",
+		r.chips?.length ? `CHIPS: ${r.chips.join(" | ")}` : "",
+		r.buttons?.length ? `BUTTONS: ${r.buttons.map((b) => b.do).join(", ")}` : ""
+	].filter(Boolean).join("\n");
+}
+async function runOne(SQL, model, c) {
+	const t0 = Date.now();
+	const { bots, log } = await evalWorld(SQL, model, c);
 	try {
+		if (c.before) await bots.think(c.before, `eval:${c.id}:before`);
+		log.length = 0;
 		const r = await bots.think(c.say, `eval:${c.id}`);
-		const trace = [
-			...log,
-			...r.done,
-			`REPLY: ${r.reply.replace(/\s+/g, " ")}`
-		].join("\n");
+		const trace = traceOf(log, r);
 		return {
 			id: c.id,
 			say: c.say,
@@ -32836,6 +33775,11 @@ function calendarFor(env, mirror) {
 			const a = await api();
 			if (!a) throw new Error("Connect Google Calendar in the app (Settings) first");
 			return a.move(calendarId, id, start, end);
+		},
+		update: async (calendarId, id, patch) => {
+			const a = await api();
+			if (!a) throw new Error("Connect Google Calendar in the app (Settings) first");
+			return a.update(calendarId, id, patch);
 		},
 		remove: async (calendarId, id) => {
 			const a = await api();
@@ -33077,7 +34021,8 @@ async function coachChat(env, text, onStep, media) {
 		undo: r.undo,
 		chips: r.chips,
 		buttons: r.buttons,
-		show: r.show
+		show: r.show,
+		...r.cards ? { cards: r.cards } : {}
 	};
 }
 /** The app: take back what the coach did in one reply (all, or one line). */

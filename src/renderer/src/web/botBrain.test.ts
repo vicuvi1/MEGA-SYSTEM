@@ -143,3 +143,13 @@ describe('past workouts', () => {
     expect(readAction('workout: yesterday | x')).toBeNull()
   })
 })
+
+describe('BQ3: rename and move a block', () => {
+  it('reads rename for calendar (E) and plan (B) blocks, and moves plan blocks', () => {
+    expect(readAction('rename: E2 | App dev')).toEqual({ kind: 'rename', ref: 'E2', title: 'App dev' })
+    expect(readAction('rename: b1 | title=Reading')).toEqual({ kind: 'rename', ref: 'B1', title: 'Reading' })
+    expect(readAction('move: B2 | 2026-11-07 15:00')).toEqual({ kind: 'move', ref: 'B2', day: '2026-11-07', time: '15:00' })
+    expect(readAction('rename: E2 |')).toBeNull()
+    expect(readAction('rename: Gym | Football')).toBeNull()
+  })
+})

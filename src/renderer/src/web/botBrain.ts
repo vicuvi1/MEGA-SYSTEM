@@ -23,7 +23,7 @@ import { canBeNow, isTentative, takesTime } from '@core/calResponse'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import type { Services } from './webServices'
 import { planGoal, planLine } from '@core/goalPlan'
-import { readButtons, readShow } from '@core/coachButtons'
+import { readButtons, readShow, type ReplyCards } from '@core/coachButtons'
 import { extrasContext } from './extrasContext'
 import { cleanMind, findPatterns, focusBySubject, sleepDiary, weekAhead, type CoachMind } from '@core/coachMind'
 import { sharedView, sportToday } from '@core/sportShared'
@@ -39,6 +39,7 @@ import { dayLog } from './dayLog'
 import { parseRecipeLine, type Recipe } from '@core/recipes'
 import { readPcAction, type PcAct } from '@core/pcActions'
 import { cleanLastHour, lastHourContext } from '@core/pcLastHour'
+import { alreadySaid, alreadySaidText, saidNo, timeFrame, whenWords } from '@core/benTalk'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -127,6 +128,10 @@ export type UndoOp =
   | { k: 'mustdo'; text: string; day?: string }
   /** startedAt: only that timer is cancelled, never a newer one. */
   | { k: 'focus'; startedAt?: string }
+  /** BQ3: a calendar block renamed or moved: its old title or times. */
+  | { k: 'eventedit'; cal: string; id: string; title?: string; start?: string; end?: string }
+  /** BQ3: a block of today's plan (still waiting for approval) renamed or moved. */
+  | { k: 'planblock'; day: string; index: number; title: string; start: string; cur?: { title: string; start: string } }
   /** A plugin's action (src/plugins): its own undo gets `data`. */
   | { k: 'plugin'; plugin: string; verb: string; data: unknown }
 
@@ -151,7 +156,18 @@ export interface LogEntry {
   /** Buttons and mini-widgets under the reply (interactive replies). */
   buttons?: { label: string; do: string }[]
   show?: string[]
+  /** BQ2: what the "day" and "tasks" cards show (saved when he wrote it). */
+  cards?: ReplyCards
+  /** BQ3: Ben asked which block with chips; the next message picks one. */
+  pick?: PendingPick
   at: string
+}
+
+/** BQ3: an edit waiting for "which one?" (the chips under Ben's reply). */
+export interface PendingPick {
+  verb: 'rename' | 'move'
+  value: string
+  options: { label: string; ref: string; id?: string }[]
 }
 
 export function saveLog(db: any, entries: LogEntry[]): void {
@@ -316,11 +332,19 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
   ]
   if (extra.events) {
     const nowHM = now.toTimeString().slice(0, 5)
-    const gaps = freeGaps(extra.events, today, { after: nowHM, minMinutes: 30 })
-    lines.push(`Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(', ') || 'none'}.`)
-    const tomorrow = addDays(today, 1)
+    // BQ4: after midnight the app day is still yesterday, but the calendar's "today" is the
+    // morning ahead: 07:00 is THIS morning (in a few hours), never "tomorrow morning".
+    const tf = timeFrame(now)
+    const calToday = tf.afterMidnight ? tf.calDay : today
+    const gaps = freeGaps(extra.events, calToday, { after: nowHM, minMinutes: 30 })
+    lines.push(
+      tf.afterMidnight
+        ? `Calendar for THIS MORNING and the day ahead (${calToday}, after he sleeps; it is past midnight now): ${agendaText(extra.events, calToday)}. Free time: ${gaps.map((g) => `${g.start}–${g.end}`).join(', ') || 'none'}.`
+        : `Calendar today: ${agendaText(extra.events, today)}. Free time left today: ${gaps.map((g) => `${g.start}–${g.end}`).join(', ') || 'none'}.`
+    )
+    const tomorrow = addDays(calToday, 1)
     if (extra.events.some((e) => localDay(e.start) === tomorrow)) lines.push(`Calendar tomorrow: ${agendaText(extra.events, tomorrow)}.`)
-    if (extra.events.some((e) => localDay(e.start) > tomorrow)) lines.push(weekAhead(extra.events, today))
+    if (extra.events.some((e) => localDay(e.start) > tomorrow)) lines.push(weekAhead(extra.events, calToday))
   }
   lines.push(...nowContext(s, db, extra.events ?? null, extra.finance, now))
   // Plugins (Settings → Plugins): weather, GitHub, mail, phone numbers, notes.
@@ -374,7 +398,7 @@ export function nowContext(s: Services, db: any, events: CalEvent[] | null, fina
     const cur = timed.filter(canBeNow).find((e) => Date.parse(e.start) <= t && Date.parse(e.end) > t)
     const next = timed.filter((e) => Date.parse(e.start) > t).sort((a, b) => a.start.localeCompare(b.start))[0]
     out.push(
-      `RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : 'nothing in his calendar'}${next ? `; next: "${next.title}"${isTentative(next) ? ' (he said maybe)' : ''} at ${hmOf(new Date(next.start))} (in ${Math.round((Date.parse(next.start) - t) / 60000)} min)` : '; nothing else today'}.`
+      `RIGHT NOW (${hmOf(now)}): ${cur ? `he is in "${cur.title}" until ${hmOf(new Date(cur.end))}` : 'nothing in his calendar'}${next ? `; next: "${next.title}"${isTentative(next) ? ' (he said maybe)' : ''} at ${hmOf(new Date(next.start))} (${whenWords(next.start, now)})` : '; nothing else today'}.`
     )
   } else out.push(`RIGHT NOW (${hmOf(now)}): his calendar is not connected, so you don't know where he is; ask if it matters.`)
   const items: { at: number; text: string }[] = []
@@ -454,21 +478,21 @@ export const DEFAULT_STYLE: CoachStyle = { length: 'short', tone: 4 }
 export function loadStyle(db: any): CoachStyle {
   try {
     const j = JSON.parse(getSetting(db, COACH_STYLE) || 'null')
-    return { length: ['short', 'normal', 'detailed'].includes(j?.length) ? j.length : DEFAULT_STYLE.length, tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone))), lang: LANGS.includes(j?.lang) ? j.lang : 'en' }
+    return { length: ['short', 'normal', 'detailed'].includes(j?.length) ? j.length : DEFAULT_STYLE.length, tone: Math.min(5, Math.max(1, Math.round(Number(j?.tone) || DEFAULT_STYLE.tone))), lang: LANGS.includes(j?.lang) ? j.lang : 'auto' }
   } catch {
     return DEFAULT_STYLE
   }
 }
 export function saveStyle(db: any, st: Partial<CoachStyle>): CoachStyle {
   const next = { ...loadStyle(db), ...st }
-  const clean = { length: ['short', 'normal', 'detailed'].includes(next.length) ? next.length : 'short', tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4))), lang: LANGS.includes(next.lang as string) ? next.lang : 'en' } as CoachStyle
+  const clean = { length: ['short', 'normal', 'detailed'].includes(next.length) ? next.length : 'short', tone: Math.min(5, Math.max(1, Math.round(Number(next.tone) || 4))), lang: LANGS.includes(next.lang as string) ? next.lang : 'auto' } as CoachStyle
   setSetting(db, COACH_STYLE, JSON.stringify(clean))
   return clean
 }
 const TONES = ['', 'gentle and encouraging, no anger', 'warm friend, honest, light push', 'friend with tough love (angry only when clearly earned)', 'tough love, direct, calls out excuses, angry when he slips', 'drill sergeant: blunt, demanding, zero excuses (still on his side, never insulting)']
 export function styleText(st: CoachStyle): string {
   const len = st.length === 'short' ? 'SHORT: 2–4 short lines.' : st.length === 'normal' ? 'NORMAL length: up to 6–8 lines when useful.' : 'DETAILED when he asks for depth: clear sections, still no fluff.'
-  const lang = st.lang === 'ro' ? 'Reply in Romanian.' : st.lang === 'ru' ? 'Reply in Russian.' : st.lang === 'auto' ? 'Reply in the language his message is written in (English, Romanian or Russian).' : 'Reply in English (he may write in Romanian or Russian; understand it, answer in English).'
+  const lang = st.lang === 'ro' ? 'Reply in Romanian.' : st.lang === 'ru' ? 'Reply in Russian.' : st.lang === 'auto' ? 'Reply in the language his message is written in (English, Romanian or Russian; a mixed message: the language most of it is in).' : 'Reply in English (he may write in Romanian or Russian; understand it, answer in English).'
   return `His chosen style: ${len} Tone ${st.tone}/5: ${TONES[st.tone]}. ${lang}`
 }
 
@@ -589,7 +613,7 @@ function moreContext(s: Services, db: any, finance: any, today: string, input: i
 }
 
 const PERSONA: Record<Persona, string> = {
-  mega: 'You are BEN: Victor\'s best friend who is also his coach (your name is Ben; the Telegram bot may still be called Mega). You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name sometimes, you remember what he said and bring it back ("you said the CV was the priority, bro"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher.',
+  mega: 'You are BEN: Victor\'s best friend who is also his coach (your name is Ben; the Telegram bot may still be called Mega). You know him really well (everything below is what you know: his goals, his patterns, what works for him, his week, his promises, what he told you before). You talk like a close friend texting: casual, warm, real, a bit of banter and humour, his name only now and then (never "Look, Victor…"), you remember what he said and bring it back ("you said the CV was the priority, bro"). You genuinely want him to win: study (university), cyber security career, training and body, sleep, discipline, money. A friend who cares gets ANGRY when he slips on purpose and HYPED when he wins. You never fake-praise and never lecture like a teacher: you say a hard thing once, clearly, then you let it land.',
   finance: 'You are the MONEY COACH (Finance bot). Help Victor spend with intention and save: react to spending with context (how often, how much this week/month, against his limit), spot patterns, suggest one concrete change. Logging money is your main job; coaching on money is what makes you useful.',
   waky: 'You are WAKY, the SLEEP COACH. Help Victor wake up on time and sleep well: bedtime routine, consistency, sleep debt, patterns (which days go wrong and why). Be concrete about times.',
   sport: 'You are the TRAINING COACH. Plan concrete workouts and progressions, keep the streak alive.'
@@ -647,6 +671,8 @@ Points and the week:
   calendar: `Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
 - "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
+- "rename: E3 | <new title>" change what a block is for ("rename: E2 | App dev"). Today's plan blocks waiting for his OK have B-numbers: "rename: B1 | <title>", "move: B1 | <YYYY-MM-DD HH:MM>".
+- Edits ("change/rename/move the deep block…"): ONE block fits → do it now, no question. Several fit → do nothing yet: one short line plus "chips" naming each option with its time ("Deep block 1 · 07:00", "Deep block 2 · 14:00"). Never ask "which one?" in free text.
 - "shift: <+/-minutes> | E3, E4, E5" move several (e.g. he's running late: shift the rest of today's blocks).`,
   todoist: `Todoist (use the T-numbers):
 - "task: <text>" new task (Todoist reads "friday 18:00", "p1", "#University").
@@ -656,7 +682,7 @@ Points and the week:
 const GROUP_WORDS: Record<keyof typeof ACT_GROUPS, RegExp> = {
   body: /\d+\s*[x×]\s*\d+|\b(bench|deadlift|squat|press|pull-?ups?|dips|curls?|sets?|kg|water|drink|glass|ml|pushups?|squats?|reps?|plank|workouts?|gym|train|run|sleep|slept|wake|woke|bed|habit|oath|clean|skincare|weight|exercise|target|tired|apa|somn)\b/i,
   money: /\d|\b(lei|mdl|spent|spend|bought|paid|pay|money|expense|budget|salary|reward|points?|shop|week|big ?3|cash|card|bani)\b|\bM\d\b/i,
-  calendar: /\b(calendar|event|block|meeting|class|lecture|exam|move|resched\w*|shift|late|plan|book|tomorrow|today|tonight|morning|afternoon|evening|free|time|at|until|before|after)\b|\bE\d\b|\d{1,2}:\d{2}/i,
+  calendar: /\b(calendar|event|block|blocks|rename|change|swap|meeting|class|lecture|exam|move|resched\w*|shift|late|plan|book|tomorrow|today|tonight|morning|afternoon|evening|free|time|at|until|before|after)\b|\bE\d\b|\d{1,2}:\d{2}/i,
   todoist: /\b(tasks?|todo|todoist|done|finish(ed)?|due|must-?dos?|priority|star|list|deadline|homework|assignment)\b|\bT\d\b/i
 }
 /** The optional action groups for this message: all of them for big asks, corrections and media. */
@@ -664,6 +690,19 @@ export function actionGroups(message: string, all = false): string {
   const keys = (Object.keys(ACT_GROUPS) as (keyof typeof ACT_GROUPS)[]).filter((k) => all || GROUP_WORDS[k].test(message))
   return keys.length ? `== Actions for this message ==\n${keys.map((k) => ACT_GROUPS[k]).join('\n')}` : ''
 }
+
+/**
+ * BQ: how Ben talks (cached with the rules). Answer first, never repeat, no
+ * stock openers, match his energy, take a no, act then confirm.
+ */
+export const BQ_RULES = `How to talk to him (most important):
+- Answer HIS message first, in 1–3 sentences. A question gets the answer, not a speech. Then stop, or add one short push only if it fits.
+- Never repeat a point you already made in your last replies (see "Already said") unless he brings it up. Said once is enough; a friend doesn't nag.
+- Vary how you start. Never open with "Look, Victor", "Listen", "Bro," or his name. At most one emoji, and only sometimes.
+- Match his energy: short and joking when he is, calm when he's tired, serious when he's serious.
+- After a "no" or "not now", stop pushing that thing. "OK" and move on.
+- He writes fast, with typos, and mixes English, Romanian and Russian ("chagne", "aporve the paln"): read what he means. If you are really unsure, ask with 2–3 chips of your best guesses instead of guessing wrong.
+- Act, then confirm: when he asks for a change and the target is clear, do it now with an action. The app shows the real result under your reply (with Undo); never say it's done if you put no action. If something can't be done, say so plainly.`
 
 const LOOKUPS = `Need facts you don't have (history, other days, all tasks)? Put requests in "need" and leave "reply" empty; you'll get the answers and answer then. Only when really needed. Requests:
 - "spending <YYYY-MM-DD> <YYYY-MM-DD> [category]" totals and top categories (or one category).
@@ -749,20 +788,23 @@ export function chatGist(c: { role: 'me' | 'coach'; text: string }): string {
 }
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean; allActions?: boolean; blocks?: string; recalled?: string } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean; allActions?: boolean; blocks?: string; recalled?: string; now?: Date; meant?: string } = {}): string {
   // Prompt diet: the last 12 turns (240 chars each) and only the facts that matter now.
   const turns = memory.chat.slice(-12)
   const chat = turns.map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${chatGist(c)}`)
   const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(' ')}`)
   // BR1: what was found by meaning, minus the facts already listed.
   const recalled = (extra.recalled ?? '').split('\n').filter((l) => l && !facts.some((f) => l.includes(f.t))).join('\n')
+  // BQ1: what his last replies already said (themes, openers, emoji), so he doesn't repeat himself.
+  const said = alreadySaidText(alreadySaid(memory.chat.filter((c) => c.role === 'coach').map((c) => c.text), message))
   return [
     PERSONA[persona],
     'Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks "why"/"how come" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.',
     UNTRUSTED_NOTE,
     'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
-    'Style: a close friend who coaches, tough love, on his side. Clear, length as he chose (see "How he wants you to write"; default short: 3–4 lines). Numbers first (his real ones: "focus 32m of 10h this week", "water 1.2 of 2.7 L"), then ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise; check his tracked goals against this week. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Ask one question back only when you really need to know. Reply in the language his chosen style says (English unless he picked another).',
+    BQ_RULES,
+    'Style: a close friend who coaches, tough love, on his side, honest. Clear, length as he chose (see "How he wants you to write"; default short). Use numbers when they answer him (his real ones: "focus 32m of 10h this week"), then at most ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Reply in the language his chosen style says.',
     '',
     ACT_CORE,
     DESK_ACTIONS,
@@ -771,8 +813,9 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     LOOKUPS,
     '',
     'Also put in "remember" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.',
-    'Interactive replies: "buttons" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. "do" is one of: "focus:<minutes>:<subject>" (start a focus timer), "approve" (approve today\'s plan), "plan" (make today\'s plan), "book:<goal title>" (book a goal\'s blocks), "say:<his reply>" (sends that as his message), "open:plan|goals|score|about". Example: {"label": "▶ 25 min Algebra", "do": "focus:25:Algebra"}. Prefer a button over telling him to type a command. "show" (0–2) puts a live mini-widget under your message when it helps him see it: "focus-week" (focus per day, 7 days), "goals" (goal progress), "plan" (today\'s plan), "water", "mustdos" (tickable list), "promises".',
-    'Put in "chips" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message ("Done ✅", "Give me 10 min", "Why?", "Plan it"). Never generic.',
+    'Interactive replies: "buttons" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. "do" is one of: "focus:<minutes>:<subject>" (start a focus timer), "approve" (approve today\'s plan), "change" (change today\'s plan), "plan" (make today\'s plan), "book:<goal title>" (book a goal\'s blocks), "say:<his reply>" (sends that as his message), "open:plan|goals|score|about". Example: {"label": "▶ 25 min Algebra", "do": "focus:25:Algebra"}. Prefer a button over telling him to type a command. "show" (0–2) puts a live card under your message: "plan" (today\'s plan with Approve and Change), "day" (today\'s calendar), "tasks" (today\'s Todoist list), "mustdos" (tickable list), "focus-week" (focus per day, 7 days), "goals" (goal progress), "water", "promises".',
+    'SHOW, DON\'T TELL: when he asks to see, check or approve the plan, his day or his tasks ("show me the plan", "how can I approve it if I don\'t see it"), put "plan" / "day" / "tasks" in "show" and say one line ("Here it is: tap Approve or Change."). Never retell the plan in prose instead of showing it.',
+    'Put in "chips" 2–4 short replies HE might send next, in his voice, at most 4 words each, fitting your message ("Done ✅", "Give me 10 min", "Why?", "Plan it"). Never generic. When you are not sure what he meant, do not guess: ask in one short line and make the chips your 2–3 best guesses of what he meant.',
     'Put in "steps" 1–4 very short labels of what you did or checked, for the screen ("Checked your calendar", "Found 2h free after 15:00", "Moved 3 blocks").',
     '',
     'Answer ONLY with JSON: {"reply": string, "mood": "proud"|"happy"|"chill"|"focused"|"annoyed"|"angry"|"furious", "chips": string[], "buttons": {"label": string, "do": string}[], "show": string[], "actions": string[], "remember": string[], "steps": string[], "need": string[]}.',
@@ -780,8 +823,11 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     PROMPT_SPLIT,
     extra.stealth ? STEALTH_NOTE : '',
     (extra.tone ?? 4) >= 5
-      ? 'Your mood shows. Start the reply with ONE face that fits your mood: 😎/🔥 proud, 😄 happy, 🙂 chill, 😤 annoyed, 😠 angry, 😡 furious (when he keeps breaking promises or wastes the day). Angry is allowed and good when earned: say why with his numbers, then the one thing to do NOW. Then 1–2 more emoji at most. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer gently to the goal only if it fits.'
-      : 'Start the reply with ONE face: 😎/🔥 proud, 😄 happy, 🙂 chill, 🎯 focused (he is slipping: you help him move). NEVER angry faces or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. Then 1–2 more emoji at most. When he just chats, chat back like a friend, short.',
+      ? 'Your mood shows through "mood" (the app draws your face from it) and your words. Angry is allowed when earned (he keeps breaking promises or wastes the day): say why ONCE with his numbers, then the one thing to do NOW. At most one emoji, and often none. When he just chats (how are you, jokes, life stuff), chat back like a friend, short, and steer to the goal only if it fits.'
+      : 'Your mood goes in "mood" (the app draws your face from it): proud, happy, chill or focused (he is slipping: you help him move). NEVER angry or scolding. When he slips, be honest with one number, then DO something: make the next step tiny (10 minutes), offer to move or shrink the task, or book it in his free time. A coach removes friction; he does not keep score. At most one emoji, and often none. When he just chats, chat back like a friend, short.',
+    timeFrame(extra.now ?? new Date()).text,
+    said,
+    saidNo(message) ? 'He just said NO. Accept it in a few words ("OK, your call.") and drop that topic. Do not push again, do not explain why he should.' : '',
     actionGroups(`${message} ${turns.slice(-2).map((c) => c.text).join(' ')}`, !!extra.allActions || !!media),
     extra.found ? 'You already have the answers to your lookups (below): answer now, leave "need" empty.' : '',
     '',
@@ -813,6 +859,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     chat.length ? chat.join('\n') : '(none)',
     '',
     media === 'voice' ? 'Victor sent a VOICE message (attached). First understand what he said; treat it like his text message.' : '',
+    extra.meant ? `He types fast (typos, English mixed with Romanian or Russian). Read his message as: "${extra.meant}".` : '',
     media === 'photo' ? 'Victor sent a PHOTO (attached). If it is a receipt or a bill: you MUST add one action "log: <kind> <shop> <total>" with the TOTAL as a plain number LAST (e.g. "log: groceries Linella 245"), then comment briefly as his money coach. Otherwise react as a coach.' : '',
     `Victor's message: ${message || (media ? '(see attachment)' : '')}`
   ]
@@ -871,6 +918,8 @@ export type BrainAction =
   | { kind: 'goal'; title: string; subject: string; deadline: string; hours: number }
   | { kind: 'move'; ref: string; day: string; time: string }
   | { kind: 'resize'; ref: string; minutes: number }
+  /** BQ3: a calendar block (E3) or a plan block (B1) gets a new title. */
+  | { kind: 'rename'; ref: string; title: string }
   | { kind: 'delevent'; ref: string }
   | { kind: 'shift'; refs: string[]; minutes: number }
   | { kind: 'edit'; ref: string; title?: string; priority?: number; due?: string; details?: string }
@@ -906,6 +955,8 @@ const WHEN = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/
 const EREF = /^E\d{1,3}$/i
 const TREF = /^T\d{1,3}$/i
 const MREF = /^M\d{1,2}$/i
+/** BQ3: a block of today's plan that waits for his OK (B1 = the first). */
+const BREF = /^B\d{1,2}$/i
 
 /** Turns an action line into something safe to run, or null. */
 export function readAction(line: string): BrainAction | null {
@@ -932,7 +983,7 @@ export function readAction(line: string): BrainAction | null {
     const minutes = Number(ext[1])
     return minutes >= 1 && minutes <= 120 ? { kind: 'extendfocus', minutes } : null
   }
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout|rename)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -940,7 +991,11 @@ export function readAction(line: string): BrainAction | null {
   const parts = arg.split('|').map((x) => x.trim())
   if (kind === 'move') {
     const w = WHEN.exec(parts[1] ?? '')
-    return EREF.test(parts[0]) && w ? { kind: 'move', ref: parts[0].toUpperCase(), day: w[1], time: `${w[2].padStart(2, '0')}:${w[3]}` } : null
+    return (EREF.test(parts[0]) || BREF.test(parts[0])) && w ? { kind: 'move', ref: parts[0].toUpperCase(), day: w[1], time: `${w[2].padStart(2, '0')}:${w[3]}` } : null
+  }
+  if (kind === 'rename') {
+    const title = (parts.slice(1).join(' | ') || '').replace(/^title\s*=\s*/i, '').trim()
+    return (EREF.test(parts[0]) || BREF.test(parts[0])) && title ? { kind: 'rename', ref: parts[0].toUpperCase(), title: title.slice(0, 120) } : null
   }
   if (kind === 'resize') {
     const minutes = Number(parts[1])
