@@ -398,8 +398,8 @@ export function IslandFeed() {
       .filter((e: any) => !e.archived && Number(e.target) > 0)
       .slice(0, 3)
       .map((e: any) => ({ id: String(e.id ?? e.name), name: String(e.name), done: Number(e.doneToday) || 0, target: Number(e.target) || 0 }))
-    // This device's Sport Track copy is the synced truth here (a −250 must show, not the higher of two copies: N1).
-    const localWater = sport?.water ? Number(sport.water.currentMl) || 0 : status.today.waterMl
+    // The one water log's sum (body_log), the same number Today, Ben and Telegram show.
+    const localWater = status.today.waterMl
     const { now: cur, next } = nowNext(blocks.current.list, now)
     const dismissed = get<Record<string, number>>(DISMISSED, {})
     // Phase 4: the reward you're working toward, today's ring and highlight.
@@ -688,8 +688,10 @@ export function IslandFeed() {
             put(LAST_WATER, Date.now())
             // The one shared water path (water.ts, N9): the shared log, then this
             // device's copy set to its answer (never added twice), and every screen told.
-            await addWater(a.ml)
-            rememberUndo(a.id, { kind: 'water', ml: a.ml })
+            // Its own row id (the tap's): delivered twice it counts once, and Undo removes exactly it.
+            const rowId = a.id ? `isl-${a.id}` : undefined
+            await addWater(a.ml, { source: 'island', id: rowId })
+            rememberUndo(a.id, { kind: 'water', ml: a.ml, rowId })
             nudgeYes('water')
             break
           }
@@ -699,7 +701,7 @@ export function IslandFeed() {
             updateSport((d) => {
               const ex = findExercise(d, exId) ?? findExercise(d, a.name)
               if (ex) ex.doneToday = (Number(ex.doneToday) || 0) + a.n
-            })
+            }, { source: 'island' })
             const w = await life.body.logWorkout({ title: `${a.name} (+${a.n})`, items: [{ exerciseId: exId, name: a.name, amount: a.n, unit: 'reps' as any }], note: 'Logged from the desktop island' })
             rememberUndo(a.id, { kind: 'reps', ex: exId, name: a.name, n: a.n, workoutId: w?.workout?.id ?? null })
             window.dispatchEvent(new CustomEvent('life-body-changed'))

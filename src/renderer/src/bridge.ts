@@ -64,7 +64,14 @@ export type Bridge = LifeApi & {
     /** Sporty on your server: connected, version, updates waiting; update() presses its Update button. */
     sporty?(): Promise<SportyView>
     /** Adds water to the shared log (the one Ben and Sporty use). */
-    water?(ml: number): Promise<{ ml: number; target: number }>
+    water?(ml: number, opts?: { source?: string; id?: string }): Promise<{ ml: number; target: number }>
+    /** The one water + reps log: changes from this device's Sport Track copy or the embedded app (rows), today's entries, remove / bring back one. Returns the shared copy after it. */
+    bodyLog?: {
+      log(changes: { kind: string; amount: number; id?: string }[], source: string): Promise<any>
+      entries(kind?: string, day?: string): Promise<import('@core/bodyLog').LogEntry[]>
+      toggle(id: string): Promise<{ removed: boolean; day: string } | null>
+      repair(): Promise<{ day: string; what: string; from: number; to: number }[]>
+    }
     /** HD: your reminders (the list Ben's ⏰ uses), and add / Done / Snooze from the island. */
     reminders?(): Promise<import('@core/healthyDay').ReminderItem[]>
     remind?(op: { op: 'add'; text: string; at: number } | { op: 'done'; id: string } | { op: 'snooze'; id: string; minutes: number }): Promise<string>

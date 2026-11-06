@@ -11,7 +11,7 @@ import { cleanIslandPrefs, type IslandAction, type IslandAlert, type IslandSnaps
 import { calendarDay } from '@core/dates'
 import type { RunningFocus } from '@shared/api'
 import { life } from './bridge'
-import { addWater } from './water'
+import { addWater, removeWaterEntry } from './water'
 import { findExercise, updateSport } from './sportTrack'
 
 const BREAK = 'ls.islandBreak'
@@ -114,7 +114,7 @@ export function breakOverAlert(now: number, dismissed: Record<string, number>, r
 // ---- IC10: what each tap logged, to take back --------------------------------
 
 type Undo =
-  | { kind: 'water'; ml: number }
+  | { kind: 'water'; ml: number; rowId?: string }
   | { kind: 'reps'; ex: string; name: string; n: number; workoutId: number | null }
   | { kind: 'mustdo'; i: number; ledgerId: number | null }
   | { kind: 'extend'; minutes: number }
@@ -151,13 +151,15 @@ async function runUndo(of: string): Promise<string> {
   const u = e.u
   switch (u.kind) {
     case 'water':
-      await addWater(-u.ml)
+      // Removes exactly that glass from the log (same on every device), else takes the amount back.
+      if (u.rowId && (await removeWaterEntry(u.rowId))) return `↶ Took back ${u.ml} ml`
+      await addWater(-u.ml, { source: 'island' })
       return `↶ Took back ${u.ml} ml`
     case 'reps':
       updateSport((d) => {
         const ex = findExercise(d, u.ex) ?? findExercise(d, u.name)
         if (ex) ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) - u.n)
-      })
+      }, { source: 'island' })
       // Only this set comes out of the day's workout (the day's sets share one
       // workout); the workout and its points go only when it was the last set.
       if (u.workoutId != null) {

@@ -6,6 +6,8 @@ import { handlePipeline } from './fakeTurso'
 import { Mirror } from './mirror'
 import { TursoHttp } from './tursoHttp'
 import { SPORT_KEY, createSportSync, mergeSport } from './sportSync'
+import { sportToday } from '@core/sportShared'
+import { logChanges } from '../../../main/bodyLog'
 
 const require = createRequire(import.meta.url)
 let SQL: SqlJsStatic
@@ -74,7 +76,7 @@ describe('Sport Track sync', () => {
     const remote = fakeTurso()
     const phone = storage()
     const pc = storage()
-    const today = new Date().toISOString().slice(0, 10)
+    const today = sportToday()
     phone.setItem(SPORT_KEY, JSON.stringify(sport(today, 40, [{ id: 5, title: 'phone workout' }])))
     const p = await device(phone)
     await p.sync.sync()
@@ -87,8 +89,10 @@ describe('Sport Track sync', () => {
     // Both change before syncing again.
     pc.setItem(SPORT_KEY, JSON.stringify({ ...JSON.parse(pc.getItem(SPORT_KEY)!), history: [{ id: 9, title: 'pc workout' }, { id: 5, title: 'phone workout' }] }))
     await c.sync.sync()
+    // +30 reps on the phone go through the one log (as updateSport and Sport Track do).
     phone.setItem(SPORT_KEY, JSON.stringify(sport(today, 70, [{ id: 5, title: 'phone workout' }])))
     await p.mirror.refresh()
+    await p.mirror.write((db) => logChanges(db as any, [{ kind: 'reps:ex_pushups', amount: 30 }], 'phone'))
     await p.sync.sync()
     const mine = JSON.parse(phone.getItem(SPORT_KEY)!)
     expect(mine.exercises[0].doneToday).toBe(70)

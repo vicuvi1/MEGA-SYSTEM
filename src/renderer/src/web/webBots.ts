@@ -9,6 +9,7 @@ import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
 import { parseTelegramText } from '@core/botCommands'
 import { addDays, calendarDay } from '@core/dates'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
+import { logReps, saveSport } from '../../../main/bodyLog'
 import { queueFinanceExpense } from './financeInbox'
 import { deleteMoney, editMoney, keepMoneyAsk, logMoney, previewMoney, recentMoney } from './financeBot'
 import { payTodoist } from './todoistCoins'
@@ -86,9 +87,8 @@ function addRepsInDb(db: any, name: string, amount: number): { done: number; tar
   const st = sportState(db)
   if (!st || !Array.isArray(st.exercises)) return null
   // Your local day, like Sport Track and the rest of the bot (was the UTC date: N7).
-  const r = addReps(st, name, amount, sportToday())
+  const r = logReps(db, name, amount, 'telegram')
   if (!r) return null
-  writeSetting(db, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
   return { done: r.exercise.done, target: r.exercise.target }
 }
 
@@ -363,8 +363,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (ml) {
       const day = sportToday()
       const st = sportState(s.db) ?? defaultSport(day)
-      const next = addWater(st, ml, day)
-      writeSetting(s.db, 'sport_tracker_json', { savedAt: Date.now(), data: next })
+      const next = saveSport(s.db, addWater(st, ml, day), 'telegram')
       const c = waterCard(next, day, waterToday(s.db, s).target)
       return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> logged.\n\n${c.text}`, keyboard: c.keyboard }
     }
@@ -1434,7 +1433,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const st = sportState(db) ?? defaultSport(day)
               const r = a.kind === 'exercise' ? setExercise(st, day, a.name, a.target, a.unit) : removeExercise(st, day, a.name)
               if (!r.line) return a.kind === 'exercise' ? `⚠️ Give "${a.name}" a daily target` : `⚠️ No exercise "${a.name}" on your list`
-              writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
+              saveSport(db as any, r.st, 'ben')
               return r.line
             })
             done.push(line)
@@ -1460,10 +1459,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             const line = await mirror.write((db) => {
               const day = sportToday()
               const st = sportState(db) ?? defaultSport(day)
-              const save = (next: any) => writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: next })
+              const save = (next: any) => saveSport(db as any, next, 'ben')
               if (a.kind === 'water') {
-                const next = addWater(st, a.ml, day)
-                save(next)
+                const next = save(addWater(st, a.ml, day))
                 opNow = { k: 'water', ml: -a.ml, day }
                 const v = sharedView(next, day)
                 return `💧 ${a.ml > 0 ? '+' : ''}${a.ml} ml · ${(v.water.ml / 1000).toFixed(2).replace(/0$/, '')} of ${(v.water.target / 1000).toFixed(1)} L today`

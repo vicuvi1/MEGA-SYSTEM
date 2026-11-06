@@ -3,6 +3,7 @@
 import { REMINDERS, type Reminder } from '@core/coachKit'
 import { addReps, addWater, sportToday } from '@core/sportShared'
 import { readSetting, writeSetting } from '../../../../main/settings'
+import { saveSport } from '../../../../main/bodyLog'
 import { undoPluginAction } from '../../../../plugins'
 import { loadLog, saveLog, sportState } from '../botBrain'
 import { deleteMoney } from '../financeBot'
@@ -72,12 +73,12 @@ export async function undoReply(c: UndoDeps, at: string, index?: number): Promis
             // are closed; taking them off today would be wrong.
             if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`
             if (op.k === 'water') {
-              writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: addWater(st, op.ml, day) })
+              saveSport(db as any, addWater(st, op.ml, day), 'telegram', { id: `undo-${at}-${k}` })
               return `↩ Water ${op.ml > 0 ? '+' : ''}${op.ml} ml`
             }
             const r = addReps(st, op.ex, op.amount, day)
             if (!r) return '⚠️ Exercise not found'
-            writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: r.st })
+            saveSport(db as any, r.st, 'telegram', { id: `undo-${at}-${k}` })
             let gone = ''
             if (op.workout) {
               try {

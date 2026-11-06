@@ -62,6 +62,7 @@ import { monthTakePrompt, callDue, loseStakes, overdueStakes, stakeLostText, sta
 import { dueTopics } from '@core/benPlans'
 import { MOOD_FACES, moodDue } from '@core/benKnows'
 import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@core/sportShared'
+import { saveSport, sportNow } from '../main/bodyLog'
 import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState, missedTwiceText } from '@core/rhythm'
@@ -1288,7 +1289,7 @@ function bodyFacts(db: any, svc: any, today: string, now: Date) {
   }
   let sport: any = null
   try {
-    sport = readSetting(db, 'sport_tracker_json')?.data ?? null
+    sport = sportNow(db as any)
   } catch {
     sport = null
   }
@@ -1311,7 +1312,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     const sl = svc.sleep
     let sport: any = null
     try {
-      sport = readSetting(db as any, 'sport_tracker_json')?.data ?? null
+      sport = sportNow(db as any)
     } catch {
       sport = null
     }
@@ -1364,7 +1365,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
     const day = sportToday(now)
     const st = await mirror.read((db) => {
       try {
-        return readSetting(db as any, 'sport_tracker_json')?.data ?? null
+        return sportNow(db as any)
       } catch {
         return null
       }
@@ -1533,12 +1534,14 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
   const today = sportToday()
   const read = (db: any) => {
     try {
-      return readSetting(db, 'sport_tracker_json')?.data ?? null
+      return sportNow(db as any)
     } catch {
       return null
     }
   }
-  const save = (db: any, st: any) => writeSetting(db, 'sport_tracker_json', { savedAt: Date.now(), data: st })
+  // Through the one log (body_log): a row each, from Sporty or an automation.
+  const from = body?.source === 'sporty' ? 'sporty' : 'automation'
+  const save = (db: any, st: any) => saveSport(db, st, from, { id: typeof body?.id === 'string' && body.id ? `api-${body.id.slice(0, 40)}` : undefined })
   const op = String(body?.op ?? 'state')
   // Self-update: Sporty polls every minute; the Update Sporty button leaves a request.
   if (op === 'poll') {
@@ -1559,8 +1562,7 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
     const ml = Number(body.ml)
     if (!Number.isFinite(ml) || Math.abs(ml) > 5000) return { ok: false, error: 'ml must be a number (−5000…5000)' }
     const state = await mirror.write((db) => {
-      const st = addWater(read(db), ml, today)
-      save(db, st)
+      const st = save(db, addWater(read(db), ml, today))
       return sharedView(st, today)
     })
     return { ok: true, state }
@@ -1571,8 +1573,8 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
     return mirror.write((db) => {
       const r = addReps(read(db), String(body.name), amount, today)
       if (!r) return { ok: false, error: `No exercise called "${body.name}" in Sport Track` }
-      save(db, r.st)
-      return { ok: true, exercise: r.exercise, state: sharedView(r.st, today) }
+      const st = save(db, r.st)
+      return { ok: true, exercise: r.exercise, state: sharedView(st, today) }
     })
   }
   if (op === 'workout') {

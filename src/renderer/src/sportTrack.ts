@@ -3,6 +3,7 @@
 // checklist when its `lastDate` (your local date) changes; everything that
 // adds reps here applies the same rule first, so reps never land on yesterday.
 import { dayKey } from '@core/dates'
+import { numberDeltas, sportNumbers, withTotals } from '@core/bodyLog'
 
 /** Where Sport Track keeps its data in this PC's storage. */
 export const SPORT_KEY = 'life_sport_tracker_v1'
@@ -27,10 +28,26 @@ export function readSport(): any | null {
   }
 }
 
-/** Changes Sport Track's data and tells its open page to reload. */
-export function updateSport(fn: (s: any) => void): any | null {
+/**
+ * This copy is only a view of the one water + reps log (body_log): what a
+ * change here adds or takes back goes to the log as rows (the app registers
+ * how, see tursoWebBridge), and the log's sums come back into this copy.
+ */
+type SportLogger = (changes: { kind: string; amount: number }[], source: string) => Promise<any | null>
+let logger: SportLogger | null = null
+export function setSportLogger(fn: SportLogger | null): void {
+  logger = fn
+}
+
+/**
+ * Changes Sport Track's data and tells its open page to reload. Water and reps
+ * it adds or takes back are logged (`source`: where, e.g. 'island'); `log: false`
+ * when the change already came from the log.
+ */
+export function updateSport(fn: (s: any) => void, opts: { log?: boolean; source?: string } = {}): any | null {
   const s = readSport()
   if (!s) return null
+  const before = JSON.parse(JSON.stringify(s))
   fn(s)
   try {
     localStorage.setItem(KEY, JSON.stringify(s))
@@ -38,7 +55,25 @@ export function updateSport(fn: (s: any) => void): any | null {
     return null
   }
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-sport-changed'))
+  const changes = opts.log === false || !logger ? [] : numberDeltas(before, s)
+  if (changes.length) void logShared(changes, opts.source ?? '')
   return s
+}
+
+/** Sends changes to the log, then shows the log's sums here. */
+export async function logShared(changes: { kind: string; amount: number; id?: string }[], source: string): Promise<any | null> {
+  if (!logger || !changes.length) return null
+  const shared = await logger(changes, source).catch(() => null)
+  if (shared) applyShared(shared)
+  return shared
+}
+
+/** Today's water and reps from the shared copy (the log's sums) into this device's copy, without logging them again. */
+export function applyShared(shared: any): void {
+  const day = sportDay()
+  if (!shared || String(shared.lastDate ?? '') !== day) return
+  const nums = sportNumbers(shared)
+  updateSport((d) => void Object.assign(d, withTotals(d, day, nums)), { log: false })
 }
 
 /** The exercise a name like "pushups", "Push-ups" or "ex_situps" means. */

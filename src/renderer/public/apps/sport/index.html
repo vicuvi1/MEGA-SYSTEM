@@ -2194,7 +2194,33 @@
       }
     }
 
+    // Inside Life System, water and reps go to its one log (it adds up every
+    // device, Telegram and the island): each change here is sent as "+250 ml",
+    // "+20 push-ups", never as a counter of this page's own.
+    const EMBEDDED = window.parent && window.parent !== window;
+    let logged = null;
+    function numbersOf(s) {
+      const n = { water: Math.round((s.water && s.water.currentMl) || 0) };
+      (s.exercises || []).forEach(e => { n['reps:' + String(e.id != null ? e.id : e.name)] = Math.round(e.doneToday || 0); });
+      return { day: s.lastDate, n };
+    }
+    function noteLogged(s) { logged = numbersOf(s); }
+    function sendChanges(s) {
+      const now = numbersOf(s);
+      if (EMBEDDED && logged && logged.day === now.day) {
+        const changes = [];
+        for (const k of Object.keys(now.n)) {
+          if (!(k in logged.n)) continue;
+          const d = now.n[k] - logged.n[k];
+          if (d) changes.push({ kind: k, amount: d, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + changes.length });
+        }
+        if (changes.length) window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_LOG', payload: { day: now.day, changes } }, location.origin);
+      }
+      logged = now;
+    }
+
     function saveState(s) {
+      sendChanges(s);
       // Today's counts also go to the day log (the calendar), so a day is never lost at midnight.
       s.days = s.days || {};
       if (s.lastDate === localDay()) {
@@ -2209,6 +2235,7 @@
     }
 
     let state = loadState();
+    noteLogged(state);
 
     // A new day (your midnight): a fresh checklist and water. Checked on open,
     // every minute, and when you come back to the window.
@@ -3415,6 +3442,7 @@
     window.addEventListener('storage', (e) => {
       if (e.key !== STORAGE_KEY) return;
       state = loadState();
+      noteLogged(state);
       rollover();
       renderAll();
     });
@@ -3422,6 +3450,7 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible') return;
       state = loadState();
+      noteLogged(state);
       rollover();
       renderAll();
     });

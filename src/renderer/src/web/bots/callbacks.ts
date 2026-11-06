@@ -5,6 +5,7 @@
 // what they need from the bot through `c` (BotContext) and the tap through `t`.
 import { calendarDay } from '@core/dates'
 import { getSetting, setSetting, writeSetting } from '../../../../main/settings'
+import { saveSport } from '../../../../main/bodyLog'
 import { moneyButton, takeMoneyAsk } from '../financeBot'
 import { financeDayTx } from '../webServices'
 import { payTodoist } from '../todoistCoins'
@@ -53,11 +54,11 @@ export const CALLBACKS: CallbackHandler[] = [
         const svc = services.services(db)
         const day = sportToday()
         let st = sportState(db) ?? defaultSport(day)
-        const save = (x: any) => writeSetting(db as any, 'sport_tracker_json', { savedAt: Date.now(), data: x })
+        // Through the one log: each tap is a row (the same tap delivered twice counts once).
+        const save = (x: any) => (st = saveSport(db as any, x, 'telegram', { id: `tg-${key}` }))
         if (data.startsWith('wa|')) {
           if (!show) {
-            st = addWater(st, Number(data.slice(3)) || 0, day)
-            save(st)
+            save(addWater(st, Number(data.slice(3)) || 0, day))
           }
           const c = waterCard(st, day, waterToday(db, svc).target)
           return { ...c, toast: show ? '' : `${Number(data.slice(3)) > 0 ? '+' : ''}${data.slice(3)} ml` }
@@ -66,8 +67,7 @@ export const CALLBACKS: CallbackHandler[] = [
         let toast = ''
         if (!show) {
           const was = allDone(sportForDay(st, day))
-          st = applyWorkoutTap(st, day, data.slice(3))
-          save(st)
+          save(applyWorkoutTap(st, day, data.slice(3)))
           toast = 'Logged'
           if (!was && allDone(st)) {
             // Finished: it counts as today's workout (streak, points), and targets may go up.

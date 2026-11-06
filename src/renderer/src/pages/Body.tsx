@@ -8,6 +8,7 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { soundCoin } from '../soundKit'
 import { useWater } from '../water'
+import { WaterHistory } from '../WaterHistory'
 import { StrengthCard } from '../StrengthCard'
 import { ReadinessCard } from '../ReadinessCard'
 import { SkillPaths } from '../SkillPaths'
@@ -227,6 +228,9 @@ export function Body({
 
       {/* SP6: the daily checklist and water live in Sport Track only (one routine panel, not two). */}
       <p className="hint small">Your daily checklist, water and rest timer are in <b>Sport Track</b> (the tab at the top).</p>
+      <section className="card">
+        <WaterHistory />
+      </section>
 
       {/* READINESS: sleep + soreness → full / light / rest (H4) */}
       <ReadinessCard workoutDone={!!state.workoutDoneToday} />

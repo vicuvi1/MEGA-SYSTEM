@@ -374,5 +374,17 @@ export const MIGRATIONS: string[] = [
     note TEXT
   );
   CREATE INDEX IF NOT EXISTS goal_checkins_goal ON goal_checkins(goal_id, day);
+  `,
+  /* 022 One log of water and reps: every glass and set is a row with its own id (never changed; take-backs and removals are rows too) */ `
+  CREATE TABLE IF NOT EXISTS body_log (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    day TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'app',
+    undoes TEXT
+  );
+  CREATE INDEX IF NOT EXISTS body_log_day ON body_log(day, kind);
   `
 ]

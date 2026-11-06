@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EmbeddedApps } from '@shared/api'
 import { life } from './bridge'
+import { logShared, sportDay } from './sportTrack'
 import { sportItems } from '@core/sportBridge'
 import { dayNumber } from '@core/discipline'
 
@@ -74,6 +75,22 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         } catch (err) {
           console.error('[EmbedHost Sport] award error:', err)
         }
+      }
+
+      // Water and reps tapped in Sport Track: rows in the one log (body_log), like
+      // every other place; the log's sums come back into Sport Track's copy.
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_LOG') {
+        const p = data.payload ?? {}
+        const changes = (Array.isArray(p.changes) ? p.changes : [])
+          .filter((c: any) => c && typeof c.kind === 'string' && /^(water|reps:[\w .-]{1,60})$/.test(c.kind) && Number.isFinite(c.amount) && Math.abs(c.amount) <= 5000)
+          .slice(0, 20)
+          .map((c: any) => ({ kind: String(c.kind), amount: Math.round(c.amount), id: typeof c.id === 'string' ? `st-${c.id.replace(/[^\w-]/g, '').slice(0, 40)}` : undefined }))
+        if (p.day === sportDay() && changes.length) {
+          await logShared(changes, 'sport')
+          window.dispatchEvent(new CustomEvent('life-water-changed'))
+          window.dispatchEvent(new CustomEvent('life-body-changed'))
+        }
+        return
       }
 
       // SP4: a planned rest day from Sport Track keeps the workout streak.

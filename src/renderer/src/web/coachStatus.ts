@@ -7,6 +7,8 @@ import { planGoal } from '@core/goalPlan'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
 import { waterTargetFor, sharedView, sportToday } from '@core/sportShared'
 import { getSetting } from '../../../main/settings'
+import { bodyTotals } from '../../../main/bodyLog'
+import { WATER_KIND } from '@core/bodyLog'
 import { helpLine, shownMood } from '@core/benActs'
 import { loadStyle } from './botBrain'
 import { addDays } from '@core/dates'
@@ -22,7 +24,10 @@ import { WATER_TARGET_ML } from '@core/defaults'
  */
 export function waterToday(db: any, s: any, now = new Date()): { ml: number; target: number } {
   const sport = json(db, 'sport_tracker_json')?.data
-  const w = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: WATER_TARGET_ML }
+  const day = sportToday(now)
+  const view = sport ? sharedView(sport, day).water : { ml: 0, target: WATER_TARGET_ML }
+  // The amount is the one log's sum (body_log), never a copy's own counter.
+  const w = { ml: bodyTotals(db, day, sport)[WATER_KIND] ?? view.ml, target: view.target }
   try {
     const b = s.body.state(now)
     const t = waterTargetFor(b.latestWeight, !!b.workoutDoneToday)

@@ -8,6 +8,7 @@ import { triggerRpgPopup } from './RpgFloatingPopups'
 import { soundCoin, soundSuccess } from './soundKit'
 import type { PageId } from './modules'
 import { barFill } from './motionKit'
+import { WaterHistory } from './WaterHistory'
 
 interface Props {
   body: BodyState | null
@@ -21,6 +22,8 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
   const water = useWater()
   const waterMl = water.ml
   const waterTarget = water.target
+  // The water row's ⋯: what was logged today and from where.
+  const [waterLog, setWaterLog] = useState(false)
 
   // The app's day (turns at 04:00, like workouts and points: N8).
   const todayKey = dayKey(new Date())
@@ -228,6 +231,11 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
                 </span>
                 <span className="reps-stat">
                   {obj.current}/{obj.target} {obj.unit}
+                  {water && (
+                    <button className="chip" style={{ marginLeft: 6 }} aria-expanded={waterLog} onClick={() => setWaterLog((v) => !v)} title="What was logged today, and from where">
+                      ⋯
+                    </button>
+                  )}
                 </span>
               </div>
               <div className="reps-bar pbar">
@@ -252,6 +260,7 @@ export function SoloDailyQuestBanner({ body, summary, onRefresh, onGo }: Props) 
                   )}
                 </div>
               )}
+              {water && waterLog && <WaterHistory compact />}
               {isDone && water && obj.current > 0 && (
                 <div className="reps-btns">
                   <button className="chip" onClick={(e) => log(e, -Math.min(250, obj.current))} title="Take back 250 ml">

@@ -1972,6 +1972,611 @@ function readSetting(db, key) {
 function writeSetting(db, key, value) {
 	setSetting(db, key, serializeSetting(key, value));
 }
+// src/core/sportShared.ts
+/** The calendar day in local time (Sport Track and Sporty use the same; never UTC). */
+var sportToday = (now = /* @__PURE__ */ new Date()) => dayKey(now);
+/** A new day starts a fresh checklist (reps and water back to 0). */
+function sportForDay(st, today) {
+	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : {};
+	if (!Array.isArray(s.exercises)) s.exercises = [];
+	if (!s.water || typeof s.water !== "object") s.water = {
+		currentMl: 0,
+		targetMl: WATER_TARGET_ML,
+		glassSizeMl: 250
+	};
+	if (s.lastDate !== today) {
+		s.lastDate = today;
+		s.exercises.forEach((e) => e.doneToday = 0);
+		s.water.currentMl = 0;
+	}
+	return s;
+}
+function sharedView(st, today) {
+	const s = sportForDay(st, today);
+	return {
+		date: today,
+		water: {
+			ml: Math.max(0, Math.round(Number(s.water.currentMl) || 0)),
+			target: Number(s.water.targetMl) || 2700,
+			glass: Number(s.water.glassSizeMl) || 250
+		},
+		exercises: s.exercises.map((e) => ({
+			id: String(e.id ?? e.name),
+			name: String(e.name ?? e.id),
+			target: Number(e.target) || 0,
+			done: Number(e.doneToday) || 0
+		}))
+	};
+}
+/** Adds (or with a negative amount, removes) water; never below 0. */
+function addWater(st, ml, today) {
+	const s = sportForDay(st, today);
+	s.water.currentMl = Math.max(0, Math.round((Number(s.water.currentMl) || 0) + ml));
+	if (ml < 0) s.water.fixedAt = Date.now();
+	return s;
+}
+var key$2 = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
+/** The exercise "pushups", "Push-ups" or "push up" means. */
+function findSharedExercise(s, name) {
+	const k = key$2(name).replace(/s$/, "");
+	if (!k) return null;
+	return (s.exercises ?? []).find((e) => {
+		const id = key$2(e.id).replace(/s$/, "");
+		const n = key$2(e.name).replace(/s$/, "");
+		return id === k || n === k || id.includes(k) || n.includes(k) || n.length > 3 && k.includes(n);
+	}) ?? null;
+}
+/** Adds reps to an exercise (removes with a negative amount, never below 0); null if it doesn't exist. */
+function addReps(st, name, amount, today) {
+	const s = sportForDay(st, today);
+	const ex = findSharedExercise(s, name);
+	if (!ex) return null;
+	ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount));
+	if (amount < 0) ex.fixedAt = Date.now();
+	return {
+		st: s,
+		exercise: {
+			name: String(ex.name ?? ex.id),
+			done: ex.doneToday,
+			target: Number(ex.target) || 0
+		}
+	};
+}
+/**
+* "water 500", "500 ml", "+250ml", "apă 0.5 l", "2 glasses of water", "вода 300":
+* how much water a short message means (ml), or null. A small number with
+* "water" and no unit ("water 15") is a bottle bought (money), not drunk.
+*/
+/** Edit distance, for typos like "eawster", "watr", "wtaer". */
+var near = (a, b) => {
+	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+	for (let j = 1; j <= b.length; j++) d[0][j] = j;
+	for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+	return d[a.length][b.length];
+};
+function parseWater(text, glass = 250) {
+	const typo = /^([a-z]{4,8})\s*\+?(\d{2,4})$|^\+?(\d{2,4})\s*([a-z]{4,8})$/i.exec(text.trim());
+	if (typo) {
+		const w = (typo[1] ?? typo[4]).toLowerCase();
+		if (w !== "water" && w.includes("w") && w.includes("t") && near(w, "water") <= 3) text = `water ${typo[2] ?? typo[3]}`;
+	}
+	const t = text.trim().toLowerCase();
+	if (t.length > 40 || /\b(lei|mdl|ron|leu|\$|€|usd|eur)\b/.test(t)) return null;
+	const word = /(water|apa|apă|вод[аыу]|drank|drink)/.test(t);
+	const glasses = /(\d{1,2})\s*(glass(es)?|pahar(e)?|стакан\w*|cups?)/.exec(t);
+	if (glasses && (word || /^\+?\s*\d/.test(t))) return Math.min(WATER_MAX_ML, Number(glasses[1]) * glass);
+	const unit = /([+-]?\d+(?:[.,]\d+)?)\s*(ml|l|л|мл)\b/.exec(t);
+	if (unit) {
+		const n = Number(unit[1].replace(",", "."));
+		const ml = /^(l|л)$/.test(unit[2]) ? n * 1e3 : n;
+		if (Math.abs(ml) >= 50 && Math.abs(ml) <= 3e3 && (word || t.replace(unit[0], "").trim().replace(/^\+/, "") === "")) return Math.round(ml);
+		return null;
+	}
+	const bare = /^(?:\+?\s*)?(?:water|apa|apă|вода)\s*\+?(\d{2,4})$|^\+?(\d{2,4})\s*(?:water|apa|apă|вода)$/.exec(t);
+	const n = Number(bare?.[1] ?? bare?.[2]);
+	return bare && n >= 100 && n <= 3e3 ? n : null;
+}
+/** Your water target: about 35 ml per kg of body weight, +500 ml on a training day (1.5–4.5 L, in 50 ml steps). */
+function waterTargetFor(weightKg, trained = false) {
+	if (!weightKg || weightKg < 30 || weightKg > 250) return null;
+	const ml = weightKg * 35 + (trained ? 500 : 0);
+	return Math.round(Math.max(1500, Math.min(4500, ml)) / 50) * 50;
+}
+// src/core/sportCards.ts
+var DEFAULT_EXERCISES$1 = [
+	{
+		id: "ex_pushups",
+		name: "Push-ups",
+		target: 100,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_situps",
+		name: "Sit-ups",
+		target: 60,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_squats",
+		name: "Squats",
+		target: 60,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	},
+	{
+		id: "ex_press",
+		name: "Press",
+		target: 50,
+		unit: "reps",
+		active: true,
+		doneToday: 0
+	}
+];
+/** A fresh Sport Track state when there is none yet (so Ben works from day one). */
+function defaultSport(today) {
+	return {
+		lastDate: today,
+		exercises: DEFAULT_EXERCISES$1.map((e) => ({ ...e })),
+		water: {
+			currentMl: 0,
+			targetMl: WATER_TARGET_ML,
+			glassSizeMl: 250
+		},
+		history: [],
+		sportySettings: { autoProgression: true }
+	};
+}
+function bar(done, target, len = 8) {
+	if (target <= 0) return "█".repeat(len);
+	const r = Math.min(1, Math.max(0, done / target));
+	const f = Math.round(r * len);
+	return "█".repeat(f) + "░".repeat(len - f);
+}
+var esc$4 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** target: the one goal every screen shows (coachStatus waterToday), else Sport Track's. */
+function waterCard(st, today, goal) {
+	const s = sportForDay(st, today);
+	const ml = Math.round(Number(s.water.currentMl) || 0);
+	const target = goal || Number(s.water.targetMl) || 2700;
+	const glass = Number(s.water.glassSizeMl) || 250;
+	const left = Math.max(0, target - ml);
+	return {
+		text: [
+			"💧 <b>Water today</b>",
+			`<code>${bar(ml, target, 11)}</code> ${(ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(target / 1e3).toFixed(1)} L`,
+			`${Math.floor(ml / glass)} of ${Math.ceil(target / glass)} glasses (${glass} ml)`,
+			left ? `<b>${left} ml</b> to go.` : "🎯 <b>Target reached.</b> Nice.",
+			"<i>Or just type: water 250</i>"
+		].join("\n"),
+		keyboard: { inline_keyboard: [
+			[{
+				text: `💧 +${glass} (glass)`,
+				callback_data: `wa|${glass}`
+			}, {
+				text: "💧 +500 (bottle)",
+				callback_data: "wa|500"
+			}],
+			[{
+				text: "💧 +1000",
+				callback_data: "wa|1000"
+			}, {
+				text: `➖ −${glass}`,
+				callback_data: `wa|-${glass}`
+			}],
+			[{
+				text: "🏋️ Workout",
+				callback_data: "wk|show"
+			}]
+		] }
+	};
+}
+var activeExercises = (s) => (s.exercises ?? []).filter((e) => e.active !== false);
+var allDone = (s) => {
+	const a = activeExercises(s);
+	return a.length > 0 && a.every((e) => (Number(e.doneToday) || 0) >= (Number(e.target) || 0));
+};
+function workoutCard(st, today, extra = "") {
+	const s = sportForDay(st, today);
+	const list = activeExercises(s);
+	const done = allDone(s);
+	const lines = list.map((e) => {
+		const d = Number(e.doneToday) || 0;
+		const t = Number(e.target) || 0;
+		return `${d >= t ? "✅" : "▫️"} <b>${esc$4(e.name)}</b> ${d}/${t} ${esc$4(e.unit || "reps")}\n<code>${bar(d, t)}</code> ${t ? Math.round(Math.min(1, d / t) * 100) : 100}%`;
+	});
+	const total = list.reduce((a, e) => a + Math.min(Number(e.doneToday) || 0, Number(e.target) || 0), 0);
+	const goal = list.reduce((a, e) => a + (Number(e.target) || 0), 0);
+	const head = done ? "🔥 <b>Workout done for today!</b>" : `🏋️ <b>Today's workout</b> · ${goal ? Math.round(total / goal * 100) : 0}%`;
+	const rows = list.map((e, i) => ({
+		e,
+		i
+	})).filter(({ e }) => (Number(e.doneToday) || 0) < (Number(e.target) || 0)).slice(0, 6).map(({ e, i }) => [
+		{
+			text: `${String(e.name).slice(0, 12)} +10`,
+			callback_data: `wk|${i}|10`
+		},
+		{
+			text: "+25",
+			callback_data: `wk|${i}|25`
+		},
+		{
+			text: "✓ All",
+			callback_data: `wk|${i}|all`
+		}
+	]);
+	const tail = done ? [[{
+		text: "💧 Water",
+		callback_data: "wa|show"
+	}]] : [[{
+		text: "✅ Complete all",
+		callback_data: "wk|all"
+	}, {
+		text: "💧 Water",
+		callback_data: "wa|show"
+	}]];
+	return {
+		text: [
+			head,
+			"",
+			...lines,
+			...extra ? ["", extra] : [],
+			...done ? [] : ["", "<i>Or type: 30 pushups</i>"]
+		].join("\n"),
+		keyboard: { inline_keyboard: [...rows, ...tail] }
+	};
+}
+/** Applies a button: "3|10", "3|all", "all". Returns the new state. */
+function applyWorkoutTap(st, today, data) {
+	const s = sportForDay(st, today);
+	const list = activeExercises(s);
+	if (data === "all") {
+		for (const e of list) e.doneToday = Math.max(Number(e.doneToday) || 0, Number(e.target) || 0);
+		return s;
+	}
+	const [i, amt] = data.split("|");
+	const e = list[Number(i)];
+	if (!e) return s;
+	e.doneToday = amt === "all" ? Math.max(Number(e.doneToday) || 0, Number(e.target) || 0) : Math.max(0, (Number(e.doneToday) || 0) + (Number(amt) || 0));
+	return s;
+}
+function recordWorkoutDay(log, st, today) {
+	const s = sportForDay(st, today);
+	const days = { ...log?.days ?? {} };
+	days[today] = activeExercises(s).map((e) => ({
+		name: String(e.name),
+		target: Number(e.target) || 0,
+		done: Number(e.doneToday) || 0
+	}));
+	const keep = Object.keys(days).sort().slice(-60);
+	return { days: Object.fromEntries(keep.map((d) => [d, days[d]])) };
+}
+/**
+* Real progression, per exercise:
+* - harder: the full target done on the last 2 days it was trained at this
+*   target → +5% (at least +1); the next step needs 2 more full days at the
+*   new target, so it only climbs while you keep up;
+* - lighter: not trained for real (half the target) in the last 14 days,
+*   though you trained before → −10%, so coming back is doable.
+*/
+function progression(log, st, today, needed = 2, pct = 5) {
+	const days = Object.keys(log.days ?? {}).sort();
+	const out = [];
+	const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+	for (const e of activeExercises(st)) {
+		const cur = Number(e.target) || 0;
+		if (!cur) continue;
+		const name = String(e.name);
+		const rows = days.map((d) => ({
+			d,
+			r: log.days[d].find((x) => same(x.name, name))
+		})).filter((x) => x.r);
+		if (today) {
+			const from = isoAdd(today, -14);
+			const real = rows.some((x) => x.d >= from && x.d < today && x.r.done >= x.r.target * .5);
+			const before = rows.some((x) => x.d < from && x.r.done > 0);
+			if (!real && before) {
+				const to = Math.max(1, Math.round(cur * .9));
+				if (to < cur) out.push({
+					name,
+					from: cur,
+					to,
+					why: "2 weeks without it: a bit lighter to come back"
+				});
+				continue;
+			}
+		}
+		const atTarget = rows.filter((x) => x.r.target >= cur && x.r.done > 0).slice(-needed);
+		if (atTarget.length >= needed && atTarget.every((x) => x.r.done >= x.r.target)) out.push({
+			name,
+			from: cur,
+			to: cur + Math.max(1, Math.ceil(cur * pct / 100)),
+			why: `full target ${needed} times`
+		});
+	}
+	return out;
+}
+var isoAdd = (day, n) => {
+	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+};
+/** Exercise plan changes from Ben: set a target, add an exercise, remove one. */
+function setExercise(st, today, name, target, unit = "reps") {
+	const s = sportForDay(st, today);
+	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key || String(x.id).toLowerCase().replace(/[^a-z0-9]/g, "").includes(key));
+	if (e) {
+		const from = Number(e.target) || 0;
+		if (target && target > 0) e.target = Math.round(target);
+		e.active = true;
+		return {
+			st: s,
+			line: `🏋️ ${e.name}: target ${from} → ${e.target} ${e.unit || unit}`
+		};
+	}
+	if (!(target && target > 0)) return {
+		st: s,
+		line: ""
+	};
+	s.exercises.push({
+		id: `ex_${key || Date.now()}`,
+		name: name.slice(0, 30),
+		target: Math.round(target),
+		unit,
+		active: true,
+		doneToday: 0
+	});
+	return {
+		st: s,
+		line: `🏋️ New exercise: ${name} · ${Math.round(target)} ${unit} a day`
+	};
+}
+function removeExercise(st, today, name) {
+	const s = sportForDay(st, today);
+	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key);
+	if (!e) return {
+		st: s,
+		line: ""
+	};
+	e.active = false;
+	return {
+		st: s,
+		line: `🏋️ ${e.name} off the daily list`
+	};
+}
+// src/core/bodyLog.ts
+var WATER_KIND = "water";
+/** The kind for an exercise's reps (by Sport Track's exercise id). */
+var repsKind = (exerciseId) => `reps:${exerciseId}`;
+/**
+* Which rows still count: a row is cancelled while a row that still counts
+* cancels it. Cancels form a chain (entry ← remove ← undo remove ← …), so the
+* newest link decides. Works on any order of rows.
+*/
+function liveIds(events) {
+	const cancelers = /* @__PURE__ */ new Map();
+	for (const e of events) if (e.undoes) (cancelers.get(e.undoes) ?? cancelers.set(e.undoes, []).get(e.undoes)).push(e);
+	const memo = /* @__PURE__ */ new Map();
+	const live = (e, depth = 0) => {
+		const known = memo.get(e.id);
+		if (known != null) return known;
+		if (depth > 200) return true;
+		const v = !(cancelers.get(e.id) ?? []).some((c) => c.id !== e.id && live(c, depth + 1));
+		memo.set(e.id, v);
+		return v;
+	};
+	return new Set(events.filter((e) => live(e)).map((e) => e.id));
+}
+/** The day's total per kind (never below 0). Cancel rows add nothing themselves. */
+function totalsOf(events, day) {
+	const mine = events.filter((e) => e.day === day);
+	const live = liveIds(mine);
+	const out = {};
+	for (const e of mine) {
+		if (e.undoes) {
+			out[e.kind] ??= 0;
+			continue;
+		}
+		out[e.kind] = (out[e.kind] ?? 0) + (live.has(e.id) ? Math.round(Number(e.amount) || 0) : 0);
+	}
+	for (const k of Object.keys(out)) out[k] = Math.max(0, out[k]);
+	return out;
+}
+/** Today's numbers a Sport Track copy shows: water and each exercise's reps. */
+function sportNumbers(st) {
+	const out = {};
+	if (!st || typeof st !== "object") return out;
+	if (st.water && typeof st.water === "object") out[WATER_KIND] = Math.max(0, Math.round(Number(st.water.currentMl) || 0));
+	for (const e of Array.isArray(st.exercises) ? st.exercises : []) {
+		const id = String(e?.id ?? e?.name ?? "");
+		if (id) out[repsKind(id)] = Math.max(0, Math.round(Number(e.doneToday) || 0));
+	}
+	return out;
+}
+/** What changed between two copies of the same day (kinds missing on either side don't count: a new or removed exercise is no reps). */
+function numberDeltas(before, after) {
+	if (!before || !after || String(before.lastDate ?? "") !== String(after.lastDate ?? "")) return [];
+	const a = sportNumbers(before);
+	const b = sportNumbers(after);
+	const out = [];
+	for (const [k, v] of Object.entries(b)) {
+		if (!(k in a)) continue;
+		const d = v - a[k];
+		if (d) out.push({
+			kind: k,
+			amount: d
+		});
+	}
+	return out;
+}
+/** A copy with today's numbers from the log (water, every exercise's reps and the day log). Kinds the log doesn't know keep their value. */
+function withTotals(st, day, totals) {
+	if (!st || typeof st !== "object" || String(st.lastDate ?? "") !== day) return st;
+	const s = JSON.parse(JSON.stringify(st));
+	if (s.water && typeof s.water === "object") {
+		if ("water" in totals) s.water.currentMl = totals[WATER_KIND];
+		delete s.water.fixedAt;
+	}
+	const dayMap = {};
+	for (const e of Array.isArray(s.exercises) ? s.exercises : []) {
+		const k = repsKind(String(e?.id ?? e?.name ?? ""));
+		if (k in totals) e.doneToday = totals[k];
+		delete e.fixedAt;
+		if ((Number(e.doneToday) || 0) > 0) dayMap[String(e.id ?? e.name)] = Number(e.doneToday);
+	}
+	if (s.days && typeof s.days === "object") {
+		if (Object.keys(dayMap).length) s.days[day] = dayMap;
+		else delete s.days[day];
+	}
+	return s;
+}
+// src/main/bodyLog.ts
+var rid$1 = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+/** The shared Sport Track copy (null when there is none yet). */
+function sportBlob(db) {
+	try {
+		return readSetting(db, "sport_tracker_json")?.data ?? null;
+	} catch {
+		return null;
+	}
+}
+/** The log's rows for a day (or a range of days). */
+function bodyEvents(db, from, to = from) {
+	try {
+		return db.prepare("SELECT id, at, day, kind, amount, source, undoes FROM body_log WHERE day >= ? AND day <= ? ORDER BY at, id").all(from, to).map((r) => ({
+			id: String(r.id),
+			at: String(r.at),
+			day: String(r.day),
+			kind: String(r.kind),
+			amount: Number(r.amount) || 0,
+			source: String(r.source ?? ""),
+			undoes: r.undoes == null ? null : String(r.undoes)
+		}));
+	} catch {
+		return [];
+	}
+}
+/** Adds one row; false when that id is already there (the same tap sent twice counts once). */
+function insert(db, e) {
+	const r = db.prepare("INSERT OR IGNORE INTO body_log (id, at, day, kind, amount, source, undoes) VALUES (?, ?, ?, ?, ?, ?, ?)").run(e.id, e.at, e.day, e.kind, Math.round(e.amount), e.source.slice(0, 20), e.undoes);
+	return r?.changes == null ? true : Number(r.changes) > 0;
+}
+/**
+* The day's numbers: the log's sums, and for a kind it has no rows of yet
+* (the day the log started), the shared copy's number from before.
+*/
+function bodyTotals(db, day, blob = sportBlob(db)) {
+	const t = totalsOf(bodyEvents(db, day), day);
+	if (blob && String(blob.lastDate ?? "") === day) {
+		for (const [k, v] of Object.entries(sportNumbers(blob))) if (!(k in t)) t[k] = v;
+	}
+	return t;
+}
+var dayStart = (day, now) => {
+	const t = /* @__PURE__ */ new Date(`${day}T04:00:00`);
+	return Number.isFinite(t.getTime()) && t <= now ? t.toISOString() : now.toISOString();
+};
+/** First write of a day the log has no rows for a kind yet: what the copy already had becomes one "logged earlier" row (same id on every device). */
+function seed(db, day, from, now) {
+	if (!from || String(from.lastDate ?? "") !== day) return;
+	const have = new Set(bodyEvents(db, day).map((e) => e.kind));
+	for (const [kind, v] of Object.entries(sportNumbers(from))) if (v > 0 && !have.has(kind)) insert(db, {
+		id: `seed:${day}:${kind}`,
+		at: dayStart(day, now),
+		day,
+		kind,
+		amount: v,
+		source: "earlier",
+		undoes: null
+	});
+}
+/** Rewrites the shared copy's today numbers from the log (nothing when they already match). */
+function writeView(db, st, day, base = st) {
+	const final = withTotals(st, day, bodyTotals(db, day, st));
+	const value = {
+		savedAt: Date.now(),
+		data: final
+	};
+	if (shape(base, day) === shape(final, day)) db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("sport_tracker_json", JSON.stringify(value));
+	else writeSetting(db, "sport_tracker_json", value);
+	return final;
+}
+/** A copy without today's numbers (to tell a number change from an edit of the exercises). */
+function shape(st, day) {
+	if (!st || typeof st !== "object") return JSON.stringify(st);
+	const s = JSON.parse(JSON.stringify(st));
+	if (s.water && typeof s.water === "object") delete s.water.currentMl, delete s.water.fixedAt;
+	for (const e of Array.isArray(s.exercises) ? s.exercises : []) if (e && typeof e === "object") delete e.doneToday, delete e.fixedAt;
+	if (s.days && typeof s.days === "object") delete s.days[day];
+	delete s.lastDate;
+	return JSON.stringify(s);
+}
+/**
+* Saves a changed Sport Track copy through the log: what changed today
+* (water, reps) becomes rows, then the copy is written with the log's sums.
+* Every place that used to write sport_tracker_json goes through here.
+* `id`: a fixed id for the row (a tap from the island or Telegram sent twice counts once).
+*/
+function saveSport(db, next, source, opts = {}) {
+	const now = opts.now ?? /* @__PURE__ */ new Date();
+	const day = sportToday(now);
+	const raw = sportBlob(db);
+	const forDay = raw ? sportForDay(raw, day) : null;
+	if (forDay) seed(db, day, forDay, now);
+	const prev = forDay ? withTotals(forDay, day, bodyTotals(db, day, forDay)) : next ? sportForDay({
+		...next,
+		lastDate: ""
+	}, day) : null;
+	if (prev && next && String(next.lastDate ?? "") === day) {
+		const deltas = numberDeltas(prev, next);
+		const totals = bodyTotals(db, day, prev);
+		deltas.forEach((d, i) => {
+			const amount = d.amount < 0 ? Math.max(d.amount, -(totals[d.kind] ?? 0)) : d.amount;
+			if (!amount) return;
+			if (insert(db, {
+				id: opts.id ? deltas.length > 1 ? `${opts.id}-${i}` : opts.id : rid$1(),
+				at: now.toISOString(),
+				day,
+				kind: d.kind,
+				amount,
+				source,
+				undoes: null
+			})) totals[d.kind] = (totals[d.kind] ?? 0) + amount;
+		});
+	}
+	return next ? writeView(db, next, day, forDay) : next;
+}
+/** The shared copy for today with the log's numbers (null when there is none yet). Start every change from this. */
+function sportNow(db, now = /* @__PURE__ */ new Date()) {
+	const raw = sportBlob(db);
+	if (!raw) return null;
+	const day = sportToday(now);
+	const st = sportForDay(raw, day);
+	return withTotals(st, day, bodyTotals(db, day, st));
+}
+/** Adds reps to an exercise on today's checklist (null when it isn't there). */
+function logReps(db, name, amount, source, opts = {}) {
+	const day = sportToday(opts.now ?? /* @__PURE__ */ new Date());
+	const st = sportNow(db, opts.now);
+	if (!st) return null;
+	const r = addReps(st, name, amount, day);
+	if (!r) return null;
+	const saved = saveSport(db, r.st, source, opts);
+	const view = sharedView(saved, day).exercises.find((e) => e.name === r.exercise.name);
+	return {
+		st: saved,
+		exercise: {
+			...r.exercise,
+			done: view?.done ?? r.exercise.done
+		}
+	};
+}
 // src/core/goalPlan.ts
 var round5 = (m) => Math.ceil(m / 5) * 5;
 /** Minutes a day to finish `leftMin` in `days` days. */
@@ -2887,116 +3492,6 @@ function weekSoFar(today, focus, workouts, tasks) {
 		tasks: tasks.filter((x) => inWeek(x.day)).length,
 		daysLeft: 7 - (wdN + 6) % 7
 	};
-}
-// src/core/sportShared.ts
-/** The calendar day in local time (Sport Track and Sporty use the same; never UTC). */
-var sportToday = (now = /* @__PURE__ */ new Date()) => dayKey(now);
-/** A new day starts a fresh checklist (reps and water back to 0). */
-function sportForDay(st, today) {
-	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : {};
-	if (!Array.isArray(s.exercises)) s.exercises = [];
-	if (!s.water || typeof s.water !== "object") s.water = {
-		currentMl: 0,
-		targetMl: WATER_TARGET_ML,
-		glassSizeMl: 250
-	};
-	if (s.lastDate !== today) {
-		s.lastDate = today;
-		s.exercises.forEach((e) => e.doneToday = 0);
-		s.water.currentMl = 0;
-	}
-	return s;
-}
-function sharedView(st, today) {
-	const s = sportForDay(st, today);
-	return {
-		date: today,
-		water: {
-			ml: Math.max(0, Math.round(Number(s.water.currentMl) || 0)),
-			target: Number(s.water.targetMl) || 2700,
-			glass: Number(s.water.glassSizeMl) || 250
-		},
-		exercises: s.exercises.map((e) => ({
-			id: String(e.id ?? e.name),
-			name: String(e.name ?? e.id),
-			target: Number(e.target) || 0,
-			done: Number(e.doneToday) || 0
-		}))
-	};
-}
-/** Adds (or with a negative amount, removes) water; never below 0. */
-function addWater(st, ml, today) {
-	const s = sportForDay(st, today);
-	s.water.currentMl = Math.max(0, Math.round((Number(s.water.currentMl) || 0) + ml));
-	if (ml < 0) s.water.fixedAt = Date.now();
-	return s;
-}
-var key$2 = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
-/** The exercise "pushups", "Push-ups" or "push up" means. */
-function findSharedExercise(s, name) {
-	const k = key$2(name).replace(/s$/, "");
-	if (!k) return null;
-	return (s.exercises ?? []).find((e) => {
-		const id = key$2(e.id).replace(/s$/, "");
-		const n = key$2(e.name).replace(/s$/, "");
-		return id === k || n === k || id.includes(k) || n.includes(k) || n.length > 3 && k.includes(n);
-	}) ?? null;
-}
-/** Adds reps to an exercise (removes with a negative amount, never below 0); null if it doesn't exist. */
-function addReps(st, name, amount, today) {
-	const s = sportForDay(st, today);
-	const ex = findSharedExercise(s, name);
-	if (!ex) return null;
-	ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + Math.round(amount));
-	if (amount < 0) ex.fixedAt = Date.now();
-	return {
-		st: s,
-		exercise: {
-			name: String(ex.name ?? ex.id),
-			done: ex.doneToday,
-			target: Number(ex.target) || 0
-		}
-	};
-}
-/**
-* "water 500", "500 ml", "+250ml", "apă 0.5 l", "2 glasses of water", "вода 300":
-* how much water a short message means (ml), or null. A small number with
-* "water" and no unit ("water 15") is a bottle bought (money), not drunk.
-*/
-/** Edit distance, for typos like "eawster", "watr", "wtaer". */
-var near = (a, b) => {
-	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-	for (let j = 1; j <= b.length; j++) d[0][j] = j;
-	for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-	return d[a.length][b.length];
-};
-function parseWater(text, glass = 250) {
-	const typo = /^([a-z]{4,8})\s*\+?(\d{2,4})$|^\+?(\d{2,4})\s*([a-z]{4,8})$/i.exec(text.trim());
-	if (typo) {
-		const w = (typo[1] ?? typo[4]).toLowerCase();
-		if (w !== "water" && w.includes("w") && w.includes("t") && near(w, "water") <= 3) text = `water ${typo[2] ?? typo[3]}`;
-	}
-	const t = text.trim().toLowerCase();
-	if (t.length > 40 || /\b(lei|mdl|ron|leu|\$|€|usd|eur)\b/.test(t)) return null;
-	const word = /(water|apa|apă|вод[аыу]|drank|drink)/.test(t);
-	const glasses = /(\d{1,2})\s*(glass(es)?|pahar(e)?|стакан\w*|cups?)/.exec(t);
-	if (glasses && (word || /^\+?\s*\d/.test(t))) return Math.min(WATER_MAX_ML, Number(glasses[1]) * glass);
-	const unit = /([+-]?\d+(?:[.,]\d+)?)\s*(ml|l|л|мл)\b/.exec(t);
-	if (unit) {
-		const n = Number(unit[1].replace(",", "."));
-		const ml = /^(l|л)$/.test(unit[2]) ? n * 1e3 : n;
-		if (Math.abs(ml) >= 50 && Math.abs(ml) <= 3e3 && (word || t.replace(unit[0], "").trim().replace(/^\+/, "") === "")) return Math.round(ml);
-		return null;
-	}
-	const bare = /^(?:\+?\s*)?(?:water|apa|apă|вода)\s*\+?(\d{2,4})$|^\+?(\d{2,4})\s*(?:water|apa|apă|вода)$/.exec(t);
-	const n = Number(bare?.[1] ?? bare?.[2]);
-	return bare && n >= 100 && n <= 3e3 ? n : null;
-}
-/** Your water target: about 35 ml per kg of body weight, +500 ml on a training day (1.5–4.5 L, in 50 ml steps). */
-function waterTargetFor(weightKg, trained = false) {
-	if (!weightKg || weightKg < 30 || weightKg > 250) return null;
-	const ml = weightKg * 35 + (trained ? 500 : 0);
-	return Math.round(Math.max(1500, Math.min(4500, ml)) / 50) * 50;
 }
 // src/core/urgePatterns.ts
 var DAYS$2 = [
@@ -4587,7 +5082,7 @@ function gmailLine(d, today, yesterday) {
 var GMAIL = "gmail";
 var API$1 = "https://gmail.googleapis.com/gmail/v1/users/me";
 var dayOf$4 = (d) => calendarDay(d);
-var esc$4 = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+var esc$3 = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 async function job(ctx) {
 	const cfg = JSON.parse(await ctx.get(`plugin_gmail`) || "{}");
 	const q = gmailQuery(listOf(cfg.senders), listOf(cfg.labels));
@@ -4621,7 +5116,7 @@ async function job(ctx) {
 	};
 	await ctx.set(`plugin_${GMAIL}_data`, JSON.stringify(data));
 	const seen = new Set((prev?.items ?? []).map((x) => x.title));
-	const message = items.filter((x) => !seen.has(x.title)).length ? `📬 <b>From your mail</b>\n${items.map((x, i) => `${i + 1}) ${esc$4(itemText(x))}`).join("\n")}\n\nSay <i>"add 1"</i> and I'll put it in Todoist or your calendar. I only read; I never send email.` : void 0;
+	const message = items.filter((x) => !seen.has(x.title)).length ? `📬 <b>From your mail</b>\n${items.map((x, i) => `${i + 1}) ${esc$3(itemText(x))}`).join("\n")}\n\nSay <i>"add 1"</i> and I'll put it in Todoist or your calendar. I only read; I never send email.` : void 0;
 	return {
 		note: `${msgs.length} unread checked · ${items.length} worth a look`,
 		message
@@ -8190,9 +8685,10 @@ function saveMind(db, m) {
 	setSetting(db, MIND, JSON.stringify(cleanMind(m)));
 }
 /** Sport Track's shared state (water and reps), if it exists. */
+/** Today's Sport Track copy, with water and reps from the one log (body_log). */
 function sportState(db) {
 	try {
-		return readSetting(db, "sport_tracker_json")?.data ?? null;
+		return sportNow(db);
 	} catch {
 		return null;
 	}
@@ -9582,6 +10078,18 @@ var MIGRATIONS = [
     note TEXT
   );
   CREATE INDEX IF NOT EXISTS goal_checkins_goal ON goal_checkins(goal_id, day);
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS body_log (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    day TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'app',
+    undoes TEXT
+  );
+  CREATE INDEX IF NOT EXISTS body_log_day ON body_log(day, kind);
   `
 ];
 // src/core/rules.ts
@@ -9876,7 +10384,7 @@ function planAward(rule, entries, now, day, note) {
 	};
 }
 // src/core/body.ts
-var DEFAULT_EXERCISES$1 = [
+var DEFAULT_EXERCISES = [
 	{
 		id: "situps",
 		name: "Sit-ups",
@@ -11630,7 +12138,7 @@ var Mirror = class Mirror {
 			enabled: r.enabled ? 1 : 0,
 			sort: i
 		})).filter((r) => !haveRules.has(r.id));
-		const exercises = DEFAULT_EXERCISES$1.filter((e) => !haveEx.has(e.id));
+		const exercises = DEFAULT_EXERCISES.filter((e) => !haveEx.has(e.id));
 		if (!rules.length && !exercises.length) return;
 		db.dropChanges();
 		db.transaction(() => {
@@ -13625,274 +14133,6 @@ function writeJournal(db, day, r, now = /* @__PURE__ */ new Date()) {
 	if (cur) db.prepare("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(j.body, now.toISOString(), cur.id);
 	else db.prepare("INSERT INTO notes (id, title, body, author, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)").run(newId$2(), j.title, j.body, "ben", now.toISOString(), now.toISOString());
 }
-// src/core/sportCards.ts
-var DEFAULT_EXERCISES = [
-	{
-		id: "ex_pushups",
-		name: "Push-ups",
-		target: 100,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	},
-	{
-		id: "ex_situps",
-		name: "Sit-ups",
-		target: 60,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	},
-	{
-		id: "ex_squats",
-		name: "Squats",
-		target: 60,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	},
-	{
-		id: "ex_press",
-		name: "Press",
-		target: 50,
-		unit: "reps",
-		active: true,
-		doneToday: 0
-	}
-];
-/** A fresh Sport Track state when there is none yet (so Ben works from day one). */
-function defaultSport(today) {
-	return {
-		lastDate: today,
-		exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })),
-		water: {
-			currentMl: 0,
-			targetMl: WATER_TARGET_ML,
-			glassSizeMl: 250
-		},
-		history: [],
-		sportySettings: { autoProgression: true }
-	};
-}
-function bar(done, target, len = 8) {
-	if (target <= 0) return "█".repeat(len);
-	const r = Math.min(1, Math.max(0, done / target));
-	const f = Math.round(r * len);
-	return "█".repeat(f) + "░".repeat(len - f);
-}
-var esc$3 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-/** target: the one goal every screen shows (coachStatus waterToday), else Sport Track's. */
-function waterCard(st, today, goal) {
-	const s = sportForDay(st, today);
-	const ml = Math.round(Number(s.water.currentMl) || 0);
-	const target = goal || Number(s.water.targetMl) || 2700;
-	const glass = Number(s.water.glassSizeMl) || 250;
-	const left = Math.max(0, target - ml);
-	return {
-		text: [
-			"💧 <b>Water today</b>",
-			`<code>${bar(ml, target, 11)}</code> ${(ml / 1e3).toFixed(2).replace(/0$/, "")} of ${(target / 1e3).toFixed(1)} L`,
-			`${Math.floor(ml / glass)} of ${Math.ceil(target / glass)} glasses (${glass} ml)`,
-			left ? `<b>${left} ml</b> to go.` : "🎯 <b>Target reached.</b> Nice.",
-			"<i>Or just type: water 250</i>"
-		].join("\n"),
-		keyboard: { inline_keyboard: [
-			[{
-				text: `💧 +${glass} (glass)`,
-				callback_data: `wa|${glass}`
-			}, {
-				text: "💧 +500 (bottle)",
-				callback_data: "wa|500"
-			}],
-			[{
-				text: "💧 +1000",
-				callback_data: "wa|1000"
-			}, {
-				text: `➖ −${glass}`,
-				callback_data: `wa|-${glass}`
-			}],
-			[{
-				text: "🏋️ Workout",
-				callback_data: "wk|show"
-			}]
-		] }
-	};
-}
-var activeExercises = (s) => (s.exercises ?? []).filter((e) => e.active !== false);
-var allDone = (s) => {
-	const a = activeExercises(s);
-	return a.length > 0 && a.every((e) => (Number(e.doneToday) || 0) >= (Number(e.target) || 0));
-};
-function workoutCard(st, today, extra = "") {
-	const s = sportForDay(st, today);
-	const list = activeExercises(s);
-	const done = allDone(s);
-	const lines = list.map((e) => {
-		const d = Number(e.doneToday) || 0;
-		const t = Number(e.target) || 0;
-		return `${d >= t ? "✅" : "▫️"} <b>${esc$3(e.name)}</b> ${d}/${t} ${esc$3(e.unit || "reps")}\n<code>${bar(d, t)}</code> ${t ? Math.round(Math.min(1, d / t) * 100) : 100}%`;
-	});
-	const total = list.reduce((a, e) => a + Math.min(Number(e.doneToday) || 0, Number(e.target) || 0), 0);
-	const goal = list.reduce((a, e) => a + (Number(e.target) || 0), 0);
-	const head = done ? "🔥 <b>Workout done for today!</b>" : `🏋️ <b>Today's workout</b> · ${goal ? Math.round(total / goal * 100) : 0}%`;
-	const rows = list.map((e, i) => ({
-		e,
-		i
-	})).filter(({ e }) => (Number(e.doneToday) || 0) < (Number(e.target) || 0)).slice(0, 6).map(({ e, i }) => [
-		{
-			text: `${String(e.name).slice(0, 12)} +10`,
-			callback_data: `wk|${i}|10`
-		},
-		{
-			text: "+25",
-			callback_data: `wk|${i}|25`
-		},
-		{
-			text: "✓ All",
-			callback_data: `wk|${i}|all`
-		}
-	]);
-	const tail = done ? [[{
-		text: "💧 Water",
-		callback_data: "wa|show"
-	}]] : [[{
-		text: "✅ Complete all",
-		callback_data: "wk|all"
-	}, {
-		text: "💧 Water",
-		callback_data: "wa|show"
-	}]];
-	return {
-		text: [
-			head,
-			"",
-			...lines,
-			...extra ? ["", extra] : [],
-			...done ? [] : ["", "<i>Or type: 30 pushups</i>"]
-		].join("\n"),
-		keyboard: { inline_keyboard: [...rows, ...tail] }
-	};
-}
-/** Applies a button: "3|10", "3|all", "all". Returns the new state. */
-function applyWorkoutTap(st, today, data) {
-	const s = sportForDay(st, today);
-	const list = activeExercises(s);
-	if (data === "all") {
-		for (const e of list) e.doneToday = Math.max(Number(e.doneToday) || 0, Number(e.target) || 0);
-		return s;
-	}
-	const [i, amt] = data.split("|");
-	const e = list[Number(i)];
-	if (!e) return s;
-	e.doneToday = amt === "all" ? Math.max(Number(e.doneToday) || 0, Number(e.target) || 0) : Math.max(0, (Number(e.doneToday) || 0) + (Number(amt) || 0));
-	return s;
-}
-function recordWorkoutDay(log, st, today) {
-	const s = sportForDay(st, today);
-	const days = { ...log?.days ?? {} };
-	days[today] = activeExercises(s).map((e) => ({
-		name: String(e.name),
-		target: Number(e.target) || 0,
-		done: Number(e.doneToday) || 0
-	}));
-	const keep = Object.keys(days).sort().slice(-60);
-	return { days: Object.fromEntries(keep.map((d) => [d, days[d]])) };
-}
-/**
-* Real progression, per exercise:
-* - harder: the full target done on the last 2 days it was trained at this
-*   target → +5% (at least +1); the next step needs 2 more full days at the
-*   new target, so it only climbs while you keep up;
-* - lighter: not trained for real (half the target) in the last 14 days,
-*   though you trained before → −10%, so coming back is doable.
-*/
-function progression(log, st, today, needed = 2, pct = 5) {
-	const days = Object.keys(log.days ?? {}).sort();
-	const out = [];
-	const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-	for (const e of activeExercises(st)) {
-		const cur = Number(e.target) || 0;
-		if (!cur) continue;
-		const name = String(e.name);
-		const rows = days.map((d) => ({
-			d,
-			r: log.days[d].find((x) => same(x.name, name))
-		})).filter((x) => x.r);
-		if (today) {
-			const from = isoAdd(today, -14);
-			const real = rows.some((x) => x.d >= from && x.d < today && x.r.done >= x.r.target * .5);
-			const before = rows.some((x) => x.d < from && x.r.done > 0);
-			if (!real && before) {
-				const to = Math.max(1, Math.round(cur * .9));
-				if (to < cur) out.push({
-					name,
-					from: cur,
-					to,
-					why: "2 weeks without it: a bit lighter to come back"
-				});
-				continue;
-			}
-		}
-		const atTarget = rows.filter((x) => x.r.target >= cur && x.r.done > 0).slice(-needed);
-		if (atTarget.length >= needed && atTarget.every((x) => x.r.done >= x.r.target)) out.push({
-			name,
-			from: cur,
-			to: cur + Math.max(1, Math.ceil(cur * pct / 100)),
-			why: `full target ${needed} times`
-		});
-	}
-	return out;
-}
-var isoAdd = (day, n) => {
-	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
-	d.setUTCDate(d.getUTCDate() + n);
-	return d.toISOString().slice(0, 10);
-};
-/** Exercise plan changes from Ben: set a target, add an exercise, remove one. */
-function setExercise(st, today, name, target, unit = "reps") {
-	const s = sportForDay(st, today);
-	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key || String(x.id).toLowerCase().replace(/[^a-z0-9]/g, "").includes(key));
-	if (e) {
-		const from = Number(e.target) || 0;
-		if (target && target > 0) e.target = Math.round(target);
-		e.active = true;
-		return {
-			st: s,
-			line: `🏋️ ${e.name}: target ${from} → ${e.target} ${e.unit || unit}`
-		};
-	}
-	if (!(target && target > 0)) return {
-		st: s,
-		line: ""
-	};
-	s.exercises.push({
-		id: `ex_${key || Date.now()}`,
-		name: name.slice(0, 30),
-		target: Math.round(target),
-		unit,
-		active: true,
-		doneToday: 0
-	});
-	return {
-		st: s,
-		line: `🏋️ New exercise: ${name} · ${Math.round(target)} ${unit} a day`
-	};
-}
-function removeExercise(st, today, name) {
-	const s = sportForDay(st, today);
-	const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-	const e = s.exercises.find((x) => String(x.name).toLowerCase().replace(/[^a-z0-9]/g, "") === key);
-	if (!e) return {
-		st: s,
-		line: ""
-	};
-	e.active = false;
-	return {
-		st: s,
-		line: `🏋️ ${e.name} off the daily list`
-	};
-}
 // src/renderer/src/web/benDesk.ts
 var DESK = "ben_desk";
 var EMPTY_DESK = {
@@ -14303,12 +14543,7 @@ function deskChange(s, o, now = /* @__PURE__ */ new Date()) {
 		const ml = Math.round(o.ml);
 		if (!(ml > 0 && ml <= 3e3)) throw new Error(`Water: between 1 and ${WATER_MAX_ML} ml`);
 		const day = sportToday(now);
-		const next = addWater(sportState(db) ?? defaultSport(day), ml, day);
-		writeSetting(db, "sport_tracker_json", {
-			savedAt: Date.now(),
-			data: next
-		});
-		const v = sharedView(next, day);
+		const v = sharedView(saveSport(db, addWater(sportState(db) ?? defaultSport(day), ml, day), "ben", { now }), day);
 		return `💧 +${ml} ml · ${(v.water.ml / 1e3).toFixed(1)} of ${(v.water.target / 1e3).toFixed(1)} L today`;
 	}
 	if (o.op === "stake") {
@@ -14822,7 +15057,7 @@ var Body = class {
 		let rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
 		const any = this.db.prepare("SELECT COUNT(*) AS n FROM exercises").get().n;
 		if (rows.length === 0 && !any) {
-			for (const ex of DEFAULT_EXERCISES$1) this.saveExercise(ex);
+			for (const ex of DEFAULT_EXERCISES) this.saveExercise(ex);
 			rows = this.db.prepare("SELECT id, name, unit, target, category, sort, archived FROM exercises WHERE archived = 0 ORDER BY sort, name").all();
 		}
 		return rows.map((r) => ({
@@ -24084,10 +24319,16 @@ function readSport() {
 		return null;
 	}
 }
-/** Changes Sport Track's data and tells its open page to reload. */
-function updateSport(fn) {
+var logger = null;
+/**
+* Changes Sport Track's data and tells its open page to reload. Water and reps
+* it adds or takes back are logged (`source`: where, e.g. 'island'); `log: false`
+* when the change already came from the log.
+*/
+function updateSport(fn, opts = {}) {
 	const s = readSport();
 	if (!s) return null;
+	const before = JSON.parse(JSON.stringify(s));
 	fn(s);
 	try {
 		localStorage.setItem(KEY$1, JSON.stringify(s));
@@ -24095,7 +24336,23 @@ function updateSport(fn) {
 		return null;
 	}
 	if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-sport-changed"));
+	const changes = opts.log === false || !logger ? [] : numberDeltas(before, s);
+	if (changes.length) logShared(changes, opts.source ?? "");
 	return s;
+}
+/** Sends changes to the log, then shows the log's sums here. */
+async function logShared(changes, source) {
+	if (!logger || !changes.length) return null;
+	const shared = await logger(changes, source).catch(() => null);
+	if (shared) applyShared(shared);
+	return shared;
+}
+/** Today's water and reps from the shared copy (the log's sums) into this device's copy, without logging them again. */
+function applyShared(shared) {
+	const day = sportDay();
+	if (!shared || String(shared.lastDate ?? "") !== day) return;
+	const nums = sportNumbers(shared);
+	updateSport((d) => void Object.assign(d, withTotals(d, day, nums)), { log: false });
 }
 /** The exercise a name like "pushups", "Push-ups" or "ex_situps" means. */
 function findExercise(s, name) {
@@ -24276,9 +24533,14 @@ function missTwiceLine(items) {
 */
 function waterToday(db, s, now = /* @__PURE__ */ new Date()) {
 	const sport = json$1(db, "sport_tracker_json")?.data;
-	const w = sport ? sharedView(sport, sportToday(now)).water : {
+	const day = sportToday(now);
+	const view = sport ? sharedView(sport, day).water : {
 		ml: 0,
 		target: WATER_TARGET_ML
+	};
+	const w = {
+		ml: bodyTotals(db, day, sport)["water"] ?? view.ml,
+		target: view.target
 	};
 	try {
 		const b = s.body.state(now);
@@ -26646,15 +26908,9 @@ var CALLBACKS = [
 				const svc = services.services(db);
 				const day = sportToday();
 				let st = sportState(db) ?? defaultSport(day);
-				const save = (x) => writeSetting(db, "sport_tracker_json", {
-					savedAt: Date.now(),
-					data: x
-				});
+				const save = (x) => st = saveSport(db, x, "telegram", { id: `tg-${key}` });
 				if (data.startsWith("wa|")) {
-					if (!show) {
-						st = addWater(st, Number(data.slice(3)) || 0, day);
-						save(st);
-					}
+					if (!show) save(addWater(st, Number(data.slice(3)) || 0, day));
 					return {
 						...waterCard(st, day, waterToday(db, svc).target),
 						toast: show ? "" : `${Number(data.slice(3)) > 0 ? "+" : ""}${data.slice(3)} ml`
@@ -26664,8 +26920,7 @@ var CALLBACKS = [
 				let toast = "";
 				if (!show) {
 					const was = allDone(sportForDay(st, day));
-					st = applyWorkoutTap(st, day, data.slice(3));
-					save(st);
+					save(applyWorkoutTap(st, day, data.slice(3)));
 					toast = "Logged";
 					if (!was && allDone(st)) {
 						const list = activeExercises(st);
@@ -27888,18 +28143,12 @@ async function undoReply(c, at, index) {
 						const day = sportToday();
 						if (op.day && op.day !== day) return `⚠️ That was logged on ${op.day}; that day is closed, so today stays as it is`;
 						if (op.k === "water") {
-							writeSetting(db, "sport_tracker_json", {
-								savedAt: Date.now(),
-								data: addWater(st, op.ml, day)
-							});
+							saveSport(db, addWater(st, op.ml, day), "telegram", { id: `undo-${at}-${k}` });
 							return `↩ Water ${op.ml > 0 ? "+" : ""}${op.ml} ml`;
 						}
 						const r = addReps(st, op.ex, op.amount, day);
 						if (!r) return "⚠️ Exercise not found";
-						writeSetting(db, "sport_tracker_json", {
-							savedAt: Date.now(),
-							data: r.st
-						});
+						saveSport(db, r.st, "telegram", { id: `undo-${at}-${k}` });
 						let gone = "";
 						if (op.workout) try {
 							svc.body.takeBackSet(op.workout, r.exercise.name, -op.amount);
@@ -28403,12 +28652,8 @@ function addRepsToSportTrack(name, amount) {
 function addRepsInDb(db, name, amount) {
 	const st = sportState(db);
 	if (!st || !Array.isArray(st.exercises)) return null;
-	const r = addReps(st, name, amount, sportToday());
+	const r = logReps(db, name, amount, "telegram");
 	if (!r) return null;
-	writeSetting(db, "sport_tracker_json", {
-		savedAt: Date.now(),
-		data: r.st
-	});
 	return {
 		done: r.exercise.done,
 		target: r.exercise.target
@@ -28647,12 +28892,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const ml = text.startsWith("/") ? null : parseWater(text);
 		if (ml) {
 			const day = sportToday();
-			const next = addWater(sportState(s.db) ?? defaultSport(day), ml, day);
-			writeSetting(s.db, "sport_tracker_json", {
-				savedAt: Date.now(),
-				data: next
-			});
-			const c = waterCard(next, day, waterToday(s.db, s).target);
+			const st = sportState(s.db) ?? defaultSport(day);
+			const c = waterCard(saveSport(s.db, addWater(st, ml, day), "telegram"), day, waterToday(s.db, s).target);
 			return {
 				reply: `💧 <b>${ml > 0 ? "+" : ""}${ml} ml</b> logged.\n\n${c.text}`,
 				keyboard: c.keyboard
@@ -29915,10 +30156,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							const st = sportState(db) ?? defaultSport(day);
 							const r = a.kind === "exercise" ? setExercise(st, day, a.name, a.target, a.unit) : removeExercise(st, day, a.name);
 							if (!r.line) return a.kind === "exercise" ? `⚠️ Give "${a.name}" a daily target` : `⚠️ No exercise "${a.name}" on your list`;
-							writeSetting(db, "sport_tracker_json", {
-								savedAt: Date.now(),
-								data: r.st
-							});
+							saveSport(db, r.st, "ben");
 							return r.line;
 						});
 						done.push(line);
@@ -29953,13 +30191,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						const line = await mirror.write((db) => {
 							const day = sportToday();
 							const st = sportState(db) ?? defaultSport(day);
-							const save = (next) => writeSetting(db, "sport_tracker_json", {
-								savedAt: Date.now(),
-								data: next
-							});
+							const save = (next) => saveSport(db, next, "ben");
 							if (a.kind === "water") {
-								const next = addWater(st, a.ml, day);
-								save(next);
+								const next = save(addWater(st, a.ml, day));
 								opNow = {
 									k: "water",
 									ml: -a.ml,
@@ -38078,7 +38312,7 @@ function bodyFacts(db, svc, today, now) {
 	} catch {}
 	let sport = null;
 	try {
-		sport = readSetting(db, "sport_tracker_json")?.data ?? null;
+		sport = sportNow(db);
 	} catch {
 		sport = null;
 	}
@@ -38119,7 +38353,7 @@ async function rhythmTick(env, now, send) {
 		const sl = svc.sleep;
 		let sport = null;
 		try {
-			sport = readSetting(db, "sport_tracker_json")?.data ?? null;
+			sport = sportNow(db);
 		} catch {
 			sport = null;
 		}
@@ -38179,7 +38413,7 @@ async function rhythmTick(env, now, send) {
 		const day = sportToday(now);
 		const card = workoutCard(await mirror.read((db) => {
 			try {
-				return readSetting(db, "sport_tracker_json")?.data ?? null;
+				return sportNow(db);
 			} catch {
 				return null;
 			}
@@ -38358,15 +38592,13 @@ async function sportShared(env, body) {
 	const today = sportToday();
 	const read = (db) => {
 		try {
-			return readSetting(db, "sport_tracker_json")?.data ?? null;
+			return sportNow(db);
 		} catch {
 			return null;
 		}
 	};
-	const save = (db, st) => writeSetting(db, "sport_tracker_json", {
-		savedAt: Date.now(),
-		data: st
-	});
+	const from = body?.source === "sporty" ? "sporty" : "automation";
+	const save = (db, st) => saveSport(db, st, from, { id: typeof body?.id === "string" && body.id ? `api-${body.id.slice(0, 40)}` : void 0 });
 	const op = String(body?.op ?? "state");
 	if (op === "poll") {
 		const r = await mirror.read((db) => pollSporty(parseJson(getSetting(db, SPORTY_STATUS)), parseJson(getSetting(db, SPORTY_REQUEST)), body, /* @__PURE__ */ new Date()));
@@ -38401,9 +38633,7 @@ async function sportShared(env, body) {
 		return {
 			ok: true,
 			state: await mirror.write((db) => {
-				const st = addWater(read(db), ml, today);
-				save(db, st);
-				return sharedView(st, today);
+				return sharedView(save(db, addWater(read(db), ml, today)), today);
 			})
 		};
 	}
@@ -38419,11 +38649,11 @@ async function sportShared(env, body) {
 				ok: false,
 				error: `No exercise called "${body.name}" in Sport Track`
 			};
-			save(db, r.st);
+			const st = save(db, r.st);
 			return {
 				ok: true,
 				exercise: r.exercise,
-				state: sharedView(r.st, today)
+				state: sharedView(st, today)
 			};
 		});
 	}

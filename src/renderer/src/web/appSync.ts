@@ -26,6 +26,12 @@ export interface AppSyncSpec {
   skip?: (store: Storage) => boolean
   /** Lists where a deletion must stick: an item gone on either side since the last sync stays gone. */
   lists?: { path: string; key: (x: any) => string }[]
+  /**
+   * The merged data checked against the database before it is kept (Sport
+   * Track: today's water and reps always come from the one log, body_log).
+   * `canWrite`: inside a change (may add rows), else a read.
+   */
+  finalize?: (db: any, merged: any, canWrite: boolean) => any
 }
 
 const parse = (raw: string | null): any => {
@@ -80,27 +86,43 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     const localRaw = get(spec.localKey)
     const localShared = sharedOf(localRaw)
     const synced = get(SYNCED)
-    const localChanged = localShared != null && localShared !== synced
+    let localChanged = localShared != null && localShared !== synced
+    const realEdit = localChanged
     const remoteNow = await mirror.read((db) => remoteOf(db))
     const remoteRaw = remoteNow?.data ? JSON.stringify(remoteNow.data) : null
     const remoteChanged = remoteRaw != null && remoteRaw !== synced
-    if (!localChanged && !remoteChanged) return
+    // The copy here says something the database's log doesn't (Sport Track's
+    // water and reps): put it right even when nothing else changed.
+    const drifted = !localChanged && !remoteChanged && !!spec.finalize && localRaw != null && (await mirror.read((db) => JSON.stringify(spec.finalize!(db, parse(localRaw), false)) !== localRaw))
+    if (!localChanged && !remoteChanged && !drifted) return
 
     let merged: any
+    if (!localChanged && spec.finalize) {
+      // Only the other side changed, but the database's copy may be off from the log: check first.
+      const mine = parse(localRaw)
+      const plain = mine ? pruneDeleted(spec, spec.merge(mine, remoteNow?.data ?? mine, false), parse(synced), share(mine), remoteNow?.data ?? mine) : fromShared(remoteNow!.data)
+      const fixed = await mirror.read((db) => spec.finalize!(db, plain, false))
+      localChanged = remoteRaw == null || JSON.stringify(share(fixed)) !== remoteRaw
+      merged = fixed
+    }
     if (localChanged) {
-      const edited = Number(get(EDITED)) || Date.now()
+      // Not edited here (only the log check asked for a write): the other side is the newer one.
+      const edited = realEdit ? Number(get(EDITED)) || Date.now() : -1
       merged = await mirror.write((db) => {
         // Read again inside the change: another device may have just saved.
         const remote = remoteOf(db)
-        const mine = parse(localRaw)
-        const out = remote?.data && JSON.stringify(remote.data) !== synced ? pruneDeleted(spec, spec.merge(mine, remote.data, edited >= (remote.savedAt || 0)), parse(synced), share(mine), remote.data) : mine
-        setSetting(db as any, spec.setting, JSON.stringify({ savedAt: Date.now(), data: share(out) }))
+        const mine = parse(localRaw) ?? (remote?.data ? fromShared(remote.data) : null)
+        if (!mine) return null
+        let out = remote?.data && JSON.stringify(remote.data) !== synced ? pruneDeleted(spec, spec.merge(mine, remote.data, edited >= (remote.savedAt || 0)), parse(synced), share(mine), remote.data) : mine
+        if (spec.finalize) out = spec.finalize(db, out, true)
+        if (!remote?.data || JSON.stringify(share(out)) !== JSON.stringify(remote.data)) setSetting(db as any, spec.setting, JSON.stringify({ savedAt: Date.now(), data: share(out) }))
         return out
       })
-    } else {
+    } else if (!spec.finalize) {
       const mine = parse(localRaw)
       merged = mine ? pruneDeleted(spec, spec.merge(mine, remoteNow!.data, false), parse(synced), share(mine), remoteNow!.data) : fromShared(remoteNow!.data)
     }
+    if (merged == null) return
     // You changed the app again while this sync was waiting (Y4): never overwrite
     // that newer edit; the next run merges it.
     if (get(spec.localKey) !== localRaw) {

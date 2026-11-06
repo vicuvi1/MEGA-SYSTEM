@@ -11,6 +11,7 @@ import { urgeEvents } from './disciplinePatterns'
 import { EXPERIMENTS, measureExperiment, pickExperiment, type ExpMetric, type ExpResult, type ExpState, type Experiment, type Series } from '@core/experiment'
 import { nightMinutes } from '@core/readiness'
 import { getSetting, setSetting, writeSetting, readSetting } from '../../../main/settings'
+import { saveSport } from '../../../main/bodyLog'
 import { addDays, calendarDay } from '@core/dates'
 import { financeSpending } from '@core/progress'
 import { addExcuse, addMood, energyMap, excuseCallout, excuseCounts, excuseLine, hoursText, moodDue, moodLine, profileCorrections, profileNote, PROFILE_NOTE, weeklyPatterns, classifyExcuse, type EnergyMap, type Excuse, type ExcuseCount, type MoodEntry, type MoodSlot, type Pattern } from '@core/benKnows'
@@ -399,8 +400,7 @@ export function deskChange(s: Services, o: DeskOp, now = new Date()): string {
     if (!(ml > 0 && ml <= WATER_MAX_ML)) throw new Error(`Water: between 1 and ${WATER_MAX_ML} ml`)
     const day = sportToday(now)
     const next = addWater(sportState(db) ?? defaultSport(day), ml, day)
-    writeSetting(db, 'sport_tracker_json', { savedAt: Date.now(), data: next })
-    const v = sharedView(next, day)
+    const v = sharedView(saveSport(db, next, 'ben', { now }), day)
     return `💧 +${ml} ml · ${(v.water.ml / 1000).toFixed(1)} of ${(v.water.target / 1000).toFixed(1)} L today`
   }
   if (o.op === 'stake') {

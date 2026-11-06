@@ -293,6 +293,18 @@
 .reps-list li.done .reps-stat { color: var(--accent-text); }
 .reps-btns { display: flex; gap: 6px; }
 .reps-btns .chip { min-height: 24px; padding: 2px 9px; }
+/* Water today: what was logged, from where (WaterHistory.tsx). */
+.water-history { display: flex; flex-direction: column; gap: 6px; padding: var(--s-2, 8px) 0; }
+.water-history .wh-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.water-history .wh-head small { color: var(--muted, inherit); }
+.water-history ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
+.water-history li { display: grid; grid-template-columns: 3.4em 5em 1fr auto; align-items: center; gap: 8px; font-size: 0.9em; }
+.water-history li.removed .wh-ml, .water-history li.removed .wh-src, .water-history li.removed .wh-time { text-decoration: line-through; opacity: 0.55; }
+.water-history .wh-time { font-variant-numeric: tabular-nums; color: var(--muted, inherit); }
+.water-history .wh-ml { font-variant-numeric: tabular-nums; font-weight: 600; }
+.water-history .wh-src { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.water-history .chip { min-height: 22px; padding: 1px 8px; }
+.water-history .linkish { background: none; border: 0; padding: 0; color: var(--accent-text, inherit); text-decoration: underline; cursor: pointer; font: inherit; }
 
 /* Side column: timeline and this week */
 .card.tl .tl-list { width: 100%; margin-top: 0; }

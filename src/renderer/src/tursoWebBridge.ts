@@ -18,7 +18,7 @@ import { financeSummary } from '@core/moneyDays'
 import { createWebAuth } from './web/webAuth'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
-import { sportDay } from './sportTrack'
+import { setSportLogger, sportDay } from './sportTrack'
 import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
@@ -33,12 +33,12 @@ const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-bod
 import type { CleanChange } from '@core/todoistClean'
 import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
 import { editBlock, memoryView, pinFact, undoMemory } from './web/memoryStore'
-import { financeStateFrom, sportState, addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
+import { financeStateFrom, addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
 import { deskChange, deskView, type DeskOp } from './web/benDesk'
 import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
-import { coachStatus } from './web/coachStatus'
+import { coachStatus, waterToday } from './web/coachStatus'
 import { backupTables, redactRows, restoreStatements } from '@core/backupPlan'
 import { breaker, retryDelay } from '@core/retry'
 import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
@@ -49,8 +49,11 @@ import { addReminder, REMINDERS, type Reminder } from '@core/coachKit'
 import { reminderDone, reminderSnooze } from '@core/healthyDay'
 import { comebackPlan } from '@core/comeback'
 import { neutral } from '@core/stealth'
-import { addWater, sharedView, sportToday } from '@core/sportShared'
-import { defaultSport } from '@core/sportCards'
+import { sportToday } from '@core/sportShared'
+import { WATER_KIND, deviceSource } from '@core/bodyLog'
+import { logChanges, logEntries, logWater, repairFromLog, toggleEntry } from '../../main/bodyLog'
+/** Where a glass or a set logged on this device came from (the water history shows it). */
+const thisDevice = () => deviceSource(typeof navigator !== 'undefined' ? navigator : undefined, typeof window !== 'undefined' && !!(window as any).desktop)
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
 
 const sportyViewOf = (db: any) => sportyView(parseJson<SportyStatus>(getSetting(db, SPORTY_STATUS)), parseJson<{ at: string }>(getSetting(db, 'sport_sync_seen')), parseJson<SportyRequest>(getSetting(db, SPORTY_REQUEST)), new Date())
@@ -268,6 +271,8 @@ export function createTursoWebBridge(): Bridge {
     return list
   })
   const syncAll = () => syncsP.then((list) => Promise.all(list.map((s) => s.sync())))
+  /** Sport Track's copy here takes the log's new sums (water or reps logged by the app, a deep link, the history list). */
+  const sportResync = () => void syncsP.then((list) => list.find((x) => x.spec === SPORT)?.sync()).catch(() => {})
   if (typeof window !== 'undefined') {
     // The app saved (its page is a same-site frame, so this page hears it).
     window.addEventListener('storage', (e) => syncsP.then((list) => list.find((s) => s.spec.localKey === e.key)?.soon()))
@@ -725,13 +730,23 @@ export function createTursoWebBridge(): Bridge {
           const e = loadLog(s.db).find((x) => x.role === 'coach' && x.at === at)
           addFeedback(s.db, { at, kind, text: e?.text ?? '' })
         }),
-      water: async (ml: number) =>
-        (await svcP).write((s) => {
-          const day = sportToday()
-          const next = addWater(sportState(s.db) ?? defaultSport(day), ml, day)
-          writeSetting(s.db, 'sport_tracker_json', { savedAt: Date.now(), data: next })
-          return sharedView(next, day).water
-        }),
+      // The one log (body_log): a row with its own id, then the shared copy from the log's sum.
+      water: async (ml: number, opts?: { source?: string; id?: string }) => {
+        const w = await (await svcP).write((s) => ({ ml: logWater(s.db as any, ml, opts?.source || thisDevice(), { id: opts?.id }).ml, target: waterToday(s.db, s).target }))
+        sportResync()
+        return w
+      },
+      bodyLog: {
+        log: async (changes: { kind: string; amount: number; id?: string }[], source: string) =>
+          (await svcP).write((s) => logChanges(s.db as any, changes, source || thisDevice())),
+        entries: async (kind?: string, day?: string) => (await svcP).read((s) => logEntries(s.db as any, day || sportToday(), kind || WATER_KIND)),
+        toggle: async (id: string) => {
+          const r = await (await svcP).write((s) => toggleEntry(s.db as any, id, thisDevice()))
+          sportResync()
+          return r
+        },
+        repair: async () => (await svcP).write((s) => repairFromLog(s.db as any))
+      },
       // HD: your reminders (the same list Ben's ⏰ uses): read, add, Done, Snooze. The server sends each to Telegram once.
       reminders: async () =>
         (await svcP).read((s) => {
@@ -1705,6 +1720,28 @@ export function createTursoWebBridge(): Bridge {
       pollOnce: async () => (await botsP).pollOnce()
     }
   } as Bridge
+  // The one water + reps log (body_log): this device's Sport Track copy
+  // (island, Today, the bots here) logs what it adds or takes back through it.
+  setSportLogger((changes, source) => bridge.coach!.bodyLog!.log(changes, source || thisDevice()))
+  // One-time check on each start: a copy that drifted from the log (today's
+  // water and reps, the last 7 days' numbers) is put right, and what changed is
+  // written to the console and kept on this device (numbers only).
+  if (typeof window !== 'undefined')
+    void syncsP
+      .then(async (list) => {
+        const changes = (await bridge.coach!.bodyLog!.repair()) ?? []
+        await list.find((x) => x.spec === SPORT)?.sync()
+        if (changes.length) {
+          console.info('[Life System] water/reps put right from the log:', changes)
+          try {
+            store?.setItem('life_body_repair', JSON.stringify({ at: new Date().toISOString(), changes: changes.slice(0, 40) }))
+          } catch {
+            /* private window */
+          }
+          window.dispatchEvent(new CustomEvent('life-water-changed'))
+        }
+      })
+      .catch(() => {})
   return bridge
 }
 

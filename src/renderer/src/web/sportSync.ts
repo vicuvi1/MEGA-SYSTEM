@@ -1,10 +1,11 @@
 // Sport Track keeps its data in this browser (localStorage). This copies it
 // to Turso (settings.sport_tracker_json) and back, so the phone and the PC
 // see the same reps, water and workout history. When both changed, they are
-// merged: history from both, and for the same day the higher rep counts,
-// unless one side corrected it down (fixedAt: −250 ml, an undo) after the other did (N1).
+// merged: history from both; today's water and reps come from the one log
+// (body_log, see main/bodyLog.ts), never from the higher of two copies.
 import { createAppSync, type AppSyncSpec } from './appSync'
 import type { Mirror } from './mirror'
+import { sportFromLog } from '../../../main/bodyLog'
 
 export const SPORT_KEY = 'life_sport_tracker_v1'
 const SETTING = 'sport_tracker_json'
@@ -77,6 +78,9 @@ export const SPORT: AppSyncSpec = {
   setting: SETTING,
   event: 'life-sport-changed',
   merge: mergeSport,
+  // Today's water and reps are never decided by comparing two copies: they
+  // are the sum of the one log (body_log), so every device shows the same.
+  finalize: (db, merged, canWrite) => sportFromLog(db, merged, canWrite),
   lists: [{ path: 'history', key: (h) => JSON.stringify([h?.id, h?.title]) }]
 }
 

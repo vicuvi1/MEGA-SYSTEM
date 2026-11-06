@@ -7,6 +7,7 @@ import { play } from './soundKit'
 import { readSport, updateSport } from './sportTrack'
 import { WATER_TARGET_ML } from '@core/defaults'
 import { celebrate } from './fx'
+import { WATER_KIND, type LogEntry } from '@core/bodyLog'
 
 export interface Water { ml: number; target: number }
 
@@ -23,18 +24,50 @@ export async function readWater(): Promise<Water> {
   return { ml: Math.max(st.today.waterMl, 0), target: st.today.waterTarget || l.target }
 }
 
-/** Adds (or with a negative number, takes back) water in the shared log. */
-export async function addWater(ml: number): Promise<Water> {
-  const r = life.coach?.water ? await life.coach.water(ml) : null
+/**
+ * Adds (or with a negative number, takes back) water: one row in the shared
+ * log (body_log). `source`: where it came from (island, sport…; this device
+ * by default); `id`: a fixed row id, so the same tap sent twice counts once.
+ */
+export async function addWater(ml: number, opts: { source?: string; id?: string } = {}): Promise<Water> {
+  const r = life.coach?.water ? await life.coach.water(ml, opts) : null
   if (ml > 0) celebrate(null, 'water')
+  // This device's copy shows the log's sum (never adds on its own: no second counter).
   const data = updateSport((d) => {
     if (d.water) d.water.currentMl = Math.max(0, r ? r.ml : (Number(d.water.currentMl) || 0) + ml)
-    // A take-back is marked so the sync with other devices keeps it (N1).
-    if (d.water && ml < 0) d.water.fixedAt = Date.now()
-  })
+  }, { log: !r, source: opts.source })
+  changed()
+  return r ?? { ml: Number((data as any)?.water?.currentMl) || 0, target: Number((data as any)?.water?.targetMl) || WATER_TARGET_ML }
+}
+
+function changed(): void {
   window.dispatchEvent(new CustomEvent('life-body-changed'))
   window.dispatchEvent(new CustomEvent('life-water-changed'))
-  return r ?? { ml: Number((data as any)?.water?.currentMl) || 0, target: Number((data as any)?.water?.targetMl) || WATER_TARGET_ML }
+}
+
+/** Today's water entries (time, amount, from where), oldest first. */
+export async function waterEntries(): Promise<LogEntry[]> {
+  return (await life.coach?.bodyLog?.entries(WATER_KIND).catch(() => null)) ?? []
+}
+
+/** Removes a wrong water entry, or brings a removed one back. True when it went through. */
+export async function toggleWaterEntry(id: string): Promise<{ removed: boolean } | null> {
+  const r = (await life.coach?.bodyLog?.toggle(id).catch(() => null)) ?? null
+  if (!r) return null
+  const w = await readWater()
+  updateSport((d) => {
+    if (d.water) d.water.currentMl = w.ml
+  }, { log: false })
+  changed()
+  return r
+}
+
+/** Removes one entry (the island's Undo); false when it was already removed or isn't there. */
+export async function removeWaterEntry(id: string): Promise<boolean> {
+  const list = await waterEntries()
+  const e = list.find((x) => x.id === id)
+  if (!e || e.removed) return false
+  return !!(await toggleWaterEntry(id))?.removed
 }
 
 export function useWater(): Water & { add: (ml: number) => Promise<Water>; set: (ml: number) => Promise<Water> } {

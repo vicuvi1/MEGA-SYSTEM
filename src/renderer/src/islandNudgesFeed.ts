@@ -288,7 +288,7 @@ async function logMove(op: Extract<NudgeOp, { op: 'move' }>, tapId: string | und
       ex.doneToday = (Number(ex.doneToday) || 0) + n
       id = String(ex.id)
     }
-  })
+  }, { source: 'island' })
   const w = await life.body.logWorkout({ title: `${op.name} (+${n}) · movement break`, items: [{ exerciseId: id, name: op.name, amount: n, unit: 'reps' as any }], note: 'From the island' })
   const logId = `mv${now.toString(36)}`
   // Points: only for this confirmed break, at most the rule's daily cap.
@@ -316,7 +316,7 @@ async function undoLog(logId: string): Promise<string> {
   updateSport((d) => {
     const ex = findExercise(d, log.ex) ?? findExercise(d, log.name)
     if (ex) ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) - log.n)
-  })
+  }, { source: 'island' })
   // Only that set leaves the day's workout (the rest of the day stays).
   if (log.workoutId != null && life.body.takeBackSet) await life.body.takeBackSet(log.workoutId, log.name, log.n).catch(() => {})
   if (log.ledgerId != null) await life.wallet.undo(log.ledgerId, 'Move break undone on the island').catch(() => {})
@@ -337,7 +337,7 @@ async function fixLog(logId: string, n: number): Promise<string> {
   updateSport((d) => {
     const ex = findExercise(d, log.ex) ?? findExercise(d, log.name)
     if (ex) ex.doneToday = Math.max(0, (Number(ex.doneToday) || 0) + r.delta)
-  })
+  }, { source: 'island' })
   // The workout gets the right number: the old set out, the real one in (no new points: the day's workout already counted).
   let workoutId = old.workoutId
   if (old.workoutId != null && life.body.takeBackSet) {
@@ -381,7 +381,7 @@ export async function nudgeAct(a: IslandAction, o: { moved: () => void }): Promi
       return fixLog(op.logId, op.n)
     case 'water': {
       lsPut(LAST_WATER, now)
-      await addWater(op.ml)
+      await addWater(op.ml, { source: 'island' })
       save(setLog(s, op.logId, { water: true }))
       return `💧 +${op.ml} ml too`
     }

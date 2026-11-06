@@ -20,6 +20,7 @@ import { deadlineRadar, whenText, type TodoTask } from '@core/todoist'
 import { financeSpending } from '@core/progress'
 import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
 import { canBeNow, isTentative, takesTime } from '@core/calResponse'
+import { sportNow } from '../../../main/bodyLog'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import type { Services } from './webServices'
 import { planGoal, planLine } from '@core/goalPlan'
@@ -553,9 +554,10 @@ export function saveMind(db: any, m: CoachMind): void {
 }
 
 /** Sport Track's shared state (water and reps), if it exists. */
+/** Today's Sport Track copy, with water and reps from the one log (body_log). */
 export function sportState(db: any): any | null {
   try {
-    return readSetting(db, 'sport_tracker_json')?.data ?? null
+    return sportNow(db)
   } catch {
     return null
   }
