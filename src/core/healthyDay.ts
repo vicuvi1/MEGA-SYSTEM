@@ -268,6 +268,21 @@ export function healthyView(h: HealthyDay, streak: number, bonusPaid: boolean): 
   return { score: h.score, met: h.met, parts: h.parts, streak, bonus: bonusPaid, line: bodyLine(h) }
 }
 
+/**
+ * The Healthy day card's headline. The count says how many of the four are
+ * complete; the percent is overall progress (partial water counts there), so
+ * "0 of 4" next to a partly filled ring no longer reads as a contradiction.
+ */
+export function healthyHeadline(v: Pick<HealthyView, 'met' | 'score' | 'bonus'>): string {
+  if (v.met >= 4) return v.bonus ? 'All four complete · +5 points' : 'All four complete'
+  return `${v.met} of 4 complete · ${v.score}% overall`
+}
+
+/** The ring's four segments (water, moves, breaks, sleep): each fills by its own progress, 0..1. */
+export function healthySegments(parts: Pick<HealthyPart, 'id' | 'pct' | 'done'>[]): { id: string; fill: number; done: boolean }[] {
+  return parts.slice(0, 4).map((p) => ({ id: p.id, fill: p.done ? 1 : Math.max(0, Math.min(1, Number.isFinite(p.pct) ? p.pct : 0)), done: p.done }))
+}
+
 /** The evening's "how did your body do today" line (plain words, real numbers). */
 export function bodyLine(h: HealthyDay): string {
   const [w, m, b, s] = h.parts

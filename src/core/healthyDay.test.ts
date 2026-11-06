@@ -7,6 +7,8 @@ import {
   govern,
   healthyBonus,
   healthyDay,
+  healthyHeadline,
+  healthySegments,
   healthyStreak,
   islandHasWater,
   lateAlert,
@@ -247,5 +249,23 @@ describe('reminders you set', () => {
   it('in quiet mode a reminder waits as a dot (never lost)', () => {
     expect(alertGate({ kind: 'remind', prefs: DEFAULT_ISLAND_PREFS, quiet: true, call: false, lastPeekAt: 0, now: at(18) })).toBe('silent')
     expect(alertGate({ kind: 'water', prefs: DEFAULT_ISLAND_PREFS, quiet: true, call: false, lastPeekAt: 0, now: at(18) })).toBe('drop')
+  })
+})
+
+describe('the Healthy day card says clearly what the ring shows', () => {
+  it('count = parts complete, percent = overall progress', () => {
+    expect(healthyHeadline({ met: 0, score: 20, bonus: false })).toBe('0 of 4 complete · 20% overall')
+    expect(healthyHeadline({ met: 4, score: 100, bonus: true })).toBe('All four complete · +5 points')
+    expect(healthyHeadline({ met: 4, score: 100, bonus: false })).toBe('All four complete')
+  })
+  it('one segment per part, filled by its own progress', () => {
+    const seg = healthySegments([
+      { id: 'water', pct: 0.48, done: false },
+      { id: 'move', pct: 0, done: false },
+      { id: 'breaks', pct: 1.4, done: false },
+      { id: 'sleep', pct: 0.2, done: true }
+    ])
+    expect(seg.map((x) => x.fill)).toEqual([0.48, 0, 1, 1])
+    expect(seg[3].done).toBe(true)
   })
 })

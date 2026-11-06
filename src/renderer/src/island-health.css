@@ -14,11 +14,15 @@
 .hd-card { display: grid; gap: 10px; padding: 12px 14px; border-radius: 16px; background: rgb(var(--ink) / 0.06); border: 1px solid rgb(var(--ink) / 0.08); }
 .hd-card.hd-all { background: linear-gradient(135deg, rgb(52 211 153 / 0.16), rgb(var(--ink) / 0.05)); border-color: rgb(52 211 153 / 0.35); }
 .hd-top { display: flex; align-items: center; gap: 12px; }
-.hd-score { display: inline-flex; align-items: baseline; justify-content: center; min-width: 52px; height: 52px; border-radius: 50%; border: 3px solid rgb(110 231 183 / 0.75); font-variant-numeric: tabular-nums; }
-.hd-low .hd-score { border-color: rgb(251 191 36 / 0.75); }
-.hd-all .hd-score { border-color: #34d399; }
-.hd-score b { font-size: 19px; line-height: 46px; }
-.hd-score small { font-size: 10px; color: rgb(var(--ink) / 0.6); }
+.hd-score { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--dw-hd-ring, 52px); height: var(--dw-hd-ring, 52px); font-variant-numeric: tabular-nums; }
+.hd-score svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hd-seg-bg, .hd-seg { fill: none; stroke-width: 4.5; stroke-linecap: round; }
+.hd-seg-bg { stroke: rgb(var(--ink) / 0.12); }
+.hd-seg { stroke: #6ee7b7; }
+.hd-low .hd-seg { stroke: #fbbf24; }
+.hd-seg.done, .hd-all .hd-seg { stroke: #34d399; }
+.hd-score b { position: relative; font-size: calc(var(--dw-hd-ring, 52px) * 0.36); line-height: 1; }
+.hd-score small { position: relative; font-size: calc(var(--dw-hd-ring, 52px) * 0.2); color: rgb(var(--ink) / 0.6); align-self: center; margin-top: 0.3em; }
 .hd-title { display: grid; gap: 2px; min-width: 0; }
 .hd-title b { font-size: 14px; }
 .hd-title small { font-size: 12px; color: rgb(var(--ink) / 0.66); }

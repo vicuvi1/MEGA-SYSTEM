@@ -112,7 +112,7 @@ export { isAltGrCombo }
 /** Which screen it lives on (IF2): the one you picked (or dropped it on), the main one, or it follows the mouse / the window you work in. */
 export type MonitorMode = 'fixed' | 'main' | 'mouse' | 'window'
 /** Where it was, for one set of screens (IP5). */
-export interface IslandLayout { place: Placement; pos: { cx: number; top: number; cy: number }; offset: { x: number; y: number }; displayId: number; size?: 'compact' | 'normal' | 'large' }
+export interface IslandLayout { place: Placement; pos: { cx: number; top: number; cy: number }; offset: { x: number; y: number }; displayId: number; size?: 'auto' | 'compact' | 'normal' | 'large' }
 
 /** The island's own settings that live only on this PC (Settings → Desktop island). */
 export interface IslandDeskPrefs {
@@ -159,7 +159,7 @@ export function cleanLayout(l: any): IslandLayout | null {
   if (!l || typeof l !== 'object' || !isPlacement(l.place)) return null
   return {
     place: l.place, pos: cleanPos(l.pos), offset: cleanOffset(l.offset), displayId: Number.isFinite(l.displayId) ? l.displayId : -1,
-    ...(['compact', 'normal', 'large'].includes(l.size) ? { size: l.size } : {})
+    ...(['auto', 'compact', 'normal', 'large'].includes(l.size) ? { size: l.size } : {})
   }
 }
 

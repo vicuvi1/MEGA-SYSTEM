@@ -28,7 +28,8 @@ export type IslandPlacement = Placement
 /** The app's colours, for the island's "Match the app" look (IP4). */
 export interface IslandTheme { dark: boolean; accent: string; accentText: string; surface: string; text: string }
 /** Your island settings as the app window sees them: plus where it is and which screen. */
-export type IslandAllPrefs = IslandPrefs & Partial<IslandDeskPrefs> & { place?: IslandPlacement; displayId?: number }
+/** `fit`: what the size is on the island's screen now (what Auto picked there). */
+export type IslandAllPrefs = IslandPrefs & Partial<IslandDeskPrefs> & { place?: IslandPlacement; displayId?: number; fit?: { pick: 'compact' | 'normal' | 'large'; auto: boolean } | null }
 
 export interface DesktopApi {
   load(): Promise<Uint8Array | null>

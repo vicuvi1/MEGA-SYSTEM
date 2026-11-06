@@ -3,7 +3,7 @@
 // and the daily bonus), the evening "how did your body do" line, Sunday's
 // weekly card and wind-down mode. The numbers come from the app window
 // (core/healthyDay.ts); nothing here keeps data of its own.
-import type { HealthyView, WeeklyHealth, WindDownMode } from '@core/healthyDay'
+import { healthyHeadline, healthySegments, type HealthyView, type WeeklyHealth, type WindDownMode } from '@core/healthyDay'
 import type { IslandAction } from '@core/islandModel'
 import { bedClock } from '@core/islandModel'
 import { barFill } from './motionKit'
@@ -20,7 +20,7 @@ export function HealthBadge({ health }: { health: HealthyView | null | undefined
   const c = 2 * Math.PI * r
   const left = health.parts.filter((p) => !p.done).map((p) => p.label.toLowerCase())
   return (
-    <span className={`hd-badge hd-${tone(health)}`} title={`Healthy day ${health.score}%${left.length ? ` · left: ${left.join(', ')}` : ' · all four done'}${health.streak > 1 ? ` · ${health.streak}-day streak` : ''}`} aria-label={`Healthy day ${health.met} of 4`}>
+    <span className={`hd-badge hd-${tone(health)}`} title={`Healthy day: ${health.met} of 4 complete, ${health.score}% overall${left.length ? ` · left: ${left.join(', ')}` : ' · all four done'}${health.streak > 1 ? ` · ${health.streak}-day streak` : ''}`} aria-label={`Healthy day ${health.met} of 4`}>
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
         <circle cx="9" cy="9" r={r} className="hd-ring-bg" />
         <circle cx="9" cy="9" r={r} className="hd-ring" strokeDasharray={c} strokeDashoffset={c * (1 - health.score / 100)} transform="rotate(-90 9 9)" />
@@ -30,20 +30,43 @@ export function HealthBadge({ health }: { health: HealthyView | null | undefined
   )
 }
 
-/** The Day page's Healthy day card: four parts, the score, the streak, the bonus, and the evening line. */
+/**
+ * The ring: four segments (water, moves, breaks, sleep), each filled by its
+ * own progress, so a half-done water shows as half a segment and the middle
+ * says how many of the four are complete.
+ */
+function HealthRing({ health }: { health: HealthyView }) {
+  const r = 21
+  const c = 2 * Math.PI * r
+  const gap = 9
+  const seg = c / 4 - gap
+  return (
+    <span className="hd-score" role="img" aria-label={`${health.met} of 4 complete, ${health.score}% overall`}>
+      <svg viewBox="0 0 52 52" aria-hidden>
+        {healthySegments(health.parts).map((p, i) => (
+          <g key={p.id} transform={`rotate(${-90 + i * 90 + (gap / c) * 180} 26 26)`}>
+            <circle cx="26" cy="26" r={r} className="hd-seg-bg" strokeDasharray={`${seg} ${c}`} />
+            {p.fill > 0 && <circle cx="26" cy="26" r={r} className={`hd-seg ${p.done ? 'done' : ''}`} strokeDasharray={`${seg * p.fill} ${c}`} />}
+          </g>
+        ))}
+      </svg>
+      <b>{health.met}</b>
+      <small>/4</small>
+    </span>
+  )
+}
+
+/** The Day page's Healthy day card: four parts, the count, overall progress, the streak, the bonus, and the evening line. */
 export function HealthCard({ health, evening }: { health: HealthyView; evening: boolean }) {
   const t = tone(health)
   return (
     <section className={`hd-card hd-${t}`} aria-label="Healthy day">
       <div className="hd-top">
-        <span className="hd-score">
-          <b>{health.score}</b>
-          <small>%</small>
-        </span>
+        <HealthRing health={health} />
         <div className="hd-title">
           <b>Healthy day</b>
           <small>
-            {health.met === 4 ? (health.bonus ? 'All four done · +5 points' : 'All four done') : `${health.met} of 4 · bonus at 4 of 4`}
+            {healthyHeadline(health)}
             {health.streak > 1 ? ` · 🔥 ${health.streak} days` : ''}
           </small>
         </div>

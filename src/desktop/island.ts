@@ -27,7 +27,8 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IslandPlacement } from '../shared/desktop'
-import { cleanIslandPrefs, ISLAND_ZOOM, quietUntil, type IslandPrefs } from '../core/islandModel'
+import { cleanIslandPrefs, quietUntil, type IslandPrefs } from '../core/islandModel'
+import { islandSizing, sizingKey, type IslandSizing } from '../core/islandFit'
 import { applyProfile, autoProfile } from '../core/islandProfiles'
 import { typingFade } from '../core/islandCommands'
 import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
@@ -93,6 +94,11 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       if (!p.place && p.top > 0) place = 'free'
       prefs = cleanIslandPrefs(p.prefs)
       desk = cleanDeskPrefs(p.desk)
+      // Fit the screen: the old default size ("Normal") becomes Auto once, so a laptop gets the compact island.
+      if (!p.sizeV) {
+        if (prefs.size === 'normal') prefs = { ...prefs, size: 'auto' }
+        desk = { ...desk, layouts: Object.fromEntries(Object.entries(desk.layouts).map(([k, l]) => [k, l.size === 'normal' ? { ...l, size: 'auto' as const } : l])) }
+      }
       if (Number.isFinite(p.v)) version = p.v
       // IC7: a right click now opens the menu for what the pill shows (it was the quiet menu by default).
       if (!p.clicksV && prefs.clicks.right === 'quiet') prefs = { ...prefs, clicks: { ...prefs.clicks, right: 'menu' } }
@@ -108,10 +114,15 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const layoutNow = (): IslandLayout => ({ place, pos: { ...pos }, offset: { ...desk.offset }, displayId: savedDisplay, size: prefs.size })
   const savePrefs = () => {
     if (desk.perScreen && screensKey) desk = { ...desk, layouts: rememberLayout(desk.layouts, screensKey, layoutNow()) }
-    try { writeFileSync(prefFile, JSON.stringify({ v: SHORTCUTS_VERSION, clicksV: 1, enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs, desk, theme: appTheme })) } catch { /* fine */ }
+    try { writeFileSync(prefFile, JSON.stringify({ v: SHORTCUTS_VERSION, clicksV: 1, sizeV: 1, enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs, desk, theme: appTheme })) } catch { /* fine */ }
   }
   if (needsSave) savePrefs()
-  const allPrefs = () => ({ ...prefs, ...desk, place, displayId: savedDisplay })
+  // What the size is on the island's screen right now (Settings shows what Auto picked).
+  const allPrefs = () => {
+    let fit: { pick: string; auto: boolean } | null = null
+    try { const z = sizing(); fit = { pick: z.pick, auto: z.auto } } catch { /* not yet */ }
+    return { ...prefs, ...desk, place, displayId: savedDisplay, fit }
+  }
 
   let win: BrowserWindow | null = null
   let last: unknown = null
@@ -172,15 +183,28 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     try { win.setIgnoreMouseEvents(ign, { forward: true }) } catch { /* fine */ }
     diag(ign ? 'pass' : 'take', ign ? `Clicks pass through (${why})` : `The island takes clicks (${why})`)
   }
+  /**
+   * The size on the island's screen (core/islandFit.ts): Auto fits the work
+   * area (a laptop gets the compact, shorter island), Compact / Normal / Large
+   * or a panel you resized by its corner win over it.
+   */
+  const sizing = (): IslandSizing => {
+    const d = display()
+    let resized: { w: number; h: number } | null = null
+    try { resized = desk.spots[screenKey(d)]?.size ?? null } catch { /* none */ }
+    return islandSizing({ pick: prefs.size, area: d.workArea, panelWidth: prefs.panelWidth, resized })
+  }
   /** The size setting, done by the page itself with CSS. */
-  const cssScale = () => ISLAND_ZOOM[prefs.size] ?? 1
+  const cssScale = () => sizing().zoom
   /** IF3: room for your widest view (the peek / panel width sliders). */
   // IN39: the panel's own size on this screen (drag its corner); while you drag it, room for the largest.
   let resizing = false
   const panelNow = (): { w: number; h: number } | null => {
     if (resizing) return PANEL_MAX
-    try { return desk.spots[screenKey(display())]?.size ?? null } catch { return null }
+    try { const z = sizing(); return { w: z.panelW, h: z.panelH } } catch { return null }
   }
+  /** The size sent last: a new screen or new scaling that changes it re-sends it (the page eases into it). */
+  let sentSizing = ''
   const base = () => {
     const p = panelNow()
     const b = islandBase(p ? { ...prefs, panelWidth: p.w } : prefs)
@@ -228,6 +252,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const y = home.y + (barOn ? 0 : fit.y)
     const b = win.getBounds()
     if (b.x !== x || b.y !== y || b.width !== width || b.height !== height) win.setBounds({ x, y, width, height })
+    // It moved to another screen, or the screen's size or scaling changed: the island fits it again.
+    if (ready && !resizing) {
+      try { if (sizingKey(sizing()) !== sentSizing) { diag('fit', `Island fits this screen: ${sizingKey(sizing())}`, true); sendPrefs() } } catch { /* fine */ }
+    }
   }
   /** H1: the visible parts changed (the panel opened or closed): slide just enough to show them. */
   const refit = () => {
@@ -247,7 +275,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const sendPrefs = () => {
     activeProfile = profileNow()
     const panel = panelNow()
-    win?.webContents.send('island:prefs', { ...applyProfile(prefs, activeProfile), ...desk, ...(panel && !resizing ? { panelWidth: panel.w, panelMaxH: panel.h } : {}), place, displayId: savedDisplay, scale: cssScale(), theme: appTheme, profile: activeProfile })
+    let fit: IslandSizing | null = null
+    try { fit = sizing() } catch { /* fine */ }
+    if (fit) sentSizing = sizingKey(fit)
+    win?.webContents.send('island:prefs', { ...applyProfile(prefs, activeProfile), ...desk, ...(panel && !resizing ? { panelWidth: panel.w, panelMaxH: panel.h } : {}), place, displayId: savedDisplay, scale: fit?.zoom ?? 1, density: fit?.density ?? 'normal', fit: fit ? { pick: fit.pick, auto: fit.auto } : null, theme: appTheme, profile: activeProfile })
   }
   /** The profile changed by itself (the time, the app in front): the island hears it. */
   const checkProfile = () => {
@@ -1098,6 +1129,14 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     }
     const before = allPrefs()
     prefs = cleanIslandPrefs({ ...prefs, ...p })
+    // A new size pick or panel width is the newest choice: it wins over the panel you resized on this screen.
+    if (prefs.size !== before.size || prefs.panelWidth !== before.panelWidth) {
+      try {
+        const key = screenKey(display())
+        const sp = desk.spots[key]
+        if (sp?.size) { const { size: _drop, ...rest } = sp; desk = { ...desk, spots: { ...desk.spots, [key]: rest } } }
+      } catch { /* fine */ }
+    }
     // Saved spots are the desktop's own: Settings can't overwrite them.
     desk = cleanDeskPrefs({ ...desk, ...p, layouts: desk.layouts, spots: desk.spots, hidden: desk.hidden })
     // IC13: Island debug runs 30 minutes at most.

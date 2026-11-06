@@ -1,0 +1,113 @@
+/* The opened island fits the screen (core/islandFit.ts). Two densities:
+   .dens-normal is the roomy look for monitors, .dens-compact the tighter one
+   for laptops (or when you pick Compact): smaller type, less padding, smaller
+   rings, chips and buttons, a shorter top bar. The tokens below are used by
+   islandWow.css, islandPages.css and island-health.css; the rest of this file
+   tightens the other pages (Music, Home, PC, System, AI usage, Goals,
+   widgets) only in Compact. Nothing here animates. */
+
+.di {
+  /* type */
+  --dw-title: 22px; --dw-num: 32px; --dw-unit: 14px; --dw-block: 16.5px; --dw-alert-title: 17px;
+  --dw-body: 14.5px; --dw-small: 13px; --dw-tiny: 12px; --dw-label: 12px; --dw-check: 15px;
+  /* spacing and cards */
+  --dw-side: 16px; --dw-gap: 12px; --dw-gap-s: 10px; --dw-card-pad: 14px 16px; --dw-card-r: 22px;
+  --dw-stat-pad: 14px 14px 12px; --dw-alert-pad: 16px 18px; --dw-check-pad: 9px 6px;
+  /* rings, tiles, chips, buttons, the Now / Next card */
+  --dw-ring: 36px; --dw-hd-ring: 52px; --dw-tile-h: 92px; --dw-tile-pad: 14px 12px 12px; --dw-tile-ico: 22px;
+  --dw-chip-pad: 8px 14px; --dw-chip-font: 13px; --dw-btn-pad: 9px 16px; --dw-btn-font: 14px; --dw-row-label: 56px;
+  /* the top bar */
+  --dw-top-h: 44px; --dw-tab-h: 30px; --dw-tab-pad: 12px; --dw-tab-font: 13px; --dw-face: 32px;
+}
+
+.di.dens-compact {
+  --dw-title: 17px; --dw-num: 25px; --dw-unit: 12px; --dw-block: 14px; --dw-alert-title: 14.5px;
+  --dw-body: 13px; --dw-small: 12px; --dw-tiny: 11px; --dw-label: 10.5px; --dw-check: 13px;
+  --dw-side: 12px; --dw-gap: 8px; --dw-gap-s: 6px; --dw-card-pad: 10px 12px; --dw-card-r: 16px;
+  --dw-stat-pad: 9px 10px 8px; --dw-alert-pad: 11px 12px; --dw-check-pad: 6px 4px;
+  --dw-ring: 28px; --dw-hd-ring: 40px; --dw-tile-h: 64px; --dw-tile-pad: 9px 9px 8px; --dw-tile-ico: 17px;
+  --dw-chip-pad: 5px 10px; --dw-chip-font: 12px; --dw-btn-pad: 6px 12px; --dw-btn-font: 12.5px; --dw-row-label: 40px;
+  --dw-top-h: 38px; --dw-tab-h: 26px; --dw-tab-pad: 9px; --dw-tab-font: 12px; --dw-face: 26px;
+}
+
+/* A new screen or scaling: the panel's size changes at once and the island's
+   shape springs to it (DesktopIsland measures the view and animates the clip),
+   so the change is smooth without animating width or height here. */
+
+/* The rings on the Day page's numbers. */
+.di .dw-ring { width: var(--dw-ring); height: var(--dw-ring); }
+
+/* ---- Compact only: the rest of the pages ---- */
+.di.dens-compact .ip-dots { padding: 2px; }
+.di.dens-compact .ip-ind { top: 2px; }
+.di.dens-compact .ip-dots button > span { font-size: 12.5px; }
+.di.dens-compact .di-top-acts { gap: 2px; }
+.di.dens-compact .di-top-acts .di-icon { font-size: 12px; }
+.di.dens-compact .di-top-acts .di-search-btn { font-size: 12px; padding: 0 6px 0 7px; }
+.di.dens-compact .di-alert-strip { font-size: 12.5px; padding: 5px 10px; margin: 0 0 4px; }
+.di.dens-compact .ip-empty { padding: 20px 12px; }
+.di.dens-compact .ip-empty b { font-size: 14px; }
+.di.dens-compact .ip-empty small { font-size: 12px; }
+
+/* Day: hero, power row, Now / Next, timer, checks. */
+.di.dens-compact .dw-hero { padding: 2px 0 0; }
+.di.dens-compact .dw-stat .dw-ring { margin-right: -2px; }
+.di.dens-compact .dw-power-edit { top: -24px; font-size: 11.5px; }
+.di.dens-compact .di-panel .di-plan { gap: 6px; }
+.di.dens-compact .di-panel .di-bar { height: 3px; margin-top: 3px; }
+.di.dens-compact .di-panel .di-check i { width: 18px; height: 18px; font-size: 10.5px; }
+.di.dens-compact .di-panel .di-chips { gap: 5px; }
+.di.dens-compact .di-panel .di-actions { gap: 5px; }
+.di.dens-compact .di-panel .di-edit-open, .di.dens-compact .di-panel .di-doing { font-size: 11.5px; }
+.di.dens-compact .di-panel .di-water > span { font-size: 15px; }
+.di.dens-compact .di-panel .di-clock { font-size: 26px; }
+.di.dens-compact .di-ev-btns { gap: 4px; }
+
+/* Healthy day, wind-down, nudges, goals, automations, tiles. */
+.di.dens-compact .hd-card { gap: 7px; padding: 9px 11px; border-radius: 14px; }
+.di.dens-compact .hd-top { gap: 9px; }
+.di.dens-compact .hd-title b { font-size: 13px; }
+.di.dens-compact .hd-title small { font-size: 11px; }
+.di.dens-compact .hd-parts { gap: 6px 10px; }
+.di.dens-compact .hd-parts li { grid-template-columns: 18px minmax(0, 1fr); column-gap: 6px; row-gap: 3px; }
+.di.dens-compact .hd-ico { width: 18px; height: 18px; font-size: 10px; }
+.di.dens-compact .hd-label b { font-size: 11.5px; }
+.di.dens-compact .hd-label small { font-size: 10.5px; }
+.di.dens-compact .hd-wind { padding: 9px 11px; gap: 9px; }
+.di.dens-compact .hd-moon { font-size: 19px; }
+.di.dens-compact .hd-wind-mid b { font-size: 13.5px; }
+
+/* Music. */
+.di.dens-compact .di-mu { gap: 8px; padding: 10px 12px 12px; min-height: 0; }
+.di.dens-compact .di-mu-hero { gap: 10px; }
+.di.dens-compact .di-mu-hero .mu-art { width: 84px !important; height: 84px !important; border-radius: 14px; }
+.di.dens-compact .di-mu-meta .t { font-size: 14px; }
+.di.dens-compact .di-mu-meta .a { font-size: 11.5px; }
+.di.dens-compact .di-mu .mu-ic { width: 30px; height: 30px; }
+.di.dens-compact .di-mu .mu-ic.big { width: 38px; height: 38px; }
+.di.dens-compact .di-mu .mu-chip { height: 24px; padding: 0 9px; font-size: 11px; }
+.di.dens-compact .di-mu .mu-grid { gap: 6px; }
+.di.dens-compact .di-mu .mu-tile b { font-size: 11.5px; }
+.di.dens-compact .di-mu .vb { gap: 7px; }
+.di.dens-compact .di-mu .vb-grid { gap: 6px; }
+.di.dens-compact .di-mu .vb-icon { font-size: 20px; }
+.di.dens-compact .di-mu .vb-now { padding: 6px 10px 6px 6px; gap: 9px; }
+.di.dens-compact .di-mu .vb-now-t b { font-size: 12.5px; }
+.di.dens-compact .di-mu .vb-now-t small { font-size: 11px; }
+.di.dens-compact .di-mu .ysc-cta { padding: 7px 10px; font-size: 12px; }
+
+/* System and AI usage (already small: tighter cards and numbers). */
+.di.dens-compact .sm-page { gap: 6px; }
+.di.dens-compact .sm-card { padding: 8px 10px; gap: 4px; border-radius: 12px; }
+.di.dens-compact .sm-big { font-size: 19px; }
+.di.dens-compact .sm-num { font-size: 15px; }
+.di.dens-compact .sm-tiles { gap: 6px; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+
+/* Goals and widgets (Home, PC, Fun). */
+.di.dens-compact .ig-list { gap: 6px; }
+.di.dens-compact .ig-row { gap: 8px; padding: 6px 8px; border-radius: 12px; }
+.di.dens-compact .ig-mid b { font-size: 12.5px; }
+.di.dens-compact .ig-ring { width: 34px; height: 34px; }
+.di.dens-compact .ig-quick button { height: 24px; min-width: 30px; font-size: 11px; }
+.di.dens-compact .wg-grid { grid-auto-rows: 74px; gap: 6px; }
+.di.dens-compact .wf { border-radius: 12px; }

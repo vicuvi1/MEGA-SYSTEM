@@ -48,6 +48,8 @@ import { lookClasses } from '@core/islandTiles'
 import './island.css'
 import './island-motion.css'
 import './island-move.css'
+import './island-fit.css'
+import { islandSizing, type IslandDensity } from '@core/islandFit'
 import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
 import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
@@ -354,6 +356,8 @@ export function DesktopIsland() {
   const look = useIslandLook(s)
   // The size setting: the desktop sends a scale and the page scales itself (its zoom stays locked).
   const [scale, setScale] = useState(1)
+  // Fits the screen (core/islandFit.ts): the desktop says Compact or Normal for the screen the island is on.
+  const [sentDensity, setSentDensity] = useState<IslandDensity | null>(null)
   // IP4: the app's colours, for the "Match the app" look.
   const [theme, setTheme] = useState<IslandTheme | null>(null)
   const prefsRef = useRef(prefs)
@@ -476,6 +480,8 @@ export function DesktopIsland() {
       // An older desktop may not send the newer settings: they get their defaults.
       setPrefs({ ...p, ...cleanIslandPrefs(p) })
       setScale(Number.isFinite(p.scale) && p.scale! > 0 ? p.scale! : ISLAND_ZOOM[p.size] ?? 1)
+      const dens = (p as { density?: unknown }).density
+      setSentDensity(dens === 'compact' || dens === 'normal' ? dens : null)
       if (p.theme !== undefined) setTheme(p.theme ?? null)
     })
     desk()?.onIslandToggle?.(() => {
@@ -2389,6 +2395,12 @@ export function DesktopIsland() {
     return finalShapeRect({ anchor, ax: anchor === 'left' ? b.left : anchor === 'right' ? b.right : b.left + b.width / 2, top: sh.getBoundingClientRect().top, w: prefs.peekWidth * scale, h })
   }
   const benUnread = s.ben.unread > 0 && !hushed && !s.locked
+  // No desktop size (the website preview, an older desktop): fit the screen the page is on.
+  const sentMaxH = (prefs as { panelMaxH?: number }).panelMaxH
+  const localFit = islandSizing({ pick: prefs.size, area: { width: window.screen?.availWidth, height: window.screen?.availHeight }, panelWidth: prefs.panelWidth })
+  const density: IslandDensity = sentDensity ?? localFit.density
+  const panelW = sentMaxH ? prefs.panelWidth : localFit.panelW
+  const panelMaxH = sentMaxH || localFit.panelH
   const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
   const edgeOk = !barNow && ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old && !showMoment
   // IM2: while a timer runs the whole outline fills (with a glowing head) instead of the bottom line.
@@ -2408,15 +2420,15 @@ export function DesktopIsland() {
               // IF3: your sizes.
               ['--di-pill-h' as string]: `${prefs.pillHeight}px`,
               ['--di-peek-w' as string]: `${prefs.peekWidth}px`,
-              ['--di-panel-w' as string]: `${prefs.panelWidth}px`,
+              ['--di-panel-w' as string]: `${panelW}px`,
               // The glow follows the music's colour while something plays.
               ...(sc.playing ? { ['--mu-aura' as string]: `${muTint.rgb.r} ${muTint.rgb.g} ${muTint.rgb.b}` } : {}),
               // IN39: the panel's own height on this screen (drag its corner).
-              ...((prefs as { panelMaxH?: number }).panelMaxH ? { ['--di-panel-maxh' as string]: `${(prefs as { panelMaxH?: number }).panelMaxH}px` } : {}),
+              ['--di-panel-maxh' as string]: `${panelMaxH}px`,
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''}`}
+            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />

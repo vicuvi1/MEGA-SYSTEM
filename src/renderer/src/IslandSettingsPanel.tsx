@@ -5,6 +5,7 @@
 // Everything is saved on this PC and shows right away.
 import { useEffect, useRef, useState } from 'react'
 import { cleanIslandPrefs, CLICK_LABEL, HIDE_SEC, KIND_LABEL, PILL_LABEL, SECTION_LABEL, SIZE_LIMITS, type AlertKindPref, type AlertRule, type ClickAction, type IslandPrefs } from '@core/islandModel'
+import { autoLabel, PICK_PANEL_W } from '@core/islandFit'
 import { isAltGrCombo, keyLabel, pressToAccelerator, shortcutClash } from '@core/islandKeys'
 import { PROFILE_IDS, PROFILE_LABEL, type IslandControls, type IslandProfileId } from '@core/islandControlPrefs'
 import { PLACEMENT_LABEL, PLACEMENTS, type IslandDeskPrefs, type MonitorMode, type Placement } from '../../desktop/islandWin'
@@ -158,10 +159,12 @@ function Slider({ label, value, min, max, step = 1, unit, onChange }: { label: s
   )
 }
 
-const SIZE_PRESETS: Record<IslandPrefs['size'], { pillHeight: number; peekWidth: number; panelWidth: number }> = {
-  compact: { pillHeight: 34, peekWidth: 360, panelWidth: 420 },
-  normal: { pillHeight: 38, peekWidth: 400, panelWidth: 460 },
-  large: { pillHeight: 42, peekWidth: 440, panelWidth: 520 }
+// Auto keeps your pill and peek sizes; the panel's width and type follow the screen (core/islandFit.ts).
+const SIZE_PRESETS: Record<IslandPrefs['size'], Partial<{ pillHeight: number; peekWidth: number; panelWidth: number }>> = {
+  auto: { pillHeight: 38, peekWidth: 400 },
+  compact: { pillHeight: 34, peekWidth: 360, panelWidth: PICK_PANEL_W.compact },
+  normal: { pillHeight: 38, peekWidth: 400, panelWidth: PICK_PANEL_W.normal },
+  large: { pillHeight: 42, peekWidth: 440, panelWidth: PICK_PANEL_W.large }
 }
 
 export function IslandSettingsPanel() {
@@ -296,11 +299,11 @@ export function IslandSettingsPanel() {
       </>)}
 
       <h3 className="is-sec">Size</h3>
-      <Row title="Quick pick" hint="Makes everything a bit smaller or bigger, text too">
+      <Row title="Quick pick" hint={p.size === 'auto' ? `${autoLabel(p.fit)}: tighter and shorter on a laptop, roomier on a big screen` : 'Makes everything a bit smaller or bigger, text too'}>
         <Segmented
           label="Size"
           value={p.size}
-          options={[['compact', 'Compact'], ['normal', 'Normal'], ['large', 'Large']]}
+          options={[['auto', 'Auto (fits your screen)'], ['compact', 'Compact'], ['normal', 'Normal'], ['large', 'Large']]}
           onChange={(v) => void save({ size: v, ...SIZE_PRESETS[v] })}
         />
       </Row>
@@ -310,8 +313,8 @@ export function IslandSettingsPanel() {
       <Row title="Peek width" hint="The bigger pill when it drops down">
         <Slider label="Peek width" value={p.peekWidth} min={SIZE_LIMITS.peekWidth[0]} max={SIZE_LIMITS.peekWidth[1]} step={10} unit=" px" onChange={(v) => void save({ peekWidth: v })} />
       </Row>
-      <Row title="Panel width" hint="The open island">
-        <Slider label="Panel width" value={p.panelWidth} min={SIZE_LIMITS.panelWidth[0]} max={SIZE_LIMITS.panelWidth[1]} step={10} unit=" px" onChange={(v) => void save({ panelWidth: v })} />
+      <Row title="Panel width" hint={p.size === 'auto' ? 'Auto picks it for your screen; moving this keeps your width' : 'The open island'}>
+        <Slider label="Panel width" value={p.panelWidth} min={SIZE_LIMITS.panelWidth[0]} max={SIZE_LIMITS.panelWidth[1]} step={10} unit=" px" onChange={(v) => void save({ panelWidth: v, ...(p.size === 'auto' ? { size: p.fit?.pick ?? (v < 540 ? 'compact' : 'normal') } : {}) })} />
       </Row>
 
       <h3 className="is-sec">What it shows</h3>

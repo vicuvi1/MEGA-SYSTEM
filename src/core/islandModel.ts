@@ -379,7 +379,8 @@ export function pill(s: IslandSnapshot, now: number): Pill {
 
 export type IslandSection = 'timer' | 'sleep' | 'plan' | 'tasks' | 'mustdos' | 'logs' | 'points' | 'ben'
 export interface IslandPrefs {
-  size: 'compact' | 'normal' | 'large'
+  /** 'auto' fits the screen it is on (core/islandFit.ts); the others are your own pick. */
+  size: 'auto' | 'compact' | 'normal' | 'large'
   /** Background opacity, 0.55 (see-through) … 1 (solid). */
   opacity: number
   /** 'app': the app's own colours, light or dark (IP4). */
@@ -442,7 +443,7 @@ export const DEFAULT_PILL_ORDER: { id: PillItem; on: boolean }[] = (['timer', 'n
 /** The quick picks for "Tucks away" (seconds the panel stays after the mouse leaves). */
 export const HIDE_SEC: Record<'fast' | 'normal' | 'slow', number> = { fast: 1, normal: 2, slow: 4 }
 /** What the size sliders allow (CSS px before the size setting) (IF3). */
-export const SIZE_LIMITS = { pillHeight: [28, 56], peekWidth: [320, 560], panelWidth: [520, 720] } as const
+export const SIZE_LIMITS = { pillHeight: [28, 56], peekWidth: [320, 560], panelWidth: [440, 720] } as const
 
 /** The reminder kinds you can turn on/off (P4). */
 export type AlertKindPref = 'meeting' | 'block' | 'water' | 'move' | 'eyes' | 'ben' | 'bed' | 'morning' | 'highlight' | 'reward' | 'over'
@@ -480,7 +481,7 @@ export function quietUntil(choice: number | 'tomorrow', now: number): number {
 export const SECTION_LABEL: Record<IslandSection, string> = { timer: 'Timer', sleep: 'Bedtime', plan: 'Now & next', tasks: 'Todoist', mustdos: 'Must-dos', logs: 'Water & reps', points: 'Points & reward', ben: 'Ben' }
 export const SHORTCUTS = ['Control+Shift+Space', 'Alt+Shift+Space', 'Control+Alt+Space', 'Alt+Q', ''] as const
 export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
-  size: 'normal',
+  size: 'auto',
   opacity: 1,
   look: 'black',
   sections: (['timer', 'sleep', 'plan', 'tasks', 'mustdos', 'logs', 'points', 'ben'] as IslandSection[]).map((id) => ({ id, on: true })),
@@ -508,7 +509,8 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   motion: 'full',
   controls: DEFAULT_CONTROLS
 }
-export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { compact: 0.88, normal: 1, large: 1.15 }
+/** The zoom of each pick when the desktop doesn't send one (Compact is tighter by its density, not smaller). */
+export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { auto: 1, compact: 1, normal: 1, large: 1.15 }
 export const HIDE_MS: Record<IslandPrefs['hide'], number> = { fast: 250, normal: 450, slow: 1200 }
 
 /** Any saved value → valid prefs (unknown sections dropped, missing ones added at the end). */
@@ -522,7 +524,7 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
   const timer = sections.findIndex((x) => x.id === 'timer')
   if (!saved.some((x: any) => x.id === 'sleep') && bed > timer + 1) sections.splice(timer + 1, 0, ...sections.splice(bed, 1))
   return {
-    size: ['compact', 'normal', 'large'].includes(p?.size) ? p.size : d.size,
+    size: ['auto', 'compact', 'normal', 'large'].includes(p?.size) ? p.size : d.size,
     opacity: Number.isFinite(p?.opacity) ? Math.min(1, Math.max(0.55, Number(p.opacity))) : d.opacity,
     look: ['black', 'glass', 'mood', 'app'].includes(p?.look) ? p.look : d.look,
     sections,
