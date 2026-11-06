@@ -182,7 +182,7 @@ export interface HeroAsk {
 }
 
 /** The start screen: Ben says hello with today's numbers, the next thing and big suggestions. */
-export function CoachHero({ title, line, status, asks, ben, closing, onClose }: { title: string; line: string; status: CoachStatus | null; asks: HeroAsk[]; ben: ReactNode; closing: boolean; onClose: () => void }) {
+export function CoachHero({ title, line, status, stats = true, asks, ben, closing, onClose }: { title: string; line: string; status: CoachStatus | null; stats?: boolean; asks: HeroAsk[]; ben: ReactNode; closing: boolean; onClose: () => void }) {
   const next = useNextThing()
   const t = status?.today
   const must = useCountUp(t?.mustDone ?? 0, 600, { fromZero: true, ready: !!t })
@@ -194,7 +194,8 @@ export function CoachHero({ title, line, status, asks, ben, closing, onClose }: 
         <div className="ch-ben">{ben}</div>
         <h2 className="ch-title">{title}</h2>
         <p className="ch-line">{next ? `${line} Next: ${next.title}, ${next.when}.` : line}</p>
-        {t && (
+        {/* Today's numbers show here only while the side panel (which has them) is folded. */}
+        {t && stats && (
           <div className="ch-stats">
             <HeroStat icon="done" tone="must" label="Must-dos" value={t.mustTotal ? `${Math.round(must)}/${t.mustTotal}` : '—'} sub={t.mustTotal ? (t.mustDone >= t.mustTotal ? 'all done' : `${t.mustTotal - t.mustDone} left`) : 'none yet'} ring={t.mustTotal ? t.mustDone / t.mustTotal : 0} />
             <HeroStat icon="water" tone="water" label="Water" value={`${water.toFixed(1)} L`} sub={t.waterTarget ? `of ${(t.waterTarget / 1000).toFixed(1)} L` : 'no goal set'} ring={t.waterTarget ? t.waterMl / t.waterTarget : 0} />

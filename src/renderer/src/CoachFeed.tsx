@@ -329,6 +329,15 @@ export function NowCard({ status, busy, onDo, onNotYet }: { status: CoachStatus;
   const mv = status.move
   // Coach UI v3: "Approve" opens the plan card first; you approve what you can see.
   const label: Record<string, string> = { focus: 'Start', running: 'Stop & log', approve: 'See the plan', plan: 'Plan it', answer: 'Done', ask: 'Ask Ben' }
+  // A plan waiting for you: one small "See the plan" chip. Approve itself is only on the plan card.
+  if (mv.kind === 'approve')
+    return (
+      <div className="cf-now move-approve slim" role="region" aria-label="Now" title={mv.sub}>
+        <button className="p" disabled={busy} onClick={onDo}>
+          <ChipIcon text="plan" /> See the plan
+        </button>
+      </div>
+    )
   return (
     <div className={`cf-now move-${mv.kind}`} role="region" aria-label="Now" title={mv.sub}>
       <span className="k" aria-hidden>

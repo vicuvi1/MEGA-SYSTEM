@@ -1,6 +1,6 @@
 // Today's top, one thin row: Ben (click to talk), what's on now and its one
-// button, your points and the bar to the reward you're working toward, and
-// the day's numbers (score, focus, water, must-dos).
+// button, the bar to the reward you're working toward, and
+// the day's numbers (score, focus, must-dos; water lives in its own card).
 import { appHour, dayKey } from '@core/dates'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CoachStatus } from './web/coachStatus'
@@ -146,7 +146,6 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   const rewards = (shop?.rewards ?? []).filter((r) => !r.archived && r.price > 0)
   const balance = shop?.balance ?? 0
   const goal = rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b2) => a.price - b2.price).find((r) => r.price > balance) ?? [...rewards].sort((a, b2) => b2.price - a.price)[0]
-  const water = st.today.waterTarget ? st.today.waterMl / st.today.waterTarget : 0
   const fm = Math.round(focusMin)
   return (
     <section className={`thb mood-${st.mood}`}>
@@ -175,9 +174,7 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
         )}
       </div>
       <button className={`thb-reward ${goal && balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title="Your rewards: add your own (1h manga, a film…) and redeem them">
-        <span className="thb-pts">
-          <i className="coin-dot" aria-hidden="true" /> {balance} pts
-        </span>
+        {/* Your balance shows once, in the top bar: here only the reward you're working toward. */}
         {goal ? (
           <span className="thb-goal">
             <i style={{ ['--p' as string]: `${Math.min(100, (balance / goal.price) * 100)}%` }} />
@@ -187,16 +184,13 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
           <small className="thb-goal-empty">+ Add a reward to work toward</small>
         )}
       </button>
+      {/* Water shows once on Today: in the "Reps & water" card, where you log it. */}
       <div className="thb-nums">
         <span className={live.score >= 70 ? 'good' : ''} title={`Today's score (Ben's evening review). Raise it: ${live.gains.map((g) => `${g.label} +${g.points}`).join(', ') || 'a perfect day'}`}>
           <b>{live.score}</b> score
         </span>
         <span title={focusStreak(st.week) >= 2 ? `Focus streak: ${focusStreak(st.week)} days` : `Goal: ${focusGoal} min`} style={{ ['--p' as string]: `${Math.min(100, (st.today.focusMin / focusGoal) * 100)}%` }}>
           <b>{fm >= 60 ? `${Math.floor(fm / 60)}h${fm % 60 ? ` ${fm % 60}m` : ''}` : `${fm}m`}</b> focus
-        </span>
-        <span title={st.today.waterTarget ? `of ${st.today.waterTarget.toLocaleString('en-GB')} ml` : 'log with Ben: water 250'} style={{ ['--p' as string]: `${Math.min(100, water * 100)}%` }}>
-          {/* In ml, like everywhere you log it (F5). */}
-          <b>{st.today.waterTarget ? `${st.today.waterMl.toLocaleString('en-GB')}` : '—'}</b> ml water
         </span>
         <span>
           <b>{st.today.mustTotal ? `${st.today.mustDone}/${st.today.mustTotal}` : '—'}</b> must-dos

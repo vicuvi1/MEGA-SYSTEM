@@ -310,11 +310,8 @@ function WhereMoneyGoes({ view }: { view: MoneyHubView }) {
           {!parts.length && <li className="mh-hint">Nothing spent yet this month.</li>}
         </ul>
       </div>
+      {/* This month so far is the number in the ring: only last month's comparison here. */}
       <div className="mh-vs">
-        <div>
-          <small>So far</small>
-          <b className="num">{leiText(c.thisTotal)}</b>
-        </div>
         <div>
           <small>Same days last month</small>
           <b className="num">{leiText(c.lastTotal)}</b>

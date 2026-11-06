@@ -156,7 +156,8 @@ export function Badges({ list }: { list: Badge[] }) {
 }
 
 export function AffordRow({ rewards, balance, perDay, onPick }: { rewards: Reward[]; balance: number; perDay: number; onPick: (ids: number[] | null) => void }) {
-  const chips = affordChips(rewards, balance, perDay)
+  // "Now" is the "Can get now" tab already: this row only looks ahead.
+  const chips = affordChips(rewards, balance, perDay).filter((c) => c.id !== 'now')
   const [on, setOn] = useState<string | null>(null)
   return (
     <div className="rx-afford" role="group" aria-label="What can I afford">

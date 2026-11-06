@@ -113,6 +113,30 @@ try {
     await pg.click('.rx-tabs button:nth-child(3)')
     await pg.waitForSelector('.rx-card .rx-title', { timeout: 5000 })
   })
+  // One place each: the points and Settings live in the top bar only; the sidebar has neither.
+  await step('Points and Settings show once (top bar), not in the sidebar', async () => {
+    await open('today')
+    await pg.waitForSelector('aside.sb .sb-item', { timeout: 10000 })
+    if (await pg.$('aside.sb .sb-me, aside.sb .sb-tools, aside.sb .sb-tool')) throw new Error('the sidebar still has a points card or a Settings tile')
+    if (await pg.locator('aside.sb', { hasText: /points|Settings/i }).count()) throw new Error('the sidebar still mentions points or Settings')
+    if (!(await pg.locator('header.topbar .tb-me').isVisible())) throw new Error('no points pill in the top bar')
+    if ((await pg.$$('header.topbar button[aria-label="Settings"]')).length !== 1) throw new Error('not exactly one Settings button in the top bar')
+    if (await pg.$('header.topbar button[aria-label="Coach"]')) throw new Error("the top bar repeats the sidebar's Coach button")
+    // Today: the balance and the water are not repeated in the top row.
+    await pg.waitForSelector('.thb', { timeout: 10000 })
+    if (await pg.locator('.thb', { hasText: /\bpts\b|ml water/ }).count()) throw new Error("Today's top row repeats the points or the water")
+    // A folded sidebar never slides out over the page on hover.
+    await pg.keyboard.press('Control+b')
+    await pg.waitForSelector('aside.sb.collapsed', { timeout: 3000 })
+    const box = await pg.locator('aside.sb').boundingBox()
+    await pg.mouse.move(box.x + box.width / 2, box.y + 200)
+    await pg.waitForTimeout(700)
+    const after = await pg.locator('aside.sb').boundingBox()
+    const main = await pg.locator('.main').boundingBox()
+    await pg.keyboard.press('Control+b')
+    await pg.mouse.move(800, 500)
+    if (after.x + after.width > main.x + 1) throw new Error(`the sidebar covers the page (${Math.round(after.x + after.width)} > ${Math.round(main.x)})`)
+  })
   // Night 7: Ben's chat folds his automatic messages and shows cards and the Now card.
   await step("Coach: Ben's chat with folded updates and cards", async () => {
     await open('coach')
@@ -128,7 +152,13 @@ try {
     if (await pg.$('.cf-side')) throw new Error('the side panel is open by default at 1440 px')
     if (!(await pg.$('.cf-card'))) throw new Error('no card')
     if (!(await pg.$('.cf-head .ba-face'))) throw new Error("no face for Ben in the header")
-    if (!(await pg.$('.cf-rail .cf-now'))) throw new Error('no Now pill above the message box')
+    // Today's numbers in one place: no number pills in the header, just one "Today" button
+    // (the side panel is folded at 1440 px); the start screen keeps the numbers meanwhile.
+    if (await pg.$('.cf-head .cf-chips, .cf-head .p-water, .cf-head .p-must')) throw new Error("today's numbers still show as header pills")
+    if ((await pg.$$('.cf-head .cf-side-open')).length !== 1) throw new Error('no single "Today" button in the header')
+    // Approve only on the plan card: while the start screen (with "See my plan") shows, the row offers no second "See the plan".
+    if (await pg.locator('.cf-rail .cf-now', { hasText: 'See the plan' }).count()) throw new Error('"See the plan" shows next to the start screen\'s "See my plan"')
+    if (await pg.locator('.cf-rail', { hasText: /Approve/ }).count()) throw new Error('Approve shows in the suggestion row')
     // Coach UI v4: the start screen (greeting, numbers, four big asks), Ben beside the box, "Ben will…".
     await pg.waitForSelector('.ch-hero .ch-title', { timeout: 5000 })
     if ((await pg.$$('.ch-hero .ch-ask')).length !== 4) throw new Error('the start screen needs four big suggestions')
@@ -190,6 +220,8 @@ try {
     if (await pg.$('.cf-row.ben.grouped .cf-mark:not(.ghost)')) throw new Error("Ben's face repeats inside a group")
     await pg.evaluate(() => document.querySelector('.cf-stream')?.scrollTo({ top: 0 }))
     await pg.locator('.cf-now button', { hasText: 'See the plan' }).click()
+    // Once the plan card is on screen, the row stops offering "See the plan" (one place to approve).
+    await pg.waitForFunction(() => ![...document.querySelectorAll('.cf-rail .cf-now')].some((e) => /See the plan/.test(e.textContent ?? '')), null, { timeout: 4000 })
     await pg.waitForFunction(() => {
       const cards = document.querySelectorAll('.cf-col .cf-plan.live')
       const r = cards[cards.length - 1]?.getBoundingClientRect()
@@ -237,6 +269,21 @@ try {
     const after = await words()
     if (!after || after.boxed || after.words) throw new Error(`after the reveal: ${after?.words} word spans, ${after?.boxed} boxed`)
     if (process.env.COACH_SHOTS) await pg.locator('.cx-chat').screenshot({ path: `${process.env.COACH_SHOTS}/review-answer.png` })
+    // The newest message sits fully above the suggestion row and the message box (nothing hides it).
+    await pg.waitForFunction(() => {
+      const rows = document.querySelectorAll('.cf-col .cf-row')
+      const last = rows[rows.length - 1]?.getBoundingClientRect()
+      const stream = document.querySelector('.cf-stream')?.getBoundingClientRect()
+      const dock = document.querySelector('.cf-dock')?.getBoundingClientRect()
+      return !!last && !!stream && !!dock && last.top >= stream.top - 1 && last.bottom <= dock.top + 1 && last.bottom <= stream.bottom - 20
+    }, null, { timeout: 4000 }).catch(async () => {
+      const r = await pg.evaluate(() => {
+        const rows = document.querySelectorAll('.cf-col .cf-row')
+        const last = rows[rows.length - 1]?.getBoundingClientRect()
+        return `last ${Math.round(last?.top)}-${Math.round(last?.bottom)}, chat ends ${Math.round(document.querySelector('.cf-stream')?.getBoundingClientRect().bottom)}, row starts ${Math.round(document.querySelector('.cf-dock')?.getBoundingClientRect().top)}`
+      })
+      throw new Error(`the newest message is partly hidden behind the suggestions (${r})`)
+    })
     fail = true
     await pg.fill('.cf-input textarea', 'what now')
     await pg.keyboard.press('Enter')

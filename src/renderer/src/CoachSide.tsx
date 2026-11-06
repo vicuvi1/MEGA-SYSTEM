@@ -1,6 +1,6 @@
 // "Ben's view of today": a side panel next to the chat on wide screens
 // (1280 px and up). Coach UI v3: the plan as a timeline, must-dos, focus this
-// week, water and points; it grows on very wide screens instead of leaving
+// week and water (points live in the top bar only); it grows on very wide screens instead of leaving
 // empty space. It can be folded away; the choice is remembered on this device.
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import type { CoachStatus } from './web/coachStatus'
@@ -15,19 +15,15 @@ import { useLive } from './live'
 const fmtMin = (n: number) => (n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n} min`)
 const nowMin = () => new Date().getHours() * 60 + new Date().getMinutes()
 
-export function CoachSide({ status, onClose, onOpen, onPlan, onWater, onFocus }: { status: CoachStatus; onClose: () => void; onOpen: (tab: 'plan' | 'today' | 'goals') => void; onPlan?: () => void; onWater: () => void; onFocus: () => void }) {
+/** `planShown`: the plan card is on screen in the chat, so the panel keeps only the plan's status line. */
+export function CoachSide({ status, planShown = false, onClose, onOpen, onPlan, onWater, onFocus }: { status: CoachStatus; planShown?: boolean; onClose: () => void; onOpen: (tab: 'plan' | 'today' | 'goals') => void; onPlan?: () => void; onWater: () => void; onFocus: () => void }) {
   const t = status.today
   const max = Math.max(30, ...status.week.map((d) => d.min))
   const weekMin = status.week.reduce((a, d) => a + d.min, 0)
   const plan = status.plan
   const [rh, setRh] = useState<RhythmState | null>(null)
-  const [points, setPoints] = useState<{ balance: number; today: number } | null>(null)
   const load = useCallback(() => {
     life.coach?.rhythm?.('state').then((r) => setRh(r.state)).catch(() => {})
-    life.wallet
-      ?.summary()
-      .then((s) => setPoints({ balance: s.balance, today: s.todayCoins }))
-      .catch(() => {})
   }, [])
   useEffect(load, [load, status])
   useLive(load)
@@ -52,11 +48,12 @@ export function CoachSide({ status, onClose, onOpen, onPlan, onWater, onFocus }:
           </span>
           <span className="tx">
             <small>Plan</small>
-            <b>{plan.status === 'approved' ? 'Approved' : plan.status === 'proposed' ? 'Waiting for you' : 'Not made yet'}</b>
+            <b>{plan.status === 'approved' ? 'Approved' : plan.status === 'proposed' ? 'Not approved yet' : 'Not made yet'}</b>
           </span>
-          <em className={`pill s-${plan.status}`}>{plan.score != null ? `${plan.score}/100` : plan.status === 'proposed' ? 'Review' : plan.status === 'approved' ? '✓' : 'Plan it'}</em>
+          {/* Approve itself is only on the plan card in the chat: this just takes you there. */}
+          <em className={`pill s-${plan.status}`}>{plan.score != null ? `${plan.score}/100` : plan.status === 'proposed' ? 'Show' : plan.status === 'approved' ? '✓' : 'Plan it'}</em>
         </button>
-        {tl && tl.items.length > 0 ? (
+        {planShown ? null : tl && tl.items.length > 0 ? (
           <>
             <PlanTrack items={tl.items} now={tl.now} from={tl.from} to={tl.to} />
             <ol className="cf-side-plan">
@@ -116,18 +113,6 @@ export function CoachSide({ status, onClose, onOpen, onPlan, onWater, onFocus }:
               <button type="button" className="cf-side-btn" onClick={onWater}>
                 + 250 ml
               </button>
-            </span>
-          </section>
-        )}
-        {points && (
-          <section className="cf-side-card points">
-            <span className="coin" aria-hidden>
-              ●
-            </span>
-            <span className="tx">
-              <small>Points</small>
-              <b>{points.balance.toLocaleString('en-GB')}</b>
-              <em>{points.today > 0 ? `+${points.today} today` : points.today < 0 ? `${points.today} today` : 'Nothing yet today'}</em>
             </span>
           </section>
         )}

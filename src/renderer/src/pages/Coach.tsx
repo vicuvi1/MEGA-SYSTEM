@@ -215,6 +215,14 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     }
     return typeof window !== 'undefined' && window.innerWidth >= 1600
   })
+  // The side panel fits from 1280 px; below that, "Today" opens Ben's desk on its Today tab.
+  const [wide, setWide] = useState(() => typeof window === 'undefined' || window.innerWidth >= 1280)
+  useEffect(() => {
+    const on = () => setWide(window.innerWidth >= 1280)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
+  const sideShown = side && wide
   const setSide = (v: boolean) => {
     setSideRaw(v)
     try {
@@ -381,22 +389,24 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   useEffect(() => {
     const el = streamRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
-    let stuck = true
+    stuckRef.current = true
     let lastTop = el.scrollTop
     const onScroll = () => {
       const near = el.scrollHeight - el.scrollTop - el.clientHeight < 140
       // Only scrolling UP lets go of the bottom: cards that load in (the plan,
       // the tasks) make the page taller mid-scroll and must not unstick it.
-      if (near) stuck = true
-      else if (el.scrollTop < lastTop - 4) stuck = false
+      if (near) stuckRef.current = true
+      else if (el.scrollTop < lastTop - 4) stuckRef.current = false
       lastTop = el.scrollTop
-      stuckRef.current = stuck
-      if (stuck) setUnseen(0)
+      if (stuckRef.current) setUnseen(0)
     }
     const ro = new ResizeObserver(() => {
-      if (stuck) el.scrollTop = el.scrollHeight
+      if (stuckRef.current) el.scrollTop = el.scrollHeight
     })
     el.addEventListener('scroll', onScroll, { passive: true })
+    // The chat itself too: when the suggestion row or the message box grows, the
+    // chat gets shorter, and the newest message must stay fully in view.
+    ro.observe(el)
     Array.from(el.children).forEach((c) => ro.observe(c))
     const mo = new MutationObserver(() => Array.from(el.children).forEach((c) => ro.observe(c)))
     mo.observe(el, { childList: true })
@@ -406,6 +416,25 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       el.removeEventListener('scroll', onScroll)
     }
   }, [log === null])
+  // Approve lives only on the plan card: while a live plan card is on screen,
+  // the suggestion row offers no "See the plan" next to it.
+  const [planInView, setPlanInView] = useState(false)
+  useEffect(() => {
+    const root = streamRef.current
+    if (!root || typeof IntersectionObserver === 'undefined') return
+    const cards = Array.from(root.querySelectorAll<HTMLElement>('.cf-plan.live, .cf-plan.spot'))
+    if (!cards.length) return setPlanInView(false)
+    const seen = new Map<Element, boolean>()
+    const io = new IntersectionObserver(
+      (es) => {
+        es.forEach((e) => seen.set(e.target, e.isIntersecting))
+        setPlanInView([...seen.values()].some(Boolean))
+      },
+      { root, threshold: 0.25 }
+    )
+    cards.forEach((c) => io.observe(c))
+    return () => io.disconnect()
+  }, [log, planSpot, hero])
   // Live: what you and the coach say on Telegram appears here as it happens.
   const busyRef = useRef(false)
   busyRef.current = busy
@@ -439,6 +468,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     const now = new Date().toISOString()
     if (box && !reducedMotion()) flyRef.current = { at: now, rect: box.getBoundingClientRect() }
     setText('')
+    // What you send always brings the chat to the bottom, so your message and the answer are in view.
+    stuckRef.current = true
     setLog((l) => [...(l ?? []), { role: 'me', bot: 'mega', via: 'app', text: q && base ? base : t, at: now, photo: pic?.url, fly: !!flyRef.current, ...(q ? { quote: q.text.slice(0, 140) } : {}) }, { role: 'coach', bot: 'mega', via: 'app', text: '', at: now, pending: true }])
     readAloud.start()
     try {
@@ -660,7 +691,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     <div ref={rootRef} className={`cx cf cf2 ${info ? 'info-open' : ''} ${typing ? 'typing' : ''} ${side && status ? 'side-on' : ''} ${busy ? 'busy' : ''} ${hero !== 'off' ? 'hero-on' : ''}`}>
       <section className="cx-chat">
         <CoachAtmos phase={dayPhase(hour)} feel={feel} burst={burst} />
-        {/* CL6: a rich header (Ben's face, what he is doing); CL7: today's numbers as small pills. */}
+        {/* CL6: a rich header (Ben's face, what he is doing). Today's numbers live in one place:
+            the side panel ("Today" opens it), or the start screen while the panel is folded. */}
         <header className="cf-head">
           <button className="cf-who" onClick={() => setInfo((v) => !v)} title="Ben's desk: plan, goals, about you">
             <BenLive size={52} act={benAct} feel={feel} pulse={pulse} talk={talk} gaze="down" online />
@@ -673,39 +705,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               </small>
             </span>
           </button>
-          {status && (
-            <div className="cf-chips" role="list" aria-label="Today">
-              <button role="listitem" className="p-must" onClick={() => (setTab('plan'), setInfo(true))} title="Must-dos: open the plan">
-                <GlyphIcon kind="done" size={14} />
-                {status.today.mustTotal ? (
-                  <>
-                    <b>
-                      {status.today.mustDone}/{status.today.mustTotal}
-                    </b>{' '}
-                    must-dos
-                  </>
-                ) : (
-                  'No must-dos yet'
-                )}
-              </button>
-              {!!status.today.waterTarget && (
-                <button role="listitem" className="p-water" onClick={() => void addWater()} title="Tap to add 250 ml">
-                  <Ring value={status.today.waterMl / status.today.waterTarget} size={16} tone="water" />
-                  <b>
-                    {(status.today.waterMl / 1000).toFixed(1)}/{(status.today.waterTarget / 1000).toFixed(1)} L
-                  </b>
-                </button>
-              )}
-              <button role="listitem" className="p-focus" onClick={() => (status.move.kind === 'focus' || status.move.kind === 'running' ? void doMove() : (setTab('today'), setInfo(true)))} title={status.move.kind === 'focus' ? 'Start focus' : 'Focus today'}>
-                <GlyphIcon kind="focus" size={14} />
-                <b>{focusLabel(status.today.focusMin)}</b> focus
-              </button>
-            </div>
-          )}
           <div className="cf-head-tools">
-            {status && !side && (
-              <button className="icon-btn cf-side-open" onClick={() => setSide(true)} aria-label="Show Ben's view of today" title="Ben's view of today">
-                <GlyphIcon kind="review" />
+            {status && !sideShown && (
+              <button className="cf-side-open" onClick={() => (wide ? setSide(true) : (setTab('today'), setInfo(true)))} aria-label="Show today: plan, must-dos, water and focus" title="Today: plan, must-dos, water and focus">
+                <GlyphIcon kind="review" size={14} />
+                Today
               </button>
             )}
             <button className={`icon-btn ${menu ? 'on' : ''}`} onClick={() => setMenu((v) => !v)} aria-label="More" aria-haspopup="menu" aria-expanded={menu} title="Search, filters and more">
@@ -856,6 +860,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             title={greeting(hour, name)}
             line={heroLine}
             status={status}
+            stats={!sideShown}
             asks={heroAsks}
             closing={hero === 'closing'}
             onClose={closeHero}
@@ -1062,7 +1067,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           {/* CN2 + CM2: the one next thing and the suggestions, as one row of pills. */}
           {!!log?.length && (
             <div className="cf-sugg cf-rail" role="toolbar" aria-label="Suggestions">
-              {status && query == null && filter === 'all' && <NowCard status={status} busy={busy} onDo={() => void doMove()} onNotYet={() => void send(`Not yet: ${(status.move as any).promise}`)} />}
+              {status && query == null && filter === 'all' && !(status.move.kind === 'approve' && (planInView || hero !== 'off')) && <NowCard status={status} busy={busy} onDo={() => void doMove()} onNotYet={() => void send(`Not yet: ${(status.move as any).promise}`)} />}
               {!busy && hero === 'off' && !logMode && chips.slice(0, status && query == null && filter === 'all' ? 2 : 3).map((q) => <SuggestChip key={q} text={q} disabled={busy} onClick={() => void send(q)} />)}
               {!busy && logMode && LOG_EXAMPLES.slice(0, 3).map((q) => <SuggestChip key={q} text={q} onClick={() => (setText(q), boxRef.current?.focus())} />)}
             </div>
@@ -1198,7 +1203,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           </form>
           </div>
         </div>
-        {status && side && <CoachSide status={status} onClose={() => setSide(false)} onPlan={focusPlan} onOpen={(t) => (setTab(t), setInfo(true))} onWater={() => void addWater()} onFocus={() => void (status.move.kind === 'focus' || status.move.kind === 'running' ? doMove() : send('Start a 25 minute focus block on my most important task.'))} />}
+        {status && side && <CoachSide status={status} planShown={planInView && hero === 'off'} onClose={() => setSide(false)} onPlan={focusPlan} onOpen={(t) => (setTab(t), setInfo(true))} onWater={() => void addWater()} onFocus={() => void (status.move.kind === 'focus' || status.move.kind === 'running' ? doMove() : send('Start a 25 minute focus block on my most important task.'))} />}
         <input ref={meFile} type="file" accept="image/*" hidden onChange={(e) => void pickMe(e.target.files?.[0]).then(() => (e.target.value = ''))} />
       </section>
 

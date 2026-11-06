@@ -103,6 +103,9 @@ function whenIdle(fn: () => void, ms = 2000): () => void {
   return () => clearTimeout(id)
 }
 
+// Below this window width the sidebar folds to icons by itself (unless you opened it with Ctrl+B).
+const SIDEBAR_FOLD_PX = 1180
+
 // Sections that hold one of the apps living inside Life System.
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
   money: { kind: 'finance', system: 'Money hub' },
@@ -265,8 +268,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       return 'auto'
     }
   })
-  const [peek, setPeek] = useState(false)
-  const peekTimer = useRef<number | undefined>(undefined)
+  // A narrow window (a laptop with a half-screen window) folds the sidebar to
+  // icons by itself, so it never covers the page. Your own choice (Ctrl+B) wins.
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < SIDEBAR_FOLD_PX)
+  useEffect(() => {
+    const on = () => setNarrow(window.innerWidth < SIDEBAR_FOLD_PX)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
 
   useEffect(() => {
     life.onNavigate((p) => {
@@ -476,9 +485,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const { events: todayEvents } = useTodayEvents()
 
   const toggleSidebar = useCallback(() => {
-    setPeek(false)
     setSidebarMode((m) => {
-      const isCollapsed = m === 'closed' || (m === 'auto' && !!activeEmbed)
+      const isCollapsed = m === 'closed' || (m === 'auto' && (!!activeEmbed || narrow))
       const next = isCollapsed ? 'open' : 'closed'
       try {
         localStorage.setItem('ls.sidebar', next)
@@ -487,7 +495,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       }
       return next
     })
-  }, [activeEmbed])
+  }, [activeEmbed, narrow])
 
   // Shortcuts, also while an app inside is focused (main forwards them).
   useEffect(() => {
@@ -642,8 +650,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   )
 
   // Sidebar: full, or a slim icon rail. "auto" turns it into a rail while an
-  // app is open, so the app gets the room; hovering the rail slides it out.
-  const collapsed = sidebarMode === 'closed' || (sidebarMode === 'auto' && !!activeEmbed)
+  // app is open or the window is narrow, so the page gets the room. The open
+  // sidebar always takes its own column: it pushes the page, never covers it.
+  const collapsed = sidebarMode === 'closed' || (sidebarMode === 'auto' && (!!activeEmbed || narrow))
   const compact = !!embed
   const focus = fullScreen && !!activeEmbed
 
@@ -680,13 +689,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         collapsed={collapsed}
         onToggle={toggleSidebar}
         badges={badges}
-        balance={summary?.balance ?? 0}
-        name={ui.name}
       />
 
       <div className="main">
         {/* The desktop app has its own island at the top of the screen: one is enough. */}
-        {!window.desktop?.islandState && <FocusIsland />}
+        {!window.desktop?.islandState && <FocusIsland hideNext={page === 'today'} />}
         <DeepLinks onGo={setPage} />
         {/* UI7: not on pages with their own full-screen app or a floating + button. */}
         <ZoomToast />
@@ -702,7 +709,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <span className={`seg-thumb ${tab === 'app' ? '' : 'second'}`} aria-hidden="true" />
               <button role="tab" aria-selected={tab === 'app'} className={tab === 'app' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'app' }))}>
                 <Icon name={embed.kind === 'finance' ? 'coin' : embed.kind === 'waky' ? 'moon' : embed.kind === 'sport' ? 'tasks' : 'shield'} size={14} />
-                {EMBED_LABEL[embed.kind]}
+                {/* The page title already says "Sport Track": its app tab doesn't repeat it. */}
+                {embed.kind === 'sport' ? 'Tracker' : EMBED_LABEL[embed.kind]}
               </button>
               <button role="tab" aria-selected={tab === 'system'} className={tab === 'system' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'system' }))}>
                 <Icon name="spark" size={14} />
@@ -733,12 +741,6 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <Icon name="plus" size={15} />
             <span>Log</span>
           </button>
-          {features.ai && (
-            <button className={`tb-icon ${page === 'coach' ? 'active' : ''}`} aria-label="Coach" title="Coach (Ctrl+J)" onClick={() => setPage('coach')}>
-              <Icon name="spark" size={17} />
-              {coachUnread > 0 && <span className="tb-badge">{coachUnread}</span>}
-            </button>
-          )}
           {activeEmbed && (
             <button className="tb-icon" aria-label="Full screen" title="Full screen (F11)" onClick={() => life.app.toggleFullScreen()}>
               <Icon name="expand" size={16} />
@@ -772,8 +774,10 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <span className="chip-text">{backup.lastError ? 'Backup missed' : 'Backed up'}</span>
             </button>
           )}
-          <button className={`tb-icon ${page === 'settings' ? 'active' : ''}`} aria-label="Settings" title="Settings" onClick={() => setPage('settings')}>
+          {/* The one Settings button (the sidebar has none); a dot when an update or a missed backup waits there. */}
+          <button className={`tb-icon tb-settings ${page === 'settings' ? 'active' : ''}`} aria-label="Settings" title="Settings" onClick={() => setPage('settings')}>
             <Icon name="gear" size={16} />
+            {badges.settings && <i className={`tb-dot ${badges.settings.dot ?? ''}`} aria-hidden="true" />}
           </button>
 
           {/* Your points: tap to spend them (Shop). */}

@@ -64,7 +64,8 @@ function Ring({ pct, over, size = 22 }: { pct: number; over: boolean; size?: num
   )
 }
 
-export function FocusIsland() {
+/** `hideNext`: the page already shows what's next (Today's "Next" line), so the pill doesn't repeat it. */
+export function FocusIsland({ hideNext = false }: { hideNext?: boolean } = {}) {
   const reduce = useReducedMotion()
   const act = useAction()
   const [prefs, setPrefsState] = useState<IslandPrefs>(loadPrefs)
@@ -171,7 +172,15 @@ export function FocusIsland() {
     const mins = Math.round((Date.parse(upcoming.start) - now) / 60000)
     return { title: upcoming.title, at: new Date(upcoming.start).toTimeString().slice(0, 5), mins }
   }, [events, now])
-  const soonBlock = next && next.mins <= 10 ? next : null
+  // A notification card about the same event is on screen: the pill steps aside until it closes.
+  const [toastTitles, setToastTitles] = useState<string[]>([])
+  useEffect(() => {
+    const on = (e: Event) => setToastTitles(((e as CustomEvent).detail as string[]) ?? [])
+    window.addEventListener('life-toasts', on)
+    return () => window.removeEventListener('life-toasts', on)
+  }, [])
+  const saidElsewhere = hideNext || (!!next && toastTitles.some((t) => t.includes(next.title)))
+  const soonBlock = next && next.mins <= 10 && !saidElsewhere ? next : null
 
   const subjects = useMemo(() => [...new Set([...(focus?.goals ?? []).map((g) => g.subject), ...(focus?.plan.items.filter((x) => !x.done).map((x) => x.text.split(/\s+/).slice(0, 3).join(' ')) ?? []), ...(focus?.subjects ?? [])])].slice(0, 6), [focus])
 
@@ -242,7 +251,7 @@ export function FocusIsland() {
   }
 
   // What the closed pill says.
-  const idleText = soonBlock ? `📚 ${soonBlock.title} in ${soonBlock.mins} min` : prefs.showPromise && extra?.promise ? `🤝 ${extra.promise}` : next && prefs.idle === 'peek' ? `Next: ${next.title} ${next.at}` : 'Ready to focus'
+  const idleText = soonBlock ? `📚 ${soonBlock.title} in ${soonBlock.mins} min` : prefs.showPromise && extra?.promise ? `🤝 ${extra.promise}` : next && prefs.idle === 'peek' && !saidElsewhere ? `Next: ${next.title} ${next.at}` : 'Ready to focus'
   const showIdlePill = prefs.idle !== 'hidden' || open || !!soonBlock
   const cls = ['isl', `pos-${prefs.pos}`, `look-${prefs.look}`, `size-${prefs.size}`, run ? 'running' : 'idle', open ? 'open' : '', over ? 'over' : '', flash ? 'flash' : '', !run && prefs.idle === 'dot' && !soonBlock ? 'isl-dotmode' : ''].filter(Boolean).join(' ')
 

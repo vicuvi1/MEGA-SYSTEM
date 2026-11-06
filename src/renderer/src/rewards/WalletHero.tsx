@@ -81,11 +81,7 @@ export function WalletHero({
         </div>
         <div className="rx-pills">
           <span className={`rx-pill today ${e && e.today > 0 ? 'on' : ''}`}>+{(e?.today ?? 0).toLocaleString()} today</span>
-          {e && (
-            <span className="rx-pill" title="This week, from Monday">
-              Week <b className="up">+{e.thisWeek.earned.toLocaleString()}</b> <b className="down">−{e.thisWeek.spent.toLocaleString()}</b>
-            </span>
-          )}
+          {/* This week's earnings show once, in "Your earnings". */}
           {flame > 0 && (
             <span className={`rx-pill rx-flame f${flame}`} title={`${insights!.focusStreak} days of focus in a row${insights!.focusStreak >= 7 ? ': +10% on focus points' : ''}`}>
               <i aria-hidden>🔥</i> {insights!.focusStreak} days · {FLAME_TEXT[flame]}

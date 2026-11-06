@@ -271,8 +271,6 @@ html.calm .cf-send.stop::after { animation-iteration-count: infinite !important;
 @media (max-width: 760px) {
   .cf-compose-row > .bl { display: none; }
   .cf-head .cf-who .bl { --ba: 42px !important; }
-  /* The start screen already shows today's numbers: the header pills step aside. */
-  .cx.cf.hero-on .cf-head .cf-chips { display: none; }
   .ch-hero { padding: 6px 12px 4px; }
   .ch-inner { gap: 9px; }
   .ch-ben { margin-bottom: 0; }
@@ -357,7 +355,5 @@ html.calm .cf-send.stop::after { animation-iteration-count: infinite !important;
 .cx.cf .cf-head { position: relative; z-index: 8; }
 /* The tools row: attach on the left, the mic and send on the right. */
 .cf-tools-row .cf-grow { flex: 1; }
-/* The start screen shows today's numbers: the header pills step aside while it is open. */
-.cx.cf.hero-on .cf-head .cf-chips { display: none; }
 .ch-ask b { white-space: normal; line-height: 1.2; }
 @media (max-width: 760px) { .cf-tools-row .cf-grow { display: none; } }

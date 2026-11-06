@@ -955,6 +955,8 @@
 .ab-state.good { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .ab-state.bad { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
 .tb-icon { position: relative; }
+.tb-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 2px var(--bg); }
+.tb-dot.warn { background: var(--orange); }
 .tb-badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg); }
 
 /* New version bar */
@@ -2018,11 +2020,7 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .cal-item.band > b { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100%; }
 .cal-item.band > small { display: none; }
 
-/* Points shown once (V7): with the sidebar open, its "You" card shows them,
-   so the header chip hides (it stays on phones and with the sidebar folded). */
-@media (min-width: 761px) {
-  .shell:not(.rail) .main > .topbar .tb-me { display: none; }
-}
+/* Points shown once: the coin pill in the top bar (the sidebar has no points card). */
 
 /* One button style everywhere (V10): the same corners, height and weight for
    the app's buttons, Ben's desk buttons and the coach header buttons; one

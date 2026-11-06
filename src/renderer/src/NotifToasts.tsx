@@ -246,6 +246,10 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
   // AF8: new cards spring in at the top, older ones glide down, swipe one away.
   const box = useRef<HTMLDivElement>(null)
   useFlip(box, cards)
+  // Tell the website's focus island what is on screen, so it doesn't say the same thing beside a card.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('life-toasts', { detail: cards.map((c) => c.title) }))
+  }, [cards])
   return (
     <div className="nt-stack" aria-live="polite" ref={box}>
       {cards.map((n) => (
