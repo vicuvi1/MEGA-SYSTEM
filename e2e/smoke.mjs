@@ -503,7 +503,7 @@ try {
     await pg.locator('.st-item', { hasText: 'Sound' }).first().click()
     await pg.waitForFunction(() => document.querySelector('.st-head h1')?.textContent === 'Sound', null, { timeout: 5000 })
     const n = await pg.locator('.sx-moment').count()
-    if (n !== 11) throw new Error(`${n} sound rows, want 11`)
+    if (n !== 13) throw new Error(`${n} sound rows, want 13`)
     await pg.click('button[aria-label="Sound for Water"]')
     await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
     await pg.locator('.ui-select-list [role=option]', { hasText: 'Pop' }).click()
@@ -971,6 +971,76 @@ try {
     await ip.waitForSelector('.di-peek.alert.kind-remind [data-tap="peek:alert:✓ Done"]', { timeout: 4000 })
     if (shots) await ip.waitForTimeout(700)
     if (shots) await ip.screenshot({ path: `${shots}/calm-dot-card.png`, clip: { x: 0, y: 0, width: 520, height: 260 } })
+    await ip.context().close()
+  })
+  // Ben on your PC (core/pcCoach.ts, the real decision code, bundled here): made-up
+  // activity → a praise peek after 50 min of coding, then a break card whose
+  // "10 push-ups" button sends the tap (the app window logs it, only on that tap).
+  await step('Ben on your PC: 50 min of coding peeks a praise line, an hour at the PC brings a break card with water and push-ups', async () => {
+    const shots = process.env.COACH_SHOTS
+    const { build } = await import('rolldown')
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const dir = await mkdtemp(join(tmpdir(), 'coach-'))
+    const entry = join(dir, 'entry.ts')
+    await writeFile(entry, `export { decideCoach, newCoachState, coachAlert } from ${JSON.stringify(join(repo, 'src/core/pcCoach.ts'))}\nexport { sessionize } from ${JSON.stringify(join(repo, 'src/core/activityStream.ts'))}\n`)
+    const out = await build({ input: entry, write: false, output: { format: 'esm' } })
+    await writeFile(join(dir, 'coach.mjs'), out.output[0].code)
+    const C = await import(join(dir, 'coach.mjs'))
+    await rm(dir, { recursive: true, force: true })
+    const now = fakeNow()
+    const day = new Date(now).toISOString().slice(0, 10)
+    const input = (events, more = {}) => ({ now, day, on: true, desktop: true, sessions: C.sessionize(events, now), idleSec: 4, activeSince: now - 20 * 60_000, dayWork: { min: 0, by: {}, distractMin: 0 }, workGoalMin: 120, push: 'push', focus: null, block: null, workHour: false, meeting: false, bedTarget: '23:30', latestBed: '00:00', wakeTime: '06:30', bedLogged: false, nextUp: null, lastMoveAt: 0, morningShown: true, eveningAt: '21:00', ...more })
+    const st = { ...C.newCoachState(day), morning: true }
+    const praise = C.decideCoach(input([{ t: 'app', at: now - 52 * 60_000, label: 'VS Code', kind: 'work', context: 'coding', conf: 0.9 }]), st).reaction
+    if (praise?.kind !== 'praise' || !/^50 min/.test(praise.text) || !praise.id.endsWith(':50')) throw new Error(`no 50-min praise: ${JSON.stringify(praise)}`)
+    const brk = C.decideCoach(input([{ t: 'app', at: now - 70 * 60_000, label: 'Chrome', kind: 'neutral', context: 'browsing', conf: 0.6 }], { activeSince: now - 58 * 60_000 }), st).reaction
+    if (brk?.kind !== 'break') throw new Error(`no break card: ${JSON.stringify(brk)}`)
+
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island coach: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '😎', mood: 'hyped', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: { title: 'Rust exercises', start: now + 40 * 60_000, end: now + 100 * 60_000 },
+        mustdos: [], water: { ml: 750, target: 2000 }, reps: [], alert: null
+      }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {},
+        islandTakeClicks: () => {},
+        islandAction: (a) => { window.__island.actions.push(a) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 3, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    if (shots) await ip.addStyleTag({ content: 'body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(#2b2d33 0 34px, #f4f5f7 34px); }' })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
+    // The praise line peeks by itself in Calm (its own "Peek for" switch is on by default).
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: a }), C.coachAlert(praise))
+    await ip.waitForSelector('.di-peek.calm-peek.kind-praise', { timeout: 5000 })
+    const said = await ip.textContent('.di-peek.calm-peek.kind-praise')
+    if (!said.includes('50 min')) throw new Error(`the praise peek says "${said}"`)
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/coach-praise-peek.png`, clip: { x: 0, y: 0, width: 520, height: 120 } })
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 })
+    // An hour at the PC: the break card; tapping its peek opens the buttons.
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: a }), C.coachAlert(brk))
+    await ip.waitForSelector('.di-peek.calm-peek.kind-move', { timeout: 5000 })
+    await ip.click('.di-peek.calm-peek.kind-move')
+    const pushBtn = '.di-peek.alert.kind-move [data-tap="peek:alert:💪 10 push-ups"]'
+    await ip.waitForSelector(pushBtn, { timeout: 4000 })
+    for (const l of ['💧 Water', '🧍 Stretched', '⏰ 15 min']) if (!(await ip.$(`.di-peek.alert.kind-move [data-tap="peek:alert:${l}"]`))) throw new Error(`the break card has no "${l}"`)
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/coach-break-card.png`, clip: { x: 0, y: 0, width: 520, height: 300 } })
+    await ip.click(pushBtn)
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'coach' && a.op === 'pushups' && a.ck === 'break'), null, { timeout: 3000 })
     await ip.context().close()
   })
   // The island's controls (IC1–IC4, IC10): pause from the peek (it shows at once,

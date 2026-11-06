@@ -7,6 +7,8 @@ import type { PcPrefs } from '@core/pcActivity'
 import { Row, Switch } from './settingsUi'
 import { useAction } from './ui'
 import { IslandRecipesPanel, SmartLearned } from './IslandRecipesPanel'
+import { COACH_LABEL, coachReady, type CoachKind } from '@core/pcCoach'
+import { coachMutedKinds, coachTurnBackOn, setCoach } from './pcCoachFeed'
 
 type Info = { prefs: PcPrefs; port: number; token: string; now: { label: string; kind: string } | null; windows: boolean; siteServer?: string | null }
 
@@ -26,6 +28,7 @@ export function PcPrivacyPanel() {
     const t = setInterval(load, 5000)
     return () => clearInterval(t)
   }, [load])
+  const [muted, setMuted] = useState<CoachKind[]>(() => coachMutedKinds())
   const historyOn = !!info?.prefs.browserHistory
   useEffect(() => {
     if (!historyOn) return setWeb(null)
@@ -45,6 +48,38 @@ export function PcPrivacyPanel() {
       <p className="hint small">
         Everything below stays on this PC. Ben only gets the day's totals, and only if you turn on "Share totals with Ben". {info.windows ? '' : 'Most sensors work on Windows only.'}
       </p>
+      <h4 className="pc-h">Ben on your PC</h4>
+      <Row
+        title="Let Ben see what I'm doing"
+        hint="Ben cheers real work (25, 50, 90 min of coding or study), calls you back after 10+ min of YouTube or games when you planned to work, asks for a break with water or push-ups after about an hour, and guards your bedtime. It turns on the app in front, the Smart island, away time and today's totals. Only app names and kinds of doing, worked out on this PC; nothing leaves it. How hard he pushes: Settings → Ben → My life. Sounds: Settings → Sound."
+      >
+        <Switch
+          label="Let Ben see what I'm doing"
+          on={coachReady(p)}
+          onChange={async (v) => {
+            const next = await setCoach(v)
+            if (next) setInfo({ ...info, prefs: next })
+          }}
+        />
+      </Row>
+      {muted.length > 0 && (
+        <p className="hint small">
+          You asked for less of:{' '}
+          {muted.map((k) => (
+            <button
+              key={k}
+              className="btn small ghost"
+              title="Back to normal"
+              onClick={() => {
+                coachTurnBackOn(k)
+                setMuted(coachMutedKinds())
+              }}
+            >
+              {COACH_LABEL[k]} ↺
+            </button>
+          ))}
+        </p>
+      )}
       {p.activeApp && (
         <p className="pc-live" role="status">
           👁 Ben sees now: <b>{info.now ? info.now.label : '…'}</b>

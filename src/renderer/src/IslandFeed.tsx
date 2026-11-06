@@ -10,7 +10,9 @@ import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
-import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
+import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert, workNow } from '@core/islandSmart'
+import { coachAnswer, coachTick } from './pcCoachFeed'
+import { DEFAULT_WAKE, toMin as fitMin } from '@core/lifeFit'
 import { windDown } from '@core/islandBody'
 import { dayNudge } from '@core/dayNudges'
 import { alertTopic, govern, noteMessage, noteShown, sleptOnTime, textTopic, waterSeen, weekDaysFromStore, weeklyHealth, windDownMode, type GovernCtx, type Queued, type ReminderItem, type Shown } from '@core/healthyDay'
@@ -507,6 +509,36 @@ export function IslandFeed() {
         })
       : null
     if (health) put(QUEUE, health.queue)
+    // Ben on your PC (pcCoach.ts): praise, back to it, breaks, bedtime, from what you really do here (only with its switch on).
+    const coachCard = await (async () => {
+      const wb = workNow(blocks.current.list, now)
+      const w = fit ? workToday(fit, dayKey(new Date(now))) : null
+      const hmNow = new Date(now).getHours() * 60 + new Date(now).getMinutes()
+      const nextBlock = blocks.current.list.filter((b) => !b.maybe && !b.call && b.kind !== 'event' && b.start > now - 5 * 60_000 && b.start < now + 3 * 3600_000).sort((x, y) => x.start - y.start)[0]
+      const mustdo = status.mustdos.find((m) => !m.done)
+      const movedAt = Math.max(nudges?.lastMoveAt ?? 0, ...shown.filter((x) => x.topic === 'move').map((x) => x.at))
+      const card = await coachTick({
+        now,
+        idleSec,
+        activeSince,
+        workGoalMin: Math.max(60, focusGoal),
+        push: fit?.push ?? 'push',
+        focus: focusRun && !focusRun.pausedAt ? { subject: focusRun.subject } : null,
+        block: wb && !wb.call ? { title: wb.title, end: wb.end } : null,
+        workHour: !!w && w.mode !== 'off' && hmNow >= fitMin(w.from) && hmNow < fitMin(w.to),
+        meeting: !!callOn,
+        bedTarget,
+        latestBed: fit?.latestBed,
+        wakeTime: fit?.wake ?? DEFAULT_WAKE,
+        bedLogged,
+        nextUp: nextBlock ? { title: nextBlock.title, minutes: Math.round((nextBlock.end - nextBlock.start) / 60000) } : mustdo ? { title: mustdo.text } : null,
+        lastMoveAt: movedAt,
+        morningShown: shown.some((x) => x.topic === 'morning' && localDayOf(x.at) === localDayOf(now)),
+        eveningAt: evAt
+      }).catch(() => null)
+      // A break or a bedtime line goes through the same governor as every body nudge.
+      return card && (card.kind === 'move' || card.kind === 'late') ? govern(card, govCtx, shown).show : card
+    })()
     const alertNow = (() => {
       // Paused: its time is never up (the end moves on with the pause).
       // Your reminders show as their own card (Done / Snooze), not as a copy of Ben's ⏰ message.
@@ -536,6 +568,8 @@ export function IslandFeed() {
         qualityAlert(dismissed, now) ??
         // HD: your reminder, then your body and your day's edges, through one governor.
         health?.alert ??
+        // Ben on your PC: one reaction at a time, by his own limits.
+        coachCard ??
         // Goals: a check-in that's due (once a period; never during a timer or a call).
         goalAlert(now, busy, dismissed) ??
         (() => {
@@ -997,6 +1031,35 @@ export function IslandFeed() {
             if (!/^https:\/\//.test(a.url)) throw new Error('That meeting has no call link')
             window.open(a.url, '_blank', 'noopener')
             said = '🎥 Opening the call'
+            break
+          }
+          case 'coach': {
+            // Ben on your PC: what you tapped is logged here (only what you did), then the coach remembers your answer.
+            if (a.op === 'water') {
+              put(LAST_WATER, Date.now())
+              const rowId = a.id ? `isl-${a.id}` : undefined
+              await addWater(250, { source: 'island', id: rowId })
+              rememberUndo(a.id, { kind: 'water', ml: 250, rowId })
+              nudgeYes('water')
+              said = '💧 +250 ml. Good.'
+            } else if (a.op === 'pushups') {
+              said = (await nudgeAct({ kind: 'moveBreak', name: 'Push-ups', n: 10, alertId: a.alertId, id: a.id }, { moved: () => void (activeSince = Date.now()) })) ?? null
+            } else if (a.op === 'stretch') {
+              activeSince = Date.now()
+              put(LAST_MOVE, Date.now())
+              said = '🧍 Nice. Back at it.'
+            } else if (a.op === 'bed') {
+              await life.sleep.logBed()
+              window.dispatchEvent(new CustomEvent('life-sleep-changed'))
+              put(BED_AUTO, null)
+              said = 'Good night 🌙 · logged in Waky'
+            } else if (a.op === 'start' && a.subject) {
+              const st = await life.focus.start(a.subject, Math.max(5, Math.min(180, a.minutes ?? 25)), null)
+              rememberUndo(a.id, st.running ? { kind: 'start', startedAt: st.running.startedAt } : null)
+              window.dispatchEvent(new Event('life-focus-changed'))
+              said = `▶ ${a.subject}`
+            }
+            said = (await coachAnswer(a.ck, a.op, a.minutes)) ?? said
             break
           }
           case 'suggest':

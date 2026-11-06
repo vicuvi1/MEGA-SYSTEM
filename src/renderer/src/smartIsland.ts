@@ -60,6 +60,8 @@ let prev = { runningAt: 0 as number, block: '', meeting: false }
 let changed: () => void = () => {}
 
 export const smartOn = () => !!prefs?.smart && !!prefs.activeApp
+/** The PC switches as the app window last read them (at most a minute old). */
+export const pcPrefsNow = (): PcPrefs | null => prefs
 const suggestOn = () => smartOn() && !!prefs?.smartSuggest
 const recipesOn = () => !!prefs?.smartRecipes && !!window.desktop?.islandState
 

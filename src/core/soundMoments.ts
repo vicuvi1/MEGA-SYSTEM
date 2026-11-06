@@ -8,8 +8,8 @@
 // soundMoments.test.ts. No audio files.
 import type { SoundCategory, SoundName, Voice } from './sounds'
 
-export type MomentId = 'ben' | 'reminder' | 'water' | 'move' | 'eyes' | 'timer' | 'meeting' | 'done' | 'points' | 'bed' | 'error'
-export type MomentSound = 'chime' | 'bell' | 'pop' | 'marimba' | 'glass' | 'drop' | 'rise' | 'gong' | 'coin' | 'hum' | 'knock' | 'pulse' | 'none'
+export type MomentId = 'ben' | 'reminder' | 'water' | 'move' | 'eyes' | 'timer' | 'meeting' | 'done' | 'points' | 'bed' | 'error' | 'praise' | 'drift'
+export type MomentSound = 'chime' | 'bell' | 'pop' | 'marimba' | 'glass' | 'drop' | 'rise' | 'gong' | 'coin' | 'hum' | 'knock' | 'pulse' | 'cheer' | 'tap' | 'none'
 
 export const MOMENTS: { id: MomentId; label: string; icon: string }[] = [
   { id: 'ben', label: 'Ben writes to you', icon: '💬' },
@@ -22,7 +22,9 @@ export const MOMENTS: { id: MomentId; label: string; icon: string }[] = [
   { id: 'done', label: 'Task or must-do done', icon: '✅' },
   { id: 'points', label: 'Points and rewards', icon: '⭐' },
   { id: 'bed', label: 'Bedtime and wind-down', icon: '🌙' },
-  { id: 'error', label: 'Something went wrong', icon: '⚠️' }
+  { id: 'error', label: 'Something went wrong', icon: '⚠️' },
+  { id: 'praise', label: 'Ben cheers your work', icon: '🔥' },
+  { id: 'drift', label: 'Ben calls you back to work', icon: '👀' }
 ]
 
 /** The built-in sounds to pick from (and None). */
@@ -39,6 +41,8 @@ export const MOMENT_SOUNDS: { id: MomentSound; label: string }[] = [
   { id: 'gong', label: 'Gong' },
   { id: 'hum', label: 'Soft hum' },
   { id: 'knock', label: 'Low knock' },
+  { id: 'cheer', label: 'Cheer' },
+  { id: 'tap', label: 'Shoulder tap' },
   { id: 'none', label: 'None' }
 ]
 
@@ -54,7 +58,9 @@ export const DEFAULT_MOMENTS: Record<MomentId, MomentSound> = {
   done: 'chime',
   points: 'coin',
   bed: 'hum',
-  error: 'knock'
+  error: 'knock',
+  praise: 'cheer',
+  drift: 'tap'
 }
 
 const SOUND_IDS = new Set<string>(MOMENT_SOUNDS.map((s) => s.id))
@@ -67,7 +73,7 @@ export function cleanMoments(raw: unknown): Record<MomentId, MomentSound> {
 
 /** Which of your sound switches (Settings → Sound) each moment follows. */
 export const MOMENT_CATEGORY: Record<MomentId, SoundCategory> = {
-  ben: 'alerts', reminder: 'alerts', water: 'alerts', move: 'alerts', eyes: 'alerts', meeting: 'alerts', bed: 'alerts', error: 'alerts',
+  ben: 'alerts', reminder: 'alerts', water: 'alerts', move: 'alerts', eyes: 'alerts', meeting: 'alerts', bed: 'alerts', error: 'alerts', praise: 'alerts', drift: 'alerts',
   timer: 'focus', done: 'success', points: 'money'
 }
 
@@ -83,6 +89,8 @@ const BY_SOUND: Partial<Record<SoundName, MomentId>> = {
   mustDo: 'done', success: 'done', habit: 'done',
   coin: 'points', reward: 'points', remindReward: 'points',
   remindBed: 'bed',
+  remindPraise: 'praise',
+  remindDrift: 'drift',
   error: 'error'
 }
 export const momentForSound = (name: SoundName): MomentId | null => BY_SOUND[name] ?? null
@@ -90,7 +98,7 @@ export const momentForSound = (name: SoundName): MomentId | null => BY_SOUND[nam
 /** The moment for an island card (its kind; `meeting`: a calendar meeting starting soon). */
 export function momentForAlert(kind: string, meeting = false): MomentId {
   if (meeting) return 'meeting'
-  const m: Record<string, MomentId> = { ben: 'ben', remind: 'reminder', water: 'water', move: 'move', eyes: 'eyes', over: 'timer', end: 'timer', winddown: 'bed', sleep: 'bed', late: 'bed', reward: 'points', highlight: 'points' }
+  const m: Record<string, MomentId> = { ben: 'ben', remind: 'reminder', water: 'water', move: 'move', eyes: 'eyes', over: 'timer', end: 'timer', winddown: 'bed', sleep: 'bed', late: 'bed', reward: 'points', highlight: 'points', praise: 'praise', refocus: 'drift', coach: 'ben' }
   return m[kind] ?? 'reminder'
 }
 
@@ -129,6 +137,10 @@ export function momentRecipe(sound: MomentSound): Voice[] {
     case 'hum': return [v(329.63, 0, 0.9, 0.09, { attack: 0.25 }), v(246.94, 0.35, 1.1, 0.08, { attack: 0.3 })]
     // A low, soft thud (not a buzzer).
     case 'knock': return [v(150, 0, 0.18, 0.18, { f2: 70, lp: [600, 200], fixed: true })]
+    // A happy little "nice!": up, up, a bright top note that rings.
+    case 'cheer': return [v(783.99, 0, 0.1, 0.08, { wave: 'triangle' }), v(1046.5, 0.08, 0.1, 0.08, { wave: 'triangle' }), v(1567.98, 0.16, 0.38, 0.09), v(2093, 0.16, 0.3, 0.03)]
+    // Two soft taps on the shoulder (a heads-up, not an alarm).
+    case 'tap': return [v(392, 0, 0.08, 0.13, { wave: 'triangle', lp: [1800, 500], attack: 0.003, fixed: true }), v(392, 0.16, 0.08, 0.11, { wave: 'triangle', lp: [1800, 500], attack: 0.003, fixed: true })]
     case 'none': return []
   }
 }

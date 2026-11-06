@@ -60,7 +60,7 @@ export type SoundName =
   | 'coin' | 'spend' | 'reward'
   | 'focusStart' | 'focusEnd' | 'lastTick'
   | 'error' | 'notify' | 'ben'
-  | 'remind' | 'remindWater' | 'remindMove' | 'remindEyes' | 'remindBed' | 'remindReward' | 'remindMeeting'
+  | 'remind' | 'remindWater' | 'remindMove' | 'remindEyes' | 'remindBed' | 'remindReward' | 'remindMeeting' | 'remindPraise' | 'remindDrift'
 
 export const SOUND_CATEGORY: Record<SoundName, SoundCategory> = {
   tick: 'ui', click: 'ui',
@@ -68,7 +68,7 @@ export const SOUND_CATEGORY: Record<SoundName, SoundCategory> = {
   coin: 'money', spend: 'money', reward: 'money',
   focusStart: 'focus', focusEnd: 'focus', lastTick: 'focus',
   error: 'alerts', notify: 'alerts', ben: 'alerts',
-  remind: 'alerts', remindWater: 'alerts', remindMove: 'alerts', remindEyes: 'alerts', remindBed: 'alerts', remindReward: 'alerts', remindMeeting: 'alerts'
+  remind: 'alerts', remindWater: 'alerts', remindMove: 'alerts', remindEyes: 'alerts', remindBed: 'alerts', remindReward: 'alerts', remindMeeting: 'alerts', remindPraise: 'alerts', remindDrift: 'alerts'
 }
 export const SOUND_NAMES = Object.keys(SOUND_CATEGORY) as SoundName[]
 export const isSoundName = (x: unknown): x is SoundName => typeof x === 'string' && x in SOUND_CATEGORY
@@ -80,7 +80,7 @@ export const HAPTICS: Partial<Record<SoundName, number | number[]>> = { habit: 8
 export function remindSound(kind: string, meeting = false): SoundName {
   if (meeting) return 'remindMeeting'
   if (kind === 'winddown' || kind === 'sleep' || kind === 'bed' || kind === 'late') return 'remindBed'
-  const m: Record<string, SoundName> = { ben: 'ben', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', reward: 'remindReward', over: 'focusEnd' }
+  const m: Record<string, SoundName> = { ben: 'ben', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', reward: 'remindReward', over: 'focusEnd', praise: 'remindPraise', refocus: 'remindDrift', coach: 'ben' }
   return m[kind] ?? 'remind'
 }
 
@@ -204,6 +204,8 @@ export function recipe(name: SoundName, step = 0): Voice[] {
     case 'remindEyes': return [v(700, 0, 0.18, 0.1), v(700, 0.25, 0.18, 0.1)]
     case 'remindBed': return [v(330, 0, 0.7, 0.1)]
     case 'remindMeeting': return [0, 0.17, 0.34].map((t) => v(987.77, t, 0.09, 0.08, { attack: 0.004 }))
+    case 'remindPraise': return [v(783.99, 0, 0.1, 0.08), v(1046.5, 0.08, 0.1, 0.08), v(1567.98, 0.16, 0.38, 0.09)]
+    case 'remindDrift': return [v(392, 0, 0.08, 0.13, { wave: 'triangle', fixed: true }), v(392, 0.16, 0.08, 0.11, { wave: 'triangle', fixed: true })]
     case 'remindReward': return [1046, 1318, 1568, 2093].map((f, i) => v(f, i * 0.07, i === 3 ? 0.25 : 0.1, 0.09, { wave: 'triangle' }))
     default: return [v(660, 0, 0.35, 0.1), v(880, 0.12, 0.35, 0.1)]
   }

@@ -46,6 +46,8 @@ export interface PcPrefs {
   holdNotifs: boolean
   /** MC11: minutes on listed sites from the browser's own history (off until you turn it on). */
   browserHistory: boolean
+  /** "Let Ben see what I'm doing": the live coach on the island (pcCoach.ts). Off until you turn it on. */
+  coach: boolean
 }
 
 export const DEFAULT_PC: PcPrefs = {
@@ -69,7 +71,8 @@ export const DEFAULT_PC: PcPrefs = {
   blockSites: false,
   sites: ['youtube.com', 'reddit.com', 'tiktok.com', 'instagram.com', 'facebook.com', 'x.com', 'twitter.com', 'netflix.com', 'twitch.tv'],
   holdNotifs: true,
-  browserHistory: false
+  browserHistory: false,
+  coach: false
 }
 
 const words = (x: unknown, max = 60) => (Array.isArray(x) ? [...new Set(x.map((v) => String(v).trim().toLowerCase()).filter((v) => v && v.length <= 40))].slice(0, max) : null)
@@ -98,7 +101,8 @@ export function cleanPcPrefs(p: any): PcPrefs {
     blockSites: b('blockSites') as boolean,
     sites: (words(p?.sites, 80) ?? DEFAULT_PC.sites).map((s) => s.replace(/^https?:\/\//, '').replace(/\/.*$/, '')),
     holdNotifs: b('holdNotifs') as boolean,
-    browserHistory: b('browserHistory') as boolean
+    browserHistory: b('browserHistory') as boolean,
+    coach: b('coach') as boolean
   }
 }
 

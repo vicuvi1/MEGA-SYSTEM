@@ -32,6 +32,8 @@ export interface IslandAck { id: string; ok: boolean; error?: string; /** What h
 
 export type IslandAction = { id?: string } & (
   | { kind: 'water'; ml: number }
+  /** Ben on your PC (pcCoach.ts): a tap on one of his cards (praise, back to it, a break, bedtime…). */
+  | { kind: 'coach'; op: import('./pcCoach').CoachOp; ck: import('./pcCoach').CoachKind; alertId: string; subject?: string; minutes?: number }
   /** `ex`: the exercise id again (the tap's own id may take `id`'s place on the way). */
   | { kind: 'reps'; id: string; name: string; n: number; ex?: string }
   | { kind: 'mustdo'; i: number }
@@ -115,7 +117,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach'
   title: string
   text: string
   face?: string

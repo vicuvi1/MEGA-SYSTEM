@@ -1251,7 +1251,7 @@ export function DesktopIsland() {
       close()
     }
     // Answered the thing that peeked: it goes back to the pill.
-    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)))) close()
+    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water', 'coach'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)))) close()
   }
   tapRef.current = tap
   // IC4: what Enter will do, live while you type (the same rules as the command bar).
@@ -2097,7 +2097,8 @@ export function DesktopIsland() {
         <IslandNudgeCard a={a} tap={tap} onRun={startNudgeRun} sound={!!prefs.sound} volume={prefs.volume} />
       ) : a.actions.length > 0 && (
         <div className="di-actions">
-          {a.actions.slice(0, 3).map((x) => (
+          {/* Three buttons; four when they are short (Ben's break card: water, push-ups, stretch, later). */}
+          {a.actions.slice(0, a.actions.length === 4 && a.actions.reduce((t, x) => t + x.label.length, 0) <= 44 ? 4 : 3).map((x) => (
             <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`peek:alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
           ))}
         </div>
