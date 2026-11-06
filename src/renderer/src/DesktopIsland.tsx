@@ -14,6 +14,7 @@ import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionV
 import { dayPart } from '@core/islandFeel'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
 import { restingView, type RestItem, type RestKind } from '@core/islandRest'
+import { CALM_TIMING, calmDots, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
 
 import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desktop'
 import { AlertScene, CountUp, Glass, Marquee, Roll, TypeIn, type WaterSplash } from './IslandScenes'
@@ -52,6 +53,7 @@ import './island-motion.css'
 import './island-move.css'
 import './island-fit.css'
 import './island-rest.css'
+import './island-calm.css'
 import { islandSizing, type IslandDensity } from '@core/islandFit'
 import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
@@ -339,6 +341,28 @@ function FlyIn({ fl, f }: { fl: Flight; f: Feel }) {
   )
 }
 
+/** Calm's peek: an icon per kind when the alert brings none. */
+const CALM_FACE: Record<string, string> = { water: '💧', move: '🤸', eyes: '👀', remind: '⏰', timer: '⏰', meeting: '📅', bed: '🌙' }
+
+/**
+ * Calm at rest: a faint short line at the island's spot (or nothing), and a
+ * small coloured dot for each thing that waits. It takes no clicks: the page
+ * watches the zone around it and slides the pill out after a short rest.
+ */
+function CalmNub({ dots, rest }: { dots: CalmDot[]; rest: 'line' | 'none' }) {
+  const label = dots.length ? `${dots.map((d) => d.label).join(', ')}. Rest the mouse here to see the island.` : 'The island: rest the mouse here to see it.'
+  return (
+    <div className={`di-nub-wrap rest-${rest} ${dots.length ? 'has-dots' : ''}`} aria-label={label} title={dots.length ? dots.map((d) => d.label).join(' · ') : undefined}>
+      <i className="di-nub" aria-hidden />
+      {dots.length > 0 && (
+        <span className="di-nub-dots" aria-hidden>
+          {dots.map((d) => <i key={d.key} className={`di-nub-dot dot-${d.color}`} />)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function DesktopIsland() {
   // IC20: the first frame shows the last picture (this session), not an empty pill.
   const [raw, setS] = useState<IslandSnapshot>(() => cachedSnap() ?? EMPTY_ISLAND)
@@ -350,7 +374,8 @@ export function DesktopIsland() {
   const [place, setPlace] = useState<IslandPlacement>('top')
   // H1: hidden / tucked into a dot / move mode / out of the way.
   const mv = useIslandMove()
-  const [basePrefs, setPrefs] = useState<IslandPrefs>(DEFAULT_ISLAND_PREFS)
+  // An older desktop (or none) doesn't say how the island behaves: it keeps the always-there pill (Lively) until told.
+  const [basePrefs, setPrefs] = useState<IslandPrefs>(() => ({ ...DEFAULT_ISLAND_PREFS, mode: 'lively' }))
   // Island 2: your tiles, buttons, profiles and colours (from the snapshot); a profile's own reminders on top of your settings.
   const tapRef = useRef<(a: IslandAction, lbl?: string) => void>(() => {})
   const k = useKit(s, (a, lbl) => tapRef.current(a, lbl))
@@ -433,7 +458,8 @@ export function DesktopIsland() {
       return
     }
     // IF7, IF11: your hover delay (or click only), how long reminders peek, how long the panel stays.
-    const step = islandStep(uiRef.current, e, islandTiming(prefsRef.current))
+    // Calm: the pill never grows into the bigger peek on hover; staying on it opens the panel (below).
+    const step = islandStep(uiRef.current, e, islandTiming(prefsRef.current.mode === 'calm' ? { ...prefsRef.current, openOn: 'click' } : prefsRef.current))
     // IS23: every change of view, and what caused it.
     if (step.ui.view !== uiRef.current.view) {
       logIslandUi('view', `${uiRef.current.view} → ${step.ui.view} (${e.type})`)
@@ -483,7 +509,8 @@ export function DesktopIsland() {
     desk()?.onIslandPlacement?.(setPlace)
     desk()?.onIslandPrefs?.((p) => {
       // An older desktop may not send the newer settings: they get their defaults.
-      setPrefs({ ...p, ...cleanIslandPrefs(p) })
+      const clean = cleanIslandPrefs(p)
+      setPrefs({ ...p, ...clean, mode: (p as { mode?: unknown }).mode === undefined ? 'lively' : clean.mode })
       setScale(Number.isFinite(p.scale) && p.scale! > 0 ? p.scale! : ISLAND_ZOOM[p.size] ?? 1)
       const dens = (p as { density?: unknown }).density
       setSentDensity(dens === 'compact' || dens === 'normal' ? dens : null)
@@ -559,6 +586,19 @@ export function DesktopIsland() {
   useEffect(() => {
     if (look.hoverOpen && ui.view === 'peek' && ui.over && !ui.byAlert && !s.locked) dispatch({ type: 'click' })
   }, [look.hoverOpen, ui.view, ui.over, ui.byAlert, s.locked]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Calm: a one-line peek opens into its card when the mouse goes onto it (it stays while the mouse is there).
+  const [calmCard, setCalmCard] = useState(false)
+  const calmCardRef = useRef(false)
+  useEffect(() => {
+    if (prefs.mode === 'calm' && ui.view === 'peek' && ui.byAlert && ui.over && !calmCardRef.current) {
+      calmCardRef.current = true
+      setCalmCard(true)
+    }
+    if (ui.view === 'compact' && calmCardRef.current) {
+      calmCardRef.current = false
+      setCalmCard(false)
+    }
+  }, [prefs.mode, ui.view, ui.byAlert, ui.over])
   // IS12: tell the desktop when a meeting from your calendar is on (by its data: a call link or other people, accepted).
   const meetingOn = !!s.inMeeting
   useEffect(() => {
@@ -580,7 +620,8 @@ export function DesktopIsland() {
   const seenAlert = useRef<string | null>(null)
   const lastPeek = useRef(0)
   const held = useRef(0)
-  const gateOf = (kind: string, meeting = false, dot = false) => alertGate({ kind, meeting, dot, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() })
+  // Calm / Balanced (core/islandCalm.ts) can only make it quieter: a dot instead of a peek.
+  const gateOf = (kind: string, meeting = false, dot = false) => modeGate({ mode: prefsRef.current.mode, kind, meeting, peekFor: prefsRef.current.peekFor, base: alertGate({ kind, meeting, dot, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() }) })
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
@@ -596,8 +637,10 @@ export function DesktopIsland() {
     const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : { type: 'alert' }
     const pref = alertPref(a.kind, !!a.meeting)
     if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume)
-    // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce.
-    if (uiRef.current.view === 'compact' && fRef.current.moves) {
+    calmCardRef.current = false
+    setCalmCard(false)
+    // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce (not in Calm: it slides out of the line).
+    if (uiRef.current.view === 'compact' && fRef.current.moves && prefsRef.current.mode !== 'calm') {
       setStretch(true)
       setDropping2(true)
       window.setTimeout(() => {
@@ -722,7 +765,8 @@ export function DesktopIsland() {
     if (!meetKey || meetKey === openedFor.current || quiet) return
     openedFor.current = meetKey
     logIslandUi('meeting', 'opened by itself before a meeting')
-    dispatch({ type: 'autoOpen', ms: 90_000 })
+    // Calm and Balanced never open the whole panel by themselves: the meeting peeks instead.
+    dispatch(prefsRef.current.mode === 'lively' ? { type: 'autoOpen', ms: 90_000 } : { type: 'alert', ms: 15_000 })
   }, [meetKey, quiet, dispatch])
 
   // ---- the shape's size: measured from the view inside it, animated with a spring ----
@@ -826,10 +870,11 @@ export function DesktopIsland() {
     }
     target.current = rects
     dbg.target = rects
-    const key = rects.map((b) => `${b.x},${b.y} ${b.w}×${b.h}`).join(' ')
+    const key = (calmHiddenRef.current ? 'calm ' : '') + rects.map((b) => `${b.x},${b.y} ${b.w}×${b.h}`).join(' ')
     if (key !== lastHot.current) {
       lastHot.current = key
-      desk()?.islandHot?.({ rects })
+      // calm: only the faint line shows (the desktop needs no lean or near checks then).
+      desk()?.islandHot?.({ rects, ...(calmHiddenRef.current ? { calm: true } : {}) })
       if (settled) logIslandUi('click area', key)
     }
     // The shape changed under a resting pointer: check it again.
@@ -880,9 +925,51 @@ export function DesktopIsland() {
   const lastPtr = useRef<{ x: number; y: number } | null>(null)
   const takeSent = useRef<{ on: boolean; at: number } | null>(null)
   const recheckT = useRef(0)
+  // ---- Calm (core/islandCalm.ts): hidden until the mouse rests on its spot ----
+  // At rest only the faint line is drawn and clicks pass through everywhere
+  // (the line too). The mouse resting in the zone around it for a moment
+  // slides the pill out; moving away hides it again ~600 ms later.
+  const [calmPhase, setCalmPhase] = useState<CalmPhase>('rest')
+  const calmPhaseRef = useRef<CalmPhase>('rest')
+  const calmT = useRef(0)
+  const calmHiddenRef = useRef(false)
+  const lastPillW = useRef(200)
+  const calmOpts = useRef({ overTitleBar: false, restW: 200, vertical: false })
+  const calmSendRef = useRef<(e: CalmEvent) => void>(() => {})
+  const calmSend = useCallback((e: CalmEvent) => {
+    const r = calmStep(calmPhaseRef.current, e, calmTiming(calmOpts.current.overTitleBar))
+    if (r.timer !== undefined) {
+      clearTimeout(calmT.current)
+      calmT.current = 0
+      if (r.timer) calmT.current = window.setTimeout(() => calmSendRef.current({ type: 'timer' }), r.timer.ms)
+    }
+    if (r.phase === calmPhaseRef.current) return
+    calmPhaseRef.current = r.phase
+    setCalmPhase(r.phase)
+    dbgEvent('calm', { phase: r.phase, why: e.type })
+    if (r.phase === 'shown' || r.phase === 'rest') logIslandUi('calm', r.phase === 'shown' ? 'the pill slid out' : 'back to the line')
+  }, [])
+  calmSendRef.current = calmSend
+  useEffect(() => () => clearTimeout(calmT.current), [])
   const evaluate = useCallback((force = false) => {
     if (!desk()?.islandTakeClicks) return
     const p = lastPtr.current
+    if (calmHiddenRef.current) {
+      // Calm at rest: never take clicks (the tab strip or window buttons under it stay yours); only watch the zone.
+      const nub = rootEl.current?.querySelector('.di-nub-wrap')?.getBoundingClientRect()
+      const o = calmOpts.current
+      const near = !!p && !!nub && inZone(p.x, p.y, calmZone({ x: nub.left, y: nub.top, w: nub.width, h: nub.height }, o))
+      calmSend({ type: near ? 'enter' : 'leave' })
+      clearTimeout(recheckT.current)
+      shield.current = SHIELD_OFF
+      dbg.take = false
+      if (force || takeSent.current?.on !== false) {
+        takeSent.current = { on: false, at: Date.now() }
+        desk()?.islandTakeClicks?.(false)
+      }
+      if (uiRef.current.over) dispatch({ type: 'hover', on: false })
+      return
+    }
     let inside = false
     if (p) {
       inside = inRects(p.x, p.y, target.current, SHIELD_PAD)
@@ -912,6 +999,7 @@ export function DesktopIsland() {
   }, [dispatch])
   evaluateRef.current = evaluate
   pointerLeft.current = () => {
+    calmSendRef.current({ type: 'leave' })
     lastPtr.current = null
     dbg.ptr = null
     clearTimeout(recheckT.current)
@@ -1819,6 +1907,38 @@ export function DesktopIsland() {
     return null
   }
   const restLabel = s.locked ? 'Open Life System' : picked ? `${picked.text} ${picked.sub}` : restMain.tip
+  // ---- Calm: the line at rest, its dots, the one-line peek (core/islandCalm.ts) ----
+  const calm = prefs.mode === 'calm'
+  // Staying on the pill opens the panel (not while the mouse is on a dot, and not with "open on click").
+  const [onDot, setOnDot] = useState(false)
+  useEffect(() => {
+    if (!calm || ui.view !== 'compact' || !ui.over || onDot || prefs.openOn === 'click' || s.locked || !calmRevealed(calmPhase)) return
+    const t = window.setTimeout(() => dispatch({ type: 'click' }), CALM_TIMING.expandMs)
+    return () => clearTimeout(t)
+  }, [calm, ui.view, ui.over, onDot, prefs.openOn, s.locked, calmPhase, dispatch])
+  const calmHidden = calm && ui.view === 'compact' && !calmRevealed(calmPhase) && !mv.moveMode && !mv.parked && !nudgeRun
+  calmHiddenRef.current = calmHidden
+  useEffect(() => {
+    if (calmHidden || ui.view !== 'compact') setOnDot(false)
+  }, [calmHidden, ui.view])
+  if (!calmHidden && ui.view === 'compact' && size.w > 60) lastPillW.current = size.w * scale
+  calmOpts.current = { overTitleBar: !!q.maximized, restW: lastPillW.current, vertical: place === 'left' || place === 'right' }
+  const dotAlert = s.alert && gateOf(s.alert.kind, !!s.alert.meeting) !== 'drop' ? s.alert : null
+  const dots: CalmDot[] = calm && !s.locked ? calmDots({ alert: dotAlert, benUnread: s.ben.unread }) : []
+  /** A dot: its card (the alert with its buttons), or the panel for Ben's message. */
+  const openDot = (d: CalmDot) => {
+    if (d.open === 'ben') return dispatch({ type: 'click' })
+    calmCardRef.current = true
+    setCalmCard(true)
+    dispatch({ type: 'alert', ms: 20_000 })
+  }
+  const calmDotsRow = calm && dots.length > 0 && !s.locked ? (
+    <span className="di-calm-dots" onPointerEnter={() => setOnDot(true)} onPointerLeave={() => setOnDot(false)}>
+      {dots.map((d) => (
+        <button key={d.key} type="button" className={`di-calm-dot dot-${d.color}`} title={d.label} aria-label={`${d.label}: open`} {...tp(`calm:dot:${d.open}`, () => openDot(d))} />
+      ))}
+    </span>
+  ) : null
   const compact = (
     <div
       className={`di-pill di-rest kind-${restKind} ${restSecond ? 'has-second' : ''}`}
@@ -1899,6 +2019,8 @@ export function DesktopIsland() {
       {!s.locked && !old && <SysPill rest={!ui.over} />}
       {/* IN35: your one-tap buttons (shown while the mouse is on the pill). */}
       {!s.locked && <PillKitButtons k={k} />}
+      {/* Calm: what waits, one coloured dot each; a tap opens its card. */}
+      {calmDotsRow}
     </div>
   )
 
@@ -1946,7 +2068,7 @@ export function DesktopIsland() {
   const quick = quickButtons(main, s, prefs.chips, now)
   const a = s.alert && gateOf(s.alert.kind) !== 'drop' ? s.alert : null
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-  const peek = a && (ui.byAlert || !main) ? (
+  const peek = a && (ui.byAlert || !main || (prefs.mode === 'calm' && calmCard)) ? (
     <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
       {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
       <div className="di-peek-top">
@@ -2295,6 +2417,14 @@ export function DesktopIsland() {
     </div>
   )
 
+  // Calm: something new peeks as one slim line (icon + a few words). The mouse on it opens its card; it never opens the panel by itself.
+  const calmPeek = a ? (
+    <div className={`di-peek calm-peek kind-${a.kind}`} role="button" tabIndex={0} title="Open it" {...tp('calm:peek', () => { calmCardRef.current = true; setCalmCard(true) })} aria-label={`${a.title}: ${a.text}. Open it`}>
+      <span className="calm-peek-face" aria-hidden>{a.face ?? CALM_FACE[peekKind(a.kind, !!a.meeting) ?? ''] ?? (a.kind === 'ben' ? s.ben.face : '✨')}</span>
+      <span className="calm-peek-text"><b>{a.title}</b>{a.text ? <span>{a.text.replace(/<[^>]+>/g, '')}</span> : null}</span>
+      <i className={`calm-peek-dot dot-${dotColor(a.kind, !!a.meeting)}`} aria-hidden />
+    </div>
+  ) : null
   // Quiet (Q7) or a call in "dot" mode (Q5): a small moon / dot; hold it to see why.
   const until = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
   // A full-screen app with "Small dot" (the desktop hides it for "Hide it").
@@ -2329,14 +2459,20 @@ export function DesktopIsland() {
   )
   const showMoment = !!moment && !hushed && !s.locked && !old
   // The thin Indicator: one capsule on the top edge; the timer, music, captions and alerts live inside it.
-  const barNow = bar && !ui.over && ui.view === 'compact' && !mv.parked && !hushed
+  const barNow = bar && !ui.over && ui.view === 'compact' && !mv.parked && !hushed && !calmHidden
   const indInfo = {
     fill: run ? { from: run.startedAt, to: run.endsAt, freeze: run.pausedAt ?? null } : s.now ? { from: s.now.start, to: s.now.end, soft: true } : null,
     music: !!sc.playing,
     rec: captioning,
     alert: s.alert?.id ?? null
   }
-  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
+  const views = { compact: calmHidden ? <CalmNub dots={dots} rest={prefs.calmRest} /> : mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : calm && ui.byAlert && !calmCard && a ? calmPeek : peek, expanded }
+  // Calm: a peek or the open panel holds the pill out; back on the pill with the mouse away, it hides ~600 ms later.
+  useEffect(() => {
+    if (prefs.mode !== 'calm') return calmSend({ type: 'reset' })
+    if (ui.view !== 'compact' || ui.over || mv.moveMode || nudgeRun) calmSend({ type: 'hold' })
+    else if (calmPhase === 'shown') calmSend({ type: 'leave' })
+  }, [prefs.mode, ui.view, ui.over, mv.moveMode, nudgeRun, calmPhase, calmSend])
   // No desktop size (the website preview, an older desktop): fit the screen the page is on.
   const sentMaxH = (prefs as { panelMaxH?: number }).panelMaxH
   const localFit = islandSizing({ pick: prefs.size, area: { width: window.screen?.availWidth, height: window.screen?.availHeight }, panelWidth: prefs.panelWidth })
@@ -2444,12 +2580,12 @@ export function DesktopIsland() {
   const hidden = docHidden || !visible
   // Rings and sweeps: every frame only while the shape moves, 4 times a second otherwise, not at all hidden or tucked away.
   useEffect(() => {
-    setFrameMode(hidden || tuck !== 'none' || mv.parked ? 'paused' : moving ? 'fast' : 'slow')
-  }, [hidden, tuck, moving, mv.parked])
+    setFrameMode(hidden || tuck !== 'none' || mv.parked || calmHidden ? 'paused' : moving ? 'fast' : 'slow')
+  }, [hidden, tuck, moving, mv.parked, calmHidden])
   // IM4: the particles only in Full, never while hidden or tucked away.
   useEffect(() => {
-    setParticlesAllowed(f.extras && !hidden && tuck === 'none')
-  }, [f.extras, hidden, tuck])
+    setParticlesAllowed(f.extras && !hidden && tuck === 'none' && !calmHidden)
+  }, [f.extras, hidden, tuck, calmHidden])
   // IM11, IM12: the pointer near the island (the desktop says, ~30 times a
   // second within 40 px; the page's own pointer moves too): the pill leans
   // 2–3 px toward it (Full) and a tucked-away dot blinks awake.
@@ -2462,7 +2598,7 @@ export function DesktopIsland() {
       nearRef.current = near
       el.classList.toggle('is-near', near)
     }
-    const ok = fRef.current.moves && uiRef.current.view === 'compact' && !movingRef.current && !document.documentElement.classList.contains('di-dragging')
+    const ok = fRef.current.moves && uiRef.current.view === 'compact' && !calmHiddenRef.current && !movingRef.current && !document.documentElement.classList.contains('di-dragging')
     const l = ok ? leanFor(n) : { x: 0, y: 0 }
     el.style.setProperty('--di-lean', `${l.x}px ${l.y}px`)
   }, [])
@@ -2531,7 +2667,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''}`}
+            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''} mode-${prefs.mode} ${calmHidden ? 'calm-hidden' : ''} ${calmHidden && prefs.calmRest === 'none' ? 'calm-none' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2563,7 +2699,7 @@ export function DesktopIsland() {
               <motion.div className="di-follow" style={{ y: mh }}>{sweep}</motion.div>
             </motion.div>
             {/* The notch's shoulders: the concave curves where it meets the top edge, like a hardware notch. */}
-            {notchOn && !barNow && !bar && <motion.div className={`di-ears at-${anchor}`} style={{ width: mw, scale: lift, scaleX: jx, originX: origin, originY: 0 }} aria-hidden />}
+            {notchOn && !barNow && !bar && !calmHidden && <motion.div className={`di-ears at-${anchor}`} style={{ width: mw, scale: lift, scaleX: jx, originX: origin, originY: 0 }} aria-hidden />}
             <motion.div className={`di-beside at-${anchor}`} style={{ x: besideX }}>
               <AnimatePresence>{stackOn ? null : bubbleEl}</AnimatePresence>
               {stackOn && <LiveStack items={stack} open={stackOpen} side={side as 1 | -1} icon={bubbleIcon} onPick={pickKey} onMoved={(done) => (done ? sendHot(true) : pump(700))} />}

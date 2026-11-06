@@ -609,6 +609,91 @@ try {
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'suggest' && a.answer === 'later'), null, { timeout: 3000 })
     await ip.context().close()
   })
+  // Calm (the default on the desktop): hidden until the mouse rests on its spot,
+  // new things peek as one slim line and then wait as a coloured dot.
+  await step('Desktop island Calm: only a faint line at rest, hover brings the pill, a nudge peeks then waits as a dot, a quiet kind is only a dot, your reminder peeks, a dot opens its card', async () => {
+    const shots = process.env.CALM_SHOTS
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island calm: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: { title: 'Study group', start: now + 40 * 60_000, end: now + 100 * 60_000 },
+        mustdos: [], water: { ml: 500, target: 2000 }, reps: [], alert: null
+      }
+      window.__island = { take: [], actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {},
+        islandTakeClicks: (on) => { window.__island.take.push(on) },
+        islandAction: (a) => { window.__island.actions.push(a) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 2, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    // A made-up browser tab strip behind it, so the screenshots show what sits under the island.
+    if (shots) await ip.addStyleTag({ content: 'body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(#2b2d33 0 34px, #f4f5f7 34px); }' })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
+    if (await ip.$('.di-pill')) throw new Error('Calm at rest still shows the pill')
+    const nub = await ip.locator('.di-nub').boundingBox()
+    if (!nub || nub.width > 60 || nub.height > 6) throw new Error(`the resting line is ${nub?.width}×${nub?.height}`)
+    if (shots) await ip.screenshot({ path: `${shots}/calm-rest-line.png`, clip: { x: 0, y: 0, width: 520, height: 90 } })
+    // Passing the mouse over it quickly does nothing, and clicks keep passing through.
+    await ip.mouse.move(nub.x + nub.width / 2, nub.y + 2)
+    await ip.waitForTimeout(60)
+    await ip.mouse.move(nub.x + nub.width / 2, 300)
+    await ip.waitForTimeout(400)
+    if (await ip.$('.di-pill')) throw new Error('a quick pass brought the pill out')
+    if (await ip.evaluate(() => window.__island.take.includes(true))) throw new Error('the resting line took clicks')
+    // Resting on it: the pill slides out.
+    await ip.mouse.move(nub.x + nub.width / 2, nub.y + 2)
+    await ip.waitForSelector('.di-pill.di-rest', { timeout: 3000 })
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/calm-hover-pill.png`, clip: { x: 0, y: 0, width: 520, height: 120 } })
+    // Staying on it opens the panel; away, it goes back to the line.
+    await ip.waitForSelector('.di-panel', { timeout: 3000 })
+    await ip.mouse.move(260, 600, { steps: 3 })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 8000 })
+    if (await ip.$('.di-panel')) throw new Error('the panel stayed open')
+    // An eye break (off in "Peek for"): no peek, only a green dot.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: { id: 'eyes:1', kind: 'eyes', title: 'Eye break', text: 'Look far away for 20 seconds', actions: [] } }))
+    await ip.waitForSelector('.di-nub-dot.dot-green', { timeout: 5000 })
+    await ip.waitForTimeout(500)
+    if (await ip.$('.di-peek')) throw new Error('an eye break popped up in Calm')
+    // Water (on): a slim one-line peek, never the panel, then a blue dot on the line.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: { id: 'water:1', kind: 'water', title: 'Water', text: '2 glasses behind', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
+    await ip.waitForSelector('.di-peek.calm-peek', { timeout: 5000 })
+    if (await ip.$('.di-panel') || await ip.$('.di-peek.alert')) throw new Error('the water nudge opened more than the slim peek')
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/calm-peek.png`, clip: { x: 0, y: 0, width: 520, height: 120 } })
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 6000 })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-dot.dot-blue', { timeout: 4000 })
+    if (shots) await ip.screenshot({ path: `${shots}/calm-dot.png`, clip: { x: 0, y: 0, width: 520, height: 90 } })
+    // A reminder you set still peeks by itself.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: { id: 'remind:1', kind: 'remind', title: 'Reminder', text: 'Call the dentist', actions: [{ label: '✓ Done', action: { kind: 'dismiss', id: 'remind:1' }, primary: true }] } }))
+    await ip.waitForSelector('.di-peek.calm-peek.kind-remind', { timeout: 5000 })
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 6000 })
+    await ip.waitForSelector('.di-nub-dot.dot-amber', { timeout: 4000 })
+    // Hover, then tap its dot: the reminder's card with its buttons.
+    const n2 = await ip.locator('.di-nub').boundingBox()
+    await ip.mouse.move(n2.x + n2.width / 2, n2.y + 2)
+    await ip.waitForSelector('.di-pill .di-calm-dot.dot-amber', { timeout: 3000 })
+    // On a dot the panel doesn't open by itself (staying on the rest of the pill does).
+    await ip.hover('.di-pill .di-calm-dot.dot-amber')
+    await ip.waitForTimeout(1200)
+    if (await ip.$('.di-panel')) throw new Error('the panel opened while the mouse was on a dot')
+    if (shots) await ip.screenshot({ path: `${shots}/calm-pill-dot.png`, clip: { x: 0, y: 0, width: 520, height: 120 } })
+    await ip.click('.di-pill .di-calm-dot.dot-amber')
+    await ip.waitForSelector('.di-peek.alert.kind-remind [data-tap="peek:alert:✓ Done"]', { timeout: 4000 })
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/calm-dot-card.png`, clip: { x: 0, y: 0, width: 520, height: 260 } })
+    await ip.context().close()
+  })
   // The island's controls (IC1–IC4, IC10): pause from the peek (it shows at once,
   // and shakes back when the app says no), the round menu, live suggestions in
   // the command bar, and undo after a log.

@@ -6,6 +6,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { cleanIslandPrefs, CLICK_LABEL, HIDE_SEC, KIND_LABEL, PILL_LABEL, SECTION_LABEL, SIZE_LIMITS, type AlertKindPref, type AlertRule, type ClickAction, type IslandPrefs } from '@core/islandModel'
 import { autoLabel, PICK_PANEL_W } from '@core/islandFit'
+import { BALANCED_PEEKS, ISLAND_MODES, MODE_HINT, MODE_LABEL, PEEK_KINDS, PEEK_LABEL, type IslandMode, type PeekKind } from '@core/islandCalm'
+import { hideText, SHOWN } from '@core/islandMove'
 import { isAltGrCombo, keyLabel, pressToAccelerator, shortcutClash } from '@core/islandKeys'
 import { PROFILE_IDS, PROFILE_LABEL, type IslandControls, type IslandProfileId } from '@core/islandControlPrefs'
 import { PLACEMENT_LABEL, PLACEMENTS, type IslandDeskPrefs, type MonitorMode, type Placement } from '../../desktop/islandWin'
@@ -256,6 +258,44 @@ export function IslandSettingsPanel() {
       </header>
       <p className="muted bk-note">Make the island at the edge of your screen yours. Changes show right away and are kept on this PC.</p>
 
+      <h3 className="is-sec">How the island behaves</h3>
+      <Row title="Style" hint={MODE_HINT[p.mode]}>
+        <Segmented<IslandMode> label="How the island behaves" value={p.mode} options={ISLAND_MODES.map((m) => [m, MODE_LABEL[m]])} onChange={(v) => void save({ mode: v })} />
+      </Row>
+      {p.mode === 'calm' && (
+        <Row title="While it's hidden" hint={p.calmRest === 'none' ? 'Nothing at its spot. Rest the mouse there to bring it out. A small dot still shows when something waits.' : 'A faint short line marks its spot. Rest the mouse there to bring it out.'}>
+          <Segmented label="While it's hidden" value={p.calmRest} options={[['line', 'Show a small line'], ['none', 'Show nothing']]} onChange={(v) => void save({ calmRest: v })} />
+        </Row>
+      )}
+      {p.mode !== 'lively' && (
+        <>
+          <Row title="Peek for" hint={p.mode === 'calm' ? 'These slide down for a few seconds by themselves, then wait as a coloured dot. Everything else is only a dot. Quiet hours, calls, focus and the hourly limit still hold them back.' : 'Only these can drop down by themselves in Balanced. Everything else waits as a dot.'} />
+          <div className="is-kinds is-peekfor">
+            {PEEK_KINDS.filter((k: PeekKind) => p.mode === 'calm' || BALANCED_PEEKS.has(k)).map((k: PeekKind) => (
+              <label key={k} className="is-kind">
+                <span>{PEEK_LABEL[k]}</span>
+                <Switch label={`Peek for ${PEEK_LABEL[k]}`} on={p.peekFor[k]} onChange={(v) => void save({ peekFor: { ...p.peekFor, [k]: v } })} />
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+      {desk.islandHide && (
+        <Row title="Hide it for a while" hint={p.hidden && p.hidden.mode !== 'shown' ? hideText(p.hidden, Date.now()) : 'Gone completely; it comes back by itself'}>
+          <span className="is-hide-btns">
+            {p.hidden && p.hidden.mode !== 'shown' ? (
+              <button type="button" className="btn small ghost" onClick={() => { desk.islandHide?.(null); setP({ ...p, hidden: SHOWN }) }}>Bring it back</button>
+            ) : (
+              <>
+                <button type="button" className="btn small ghost" onClick={() => { desk.islandHide?.('1h'); setP({ ...p, hidden: { mode: 'hidden', until: Date.now() + 3600_000 } }) }}>For 1 hour</button>
+                <button type="button" className="btn small ghost" onClick={() => { desk.islandHide?.('tomorrow'); setP({ ...p, hidden: { mode: 'hidden', until: Date.now() + 12 * 3600_000 } }) }}>Until tomorrow</button>
+              </>
+            )}
+          </span>
+        </Row>
+      )}
+      {p.hideShortcut != null && keyRow('hideShortcut', 'Hide or bring back the island', 'The same keys hide it and bring it back, from any app (the tray can too)')}
+
       {desk.islandDisplays && (<>
       <h3 className="is-sec">Where</h3>
       <Row title="Position" hint="Drag the island to move it too: drop it on an edge to dock it">
@@ -458,7 +498,6 @@ export function IslandSettingsPanel() {
       {keyRow('quietShortcut', 'Quiet', "Quiet for an hour, or back on (also in the tray and the island's 🌙)")}
       {p.captureShortcut != null && keyRow('captureShortcut', 'Add a task', 'A box to add a Todoist task from any app')}
       {p.voiceShortcut != null && keyRow('voiceShortcut', 'Talk to Ben', 'Press to record a voice note to Ben, press again to send it')}
-      {p.hideShortcut != null && keyRow('hideShortcut', 'Hide or bring back the island', 'The same keys hide it and bring it back (the tray can too)')}
 
       <h3 className="is-sec">Controls</h3>
       <Row title="Round menu" hint="Hold the pill for a moment: six quick actions fan out; slide to one and let go">

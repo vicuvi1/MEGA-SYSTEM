@@ -171,7 +171,7 @@ export interface DesktopApi {
   /** Island window: quiet until (ms, 0 = not quiet), and what Windows says (a call, a full-screen app). */
   onIslandQuiet?(cb: (q: { until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: IslandDeskPrefs['fullscreen']; maximized?: boolean }) => void): void
   /** Island window: where the visible shape is, in CSS pixels of the page (one or more areas); clicks pass through elsewhere. The old single rect still works. */
-  islandHot?(rect: { rects: { x: number; y: number; w: number; h: number }[] } | { x: number; y: number; width: number; height: number }): void
+  islandHot?(rect: { rects: { x: number; y: number; w: number; h: number }[]; calm?: boolean } | { x: number; y: number; width: number; height: number }): void
   /** Island window: the pointer is on the island (take clicks) or not (let them pass through) (IC1). */
   islandTakeClicks?(on: boolean): void
   /** Island window: shown or hidden (it pauses its animations while hidden). */

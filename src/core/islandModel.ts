@@ -7,6 +7,7 @@ import type { ContextKind } from './activityContext'
 import type { SafeAction } from './recipes'
 import { cleanControls, DEFAULT_CONTROLS, type IslandControls } from './islandControlPrefs'
 import { rainItem, sunItem } from './widgets/weatherPill'
+import { cleanPeekFor, DEFAULT_PEEK_FOR, isIslandMode, type CalmRest, type IslandMode, type PeekKind } from './islandCalm'
 
 export interface IslandBlock {
   title: string
@@ -429,6 +430,12 @@ export interface IslandPrefs {
   motion: 'full' | 'calm' | 'off'
   /** IC3–IC19: the round menu, the break after focus, fading while you type, profiles. */
   controls: IslandControls
+  /** How the island behaves: Calm (hidden until hover, dots instead of pop-ups), Balanced or Lively (core/islandCalm.ts). */
+  mode: IslandMode
+  /** Calm at rest: a faint short line at its spot, or nothing. */
+  calmRest: CalmRest
+  /** Calm and Balanced: which things may still peek by themselves. */
+  peekFor: Record<PeekKind, boolean>
 }
 
 /** peek: it drops down; dot: a dot only (it waits in the panel); never: not shown (IF5). */
@@ -507,7 +514,10 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   peekWidth: 400,
   panelWidth: 600,
   motion: 'full',
-  controls: DEFAULT_CONTROLS
+  controls: DEFAULT_CONTROLS,
+  mode: 'calm',
+  calmRest: 'line',
+  peekFor: DEFAULT_PEEK_FOR
 }
 /** The zoom of each pick when the desktop doesn't send one (Compact is tighter by its density, not smaller). */
 export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { auto: 1, compact: 1, normal: 1, large: 1.15 }
@@ -565,7 +575,11 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
     peekWidth: num(p?.peekWidth, SIZE_LIMITS.peekWidth[0], SIZE_LIMITS.peekWidth[1], d.peekWidth, true),
     panelWidth: num(p?.panelWidth, SIZE_LIMITS.panelWidth[0], SIZE_LIMITS.panelWidth[1], d.panelWidth, true),
     motion: ['full', 'calm', 'off'].includes(p?.motion) ? p.motion : d.motion,
-    controls: cleanControls(p?.controls)
+    controls: cleanControls(p?.controls),
+    // Calm is the default (also for set-ups saved before it existed: they had no mode).
+    mode: isIslandMode(p?.mode) ? p.mode : d.mode,
+    calmRest: p?.calmRest === 'none' ? 'none' : 'line',
+    peekFor: cleanPeekFor(p?.peekFor)
   }
 }
 

@@ -29,3 +29,7 @@
   .is-key .is-err { text-align: left; }
   .is-slider { width: 100%; }
 }
+
+/* Calm: "Hide it for a while" buttons side by side. */
+.is-hide-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.is-hide-btns .btn { border: 1px solid rgb(var(--ink) / 0.14); }

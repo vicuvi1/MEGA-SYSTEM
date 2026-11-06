@@ -136,6 +136,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let pageCtl = false
   /** The pointer is inside the window's box (null: not known). */
   let inWin: boolean | null = null
+  /** Calm at rest: the page shows only its faint line (it watches the hover zone itself). */
+  let calmRest = false
   /** Island debug (IC13): the last poll's timing, for the overlay. */
   const timing = { lastPoll: 0, jitter: 0, lastTick: 0, lag: 0, flips: 0 }
   let drag: { timer: ReturnType<typeof setInterval>; offX: number; offY: number; w: number; h: number; startedAt: number; lastMove: number; lx: number; ly: number; spot?: string } | null = null
@@ -667,6 +669,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const list = hotRects(r)
     if (!list) return
     hot = list
+    // Calm at rest (only the faint line shows): no leaning toward the mouse.
+    calmRest = (r as { calm?: unknown } | null)?.calm === true
     refit()
     diag('hot', `Click area: ${list.map((h) => `${Math.round(h.x)},${Math.round(h.y)} ${Math.round(h.w)}×${Math.round(h.h)}`).join(' + ') || 'none'} (zoom ${pageZoom().toFixed(2)})`)
   })
@@ -717,6 +721,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let leanSent = false
   setInterval(() => {
     if (!win || win.isDestroyed() || drag || !win.isVisible() || !hot.length) return
+    if (calmRest) {
+      if (leanSent) { leanSent = false; win.webContents.send('island:cursor', null) }
+      return
+    }
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
     const z = pageZoom() || 1

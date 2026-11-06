@@ -1,0 +1,61 @@
+/* Calm (core/islandCalm.ts): hidden until the mouse rests on its spot.
+   At rest only a faint short line (or nothing) and the waiting dots; the
+   black shape, its shadow and every animation are off. */
+.di {
+  --calm-line: rgb(150 152 165 / 0.42);
+  --calm-blue: #4aa8ff;
+  --calm-green: #3ddc84;
+  --calm-amber: #ffb020;
+  --calm-lime: #d4ff3f;
+  --calm-grey: #9aa0aa;
+}
+@media (prefers-color-scheme: light) { .di { --calm-line: rgb(70 72 85 / 0.3); } }
+.di.theme-light { --calm-line: rgb(70 72 85 / 0.3); }
+
+.di.calm-hidden .di-shape { background: transparent; box-shadow: none; backdrop-filter: none; }
+.di.calm-hidden .di-shade, .di.calm-hidden .di-sky, .di.calm-hidden .di-beside { opacity: 0; visibility: hidden; }
+/* Nothing moves while it rests. */
+.di.calm-hidden, .di.calm-hidden * { animation: none; }
+
+.di-nub-wrap { display: flex; align-items: flex-start; gap: 4px; padding: 0 2px 2px; }
+.di-nub { display: block; width: 48px; height: 3px; border-radius: 0 0 3px 3px; background: var(--calm-line); opacity: 0.8; transition: opacity 0.2s ease; }
+.di.calm-hidden.is-near .di-nub { opacity: 1; }
+/* "Show nothing": the spot still works; only waiting dots show. */
+.di.calm-none .di-nub { opacity: 0; }
+.di.calm-none .di-nub-wrap:not(.has-dots) { min-height: 3px; }
+.di-nub-dots { display: flex; gap: 3px; padding-top: 1px; }
+.di-nub-dot { display: block; width: 5px; height: 5px; border-radius: 50%; opacity: 0.85; }
+.di.calm-hidden.is-near .di-nub-dot { opacity: 1; }
+
+/* Docked on a side: an upright line. */
+.di.at-left .di-nub-wrap, .di.at-right .di-nub-wrap { flex-direction: column; align-items: center; padding: 2px; }
+.di.at-left .di-nub, .di.at-right .di-nub { width: 3px; height: 48px; border-radius: 3px; }
+.di.at-left .di-nub-dots, .di.at-right .di-nub-dots { flex-direction: column; padding: 0; }
+
+/* The dot colours (on the line, in the pill, in the slim peek). */
+.di .dot-blue { background: var(--calm-blue); }
+.di .dot-green { background: var(--calm-green); }
+.di .dot-amber { background: var(--calm-amber); }
+.di .dot-lime { background: var(--calm-lime); }
+.di .dot-grey { background: var(--calm-grey); }
+
+/* In the pill (the mouse brought it out): one button per waiting thing. */
+.di-calm-dots { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; }
+.di-calm-dot { width: 9px; height: 9px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 2px rgb(0 0 0 / 0.35); transition: transform 0.15s ease; }
+.di-calm-dot:hover, .di-calm-dot:focus-visible { transform: scale(1.35); }
+.di-calm-dot:focus-visible { outline: 2px solid var(--calm-lime); outline-offset: 2px; }
+
+/* The slim one-line peek: an icon, a few words, its dot. */
+.di-peek.calm-peek {
+  display: flex; align-items: center; gap: 8px; box-sizing: border-box;
+  width: max-content; height: var(--di-pill-h, 38px); max-width: var(--di-peek-w, 400px); min-width: 180px;
+  padding: 0 14px; cursor: pointer;
+}
+.calm-peek-face { flex: none; font-size: 16px; line-height: 1; }
+.calm-peek-text { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.calm-peek-text b { font-weight: 650; margin-right: 6px; }
+.calm-peek-text span { opacity: 0.78; }
+.calm-peek-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+
+/* Calm has its own coloured dots: no extra red dot in the pill. */
+.di.mode-calm .rest-item .rest-dot:not(.rec) { display: none; }
