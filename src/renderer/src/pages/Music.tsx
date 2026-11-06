@@ -7,7 +7,7 @@
 // so there is one player, not two. Stations sync across devices (island_kit).
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { DEFAULT_KIT, type IslandKit } from '@core/islandTiles'
-import { EXAMPLE_STATIONS, moveStation, toggleFav, type MusicKit } from '@core/music'
+import { moveStation, toggleFav, type MusicKit } from '@core/music'
 import { addStation, removeStation, renameStation, STATION_KIND_LABEL } from '@core/soundcloud'
 import { life } from '../bridge'
 import { getRecents, subscribeRecents } from '../music/engine'
@@ -18,6 +18,7 @@ import {
   Ambient, Artwork, clickPress, EqMode, Lyrics, MuIcon, PlayerPicker, Scroller, SleepTimer, StarButton, StationTile, SysTransport, ThinBar, Times, TrackList, Transport, UpNext,
   useRememberArt, useTint, tintStyle, Volume, Waveform
 } from '../music/MusicUi'
+import { VibeGrid } from '../music/VibeGrid'
 import '../music/musicPage.css'
 
 function useMusicKit(): [IslandKit, (m: Partial<MusicKit>) => void] {
@@ -63,7 +64,12 @@ export function Music() {
   }
   return (
     <div className="mup mu" style={tintStyle(tint.rgb, s)}>
-      <section className={`mup-hero ${s.playing ? 'playing' : ''}`} aria-label="Now playing">
+      {f.kind === 'none' && !sc.probing && (
+        <section className="mup-card mup-vibes" aria-label="Pick a vibe">
+          <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="page" now={{ hour: new Date().getHours() }} />
+        </section>
+      )}
+      <section className={`mup-hero ${f.kind === 'none' ? 'idle' : ''} ${s.playing ? 'playing' : ''}`} aria-label="Now playing">
         <Ambient s={s} />
         <div className="mup-hero-in">
           <Artwork s={s} size={260} className="mup-art" />
@@ -82,7 +88,7 @@ export function Music() {
             {f.kind === 'none' ? (
               <>
                 <h2 className="mup-title">Nothing playing</h2>
-                <p className="mup-artist">{sc.probing ? 'Looking for the island…' : music.stations.length ? 'Pick a station below to start.' : 'Add a SoundCloud playlist, track or likes link below.'}</p>
+                <p className="mup-artist">{sc.probing ? 'Looking for the island…' : 'Pick a vibe above, or one of your stations below.'}</p>
               </>
             ) : (
               <>
@@ -112,6 +118,11 @@ export function Music() {
 
       <div className="mup-cols">
         <div className="mup-col">
+          {f.kind !== 'none' && (
+            <section className="mup-card mup-vibes">
+              <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="page:sec" now={{ hour: new Date().getHours() }} title="Vibes" />
+            </section>
+          )}
           <section className="mup-card">
             <h3>Up next</h3>
             {sc.s.loaded ? <UpNext ctl={sc} press={press} max={10} /> : <p className="mu-empty">Play a station to see what comes next.</p>}
@@ -128,14 +139,7 @@ export function Music() {
                 ))}
               </div>
             ) : (
-              <div className="mup-examples" aria-label="Examples">
-                <p className="mu-empty">Your stations will look like this (made-up examples):</p>
-                <div className="mu-grid">
-                  {EXAMPLE_STATIONS.map((x) => (
-                    <StationTile key={x.id} st={x} on={false} playing={false} press={() => ({ disabled: true })} id={`ex:${x.id}`} onPlay={() => {}} />
-                  ))}
-                </div>
-              </div>
+              <p className="mu-empty">Paste a SoundCloud playlist, track or likes link to keep it here, next to the vibes.</p>
             )}
             <div className="mu-add">
               <input value={url} placeholder="https://soundcloud.com/artist/sets/playlist" onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} aria-label="SoundCloud address" />
@@ -183,6 +187,7 @@ export function Music() {
             <h3>Options</h3>
             <label><input type="checkbox" checked={music.lyrics} onChange={(e) => saveMusic({ lyrics: e.target.checked })} /> Synced lyrics <small>(the song's name is looked up on lrclib.net)</small></label>
             <label><input type="checkbox" checked={music.pillLyric} disabled={!music.lyrics} onChange={(e) => saveMusic({ pillLyric: e.target.checked })} /> Show the lyric line on the island's pill</label>
+            <label><input type="checkbox" checked={music.nowToast} onChange={(e) => saveMusic({ nowToast: e.target.checked })} /> A small "now playing" card with the cover when the track changes</label>
             <label><input type="checkbox" checked={music.benSees} onChange={(e) => saveMusic({ benSees: e.target.checked })} /> Ben can see what's playing</label>
             <p className="mu-empty">It pauses by itself in a call, when the PC locks, and (with "Pause music during focus" on in PC & automation) when a focus timer starts. In the desktop app a focus mix plays instead, and the media keys work while it's loaded.</p>
           </section>

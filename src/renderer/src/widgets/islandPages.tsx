@@ -13,6 +13,7 @@
 //   ctx.now is the time, ctx.day is the Day page's own content (only Day uses it).
 // - order (optional): where a new page goes before you reorder it (lower = earlier).
 // - It returns a function that takes the page away again.
+import { islandPageSound } from '../islandSounds'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { IslandAction, IslandSnapshot } from '@core/islandModel'
 import { autoPage, cleanPagesPrefs, isPageId, keyDir, stepPage, swipeDir, visiblePages, wheelDir } from '@core/widgets/pages'
@@ -121,6 +122,7 @@ export function IslandPager({ snap, tap, now, day, profile }: { snap: IslandSnap
     if (id === page) return
     const d = shown.indexOf(id) > shown.indexOf(page) ? 1 : -1
     setDir(d)
+    islandPageSound(d)
     setLeaving((l) => ({ id: page, dir: d, n: (l?.n ?? 0) + 1 }))
     setCur(id)
     saveLast(id)

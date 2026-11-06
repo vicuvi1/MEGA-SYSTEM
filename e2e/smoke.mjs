@@ -151,6 +151,10 @@ try {
     await open('music')
     await pg.waitForSelector('.mup-hero', { timeout: 15000 })
     if (await pg.$('iframe[src*="soundcloud"]')) throw new Error('the player loaded before play')
+    // Nothing playing: "Pick a vibe" with the starter stations and "Play something for now".
+    await pg.waitForSelector('.vb-card', { timeout: 5000 })
+    if (!(await pg.$('.vb-now'))) throw new Error('no "Play something for now" button')
+    if ((await pg.locator('.vb-card').count()) < 6) throw new Error('fewer than 6 starter stations')
     await pg.fill('.mu-add input', 'https://soundcloud.com/example-artist/sets/smoke-mix')
     await pg.locator('.mu-add .mu-btn').click()
     await pg.waitForSelector('.mup-manage li', { timeout: 5000 })

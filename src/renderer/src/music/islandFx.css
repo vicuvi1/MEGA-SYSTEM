@@ -1,0 +1,38 @@
+/* MU: the island feels the music (IslandMusicFx.tsx). The beat is simulated
+   (--mu-beat from the track's name; SoundCloud's audio can't be analysed).
+   Transform and opacity only; loops run only while music plays. */
+
+/* ---- the opened panel's glow ---- */
+.di-beat-glow { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; mix-blend-mode: screen; opacity: 0; transition: opacity 0.6s ease; }
+.di-beat-glow.on { opacity: 1; }
+.di-beat-glow::before, .di-beat-glow::after { content: ''; position: absolute; width: 85%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgb(var(--mu-rgb) / 0.24), transparent); opacity: 0.6; transform: scale(0.94); }
+.di-beat-glow::before { top: -38%; left: -22%; }
+.di-beat-glow::after { bottom: -45%; right: -28%; background: radial-gradient(closest-side, rgb(var(--mu-rgb) / 0.16), transparent); }
+.di-beat-glow.on::before { animation: di-beat calc(var(--mu-beat, 0.75s) * 2) ease-in-out infinite; }
+.di-beat-glow.on::after { animation: di-beat calc(var(--mu-beat, 0.75s) * 2) ease-in-out calc(var(--mu-beat, 0.75s) * -1) infinite; }
+@keyframes di-beat { 0%, 100% { opacity: 0.5; transform: scale(0.92); } 14% { opacity: 1; transform: scale(1.06); } 40% { opacity: 0.68; transform: scale(0.98); } 64% { opacity: 0.85; transform: scale(1.02); } }
+
+/* ---- the pill: the equalizer and the cover ring follow the beat ---- */
+.di-sc-pill.playing .mu-eq.on b { animation-duration: var(--mu-beat, 0.75s); }
+.di-sc-pill.playing .mu-eq.on b:nth-child(2) { animation-duration: calc(var(--mu-beat, 0.75s) * 0.75); }
+.di-sc-pill.playing .mu-eq.on b:nth-child(3) { animation-duration: calc(var(--mu-beat, 0.75s) * 1.25); }
+.di-sc-pill.playing .mu-eq.on b:nth-child(4) { animation-duration: calc(var(--mu-beat, 0.75s) * 0.88); }
+.di-sc-pill .di-mp { isolation: isolate; }
+.di-sc-pill .di-mp::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; background: radial-gradient(closest-side, rgb(var(--mu-rgb) / 0.55), transparent); opacity: 0; transform: scale(0.8); pointer-events: none; z-index: -1; }
+.di-sc-pill.playing .di-mp::after { animation: di-kick var(--mu-beat, 0.75s) ease-out infinite; }
+@keyframes di-kick { 0% { opacity: 0.75; transform: scale(0.85); } 100% { opacity: 0; transform: scale(1.35); } }
+
+/* ---- the "now playing" card on the pill ---- */
+.di-np-toast { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 220px; padding: 2px 10px 2px 2px; border-radius: 999px; background: rgb(var(--mu-rgb) / 0.16); animation: di-np-in 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.di-np-toast img, .di-np-toast > i { flex: none; width: 22px; height: 22px; border-radius: 6px; object-fit: cover; display: grid; place-items: center; font-style: normal; font-size: 11px; background: rgb(var(--mu-rgb) / 0.4); }
+.di-np-t { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
+.di-np-t small { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
+.di-np-t b { font-size: 11.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@keyframes di-np-in { from { opacity: 0; transform: translateY(-4px) scale(0.92); } to { opacity: 1; transform: none; } }
+
+html.calm .di-beat-glow.on::before, html.calm .di-beat-glow.on::after, html.calm .di-sc-pill.playing .di-mp::after { animation-iteration-count: infinite !important; }
+@media (prefers-reduced-motion: reduce) {
+  .di-beat-glow.on::before, .di-beat-glow.on::after, .di-sc-pill.playing .di-mp::after { animation: none; }
+  .di-np-toast { animation-duration: 0.01s; }
+}
+.di.motion-off .di-beat-glow::before, .di.motion-off .di-beat-glow::after, .di.motion-off .di-sc-pill .di-mp::after { animation: none !important; }

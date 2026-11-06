@@ -19,6 +19,7 @@ import { serveRemote } from './music/remote'
 import { Eq, EqMode, lyricNow, MuIcon, posNow, Scroller, useTint, tintStyle } from './music/MusicUi'
 import { useLyrics } from './music/players'
 import { useTicker } from './music/hooks'
+import { NowPlayingToast, useTrackToast } from './music/IslandMusicFx'
 import './music/music.css'
 
 export { playStation, sc } from './music/engine'
@@ -124,12 +125,14 @@ export function ScPillBadge({ music }: { music?: MusicKit }) {
   const tint = useTint(s, '#d4ff3f')
   const lines = useLyrics(s.title, s.artist, s.dur, !!music?.lyrics && !!music?.pillLyric && s.loaded)
   useTicker(!!lines && s.playing, 1000)
+  const toast = useTrackToast(s, music?.nowToast !== false)
   if (!s.loaded || !s.station) return null
-  const lyric = lyricNow(s, lines)
+  const lyric = toast ? null : lyricNow(s, lines)
   return (
     <span className={`di-sc-pill mu ${s.playing ? 'playing' : ''}`} style={tintStyle(tint.rgb, s)} title={s.title || s.station.name} aria-label={s.playing ? `Playing ${s.title || s.station.name}` : 'Music paused'}>
       <RingArt />
       <EqMode on={s.playing} mode={music?.eqMode ?? 'beat'} />
+      {toast && <NowPlayingToast t={toast} />}
       {lyric && <Scroller key={lyric} className="di-mp-lyric" text={lyric} />}
     </span>
   )

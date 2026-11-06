@@ -59,3 +59,15 @@
   .mup .mu-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
   .mup-manage .mu-chip { padding: 0 8px; }
 }
+
+/* Nothing playing: the vibes lead, the player strip stays small. */
+.mup-vibes { padding: 20px; }
+.mup-vibes .vb-head h4 { font-size: 12px; }
+.mup-vibes .vb-now { max-width: 460px; }
+.mup-hero.idle { padding: 14px 18px; box-shadow: none; }
+.mup-hero.idle .mup-hero-in { gap: 16px; }
+.mup-hero.idle .mup-art { width: 56px !important; height: 56px !important; border-radius: 14px; }
+.mup-hero.idle .mup-title { font-size: 18px; margin: 0; }
+.mup-hero.idle .mup-artist { font-size: 13px; }
+.mup-hero.idle .mup-top { display: none; }
+.mup-hero.idle .mu-art-blank { font-size: 22px; }

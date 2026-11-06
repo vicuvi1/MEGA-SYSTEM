@@ -27,8 +27,12 @@ export interface SoundPrefs {
   bedVolume: number
   /** A very quiet tick in the last 10 seconds of a focus timer. */
   lastTen: boolean
+  /** The desktop island's own sounds (open, close, pages, taps, done…): off, subtle or full. */
+  island: 'off' | 'subtle' | 'full'
+  /** The island stays silent while a focus timer runs. */
+  islandFocusQuiet: boolean
 }
-export const DEFAULT_SOUND_PREFS: SoundPrefs = { cats: { ui: true, success: true, money: true, focus: true, alerts: true }, theme: 'soft', haptics: true, bed: 'off', bedVolume: 40, lastTen: true }
+export const DEFAULT_SOUND_PREFS: SoundPrefs = { cats: { ui: true, success: true, money: true, focus: true, alerts: true }, theme: 'soft', haptics: true, bed: 'off', bedVolume: 40, lastTen: true, island: 'subtle', islandFocusQuiet: false }
 
 export function cleanSoundPrefs(p: unknown): SoundPrefs {
   const o = (p && typeof p === 'object' ? p : {}) as Partial<SoundPrefs>
@@ -40,7 +44,9 @@ export function cleanSoundPrefs(p: unknown): SoundPrefs {
     haptics: o.haptics !== false,
     bed: o.bed === 'brown' || o.bed === 'rain' || o.bed === 'tick' ? o.bed : 'off',
     bedVolume: typeof o.bedVolume === 'number' ? Math.max(0, Math.min(100, o.bedVolume)) : 40,
-    lastTen: o.lastTen !== false
+    lastTen: o.lastTen !== false,
+    island: o.island === 'off' || o.island === 'full' ? o.island : 'subtle',
+    islandFocusQuiet: o.islandFocusQuiet === true
   }
 }
 

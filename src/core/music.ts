@@ -5,6 +5,7 @@
 // picked from the artwork, station order, the focus mix, and the "now
 // playing" line Ben may see. No DOM here; tested in music.test.ts.
 import { cleanStations, parseSoundCloud, type Station } from './soundcloud'
+import { cleanHiddenStarters } from './starterStations'
 
 // ---- the synced part (island_kit.music) ----
 
@@ -28,9 +29,13 @@ export interface MusicKit {
   eqMode: EqMode
   /** The player the views follow: 'sc', a PC player's id, or null (whatever plays). */
   pin: string | null
+  /** Starter stations you hid (their ids, core/starterStations.ts). */
+  hiddenStarters: string[]
+  /** A small "now playing" card with the cover (and a soft bell) when the track changes. */
+  nowToast: boolean
 }
 export type EqMode = 'beat' | 'pitch'
-export const DEFAULT_MUSIC: MusicKit = { stations: [], favs: [], focusMix: null, benSees: false, lyrics: true, pillLyric: false, eqMode: 'beat', pin: null }
+export const DEFAULT_MUSIC: MusicKit = { stations: [], favs: [], focusMix: null, benSees: false, lyrics: true, pillLyric: false, eqMode: 'beat', pin: null, hiddenStarters: [], nowToast: true }
 
 const line = (s: unknown, n: number) => String(s ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n)
 
@@ -66,7 +71,7 @@ export function cleanMusicKit(v: any): MusicKit {
   const stations = cleanStations(v?.stations)
   const mix = typeof v?.focusMix === 'string' && stations.some((s) => s.id === v.focusMix) ? v.focusMix : null
   const pin = typeof v?.pin === 'string' && /^(sc|sys:[A-Za-z0-9._!\- ]{1,200})$/.test(v.pin) ? v.pin : null
-  return { stations, favs: cleanFavs(v?.favs), focusMix: mix, benSees: v?.benSees === true, lyrics: v?.lyrics !== false, pillLyric: v?.pillLyric === true, eqMode: v?.eqMode === 'pitch' ? 'pitch' : 'beat', pin }
+  return { stations, favs: cleanFavs(v?.favs), focusMix: mix, benSees: v?.benSees === true, lyrics: v?.lyrics !== false, pillLyric: v?.pillLyric === true, eqMode: v?.eqMode === 'pitch' ? 'pitch' : 'beat', pin, hiddenStarters: cleanHiddenStarters(v?.hiddenStarters), nowToast: v?.nowToast !== false }
 }
 
 /** Star or unstar a track (newest first). */
@@ -355,3 +360,15 @@ export function pickPlayer(list: PlayerInfo[], pin: string | null): PlayerInfo |
   if (pinned) return pinned
   return list.find((p) => p.id === 'sc' && p.playing) ?? list.find((p) => p.playing) ?? list.find((p) => p.id === 'sc') ?? list[0]
 }
+
+// ---- the island's "now playing" card ----
+
+/**
+ * Should the island show its small "now playing" card? Only for a new
+ * track (a different address than the last one shown) that is playing, with
+ * the option on. A pause and play of the same song doesn't count.
+ */
+export function shouldToastTrack(lastShown: string | null, cur: { url: string; title: string; playing: boolean }, on: boolean): boolean {
+  return on && cur.playing && !!cur.url && !!cur.title && cur.url !== lastShown
+}
+export const NOW_TOAST_MS = 3600

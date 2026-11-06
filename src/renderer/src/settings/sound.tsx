@@ -7,6 +7,8 @@ import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { Icon } from '../Icon'
 import { useUiPrefs } from '../uiPrefs'
 import { bedPlaying, play, setBedVolume, soundPrefs, startBed, stopBed, whyQuiet } from '../soundKit'
+import { ISLAND_SOUND_LABEL, ISLAND_SOUND_MODES, type IslandSoundMode, type IslandSoundName } from '@core/islandSound'
+import { soundCheck } from '../islandSounds'
 
 /** What each kind's preview plays. */
 const PREVIEW: Record<SoundCategory, SoundName[]> = { success: ['habit', 'mustDo', 'water', 'levelUp'], money: ['coin', 'reward'], focus: ['focusStart', 'focusEnd'], alerts: ['remind', 'error'], ui: ['tick', 'click'] }
@@ -24,6 +26,14 @@ export function SoundSection() {
     startBed(k, { preview: true })
     setTrying(k)
     window.setTimeout(() => (bedPlaying() === k && stopBed(), setTrying((x) => (x === k ? null : x))), 5000)
+  }
+  const [checking, setChecking] = useState<IslandSoundName | null>(null)
+  const stopCheck = useRef<(() => void) | null>(null)
+  useEffect(() => () => stopCheck.current?.(), [])
+  const runCheck = () => {
+    stopCheck.current?.()
+    if (checking) return setChecking(null)
+    stopCheck.current = soundCheck((n) => setChecking(n))
   }
   const why = ui.sound ? whyQuiet() : null
   const step = useRef(0)
@@ -80,6 +90,19 @@ export function SoundSection() {
           {p.bed !== 'off' && (
             <Row title="Background volume" hint={`${p.bedVolume}%`}>
               <input className="sx-range" type="range" min={5} max={100} step={5} value={p.bedVolume} onChange={(e) => (set({ bedVolume: Number(e.target.value) }), setBedVolume(Number(e.target.value)))} aria-label="Background volume" />
+            </Row>
+          )}
+          <Row title="Island sounds" hint="The desktop island's own soft sounds: open and close, pages, taps, done, alerts. Much quieter while music plays, silent in a call">
+            <div className="sx-try">
+              <Segmented<IslandSoundMode> label="Island sounds" value={p.island} options={ISLAND_SOUND_MODES} onChange={(v) => set({ island: v })} />
+              <button type="button" className="btn small ghost" onClick={runCheck} disabled={p.island === 'off'} aria-live="polite">
+                {checking ? `Playing: ${ISLAND_SOUND_LABEL[checking]}` : 'Sound check'}
+              </button>
+            </div>
+          </Row>
+          {p.island !== 'off' && (
+            <Row title="Island quiet during focus" hint="No island sounds while a focus timer runs (errors still sound)">
+              <Switch label="Island quiet during focus" on={p.islandFocusQuiet} onChange={(v) => set({ islandFocusQuiet: v })} />
             </Row>
           )}
           <Row title="Last 10 seconds" hint="A very quiet tick each second before the gong (never in a meeting)">

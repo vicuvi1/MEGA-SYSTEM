@@ -8,6 +8,7 @@ import { nowPlayingLine } from '@core/music'
 import { widgetSrc } from '@core/soundcloud'
 import { attachFrame, getState, playStation, subscribe } from './music/engine'
 import type { Station } from '@core/soundcloud'
+import { STARTER_STATIONS } from '@core/starterStations'
 import { CHANNEL, isIslandPage, type TrackNote } from './music/remote'
 import { life } from './bridge'
 
@@ -35,7 +36,8 @@ async function noteTrack(k: TrackNote) {
 /** A station by its id, name or address (for automations: "play station Deep focus"). */
 async function findStation(q: string): Promise<Station | null> {
   const kit = await life.islandKit?.get().catch(() => null)
-  const list = kit?.music?.stations ?? []
+  // Your stations first, then the starter vibes ("play station Lofi beats").
+  const list: Station[] = [...(kit?.music?.stations ?? []), ...STARTER_STATIONS]
   const k = String(q ?? '').trim().toLowerCase()
   return list.find((x) => x.id.toLowerCase() === k) ?? list.find((x) => x.name.toLowerCase() === k) ?? list.find((x) => x.url === k) ?? list.find((x) => x.name.toLowerCase().includes(k)) ?? null
 }

@@ -9,6 +9,7 @@ import { WIDGET_API, type Station } from '@core/soundcloud'
 import { addRecent, cleanRecents, nextIndex, prevIndex, queueFrom, REPEAT_NEXT, safeArt, shuffleOrder, sleepVolume, type QItem, type Recent, type Repeat } from '@core/music'
 import { parseSoundCloud } from '@core/soundcloud'
 import { play as playSound } from '../soundKit'
+import { watchStationHealth } from './stationHealth'
 
 export interface ScState {
   station: Station | null
@@ -334,4 +335,17 @@ export function uiTick(): void {
   } catch {
     /* no audio */
   }
+}
+
+// A starter station SoundCloud won't play here: say so, stop, and it hides from the grid (music/stationHealth.ts).
+if (typeof window !== 'undefined') {
+  watchStationHealth(getState, subscribe, (url) => {
+    if (getState().station?.url !== url) return
+    try {
+      widget?.pause()
+    } catch {
+      /* gone */
+    }
+    set({ playing: false, error: "That station isn't available on SoundCloud right now, so it's hidden. Pick another vibe." })
+  })
 }

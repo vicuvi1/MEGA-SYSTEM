@@ -3,7 +3,7 @@
 // master volume and a limiter, so stacked sounds never clip. Unlocked on the
 // first tap, asleep after 30 s of silence. The notes, themes and rules live in
 // core/sounds.ts; nothing here is a file, everything is synthesized.
-import { DEFAULT_SOUND_PREFS, BED_LOWPASS, HAPTICS, SOUND_CATEGORY, bedSamples, cleanSoundPrefs, createDebounce, remindSound, soundBlock, soundLength, themed, type BedKind, type PlayCheck, type SoundCategory, type SoundName, type SoundPrefs } from '@core/sounds'
+import { DEFAULT_SOUND_PREFS, BED_LOWPASS, HAPTICS, SOUND_CATEGORY, bedSamples, cleanSoundPrefs, createDebounce, remindSound, soundBlock, soundLength, themed, type BedKind, type PlayCheck, type SoundCategory, type SoundName, type SoundPrefs, type Voice } from '@core/sounds'
 import { DEFAULT_NOTIF, getUiPrefs } from './uiPrefs'
 
 type Ctx = AudioContext
@@ -186,14 +186,27 @@ export function play(name: SoundName, opts: PlayOpts = {}): void {
   if (soundBlock(cat, playCheck(), opts)) return
   const e = engine()
   if (!e) return
+  const voices = themed(name, opts.theme ?? prefs.theme, opts.step ?? 0)
+  schedule(e, voices, cat, opts.gain == null ? 1 : Math.max(0, Math.min(1, opts.gain)), 0)
+}
+
+/** Turns notes into sound on a bus, at `extra` loudness, leaning left/right by `pan`. */
+function schedule(e: Engine, voices: Voice[], cat: SoundCategory, extra: number, pan: number): void {
   try {
     const { c, master, buses } = e
     wake(c)
     const vol = Math.max(0, Math.min(100, getUiPrefs().volume ?? 80)) / 100
     master.gain.setTargetAtTime(vol, c.currentTime, 0.01)
-    const voices = themed(name, opts.theme ?? prefs.theme, opts.step ?? 0)
-    const extra = opts.gain == null ? 1 : Math.max(0, Math.min(1, opts.gain))
+    let out: AudioNode = buses[cat]
+    let panner: StereoPannerNode | null = null
+    if (pan && typeof c.createStereoPanner === 'function') {
+      panner = c.createStereoPanner()
+      panner.pan.value = Math.max(-1, Math.min(1, pan))
+      panner.connect(buses[cat])
+      out = panner
+    }
     const t0 = c.currentTime + 0.005
+    let left = voices.length
     for (const x of voices) {
       const t = t0 + x.at
       const atk = x.attack ?? 0.008
@@ -207,10 +220,13 @@ export function play(name: SoundName, opts: PlayOpts = {}): void {
       if (x.noise) {
         const n = c.createBufferSource()
         n.buffer = noise(c)
+        // Longer air (a whoosh) loops the short noise buffer.
+        n.loop = x.len + atk > 0.09
         const bp = c.createBiquadFilter()
         bp.type = 'bandpass'
-        bp.frequency.value = x.f
-        bp.Q.value = 3
+        bp.frequency.setValueAtTime(x.f, t)
+        if (x.f2) bp.frequency.exponentialRampToValueAtTime(x.f2, end)
+        bp.Q.value = x.f2 ? 1.4 : 3
         n.connect(bp)
         src = n
         head = bp
@@ -230,13 +246,14 @@ export function play(name: SoundName, opts: PlayOpts = {}): void {
         head.connect(lp)
         head = lp
       }
-      head.connect(g).connect(buses[cat])
+      head.connect(g).connect(out)
       src.start(t)
       src.stop(end + 0.03)
       src.onended = () => {
         try {
           g.disconnect()
           src.disconnect()
+          if (--left === 0) panner?.disconnect()
         } catch {
           /* gone */
         }
@@ -246,6 +263,23 @@ export function play(name: SoundName, opts: PlayOpts = {}): void {
   } catch {
     /* no audio device, or the context went away */
   }
+}
+
+/** The sound engine has started (after your first tap or key): nothing makes it start early. */
+export const audioReady = () => !!eng && eng.c.state !== 'closed'
+
+/**
+ * Plays notes made elsewhere (the island's own sounds, core/islandSound.ts)
+ * through the same engine, the same rules (your switches, quiet hours, a
+ * meeting) and the same limiter. Never starts the engine before a gesture.
+ */
+export function playVoices(voices: Voice[], cat: SoundCategory, opts: { gain?: number; pan?: number; preview?: boolean } = {}): boolean {
+  if (!voices.length || !audioReady()) return false
+  if (soundBlock(cat, playCheck(), { preview: opts.preview })) return false
+  const e = engine()
+  if (!e) return false
+  schedule(e, voices, cat, opts.gain == null ? 1 : Math.max(0, Math.min(1, opts.gain)), opts.pan ?? 0)
+  return true
 }
 
 /** The island's reminders (water, stretch, eyes, bed…), at the island's own volume. */

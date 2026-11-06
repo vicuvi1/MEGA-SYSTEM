@@ -23,6 +23,7 @@ import { IslandMedia } from './IslandMedia'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
 import { play, playReminder } from './soundKit'
+import { islandActionSound, useIslandSoundEvents } from './islandSounds'
 import { useIslandSounds } from './focusSound'
 import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
 import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
@@ -30,6 +31,7 @@ import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from '
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
 import { MusicPanel, ScHost, ScPeekRow, ScPillBadge } from './IslandMusic'
+import { IslandBeatGlow } from './music/IslandMusicFx'
 import { useMusicPage } from './IslandMusicTab'
 import { IslandPager, useScriptClock } from './widgets/island'
 import { IslandBar, IslandClock, lookRootClasses, notchRadius, showBar, useIslandLook } from './widgets/islandLook'
@@ -1054,6 +1056,7 @@ export function DesktopIsland() {
     return () => clearTimeout(t)
   }, [undo])
   const send = (a: IslandAction) => {
+    islandActionSound(a, s)
     const t = label(a)
     dbgEvent('tap', { kind: a.kind })
     if (!t) {
@@ -1185,6 +1188,7 @@ export function DesktopIsland() {
     window.setTimeout(() => burstFrom(shape.current, m.colors, 60), 160)
   }, [s])
   useEffect(() => () => clearTimeout(momentT.current), [])
+  useIslandSoundEvents({ view: ui.view, snap: s, momentId: moment?.id, toastErr: toast?.state === 'err' ? `${toast.id}:${toast.text}` : null, over: ui.over })
   // Island 2: an eye break / tidy minute countdown or a breathing minute runs on the pill; done, it's noted.
   const [nudgeRun, setNudgeRun] = useState<NudgeRun | null>(null)
   const startNudgeRun = (r: NudgeRun) => {
@@ -1812,6 +1816,7 @@ export function DesktopIsland() {
   useKeyboardMode({ on: kbd && ui.view === 'expanded', panel: () => panelEl.current, input: () => input.current, suggesting: () => sugg.length > 0 })
   const expanded = (
     <div className="di-panel" ref={panelEl} role="dialog" aria-label="Life System command center">
+      <IslandBeatGlow />
       <header className="di-head" {...dragProps}>
         <span className={`di-face mood-${s.ben.mood}`}>{s.ben.face}</span>
         <div className="di-who">

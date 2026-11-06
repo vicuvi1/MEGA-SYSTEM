@@ -13,12 +13,22 @@ import { getRecents, subscribeRecents } from './music/engine'
 import { useMusic } from './music/remote'
 import { useFollowed, useLyrics, useSystemPlayers } from './music/players'
 import { rememberStationArt } from './music/hooks'
+import { looksLikeWorkout, type NowCtx } from '@core/starterStations'
+import type { IslandSnapshot } from '@core/islandModel'
+import { VibeGrid } from './music/VibeGrid'
 import { Ambient, Artwork, EqMode, Lyrics, PlayerPicker, Scroller, SleepTimer, StarButton, StationTile, SysTransport, ThinBar, Times, TrackList, Transport, UpNext, useRememberArt, useTint, tintStyle, Volume, Waveform, type Press } from './music/MusicUi'
 
 const press: Press = (id, fn) => tp(id, () => fn())
 type Sec = 'next' | 'stations' | 'favs' | 'recent'
 
-export function IslandMusicTab({ k, onBack }: { k: KitState; onBack: () => void }) {
+/** What's going on, for "Play something for now". */
+const nowFrom = (snap?: IslandSnapshot | null): NowCtx => ({
+  hour: new Date().getHours(),
+  focus: !!snap?.running && !snap.running.brk,
+  workout: looksLikeWorkout(snap?.running?.subject, snap?.now?.title)
+})
+
+export function IslandMusicTab({ k, onBack, snap }: { k: KitState; onBack: () => void; snap?: IslandSnapshot | null }) {
   const sc = useMusic()
   const music = k.kit.music
   const saveMusic = (m: Partial<MusicKit>) => k.save({ ...k.kit, music: { ...music, ...m } })
@@ -34,6 +44,8 @@ export function IslandMusicTab({ k, onBack }: { k: KitState; onBack: () => void 
   const [url, setUrl] = useState('')
   const [err, setErr] = useState('')
   const isSc = f.kind === 'sc'
+  const now = nowFrom(snap)
+  const hasLists = music.stations.length > 0 || music.favs.length > 0 || recents.length > 0
   const add = () => {
     const r = addStation(music.stations, url)
     if (r.error) return setErr(r.error)
@@ -42,6 +54,18 @@ export function IslandMusicTab({ k, onBack }: { k: KitState; onBack: () => void 
     saveMusic({ stations: r.list })
     if (r.station) ctl.run({ op: 'play', station: r.station })
   }
+  const pasteForm = (
+    <>
+      <div className="mu-add">
+        <input value={url} placeholder="soundcloud.com/artist/sets/playlist" onPointerDown={() => window.desktop?.islandFocus?.()} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} aria-label="SoundCloud address" />
+        <button className="mu-btn" {...tp('mu:isl:add', add)}>Add</button>
+        {!!music.stations.length && sc.s.station && music.stations.some((x) => x.url === sc.s.station?.url) && (
+          <button className="mu-btn ghost" title="Remove the station that is playing" {...tp('mu:isl:del', () => saveMusic({ stations: removeStation(music.stations, music.stations.find((x) => x.url === sc.s.station?.url)!.id) }))}>Remove this one</button>
+        )}
+      </div>
+      {err && <p className="mu-warn">{err}</p>}
+    </>
+  )
   return (
     <section className="di-mu mu" style={tintStyle(tint.rgb, s)} aria-label="Music">
       <Ambient s={s} />
@@ -56,13 +80,7 @@ export function IslandMusicTab({ k, onBack }: { k: KitState; onBack: () => void 
       <PlayerPicker players={f.players} current={f.current} pin={music.pin} onPin={(pin) => saveMusic({ pin })} press={press} prefix="mu:isl" />
 
       {f.kind === 'none' ? (
-        <div className="di-mu-hero">
-          <Artwork s={s} size={112} />
-          <div className="di-mu-meta">
-            <span className="t">Nothing playing</span>
-            <span className="a">{music.stations.length ? 'Pick a station below.' : 'Paste a SoundCloud playlist, track or likes link below.'}</span>
-          </div>
-        </div>
+        <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="mu:isl" now={now} paste={pasteForm} />
       ) : (
         <>
           <div className="di-mu-hero">
@@ -90,7 +108,7 @@ export function IslandMusicTab({ k, onBack }: { k: KitState; onBack: () => void 
         </>
       )}
 
-      <div className="di-mu-tabs" role="tablist">
+      {(f.kind !== 'none' || hasLists) && <div className="di-mu-tabs" role="tablist">
         {(
           [
             ['next', 'Up next'],
@@ -101,8 +119,8 @@ export function IslandMusicTab({ k, onBack }: { k: KitState; onBack: () => void 
         ).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={sec === id} className={`mu-chip di-mu-tab-btn ${sec === id ? 'on' : ''}`} {...tp(`mu:sec:${id}`, () => setSec(id))}>{label}</button>
         ))}
-      </div>
-      <div className="di-mu-sec">
+      </div>}
+      {(f.kind !== 'none' || hasLists) && <div className="di-mu-sec">
         {sec === 'next' && (sc.s.loaded ? <UpNext ctl={sc} press={press} max={6} prefix="mu:isl" /> : <p className="mu-empty">Play a station to see what comes next.</p>)}
         {sec === 'stations' && (
           <>
@@ -113,19 +131,12 @@ export function IslandMusicTab({ k, onBack }: { k: KitState; onBack: () => void 
                 ))}
               </div>
             )}
-            <div className="mu-add">
-              <input value={url} placeholder="soundcloud.com/artist/sets/playlist" onPointerDown={() => window.desktop?.islandFocus?.()} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} aria-label="SoundCloud address" />
-              <button className="mu-btn" {...tp('mu:isl:add', add)}>Add</button>
-              {!!music.stations.length && sc.s.station && music.stations.some((x) => x.url === sc.s.station?.url) && (
-                <button className="mu-btn ghost" title="Remove the station that is playing" {...tp('mu:isl:del', () => saveMusic({ stations: removeStation(music.stations, music.stations.find((x) => x.url === sc.s.station?.url)!.id) }))}>Remove this one</button>
-              )}
-            </div>
-            {err && <p className="mu-warn">{err}</p>}
+            {f.kind === 'none' ? (!music.stations.length && <p className="mu-empty">Your own stations show up here.</p>) : <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="mu:isl:sec" now={now} title="Vibes" paste={pasteForm} />}
           </>
         )}
         {sec === 'favs' && <TrackList list={music.favs} ctl={sc} press={press} prefix="mu:isl:fav" empty="Star a track to keep it here." />}
         {sec === 'recent' && <TrackList list={recents.slice(0, 8)} ctl={sc} press={press} prefix="mu:isl:rec" empty="What you play shows up here." />}
-      </div>
+      </div>}
     </section>
   )
 }
@@ -152,7 +163,7 @@ export function useMusicPage(k: KitState, openPanel: () => void) {
         title: 'Music',
         icon: '🎵',
         order: 10,
-        render: () => <IslandMusicTab k={kRef.current} onBack={() => window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'day' }))} />
+        render: (ctx) => <IslandMusicTab k={kRef.current} snap={ctx.snap} onBack={() => window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'day' }))} />
       }),
     []
   )
